@@ -8,15 +8,15 @@ Drezivo is a Philippines-first, multi-tenant clothing-rental operations SaaS. A 
 
 This is incremental, not feature-complete interpretation of every supplied screen.
 
-| Release | Outcome and scope | Gate |
-|---|---|---|
-| V0 discovery/pilot | 12–15 discovery interviews proposed; concierge onboarding and observed single-garment lifecycle using one default branch | Evidence of actual workflow and failure modes |
-| V1 | Single branch; Owner and Front desk; styles/variants/assets; single-garment guest checkout; reservations, holds, manual cash/QR review, pickup, return, inspection, cleaning-ready state, deposits, exports, audit, minimal Drezivo operator admin | Release gates in §9 |
-| V1.1 | Fittings with room/staff/resource capacity, multi-item booking UI, automated no-show/late reminders and partial physical returns | Promote only if pilot evidence supports it |
-| V2 | Branches, branch permissions, transfers and custody | Separate migration/security gate |
-| V3 conditional | Enterprise governance, SSO, advanced audit/reporting | Demand/readiness gate |
+| Release            | Outcome and scope                                                                                                                                                                                                                                  | Gate                                          |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| V0 discovery/pilot | 12–15 discovery interviews proposed; concierge onboarding and observed single-garment lifecycle using one default branch                                                                                                                           | Evidence of actual workflow and failure modes |
+| V1                 | Single branch; Owner and Front desk; styles/variants/assets; single-garment guest checkout; reservations, holds, manual cash/QR review, pickup, return, inspection, cleaning-ready state, deposits, exports, audit, minimal Drezivo operator admin | Release gates in §9                           |
+| V1.1               | Fittings with room/staff/resource capacity, multi-item booking UI, automated no-show/late reminders and partial physical returns                                                                                                                   | Promote only if pilot evidence supports it    |
+| V2                 | Branches, branch permissions, transfers and custody                                                                                                                                                                                                | Separate migration/security gate              |
+| V3 conditional     | Enterprise governance, SSO, advanced audit/reporting                                                                                                                                                                                               | Demand/readiness gate                         |
 
-Tenant and default branch exist from account creation. Tenant-owned records carry tenant scope; operational records also carry the relevant branch. Platform plan definitions are global. The authoritative user-confirmed monthly prices (15 September 2026) are Starter ₱300, Professional ₱499, and Business ₱1,299. The ₱999/₱1,999/₱3,999 screenshot is outdated and must not be used. Willingness to pay, retention, and unit economics remain unmeasured; that is a validation topic, not a price-selection question.
+Verified public sign-up creates a minimal Drezivo account, not a tenant. The backend then creates one Clerk organization and one local incomplete onboarding for the owner candidate. Tenant, default branch, Owner membership, draft storefront, and subscription exist only after idempotent bootstrap. Tenant-owned records carry tenant scope; operational records also carry the relevant branch. Platform plan definitions are global. The authoritative user-confirmed monthly prices (15 September 2026) are Starter ₱300, Professional ₱499, and Business ₱1,299. The ₱999/₱1,999/₱3,999 screenshot is outdated and must not be used. Willingness to pay, retention, and unit economics remain unmeasured; that is a validation topic, not a price-selection question.
 
 ## 2. Boundaries and users
 
@@ -44,7 +44,7 @@ Every mutation has disabled/pending state and early-return guard. One idempotenc
 
 ### Onboarding/live publish (FR4, FR13, FR14)
 
-Sign-up creates tenant, owner, default branch, draft storefront, proposed 14-day trial, PHP and Asia/Manila defaults. Wizard requires business name/contact, branch address/hours, payment instruction, duration, pickup/return, deposit, cancellation policy, privacy/contact copy, and one style/variant/asset. CSV import offers preview, row validation, duplicate detection, idempotent commit; invalid rows write nothing.
+After email verification, a public user is an owner candidate. The API, not the browser, creates one Clerk organization and a resumable local onboarding record. The candidate chooses Starter, Professional, or Business before bootstrap. A successful, idempotent bootstrap creates the tenant, Owner membership, default branch, draft storefront, selected-plan subscription, PHP and Asia/Manila defaults, and a seven-day trial from database time. The first business needs no card or payment account. An invited Front Desk recipient bypasses owner onboarding and may only claim the verified invitation. The later setup wizard requires business name/contact, branch address/hours, payment instruction, duration, pickup/return, deposit, cancellation policy, privacy/contact copy, and one style/variant/asset before publishing. CSV import offers preview, row validation, duplicate detection, idempotent commit; invalid rows write nothing.
 
 Publish requires contact, policy, payment instruction, and one active rentable asset. Preview must equal public route. Acceptance: anonymous mobile visitor opens URL, views a style, selects future date, gets real availability, and sees contact. Publish/first availability are instrumented.
 
@@ -66,15 +66,15 @@ Fitting scheduling is V1.1 pending validation. V1 may store a note only and must
 
 ## 5. Permissions and privacy
 
-| Capability | Owner | Front desk |
-|---|---|---|
-| Assets/conditions/blocks | Full | Operational edits; no archive |
-| Reservations/pickup/return/cleaning | Full | Create/update/custody |
-| QR/payment instructions/refunds | Full | View; no edit/refund |
-| Evidence | View/verify/reject | Operational view; no verify by default |
-| Private ID/receipt documents | Audited full | Receipt only when assigned; ID denied by default |
-| Policies/publish/users | Full | Read-only |
-| Exports/deletion | Full audited | Request only |
+| Capability                          | Owner              | Front desk                                       |
+| ----------------------------------- | ------------------ | ------------------------------------------------ |
+| Assets/conditions/blocks            | Full               | Operational edits; no archive                    |
+| Reservations/pickup/return/cleaning | Full               | Create/update/custody                            |
+| QR/payment instructions/refunds     | Full               | View; no edit/refund                             |
+| Evidence                            | View/verify/reject | Operational view; no verify by default           |
+| Private ID/receipt documents        | Audited full       | Receipt only when assigned; ID denied by default |
+| Policies/publish/users              | Full               | Read-only                                        |
+| Exports/deletion                    | Full audited       | Request only                                     |
 
 Collect minimum name/contact/booking data. Social handles, DOB and IDs are opt-in with purpose, retention, restricted access, export and erasure. Every route/object/upload/export is server-authorized and tenant isolated.
 
@@ -82,16 +82,16 @@ Collect minimum name/contact/booking data. Social handles, DOB and IDs are opt-i
 
 ### Authoritative plans
 
-| | Starter | Professional | Business |
-|---|---:|---:|---:|
-| Monthly price | ₱300 | ₱499 | ₱1,299 |
-| Active physical assets | Up to 50 | Up to 200 | Up to 1,000 (recommended bounded cap; confirm capacity budget before launch) |
-| Owner + Front desk roles | Included | Included | Included |
-| Core reliability, isolation, exports, returns/refunds | Included | Included | Included |
-| Fittings with resource capacity | Not available until V1.1 ships; then plan entitlement TBD | Same | Same |
-| Multi-item booking UI | V1.1 entitlement TBD | V1.1 entitlement TBD | V1.1 entitlement TBD |
-| Branches/transfers | Not available; V2 only | Not available; V2 only | Not available; V2 only |
-| Advanced reporting/governance | Not promised | Not promised | Future V3 decision |
+|                                                       |                                                   Starter |           Professional |                                                                     Business |
+| ----------------------------------------------------- | --------------------------------------------------------: | ---------------------: | ---------------------------------------------------------------------------: |
+| Monthly price                                         |                                                      ₱300 |                   ₱499 |                                                                       ₱1,299 |
+| Active physical assets                                |                                                  Up to 50 |              Up to 200 | Up to 1,000 (recommended bounded cap; confirm capacity budget before launch) |
+| Owner + Front desk roles                              |                                                  Included |               Included |                                                                     Included |
+| Core reliability, isolation, exports, returns/refunds |                                                  Included |               Included |                                                                     Included |
+| Fittings with resource capacity                       | Not available until V1.1 ships; then plan entitlement TBD |                   Same |                                                                         Same |
+| Multi-item booking UI                                 |                                      V1.1 entitlement TBD |   V1.1 entitlement TBD |                                                         V1.1 entitlement TBD |
+| Branches/transfers                                    |                                    Not available; V2 only | Not available; V2 only |                                                       Not available; V2 only |
+| Advanced reporting/governance                         |                                              Not promised |           Not promised |                                                           Future V3 decision |
 
 The table separates customer price from proposed quotas and release availability. Asset quota counts active physical assets, not styles. A plan check is enforced at creation/import/activation and gives a clear upgrade or archive path; it never deletes records. Basic integrity and both V1 roles are available on every plan. No plan sells V2 branches early. Fitting is not available in V1 even if Professional or Business copy suggests it; marketing and entitlements change only when V1.1 ships. Seat counts are intentionally not promised until observed usage supports a bound; the recommended initial model is one Owner plus one Front desk seat on Starter, up to three Front desk seats on Professional, and up to ten on Business, subject to operator capacity review.
 
@@ -99,7 +99,7 @@ Pricing copy must use these exact PHP amounts and say monthly. Do not carry “M
 
 Notification outbox states are queued, sending, sent, failed with bounded retry. UI says queued until provider acknowledgment; no SMS promise.
 
-Billing lifecycle is proposed: trial (14 days), active, past_due (7-day grace), restricted, cancelled. Operator V1 supports tenant provisioning, entitlement changes, suspension, time-bounded recovery/support grants, and actor/reason audit. Suspension blocks new bookings/publish changes but preserves returns, refunds, exports and existing-rental read access. Downgrade/cancel never deletes data or prevents returns/refunds.
+Billing lifecycle is trialing (seven days), active, past_due (seven-day normal-access grace), restricted, and cancelled. A verified person receives one lifetime trial, even if an operator later closes their current tenant. Trial limits apply immediately: Starter allows 75 active physical assets and one Front Desk seat, Professional 250 and three, and Business 1,000 and ten. A seat is an active Front Desk membership or an unexpired pending invitation; the Owner does not consume a Front Desk seat. Later businesses are payment-pending until audited manual operator verification, not tenants with operational capacity. Operator V1 supports payment verification, entitlement changes, restriction/recovery, closure, and actor/reason audit. Restricted access blocks new bookings, publishing, assets, and invitations but preserves explicitly approved returns, refunds, settlement, exports, and existing-rental reads. Cancelled tenants retain read-only settlement/export access. Downgrade, restriction, and cancellation never delete data or prevent approved returns/refunds.
 
 ## 7. Requirements map
 
@@ -125,21 +125,21 @@ See [Drezivo-Market-Research.md](Drezivo-Market-Research.md) for evidence limits
 
 ## 11. Implementation acceptance details
 
-| Requirement | Concrete acceptance example |
-|---|---|
-| FR3, OR2 — correct commercial offer | Every plan surface and billing record shows ₱300/₱499/₱1,299 monthly; quotas are checked server-side, including concurrent CSV import/asset activation. Features not released cannot be purchased as available. |
-| FR7–FR8 — time and rates | Customer selects a fixed-duration or daily tariff configured by the merchant. Show explicit pickup and return deadlines and the extra-day price. Charging duration is separate from blocked prep/cleaning time. Adjacent intervals work; a conflicting garment cannot be confirmed by another staff member. |
-| FR8 — inventory history | Archiving a style/variant/asset hides new intake while preserving existing reservations and history. Refuse retirement with unresolved custody without a resolution workflow. Per-asset measurements and condition remain distinguishable. |
-| FR9, FR13 — publish controls | Hidden categories and unpublished storefronts disappear from public results. Existing guests retain private access to their own accepted booking. Preview uses draft content without exposing it publicly. |
-| FR10, OR5 — customer boundaries | A renter link opens only its own booking; guessing a reference or changing customer ID reveals nothing. Staff removal takes effect through server authorization. Customer erasure preserves legally required records using the documented retention/anonymization process. |
-| FR12, FR22, OR9 — real collection | A uploaded screenshot shows proof submitted, not Paid. Owner approval records verified amount/reference. Partial payment displays remaining charge and deposit obligations separately. Two refund requests cannot consume the same remaining funds. |
-| FR18–FR22 — deadline race | Two guests request the same physical garment; one obtains the hold and sees instructions. A receipt received after expiry enters payment exception handling. Confirmation racing expiry has one documented winner. |
-| OR10 — fulfillment disruption | An overdue garment threatens the next pickup. The dashboard identifies the affected booking, blocks unsafe handover, and lets the owner record an agreed substitute/reschedule/refund. Actual return remains recordable. |
-| OR6–OR8 — portability/recovery | A malformed import reports row errors without partial writes. Export includes understandable booking/financial references and stable IDs. A restore drill reconciles row counts, tenant boundaries, file versions and money totals. |
+| Requirement                         | Concrete acceptance example                                                                                                                                                                                                                                                                                 |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR3, OR2 — correct commercial offer | Every plan surface and billing record shows ₱300/₱499/₱1,299 monthly; quotas are checked server-side, including concurrent CSV import/asset activation. Features not released cannot be purchased as available.                                                                                             |
+| FR7–FR8 — time and rates            | Customer selects a fixed-duration or daily tariff configured by the merchant. Show explicit pickup and return deadlines and the extra-day price. Charging duration is separate from blocked prep/cleaning time. Adjacent intervals work; a conflicting garment cannot be confirmed by another staff member. |
+| FR8 — inventory history             | Archiving a style/variant/asset hides new intake while preserving existing reservations and history. Refuse retirement with unresolved custody without a resolution workflow. Per-asset measurements and condition remain distinguishable.                                                                  |
+| FR9, FR13 — publish controls        | Hidden categories and unpublished storefronts disappear from public results. Existing guests retain private access to their own accepted booking. Preview uses draft content without exposing it publicly.                                                                                                  |
+| FR10, OR5 — customer boundaries     | A renter link opens only its own booking; guessing a reference or changing customer ID reveals nothing. Staff removal takes effect through server authorization. Customer erasure preserves legally required records using the documented retention/anonymization process.                                  |
+| FR12, FR22, OR9 — real collection   | A uploaded screenshot shows proof submitted, not Paid. Owner approval records verified amount/reference. Partial payment displays remaining charge and deposit obligations separately. Two refund requests cannot consume the same remaining funds.                                                         |
+| FR18–FR22 — deadline race           | Two guests request the same physical garment; one obtains the hold and sees instructions. A receipt received after expiry enters payment exception handling. Confirmation racing expiry has one documented winner.                                                                                          |
+| OR10 — fulfillment disruption       | An overdue garment threatens the next pickup. The dashboard identifies the affected booking, blocks unsafe handover, and lets the owner record an agreed substitute/reschedule/refund. Actual return remains recordable.                                                                                    |
+| OR6–OR8 — portability/recovery      | A malformed import reports row errors without partial writes. Export includes understandable booking/financial references and stable IDs. A restore drill reconciles row counts, tenant boundaries, file versions and money totals.                                                                         |
 
 ### Policy defaults versus validated facts
 
-The launch geography and confirmed monthly prices come from the owner/initial brief. The following remain recommendations: trial 14 days, payment hold 15 minutes, maximum manual review 24 hours, renewal grace seven days, Business asset cap 1,000, and proposed seat limits. Policies must be visible before checkout and snapshotted. Test opening-hours treatment during the pilot; do not let an unattended overnight payment flow imply immediate confirmation.
+The launch geography, confirmed monthly prices, seven-day trial, seven-day renewal grace, physical-asset limits (75 / 250 / 1,000), and Front Desk seat limits (1 / 3 / 10) come from the owner/initial brief. Payment hold 15 minutes and maximum manual review 24 hours remain recommendations. Policies must be visible before checkout and snapshotted. Test opening-hours treatment during the pilot; do not let an unattended overnight payment flow imply immediate confirmation.
 
 Cancellation and no-show rules are merchant-configured, versioned and accepted before payment. Owner records reason, permitted deduction and refund obligation; Drezivo does not automatically impose a universal non-refundable fee. A requested extension needs fresh capacity and repricing; actual late custody still records if extension is denied. Minimum booking notice, maximum rental length, buffer minutes, refund timelines and delivery zones must have bounded validated configuration before a storefront goes live.
 

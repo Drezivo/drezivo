@@ -26,15 +26,28 @@ export const errorCode = z.enum([
   // 404 — resource missing or concealed cross-tenant (never distinguished on the wire)
   'NOT_FOUND',
   // 409 — a concurrent conflict, one of three business-distinct reasons
+  'CONFLICT',
   'CAPACITY_CONFLICT',
   'STATE_CONFLICT',
   'IDEMPOTENCY_KEY_REUSED',
+  'TRIAL_CONSUMED',
+  'CURRENT_OWNED_TENANT_EXISTS',
+  'INCOMPLETE_ONBOARDING_EXISTS',
+  'SEAT_LIMIT_EXCEEDED',
+  'ASSET_LIMIT_EXCEEDED',
+  'INVALID_INVITATION',
+  'STALE_PROVIDER_STATE',
+  'TENANT_RESTRICTED',
+  'LAST_OWNER_CONFLICT',
+  'OPERATOR_APPROVAL_REQUIRED',
   // 422 — the request body failed validation
   'VALIDATION_FAILED',
   // 429 — rate limited
   'RATE_LIMITED',
   // 503 — an upstream dependency (DB, S3, email, payment rail) is unavailable
   'DEPENDENCY_UNAVAILABLE',
+  // 501 — explicitly unfinished scaffold behavior
+  'NOT_IMPLEMENTED',
   // 500 — unexpected failure with no safe, more specific code to report
   'INTERNAL_ERROR',
 ]);
@@ -42,9 +55,10 @@ export type ErrorCode = z.infer<typeof errorCode>;
 
 /** One field-level validation failure, for `422 VALIDATION_FAILED` responses. */
 export const errorField = z.object({
-  field: z.string().min(1),
+  path: z.string().min(1),
   message: z.string().min(1),
 });
+export type ErrorField = z.infer<typeof errorField>;
 
 /**
  * The single error envelope every endpoint returns on failure. `message` is

@@ -1,3 +1,7 @@
+import type { ErrorCode, ErrorField } from '@drezivo/contracts';
+
+export type { ErrorCode } from '@drezivo/contracts';
+
 /**
  * Typed error hierarchy mapped to the TRD §4 error envelope:
  *   { code, message, request_id, fields? }
@@ -11,21 +15,8 @@
  * not by a 403 that confirms the object exists.
  */
 
-export type ErrorCode =
-  | 'UNAUTHENTICATED'
-  | 'FORBIDDEN'
-  | 'NOT_FOUND'
-  | 'CONFLICT'
-  | 'IDEMPOTENCY_KEY_REUSED'
-  | 'VALIDATION_FAILED'
-  | 'RATE_LIMITED'
-  | 'DEPENDENCY_UNAVAILABLE'
-  | 'NOT_IMPLEMENTED';
-
-export interface FieldError {
-  path: string;
-  message: string;
-}
+/** Compatibility name for API callers while the shared contract owns the shape. */
+export type FieldError = ErrorField;
 
 export abstract class AppError extends Error {
   abstract readonly status: number;

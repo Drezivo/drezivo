@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 import { Client } from 'pg';
 
+import '../src/config/load-env.js';
+
 /**
  * Applies the numbered `.sql` files in `src/db/migrations/` in order, once, tracked by a
  * `schema_migrations` ledger table — this is intentionally NOT drizzle-kit's own migrator,
@@ -21,9 +23,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, '..', 'src', 'db', 'migrations');
 
 async function main(): Promise<void> {
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = process.env.DATABASE_URL_DIRECT ?? process.env.DATABASE_URL;
   if (!databaseUrl) {
-    console.error('DATABASE_URL is required to run migrations.');
+    console.error('DATABASE_URL_DIRECT or DATABASE_URL is required to run migrations.');
     process.exit(1);
   }
 
@@ -61,7 +63,9 @@ async function main(): Promise<void> {
         await client.query('COMMIT');
       } catch (error) {
         await client.query('ROLLBACK');
-        console.error(`Migration ${file} failed; rolled back. Fix forward with a new migration file, never edit this one.`);
+        console.error(
+          `Migration ${file} failed; rolled back. Fix forward with a new migration file, never edit this one.`,
+        );
         throw error;
       }
     }

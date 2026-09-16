@@ -27,7 +27,7 @@ describe('errorEnvelope', () => {
       code: 'VALIDATION_FAILED',
       message: 'Validation failed.',
       request_id: 'req_01HXYZ',
-      fields: [{ field: 'requested_interval.start', message: 'must be in the future' }],
+      fields: [{ path: 'requested_interval.start', message: 'must be in the future' }],
     });
 
     expect(result.success).toBe(true);

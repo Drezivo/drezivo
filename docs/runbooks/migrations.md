@@ -5,6 +5,9 @@ currently running against it. This runbook implements TRD §9 ("Neon operations 
 evolution") directly — read that section if you need the reasoning behind a step here, not just
 the step.
 
+For the additive account, onboarding, membership, and subscription rollout, also follow the
+[Tenancy and onboarding migration plan](../architecture/Tenancy-Onboarding-Migration-Plan.md).
+
 ## The rule that governs everything below
 
 **Apply version-controlled, reviewed migrations once, through CI/CD, using a migration role.**
@@ -20,7 +23,7 @@ receiving traffic, breaks the old instances mid-rollout.
 
 ### 1. Expand
 
-Add the new schema element in a way that is *purely additive* — a new nullable column, a new
+Add the new schema element in a way that is _purely additive_ — a new nullable column, a new
 table, a new index built without locking out writes (`CREATE INDEX CONCURRENTLY`), a new
 constraint that is not yet enforced. Old application code, which does not know this element
 exists, continues to work unmodified. New application code can start writing to it once
@@ -66,7 +69,7 @@ options." Concretely:
   receiving production writes — a plain `CREATE INDEX` holds a lock that blocks writes for the
   duration of the build.
 - Adding a `NOT NULL` constraint to an existing large table: prefer `ADD CONSTRAINT ... CHECK
-  (col IS NOT NULL) NOT VALID` followed by `VALIDATE CONSTRAINT` (which takes a lighter lock and
+(col IS NOT NULL) NOT VALID` followed by `VALIDATE CONSTRAINT` (which takes a lighter lock and
   scans without blocking writes for the whole duration), then convert to a true `NOT NULL` once
   validated, over a single blocking `SET NOT NULL` on a large table.
 - Adding the `EXCLUDE USING gist` constraint this system depends on for availability correctness
@@ -83,14 +86,14 @@ options." Concretely:
 
 **Data fixes roll forward. An application code rollback does not reverse a data migration.**
 (TRD §9.) If a migration already ran and altered data — backfilled a column, converted a
-representation — rolling the *application code* back to the previous version does not undo that
+representation — rolling the _application code_ back to the previous version does not undo that
 data change; the previous code version may not even know the new column exists, let alone how
 to reverse its population. If a migration produces incorrect data, the fix is a new, forward
 migration that corrects it — reviewed and applied the same way as any other migration — not a
 `git revert` of the migration file, which at best does nothing to already-changed data and at
 worst leaves the schema in a state neither the old nor the new application code expects.
 
-See `docs/runbooks/rollback.md` for what rollback *can* and cannot undo across the whole system,
+See `docs/runbooks/rollback.md` for what rollback _can_ and cannot undo across the whole system,
 not just migrations.
 
 ## Neon-specific operational notes

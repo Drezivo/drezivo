@@ -1,6 +1,6 @@
 # Tenancy, Owner Onboarding, Clerk, Memberships, and Billing V1 Checklist
 
-**Status:** staged implementation plan, no task is complete yet
+**Status:** Phase 0 complete; Phase 1 onward remain staged and unimplemented
 **Canonical decision record:** [Second Brain architecture note](../Drezivo-Second-Brain/02-Architecture/Tenancy%2C%20Onboarding%2C%20Clerk%2C%20Memberships%2C%20and%20Billing%20Foundation.md)
 **Canonical specifications to align first:** [PRD](../docs/product/Drezivo-PRD.md),
 [TRD](../docs/architecture/Drezivo-TRD.md), [Data Model](../docs/architecture/Drezivo-Data-Model.md),
@@ -40,48 +40,48 @@ or billing tasks as authority for this work.
 
 ## Phase 0: Canonical decision and contract preparation
 
-- [ ] **TBF-000 — Align the canonical specifications**
+- [x] **TBF-000 — Align the canonical specifications**
   - **Depends on:** None.
   - **Outcome:** PRD, TRD, Data Model, ERD, and this checklist agree on the accepted lifecycle.
   - **Acceptance:**
-    - [ ] Replace 14-day trial and one-trial-per-tenant language with seven-day,
+    - [x] Replace 14-day trial and one-trial-per-tenant language with seven-day,
           one-trial-per-verified-person policy.
-    - [ ] Replace 50 / 200 / 1,000 asset limits with 75 / 250 / 1,000.
-    - [ ] State Front Desk caps of 1 / 3 / 10 and count active members plus unexpired invites.
-    - [ ] Document payment-pending onboarding, one current owned tenant, closure, and external
+    - [x] Replace 50 / 200 / 1,000 asset limits with 75 / 250 / 1,000.
+    - [x] State Front Desk caps of 1 / 3 / 10 and count active members plus unexpired invites.
+    - [x] Document payment-pending onboarding, one current owned tenant, closure, and external
           Clerk organization deletion restriction.
-    - [ ] Record that Clerk proves identity while Drezivo authorizes local membership and
+    - [x] Record that Clerk proves identity while Drezivo authorizes local membership and
           entitlements.
   - **Tests/evidence:** Documentation review finds no conflicting old lifecycle statement.
 
-- [ ] **TBF-001 — Define shared contracts and stable errors**
+- [x] **TBF-001 — Define shared contracts and stable errors**
   - **Depends on:** TBF-000.
   - **Outcome:** The contracts package owns onboarding, invitation, subscription, operator, and
     webhook-safe DTOs before API routes exist.
   - **Acceptance:**
-    - [ ] Add closed schemas for onboarding status, plan code, trial/billing state, invitation
+    - [x] Add closed schemas for onboarding status, plan code, trial/billing state, invitation
           status, actor context, and safe operator-action responses.
-    - [ ] Membership status accepts only `active`, `suspended`, and `removed`. `pending` is
+    - [x] Membership status accepts only `active`, `suspended`, and `removed`. `pending` is
           invitation state, not membership state.
-    - [ ] Add request schemas for create/resume/abandon onboarding, choose plan, bootstrap,
+    - [x] Add request schemas for create/resume/abandon onboarding, choose plan, bootstrap,
           invite/resend/cancel/claim, plan change, payment verification, closure, and owner transfer.
-    - [ ] Add stable error codes for trial consumed, existing owned tenant, incomplete onboarding,
+    - [x] Add stable error codes for trial consumed, existing owned tenant, incomplete onboarding,
           seat/asset overage, invalid invitation, stale provider state, and restricted tenant.
-    - [ ] Tenant-owned writes do not accept tenant ID, Clerk organization ID, role, price,
+    - [x] Tenant-owned writes do not accept tenant ID, Clerk organization ID, role, price,
           entitlement, or seat count as authority.
-    - [ ] OpenAPI and envelope behavior remain backward compatible.
+    - [x] OpenAPI and envelope behavior remain backward compatible.
   - **Tests/evidence:** Contract schema tests reject unknown states and client-supplied authority.
 
-- [ ] **TBF-002 — Define migration and rollback boundaries**
+- [x] **TBF-002 — Define migration and rollback boundaries**
   - **Depends on:** TBF-000.
   - **Outcome:** The database rollout is additive, ordered, and safe to deploy before consumers.
   - **Acceptance:**
-    - [ ] Identify new global pre-tenant versus tenant-owned tables and their RLS policy.
-    - [ ] Specify indexes and unique/partial-unique constraints for one unfinished onboarding,
+    - [x] Identify new global pre-tenant versus tenant-owned tables and their RLS policy.
+    - [x] Specify indexes and unique/partial-unique constraints for one unfinished onboarding,
           one Clerk organization mapping, current owned tenant, one current subscription, invite
           intent, and provider event dedupe.
-    - [ ] Specify backfill/default behavior for existing tenant and membership rows.
-    - [ ] Define rollback as application rollback plus forward-only corrective migration, never
+    - [x] Specify backfill/default behavior for existing tenant and membership rows.
+    - [x] Define rollback as application rollback plus forward-only corrective migration, never
           destructive schema reversal of live lifecycle data.
   - **Tests/evidence:** Migration review includes real Postgres constraint and RLS test plan.
 

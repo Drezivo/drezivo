@@ -421,6 +421,10 @@ integration evidence.
   expiry, and local-first access removal.
 - Chose immediate restriction on external Clerk organization deletion, operator-assisted closure,
   and second-approved sole-owner transfer.
+- Phase 0 aligns the canonical specifications, closes the onboarding and webhook contract surface,
+  and records the additive migration/RLS/backfill boundary before persistence work begins. Local
+  compose provides loopback-only PostgreSQL and MinIO for migration rehearsal; it does not make
+  object storage integration complete.
 
 ## Related notes
 

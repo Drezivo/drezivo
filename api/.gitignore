@@ -1,4 +1,4 @@
-# --- secrets: every .env variant, no exceptions, including .env.example ---
+# --- secrets: every local environment variant, including the local example ---
 .env*
 
 # dependencies

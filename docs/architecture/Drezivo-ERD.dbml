@@ -3,6 +3,68 @@ Project Drezivo {
   Note: 'ERD-ready logical specification. V1/V1.1/V2 tables are grouped; do not deploy all phases blindly. SQL invariants in Drezivo-Data-Model.md are mandatory.'
 }
 
+Table account {
+  id uuid [pk, not null]
+  clerk_user_id varchar(200) [not null]
+  trial_consumed_at timestamptz
+  current_owned_tenant_id uuid
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  indexes {
+    (clerk_user_id) [unique]
+    (current_owned_tenant_id) [unique]
+  }
+  Note: 'V1 foundation global record. Minimal Clerk identity only; one current owned tenant and one lifetime trial.'
+}
+
+Table organization_onboarding {
+  id uuid [pk, not null]
+  account_id uuid [not null]
+  clerk_org_id varchar(200) [not null]
+  status varchar(30) [not null]
+  selected_plan_code varchar(30)
+  provisioned_tenant_id uuid
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  indexes {
+    (clerk_org_id) [unique]
+    (account_id, status)
+  }
+  Note: 'V1 foundation global pre-tenant record. Partial unique index permits one incomplete/payment_pending onboarding per account.'
+}
+
+Table onboarding_payment_verification {
+  id uuid [pk, not null]
+  organization_onboarding_id uuid [not null]
+  operator_subject varchar(200) [not null]
+  amount_minor bigint [not null]
+  currency char(3) [not null]
+  payment_reference varchar(200) [not null]
+  status varchar(30) [not null]
+  business_key varchar(160) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (business_key) [unique]
+  }
+  Note: 'V1 foundation global immutable operator-verification record. No tenant exists until activation succeeds.'
+}
+
+Table bootstrap_idempotency_record {
+  id uuid [pk, not null]
+  account_id uuid [not null]
+  operation varchar(100) [not null]
+  intent_key varchar(255) [not null]
+  payload_hash varchar(128) [not null]
+  status varchar(30) [not null]
+  safe_response jsonb
+  expires_at timestamptz [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (account_id, operation, intent_key) [unique]
+  }
+  Note: 'V1 foundation global idempotency. It exists because idempotency_record is tenant-scoped.'
+}
+
 Table tenant {
   id uuid [pk, not null]
   clerk_org_id varchar(200) [not null]
@@ -42,6 +104,7 @@ Table membership {
   tenant_id uuid [not null]
   id uuid [not null]
   clerk_user_id varchar(200) [not null]
+  clerk_membership_id varchar(200)
   role varchar(40) [not null]
   status varchar(20) [not null]
   authz_version bigint [not null]
@@ -50,8 +113,28 @@ Table membership {
   indexes {
     (tenant_id, id) [pk]
     (tenant_id, clerk_user_id) [unique]
+    (clerk_membership_id) [unique]
   }
-  Note: 'V1. owner/frontdesk initially; local status check required on every protected request.'
+  Note: 'V1. owner/frontdesk initially; active/suspended/removed local status check required on every protected request.'
+}
+
+Table membership_invitation {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  recipient_email_digest varchar(128) [not null]
+  recipient_email_ciphertext text [not null]
+  status varchar(30) [not null]
+  expires_at timestamptz [not null]
+  clerk_invitation_id varchar(200)
+  business_key varchar(160) [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, business_key) [unique]
+    (clerk_invitation_id) [unique]
+  }
+  Note: 'V1 foundation tenant-owned Front Desk intent. Partial unique pending recipient index and seven-day expiry are migration constraints.'
 }
 
 Table branch_membership {
@@ -907,7 +990,13 @@ Table transfer_event {
 }
 
 Ref: branch.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: account.current_owned_tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: organization_onboarding.account_id > account.id [delete: restrict, update: no action]
+Ref: organization_onboarding.provisioned_tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: onboarding_payment_verification.organization_onboarding_id > organization_onboarding.id [delete: restrict, update: no action]
+Ref: bootstrap_idempotency_record.account_id > account.id [delete: restrict, update: no action]
 Ref: membership.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: membership_invitation.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: branch_membership.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: customer.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: category.tenant_id > tenant.id [delete: restrict, update: no action]
@@ -1040,9 +1129,14 @@ Ref: subscription_event.prior_plan_id > plan.id [delete: restrict, update: no ac
 Ref: subscription_event.next_plan_id > plan.id [delete: restrict, update: no action]
 
 TableGroup V1_Core {
+  account
+  organization_onboarding
+  onboarding_payment_verification
+  bootstrap_idempotency_record
   tenant
   branch
   membership
+  membership_invitation
   branch_membership
   customer
   category
