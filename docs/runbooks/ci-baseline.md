@@ -31,6 +31,10 @@ should be configured in GitHub in the same change that enables the workflow.
 - Contracts, API, and app tests pass locally.
 - The app type-check and the web test setup still contain scaffold failures. The web lint passes,
   but its test command requires the missing `@tailwindcss/postcss` dependency to be resolved.
+- `npm audit --omit=dev --audit-level=high` reports three production-tree findings: one high
+  Drizzle ORM advisory and two high PostCSS advisories reached through Next.js. The available
+  fixes include breaking upgrades, so they require a dependency review and regression test before
+  production use.
 
 Until those items are fixed, release reviews use the local evidence above and must call out the
 remaining failures in the pull request.
