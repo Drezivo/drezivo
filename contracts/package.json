@@ -44,7 +44,7 @@
     "prepare": "husky"
   },
   "peerDependencies": {
-    "zod": "^3.23.0"
+    "zod": "^4.6.4"
   },
   "devDependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",
@@ -62,7 +62,7 @@
     "typescript-eslint": "^8.12.2",
     "vitest": "^5.0.0",
     "yaml": "^2.6.0",
-    "zod": "^3.23.0"
+    "zod": "^4.6.4"
   },
   "lint-staged": {
     "*.ts": [
