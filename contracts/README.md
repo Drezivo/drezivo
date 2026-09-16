@@ -78,8 +78,10 @@ npm install
 npm run openapi:generate
 ```
 
-For local consumer bootstrap, run `npm ci && npm run build && npm pack --pack-destination .`.
-Install the exact `drezivo-contracts-0.1.0.tgz` using `file:../contracts/drezivo-contracts-0.1.0.tgz`.
+For local consumer bootstrap, run `npm ci && npm run build`. In the monorepo, `api`, `app`,
+and `web` consume this workspace through the root workspace link. Do not create or install a
+tarball during normal development. A published package is a separate release decision and must
+use the release runbook.
 
 Commit the resulting `openapi/drezivo.v1.yaml`. Never edit that file directly — the next
 regeneration would silently discard the edit, and in the meantime the document would describe an

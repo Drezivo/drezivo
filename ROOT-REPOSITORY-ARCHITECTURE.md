@@ -58,7 +58,7 @@ Drezivo/
 ├── package.json                       root workspace scripts and package policy
 ├── package-lock.json                  one dependency lockfile for the monorepo
 ├── .git/                              one Git history and one branch protection boundary
-├── .github/                           CI, security, CODEOWNERS, and issue templates
+├── .github/                           security, CODEOWNERS, and workflow templates
 ├── AGENTS.md                          root agent entry point
 ├── CLAUDE.md                          root Claude entry point
 ├── AI-AGENT-ONBOARDING.md             first-turn agent protocol
@@ -80,7 +80,8 @@ Drezivo/
 
 The folder names are retained to avoid an unnecessary source move. Their workspace roles are
 explicit: `contracts` is a package, `api` is a service, `app` and `web` are applications, and
-`docs` is documentation. The root lockfile and root CI run cross-workspace checks together.
+`docs` is documentation. The root lockfile is authoritative. Automatic CI is deferred until the
+scaffold gate is green; see [`docs/runbooks/ci-baseline.md`](docs/runbooks/ci-baseline.md).
 
 Former per-package Git metadata is preserved in the ignored `.polyrepo-git-archives/` directory for
 history reference only. Do not run Git commands there. Do not initialize another repository below
@@ -125,7 +126,7 @@ product decision changes. Historical documents keep a superseded banner and are 
 
 | Folder | Put here | Keep out |
 | --- | --- | --- |
-| root `.github/` | one CI pipeline, CODEOWNERS, security settings preparation | secrets and provider credentials |
+| root `.github/` | workflow templates, CODEOWNERS, security settings preparation | secrets and provider credentials |
 | `api/src/middleware` | boundary validation, verified identity, context, rate limits, idempotency | domain calculations and UI concerns |
 | `api/src/modules` | domain services, repositories, and transactions | cross-tenant queries and unvalidated values |
 | `api/src/db` | Drizzle mapping, reviewed migrations, RLS, client | production hand edits and raw secrets |
@@ -151,8 +152,9 @@ flowchart LR
 ```
 
 The dependency direction remains `contracts -> api -> app/web`, but all changes are reviewed and
-validated in one pull request when they cross workspaces. Root CI runs affected workspace checks and
-then the full gate for release candidates. Breaking API changes use an expand, migrate, contract
+validated in one pull request when they cross workspaces. Automatic CI is deferred until the
+scaffold gate is green; the enablement gate is documented in `docs/runbooks/ci-baseline.md`.
+Breaking API changes use an expand, migrate, contract
 window while all consumers compile in the same commit where possible.
 
 Use branches named `<type>/<short-kebab-slug>` and Conventional Commits. Run commands from the root:
@@ -210,4 +212,5 @@ security rules. Never create a second root Git repository or push from a former 
 
 The initial scaffold used five independent Git repositories. That decision is retained in
 `docs/decisions/0001-polyrepo-five-repositories.md` as a superseded record. The active decision is
-one root monorepo with workspace boundaries and one CI, review, license, and release boundary.
+one root monorepo with workspace boundaries and one review, license, and release boundary. CI will
+be enabled after the documented scaffold gate is green.

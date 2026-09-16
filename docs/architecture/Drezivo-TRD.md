@@ -3,7 +3,7 @@
 **Revision:** 1.1 · **Date:** 15 September 2026  
 **Status:** Monorepo scaffold and architecture contract. Infrastructure remains unprovisioned; scaffold checks do not prove production performance, isolation or recovery.
 
-**Changes in 1.2.** The five former checkouts are now workspaces in one root Git repository. The root lockfile, CI, license, review boundary, and release evidence are authoritative. Workspace ownership remains explicit: `contracts` provides shared schemas, `api` owns business transactions and the worker, `app` and `web` render user journeys, and `docs` owns specifications. The former polyrepo decision remains as a superseded ADR. Security controls, tenant context, and migration windows now apply across workspaces in one pull request.
+**Changes in 1.2.** The five former checkouts are now workspaces in one root Git repository. The root lockfile, license, review boundary, and release evidence are authoritative. Workspace ownership remains explicit: `contracts` provides shared schemas, `api` owns business transactions and the worker, `app` and `web` render user journeys, and `docs` owns specifications. The former polyrepo decision remains as a superseded ADR. Automatic CI is deferred until the scaffold gate is green, as recorded in `docs/runbooks/ci-baseline.md`. Security controls, tenant context, and migration windows now apply across workspaces in one pull request.
 
 Read with [PRD](../product/Drezivo-PRD.md), [market research](../product/Drezivo-Market-Research.md), and [logical data model](Drezivo-Data-Model.md). Product release V1 is distinct from document revision numbers. The DBML describes relationships; SQL migrations must implement constraints it cannot express.
 
@@ -109,7 +109,7 @@ for reference only.
 
 Breaking API changes still use an expand, migrate, contract window: keep old and new shapes valid,
 migrate all workspace consumers, then remove the old shape in a later release. A workspace may be
-deployed independently after its affected checks pass, but the root CI and review gate must cover
+deployed independently after its affected checks pass, but the root review gate must cover
 the complete change before a release tag.
 
 ## 3. Authentication, authorization, and tenant isolation
@@ -138,7 +138,7 @@ Multi-tenancy is the property most easily broken by a workspace boundary, becaus
 
 **The frontends hold no authority.** `app` and `web` may display an organization and a branch, and may hide controls the actor cannot use. That is presentation. Every one of those checks is repeated server-side, and a divergence between them is a UI bug, never a security boundary. `web` in particular renders only published projections: an unpublished or foreign store returns `notFound()`, matching the API's rule that a foreign object is a `404` and never a `403` that confirms it exists.
 
-**Organization switching is explicit, in both frontends.** Clerk's own documentation warns that background requests from a tab left open in another organization can carry the wrong token. Both `app` and `web` must attach the active organization explicitly per request rather than relying on ambient state, and both must discard in-flight queries on switch. The cross-tab organization-switch test runs for both workspace applications in the same root CI gate.
+**Organization switching is explicit, in both frontends.** Clerk's own documentation warns that background requests from a tab left open in another organization can carry the wrong token. Both `app` and `web` must attach the active organization explicitly per request rather than relying on ambient state, and both must discard in-flight queries on switch. The cross-tab organization-switch test belongs in the root gate when automatic CI is enabled.
 
 **The worker carries tenant context per job, not per process.** The worker runs outside any HTTP request, so nothing sets its tenant context for it. Every outbox and job row stores the owning `tenant_id`; the worker sets the context transaction-locally for each claimed job and fails the job closed if the row has no resolvable tenant. A worker process must never hold a long-lived session-level tenant setting — a leaked setting across jobs is a cross-tenant write.
 
@@ -333,14 +333,14 @@ Remaining selections: hosting plans/region; email sender and quotas; observabili
 
 ## 13. Monorepo operations and scaffold boundary
 
-The root Git repository is the only source of version history, review, licensing, CI, and release
+The root Git repository is the only source of version history, review, licensing, and release
 evidence. `contracts`, `api`, `app`, `web`, and `docs` are workspace boundaries, not separate
 repositories. The API remains the authority for authentication context, tenant scope, transactions,
 migrations, and the durable worker. The clients remain consumers, and the docs workspace remains
 the narrative authority.
 
-Root CI should run affected workspace checks for fast feedback and the complete gate for release
-candidates. A change that crosses a workspace boundary updates the relevant contract, API, client,
+Automatic CI is planned after the scaffold gate is green. A change that crosses a workspace boundary
+updates the relevant contract, API, client,
 test, and docs files in one pull request whenever compatibility permits. Use exact workspace imports
 for `@drezivo/contracts`, never a copied type. Keep old and new contract shapes valid through an
 expand, migrate, contract window.

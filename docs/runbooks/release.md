@@ -13,7 +13,8 @@ This runbook moves a change from the root monorepo to a live environment. Read
 5. Run root checks, review the diff and dependency changes, deploy to staging, run smoke and recovery
    checks, then promote to production through the protected environment.
 
-Root CI may filter unaffected workspaces for speed, but release candidates run the complete gate:
+When automatic CI is enabled, it may filter unaffected workspaces for speed, but release candidates
+run the complete gate:
 
 ```text
 npm ci

@@ -8,7 +8,7 @@
 
 Drezivo uses one Git repository at the workspace root. `contracts`, `api`, `app`, `web`, and
 `docs` remain named workspace directories with explicit ownership. The root `package.json` and
-`package-lock.json` manage installation and scripts. Root CI, pull requests, CODEOWNERS, licensing,
+`package-lock.json` manage installation and scripts. Root pull requests, CODEOWNERS, licensing,
 security checks, and release evidence cover the complete change.
 
 ## Why
@@ -31,7 +31,7 @@ controls one review boundary while preserving deployable process boundaries.
 1. The root Git history is authoritative. Do not initialize nested repositories.
 2. The former checkout metadata is kept under the ignored `.polyrepo-git-archives/` folder only for
    reference. It is not part of builds, commits, or release commands.
-3. Root CI runs affected workspace checks and a complete release gate. Workspace-specific scripts
+3. The planned root CI workflow will run affected workspace checks and a complete release gate. Workspace-specific scripts
    remain available through `npm run <script> --workspace <package-name>`.
 4. Breaking contract changes use an expand, migrate, contract window. Update consumers and docs in
    the same pull request where feasible.
