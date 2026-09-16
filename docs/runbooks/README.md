@@ -30,6 +30,8 @@ way a contract-affecting change with no `@drezivo/contracts` PR is incomplete
 | `incident.md` | Something is actively broken in production right now. |
 | `oncall-checklist.md` | You're starting an on-call shift, or a dashboard signal fired and you don't know what it means. |
 | `security-incident.md` | A credential leaked. |
+| `ci-baseline.md` | You are deciding when the root verification workflow is safe to enable. |
+| `github-ruleset.md` | You are configuring or reviewing protection for the root `main` branch. |
 
 Start with `incident.md` if you are not sure which one applies and something is on fire.
 

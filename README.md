@@ -19,6 +19,7 @@ contains the same orientation in a visual Word document.
 5. [ERD input](Drezivo-ERD.dbml) — 50 entities and 132 relationships, grouped by release. Import into a DBML-compatible diagram tool. Do not treat exported SQL as complete production migrations.
 6. [Legal drafts](docs/product/legal/) — Philippines-first Terms of Service and Privacy Policy for counsel and Data Protection Officer review.
 7. [Security foundation](SECURITY-FOUNDATION.md) — session, tenant isolation, risk signals, bot defense, monitoring, incident response, and suggested configuration names.
+8. [GitHub ruleset runbook](docs/runbooks/github-ruleset.md) — exact `main` protection settings and the plan/CI prerequisites.
 
 ## Confirmed decisions
 

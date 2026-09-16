@@ -25,7 +25,8 @@ license through GitHub's license picker without that approval.
 4. Set the organization base permission to the minimum required, use teams, and reserve Admin for
    owners. GitHub recommends Read for viewers, Write for active contributors, Maintain for project
    managers, and Admin only for sensitive settings.
-5. Protect `main`: require pull requests, at least one review, passing root status checks, and no
+5. Protect `main` with the settings in [`docs/runbooks/github-ruleset.md`](docs/runbooks/github-ruleset.md):
+   require pull requests, at least one review, passing root status checks once CI exists, and no
    direct pushes. Require signed commits where the selected plan and team workflow support them.
 6. Enable secret scanning, push protection, Dependabot alerts, and dependency review where the plan
    supports them. Add a root CODEOWNERS file for security, database, contracts, legal, and release
@@ -34,17 +35,6 @@ license through GitHub's license picker without that approval.
    repository, issues, pull requests, build logs, or the Obsidian vault.
 8. Keep the root `LICENSE.md` authoritative. Workspace `LICENSE.md` files are transition notices;
    update or remove them only in a reviewed monorepo migration commit.
-
-## Review checklist
-
-- [ ] Legal entity name, copyright year, address, and contact are complete.
-- [ ] Counsel reviewed proprietary rights, employee/contractor access, liability language, and
-  third-party notices.
-- [ ] Organization visibility, teams, permissions, and branch protection match this policy.
-- [ ] Root license is visible at the repository root and the organization profile uses the approved
-  wording.
-- [ ] Public-facing Terms and Privacy Policy match actual product and data flows.
-- [ ] Every open-source exception has an owner, scope, expiry, and written approval.
 
 ## Reference
 

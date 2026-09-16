@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Apply Drezivo's branch protection to one repo. Run once per repo, after CI exists.
-#   ./branch-protection.sh Drezivoo/api "typecheck / lint / test / build"
+# Apply the Drezivo monorepo's fallback branch protection after CI exists.
+#   ./branch-protection.sh Drezivo/drezivo "verify"
 # Requires: gh auth login, with admin rights on the repo.
 set -euo pipefail
 
@@ -45,4 +45,4 @@ gh api -X PATCH "repos/${REPO}" \
   -F squash_merge_commit_title=PR_TITLE \
   -F squash_merge_commit_message=PR_BODY
 
-echo "Done. main is protected: no direct pushes, no force-pushes, 1 code-owner review, CI required."
+echo "Done. main is protected: no direct pushes, no force-pushes, 1 code-owner review, and required checks."
