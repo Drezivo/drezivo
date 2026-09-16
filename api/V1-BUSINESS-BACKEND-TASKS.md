@@ -161,7 +161,7 @@ Cancellation requests are tracked with request metadata, not as a mutually exclu
 - Store rental dates as PostgreSQL `date` values, not timestamps.
 - Store fitting appointments as UTC instants and interpret schedules in the organization's IANA timezone.
 - Default new Philippine organizations to `Asia/Manila` and `PHP`, while keeping both fields explicit.
-- Store money using PostgreSQL/Prisma decimal types, never floating point.
+- Store money using PostgreSQL numeric/decimal types, never floating point.
 - Serialize API money fields as decimal strings with an ISO currency code.
 - Snapshot prices, fees, deposits, selected size, and delivery details on a reservation so later catalog edits do not rewrite history.
 - Normalize emails by trimming and lowercasing. Enforce organization-scoped uniqueness when a customer email is present.
@@ -274,11 +274,11 @@ Tasks are ordered by dependency. A task is complete only when its acceptance cri
     - [ ] Async failures reach one global error handler.
     - [ ] Unknown routes return the standard error shape.
 
-- [ ] **FND-004 — Configure Prisma, PostgreSQL, and test infrastructure**
+- [ ] **FND-004 — Configure Drizzle, PostgreSQL, and test infrastructure**
   - **Depends on:** FND-001, FND-002
-  - **Outcome:** A single shared Prisma client, migration workflow, Jest configuration, factories, and isolated integration-test database.
+  - **Outcome:** A single shared Drizzle client, migration workflow, Jest configuration, factories, and isolated integration-test database.
   - **Acceptance criteria:**
-    - [ ] No feature creates its own Prisma client.
+    - [ ] No feature creates its own database client.
     - [ ] Tests cannot connect to development or production databases.
     - [ ] Integration tests can migrate, seed, and clean their database deterministically.
     - [ ] CI commands cover lint, typecheck, test, and build.
@@ -721,5 +721,5 @@ The V1 business backend is complete when:
 - Conflicting rental reservations and over-capacity fittings are prevented atomically.
 - Daily operations are visible through consistent reservation, calendar, payment, fitting, customer, and dashboard APIs.
 - Tenant isolation and private-file access are proven by integration tests.
-- Prisma migrations, lint, typecheck, tests, and build pass from a clean environment.
+- Drizzle migrations, lint, typecheck, tests, and build pass from a clean environment.
 - The implemented backend remains within the stated V1 boundaries and is ready for the separate business frontend to consume.

@@ -70,7 +70,7 @@ options." Concretely:
   scans without blocking writes for the whole duration), then convert to a true `NOT NULL` once
   validated, over a single blocking `SET NOT NULL` on a large table.
 - Adding the `EXCLUDE USING gist` constraint this system depends on for availability correctness
-  (`docs/decisions/0002-drizzle-over-prisma.md`) is exactly the kind of change this budget
+  (`docs/decisions/0002-drizzle-and-node-postgres.md`) is exactly the kind of change this budget
   applies to — test its lock behavior and duration against a realistic data volume (a Neon
   branch seeded with representative row counts, TRD §9) before running it against production.
 - DECISION NEEDED: set an explicit maximum acceptable lock duration (e.g., "no migration step

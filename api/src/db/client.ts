@@ -6,9 +6,8 @@ import { config } from '../config/index.js';
 import * as schema from './schema/index.js';
 
 /**
- * Single shared pg Pool + drizzle instance for the whole process (AGENTS.md: "Use a single
- * shared PrismaClient instance" — the Drizzle equivalent is one shared Pool). Never construct
- * a second `Pool` inside a feature module.
+ * One shared pg Pool and Drizzle instance serve the whole process. Never construct a second
+ * `Pool` inside a feature module.
  *
  * TRD §9 (Neon operations): Neon's pooler is transaction-based, so session-level state must
  * not be assumed to survive a checkout — `app.tenant_id` is therefore set with `SET LOCAL`

@@ -24,7 +24,7 @@ System-wide → likely database pool exhaustion (see below) or a downstream depe
 
 **What it means:** concurrent writes hitting the same row/constraint — expected background rate
 from legitimate contention (two staff confirming near-simultaneously, the `EXCLUDE USING gist`
-constraint doing its job per `docs/decisions/0002-drizzle-over-prisma.md`). An elevated *rate*
+constraint doing its job per `docs/decisions/0002-drizzle-and-node-postgres.md`). An elevated *rate*
 suggests either a hot row (one tenant, one asset, dominating contention) or application code
 retrying without backoff and amplifying the conflict rate itself.
 
