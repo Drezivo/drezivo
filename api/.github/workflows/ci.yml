@@ -1,0 +1,96 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  commit-hygiene:
+    name: commit hygiene
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: npm }
+      - uses: ./.github/actions/bootstrap-contracts
+        with:
+          ref: ${{ vars.CONTRACTS_REF }}
+          token: ${{ secrets.CONTRACTS_READ_TOKEN }}
+      - run: npm ci
+      - name: validate PR title
+        run: echo "${{ github.event.pull_request.title }}" | npx commitlint
+      - name: validate branch commits
+        run: npx commitlint --from origin/main --to HEAD
+
+  verify:
+    name: typecheck / lint / test / build
+    runs-on: ubuntu-latest
+
+    # TRD §11: tests run against real PostgreSQL. SQLite and mocked locking cannot
+    # reproduce gist exclusion constraints, row-level security, or SELECT ... FOR UPDATE,
+    # which are exactly the behaviours these tests exist to prove.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: drezivo
+          POSTGRES_PASSWORD: drezivo_test_only_not_a_secret
+          POSTGRES_DB: drezivo_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U drezivo"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: postgres://drezivo:drezivo_test_only_not_a_secret@localhost:5432/drezivo_test
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: npm }
+      - uses: ./.github/actions/bootstrap-contracts
+        with:
+          ref: ${{ vars.CONTRACTS_REF }}
+          token: ${{ secrets.CONTRACTS_READ_TOKEN }}
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - name: apply migrations
+        run: npm run db:migrate
+      - name: verify migrations are reversible-safe and idempotent
+        run: npm run db:migrate
+      - run: npm test -- --run
+      - run: npm run build
+
+  secrets:
+    name: no secrets, no env files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: reject tracked env files
+        run: |
+          if git ls-files | grep -E '(^|/)\.env'; then
+            echo "::error::A .env file is tracked. Remove it with 'git rm --cached' and rotate every value in it."
+            exit 1
+          fi
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

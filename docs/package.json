@@ -1,0 +1,16 @@
+{
+  "name": "@drezivo/docs",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Drezivo specification, architecture, decisions, and runbooks. No application code — this package.json exists only to pin the CI tooling versions used by the markdown lint / link check / commit-hygiene gate.",
+  "scripts": {
+    "lint:md": "markdownlint-cli2 \"**/*.md\" \"#node_modules\"",
+    "lint:links": "node scripts/check-markdown-links.mjs"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.5.0",
+    "@commitlint/config-conventional": "^19.5.0",
+    "markdown-link-check": "^3.13.6",
+    "markdownlint-cli2": "^0.14.0"
+  }
+}

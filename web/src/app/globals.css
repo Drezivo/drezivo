@@ -1,0 +1,61 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens for the Drezivo public surface (marketing site + tenant
+ * storefronts). Per .claude/rules/frontend.md: never hardcode raw color/
+ * spacing values in components — reference these tokens instead. Tenant
+ * storefronts may layer a tenant accent color on top of these later (V1.1+);
+ * V1 renders every storefront with this one shared, neutral system.
+ */
+@theme {
+  --color-background: #faf7f2;
+  --color-surface: #ffffff;
+  --color-foreground: #1c2521;
+  --color-muted: #6b6156;
+  --color-border: #e7e0d4;
+
+  --color-primary: #1f3d33;
+  --color-primary-foreground: #faf7f2;
+  --color-accent: #a97142;
+  --color-accent-foreground: #faf7f2;
+
+  --color-success: #2f7a4d;
+  --color-success-foreground: #eefaf2;
+  --color-warning: #a9660a;
+  --color-warning-foreground: #fff6e8;
+  --color-danger: #b3311f;
+  --color-danger-foreground: #fdeeec;
+
+  --font-display: 'Georgia', 'Times New Roman', serif;
+  --font-body:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-background: #14181a;
+    --color-surface: #1c2226;
+    --color-foreground: #f1ede4;
+    --color-muted: #a39c8e;
+    --color-border: #2b3338;
+  }
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-body);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}

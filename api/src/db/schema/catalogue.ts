@@ -1,0 +1,126 @@
+import {
+  boolean,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  smallint,
+  text,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
+
+import { branch } from './tenancy.js';
+import { file } from './files.js';
+import { idColumn, timestamps, updatableTimestamps } from './_shared.js';
+
+/**
+ * Owns: styles (product), variants (product_variant), individually tracked physical garments
+ * (physical_asset), and catalogue imagery. Governed by TRD §2 (Catalogue/assets row);
+ * Data-Model §5 "Three identities" (product / variant / physical asset are distinct rows —
+ * never model rental stock as a quantity counter on the variant).
+ *
+ * This module must never write to `asset_allocation` directly — planned unavailability is
+ * owned exclusively by the availability module (see db/schema/availability.ts).
+ */
+
+export const productStatusEnum = pgEnum('product_status', ['draft', 'active', 'archived']);
+export const pricingModeEnum = pgEnum('pricing_mode', ['fixed_duration', 'daily']);
+export const assetLifecycleEnum = pgEnum('asset_lifecycle_status', ['active', 'retired', 'lost']);
+export const assetReadinessEnum = pgEnum('asset_readiness', ['ready', 'needs_cleaning', 'needs_repair', 'unready']);
+export const assetCustodyKindEnum = pgEnum('asset_custody_kind', ['at_branch', 'with_customer', 'in_transit']);
+
+export const category = pgTable('category', {
+  ...idColumn,
+  tenantId: uuid('tenant_id').notNull(),
+  name: text('name').notNull(),
+  visible: boolean('visible').notNull().default(true),
+  displayOrder: integer('display_order').notNull().default(0),
+  ...timestamps,
+});
+
+export const product = pgTable(
+  'product',
+  {
+    ...idColumn,
+    tenantId: uuid('tenant_id').notNull(),
+    categoryId: uuid('category_id').references(() => category.id),
+    name: text('name').notNull(),
+    description: text('description'),
+    status: productStatusEnum('status').notNull().default('draft'),
+    ...updatableTimestamps,
+  },
+  (table) => [uniqueIndex('product_tenant_status_idx').on(table.tenantId, table.status)],
+);
+
+/** Units are cm/in; `measurements` is a validated numeric map at the Zod boundary, not free-form JSON from the client. */
+export const productVariant = pgTable(
+  'product_variant',
+  {
+    ...idColumn,
+    tenantId: uuid('tenant_id').notNull(),
+    productId: uuid('product_id')
+      .notNull()
+      .references(() => product.id),
+    sku: text('sku').notNull(),
+    sizeLabel: text('size_label').notNull(),
+    colorLabel: text('color_label').notNull(),
+    measurements: jsonb('measurements').$type<Record<string, number>>().notNull().default({}),
+    measurementUnit: text('measurement_unit').notNull().default('cm'),
+    rentalPriceMinor: integer('rental_price_minor').notNull(),
+    securityDepositMinor: integer('security_deposit_minor').notNull().default(0),
+    currency: text('currency').notNull().default('PHP'),
+    pricingMode: pricingModeEnum('pricing_mode').notNull().default('fixed_duration'),
+    includedDurationMinutes: integer('included_duration_minutes').notNull(),
+    extraDayPriceMinor: integer('extra_day_price_minor').notNull().default(0),
+    prepMinutes: integer('prep_minutes').notNull().default(0),
+    turnaroundMinutes: integer('turnaround_minutes').notNull().default(0),
+    status: productStatusEnum('status').notNull().default('draft'),
+    ...updatableTimestamps,
+  },
+  (table) => [uniqueIndex('product_variant_tenant_sku_key').on(table.tenantId, table.sku)],
+);
+
+/** `branch_id` is the administrative home/holding branch; actual custody can be with a customer or in transit (see custody_kind). */
+export const physicalAsset = pgTable(
+  'physical_asset',
+  {
+    ...idColumn,
+    tenantId: uuid('tenant_id').notNull(),
+    branchId: uuid('branch_id')
+      .notNull()
+      .references(() => branch.id),
+    variantId: uuid('variant_id')
+      .notNull()
+      .references(() => productVariant.id),
+    assetCode: text('asset_code').notNull(),
+    lifecycleStatus: assetLifecycleEnum('lifecycle_status').notNull().default('active'),
+    readiness: assetReadinessEnum('readiness').notNull().default('ready'),
+    custodyKind: assetCustodyKindEnum('custody_kind').notNull().default('at_branch'),
+    conditionNote: text('condition_note'),
+    measurementOverrides: jsonb('measurement_overrides').$type<Record<string, number>>(),
+    alterationNote: text('alteration_note'),
+    // `version` guards concurrent readiness/custody writes with a conditional UPDATE — see
+    // the reservations module's confirm handler for the same optimistic-concurrency pattern.
+    version: integer('version').notNull().default(1),
+    ...updatableTimestamps,
+  },
+  (table) => [uniqueIndex('physical_asset_tenant_code_key').on(table.tenantId, table.assetCode)],
+);
+
+export const productImage = pgTable(
+  'product_image',
+  {
+    ...idColumn,
+    tenantId: uuid('tenant_id').notNull(),
+    productId: uuid('product_id')
+      .notNull()
+      .references(() => product.id),
+    fileId: uuid('file_id')
+      .notNull()
+      .references(() => file.id),
+    displayOrder: smallint('display_order').notNull().default(0),
+    ...timestamps,
+  },
+  (table) => [uniqueIndex('product_image_product_order_key').on(table.productId, table.displayOrder)],
+);

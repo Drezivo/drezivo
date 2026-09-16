@@ -1,0 +1,67 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  commit-hygiene:
+    name: commit hygiene
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: npm }
+      - run: npm ci
+      # The PR title becomes the squash commit on main, so it must parse as a
+      # Conventional Commit. Every commit on the branch is checked too.
+      - name: validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$PR_TITLE" | npx commitlint
+      - name: validate branch commits
+        run: npx commitlint --from origin/main --to HEAD
+
+  verify:
+    name: markdown lint / link check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: npm }
+      - run: npm ci
+      # This repo has no application code, so there is nothing to typecheck, unit-test, or
+      # build. The local and CI gate is a markdown lint plus a check that every relative link
+      # in the repo actually resolves to a file that exists.
+      - name: markdown lint
+        run: npm run lint:md
+      - name: relative link check
+        run: npm run lint:links
+
+  secrets:
+    name: no secrets, no env files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      # A tracked .env of any kind is a live finding, not a style issue.
+      - name: reject tracked env files
+        run: |
+          if git ls-files | grep -E '(^|/)\.env'; then
+            echo "::error::A .env file is tracked. Remove it with 'git rm --cached' and rotate every value in it."
+            exit 1
+          fi
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

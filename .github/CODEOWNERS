@@ -1,0 +1,10 @@
+# Replace the placeholder teams before enabling required CODEOWNERS review.
+# One root CODEOWNERS file governs the monorepo.
+* @INSERT-GITHUB-TEAM
+/api/ @INSERT-BACKEND-TEAM
+/contracts/ @INSERT-PLATFORM-TEAM
+/app/ @INSERT-FRONTEND-TEAM
+/web/ @INSERT-FRONTEND-TEAM
+/docs/product/legal/ @INSERT-LEGAL-TEAM
+/SECURITY-FOUNDATION.md @INSERT-SECURITY-TEAM
+/.github/ @INSERT-PLATFORM-TEAM

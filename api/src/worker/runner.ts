@@ -1,0 +1,148 @@
+import { randomUUID } from 'node:crypto';
+
+import { config } from '../config/index.js';
+import { pool } from '../db/client.js';
+import { logger } from '../shared/logger.js';
+
+export interface OutboxRow {
+  id: string;
+  tenant_id: string;
+  event_type: string;
+  payload: Record<string, unknown>;
+  attempts: number;
+  max_attempts: number;
+  /** Set locally by `claimBatch` after a successful claim; verified before any terminal write so a lease loss never lets a stale worker mark a reclaimed row complete. */
+  _leaseToken?: string;
+}
+
+export type EventHandler = (row: OutboxRow) => Promise<void>;
+
+/**
+ * Lease-claim polling loop with bounded retry to a terminal state (TRD §8). Polling, not
+ * `LISTEN`/`NOTIFY`, per TRD §9: "Polling, not session LISTEN, is the initial design" — Neon's
+ * pooled connections make holding a `LISTEN` session impractical, and polling is simple enough
+ * to reason about under worker-outage tests (TRD §5 adversarial test 3).
+ *
+ * One claim transaction per batch: `FOR UPDATE SKIP LOCKED` lets multiple worker replicas poll
+ * concurrently without claiming the same row twice, and the lease token/deadline mean a worker
+ * that crashes mid-processing does not hold its claim forever — a later poll (by this or any
+ * other replica) reclaims the row once `lease_until` has passed.
+ */
+export class WorkerRunner {
+  private stopped = false;
+
+  constructor(
+    private readonly handlers: Record<string, EventHandler>,
+    private readonly pollIntervalMs = config.WORKER_POLL_INTERVAL_MS,
+    private readonly leaseSeconds = config.WORKER_LEASE_SECONDS,
+  ) {}
+
+  async start(): Promise<void> {
+    logger.info({ pollIntervalMs: this.pollIntervalMs }, 'worker runner starting');
+    while (!this.stopped) {
+      const claimed = await this.claimBatch(10);
+      if (claimed.length === 0) {
+        await sleep(this.pollIntervalMs);
+        continue;
+      }
+      for (const row of claimed) {
+        await this.processOne(row);
+      }
+    }
+  }
+
+  stop(): void {
+    this.stopped = true;
+  }
+
+  private async claimBatch(limit: number): Promise<OutboxRow[]> {
+    const leaseToken = randomUUID();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query<OutboxRow>(
+        `WITH due AS (
+           SELECT id FROM outbox_event
+           WHERE status = 'pending'
+              OR (status = 'leased' AND lease_until < now())
+           ORDER BY available_at
+           FOR UPDATE SKIP LOCKED
+           LIMIT $1
+         )
+         UPDATE outbox_event o
+         SET status = 'leased', lease_token = $2, lease_until = now() + make_interval(secs => $3)
+         FROM due
+         WHERE o.id = due.id
+         RETURNING o.id, o.tenant_id, o.event_type, o.payload, o.attempts, o.max_attempts`,
+        [limit, leaseToken, this.leaseSeconds],
+      );
+      await client.query('COMMIT');
+      // Stamp the lease token onto each row locally so `complete`/`fail` below can verify it
+      // still holds this exact lease before writing a terminal outcome.
+      return rows.map((row) => ({ ...row, _leaseToken: leaseToken }));
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  private async processOne(row: OutboxRow): Promise<void> {
+    const handler = this.handlers[row.event_type];
+    if (!handler) {
+      logger.error({ eventType: row.event_type, outboxId: row.id }, 'no handler registered for event type');
+      await this.markDead(row, 'no handler registered');
+      return;
+    }
+
+    try {
+      await handler(row);
+      await this.complete(row);
+    } catch (error) {
+      await this.retryOrDie(row, error);
+    }
+  }
+
+  private async complete(row: OutboxRow): Promise<void> {
+    await pool.query(
+      `UPDATE outbox_event SET status = 'succeeded', completed_at = now()
+       WHERE id = $1 AND lease_token = $2`,
+      [row.id, row._leaseToken],
+    );
+  }
+
+  private async retryOrDie(row: OutboxRow, error: unknown): Promise<void> {
+    const attempts = row.attempts + 1;
+    const safeMessage = error instanceof Error ? error.message : 'unknown error';
+    logger.warn({ outboxId: row.id, attempts, err: error }, 'outbox handler failed');
+
+    if (attempts >= row.max_attempts) {
+      await this.markDead(row, safeMessage);
+      logger.error({ outboxId: row.id, tenantId: row.tenant_id, eventType: row.event_type }, 'outbox event moved to dead-letter');
+      return;
+    }
+
+    // Exponential backoff with jitter, bounded by max_attempts (TRD §8).
+    const backoffSeconds = Math.min(2 ** attempts, 3600) + Math.random() * 5;
+    await pool.query(
+      `UPDATE outbox_event
+       SET status = 'pending', attempts = $2, safe_last_error = $3,
+           available_at = now() + make_interval(secs => $4), lease_token = NULL, lease_until = NULL
+       WHERE id = $1 AND lease_token = $5`,
+      [row.id, attempts, safeMessage, backoffSeconds, row._leaseToken],
+    );
+  }
+
+  private async markDead(row: OutboxRow, safeMessage: string): Promise<void> {
+    await pool.query(
+      `UPDATE outbox_event SET status = 'dead', attempts = $2, safe_last_error = $3
+       WHERE id = $1`,
+      [row.id, row.attempts + 1, safeMessage],
+    );
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

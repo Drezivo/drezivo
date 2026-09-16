@@ -1,0 +1,1099 @@
+Project Drezivo {
+  database_type: 'PostgreSQL'
+  Note: 'ERD-ready logical specification. V1/V1.1/V2 tables are grouped; do not deploy all phases blindly. SQL invariants in Drezivo-Data-Model.md are mandatory.'
+}
+
+Table tenant {
+  id uuid [pk, not null]
+  clerk_org_id varchar(200) [not null]
+  name varchar(200) [not null]
+  slug varchar(100) [not null]
+  status varchar(30) [not null]
+  currency char(3) [not null]
+  timezone varchar(64) [not null]
+  updated_at timestamptz [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (clerk_org_id) [unique]
+    (slug) [unique]
+  }
+  Note: 'V1. Business isolation boundary. Status active/restricted/cancelled; current state is not historical booking policy.'
+}
+
+Table branch {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  name varchar(160) [not null]
+  code varchar(40) [not null]
+  is_default boolean [not null]
+  timezone varchar(64) [not null]
+  address jsonb [not null]
+  operating_hours jsonb [not null]
+  status varchar(20) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, code) [unique]
+  }
+  Note: 'V1. One default branch in V1; multiple in V2. Partial unique default and at-least-one default enforced in migrations/service.'
+}
+
+Table membership {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  clerk_user_id varchar(200) [not null]
+  role varchar(40) [not null]
+  status varchar(20) [not null]
+  authz_version bigint [not null]
+  updated_at timestamptz [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, clerk_user_id) [unique]
+  }
+  Note: 'V1. owner/frontdesk initially; local status check required on every protected request.'
+}
+
+Table branch_membership {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  branch_id uuid [not null]
+  membership_id uuid [not null]
+  permission_codes jsonb [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, branch_id, membership_id) [unique]
+  }
+  Note: 'V1. One default grant V1. V2 server validates branch-scoped capabilities; JSON codes are allowlisted.'
+}
+
+Table customer {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  full_name varchar(200) [not null]
+  email varchar(320)
+  phone varchar(40)
+  notes text
+  privacy_notice_version varchar(50) [not null]
+  anonymized_at timestamptz
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, email)
+    (tenant_id, phone)
+  }
+  Note: 'V1. At least one usable verified contact according to channel policy; guest checkout requires email. Do not merge people on phone alone.'
+}
+
+Table category {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  name varchar(120) [not null]
+  visible boolean [not null]
+  display_order integer [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, name) [unique]
+  }
+  Note: 'V1. '
+}
+
+Table product {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  category_id uuid [not null]
+  name varchar(200) [not null]
+  description text [not null]
+  status varchar(20) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, category_id, status)
+  }
+  Note: 'V1. Style-level marketing entry, not stock quantity.'
+}
+
+Table product_variant {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  product_id uuid [not null]
+  sku varchar(80) [not null]
+  size_label varchar(40) [not null]
+  color_label varchar(80) [not null]
+  measurements jsonb [not null]
+  measurement_unit varchar(8) [not null]
+  rental_price_minor bigint [not null]
+  security_deposit_minor bigint [not null]
+  currency char(3) [not null]
+  pricing_mode varchar(30) [not null]
+  included_duration_minutes integer [not null]
+  extra_day_price_minor bigint [not null]
+  prep_minutes integer [not null]
+  turnaround_minutes integer [not null]
+  status varchar(20) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, sku) [unique]
+  }
+  Note: 'V1. Units cm/in, validated numeric measurement map. Pricing mode fixed_duration/daily; explicit nonnegative amounts and bounded minutes.'
+}
+
+Table physical_asset {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  branch_id uuid [not null]
+  variant_id uuid [not null]
+  asset_code varchar(80) [not null]
+  lifecycle_status varchar(30) [not null]
+  readiness varchar(30) [not null]
+  custody_kind varchar(30) [not null]
+  condition_note text
+  measurement_overrides jsonb [not null]
+  alteration_note text
+  location_id uuid
+  version bigint [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, asset_code) [unique]
+    (tenant_id, branch_id, variant_id, readiness)
+  }
+  Note: 'V1. branch_id is administrative home/holding branch; actual custody can be customer/transit. Location optional until V2.'
+}
+
+Table file_object {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  purpose varchar(30) [not null]
+  storage_key varchar(500) [not null]
+  version_id varchar(200)
+  sha256 char(64)
+  mime_type varchar(120) [not null]
+  byte_size bigint [not null]
+  lifecycle_status varchar(30) [not null]
+  is_private boolean [not null]
+  upload_expires_at timestamptz [not null]
+  frozen_at timestamptz
+  retention_until timestamptz
+  legal_hold boolean [not null]
+  deleted_at timestamptz
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (storage_key) [unique]
+  }
+  Note: 'V1. Accepted evidence has exact version/checksum/frozen timestamp. Upload expiry is not evidence retention. Delete all applicable versions.'
+}
+
+Table product_image {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  product_id uuid [not null]
+  file_id uuid [not null]
+  display_order integer [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, product_id, display_order) [unique]
+  }
+  Note: 'V1. Order zero is primary image; only public derivatives may be exposed.'
+}
+
+Table storefront {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  branch_id uuid [not null]
+  slug varchar(120) [not null]
+  status varchar(20) [not null]
+  branding jsonb [not null]
+  contact jsonb [not null]
+  published_at timestamptz
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id) [unique]
+    (slug) [unique]
+  }
+  Note: 'V1. One storefront per tenant initially, globally unique path slug. Branch selector added V2 without duplicating tenant identity.'
+}
+
+Table policy_snapshot {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  storefront_id uuid [not null]
+  version integer [not null]
+  rental_rules jsonb [not null]
+  deposit_rules jsonb [not null]
+  cancellation_rules jsonb [not null]
+  delivery_rules jsonb [not null]
+  privacy_notice text [not null]
+  effective_at timestamptz [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, storefront_id, version) [unique]
+  }
+  Note: 'V1. Immutable policy version once referenced. Terms acceptance stored on reservation.'
+}
+
+Table payment_method {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  name varchar(80) [not null]
+  rail varchar(40) [not null]
+  destination_snapshot jsonb [not null]
+  qr_file_id uuid
+  active boolean [not null]
+  version integer [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+  }
+  Note: 'V1. Sensitive destination metadata; owner edits only. New version rather than changing already shown instructions; rail cash/manual_qr/manual_transfer.'
+}
+
+Table reservation {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  branch_id uuid [not null]
+  customer_id uuid
+  storefront_id uuid [not null]
+  policy_snapshot_id uuid [not null]
+  payment_method_id uuid [not null]
+  reference_code varchar(40) [not null]
+  status varchar(30) [not null]
+  event_date date
+  pickup_at timestamptz [not null]
+  due_at timestamptz [not null]
+  timezone_snapshot varchar(64) [not null]
+  customer_snapshot jsonb [not null]
+  delivery_snapshot jsonb [not null]
+  price_snapshot jsonb [not null]
+  currency char(3) [not null]
+  rental_total_minor bigint [not null]
+  security_required_minor bigint [not null]
+  due_now_minor bigint [not null]
+  hold_acquired_at timestamptz [not null]
+  hold_expires_at timestamptz
+  terms_accepted_at timestamptz
+  submitted_at timestamptz
+  confirmed_at timestamptz
+  completed_at timestamptz
+  version bigint [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, reference_code) [unique]
+    (tenant_id, branch_id, status, pickup_at)
+    (tenant_id, status, hold_expires_at)
+  }
+  Note: 'V1. Customer/contact may be absent for anonymous short hold; required before pending_confirmation. Snapshot fields validated by state. Canonical reservation states in model doc.'
+}
+
+Table reservation_line {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  reservation_id uuid [not null]
+  variant_id uuid [not null]
+  line_number integer [not null]
+  name_snapshot varchar(200) [not null]
+  measurements_snapshot jsonb [not null]
+  pricing_snapshot jsonb [not null]
+  rental_minor bigint [not null]
+  deposit_minor bigint [not null]
+  currency char(3) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, reservation_id, line_number) [unique]
+  }
+  Note: 'V1. One serialized garment per line. One line in V1 UI. No quantity greater than one; allocation assigns the physical asset.'
+}
+
+Table maintenance_work_order {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  branch_id uuid [not null]
+  asset_id uuid [not null]
+  kind varchar(30) [not null]
+  status varchar(20) [not null]
+  reason text [not null]
+  opened_at timestamptz [not null]
+  closed_at timestamptz
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+  }
+  Note: 'V1. cleaning/repair/manual_block; planned interval represented by asset_allocation. Actual readiness independently checked.'
+}
+
+Table asset_allocation {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  branch_id uuid [not null]
+  asset_id uuid [not null]
+  reservation_line_id uuid
+  maintenance_id uuid
+  fitting_line_id uuid
+  transfer_line_id uuid
+  kind varchar(30) [not null]
+  period tstzrange [not null]
+  is_blocking boolean [not null]
+  released_at timestamptz
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, asset_id)
+    (tenant_id, reservation_line_id)
+  }
+  Note: 'V1. Exactly one source FK. EXCLUDE gist tenant_id =, asset_id =, period && WHERE is_blocking. Nonempty bounded [) range. Holds/pending/confirmed/turnaround all block; deterministic transition contract.'
+}
+
+Table custody_event {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  branch_id uuid [not null]
+  asset_id uuid [not null]
+  reservation_line_id uuid
+  transfer_line_id uuid
+  actor_membership_id uuid [not null]
+  event_kind varchar(30) [not null]
+  occurred_at timestamptz [not null]
+  condition_snapshot jsonb [not null]
+  business_key varchar(160) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, business_key) [unique]
+    (tenant_id, asset_id, occurred_at)
+  }
+  Note: 'V1. Immutable actual facts independent of planned exclusion. Exactly matching intent is duplicate-safe; real lateness never rejected due to future allocations.'
+}
+
+Table disruption {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  asset_id uuid [not null]
+  reservation_line_id uuid [not null]
+  cause_custody_event_id uuid
+  reason varchar(60) [not null]
+  status varchar(20) [not null]
+  resolved_at timestamptz
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, status)
+  }
+  Note: 'V1. Overdue/unready asset threatens upcoming booking; operator resolves substitute/new dates/refund with customer. Do not silently auto-cancel.'
+}
+
+Table payment {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  reservation_id uuid
+  fitting_id uuid
+  payment_method_id uuid [not null]
+  amount_minor bigint [not null]
+  currency char(3) [not null]
+  status varchar(20) [not null]
+  merchant_reference varchar(160)
+  verified_at timestamptz
+  business_key varchar(160) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, business_key) [unique]
+    (tenant_id, reservation_id, status)
+  }
+  Note: 'V1. Exactly one reservation/fitting. Pending intent may change through guards; verified amount/currency/reference immutable; corrections use reversals. Merchant reference uniqueness needs method/provider scope.'
+}
+
+Table payment_receipt {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  payment_id uuid [not null]
+  file_id uuid [not null]
+  evidence_status varchar(30) [not null]
+  submitted_at timestamptz [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, payment_id, file_id) [unique]
+  }
+  Note: 'V1. Evidence does not imply receipt of funds. File must be finalized, private, same tenant.'
+}
+
+Table payment_verification {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  payment_id uuid [not null]
+  verifier_membership_id uuid [not null]
+  decision varchar(20) [not null]
+  verified_amount_minor bigint
+  evidence_note text [not null]
+  decided_at timestamptz [not null]
+  business_key varchar(160) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, business_key) [unique]
+  }
+  Note: 'V1. Immutable review decisions; only one successful settlement per payment via locked conditional transition. Private notes not application logs.'
+}
+
+Table charge {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  reservation_id uuid
+  fitting_id uuid
+  kind varchar(30) [not null]
+  amount_minor bigint [not null]
+  currency char(3) [not null]
+  reverses_id uuid
+  business_key varchar(160) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, business_key) [unique]
+  }
+  Note: 'V1. Immutable nonnegative charge or linked credit/reversal. Exactly one rental/fitting. Security deposit liability is not a revenue charge.'
+}
+
+Table payment_allocation {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  payment_id uuid [not null]
+  charge_id uuid [not null]
+  amount_minor bigint [not null]
+  direction varchar(12) [not null]
+  reverses_id uuid
+  business_key varchar(160) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, business_key) [unique]
+  }
+  Note: 'V1. Immutable apply/reverse toward charge; reversal bounded by original. Same booking and currency required beyond tenant FK.'
+}
+
+Table refund {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  payment_id uuid [not null]
+  amount_minor bigint [not null]
+  currency char(3) [not null]
+  purpose varchar(30) [not null]
+  status varchar(20) [not null]
+  merchant_reference varchar(160)
+  requested_by uuid [not null]
+  completed_at timestamptz
+  business_key varchar(160) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, business_key) [unique]
+  }
+  Note: 'V1. requested/processing/completed/failed/cancelled; reserve refundable balance for pending instructions. Manual completion verified; never reissue automatically on uncertain transfer.'
+}
+
+Table deposit_entry {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  reservation_id uuid [not null]
+  payment_id uuid [not null]
+  charge_id uuid
+  refund_id uuid
+  kind varchar(20) [not null]
+  amount_minor bigint [not null]
+  currency char(3) [not null]
+  reverses_id uuid
+  business_key varchar(160) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, business_key) [unique]
+  }
+  Note: 'V1. Immutable receive/release/apply/reversal. Exactly linked financial effect; apply pairs with charge payment allocation and release with refund. See balance formulas.'
+}
+
+Table guest_access_token {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  reservation_id uuid [not null]
+  token_hash char(64) [not null]
+  scope_codes jsonb [not null]
+  expires_at timestamptz [not null]
+  revoked_at timestamptz
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (token_hash) [unique]
+  }
+  Note: 'V1. High entropy bearer secret only returned once, hash stored; scopes allowlisted per state. Reference is not auth.'
+}
+
+Table idempotency_record {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  principal_key varchar(200) [not null]
+  operation varchar(80) [not null]
+  intent_key varchar(160) [not null]
+  payload_hash char(64) [not null]
+  status varchar(20) [not null]
+  resource_id uuid
+  response_code integer
+  safe_response jsonb
+  expires_at timestamptz [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, principal_key, operation, intent_key) [unique]
+  }
+  Note: 'V1. Principal includes staff or anonymous checkout session namespace; terminal business keys outlive request cache.'
+}
+
+Table outbox_event {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  dedupe_key varchar(200) [not null]
+  event_type varchar(80) [not null]
+  payload jsonb [not null]
+  status varchar(20) [not null]
+  lease_token uuid
+  lease_until timestamptz
+  attempts integer [not null]
+  max_attempts integer [not null]
+  available_at timestamptz [not null]
+  completed_at timestamptz
+  safe_last_error text
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, dedupe_key) [unique]
+    (status, available_at)
+  }
+  Note: 'V1. pending/leased/succeeded/dead; at-least-once. Payload minimum IDs, no bearer secrets. Worker tenant scopes each domain operation.'
+}
+
+Table webhook_inbox {
+  id uuid [pk, not null]
+  provider varchar(40) [not null]
+  provider_event_id varchar(200) [not null]
+  payload_digest char(64) [not null]
+  safe_payload jsonb [not null]
+  status varchar(20) [not null]
+  processed_at timestamptz
+  created_at timestamptz [not null]
+  indexes {
+    (provider, provider_event_id) [unique]
+  }
+  Note: 'V1. Global pre-tenant inbox, separate restricted worker role; no raw token/PII payload. Verify signature before insert; provider data fetched/reconciled securely.'
+}
+
+Table notification_delivery {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  outbox_id uuid [not null]
+  channel varchar(20) [not null]
+  template_version varchar(40) [not null]
+  status varchar(20) [not null]
+  provider_message_id varchar(200)
+  accepted_at timestamptz
+  delivered_at timestamptz
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, outbox_id) [unique]
+  }
+  Note: 'V1. Recipient resolved from authorized record at send time; queued vs provider accepted vs delivered/bounced distinguished.'
+}
+
+Table audit_event {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  actor_key varchar(200) [not null]
+  support_grant_id uuid
+  action varchar(80) [not null]
+  entity_type varchar(60) [not null]
+  entity_id uuid
+  redacted_summary jsonb [not null]
+  request_id uuid [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, entity_type, entity_id, created_at)
+  }
+  Note: 'V1. Append-only metadata. No full before/after sensitive payloads; actor can be staff/operator/system namespace.'
+}
+
+Table import_job {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  requested_by uuid [not null]
+  file_id uuid [not null]
+  status varchar(20) [not null]
+  content_hash char(64) [not null]
+  intent_key varchar(160) [not null]
+  result_summary jsonb [not null]
+  completed_at timestamptz
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, intent_key) [unique]
+  }
+  Note: 'V1. Preview validates rows; commit all-or-nothing for V1 bounded imports. Larger batches explicit later, no silent partial success.'
+}
+
+Table export_job {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  requested_by uuid [not null]
+  scope_snapshot jsonb [not null]
+  status varchar(20) [not null]
+  result_file_id uuid
+  expires_at timestamptz [not null]
+  completed_at timestamptz
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+  }
+  Note: 'V1. Durable queue record; permission rechecked at download. Generated CSV protects formula injection.'
+}
+
+Table plan {
+  id uuid [pk, not null]
+  code varchar(40) [not null]
+  version integer [not null]
+  monthly_minor bigint [not null]
+  currency char(3) [not null]
+  active boolean [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (code, version) [unique]
+  }
+  Note: 'V1. Owner confirmed Starter30000 Professional49900 Business129900 PHP minor units/month. Immutable price versions.'
+}
+
+Table plan_entitlement {
+  id uuid [pk, not null]
+  plan_id uuid [not null]
+  capability varchar(80) [not null]
+  limit_value bigint
+  enabled boolean [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (plan_id, capability) [unique]
+  }
+  Note: 'V1. Limits and release flags both required; null means nonnumeric capability, not implicitly unlimited.'
+}
+
+Table subscription {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  plan_id uuid [not null]
+  status varchar(20) [not null]
+  trial_ends_at timestamptz
+  current_period_start timestamptz [not null]
+  current_period_end timestamptz [not null]
+  grace_ends_at timestamptz
+  cancel_at_period_end boolean [not null]
+  provider_reference varchar(200)
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id) [unique]
+  }
+  Note: 'V1. Current subscription one/tenant. Versioned plan pointer; history captured in subscription_event. Restriction preserves existing rental settlement.'
+}
+
+Table subscription_event {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  subscription_id uuid [not null]
+  prior_plan_id uuid
+  next_plan_id uuid [not null]
+  event_type varchar(30) [not null]
+  effective_at timestamptz [not null]
+  business_key varchar(160) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, business_key) [unique]
+  }
+  Note: 'V1. Immutable commercial transition history; no silent repricing existing period.'
+}
+
+Table subscription_payment {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  subscription_id uuid [not null]
+  amount_minor bigint [not null]
+  currency char(3) [not null]
+  status varchar(20) [not null]
+  collection_method varchar(40) [not null]
+  provider_reference varchar(200)
+  business_key varchar(160) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, business_key) [unique]
+  }
+  Note: 'V1. Drezivo revenue collection only; never shares merchant rental payment balances.'
+}
+
+Table support_grant {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  operator_subject varchar(200) [not null]
+  granted_by varchar(200) [not null]
+  permission_codes jsonb [not null]
+  reason text [not null]
+  starts_at timestamptz [not null]
+  expires_at timestamptz [not null]
+  revoked_at timestamptz
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+  }
+  Note: 'V1. Time-bound tenant-scoped operator permission; private documents separate capability; no universal bypass role.'
+}
+
+Table fitting_appointment {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  branch_id uuid [not null]
+  customer_id uuid [not null]
+  status varchar(20) [not null]
+  period tstzrange [not null]
+  timezone_snapshot varchar(64) [not null]
+  currency char(3) [not null]
+  fee_minor bigint [not null]
+  business_key varchar(160) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, business_key) [unique]
+  }
+  Note: 'V1.1. Appointment confirmed only after all required resources and promised garment blocks claim atomically.'
+}
+
+Table fitting_line {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  fitting_id uuid [not null]
+  variant_id uuid [not null]
+  asset_id uuid
+  garment_guaranteed boolean [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+  }
+  Note: 'V1.1. Guaranteed garment requires asset plus asset_allocation; unassigned preference must not claim guarantee.'
+}
+
+Table fitting_resource {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  branch_id uuid [not null]
+  membership_id uuid
+  name varchar(100) [not null]
+  kind varchar(20) [not null]
+  active boolean [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+  }
+  Note: 'V1.1. Individual room/staff/capacity slot, capacity one per resource. Model N capacity as N identifiable slots.'
+}
+
+Table resource_allocation {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  resource_id uuid [not null]
+  fitting_id uuid
+  reason varchar(30) [not null]
+  period tstzrange [not null]
+  is_blocking boolean [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+  }
+  Note: 'V1.1. EXCLUDE same tenant/resource overlapping period WHERE is_blocking. Appointment or closure/break; explicit source check.'
+}
+
+Table fitting_hours {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  resource_id uuid [not null]
+  weekday integer [not null]
+  starts_local time [not null]
+  ends_local time [not null]
+  valid_from date [not null]
+  valid_to date
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+  }
+  Note: 'V1.1. Allow multiple windows per day; date exceptions become resource_allocation closures. Timezone from branch.'
+}
+
+Table location {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  branch_id uuid [not null]
+  code varchar(40) [not null]
+  name varchar(120) [not null]
+  kind varchar(30) [not null]
+  active boolean [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, branch_id, code) [unique]
+  }
+  Note: 'V2. Physical room/rack/storage; transit tracked as custody state, not fake destination stock.'
+}
+
+Table transfer_order {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  from_branch_id uuid [not null]
+  to_branch_id uuid [not null]
+  status varchar(30) [not null]
+  requested_by uuid [not null]
+  expected_dispatch_at timestamptz [not null]
+  expected_receive_at timestamptz [not null]
+  version bigint [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+  }
+  Note: 'V2. Distinct branches same tenant. requested/approved/in_transit/partially_received/completed/cancelled; each line independent arrival.'
+}
+
+Table transfer_line {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  transfer_id uuid [not null]
+  asset_id uuid [not null]
+  status varchar(30) [not null]
+  dispatched_at timestamptz
+  received_at timestamptz
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, transfer_id, asset_id) [unique]
+  }
+  Note: 'V2. Physical unit one line. Pending transfer alone does not update custody or branch availability.'
+}
+
+Table transfer_event {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  transfer_line_id uuid [not null]
+  actor_membership_id uuid [not null]
+  kind varchar(30) [not null]
+  occurred_at timestamptz [not null]
+  condition_snapshot jsonb [not null]
+  business_key varchar(160) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, business_key) [unique]
+  }
+  Note: 'V2. Immutable dispatch/receive/lost/cancel event. Winning state transition updates current asset location and custody atomically.'
+}
+
+Ref: branch.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: membership.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: branch_membership.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: customer.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: category.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: product.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: product_variant.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: physical_asset.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: file_object.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: product_image.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: storefront.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: policy_snapshot.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: payment_method.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: reservation.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: reservation_line.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: maintenance_work_order.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: asset_allocation.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: custody_event.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: disruption.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: payment.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: payment_receipt.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: payment_verification.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: charge.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: payment_allocation.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: refund.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: deposit_entry.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: guest_access_token.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: idempotency_record.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: outbox_event.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: notification_delivery.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: audit_event.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: import_job.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: export_job.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: subscription.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: subscription_event.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: subscription_payment.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: support_grant.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: fitting_appointment.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: fitting_line.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: fitting_resource.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: resource_allocation.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: fitting_hours.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: location.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: transfer_order.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: transfer_line.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: transfer_event.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: branch_membership.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
+Ref: branch_membership.(tenant_id, membership_id) > membership.(tenant_id, id) [delete: restrict, update: no action]
+Ref: product.(tenant_id, category_id) > category.(tenant_id, id) [delete: restrict, update: no action]
+Ref: product_variant.(tenant_id, product_id) > product.(tenant_id, id) [delete: restrict, update: no action]
+Ref: physical_asset.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
+Ref: physical_asset.(tenant_id, variant_id) > product_variant.(tenant_id, id) [delete: restrict, update: no action]
+Ref: physical_asset.(tenant_id, location_id) > location.(tenant_id, id) [delete: restrict, update: no action]
+Ref: product_image.(tenant_id, product_id) > product.(tenant_id, id) [delete: restrict, update: no action]
+Ref: product_image.(tenant_id, file_id) > file_object.(tenant_id, id) [delete: restrict, update: no action]
+Ref: storefront.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
+Ref: policy_snapshot.(tenant_id, storefront_id) > storefront.(tenant_id, id) [delete: restrict, update: no action]
+Ref: payment_method.(tenant_id, qr_file_id) > file_object.(tenant_id, id) [delete: restrict, update: no action]
+Ref: reservation.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
+Ref: reservation.(tenant_id, customer_id) > customer.(tenant_id, id) [delete: restrict, update: no action]
+Ref: reservation.(tenant_id, storefront_id) > storefront.(tenant_id, id) [delete: restrict, update: no action]
+Ref: reservation.(tenant_id, policy_snapshot_id) > policy_snapshot.(tenant_id, id) [delete: restrict, update: no action]
+Ref: reservation.(tenant_id, payment_method_id) > payment_method.(tenant_id, id) [delete: restrict, update: no action]
+Ref: reservation_line.(tenant_id, reservation_id) > reservation.(tenant_id, id) [delete: restrict, update: no action]
+Ref: reservation_line.(tenant_id, variant_id) > product_variant.(tenant_id, id) [delete: restrict, update: no action]
+Ref: maintenance_work_order.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
+Ref: maintenance_work_order.(tenant_id, asset_id) > physical_asset.(tenant_id, id) [delete: restrict, update: no action]
+Ref: asset_allocation.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
+Ref: asset_allocation.(tenant_id, asset_id) > physical_asset.(tenant_id, id) [delete: restrict, update: no action]
+Ref: asset_allocation.(tenant_id, reservation_line_id) > reservation_line.(tenant_id, id) [delete: restrict, update: no action]
+Ref: asset_allocation.(tenant_id, maintenance_id) > maintenance_work_order.(tenant_id, id) [delete: restrict, update: no action]
+Ref: asset_allocation.(tenant_id, fitting_line_id) > fitting_line.(tenant_id, id) [delete: restrict, update: no action]
+Ref: asset_allocation.(tenant_id, transfer_line_id) > transfer_line.(tenant_id, id) [delete: restrict, update: no action]
+Ref: custody_event.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
+Ref: custody_event.(tenant_id, asset_id) > physical_asset.(tenant_id, id) [delete: restrict, update: no action]
+Ref: custody_event.(tenant_id, reservation_line_id) > reservation_line.(tenant_id, id) [delete: restrict, update: no action]
+Ref: custody_event.(tenant_id, transfer_line_id) > transfer_line.(tenant_id, id) [delete: restrict, update: no action]
+Ref: custody_event.(tenant_id, actor_membership_id) > membership.(tenant_id, id) [delete: restrict, update: no action]
+Ref: disruption.(tenant_id, asset_id) > physical_asset.(tenant_id, id) [delete: restrict, update: no action]
+Ref: disruption.(tenant_id, reservation_line_id) > reservation_line.(tenant_id, id) [delete: restrict, update: no action]
+Ref: disruption.(tenant_id, cause_custody_event_id) > custody_event.(tenant_id, id) [delete: restrict, update: no action]
+Ref: payment.(tenant_id, reservation_id) > reservation.(tenant_id, id) [delete: restrict, update: no action]
+Ref: payment.(tenant_id, fitting_id) > fitting_appointment.(tenant_id, id) [delete: restrict, update: no action]
+Ref: payment.(tenant_id, payment_method_id) > payment_method.(tenant_id, id) [delete: restrict, update: no action]
+Ref: payment_receipt.(tenant_id, payment_id) > payment.(tenant_id, id) [delete: restrict, update: no action]
+Ref: payment_receipt.(tenant_id, file_id) > file_object.(tenant_id, id) [delete: restrict, update: no action]
+Ref: payment_verification.(tenant_id, payment_id) > payment.(tenant_id, id) [delete: restrict, update: no action]
+Ref: payment_verification.(tenant_id, verifier_membership_id) > membership.(tenant_id, id) [delete: restrict, update: no action]
+Ref: charge.(tenant_id, reservation_id) > reservation.(tenant_id, id) [delete: restrict, update: no action]
+Ref: charge.(tenant_id, fitting_id) > fitting_appointment.(tenant_id, id) [delete: restrict, update: no action]
+Ref: charge.(tenant_id, reverses_id) > charge.(tenant_id, id) [delete: restrict, update: no action]
+Ref: payment_allocation.(tenant_id, payment_id) > payment.(tenant_id, id) [delete: restrict, update: no action]
+Ref: payment_allocation.(tenant_id, charge_id) > charge.(tenant_id, id) [delete: restrict, update: no action]
+Ref: payment_allocation.(tenant_id, reverses_id) > payment_allocation.(tenant_id, id) [delete: restrict, update: no action]
+Ref: refund.(tenant_id, payment_id) > payment.(tenant_id, id) [delete: restrict, update: no action]
+Ref: refund.(tenant_id, requested_by) > membership.(tenant_id, id) [delete: restrict, update: no action]
+Ref: deposit_entry.(tenant_id, reservation_id) > reservation.(tenant_id, id) [delete: restrict, update: no action]
+Ref: deposit_entry.(tenant_id, payment_id) > payment.(tenant_id, id) [delete: restrict, update: no action]
+Ref: deposit_entry.(tenant_id, charge_id) > charge.(tenant_id, id) [delete: restrict, update: no action]
+Ref: deposit_entry.(tenant_id, refund_id) > refund.(tenant_id, id) [delete: restrict, update: no action]
+Ref: deposit_entry.(tenant_id, reverses_id) > deposit_entry.(tenant_id, id) [delete: restrict, update: no action]
+Ref: guest_access_token.(tenant_id, reservation_id) > reservation.(tenant_id, id) [delete: restrict, update: no action]
+Ref: notification_delivery.(tenant_id, outbox_id) > outbox_event.(tenant_id, id) [delete: restrict, update: no action]
+Ref: audit_event.(tenant_id, support_grant_id) > support_grant.(tenant_id, id) [delete: restrict, update: no action]
+Ref: import_job.(tenant_id, requested_by) > membership.(tenant_id, id) [delete: restrict, update: no action]
+Ref: import_job.(tenant_id, file_id) > file_object.(tenant_id, id) [delete: restrict, update: no action]
+Ref: export_job.(tenant_id, requested_by) > membership.(tenant_id, id) [delete: restrict, update: no action]
+Ref: export_job.(tenant_id, result_file_id) > file_object.(tenant_id, id) [delete: restrict, update: no action]
+Ref: subscription_event.(tenant_id, subscription_id) > subscription.(tenant_id, id) [delete: restrict, update: no action]
+Ref: subscription_payment.(tenant_id, subscription_id) > subscription.(tenant_id, id) [delete: restrict, update: no action]
+Ref: fitting_appointment.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
+Ref: fitting_appointment.(tenant_id, customer_id) > customer.(tenant_id, id) [delete: restrict, update: no action]
+Ref: fitting_line.(tenant_id, fitting_id) > fitting_appointment.(tenant_id, id) [delete: restrict, update: no action]
+Ref: fitting_line.(tenant_id, variant_id) > product_variant.(tenant_id, id) [delete: restrict, update: no action]
+Ref: fitting_line.(tenant_id, asset_id) > physical_asset.(tenant_id, id) [delete: restrict, update: no action]
+Ref: fitting_resource.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
+Ref: fitting_resource.(tenant_id, membership_id) > membership.(tenant_id, id) [delete: restrict, update: no action]
+Ref: resource_allocation.(tenant_id, resource_id) > fitting_resource.(tenant_id, id) [delete: restrict, update: no action]
+Ref: resource_allocation.(tenant_id, fitting_id) > fitting_appointment.(tenant_id, id) [delete: restrict, update: no action]
+Ref: fitting_hours.(tenant_id, resource_id) > fitting_resource.(tenant_id, id) [delete: restrict, update: no action]
+Ref: location.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
+Ref: transfer_order.(tenant_id, from_branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
+Ref: transfer_order.(tenant_id, to_branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
+Ref: transfer_order.(tenant_id, requested_by) > membership.(tenant_id, id) [delete: restrict, update: no action]
+Ref: transfer_line.(tenant_id, transfer_id) > transfer_order.(tenant_id, id) [delete: restrict, update: no action]
+Ref: transfer_line.(tenant_id, asset_id) > physical_asset.(tenant_id, id) [delete: restrict, update: no action]
+Ref: transfer_event.(tenant_id, transfer_line_id) > transfer_line.(tenant_id, id) [delete: restrict, update: no action]
+Ref: transfer_event.(tenant_id, actor_membership_id) > membership.(tenant_id, id) [delete: restrict, update: no action]
+Ref: plan_entitlement.plan_id > plan.id [delete: restrict, update: no action]
+Ref: subscription.plan_id > plan.id [delete: restrict, update: no action]
+Ref: subscription_event.prior_plan_id > plan.id [delete: restrict, update: no action]
+Ref: subscription_event.next_plan_id > plan.id [delete: restrict, update: no action]
+
+TableGroup V1_Core {
+  tenant
+  branch
+  membership
+  branch_membership
+  customer
+  category
+  product
+  product_variant
+  physical_asset
+  file_object
+  product_image
+  storefront
+  policy_snapshot
+  payment_method
+  reservation
+  reservation_line
+  maintenance_work_order
+  asset_allocation
+  custody_event
+  disruption
+  payment
+  payment_receipt
+  payment_verification
+  charge
+  payment_allocation
+  refund
+  deposit_entry
+  guest_access_token
+  idempotency_record
+  outbox_event
+  webhook_inbox
+  notification_delivery
+  audit_event
+  import_job
+  export_job
+  plan
+  plan_entitlement
+  subscription
+  subscription_event
+  subscription_payment
+  support_grant
+}
+
+TableGroup V1_1_Fittings {
+  fitting_appointment
+  fitting_line
+  fitting_resource
+  resource_allocation
+  fitting_hours
+}
+
+TableGroup V2_Branches {
+  location
+  transfer_order
+  transfer_line
+  transfer_event
+}

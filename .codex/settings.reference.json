@@ -1,0 +1,5 @@
+{
+  "note": "Reference only. Native Codex settings are controlled by supported Codex configuration; this file does not register Claude hooks.",
+  "source": ".claude",
+  "architectureGuide": "ROOT-REPOSITORY-ARCHITECTURE.md"
+}

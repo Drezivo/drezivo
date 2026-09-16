@@ -1,0 +1,28 @@
+{
+  "config": {
+    "default": true,
+    "MD013": false,
+    "MD024": {
+      "siblings_only": true
+    },
+    "MD033": false,
+    "MD041": false,
+    "MD025": {
+      "front_matter_title": ""
+    }
+  },
+  "globs": [
+    "**/*.md"
+  ],
+  "ignores": [
+    "node_modules/**",
+    "archive/**",
+    "frontend-references/**",
+    ".claude/**",
+    ".codex/**",
+    "product/Clothing Rental SaaS \u2014 Customer Public Storefront Pages.md",
+    "product/Clothing-rental-saas-pages.md",
+    "product/Notes.md",
+    "product/Project Context \u2014 Clothing Rental SaaS.md"
+  ]
+}

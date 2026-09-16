@@ -1,0 +1,20 @@
+# --- secrets: every .env variant, no exceptions, including .env.example ---
+.env*
+
+# dependencies (this repo's package.json only holds markdown lint/link-check tooling,
+# but node_modules is still never committed)
+node_modules/
+
+# local agent overrides
+CLAUDE.local.md
+.claude/settings.local.json
+
+# editor and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# logs
+*.log

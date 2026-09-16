@@ -1,0 +1,42 @@
+# --- secrets: every .env variant, no exceptions, including .env.example ---
+.env*
+
+# dependencies
+node_modules/
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/releases
+
+# build output
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# test and coverage
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+
+# local agent overrides
+CLAUDE.local.md
+.claude/settings.local.json
+
+# editor and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# logs
+*.log
+npm-debug.log*
+
+# Next.js
+.next/
+next-env.d.ts
+.vercel

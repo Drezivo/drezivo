@@ -1,0 +1,9 @@
+# Every PR needs a review from an owner listed here. Last matching pattern wins.
+# Replace the placeholder handles with real GitHub usernames or @Drezivoo/<team>.
+
+*                       @Drezivoo/maintainers
+
+# Changes here alter the security posture of the whole product — review them deliberately.
+/.github/               @Drezivoo/maintainers
+/CONTRIBUTING.md        @Drezivoo/maintainers
+/.claude/rules/         @Drezivoo/maintainers

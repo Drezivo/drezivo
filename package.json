@@ -1,0 +1,16 @@
+{
+  "name": "drezivo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Drezivo clothing-rental SaaS monorepo",
+  "workspaces": ["contracts", "api", "app", "web", "docs"],
+  "engines": {"node": ">=22 <25"},
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "check:docs": "npm run lint:md --workspace @drezivo/docs && npm run lint:links --workspace @drezivo/docs",
+    "check": "npm run check:docs && npm run typecheck && npm run lint && npm run test"
+  }
+}

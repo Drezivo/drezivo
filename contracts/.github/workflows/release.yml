@@ -1,0 +1,66 @@
+name: release
+
+# Publishes @drezivo/contracts to GitHub Packages only after a manually approved tag run.
+# Consumers (api, app, web) pin an exact version; nothing auto-upgrades.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Exact version tag to release (for example v0.1.0)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  publish:
+    environment: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: validate requested tag
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::tag must be vMAJOR.MINOR.PATCH"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@drezivo'
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test -- --run
+      - run: npm run build
+      # The OpenAPI document is generated from the Zod schemas. If regenerating it
+      # produces a diff, the committed document is stale and consumers would be reading
+      # a contract the code no longer implements.
+      - name: verify committed OpenAPI matches the schemas
+        run: |
+          npm run openapi:generate
+          git diff --exit-code openapi/ || {
+            echo "::error::openapi/ is out of date. Run 'npm run openapi:generate' and commit the result."
+            exit 1
+          }
+      - name: verify tag matches package.json version
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          PKG="v$(node -p "require('./package.json').version")"
+          [ "$PKG" = "$RELEASE_TAG" ] || {
+            echo "::error::requested tag does not match package.json ${PKG}"
+            exit 1
+          }
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: softprops/action-gh-release@v2
+        with: { generate_release_notes: true, tag_name: ${{ inputs.tag }} }

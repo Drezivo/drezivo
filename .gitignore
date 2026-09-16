@@ -1,0 +1,28 @@
+# Drezivo monorepo
+**/node_modules/
+**/.next/
+**/dist/
+**/coverage/
+**/.turbo/
+**/.cache/
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.template
+**/*.log
+**/~$*
+**/.DS_Store
+
+# Archived former per-package Git metadata; root Git is authoritative.
+.polyrepo-git-archives/
+
+# Local Obsidian state and secrets
+Drezivo-Second-Brain/.obsidian/workspace*.json
+Drezivo-Second-Brain/.obsidian/cache/
+Drezivo-Second-Brain/**/.env*
+Drezivo-Second-Brain/**/secrets*/
+
+**/*.tgz
+
+**/.impeccable/
+

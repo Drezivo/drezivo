@@ -1,0 +1,92 @@
+/**
+ * Typed error hierarchy mapped to the TRD §4 error envelope:
+ *   { code, message, request_id, fields? }
+ * and the fixed status set: 401 / 403 / 404 / 409 / 422 / 429 / 503.
+ *
+ * `error-handler.ts` middleware is the ONLY place that turns these into an HTTP response.
+ * Throw these from services/repositories; never throw a raw `Error` or a string, and never
+ * let a raw database/driver error escape to the client (it can leak schema or other-tenant
+ * identifiers). A foreign-tenant object must be raised as NotFoundError, never
+ * ForbiddenError — the TRD is explicit that tenant isolation fails closed by concealment,
+ * not by a 403 that confirms the object exists.
+ */
+
+export type ErrorCode =
+  | 'UNAUTHENTICATED'
+  | 'FORBIDDEN'
+  | 'NOT_FOUND'
+  | 'CONFLICT'
+  | 'IDEMPOTENCY_KEY_REUSED'
+  | 'VALIDATION_FAILED'
+  | 'RATE_LIMITED'
+  | 'DEPENDENCY_UNAVAILABLE'
+  | 'NOT_IMPLEMENTED';
+
+export interface FieldError {
+  path: string;
+  message: string;
+}
+
+export abstract class AppError extends Error {
+  abstract readonly status: number;
+  abstract readonly code: ErrorCode;
+  readonly fields: FieldError[] | undefined;
+
+  constructor(message: string, fields?: FieldError[]) {
+    super(message);
+    this.name = new.target.name;
+    this.fields = fields;
+  }
+}
+
+/** 401 — no valid, verified principal. Never redirect; REST always returns JSON. */
+export class UnauthenticatedError extends AppError {
+  readonly status = 401;
+  readonly code: ErrorCode = 'UNAUTHENTICATED';
+}
+
+/** 403 — principal is known but the action itself is not permitted (not an object-existence leak). */
+export class ForbiddenError extends AppError {
+  readonly status = 403;
+  readonly code: ErrorCode = 'FORBIDDEN';
+}
+
+/** 404 — also used for any object that exists but belongs to a different tenant. */
+export class NotFoundError extends AppError {
+  readonly status = 404;
+  readonly code: ErrorCode = 'NOT_FOUND';
+}
+
+/** 409 — capacity conflict, invalid state transition, or a stale `version` on a conditional update. */
+export class ConflictError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'CONFLICT';
+}
+
+/** 409 — same idempotency key replayed with a different canonical request hash. */
+export class IdempotencyKeyReusedError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'IDEMPOTENCY_KEY_REUSED';
+}
+
+/** 422 — well-formed request, semantically invalid input (Zod boundary failures land here). */
+export class ValidationError extends AppError {
+  readonly status = 422;
+  readonly code: ErrorCode = 'VALIDATION_FAILED';
+}
+
+/** 429 — throttled; caller should back off. */
+export class RateLimitedError extends AppError {
+  readonly status = 429;
+  readonly code: ErrorCode = 'RATE_LIMITED';
+}
+
+/** 503 — a required downstream dependency (DB, Clerk, S3) is unavailable. Never expose internals. */
+export class DependencyUnavailableError extends AppError {
+  readonly status = 503;
+  readonly code: ErrorCode = 'DEPENDENCY_UNAVAILABLE';
+}
+
+export function isAppError(err: unknown): err is AppError {
+  return err instanceof AppError;
+}

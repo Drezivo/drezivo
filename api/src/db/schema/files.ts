@@ -1,0 +1,49 @@
+import { boolean, integer, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+
+import { idColumn, timestamps } from './_shared.js';
+
+/**
+ * Owns: upload sessions, scanning/finalization state, and the immutable-once-accepted object
+ * record. Governed by TRD §2 (Files row), §7 (files/privacy); Data-Model §8.
+ *
+ * TRD §7: a presigned upload URL can be reused until expiry and can overwrite a key, so a
+ * successful upload is NOT automatically immutable evidence. `versionId`/`sha256` +
+ * `frozenAt` record the exact accepted bytes; a later reuse of the same upload URL must not
+ * change what a merchant already approved. This module must never let a client flip
+ * `isPrivate` to make evidence public.
+ */
+
+export const fileLifecycleEnum = pgEnum('file_lifecycle_status', [
+  'pending_upload',
+  'uploaded',
+  'scanning',
+  'accepted',
+  'rejected',
+  'deleted',
+]);
+export const filePurposeEnum = pgEnum('file_purpose', [
+  'catalogue_image',
+  'payment_receipt',
+  'verification_document',
+  'storefront_asset',
+  'export_result',
+]);
+
+export const file = pgTable('file_object', {
+  ...idColumn,
+  tenantId: uuid('tenant_id').notNull(),
+  purpose: filePurposeEnum('purpose').notNull(),
+  storageKey: text('storage_key').notNull(),
+  versionId: text('version_id'),
+  sha256: text('sha256'),
+  mimeType: text('mime_type').notNull(),
+  byteSize: integer('byte_size').notNull(),
+  lifecycleStatus: fileLifecycleEnum('lifecycle_status').notNull().default('pending_upload'),
+  isPrivate: boolean('is_private').notNull().default(true),
+  uploadExpiresAt: timestamp('upload_expires_at', { withTimezone: true }).notNull(),
+  frozenAt: timestamp('frozen_at', { withTimezone: true }),
+  retentionUntil: timestamp('retention_until', { withTimezone: true }),
+  legalHold: boolean('legal_hold').notNull().default(false),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  ...timestamps,
+});

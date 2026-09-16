@@ -1,0 +1,72 @@
+/**
+ * TRD §4 — "Use opaque IDs and ISO timestamps."
+ * Data-Model §2 — "Tenant-owned primary keys are (tenant_id,id). UUIDs are
+ * generated server-side."
+ *
+ * IDs are opaque strings from the consumer's point of view: a caller must
+ * never parse, decrement, or guess one. Branding each resource's ID type
+ * separately means `passReservationId(customerId)` is a compile-time error
+ * instead of a runtime cross-tenant data leak waiting to happen.
+ */
+import { z } from 'zod';
+
+const uuid = z.string().uuid();
+
+/** Builds a branded, opaque ID schema for one resource kind. */
+function idSchema<Brand extends string>(_brand: Brand) {
+  return uuid.brand<Brand>();
+}
+
+export const tenantId = idSchema('TenantId');
+export type TenantId = z.infer<typeof tenantId>;
+
+export const branchId = idSchema('BranchId');
+export type BranchId = z.infer<typeof branchId>;
+
+export const membershipId = idSchema('MembershipId');
+export type MembershipId = z.infer<typeof membershipId>;
+
+export const customerId = idSchema('CustomerId');
+export type CustomerId = z.infer<typeof customerId>;
+
+export const productId = idSchema('ProductId');
+export type ProductId = z.infer<typeof productId>;
+
+export const productVariantId = idSchema('ProductVariantId');
+export type ProductVariantId = z.infer<typeof productVariantId>;
+
+export const physicalAssetId = idSchema('PhysicalAssetId');
+export type PhysicalAssetId = z.infer<typeof physicalAssetId>;
+
+export const storefrontId = idSchema('StorefrontId');
+export type StorefrontId = z.infer<typeof storefrontId>;
+
+export const paymentMethodId = idSchema('PaymentMethodId');
+export type PaymentMethodId = z.infer<typeof paymentMethodId>;
+
+export const reservationId = idSchema('ReservationId');
+export type ReservationId = z.infer<typeof reservationId>;
+
+export const reservationLineId = idSchema('ReservationLineId');
+export type ReservationLineId = z.infer<typeof reservationLineId>;
+
+export const paymentId = idSchema('PaymentId');
+export type PaymentId = z.infer<typeof paymentId>;
+
+export const paymentReceiptId = idSchema('PaymentReceiptId');
+export type PaymentReceiptId = z.infer<typeof paymentReceiptId>;
+
+export const refundId = idSchema('RefundId');
+export type RefundId = z.infer<typeof refundId>;
+
+export const chargeId = idSchema('ChargeId');
+export type ChargeId = z.infer<typeof chargeId>;
+
+export const fileObjectId = idSchema('FileObjectId');
+export type FileObjectId = z.infer<typeof fileObjectId>;
+
+export const exportJobId = idSchema('ExportJobId');
+export type ExportJobId = z.infer<typeof exportJobId>;
+
+export const guestAccessTokenId = idSchema('GuestAccessTokenId');
+export type GuestAccessTokenId = z.infer<typeof guestAccessTokenId>;
