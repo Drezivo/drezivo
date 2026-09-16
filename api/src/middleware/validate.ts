@@ -45,7 +45,7 @@ function toValidationError(error: unknown): ValidationError {
   if (error && typeof error === 'object' && 'issues' in error) {
     const zodError = error as { issues: Array<{ path: (string | number)[]; message: string }> };
     const fields = zodError.issues.map((issue) => ({
-      path: issue.path.join('.'),
+      field: issue.path.join('.'),
       message: issue.message,
     }));
     return new ValidationError('Request validation failed.', fields);

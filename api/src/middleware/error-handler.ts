@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 
-import { isAppError } from '../shared/errors.js';
+import { isAppError, RateLimitedError } from '../shared/errors.js';
 import { logger } from '../shared/logger.js';
 import { sendError } from '../shared/response.js';
 
@@ -23,10 +23,13 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
     } else {
       logger.warn({ code: err.code, requestId: req.requestId, route: req.originalUrl }, err.message);
     }
+    if (err instanceof RateLimitedError && err.retryAfterSeconds !== undefined) {
+      res.setHeader('Retry-After', String(err.retryAfterSeconds));
+    }
     sendError(res, err.status, err.code, err.message, req.requestId, err.fields);
     return;
   }
 
   logger.error({ err, requestId: req.requestId, route: req.originalUrl }, 'unhandled error');
-  sendError(res, 503, 'DEPENDENCY_UNAVAILABLE', 'Something went wrong. Please try again.', req.requestId);
+  sendError(res, 500, 'INTERNAL_ERROR', 'Something went wrong. Please try again.', req.requestId);
 }

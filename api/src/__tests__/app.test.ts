@@ -27,7 +27,7 @@ describe('API scaffold', async () => {
   it('returns health without external dependencies', async () => { expect((await request(app).get('/health')).status).toBe(200); });
   it('returns stable 501 for duplicate unfinished mutations', async () => {
     const responses = await Promise.all([request(app).post('/api/v1/public/stores/demo/holds'), request(app).post('/api/v1/public/stores/demo/holds')]);
-    expect(responses.map((r) => r.status)).toEqual([501, 501]); expect(responses[0]?.body.error.code).toBe('NOT_IMPLEMENTED'); expect(responses[0]?.body.error.message).toBe(responses[1]?.body.error.message);
+    expect(responses.map((r) => r.status)).toEqual([501, 501]); expect(responses[0]?.body.success).toBe(false); expect(responses[0]?.body.error.code).toBe('NOT_IMPLEMENTED'); expect(responses[0]?.body.error.message).toBe(responses[1]?.body.error.message); expect(responses[0]?.body.request_id).toBe(responses[0]?.headers['x-request-id']);
   });
-  it('returns a shared JSON envelope for unknown routes', async () => { const response = await request(app).get('/api/v1/no-such-route'); expect(response.status).toBe(404); expect(response.body.error.code).toBe('NOT_FOUND'); });
+  it('returns a shared JSON envelope for unknown routes', async () => { const response = await request(app).get('/api/v1/no-such-route'); expect(response.status).toBe(404); expect(response.body.success).toBe(false); expect(response.body.error.code).toBe('NOT_FOUND'); });
 });

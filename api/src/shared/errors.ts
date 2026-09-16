@@ -1,6 +1,6 @@
 /**
- * Typed error hierarchy mapped to the TRD §4 error envelope:
- *   { code, message, request_id, fields? }
+ * Typed error hierarchy mapped to the contract envelope:
+ *   { success: false, error: { code, message, fields? }, request_id }
  * and the fixed status set: 401 / 403 / 404 / 409 / 422 / 429 / 503.
  *
  * `error-handler.ts` middleware is the ONLY place that turns these into an HTTP response.
@@ -11,21 +11,12 @@
  * not by a 403 that confirms the object exists.
  */
 
-export type ErrorCode =
-  | 'UNAUTHENTICATED'
-  | 'FORBIDDEN'
-  | 'NOT_FOUND'
-  | 'CONFLICT'
-  | 'IDEMPOTENCY_KEY_REUSED'
-  | 'VALIDATION_FAILED'
-  | 'RATE_LIMITED'
-  | 'DEPENDENCY_UNAVAILABLE'
-  | 'NOT_IMPLEMENTED';
+import type { ErrorCode, ErrorField } from '@drezivo/contracts';
 
-export interface FieldError {
-  path: string;
-  message: string;
-}
+export type { ErrorCode, ErrorField } from '@drezivo/contracts';
+
+/** Backward-compatible API-local name; the contract package owns the shape. */
+export type FieldError = ErrorField;
 
 export abstract class AppError extends Error {
   abstract readonly status: number;
@@ -57,10 +48,16 @@ export class NotFoundError extends AppError {
   readonly code: ErrorCode = 'NOT_FOUND';
 }
 
-/** 409 — capacity conflict, invalid state transition, or a stale `version` on a conditional update. */
-export class ConflictError extends AppError {
+/** 409 — another caller took the last capacity for the requested interval. */
+export class CapacityConflictError extends AppError {
   readonly status = 409;
-  readonly code: ErrorCode = 'CONFLICT';
+  readonly code: ErrorCode = 'CAPACITY_CONFLICT';
+}
+
+/** 409 — illegal state transition, a stale `version` on a conditional update, or lost claim contention. */
+export class StateConflictError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'STATE_CONFLICT';
 }
 
 /** 409 — same idempotency key replayed with a different canonical request hash. */
@@ -75,10 +72,16 @@ export class ValidationError extends AppError {
   readonly code: ErrorCode = 'VALIDATION_FAILED';
 }
 
-/** 429 — throttled; caller should back off. */
+/** 429 — throttled; caller should back off. `retryAfterSeconds` is emitted as the Retry-After header. */
 export class RateLimitedError extends AppError {
   readonly status = 429;
   readonly code: ErrorCode = 'RATE_LIMITED';
+  readonly retryAfterSeconds: number | undefined;
+
+  constructor(message: string, retryAfterSeconds?: number) {
+    super(message);
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
 }
 
 /** 503 — a required downstream dependency (DB, Clerk, S3) is unavailable. Never expose internals. */

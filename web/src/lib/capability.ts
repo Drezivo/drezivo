@@ -31,6 +31,8 @@
 
 import type { GuestReservationSummary } from '@drezivo/contracts';
 
+import { unwrapSuccessData } from './api-client';
+
 function requireApiBaseUrl(): string {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (!apiBaseUrl) {
@@ -76,7 +78,7 @@ export async function exchangeGuestCapability(
     throw new Error('This reservation link is no longer valid.');
   }
 
-  return (await response.json()) as GuestCapabilityExchangeResult;
+  return unwrapSuccessData<GuestCapabilityExchangeResult>(response);
 }
 
 /**
@@ -111,7 +113,7 @@ export async function getGuestReservationByToken(
     throw new Error('Unable to load this reservation right now. Please try again shortly.');
   }
 
-  return (await response.json()) as GuestReservationSummary;
+  return unwrapSuccessData<GuestReservationSummary>(response);
 }
 
 /**
@@ -150,7 +152,7 @@ export async function getGuestReservationById(
     throw new Error('Unable to load this reservation right now. Please try again shortly.');
   }
 
-  return (await response.json()) as GuestReservationSummary;
+  return unwrapSuccessData<GuestReservationSummary>(response);
 }
 
 export interface SubmitGuestDetailsInput {
@@ -193,9 +195,7 @@ export async function submitGuestReservationDetails(
     },
   );
 
-  if (!response.ok) {
-    throw new Error('Unable to save your details. Please try again.');
-  }
+  await unwrapSuccessData<unknown>(response);
 }
 
 /**
@@ -224,5 +224,5 @@ export async function confirmGuestReservation(
     throw new Error('Unable to confirm your reservation. Please try again.');
   }
 
-  return (await response.json()) as GuestReservationSummary;
+  return unwrapSuccessData<GuestReservationSummary>(response);
 }

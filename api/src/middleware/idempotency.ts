@@ -4,8 +4,9 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
 import { config } from '../config/index.js';
 import { withTenantTransaction } from '../db/client.js';
-import { ConflictError, IdempotencyKeyReusedError, ValidationError } from '../shared/errors.js';
+import { IdempotencyKeyReusedError, StateConflictError, ValidationError } from '../shared/errors.js';
 import { logger } from '../shared/logger.js';
+import { sendError } from '../shared/response.js';
 
 const IDEMPOTENCY_KEY_HEADER = 'idempotency-key';
 
@@ -98,7 +99,7 @@ async function handle(
       if (!row) {
         // Extremely narrow race: conflicted on insert, then the row vanished (TTL sweep).
         // Safe to treat as "not claimed"; caller can retry with a fresh request.
-        throw new ConflictError('Idempotency claim could not be established; retry the request.');
+        throw new StateConflictError('Idempotency claim could not be established; retry the request.');
       }
       return { won: false as const, record: row };
     });
@@ -121,13 +122,13 @@ async function handle(
       // TRD §4: "a concurrent matching request ... returns an in-progress response with retry
       // guidance" — the ORIGINAL request has not committed yet, so there is no outcome to
       // replay; the caller retries the SAME key shortly instead of generating a new one.
-      res.status(409).json({
-        error: {
-          code: 'CONFLICT',
-          message: 'An identical request is already being processed. Retry shortly with the same key.',
-          request_id: req.requestId,
-        },
-      });
+      sendError(
+        res,
+        409,
+        'STATE_CONFLICT',
+        'An identical request is already being processed. Retry shortly with the same key.',
+        req.requestId,
+      );
       return;
     }
 
