@@ -32,6 +32,7 @@ way a contract-affecting change with no `@drezivo/contracts` PR is incomplete
 | `security-incident.md` | A credential leaked. |
 | `ci-baseline.md` | You are deciding when the root verification workflow is safe to enable. |
 | `github-ruleset.md` | You are configuring or reviewing protection for the root `main` branch. |
+| `security-automation.md` | You are deciding when GitHub secret scanning or dependency review can be enabled. |
 
 Start with `incident.md` if you are not sure which one applies and something is on fire.
 

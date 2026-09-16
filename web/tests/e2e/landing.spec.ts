@@ -95,15 +95,15 @@ test.describe('marketing landing page', () => {
     expect(problemImageBox!.width).toBeLessThan(viewportWidth - 40);
     await expect(problem.locator('.problem-pill')).toHaveCount(6);
 
-    const pillBoxes = await problem.locator('.problem-pill').evaluateAll((elements) => elements.map((element) => {
+    const pillBoxes = (await problem.locator('.problem-pill').evaluateAll((elements) => elements.map((element) => {
       const rect = element.getBoundingClientRect();
       return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
-    }));
+    }))) as Array<{ left: number; right: number; top: number; bottom: number }>;
     for (const pill of pillBoxes) {
       expect(pill.left).toBeGreaterThanOrEqual(0);
       expect(pill.right).toBeLessThanOrEqual(viewportWidth);
-      expect(pill.top).toBeGreaterThanOrEqual(problemImageBox!.top - 8);
-      expect(pill.bottom).toBeLessThanOrEqual(problemImageBox!.bottom + 8);
+      expect(pill.top).toBeGreaterThanOrEqual(problemImageBox!.y - 8);
+      expect(pill.bottom).toBeLessThanOrEqual(problemImageBox!.y + problemImageBox!.height + 8);
     }
 
     const menu = page.locator('summary').filter({ hasText: 'Menu' });

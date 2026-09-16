@@ -1,9 +1,9 @@
 # Environments
 
 **No `.env` file of any kind is ever committed — not `.env`, not `.env.local`, not
-`.env.example`, in the monorepo.** This is enforced by the tracked-`.env` /
-gitleaks CI job across the monorepo (see `docs/decisions/0006-monorepo.md` for the active layout)
-and by the `protect-files.sh` hook locally. This document is
+`.env.example`, in the monorepo.** This is enforced by the tracked-`.env` check and by the
+`protect-files.sh` hook locally. Planned security automation is described in
+[`security-automation.md`](security-automation.md). This document is
 where environment variable **names** live instead — in prose, so nobody is tempted to paste a
 working value next to the name the way an `.env.example` invites. A missing required variable
 must fail the process at startup with a clear message, never silently at the first request that
@@ -115,6 +115,5 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 ## `docs` (this repository)
 
 No runtime environment variables — this repository has no build (see `CONTRIBUTING.md` in this
-repository, "Repo specifics"). The tracked-`.env` / gitleaks CI job still runs here, because the
-rule ("no committed `.env`") applies uniformly across all the monorepo regardless of
-whether a given repository has anything to put in one.
+repository, "Repo specifics"). Security automation is deferred until the no-committed-`.env` rule
+and the selected GitHub checks apply uniformly across the monorepo.
