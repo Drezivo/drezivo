@@ -34,23 +34,23 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@commitlint/cli": "^19.5.0",
-    "@commitlint/config-conventional": "^19.5.0",
-    "@eslint/js": "^9.11.0",
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
+    "@eslint/js": "^10.0.1",
     "@types/express": "^5.0.0",
-    "@types/node": "^22.7.0",
+    "@types/node": "^26.5.1",
     "@types/pg": "^8.11.0",
-    "@types/supertest": "^6.0.2",
+    "@types/supertest": "^7.2.1",
     "drizzle-kit": "^0.31.0",
-    "eslint": "^9.11.0",
+    "eslint": "^10.10.0",
     "husky": "^9.1.6",
-    "lint-staged": "^15.2.10",
+    "lint-staged": "^17.5.1",
     "prettier": "^3.3.3",
     "supertest": "^7.0.0",
     "tsx": "^4.19.1",
-    "typescript": "^5.6.2",
+    "typescript": "^7.0.2",
     "typescript-eslint": "^8.7.0",
-    "vitest": "^2.1.1"
+    "vitest": "^5.0.0"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
