@@ -21,7 +21,4 @@ in sync when editing them. For workspace-local mirrors, run `node docs/scripts/s
 from the root and then its `--check` mode. Do not create
 remotes, publish, modify GitHub settings, or deploy without explicit authorization.
 
-Before security-sensitive design or implementation, read [SECURITY-FOUNDATION.md](SECURITY-FOUNDATION.md).
-It is the root baseline for sessions, tenant isolation, risk signals, logging, incident response,
-and deployment configuration. It contains recommendations only until an implementation has tests
-and operational evidence.
+Before security-sensitive design or implementation, read the private local `SECURITY-FOUNDATION.md` when it is available. It is intentionally ignored by Git. If it is absent, read `SECURITY-FOUNDATION.template.md` and obtain the private guide before changing authentication, authorization, tenant isolation, storage, logging, deployment, or incident-response behavior.

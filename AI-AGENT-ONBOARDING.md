@@ -7,7 +7,7 @@ agent authority.
 
 ## 1. Establish context before editing
 
-1. Read this file, [`AGENTS.md`](AGENTS.md), [`ROOT-REPOSITORY-ARCHITECTURE.md`](ROOT-REPOSITORY-ARCHITECTURE.md), and [`SECURITY-FOUNDATION.md`](SECURITY-FOUNDATION.md). The security guide is required before authentication, authorization, data, storage, or deployment decisions.
+1. Read this file, [`AGENTS.md`](AGENTS.md), [`ROOT-REPOSITORY-ARCHITECTURE.md`](ROOT-REPOSITORY-ARCHITECTURE.md), and `SECURITY-FOUNDATION.template.md`. If the private local `SECURITY-FOUNDATION.md` is present, read it too. The private guide is required before authentication, authorization, data, storage, or deployment decisions.
 2. Identify the owning workspace: `contracts`, `api`, `app`, `web`, or `docs`.
 3. Read that workspace's `AGENTS.md`, `CLAUDE.md`, `.codex/rules/`, and `README.md`.
 4. Inspect `git status --short --branch`; preserve unrelated user changes.

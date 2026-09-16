@@ -26,5 +26,5 @@ The navigation hub for the Drezivo second brain.
 
 The system is one monorepo containing five workspaces. `contracts -> api -> app/web` is the
 normal dependency direction. See the root [architecture guide](../ROOT-REPOSITORY-ARCHITECTURE.md)
-and [security foundation](../SECURITY-FOUNDATION.md) outside this vault for the complete map and
+and the private [security foundation](../../SECURITY-FOUNDATION.template.md) pointer outside this vault for the complete map and
 security baseline.

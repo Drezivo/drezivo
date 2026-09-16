@@ -1,6 +1,3 @@
 # Security foundation
 
-Read the root [SECURITY-FOUNDATION.md](../../../SECURITY-FOUNDATION.md) before security-sensitive
-design or implementation. It defines the Drezivo baseline for Clerk sessions, tenant and branch
-authorization, idempotency, risk signals, bot controls, logging, incident response, and suggested
-configuration names. Recommendations are not evidence of implementation or certification.
+Read the private root `SECURITY-FOUNDATION.md` when it is available. It is intentionally ignored by Git. If it is absent, read the root `SECURITY-FOUNDATION.template.md` and obtain the private guide before security-sensitive work. It defines the Drezivo baseline for sessions, tenant and branch authorization, idempotency, risk signals, bot controls, logging, incident response, and suggested configuration names. Recommendations are not evidence of implementation or certification.

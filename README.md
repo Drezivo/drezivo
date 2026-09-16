@@ -18,13 +18,13 @@ contains the same orientation in a visual Word document.
 4. [Logical data model](Drezivo-Data-Model.md) — entity dictionary, invariants, state transitions and transaction rules.
 5. [ERD input](Drezivo-ERD.dbml) — 50 entities and 132 relationships, grouped by release. Import into a DBML-compatible diagram tool. Do not treat exported SQL as complete production migrations.
 6. [Legal drafts](docs/product/legal/) — Philippines-first Terms of Service and Privacy Policy for counsel and Data Protection Officer review.
-7. [Security foundation](SECURITY-FOUNDATION.md) — session, tenant isolation, risk signals, bot defense, monitoring, incident response, and suggested configuration names.
+7. [Security foundation template](SECURITY-FOUNDATION.template.md) — instructions for obtaining the private session, tenant isolation, risk, bot, monitoring, and incident guidance.
 8. [GitHub ruleset runbook](docs/runbooks/github-ruleset.md) — exact `main` protection settings and the plan/CI prerequisites.
 
 ## Confirmed decisions
 
 - Clothing rental operations, Philippines first; one branch at launch with branch-aware ownership from day one.
-- Monthly prices: **Starter ₱300 · Professional ₱499 · Business ₱1,299**. Screenshot prices are outdated.
+- Monthly prices: **Starter ₱300 · Professional ₱499 · Business ₱1,299**.
 - Familiar stack retained. A modular Express API plus durable worker is recommended.
 - Receipt evidence is not payment confirmation. Exclusive expiring holds precede payment instructions.
 - Separate catalogue variants, physical garments, planned allocation, actual custody and refundable deposits.

@@ -9,5 +9,4 @@ files synchronized.
 The product uses Next.js and TypeScript for `app` and `web`, Express and TypeScript for `api`,
 Neon PostgreSQL with Drizzle, Clerk identity, S3 storage, REST, and a versioned `contracts` package.
 
-Read [SECURITY-FOUNDATION.md](SECURITY-FOUNDATION.md) before security-sensitive work. Treat its
-configuration values as review starting points, never as secrets or production certification.
+Read the private local `SECURITY-FOUNDATION.md` when available before security-sensitive work. It is intentionally ignored by Git. If it is absent, read `SECURITY-FOUNDATION.template.md` and obtain the private guide before changing security-sensitive behavior.

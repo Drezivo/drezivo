@@ -10,7 +10,7 @@ and the root `package.json` and `package-lock.json` govern all workspaces. The f
 Their local `.claude` and `.codex` folders remain as context during migration, but root rules win.
 
 Read this file, [`AI-AGENT-ONBOARDING.md`](AI-AGENT-ONBOARDING.md), [`AGENTS.md`](AGENTS.md), and
-[`SECURITY-FOUNDATION.md`](SECURITY-FOUNDATION.md) before editing. The companion
+the private local `SECURITY-FOUNDATION.md` (when supplied) before editing. The companion
 [human architecture guide](Drezivo-Human-Repository-Architecture-Guide.docx) explains the system
 with visual examples. It is human onboarding material, not agent authority.
 
@@ -63,7 +63,7 @@ Drezivo/
 ├── CLAUDE.md                          root Claude entry point
 ├── AI-AGENT-ONBOARDING.md             first-turn agent protocol
 ├── ROOT-REPOSITORY-ARCHITECTURE.md    this source of truth
-├── SECURITY-FOUNDATION.md              security baseline and configuration names
+├── SECURITY-FOUNDATION.template.md     public pointer for the private security baseline
 ├── LICENSE.md                         organization and monorepo proprietary license
 ├── LICENSE-POLICY.md                  licensing decisions and GitHub checklist
 ├── Drezivo-Second-Brain/              project-only Obsidian vault
@@ -187,7 +187,9 @@ security rules. Never create a second root Git repository or push from a former 
 - Route crash-surviving work through an outbox or lease-based queue.
 - Never log secrets, tokens, request bodies, payment evidence, or unnecessary personal information.
 - Enforce idle and absolute session expiry, revocation, and sensitive-action reauthentication.
-- Read [`SECURITY-FOUNDATION.md`](SECURITY-FOUNDATION.md) for the threat model and launch gates.
+- Read the private local `SECURITY-FOUNDATION.md` for the threat model and launch gates. If it is
+  absent, read [`SECURITY-FOUNDATION.template.md`](SECURITY-FOUNDATION.template.md) and obtain it
+  through the approved team channel.
 - Use the human-writing rules for chat, code, UI copy, legal text, commits, and generated documents.
 
 ## Glossary

@@ -352,7 +352,7 @@ operations fail closed; placeholder screens and health responses are not impleme
 V1 authentication must validate a server-side session or verified provider equivalent for absolute
 expiry, idle timeout, revocation, current user state, and a concurrency-safe session cap. Guest
 capability cookies are host-only, Secure in production, and HttpOnly. Cross-origin REST access uses
-an explicit origin allowlist. See the root `SECURITY-FOUNDATION.md` for the threat model and launch
+an explicit origin allowlist. See the private root `SECURITY-FOUNDATION.md` for the threat model and launch
 gates.
 
 Commit policy: short-lived `<type>/<slug>` branches, Conventional Commits, reviewable pull

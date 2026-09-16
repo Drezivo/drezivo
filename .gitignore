@@ -26,3 +26,6 @@ Drezivo-Second-Brain/**/secrets*/
 
 **/.impeccable/
 
+# Private security design guide. Keep a local copy; commit only the public template.
+SECURITY-FOUNDATION.md
+

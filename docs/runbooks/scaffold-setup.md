@@ -38,7 +38,8 @@ Protect `main` with pull requests, required checks, and reviewed merges. The roo
 
 Configure production, staging, and development secrets separately. Never put values in GitHub
 variables that should be secret, the repository, issues, pull requests, build logs, or Obsidian.
-See `SECURITY-FOUNDATION.md` for session, risk, bot, audit, and incident controls.
+See the private local `SECURITY-FOUNDATION.md` for session, risk, bot, audit, and incident controls.
+If it is absent, read the root `SECURITY-FOUNDATION.template.md` and obtain the private guide.
 
 ## Agent configuration
 

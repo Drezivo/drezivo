@@ -45,7 +45,7 @@ identity and review that exception quarterly.
 1. Repair the failures listed in [`ci-baseline.md`](ci-baseline.md).
 2. Re-enable the root workflow and confirm a pull request produces the expected `verify` check.
 3. Replace every `INSERT-*` value in [`.github/CODEOWNERS`](../../.github/CODEOWNERS) with real
-   teams. Open a test pull request that changes `SECURITY-FOUNDATION.md` and a legal draft.
+   teams. Open a test pull request that changes `SECURITY-FOUNDATION.template.md` and a legal draft.
 4. Create the ruleset in `Evaluate`, test pull requests, then switch to `Active`.
 5. Require the ruleset in the repository merge settings and keep direct pushes to `main` disabled.
 6. Record the ruleset owner, bypass identities, review date, and a screenshot or exported settings

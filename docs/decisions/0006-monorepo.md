@@ -35,7 +35,7 @@ controls one review boundary while preserving deployable process boundaries.
    remain available through `npm run <script> --workspace <package-name>`.
 4. Breaking contract changes use an expand, migrate, contract window. Update consumers and docs in
    the same pull request where feasible.
-5. Root `LICENSE.md`, `LICENSE-POLICY.md`, `SECURITY-FOUNDATION.md`, and agent rules govern all
+5. Root `LICENSE.md`, `LICENSE-POLICY.md`, the private local `SECURITY-FOUNDATION.md`, and agent rules govern all
    workspaces. Workspace license files are retained as notices during the transition and must not
    conflict with the root policy.
 
