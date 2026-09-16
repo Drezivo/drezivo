@@ -1,16 +1,16 @@
 filters:
   and:
-    - 'file.hasTag("drezivo")'
-    - 'status != "archived"'
+    - file.hasTag("drezivo")
+    - status != "archived"
 views:
   - type: table
     name: Durable notes
+    groupBy:
+      property: type
+      direction: ASC
     order:
       - file.name
       - type
       - status
       - updated
       - tags
-    groupBy:
-      property: type
-      direction: ASC
