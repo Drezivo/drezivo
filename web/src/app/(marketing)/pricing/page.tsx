@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { buildMarketingMetadata } from '@/lib/seo';
 import { formatPhpPerUnit } from '@/lib/money';
+import { MARKETING_PLANS } from '@/lib/marketing-content';
 
 export const metadata: Metadata = buildMarketingMetadata(
   'Pricing',
@@ -17,79 +18,42 @@ export const metadata: Metadata = buildMarketingMetadata(
  * over from that screenshot — PRD §6 is explicit that no plan sells those
  * without a separately approved entitlement and support budget.
  */
-const PLANS = [
-  {
-    name: 'Starter',
-    price: '300.00',
-    blurb: 'Perfect for small businesses just getting started.',
-    features: [
-      'Up to 50 active physical assets',
-      'Owner + Front desk roles',
-      'Reservations, calendar & availability',
-      'Customer management',
-      'Returns, refunds & exports',
-    ],
-  },
-  {
-    name: 'Professional',
-    price: '499.00',
-    blurb: 'For growing businesses with more rentals and customers.',
-    features: [
-      'Up to 200 active physical assets',
-      'Owner + up to 3 Front desk seats',
-      'Everything in Starter',
-      'Priority support',
-    ],
-    highlighted: true,
-  },
-  {
-    name: 'Business',
-    price: '1299.00',
-    blurb: 'For established businesses with higher volume.',
-    features: [
-      'Up to 1,000 active physical assets',
-      'Owner + up to 10 Front desk seats',
-      'Everything in Professional',
-    ],
-  },
-] as const;
-
 export default function PricingPage() {
   return (
-    <section className="mx-auto max-w-5xl px-6 py-20">
+    <section className="marketing-container py-20 lg:py-28">
       <div className="text-center">
-        <p className="text-sm font-medium uppercase tracking-widest text-accent">Pricing</p>
-        <h1 className="mt-3 font-display text-4xl font-semibold text-foreground">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-marketing-gold-strong">Pricing</p>
+        <h1 className="mt-5 font-display text-5xl text-marketing-ink">
           Simple, transparent pricing
         </h1>
-        <p className="mx-auto mt-4 max-w-xl text-muted">
+        <p className="mx-auto mt-4 max-w-xl text-marketing-muted">
           Choose the plan that fits your business. No hidden fees — just the tools you need to
           grow.
         </p>
       </div>
 
       <div className="mt-14 grid gap-6 sm:grid-cols-3">
-        {PLANS.map((plan) => (
+        {MARKETING_PLANS.map((plan) => (
           <div
             key={plan.name}
             className={`rounded-lg border p-6 ${
-              plan.highlighted ? 'border-accent bg-surface shadow-sm' : 'border-border bg-surface'
+              plan.highlighted ? 'border-marketing-brown bg-marketing-dark text-marketing-cream shadow-xl' : 'border-marketing-line bg-marketing-panel text-marketing-ink'
             }`}
           >
             {plan.highlighted ? (
-              <p className="mb-3 inline-block rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground">
+              <p className="mb-3 inline-block rounded-full bg-marketing-gold px-3 py-1 text-xs font-medium text-marketing-dark">
                 Most Popular
               </p>
             ) : null}
-            <p className="font-medium text-foreground">{plan.name}</p>
-            <p className="mt-1 text-sm text-muted">{plan.blurb}</p>
-            <p className="mt-4 font-display text-3xl font-semibold text-foreground">
+            <p className="font-medium">{plan.name}</p>
+            <p className={`mt-1 text-sm ${plan.highlighted ? 'text-marketing-cream/70' : 'text-marketing-muted'}`}>{plan.blurb}</p>
+            <p className="mt-4 font-display text-3xl font-semibold">
               {formatPhpPerUnit(plan.price, 'month')}
             </p>
-            <ul className="mt-6 space-y-2 text-sm text-foreground">
+            <ul className={`mt-6 space-y-2 text-sm ${plan.highlighted ? 'text-marketing-cream/80' : 'text-marketing-muted'}`}>
               {plan.features.map((feature) => (
                 <li key={feature} className="flex gap-2">
-                  <span aria-hidden="true" className="text-accent">
+                  <span aria-hidden="true" className="text-marketing-gold">
                     ✓
                   </span>
                   {feature}
@@ -100,8 +64,8 @@ export default function PricingPage() {
               href="https://app.drezivo.com/sign-up"
               className={`mt-8 block rounded-md px-4 py-2.5 text-center text-sm font-medium ${
                 plan.highlighted
-                  ? 'bg-primary text-primary-foreground'
-                  : 'border border-border text-foreground'
+                  ? 'bg-marketing-cream text-marketing-dark'
+                  : 'border border-marketing-line text-marketing-ink'
               }`}
             >
               Get Started
@@ -110,7 +74,7 @@ export default function PricingPage() {
         ))}
       </div>
 
-      <div className="mt-10 grid gap-4 rounded-lg border border-border bg-surface p-6 text-sm text-muted sm:grid-cols-3">
+      <div className="mt-10 grid gap-4 rounded-2xl border border-marketing-line bg-marketing-panel p-6 text-sm text-marketing-muted sm:grid-cols-3">
         <p>No credit card required to start your 14-day trial.</p>
         <p>Cancel anytime — downgrade or cancel never deletes your data.</p>
         <p>
@@ -119,9 +83,9 @@ export default function PricingPage() {
         </p>
       </div>
 
-      <p className="mt-10 text-center text-sm text-muted">
+      <p className="mt-10 text-center text-sm text-marketing-muted">
         Have questions about a plan?{' '}
-        <Link href="/faq" className="text-accent underline underline-offset-2">
+        <Link href="/faq" className="text-marketing-brown underline underline-offset-2">
           Read the FAQ
         </Link>
         .
