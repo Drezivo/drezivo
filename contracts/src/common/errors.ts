@@ -44,10 +44,10 @@ export const errorCode = z.enum([
   'VALIDATION_FAILED',
   // 429 — rate limited
   'RATE_LIMITED',
+  // 501 — the route is part of the contract but this api build has not implemented it yet
+  'NOT_IMPLEMENTED',
   // 503 — an upstream dependency (DB, S3, email, payment rail) is unavailable
   'DEPENDENCY_UNAVAILABLE',
-  // 501 — explicitly unfinished scaffold behavior
-  'NOT_IMPLEMENTED',
   // 500 — unexpected failure with no safe, more specific code to report
   'INTERNAL_ERROR',
 ]);
@@ -55,22 +55,32 @@ export type ErrorCode = z.infer<typeof errorCode>;
 
 /** One field-level validation failure, for `422 VALIDATION_FAILED` responses. */
 export const errorField = z.object({
-  path: z.string().min(1),
+  field: z.string().min(1),
   message: z.string().min(1),
 });
 export type ErrorField = z.infer<typeof errorField>;
 
 /**
- * The single error envelope every endpoint returns on failure. `message` is
- * always safe to display — never a raw SQL error, stack trace, or
- * cross-tenant foreign-key detail (TRD §4). `request_id` lets a support
- * agent correlate a customer report with server logs without needing any
- * PII in the report itself.
+ * The failure details nested under `error` in every failure response.
+ * `message` is always safe to display — never a raw SQL error, stack trace,
+ * or cross-tenant foreign-key detail (TRD §4).
  */
-export const errorEnvelope = z.object({
+export const errorObject = z.object({
   code: errorCode,
   message: z.string().min(1),
-  request_id: z.string().min(1),
   fields: z.array(errorField).optional(),
+});
+export type ErrorObject = z.infer<typeof errorObject>;
+
+/**
+ * The single failure envelope every endpoint returns on failure:
+ * `{ success: false, error: { code, message, fields? }, request_id }`.
+ * `request_id` lets a support agent correlate a customer report with server
+ * logs without needing any PII in the report itself.
+ */
+export const errorEnvelope = z.object({
+  success: z.literal(false),
+  error: errorObject,
+  request_id: z.string().min(1),
 });
 export type ErrorEnvelope = z.infer<typeof errorEnvelope>;

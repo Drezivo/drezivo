@@ -53,7 +53,8 @@ export function rateLimit(options: RateLimitOptions): RequestHandler {
     }
 
     if (bucket.count >= options.max) {
-      next(new RateLimitedError('Too many requests. Please try again later.'));
+      const retryAfterSeconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+      next(new RateLimitedError('Too many requests. Please try again later.', retryAfterSeconds));
       return;
     }
 

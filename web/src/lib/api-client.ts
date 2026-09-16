@@ -5,8 +5,14 @@ import type {
   AvailabilityResponse,
   CreateHoldRequestBody,
   CreateHoldResponse,
-  ApiErrorEnvelope,
 } from '@drezivo/contracts';
+import type { ErrorField } from '@drezivo/contracts';
+import { apiEnvelope } from '@drezivo/contracts';
+import { z } from 'zod';
+
+const responseEnvelope = apiEnvelope(z.unknown());
+type ParsedResponseEnvelope = z.infer<typeof responseEnvelope>;
+type FailureEnvelope = Extract<ParsedResponseEnvelope, { success: false }>;
 
 function requireApiBaseUrl(): string {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -17,10 +23,10 @@ function requireApiBaseUrl(): string {
 }
 
 /**
- * Thrown for every non-2xx response. Carries the server's stable error
- * envelope (Drezivo-TRD.md §4: `code`, safe `message`, `request_id`) instead
- * of a raw HTTP status, so calling UI can branch on `code` (e.g.
- * `capacity_conflict` on a 409 from a hold race) without parsing prose.
+ * Thrown for every non-2xx (or malformed) response. Carries the server's stable failure
+ * envelope details (TRD §4 / @drezivo/contracts: `error.code`, safe `error.message`,
+ * `request_id`) instead of a raw HTTP status, so calling UI can branch on `code` (e.g.
+ * `CAPACITY_CONFLICT` on a 409 from a hold race) without parsing prose.
  */
 export class ApiError extends Error {
   constructor(
@@ -28,32 +34,59 @@ export class ApiError extends Error {
     message: string,
     public readonly requestId: string | undefined,
     public readonly status: number,
+    public readonly fields?: ErrorField[],
   ) {
     super(message);
     this.name = 'ApiError';
   }
 }
 
-async function parseJsonOrThrow<T>(response: Response): Promise<T> {
-  if (response.ok) {
-    return (await response.json()) as T;
-  }
-
-  let envelope: ApiErrorEnvelope | undefined;
-  try {
-    envelope = (await response.json()) as ApiErrorEnvelope;
-  } catch {
-    // Upstream returned a non-JSON body (e.g. a raw 502 from the load
-    // balancer) — fall through to a generic envelope rather than throwing a
-    // JSON-parse error that would hide the real HTTP status from the caller.
-  }
-
-  throw new ApiError(
-    envelope?.code ?? 'unknown_error',
-    envelope?.message ?? 'Something went wrong. Please try again.',
-    envelope?.requestId,
-    response.status,
+function toApiError(status: number, envelope: FailureEnvelope): ApiError {
+  return new ApiError(
+    envelope.error.code,
+    envelope.error.message,
+    envelope.request_id,
+    status,
+    envelope.error.fields,
   );
+}
+
+async function parseJsonOrUndefined(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Parses one response against the single contract envelope and returns the unwrapped
+ * `data` payload. Throws `ApiError` on any failure or malformed body, so callers type
+ * against the contract's data-payload types (the envelope wrap is this function's job).
+ */
+export async function unwrapSuccessData<T>(response: Response): Promise<T> {
+  const payload = await parseJsonOrUndefined(response);
+  const parsed = responseEnvelope.safeParse(payload);
+
+  if (!response.ok) {
+    if (parsed.success && !parsed.data.success) {
+      throw toApiError(response.status, parsed.data);
+    }
+    // Upstream returned a non-JSON or non-envelope body (e.g. a raw 502 from the load
+    // balancer) — fall through to a generic error rather than throwing a JSON-parse error
+    // that would hide the real HTTP status from the caller.
+    throw new ApiError('unknown_error', 'Something went wrong. Please try again.', undefined, response.status);
+  }
+
+  if (!parsed.success) {
+    throw new ApiError('unknown_error', 'The API returned a malformed response.', undefined, response.status);
+  }
+
+  if (!parsed.data.success) {
+    throw toApiError(response.status, parsed.data);
+  }
+
+  return parsed.data.data as T;
 }
 
 function buildQueryString(params: Record<string, string | undefined>): string {
@@ -82,7 +115,7 @@ export const publicApiClient = {
       { cache: 'no-store' },
     );
     if (response.status === 404) return null;
-    return parseJsonOrThrow<PublicStoreProjection>(response);
+    return unwrapSuccessData<PublicStoreProjection>(response);
   },
 
   async getCatalog(
@@ -93,7 +126,7 @@ export const publicApiClient = {
       `${requireApiBaseUrl()}/api/v1/public/stores/${encodeURIComponent(slug)}/catalog${buildQueryString(filters)}`,
       { cache: 'no-store' },
     );
-    return parseJsonOrThrow<CatalogListResponse>(response);
+    return unwrapSuccessData<CatalogListResponse>(response);
   },
 
   async getCatalogItem(slug: string, itemId: string): Promise<CatalogItemDetail | null> {
@@ -102,7 +135,7 @@ export const publicApiClient = {
       { cache: 'no-store' },
     );
     if (response.status === 404) return null;
-    return parseJsonOrThrow<CatalogItemDetail>(response);
+    return unwrapSuccessData<CatalogItemDetail>(response);
   },
 
   /**
@@ -120,7 +153,7 @@ export const publicApiClient = {
       `${requireApiBaseUrl()}/api/v1/public/stores/${encodeURIComponent(slug)}/availability${buildQueryString({ itemId, month })}`,
       { cache: 'no-store' },
     );
-    return parseJsonOrThrow<AvailabilityResponse>(response);
+    return unwrapSuccessData<AvailabilityResponse>(response);
   },
 
   /**
@@ -149,6 +182,6 @@ export const publicApiClient = {
         body: JSON.stringify(body),
       },
     );
-    return parseJsonOrThrow<CreateHoldResponse>(response);
+    return unwrapSuccessData<CreateHoldResponse>(response);
   },
 };

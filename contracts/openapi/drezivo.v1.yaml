@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Drezivo API
-  version: 0.1.0
+  version: 0.2.0
   description: Generated from @drezivo/contracts Zod schemas. Do not hand-edit —
     run `npm run openapi:generate`.
 servers:
@@ -15,54 +15,64 @@ components:
     ErrorEnvelope:
       type: object
       properties:
-        code:
-          type: string
-          enum: &a6
-            - UNAUTHENTICATED
-            - FORBIDDEN
-            - NOT_FOUND
-            - CONFLICT
-            - CAPACITY_CONFLICT
-            - STATE_CONFLICT
-            - IDEMPOTENCY_KEY_REUSED
-            - TRIAL_CONSUMED
-            - CURRENT_OWNED_TENANT_EXISTS
-            - INCOMPLETE_ONBOARDING_EXISTS
-            - SEAT_LIMIT_EXCEEDED
-            - ASSET_LIMIT_EXCEEDED
-            - INVALID_INVITATION
-            - STALE_PROVIDER_STATE
-            - TENANT_RESTRICTED
-            - LAST_OWNER_CONFLICT
-            - OPERATOR_APPROVAL_REQUIRED
-            - VALIDATION_FAILED
-            - RATE_LIMITED
-            - DEPENDENCY_UNAVAILABLE
-            - NOT_IMPLEMENTED
-            - INTERNAL_ERROR
-        message:
-          type: string
-          minLength: 1
+        success:
+          type: boolean
+          enum:
+            - false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum: &a6
+                - UNAUTHENTICATED
+                - FORBIDDEN
+                - NOT_FOUND
+                - CONFLICT
+                - CAPACITY_CONFLICT
+                - STATE_CONFLICT
+                - IDEMPOTENCY_KEY_REUSED
+                - TRIAL_CONSUMED
+                - CURRENT_OWNED_TENANT_EXISTS
+                - INCOMPLETE_ONBOARDING_EXISTS
+                - SEAT_LIMIT_EXCEEDED
+                - ASSET_LIMIT_EXCEEDED
+                - INVALID_INVITATION
+                - STALE_PROVIDER_STATE
+                - TENANT_RESTRICTED
+                - LAST_OWNER_CONFLICT
+                - OPERATOR_APPROVAL_REQUIRED
+                - VALIDATION_FAILED
+                - RATE_LIMITED
+                - NOT_IMPLEMENTED
+                - DEPENDENCY_UNAVAILABLE
+                - INTERNAL_ERROR
+            message:
+              type: string
+              minLength: 1
+            fields:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    minLength: 1
+                  message:
+                    type: string
+                    minLength: 1
+                required:
+                  - field
+                  - message
+          required:
+            - code
+            - message
         request_id:
           type: string
           minLength: 1
-        fields:
-          type: array
-          items:
-            type: object
-            properties:
-              path:
-                type: string
-                minLength: 1
-              message:
-                type: string
-                minLength: 1
-            required:
-              - path
-              - message
       required:
-        - code
-        - message
+        - success
+        - error
         - request_id
     OnboardingStatus:
       type: string
@@ -415,6 +425,10 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
                   data:
                     type: object
                     properties:
@@ -490,6 +504,7 @@ paths:
                     type: string
                     minLength: 1
                 required:
+                  - success
                   - data
                   - request_id
         "404":
@@ -499,32 +514,42 @@ paths:
               schema:
                 type: object
                 properties:
-                  code:
-                    type: string
-                    enum: *a6
-                  message:
-                    type: string
-                    minLength: 1
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
                   request_id:
                     type: string
                     minLength: 1
-                  fields:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        path:
-                          type: string
-                          minLength: 1
-                        message:
-                          type: string
-                          minLength: 1
-                      required:
-                        - path
-                        - message
                 required:
-                  - code
-                  - message
+                  - success
+                  - error
                   - request_id
   /public/stores/{slug}/catalogue:
     get:
@@ -603,6 +628,10 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
                   data:
                     type: object
                     properties:
@@ -658,6 +687,7 @@ paths:
                     type: string
                     minLength: 1
                 required:
+                  - success
                   - data
                   - request_id
   /public/stores/{slug}/products/{productId}:
@@ -686,6 +716,10 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
                   data:
                     type: object
                     properties:
@@ -776,6 +810,7 @@ paths:
                     type: string
                     minLength: 1
                 required:
+                  - success
                   - data
                   - request_id
         "404":
@@ -785,32 +820,42 @@ paths:
               schema:
                 type: object
                 properties:
-                  code:
-                    type: string
-                    enum: *a6
-                  message:
-                    type: string
-                    minLength: 1
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
                   request_id:
                     type: string
                     minLength: 1
-                  fields:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        path:
-                          type: string
-                          minLength: 1
-                        message:
-                          type: string
-                          minLength: 1
-                      required:
-                        - path
-                        - message
                 required:
-                  - code
-                  - message
+                  - success
+                  - error
                   - request_id
   /public/stores/{slug}/availability:
     get:
@@ -853,6 +898,10 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
                   data:
                     type: object
                     properties:
@@ -904,6 +953,7 @@ paths:
                     type: string
                     minLength: 1
                 required:
+                  - success
                   - data
                   - request_id
   /public/stores/{slug}/holds:
@@ -989,6 +1039,10 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
                   data:
                     type: object
                     properties:
@@ -1131,6 +1185,7 @@ paths:
                     type: string
                     minLength: 1
                 required:
+                  - success
                   - data
                   - request_id
         "409":
@@ -1141,32 +1196,42 @@ paths:
               schema:
                 type: object
                 properties:
-                  code:
-                    type: string
-                    enum: *a6
-                  message:
-                    type: string
-                    minLength: 1
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
                   request_id:
                     type: string
                     minLength: 1
-                  fields:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        path:
-                          type: string
-                          minLength: 1
-                        message:
-                          type: string
-                          minLength: 1
-                      required:
-                        - path
-                        - message
                 required:
-                  - code
-                  - message
+                  - success
+                  - error
                   - request_id
         "422":
           description: Validation failed.
@@ -1175,32 +1240,42 @@ paths:
               schema:
                 type: object
                 properties:
-                  code:
-                    type: string
-                    enum: *a6
-                  message:
-                    type: string
-                    minLength: 1
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
                   request_id:
                     type: string
                     minLength: 1
-                  fields:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        path:
-                          type: string
-                          minLength: 1
-                        message:
-                          type: string
-                          minLength: 1
-                      required:
-                        - path
-                        - message
                 required:
-                  - code
-                  - message
+                  - success
+                  - error
                   - request_id
   /reservations:
     post:
@@ -1276,6 +1351,10 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
                   data:
                     type: object
                     properties:
@@ -1393,6 +1472,7 @@ paths:
                     type: string
                     minLength: 1
                 required:
+                  - success
                   - data
                   - request_id
         "409":
@@ -1402,32 +1482,42 @@ paths:
               schema:
                 type: object
                 properties:
-                  code:
-                    type: string
-                    enum: *a6
-                  message:
-                    type: string
-                    minLength: 1
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
                   request_id:
                     type: string
                     minLength: 1
-                  fields:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        path:
-                          type: string
-                          minLength: 1
-                        message:
-                          type: string
-                          minLength: 1
-                      required:
-                        - path
-                        - message
                 required:
-                  - code
-                  - message
+                  - success
+                  - error
                   - request_id
   /reservations/{id}/confirm:
     post:
@@ -1467,6 +1557,10 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
                   data:
                     type: object
                     properties:
@@ -1566,6 +1660,7 @@ paths:
                     type: string
                     minLength: 1
                 required:
+                  - success
                   - data
                   - request_id
         "409":
@@ -1575,32 +1670,42 @@ paths:
               schema:
                 type: object
                 properties:
-                  code:
-                    type: string
-                    enum: *a6
-                  message:
-                    type: string
-                    minLength: 1
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
                   request_id:
                     type: string
                     minLength: 1
-                  fields:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        path:
-                          type: string
-                          minLength: 1
-                        message:
-                          type: string
-                          minLength: 1
-                      required:
-                        - path
-                        - message
                 required:
-                  - code
-                  - message
+                  - success
+                  - error
                   - request_id
   /reservations/{id}/reschedule:
     post:
@@ -1657,6 +1762,10 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
                   data:
                     type: object
                     properties:
@@ -1759,6 +1868,7 @@ paths:
                     type: string
                     minLength: 1
                 required:
+                  - success
                   - data
                   - request_id
         "409":
@@ -1769,32 +1879,42 @@ paths:
               schema:
                 type: object
                 properties:
-                  code:
-                    type: string
-                    enum: *a6
-                  message:
-                    type: string
-                    minLength: 1
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
                   request_id:
                     type: string
                     minLength: 1
-                  fields:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        path:
-                          type: string
-                          minLength: 1
-                        message:
-                          type: string
-                          minLength: 1
-                      required:
-                        - path
-                        - message
                 required:
-                  - code
-                  - message
+                  - success
+                  - error
                   - request_id
         "422":
           description: Price changed but accept_price_change was not set.
@@ -1803,32 +1923,42 @@ paths:
               schema:
                 type: object
                 properties:
-                  code:
-                    type: string
-                    enum: *a6
-                  message:
-                    type: string
-                    minLength: 1
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
                   request_id:
                     type: string
                     minLength: 1
-                  fields:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        path:
-                          type: string
-                          minLength: 1
-                        message:
-                          type: string
-                          minLength: 1
-                      required:
-                        - path
-                        - message
                 required:
-                  - code
-                  - message
+                  - success
+                  - error
                   - request_id
   /reservations/{id}/pickup:
     post:
@@ -1871,6 +2001,10 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
                   data:
                     type: object
                     properties:
@@ -1970,6 +2104,7 @@ paths:
                     type: string
                     minLength: 1
                 required:
+                  - success
                   - data
                   - request_id
         "409":
@@ -1979,32 +2114,42 @@ paths:
               schema:
                 type: object
                 properties:
-                  code:
-                    type: string
-                    enum: *a6
-                  message:
-                    type: string
-                    minLength: 1
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
                   request_id:
                     type: string
                     minLength: 1
-                  fields:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        path:
-                          type: string
-                          minLength: 1
-                        message:
-                          type: string
-                          minLength: 1
-                      required:
-                        - path
-                        - message
                 required:
-                  - code
-                  - message
+                  - success
+                  - error
                   - request_id
   /reservations/{id}/return:
     post:
@@ -2047,6 +2192,10 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
                   data:
                     type: object
                     properties:
@@ -2146,6 +2295,7 @@ paths:
                     type: string
                     minLength: 1
                 required:
+                  - success
                   - data
                   - request_id
   /reservations/{id}/cancel:
@@ -2190,6 +2340,10 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
                   data:
                     type: object
                     properties:
@@ -2289,6 +2443,7 @@ paths:
                     type: string
                     minLength: 1
                 required:
+                  - success
                   - data
                   - request_id
         "409":
@@ -2298,32 +2453,42 @@ paths:
               schema:
                 type: object
                 properties:
-                  code:
-                    type: string
-                    enum: *a6
-                  message:
-                    type: string
-                    minLength: 1
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
                   request_id:
                     type: string
                     minLength: 1
-                  fields:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        path:
-                          type: string
-                          minLength: 1
-                        message:
-                          type: string
-                          minLength: 1
-                      required:
-                        - path
-                        - message
                 required:
-                  - code
-                  - message
+                  - success
+                  - error
                   - request_id
   /guest/reservations/{id}:
     get:
@@ -2345,6 +2510,10 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
                   data:
                     type: object
                     properties:
@@ -2425,6 +2594,7 @@ paths:
                     type: string
                     minLength: 1
                 required:
+                  - success
                   - data
                   - request_id
         "404":
@@ -2434,32 +2604,42 @@ paths:
               schema:
                 type: object
                 properties:
-                  code:
-                    type: string
-                    enum: *a6
-                  message:
-                    type: string
-                    minLength: 1
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
                   request_id:
                     type: string
                     minLength: 1
-                  fields:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        path:
-                          type: string
-                          minLength: 1
-                        message:
-                          type: string
-                          minLength: 1
-                      required:
-                        - path
-                        - message
                 required:
-                  - code
-                  - message
+                  - success
+                  - error
                   - request_id
   /guest/reservations/{id}/receipts:
     post:
@@ -2503,6 +2683,10 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
                   data:
                     type: object
                     properties:
@@ -2539,6 +2723,7 @@ paths:
                     type: string
                     minLength: 1
                 required:
+                  - success
                   - data
                   - request_id
         "409":
@@ -2548,32 +2733,42 @@ paths:
               schema:
                 type: object
                 properties:
-                  code:
-                    type: string
-                    enum: *a6
-                  message:
-                    type: string
-                    minLength: 1
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
                   request_id:
                     type: string
                     minLength: 1
-                  fields:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        path:
-                          type: string
-                          minLength: 1
-                        message:
-                          type: string
-                          minLength: 1
-                      required:
-                        - path
-                        - message
                 required:
-                  - code
-                  - message
+                  - success
+                  - error
                   - request_id
   /refunds:
     post:
@@ -2627,6 +2822,10 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
                   data:
                     type: object
                     properties:
@@ -2680,6 +2879,7 @@ paths:
                     type: string
                     minLength: 1
                 required:
+                  - success
                   - data
                   - request_id
         "409":
@@ -2690,32 +2890,42 @@ paths:
               schema:
                 type: object
                 properties:
-                  code:
-                    type: string
-                    enum: *a6
-                  message:
-                    type: string
-                    minLength: 1
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
                   request_id:
                     type: string
                     minLength: 1
-                  fields:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        path:
-                          type: string
-                          minLength: 1
-                        message:
-                          type: string
-                          minLength: 1
-                      required:
-                        - path
-                        - message
                 required:
-                  - code
-                  - message
+                  - success
+                  - error
                   - request_id
   /uploads:
     post:
@@ -2765,6 +2975,10 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
                   data:
                     type: object
                     properties:
@@ -2795,6 +3009,7 @@ paths:
                     type: string
                     minLength: 1
                 required:
+                  - success
                   - data
                   - request_id
         "422":
@@ -2805,31 +3020,41 @@ paths:
               schema:
                 type: object
                 properties:
-                  code:
-                    type: string
-                    enum: *a6
-                  message:
-                    type: string
-                    minLength: 1
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
                   request_id:
                     type: string
                     minLength: 1
-                  fields:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        path:
-                          type: string
-                          minLength: 1
-                        message:
-                          type: string
-                          minLength: 1
-                      required:
-                        - path
-                        - message
                 required:
-                  - code
-                  - message
+                  - success
+                  - error
                   - request_id
 webhooks: {}

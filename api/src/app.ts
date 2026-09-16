@@ -7,6 +7,7 @@ import { requestId } from './middleware/request-id.js';
 import { reservationsRouter } from './modules/reservations/reservations.routes.js';
 import { storefrontRouter } from './modules/storefront/storefront.routes.js';
 import { logger } from './shared/logger.js';
+import { sendError } from './shared/response.js';
 
 const pinoHttp = pinoHttpExport as unknown as (options: Record<string, unknown>) => express.RequestHandler;
 
@@ -63,7 +64,7 @@ export function createApp(): Express {
   app.use(errorHandler);
 
   app.use((req, res) => {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Route not found.', request_id: req.requestId } });
+    sendError(res, 404, 'NOT_FOUND', 'Route not found.', req.requestId);
   });
 
   return app;
