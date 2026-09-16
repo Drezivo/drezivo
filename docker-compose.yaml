@@ -6,7 +6,8 @@ services:
     environment:
       POSTGRES_DB: drezivo
       POSTGRES_USER: drezivo
-      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in your untracked local environment}"
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
     ports:
       - 127.0.0.1:5432:5432
     volumes:
@@ -17,6 +18,16 @@ services:
       timeout: 5s
       retries: 12
       start_period: 5s
+
+  adminer:
+    image: adminer:4.8.1-standalone
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports:
+      - 127.0.0.1:8080:8080
 
   minio:
     image: quay.io/minio/minio:RELEASE.2025-07-23T15-54-02Z

@@ -29,9 +29,15 @@ docker compose --env-file api/.env ps
 The explicit `--env-file api/.env` is required because Compose otherwise looks for a root
 `.env` file. Before starting, put your local Clerk development credentials and matching MinIO
 credentials in the ignored `api/.env`; never commit or paste secret values into documentation.
-The Compose stack exposes PostgreSQL on `127.0.0.1:5432`, MinIO on `127.0.0.1:9000`, and the
-MinIO console on `127.0.0.1:9001`. PostgreSQL should report `healthy` and `minio-init` should
-exit successfully after creating the private buckets.
+The Compose stack exposes PostgreSQL on `127.0.0.1:5432`, Adminer on
+`http://127.0.0.1:8080`, MinIO on `127.0.0.1:9000`, and the MinIO console on
+`127.0.0.1:9001`. PostgreSQL should report `healthy` and `minio-init` should exit successfully
+after creating the private buckets.
+
+Open [Adminer](http://localhost:8080) to inspect the local database. Select `PostgreSQL` as the
+system, use `postgres` as the server, `drezivo` as both the username and database, and enter the
+local `POSTGRES_PASSWORD` value from `api/.env`. Adminer is bound to loopback and is not a
+production database administration surface.
 
 Apply the database migrations from either location:
 
@@ -73,6 +79,11 @@ Stop the local services while retaining their volumes, or reset all local data w
 docker compose --env-file api/.env down
 docker compose --env-file api/.env down --volumes
 ```
+
+The PostgreSQL volume must be recreated once after switching from the previous trust-authentication
+configuration, because PostgreSQL applies initialization authentication settings only when the
+data directory is first created. If the data must be retained, set the `drezivo` role password and
+update `pg_hba.conf` manually instead.
 
 ## API commands
 

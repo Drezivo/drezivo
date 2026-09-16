@@ -8,15 +8,17 @@ PostgreSQL and private object storage.
 
 [docker-compose.yaml](../../docker-compose.yaml) starts:
 
-- PostgreSQL 17 on loopback port 5432, with the drezivo database and role. Local-only trust
-  authentication avoids committing a development password and must never be exposed beyond the
+- PostgreSQL 17 on loopback port 5432, with the drezivo database and role. Password authentication
+  uses the ignored `POSTGRES_PASSWORD` value in `api/.env` and must never be exposed beyond the
   developer machine.
+- Adminer on loopback port 8080 for local PostgreSQL inspection. It is development-only and
+  preconfigured to use the Compose `postgres` service.
 - MinIO on loopback port 9000, with its console on loopback port 9001.
 - A one-shot MinIO client that creates private drezivo-private and drezivo-public buckets
   without making either anonymous-readable.
 
-The compose file pins the reviewed PostgreSQL and MinIO client images. Image tags are checked when
-the local stack changes; see the [PostgreSQL official image](https://hub.docker.com/_/postgres) and
+The compose file pins the reviewed PostgreSQL, Adminer, and MinIO client images. Image tags are
+checked when the local stack changes; see the [PostgreSQL official image](https://hub.docker.com/_/postgres) and
 the [MinIO Compose example](https://github.com/minio/minio/blob/master/docs/orchestration/docker-compose/docker-compose.yaml).
 
 ## Start and migrate
@@ -30,11 +32,15 @@ the [MinIO Compose example](https://github.com/minio/minio/blob/master/docs/orch
 3. Run `docker compose --env-file api/.env up -d` from the repository root. This is the supported
    startup command. Compose needs the explicit file because it otherwise discovers only a root
    `.env` file and cannot interpolate the required MinIO credentials.
-4. Run `docker compose ps`. PostgreSQL must be healthy and `minio-init` must exit successfully.
-5. Set `DATABASE_URL_DIRECT`, or `DATABASE_URL`, to the loopback PostgreSQL connection for the
+4. Run `docker compose --env-file api/.env ps`. PostgreSQL must be healthy and `minio-init`
+   must exit successfully.
+5. Open [Adminer](http://localhost:8080) when you need to inspect the database. Use `PostgreSQL`
+   as the system, `postgres` as the server, `drezivo` as the username and database, and the
+   local `POSTGRES_PASSWORD` value from `api/.env` as the password.
+6. Set `DATABASE_URL_DIRECT`, or `DATABASE_URL`, to the loopback PostgreSQL connection for the
    drezivo role/database declared by compose.
-6. Run `npm run db:migrate --workspace @drezivo/api`.
-7. Confirm the migration ledger reports all numbered SQL files and no migration error.
+7. Run `npm run db:migrate --workspace @drezivo/api`.
+8. Confirm the migration ledger reports all numbered SQL files and no migration error.
 
 The API's object-storage adapter is not wired in Phase 0. MinIO is present so its buckets and
 credentials can be exercised when the file-storage slice is implemented; do not claim the API
@@ -44,7 +50,9 @@ uploads to MinIO before that adapter and its tests exist.
 
 Run `docker compose --env-file api/.env down` to stop services while retaining volumes.
 `docker compose --env-file api/.env down --volumes` deletes the local PostgreSQL and MinIO data
-and is appropriate only when a local reset is intended.
+and is appropriate only when a local reset is intended. Existing volumes initialized under the
+old trust-authentication setup must be recreated once, or the `drezivo` role password and
+`pg_hba.conf` must be updated manually, before password login will work.
 
 ## Run the API
 
