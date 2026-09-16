@@ -12,23 +12,41 @@ export const metadata: Metadata = buildMarketingMetadata(
 
 const SIGN_UP_URL = 'https://app.drezivo.com/sign-up';
 
-const DASHBOARD_DAYS = [
-  { id: 'mon', label: 'M', tone: 'bg-marketing-gold/65' },
-  { id: 'tue', label: 'T', tone: 'bg-marketing-sage' },
-  { id: 'wed', label: 'W', tone: 'bg-marketing-blush' },
-  { id: 'thu', label: 'T', tone: 'bg-marketing-sage' },
-  { id: 'fri', label: 'F', tone: 'bg-marketing-gold/65' },
-  { id: 'sat', label: 'S', tone: 'bg-marketing-blush' },
-  { id: 'sun', label: 'S', tone: 'bg-marketing-sage' },
-] as const;
-
 const DIFFERENTIATORS = MARKETING_FEATURES.slice(0, 4);
 
 const SOLUTION_FEATURES = [
-  ['Centralized Management', 'Inventory, reservations, customers, and operations—all in one dashboard.'],
-  ['Real-Time Availability', 'Know what’s available, what’s reserved, and what’s currently rented.'],
-  ['Automated & Organized', 'Reduce manual work with smart tracking, reminders, and notifications.'],
-  ['Designed for Rental Businesses', 'Built specifically for clothing rental, with the tools you actually need.'],
+  {
+    icon: 'grid',
+    title: 'Centralized Management',
+    body: 'Handle your clothing, reservations, customers, and operations — all in one dashboard.',
+  },
+  {
+    icon: 'calendar',
+    title: 'Real-Time Availability',
+    body: 'Know what’s available, what’s reserved, and what’s currently rented.',
+  },
+  {
+    icon: 'bell',
+    title: 'Automated & Organized',
+    body: 'Reduce manual work with smart tracking, reminders, and notifications.',
+  },
+  {
+    icon: 'hanger',
+    title: 'Designed for Rental Businesses',
+    body: 'Built specifically for clothing rental, with the tools you actually need.',
+  },
+] as const;
+
+const SOLUTION_STATS = [
+  ['Today’s Reservations', '8', '+12% yesterday'],
+  ['Active Rentals', '12', '+3% yesterday'],
+  ['Pending Payments', '3', 'Needs attention'],
+] as const;
+
+const SOLUTION_RESERVATIONS = [
+  ['Black Satin Gown', 'Sep 12 · 10:00 AM', 'Reserved'],
+  ['Red Evening Dress', 'Sep 12 · 2:00 PM', 'Rented'],
+  ['White Wedding Gown', 'Sep 13 · 9:00 AM', 'Pickup'],
 ] as const;
 
 export default function LandingPage() {
@@ -59,31 +77,88 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="how-it-works" className="py-20 lg:py-24">
-        <div className="marketing-container grid gap-12 lg:grid-cols-[0.82fr_1.18fr] lg:items-center">
-          <div>
-            <p className="marketing-eyebrow"><span aria-hidden="true" />The solution</p>
-            <h2 className="mt-5 max-w-md font-display text-4xl leading-[1.1] text-marketing-ink sm:text-5xl">Everything you need, in one place.</h2>
-            <p className="mt-5 max-w-md leading-7 text-marketing-muted">Drezivo gives you a complete, easy-to-use system to manage your clothing rental business—from inventory and reservations to customers, payments, and more.</p>
-            <div className="mt-8 grid gap-5 sm:grid-cols-2">
-              {SOLUTION_FEATURES.map(([title, body], index) => (
-                <div key={title} className="flex gap-3">
-                  <span aria-hidden="true" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-marketing-cream text-sm text-marketing-gold">{['▦', '▣', '♧', '♙'][index]}</span>
-                  <div><h3 className="text-sm font-semibold text-marketing-ink">{title}</h3><p className="mt-1 text-xs leading-5 text-marketing-muted">{body}</p></div>
-                </div>
-              ))}
-            </div>
+      <section id="how-it-works" data-testid="solution-section" className="solution-section py-20 lg:py-24">
+        <Image
+          src="/marketing/solution-backdrop.png"
+          alt=""
+          fill
+          sizes="100vw"
+          className="solution-backdrop"
+          data-testid="solution-backdrop"
+        />
+
+        <div className="marketing-container relative z-10">
+          <div className="mx-auto max-w-2xl text-center">
+            <p className="marketing-eyebrow solution-eyebrow"><span aria-hidden="true" />The solution<span aria-hidden="true" /></p>
+            <h2 className="mt-5 font-display text-4xl leading-[1.05] text-marketing-ink sm:text-5xl">Everything you need, in one place.</h2>
+            <p className="mt-5 leading-7 text-marketing-muted">Drezivo gives you a complete, easy-to-use system to manage your clothing rental business - from inventory and reservations to customers, payments, and more.</p>
           </div>
-          <div className="relative rounded-[2rem] bg-marketing-ivory p-6 sm:p-10">
-            <div className="rounded-xl border border-marketing-line bg-marketing-panel p-4 shadow-xl">
-              <div className="flex items-center justify-between border-b border-marketing-line pb-3"><span className="text-xs font-semibold text-marketing-brown">Drezivo</span><span className="text-xs text-marketing-muted">Rental Calendar</span><span className="h-2 w-2 rounded-full bg-marketing-gold" /></div>
-              <div className="mt-5 grid grid-cols-[5rem_1fr_6rem] gap-3">
-                <div className="space-y-2 text-[9px] text-marketing-muted"><span className="block rounded bg-marketing-cream p-1.5 font-semibold text-marketing-brown">Overview</span><span className="block p-1.5">Reservations</span><span className="block p-1.5">Inventory</span><span className="block p-1.5">Customers</span><span className="block p-1.5">Settings</span></div>
-                <div><div className="flex items-center justify-between text-[9px] text-marketing-muted"><span>Rental Calendar</span><span>June 2025</span></div><div className="mt-3 grid grid-cols-7 gap-1">{DASHBOARD_DAYS.map((day) => <div key={`solution-${day.id}`} className="text-center text-[8px] text-marketing-muted"><span>{day.label}</span><span className={`mt-1 block h-24 rounded-md ${day.tone}`} /></div>)}</div></div>
-                <div className="space-y-2"><span className="block text-[9px] text-marketing-muted">Upcoming Reservations</span><span className="block rounded-md bg-marketing-cream p-2 text-[8px] text-marketing-muted">Today · 09:00<br /><strong className="text-marketing-ink">Maria Santos</strong></span><span className="block rounded-md bg-marketing-cream p-2 text-[8px] text-marketing-muted">Today · 11:30<br /><strong className="text-marketing-ink">Ana Reyes</strong></span></div>
+
+          <div className="solution-showcase">
+            <ul className="solution-feature-list" aria-label="Drezivo solution highlights">
+              {SOLUTION_FEATURES.map((feature) => (
+                <li key={feature.title} className="solution-feature">
+                  <span aria-hidden="true" className={`solution-feature-icon solution-feature-icon-${feature.icon}`} />
+                  <div>
+                    <h3>{feature.title}</h3>
+                    <p>{feature.body}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            <div className="solution-visual" data-testid="solution-visual">
+              <div data-testid="solution-dashboard" className="solution-dashboard">
+                <div className="solution-dashboard-topbar">
+                  <span className="solution-dashboard-brand">Drezivo</span>
+                  <span className="solution-dashboard-search">Search anything...</span>
+                  <span className="solution-dashboard-avatar" aria-hidden="true" />
+                </div>
+                <div className="solution-dashboard-body">
+                  <nav aria-label="Dashboard preview navigation" className="solution-dashboard-nav">
+                    {['Dashboard', 'Reservations', 'Calendar', 'Clothing', 'Customers', 'Payments', 'Storefront', 'Settings'].map((item) => (
+                      <span key={item} className={item === 'Dashboard' ? 'is-active' : undefined}>{item}</span>
+                    ))}
+                  </nav>
+                  <div className="solution-dashboard-main">
+                    <p className="solution-dashboard-greeting">Good morning, Luna!</p>
+                    <p className="solution-dashboard-subcopy">Here&apos;s what&apos;s happening with your rental business today.</p>
+                    <div className="solution-stat-grid">
+                      {SOLUTION_STATS.map(([label, value, note]) => (
+                        <div key={label} className="solution-stat-card">
+                          <span>{label}</span>
+                          <strong>{value}</strong>
+                          <small>{note}</small>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="solution-reservations">
+                      <p>Upcoming Reservations</p>
+                      {SOLUTION_RESERVATIONS.map(([name, time, status]) => (
+                        <div key={name} className="solution-reservation-row">
+                          <span aria-hidden="true" className="solution-dress-thumb" />
+                          <span><strong>{name}</strong><small>{time}</small></span>
+                          <em>{status}</em>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div data-testid="solution-phone" className="solution-phone" aria-label="Mobile storefront preview">
+                <div className="solution-phone-notch" aria-hidden="true" />
+                <div className="solution-phone-image" aria-hidden="true" />
+                <p>Black Satin Gown</p>
+                <strong>PHP 1,500/day</strong>
+                <span>Select Dates</span>
+                <div className="solution-phone-thumbs" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </div>
               </div>
             </div>
-            <div className="absolute -bottom-3 right-4 rounded-xl border border-marketing-line bg-marketing-panel p-3 shadow-xl sm:bottom-5 sm:right-2"><p className="text-[9px] text-marketing-muted">New reservation</p><p className="mt-1 text-xs font-semibold text-marketing-ink">Maria Santos</p><p className="mt-1 text-[9px] text-marketing-gold-strong">Payment verified</p></div>
           </div>
         </div>
       </section>
