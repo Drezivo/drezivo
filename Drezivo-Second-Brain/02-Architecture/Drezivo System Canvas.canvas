@@ -4,12 +4,14 @@
     {"id":"drezivo-contracts-02","type":"file","x":420,"y":-220,"width":300,"height":180,"file":"03-Repositories/Repository Map.md","subpath":"#contracts"},
     {"id":"drezivo-api-003","type":"file","x":420,"y":0,"width":300,"height":180,"file":"03-Repositories/Repository Map.md","subpath":"#api"},
     {"id":"drezivo-front-004","type":"file","x":420,"y":220,"width":300,"height":180,"file":"03-Repositories/Repository Map.md","subpath":"#app-and-web"},
-    {"id":"drezivo-docs-005","type":"file","x":840,"y":0,"width":300,"height":180,"file":"02-Architecture/Drezivo Architecture.md"}
+    {"id":"drezivo-docs-005","type":"file","x":840,"y":0,"width":300,"height":180,"file":"02-Architecture/Drezivo Architecture.md"},
+    {"id":"drezivo-tenancy-foundation-006","type":"file","x":1220,"y":0,"width":360,"height":220,"file":"02-Architecture/Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation.md"}
   ],
   "edges": [
     {"id":"edge-home-contracts-01","fromNode":"drezivo-home-001","fromSide":"right","toNode":"drezivo-contracts-02","toSide":"left","toEnd":"arrow","label":"maps"},
     {"id":"edge-contracts-api-02","fromNode":"drezivo-contracts-02","fromSide":"right","toNode":"drezivo-api-003","toSide":"left","toEnd":"arrow","label":"exact contract"},
     {"id":"edge-api-front-03","fromNode":"drezivo-api-003","fromSide":"right","toNode":"drezivo-front-004","toSide":"left","toEnd":"arrow","label":"REST"},
-    {"id":"edge-api-docs-04","fromNode":"drezivo-api-003","fromSide":"right","toNode":"drezivo-docs-005","toSide":"left","toEnd":"arrow","label":"implements"}
+    {"id":"edge-api-docs-04","fromNode":"drezivo-api-003","fromSide":"right","toNode":"drezivo-docs-005","toSide":"left","toEnd":"arrow","label":"implements"},
+    {"id":"edge-docs-tenancy-05","fromNode":"drezivo-docs-005","fromSide":"right","toNode":"drezivo-tenancy-foundation-006","toSide":"left","toEnd":"arrow","label":"defines"}
   ]
 }
