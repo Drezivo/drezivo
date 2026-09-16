@@ -75,6 +75,45 @@ test.describe('marketing landing page', () => {
     expect(rightBox!.x).toBeGreaterThan(imageBox!.x + imageBox!.width / 2);
   });
 
+  test('renders the reference-style solution section on desktop', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+
+    const solution = page.getByTestId('solution-section');
+    const backdrop = solution.getByTestId('solution-backdrop');
+    const firstFeature = solution.locator('.solution-feature').first();
+    const dashboard = solution.getByTestId('solution-dashboard');
+    const phone = solution.getByTestId('solution-phone');
+
+    await expect(solution.getByRole('heading', { level: 2 })).toContainText(
+      'Everything you need, in one place.',
+    );
+    await expect(solution).toContainText('Drezivo gives you a complete, easy-to-use system');
+    await expect(solution.locator('.solution-feature')).toHaveCount(4);
+    await expect(solution.getByTestId('solution-backdrop')).toBeVisible();
+    await expect(dashboard).toBeVisible();
+    await expect(phone).toBeVisible();
+    await expect(solution).not.toContainText('Rentivo');
+
+    const featureBox = await firstFeature.boundingBox();
+    const dashboardBox = await dashboard.boundingBox();
+    const phoneBox = await phone.boundingBox();
+    expect(featureBox).not.toBeNull();
+    expect(dashboardBox).not.toBeNull();
+    expect(phoneBox).not.toBeNull();
+    const sectionBox = await solution.boundingBox();
+    const backdropBox = await backdrop.boundingBox();
+    expect(sectionBox).not.toBeNull();
+    expect(backdropBox).not.toBeNull();
+    expect(sectionBox!.height).toBeCloseTo(900, 0);
+    expect(backdropBox!.x).toBeCloseTo(sectionBox!.x, 0);
+    expect(backdropBox!.y).toBeCloseTo(sectionBox!.y, 0);
+    expect(backdropBox!.width).toBeCloseTo(sectionBox!.width, 0);
+    expect(backdropBox!.height).toBeCloseTo(sectionBox!.height, 0);
+    expect(dashboardBox!.x).toBeGreaterThan(featureBox!.x + featureBox!.width);
+    expect(phoneBox!.x).toBeGreaterThan(dashboardBox!.x + dashboardBox!.width / 2);
+  });
+
   test('uses a text-only full-height hero and accessible mobile menu', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/');
@@ -105,6 +144,29 @@ test.describe('marketing landing page', () => {
       expect(pill.top).toBeGreaterThanOrEqual(problemImageBox!.y - 8);
       expect(pill.bottom).toBeLessThanOrEqual(problemImageBox!.y + problemImageBox!.height + 8);
     }
+
+    const solution = page.getByTestId('solution-section');
+    const solutionVisual = solution.getByTestId('solution-visual');
+    const solutionDashboard = solution.getByTestId('solution-dashboard');
+    const solutionPhone = solution.getByTestId('solution-phone');
+    await expect(solution.getByRole('heading', { level: 2 })).toContainText('Everything you need');
+    await expect(solution.getByTestId('solution-backdrop')).toBeVisible();
+    await expect(solutionDashboard).toBeVisible();
+    await expect(solutionPhone).toBeVisible();
+    await expect(solution).not.toContainText('Rentivo');
+
+    const solutionVisualBox = await solutionVisual.boundingBox();
+    const solutionDashboardBox = await solutionDashboard.boundingBox();
+    const solutionPhoneBox = await solutionPhone.boundingBox();
+    expect(solutionVisualBox).not.toBeNull();
+    expect(solutionDashboardBox).not.toBeNull();
+    expect(solutionPhoneBox).not.toBeNull();
+    expect(solutionVisualBox!.x).toBeGreaterThanOrEqual(0);
+    expect(solutionVisualBox!.x + solutionVisualBox!.width).toBeLessThanOrEqual(viewportWidth);
+    expect(solutionDashboardBox!.x).toBeGreaterThanOrEqual(solutionVisualBox!.x);
+    expect(solutionPhoneBox!.x + solutionPhoneBox!.width).toBeLessThanOrEqual(
+      solutionVisualBox!.x + solutionVisualBox!.width,
+    );
 
     const menu = page.locator('summary').filter({ hasText: 'Menu' });
     await menu.click();
