@@ -16,10 +16,10 @@ The backend powers a multi-tenant clothing rental SaaS. It owns tenant-safe APIs
 * Controllers and routes must stay thin.
 * Controllers validate input, call services, and shape HTTP responses.
 * Do not put business logic in controllers or routes.
-* Do not access Prisma directly from controllers or routes.
+* Do not access Drizzle or `pg` directly from controllers or routes.
 * Business logic belongs in services.
 * Data access belongs in repositories.
-* Services should not return raw Prisma models to clients.
+* Services should not return raw database rows to clients.
 * Map database records to response DTOs before returning them.
 * Keep cross-feature imports limited. Use public services or shared modules, not another feature's internals.
 
@@ -48,11 +48,11 @@ The backend powers a multi-tenant clothing rental SaaS. It owns tenant-safe APIs
 * Do not use `@ts-ignore` or `@ts-expect-error` without a clear reason.
 * Exported functions and service/repository methods should have explicit return types.
 
-## Prisma and Database
+## Drizzle and Database
 
-* Use a single shared PrismaClient instance.
-* Never create `new PrismaClient()` inside a feature.
-* Repositories own Prisma calls.
+* Use the shared Drizzle database client from `src/db/client.ts`.
+* Never create a new database client inside a feature.
+* Repositories own Drizzle queries and transaction boundaries.
 * Use explicit `select` or `include`; fetch only needed fields.
 * Do not return raw database rows to API clients.
 * Use transactions for multi-write operations.
