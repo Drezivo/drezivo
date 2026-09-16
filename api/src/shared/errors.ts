@@ -11,23 +11,12 @@
  * not by a 403 that confirms the object exists.
  */
 
-export type ErrorCode =
-  | 'UNAUTHENTICATED'
-  | 'FORBIDDEN'
-  | 'NOT_FOUND'
-  | 'CAPACITY_CONFLICT'
-  | 'STATE_CONFLICT'
-  | 'IDEMPOTENCY_KEY_REUSED'
-  | 'VALIDATION_FAILED'
-  | 'RATE_LIMITED'
-  | 'DEPENDENCY_UNAVAILABLE'
-  | 'NOT_IMPLEMENTED'
-  | 'INTERNAL_ERROR';
+import type { ErrorCode, ErrorField } from '@drezivo/contracts';
 
-export interface FieldError {
-  field: string;
-  message: string;
-}
+export type { ErrorCode, ErrorField } from '@drezivo/contracts';
+
+/** Backward-compatible API-local name; the contract package owns the shape. */
+export type FieldError = ErrorField;
 
 export abstract class AppError extends Error {
   abstract readonly status: number;

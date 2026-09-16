@@ -5,8 +5,14 @@ import type {
   AvailabilityResponse,
   CreateHoldRequestBody,
   CreateHoldResponse,
-  ErrorEnvelope,
 } from '@drezivo/contracts';
+import type { ErrorField } from '@drezivo/contracts';
+import { apiEnvelope } from '@drezivo/contracts';
+import { z } from 'zod';
+
+const responseEnvelope = apiEnvelope(z.unknown());
+type ParsedResponseEnvelope = z.infer<typeof responseEnvelope>;
+type FailureEnvelope = Extract<ParsedResponseEnvelope, { success: false }>;
 
 function requireApiBaseUrl(): string {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -28,39 +34,21 @@ export class ApiError extends Error {
     message: string,
     public readonly requestId: string | undefined,
     public readonly status: number,
+    public readonly fields?: ErrorField[],
   ) {
     super(message);
     this.name = 'ApiError';
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function isFailureEnvelope(value: unknown): value is ErrorEnvelope {
-  if (!isRecord(value) || value.success !== false) return false;
-  const error = value.error;
-  if (!isRecord(error)) return false;
-  return (
-    typeof error.code === 'string' &&
-    typeof error.message === 'string' &&
-    typeof value.request_id === 'string'
+function toApiError(status: number, envelope: FailureEnvelope): ApiError {
+  return new ApiError(
+    envelope.error.code,
+    envelope.error.message,
+    envelope.request_id,
+    status,
+    envelope.error.fields,
   );
-}
-
-function isSuccessEnvelope(value: unknown): value is { success: true; data: unknown } {
-  return isRecord(value) && value.success === true && 'data' in value;
-}
-
-function toApiError(status: number, payload: unknown): ApiError {
-  if (isFailureEnvelope(payload)) {
-    return new ApiError(payload.error.code, payload.error.message, payload.request_id, status);
-  }
-  // Upstream returned a non-JSON or non-envelope body (e.g. a raw 502 from the load
-  // balancer) — fall through to a generic error rather than throwing a JSON-parse error
-  // that would hide the real HTTP status from the caller.
-  return new ApiError('unknown_error', 'Something went wrong. Please try again.', undefined, status);
 }
 
 async function parseJsonOrUndefined(response: Response): Promise<unknown> {
@@ -78,16 +66,27 @@ async function parseJsonOrUndefined(response: Response): Promise<unknown> {
  */
 export async function unwrapSuccessData<T>(response: Response): Promise<T> {
   const payload = await parseJsonOrUndefined(response);
+  const parsed = responseEnvelope.safeParse(payload);
 
-  if (!response.ok || isFailureEnvelope(payload)) {
-    throw toApiError(response.status, payload);
+  if (!response.ok) {
+    if (parsed.success && !parsed.data.success) {
+      throw toApiError(response.status, parsed.data);
+    }
+    // Upstream returned a non-JSON or non-envelope body (e.g. a raw 502 from the load
+    // balancer) — fall through to a generic error rather than throwing a JSON-parse error
+    // that would hide the real HTTP status from the caller.
+    throw new ApiError('unknown_error', 'Something went wrong. Please try again.', undefined, response.status);
   }
 
-  if (!isSuccessEnvelope(payload)) {
+  if (!parsed.success) {
     throw new ApiError('unknown_error', 'The API returned a malformed response.', undefined, response.status);
   }
 
-  return payload.data as T;
+  if (!parsed.data.success) {
+    throw toApiError(response.status, parsed.data);
+  }
+
+  return parsed.data.data as T;
 }
 
 function buildQueryString(params: Record<string, string | undefined>): string {

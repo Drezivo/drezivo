@@ -22,9 +22,13 @@
 
 import { useAuth, useOrganization } from "@clerk/nextjs";
 import { useCallback } from "react";
-import type { ErrorEnvelope, ErrorField } from "@drezivo/contracts";
+import { apiEnvelope, type ErrorField } from "@drezivo/contracts";
+import { z } from "zod";
 
 const API_BASE_URL = process.env["NEXT_PUBLIC_API_BASE_URL"];
+const responseEnvelope = apiEnvelope(z.unknown());
+type ParsedResponseEnvelope = z.infer<typeof responseEnvelope>;
+type FailureEnvelope = Extract<ParsedResponseEnvelope, { success: false }>;
 
 /** Thrown for every non-2xx (or malformed) response. Carries the contract failure envelope's details. */
 export class ApiError extends Error {
@@ -123,12 +127,21 @@ export function useApiClient(): DrezivoApiClient {
       });
 
       const payload = await safeParseJson(response);
+      const parsed = responseEnvelope.safeParse(payload);
 
-      if (!response.ok || isFailureEnvelope(payload)) {
-        throw toApiError(response.status, payload, requestId);
+      if (!response.ok) {
+        if (parsed.success && !parsed.data.success) {
+          throw toApiError(response.status, parsed.data);
+        }
+        throw new ApiError(
+          response.status,
+          "unknown_error",
+          "The request failed and returned no usable error body.",
+          requestId,
+        );
       }
 
-      if (!isSuccessEnvelope(payload)) {
+      if (!parsed.success) {
         // 2xx without a parseable envelope: the one shape the contract forbids. Surface it
         // as an error instead of returning an undefined `data` cast to TResponse.
         throw new ApiError(
@@ -139,7 +152,11 @@ export function useApiClient(): DrezivoApiClient {
         );
       }
 
-      return payload.data as TResponse;
+      if (!parsed.data.success) {
+        throw toApiError(response.status, parsed.data);
+      }
+
+      return parsed.data.data as TResponse;
     },
     [getToken, organization]
   );
@@ -164,41 +181,12 @@ async function safeParseJson(response: Response): Promise<unknown> {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isFailureEnvelope(value: unknown): value is ErrorEnvelope {
-  if (!isRecord(value) || value["success"] !== false) return false;
-  const error = value["error"];
-  if (!isRecord(error)) return false;
-  return (
-    typeof error["code"] === "string" &&
-    typeof error["message"] === "string" &&
-    typeof value["request_id"] === "string"
-  );
-}
-
-function isSuccessEnvelope(value: unknown): value is { success: true; data: unknown } {
-  return isRecord(value) && value["success"] === true && "data" in value;
-}
-
-function toApiError(status: number, payload: unknown, fallbackRequestId: string): ApiError {
-  if (isFailureEnvelope(payload)) {
-    return new ApiError(
-      status,
-      payload.error.code,
-      payload.error.message,
-      payload.request_id,
-      payload.error.fields
-    );
-  }
-  // Non-JSON body (e.g. a raw 502 from the load balancer) — report the status without
-  // inventing envelope details the server never sent.
+function toApiError(status: number, envelope: FailureEnvelope): ApiError {
   return new ApiError(
     status,
-    "unknown_error",
-    "The request failed and returned no usable error body.",
-    fallbackRequestId
+    envelope.error.code,
+    envelope.error.message,
+    envelope.request_id,
+    envelope.error.fields,
   );
 }

@@ -195,9 +195,7 @@ export async function submitGuestReservationDetails(
     },
   );
 
-  if (!response.ok) {
-    throw new Error('Unable to save your details. Please try again.');
-  }
+  await unwrapSuccessData<unknown>(response);
 }
 
 /**
