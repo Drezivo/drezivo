@@ -50,6 +50,14 @@ small commit per decision or topic.
 6. Document backup and restore ownership. Do not add an Obsidian Git plugin without reviewing its
    permissions and update policy.
 
+## Deferred alternative
+
+2026-09-16: self-hosting the sync backend on the existing Hostinger VPS was researched as a way to
+avoid the Obsidian Sync subscription, then deferred by the owner. The recommendation above is
+unchanged. Do not start that work without reading
+[[06-Research/Self-Hosted Vault Sync]] first; it records the constraints, the operational cost, and
+the conditions that should trigger a revisit.
+
 ## Sharing rules
 
 - Never place API keys, Clerk tokens, database URLs, payment data, or customer PII in the vault.
