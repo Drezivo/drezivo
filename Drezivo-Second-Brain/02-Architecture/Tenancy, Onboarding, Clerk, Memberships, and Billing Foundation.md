@@ -169,7 +169,7 @@ membership. A serialized account-level check enforces one current owned tenant e
 person is Front Desk elsewhere.
 
 An owner cannot self-close into a replacement business. An operator permanently closes the current
-tenant with an audited reason. Closure changes the tenant to its closed/cancelled state, disables
+tenant with an audited reason. Closure changes the tenant to its persisted `cancelled` state, disables
 new operations and invitations, preserves records and settlement obligations, retains specific
 read-only settlement/export access, then releases the account's current-owned-tenant link. A later
 business never receives another trial.
@@ -192,6 +192,10 @@ V1 has exactly two tenant roles:
 
 The API derives permission from local role and branch grant. Clerk roles or claims are never a
 substitute for current Drezivo authorization.
+
+A tenant must always retain at least one active Owner. The final active Owner cannot self-remove,
+be removed, or be demoted. An approved ownership transfer atomically validates and installs the
+successor before the prior Owner loses the role.
 
 ### Invitation issuance
 
@@ -266,9 +270,12 @@ not consume a Front Desk seat.
 Request-time checks are authoritative. A durable expiry worker performs the same transitions for
 prompt convergence, but a late worker can never create extra access.
 
-### Restricted and closed behavior
+### Restricted and cancelled behavior
 
-| Capability                                      | Active, trialing, or past-due grace | Restricted | Closed/cancelled                 |
+`cancelled` is the persisted tenant status; “closed” is only the product description of the
+business outcome.
+
+| Capability                                      | Active, trialing, or past-due grace | Restricted | Cancelled                        |
 | ----------------------------------------------- | ----------------------------------- | ---------- | -------------------------------- |
 | Existing-rental reads, returns, refunds, export | Allowed                             | Allowed    | Read-only settlement/export only |
 | New bookings, holds, or public intake           | Allowed                             | Denied     | Denied                           |
@@ -295,9 +302,15 @@ charge.
 Clerk webhooks are asynchronous and retried. The existing global inbox verifies, deduplicates, and
 persists each provider event before processing.
 
-The webhook route is registered before JSON parsing and verifies exact raw bytes. It uses Clerk's
-supported Express verification path and a unique provider event ID. It never parses, logs, or
-reserializes the body before verification.
+The webhook route is registered before JSON parsing and verifies exact raw bytes. It applies a
+small raw-body bound and route-specific rate limits before durable processing, uses Clerk's
+supported Express verification path and a unique provider event ID, and returns generic failures
+that disclose neither verification nor reconciliation state. It never parses, logs, or reserializes
+the body before verification.
+
+The v1 event allowlist contains only organization, organization-invitation, and
+organization-membership events. User-profile events are rejected or ignored; Drezivo does not
+mirror Clerk user profile fields.
 
 | Event family                             | Required local effect                                                                                                   |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
@@ -324,7 +337,7 @@ Clerk references consulted 2026-09-16:
 | Account                         | Global                            | Clerk user ID unique; minimal lifecycle/trial state only; no profile mirror.                                      |
 | Organization onboarding         | Global pre-tenant                 | Clerk org ID unique; one unfinished record per creator; audited transition history and tenant link.               |
 | Onboarding payment verification | Global pre-tenant                 | Stable business key; immutable verified operator record; linked to tenant only after success.                     |
-| Tenant                          | Global root                       | Clerk org ID unique; active, restricted, or cancelled/closed; retained after provider loss.                       |
+| Tenant                          | Global root                       | Clerk org ID unique; active, restricted, or cancelled; retained after provider loss.                              |
 | Membership                      | Tenant-owned                      | One Clerk user per tenant; Owner or Front Desk; removal preserves history.                                        |
 | Membership invitation           | Tenant-owned                      | Stable intent per reserved seat; seven-day expiry; provider correlation; no raw provider token in ordinary reads. |
 | Plan and entitlement            | Global                            | Versioned prices/limits; 75/250/1000 asset and 1/3/10 seat limits explicit.                                       |
@@ -364,6 +377,8 @@ client authority.
 - Logs use opaque IDs, request ID, actor namespace, action, outcome, and UTC time. They omit raw
   webhook bodies, invitation tokens, email addresses, payment evidence, and Clerk tokens.
 - Sensitive operator actions are reason-coded and append immutable audit events.
+- Owner onboarding, invitation issuance, invitation claim, and webhook intake each have
+  endpoint-specific request-size limits, rate limits, and generic anti-enumeration failures.
 - Membership removal, provider loss, unknown webhook state, missing entitlement, and stale
   authorization deny access rather than guessing.
 - Cached Clerk claims and frontend visibility are usability aids, not authorization.
@@ -379,11 +394,10 @@ product modules into scope.
 
 1. Align canonical documents and add contracts.
 2. Add global account/onboarding persistence and bootstrap idempotency.
-3. Add Clerk adapter, create-only owner onboarding, and resumable state.
+3. Add Clerk adapter, raw webhook intake/reconciliation, and resumable create-only owner onboarding.
 4. Add tenant bootstrap, Owner membership, trial subscription, and entitlement service.
 5. Add invitation, verified claim, and local-first removal.
-6. Add webhook reconciliation, expiry worker, operator billing, closure, and owner-transfer
-   recovery in bounded slices.
+6. Add expiry worker, operator billing, closure, and owner-transfer recovery in bounded slices.
 7. Build consumer flows only after their API slice and tests are stable.
 
 The foundation is complete only when an owner can safely create, abandon/retry, and bootstrap once;
@@ -407,6 +421,10 @@ integration evidence.
   expiry, and local-first access removal.
 - Chose immediate restriction on external Clerk organization deletion, operator-assisted closure,
   and second-approved sole-owner transfer.
+- Phase 0 aligns the canonical specifications, closes the onboarding and webhook contract surface,
+  and records the additive migration/RLS/backfill boundary before persistence work begins. Local
+  compose provides loopback-only PostgreSQL and MinIO for migration rehearsal; it does not make
+  object storage integration complete.
 
 ## Related notes
 

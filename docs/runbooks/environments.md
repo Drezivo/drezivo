@@ -14,9 +14,9 @@ needs it (`CONTRIBUTING.md` §7).
 Three environments, each with its own secrets/accounts or projects, least privilege, per TRD
 §1:
 
-- **Development** — a developer's own machine, or an ephemeral preview. Points at a
-  non-production Neon branch (TRD §9: "Use Neon branches for isolated rehearsals") seeded with
-  synthetic data, never a clone of live personal data.
+- **Development** — a developer's own machine, using the loopback-only PostgreSQL and MinIO
+  services in [local development](local-development.md), or an ephemeral preview backed by a
+  non-production Neon branch. Seed only synthetic data, never a clone of live personal data.
 - **Staging** — a persistent pre-production environment that mirrors production configuration
   (same Node LTS, same Neon major version, same region where practical) so a migration or a
   deploy is rehearsed under realistic conditions before it reaches production.
@@ -34,11 +34,12 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 - `NODE_ENV` — `development` | `staging` | `production`. Gates verbose logging and
   dev-only conveniences; never gates a security control on its own.
 - `PORT` — the port the HTTP server binds. The worker entrypoint does not need this.
-- `DATABASE_URL` — the pooled Neon connection string used for ordinary request-time queries.
-  TRD §9: Neon pooling is transaction-based; session-level state must not be assumed to survive
-  checkout.
-- `DATABASE_URL_DIRECT` — the direct (non-pooled) Neon connection string, used only by
-  migration and admin tooling that requires a direct connection (TRD §9).
+- `DATABASE_URL` — the pooled Neon connection string used for ordinary request-time queries, or
+  the loopback PostgreSQL URL during local compose development. TRD §9: Neon pooling is
+  transaction-based; session-level state must not be assumed to survive checkout.
+- `DATABASE_URL_DIRECT` — the direct (non-pooled) Neon connection string, used first by
+  migration and admin tooling when supplied. Local compose uses its direct loopback PostgreSQL
+  endpoint for both variables.
 - `DATABASE_MIGRATION_ROLE` / the fact that migrations run under a distinct, more privileged
   Postgres role than the application's request-time runtime role — the runtime role itself must
   have no ownership, DDL, `BYPASSRLS`, or blanket administrative grant (TRD §3). Name the actual
@@ -75,7 +76,7 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   pilot validation.
 - `PAYMENT_REVIEW_MAX_HOURS` — proposed 24 hours maximum manual review deadline (TRD §5, PRD
   §11).
-- `TRIAL_PERIOD_DAYS` / `RENEWAL_GRACE_DAYS` — proposed 14 and 7 respectively (TRD §6, PRD §11).
+- `TRIAL_PERIOD_DAYS` / `RENEWAL_GRACE_DAYS` — seven days each (TRD §6, PRD §11).
 - `OUTBOX_MAX_ATTEMPTS` — proposed eight attempts before terminal failure (TRD §8).
 - `CONTRACTS_PACKAGE_VERSION` — not an env var but a `package.json` dependency pin on
   `@drezivo/contracts` (`docs/decisions/0003-shared-contracts-package.md`); listed here as a

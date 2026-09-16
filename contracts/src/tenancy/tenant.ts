@@ -45,7 +45,7 @@ export type MembershipRole = z.infer<typeof membershipRole>;
  * membership, then queues the Clerk change." A removed membership is kept
  * (not deleted) so historical custody/audit rows still resolve their actor.
  */
-export const membershipStatus = z.enum(['active', 'removed']);
+export const membershipStatus = z.enum(['active', 'suspended', 'removed']);
 export type MembershipStatus = z.infer<typeof membershipStatus>;
 
 export const membership = z.object({

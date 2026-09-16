@@ -11,19 +11,19 @@ Read with [PRD](../product/Drezivo-PRD.md), [market research](../product/Drezivo
 
 Retain the team's familiar stack. Use a **modular monolith**: one Express business API, divided internally by domain, with a separately running durable worker using the same domain services. Two Next.js workspaces render the surfaces: `web` for marketing/storefront and `app` for staff. PostgreSQL is the source of truth for reservations, availability, money records, and workflow state.
 
-| Component | Selection | Responsibility and tradeoff |
-|---|---|---|
-| Frontend | Next.js + TypeScript, App Router | Server-render public catalogue; interactive booking/calendar. Do not duplicate business writes in Next.js route handlers. |
-| Business API | Express + TypeScript on a supported Node LTS | REST JSON endpoints and transaction boundaries. Long-running containers suit explicit database transactions and predictable worker operation. |
-| Database | Neon PostgreSQL | Shared schema with tenant keys, constraints, row-level security, transaction locks. One production project initially; separate nonproduction environment. |
-| Authentication | Clerk | Staff authentication and organization identity. Drezivo owns domain permissions, branch grants and subscription entitlements. |
-| Files | Private S3 buckets; separate public catalogue derivatives | Original evidence is private; controlled upload, quarantine, short-lived downloads. |
-| Query/migrations | **Decided: Drizzle + node-postgres (`pg`)** | Confirmed 15 September 2026. TypeScript queries with reviewed SQL migrations for exclusion constraints/RLS. See `docs/decisions/0002-drizzle-and-node-postgres.md`. Custom SQL and real transaction tests remain mandatory. |
-| Boundary validation | **Decided: Zod + OpenAPI 3.1, published as `@drezivo/contracts`** | Runtime input validation and one shared client shape. TypeScript alone cannot validate HTTP input. Because all surfaces share one monorepo (§2.1), the contract is a workspace package imported by every consumer; generated OpenAPI remains the external compatibility record. |
-| Durable work | Postgres outbox/job tables and polling worker | Avoid an additional queue service initially; add SQS when measured load or operational needs justify it. |
-| Email | Recommend an SES adapter, subject to deliverability pilot | Sender verification, bounce/complaint handling, queued sends. Provider-specific details stay behind an adapter. |
-| Observability | Structured redacted logs, OpenTelemetry-compatible traces, error monitoring | Correlate requests and jobs without recording request bodies or private evidence. Choose a hosted sink before pilot. |
-| Tests | Unit tests, HTTP integration tests against real Postgres, browser E2E, load tests | Suggested tools: Vitest, Supertest, Playwright, k6. Pin compatible releases during implementation. |
+| Component           | Selection                                                                         | Responsibility and tradeoff                                                                                                                                                                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Frontend            | Next.js + TypeScript, App Router                                                  | Server-render public catalogue; interactive booking/calendar. Do not duplicate business writes in Next.js route handlers.                                                                                                                                                       |
+| Business API        | Express + TypeScript on a supported Node LTS                                      | REST JSON endpoints and transaction boundaries. Long-running containers suit explicit database transactions and predictable worker operation.                                                                                                                                   |
+| Database            | Neon PostgreSQL                                                                   | Shared schema with tenant keys, constraints, row-level security, transaction locks. One production project initially; separate nonproduction environment.                                                                                                                       |
+| Authentication      | Clerk                                                                             | Staff authentication and organization identity. Drezivo owns domain permissions, branch grants and subscription entitlements.                                                                                                                                                   |
+| Files               | Private S3 buckets; separate public catalogue derivatives                         | Original evidence is private; controlled upload, quarantine, short-lived downloads.                                                                                                                                                                                             |
+| Query/migrations    | **Decided: Drizzle + node-postgres (`pg`)**                                       | Confirmed 15 September 2026. TypeScript queries with reviewed SQL migrations for exclusion constraints/RLS. See `docs/decisions/0002-drizzle-and-node-postgres.md`. Custom SQL and real transaction tests remain mandatory.                                                     |
+| Boundary validation | **Decided: Zod + OpenAPI 3.1, published as `@drezivo/contracts`**                 | Runtime input validation and one shared client shape. TypeScript alone cannot validate HTTP input. Because all surfaces share one monorepo (§2.1), the contract is a workspace package imported by every consumer; generated OpenAPI remains the external compatibility record. |
+| Durable work        | Postgres outbox/job tables and polling worker                                     | Avoid an additional queue service initially; add SQS when measured load or operational needs justify it.                                                                                                                                                                        |
+| Email               | Recommend an SES adapter, subject to deliverability pilot                         | Sender verification, bounce/complaint handling, queued sends. Provider-specific details stay behind an adapter.                                                                                                                                                                 |
+| Observability       | Structured redacted logs, OpenTelemetry-compatible traces, error monitoring       | Correlate requests and jobs without recording request bodies or private evidence. Choose a hosted sink before pilot.                                                                                                                                                            |
+| Tests               | Unit tests, HTTP integration tests against real Postgres, browser E2E, load tests | Suggested tools: Vitest, Supertest, Playwright, k6. Pin compatible releases during implementation.                                                                                                                                                                              |
 
 Drizzle supports custom SQL migrations; that is relevant because an ORM schema is insufficient for the required PostgreSQL constraints. [Drizzle custom migrations](https://orm.drizzle.team/docs/kit-custom-migrations).
 
@@ -31,13 +31,13 @@ Drizzle supports custom SQL migrations; that is relevant because an ORM schema i
 
 Each deployable workspace (§2.1) is one release boundary. The `api` repository produces **two** artifacts from one image — the HTTP server and the durable worker — because they share domain services and must not drift apart.
 
-| Repository | Artifact | Host | Address |
-|---|---|---|---|
-| `web` | Next.js server | Managed Next.js host | `drezivo.com`; tenant storefronts at `drezivo.com/s/<slug>` |
-| `app` | Next.js server | Managed Next.js host | `app.drezivo.com` |
-| `api` | Express server | Managed container host | `api.drezivo.com` |
-| `api` | Worker process | Managed container host | No public address; outbound only |
-| `contracts` | npm package | GitHub Packages | `@drezivo/contracts`, consumed by the three above |
+| Repository  | Artifact       | Host                   | Address                                                     |
+| ----------- | -------------- | ---------------------- | ----------------------------------------------------------- |
+| `web`       | Next.js server | Managed Next.js host   | `drezivo.com`; tenant storefronts at `drezivo.com/s/<slug>` |
+| `app`       | Next.js server | Managed Next.js host   | `app.drezivo.com`                                           |
+| `api`       | Express server | Managed container host | `api.drezivo.com`                                           |
+| `api`       | Worker process | Managed container host | No public address; outbound only                            |
+| `contracts` | npm package    | GitHub Packages        | `@drezivo/contracts`, consumed by the three above           |
 
 All three browser-facing surfaces sit under one registrable parent domain. That is a deliberate isolation choice, not a cosmetic one: it lets the guest capability exchange in §3 set a host-scoped `__Host-` cookie, keeps the CORS allowlist an explicit three-entry list rather than a wildcard, and prevents a tenant slug from ever becoming a DNS-level identifier. **Tenant slugs are path segments under `/s/`, never subdomains.** A subdomain-per-tenant scheme would put tenant identity into the cookie origin, where a misconfiguration leaks one tenant's session to another; a path segment cannot.
 
@@ -67,18 +67,18 @@ The browser never receives a database connection string or unrestricted S3 crede
 
 ## 2. Domain boundaries and ownership
 
-| Module | Owns | Key dependency |
-|---|---|---|
-| Tenancy/access | Tenant provisioning, membership, branch grants | Clerk verification and synchronized membership |
-| Catalogue/assets | Styles, variants, measurements, physical assets, readiness | File metadata and branch ownership |
-| Availability | Authoritative planned asset intervals | Reservations, maintenance; later fittings/transfers |
-| Reservations | Quote snapshots, state transitions, pickup/return policy | Availability and operational finance |
-| Finance | Verified collections, charges, allocations, refunds, deposit liability | Immutable sources and actor authorization |
-| Storefront | Published content, policies, public projections | Catalogue, pricing, availability |
-| Files | Upload sessions, scanning, immutable accepted objects, retention | S3 |
-| Platform billing | Drezivo subscription and entitlements | Separate operator/provider records |
-| Notifications/jobs | Outbox, leases, reminders and delivery outcomes | Domain events |
-| Operator/audit | Support grants, incident actions, recovery records | Explicit privileged access |
+| Module             | Owns                                                                            | Key dependency                                             |
+| ------------------ | ------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Tenancy/access     | Create-only owner onboarding, tenant bootstrap, local membership, branch grants | Clerk identity and narrowly reconciled organization events |
+| Catalogue/assets   | Styles, variants, measurements, physical assets, readiness                      | File metadata and branch ownership                         |
+| Availability       | Authoritative planned asset intervals                                           | Reservations, maintenance; later fittings/transfers        |
+| Reservations       | Quote snapshots, state transitions, pickup/return policy                        | Availability and operational finance                       |
+| Finance            | Verified collections, charges, allocations, refunds, deposit liability          | Immutable sources and actor authorization                  |
+| Storefront         | Published content, policies, public projections                                 | Catalogue, pricing, availability                           |
+| Files              | Upload sessions, scanning, immutable accepted objects, retention                | S3                                                         |
+| Platform billing   | Drezivo subscription and entitlements                                           | Separate operator/provider records                         |
+| Notifications/jobs | Outbox, leases, reminders and delivery outcomes                                 | Domain events                                              |
+| Operator/audit     | Support grants, incident actions, recovery records                              | Explicit privileged access                                 |
 
 Modules call domain services, not another module's private database helpers. All mutations capable of changing capacity or money use a shared transaction context. Reporting reads cannot rewrite transactional facts.
 
@@ -89,13 +89,13 @@ workspace boundaries. The former independent checkouts are retained as historica
 One root pull request can update a contract, API, client, and documentation together, while each
 workspace still has a clear owner and deploy artifact.
 
-| Workspace | Owns | Must never contain |
-|---|---|---|
-| `contracts/` | Zod schemas, OpenAPI, error envelopes, money and idempotency types | Database access, provider credentials, or authorization decisions |
-| `api/` | Domain modules, Clerk verification, authorization, database, migrations, worker | Presentation logic or duplicate contract types |
-| `app/` | Staff dashboard and authenticated workflows | Direct Neon access, authoritative roles, or client-side money decisions |
-| `web/` | Marketing, public storefront, and guest booking | Staff-only data, private records, or server authorization logic |
-| `docs/` | PRD, TRD, data model, ADRs, research, legal drafts, and runbooks | Runtime business behavior and secrets |
+| Workspace    | Owns                                                                            | Must never contain                                                      |
+| ------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `contracts/` | Zod schemas, OpenAPI, error envelopes, money and idempotency types              | Database access, provider credentials, or authorization decisions       |
+| `api/`       | Domain modules, Clerk verification, authorization, database, migrations, worker | Presentation logic or duplicate contract types                          |
+| `app/`       | Staff dashboard and authenticated workflows                                     | Direct Neon access, authoritative roles, or client-side money decisions |
+| `web/`       | Marketing, public storefront, and guest booking                                 | Staff-only data, private records, or server authorization logic         |
+| `docs/`      | PRD, TRD, data model, ADRs, research, legal drafts, and runbooks                | Runtime business behavior and secrets                                   |
 
 The root `package.json` declares these workspaces and the root `package-lock.json` is the only
 install lockfile used for release. The dependency direction remains `contracts` → `api` →
@@ -122,7 +122,9 @@ the complete change before a release tag.
 4. Start a transaction using a checked-out connection. Set tenant/principal context transaction-locally; every query remains on that connection until commit/rollback.
 5. Use explicit tenant predicates and same-tenant foreign keys as well as RLS. Give the runtime role no ownership, DDL, `BYPASSRLS`, or blanket administrative grant.
 
-Clerk supplies organization context, but its docs warn that background requests in different organization tabs should use the appropriate token explicitly. Include a cross-tab organization-switch test. Clerk's Express authentication middleware recognizes credentials; the application must enforce API authorization. [Clerk Organizations](https://clerk.com/docs/guides/organizations/overview), [Clerk Express SDK](https://clerk.com/docs/reference/express/overview).
+Clerk supplies identity and organization context, but Drezivo authorizes current local membership, role, branch grant, tenant lifecycle, and entitlement. The backend creates the Clerk organization for a verified owner candidate; a signed organization-created event may repair a missing incomplete record but never starts a tenant or trial. Drezivo accepts only organization, organization-invitation, and organization-membership events for reconciliation, never Clerk user-profile synchronization. An external Clerk organization deletion immediately restricts the mapped tenant and public intake while records remain available for operator recovery.
+
+Clerk's docs warn that background requests in different organization tabs should use the appropriate token explicitly. Include a cross-tab organization-switch test. Clerk's Express authentication middleware recognizes credentials; the application must enforce API authorization. [Clerk Organizations](https://clerk.com/docs/guides/organizations/overview), [Clerk Express SDK](https://clerk.com/docs/reference/express/overview).
 
 **Membership freshness:** use a signed, deduplicated webhook inbox to synchronize changes, plus periodic reconciliation. Sensitive actions (payment destination changes, support grants, role changes) require recent authentication and an up-to-date membership check. Access removal initiated in Drezivo first disables local membership, then queues the Clerk change. Out-of-order webhook events must not re-enable removed users. If fresh authorization cannot be established, deny the sensitive action and retry later.
 
@@ -162,22 +164,22 @@ Use `/api/v1` for the first API major version. Product V2 branches do not requir
 
 **The contract is owned by the `contracts` repository (§2.1), not by `api`.** Two version numbers exist and they mean different things: `/api/v1` is the wire-level major version and changes only when the contract breaks incompatibly; `@drezivo/contracts@x.y.z` is the package version and moves on every additive change, so a consumer can state exactly which shapes it was built against. `api` implements the contract and does not define it; `app` and `web` consume it and define nothing. The OpenAPI document is generated from the Zod schemas and committed, and CI fails if regenerating it produces a diff — a stale committed document would otherwise describe an API that no longer exists. Restrict content types, body size, pagination and filters; reject unknown enum values and disallowed fields. Use opaque IDs and ISO timestamps. Serialize monetary minor units as decimal strings so JavaScript number limits cannot silently corrupt amounts.
 
-| Endpoint family | Representative operation | Authority / duplicate protection |
-|---|---|---|
-| `/public/stores/{slug}` | GET catalogue/policies | Published projection, bounded public response |
-| `/public/stores/{slug}/availability` | GET variant/date availability | No customer details; short-lived answer, never a guarantee |
-| `/public/stores/{slug}/holds` | POST checkout intent | Rate-limited anonymous checkout identity + idempotency; database capacity claim |
-| `/guest/reservations/{id}/receipts` | POST evidence attachment | Scoped capability; immutable uploaded object; idempotency |
-| `/guest/reservations/{id}` | GET own summary | Scoped capability, `no-store` |
-| `/reservations` | POST staff/walk-in request | Membership; same quote/hold logic as storefront |
-| `/reservations/{id}/confirm` | POST merchant confirmation | Financial capability, state/version checks, idempotency |
-| `/reservations/{id}/reschedule` | POST new interval | Capability, fresh quote, atomic allocation replacement |
-| `/reservations/{id}/pickup` | POST physical handover | Capability, current custody/readiness, conditional transition |
-| `/reservations/{id}/return` | POST actual return | Capability, duplicate-safe custody event and inspection workflow |
-| `/refunds` | POST refund instruction/record | Owner capability, locked residual amount, immutable reversal record |
-| `/uploads` | POST upload authorization | Tenant/capability scope, size/type budget and idempotency |
-| `/exports` | POST export job | Authorized scope, durable job and expiring download |
-| `/webhooks/{provider}` | POST provider event | Exact raw bytes, signature verification, replay checks and event inbox |
+| Endpoint family                      | Representative operation       | Authority / duplicate protection                                                |
+| ------------------------------------ | ------------------------------ | ------------------------------------------------------------------------------- |
+| `/public/stores/{slug}`              | GET catalogue/policies         | Published projection, bounded public response                                   |
+| `/public/stores/{slug}/availability` | GET variant/date availability  | No customer details; short-lived answer, never a guarantee                      |
+| `/public/stores/{slug}/holds`        | POST checkout intent           | Rate-limited anonymous checkout identity + idempotency; database capacity claim |
+| `/guest/reservations/{id}/receipts`  | POST evidence attachment       | Scoped capability; immutable uploaded object; idempotency                       |
+| `/guest/reservations/{id}`           | GET own summary                | Scoped capability, `no-store`                                                   |
+| `/reservations`                      | POST staff/walk-in request     | Membership; same quote/hold logic as storefront                                 |
+| `/reservations/{id}/confirm`         | POST merchant confirmation     | Financial capability, state/version checks, idempotency                         |
+| `/reservations/{id}/reschedule`      | POST new interval              | Capability, fresh quote, atomic allocation replacement                          |
+| `/reservations/{id}/pickup`          | POST physical handover         | Capability, current custody/readiness, conditional transition                   |
+| `/reservations/{id}/return`          | POST actual return             | Capability, duplicate-safe custody event and inspection workflow                |
+| `/refunds`                           | POST refund instruction/record | Owner capability, locked residual amount, immutable reversal record             |
+| `/uploads`                           | POST upload authorization      | Tenant/capability scope, size/type budget and idempotency                       |
+| `/exports`                           | POST export job                | Authorized scope, durable job and expiring download                             |
+| `/webhooks/{provider}`               | POST provider event            | Exact raw bytes, signature verification, replay checks and event inbox          |
 
 Every implemented route needs a permission policy even when public access is the intended policy. Preserve exact webhook bytes before JSON parsing. Use provider-supported signature algorithms, replay windows and constant-time secret comparison where applicable.
 
@@ -238,7 +240,7 @@ A manual refund is an instruction plus a verified completion record. Double-clic
 
 Drezivo subscription billing has separate entities, references and reports. The owner-confirmed monthly PHP plan prices are Starter 300, Professional 499, Business 1,299 (minor units 30000, 49900, 129900). Version prices and entitlements; do not read outdated screenshot values. Tenant cancellation/downgrade does not erase financial history. During billing restriction, disable new booking intake but keep authorized returns, dispute handling, refunds and export available for existing commitments.
 
-Proposed billing lifecycle: create a 14-day trial on successful tenant provisioning, with a server timestamp and one trial per tenant. Verified subscription collection activates the selected plan/period. Trial expiry without conversion restricts new intake. An unpaid renewal enters past_due with a proposed seven-day grace, then restricted. Cancellation takes effect at the communicated period end unless explicitly immediate; preserve operational settlement access. Store transitions in subscription history and process expiry through durable jobs plus request-time checks. These trial/grace values require pilot validation. V1 may use audited operator verification of subscription collection; it must not imply automated recurring billing before a provider is implemented.
+The first successful tenant bootstrap starts the selected plan's seven-day trial from database time. Trial eligibility is one lifetime trial per verified person, not one per tenant. Starter, Professional, and Business enforce 75 / 250 / 1,000 active physical assets and 1 / 3 / 10 Front Desk seats immediately, including during trial; seats count active Front Desk memberships plus unexpired pending invitations. Trial expiry enters a seven-day normal-access `past_due` grace, then `restricted`. Restriction permits only approved existing-rental settlement, returns, refunds, and exports through one shared policy gate. `cancelled` is the persisted tenant closure status and retains read-only settlement/export access. A later business remains pre-tenant `payment_pending` until an operator records verified manual payment. Store transitions in immutable subscription history and process expiry through durable jobs plus request-time checks. V1 has no card collection or recurring billing provider.
 
 ## 7. Files and privacy
 
@@ -278,12 +280,12 @@ Measure before adding read replicas, Redis, partitions or services. Candidate tr
 
 ## 10. Release evolution
 
-| Release | Technical increment | Migration / operational gate |
-|---|---|---|
-| V1 | Shared tenant schema, default branch, physical assets, guarded single-garment checkout, basic staff permissions | Isolation, duplicate safety, capacity and restore tests; pilot outcome gate |
-| V1.1 | Multi-line interface, fitting appointments/resources | All-or-nothing multi-asset claim; fitting room/staff exclusivity and garment availability |
-| V2 | Branch transfers and permissions | Backfill default ownership; transfer dispatch/receive, in-transit state, delayed/lost transfer and unauthorized branch tests |
-| V3 | Enterprise governance, negotiated SSO/integrations, possible dedicated isolation | Documented customer need, threat review, recovery drills, operational staffing and cost model |
+| Release | Technical increment                                                                                             | Migration / operational gate                                                                                                 |
+| ------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| V1      | Shared tenant schema, default branch, physical assets, guarded single-garment checkout, basic staff permissions | Isolation, duplicate safety, capacity and restore tests; pilot outcome gate                                                  |
+| V1.1    | Multi-line interface, fitting appointments/resources                                                            | All-or-nothing multi-asset claim; fitting room/staff exclusivity and garment availability                                    |
+| V2      | Branch transfers and permissions                                                                                | Backfill default ownership; transfer dispatch/receive, in-transit state, delayed/lost transfer and unauthorized branch tests |
+| V3      | Enterprise governance, negotiated SSO/integrations, possible dedicated isolation                                | Documented customer need, threat review, recovery drills, operational staffing and cost model                                |
 
 V1.1 fittings allocate one room and staff resource per appointment, or explicit capacity slots, with overlap protection. Do not use an unguarded “count then insert” for remaining slots. Reserve the actual garment when guaranteed for fitting; an appointment without a garment guarantee must say so.
 
@@ -293,16 +295,16 @@ V2 transfers track request, approval where needed, dispatch, transit, partial re
 
 The following are **proposed launch gates**, not measured results or contractual SLAs:
 
-| Measure | Target and test boundary |
-|---|---|
-| Availability | 99.9% successful eligible API operations monthly, including dependency-induced failures; planned maintenance counted |
-| API latency | p95 availability ≤500 ms, p95 ordinary mutations ≤1 s; exclude binary upload/provider email time and measure those separately |
+| Measure             | Target and test boundary                                                                                                                                          |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Availability        | 99.9% successful eligible API operations monthly, including dependency-induced failures; planned maintenance counted                                              |
+| API latency         | p95 availability ≤500 ms, p95 ordinary mutations ≤1 s; exclude binary upload/provider email time and measure those separately                                     |
 | Representative load | 100 seeded tenants, 1,000 physical assets in the busiest tenant, 50 requests/s including 5 mutations/s for 30 minutes; add same-asset contention tests separately |
-| Mobile UX | Core pages and checkout usable at 360 px; target p75 LCP ≤2.5 s under documented mobile test conditions |
-| Accessibility | WCAG 2.2 AA target for core flows; keyboard, labels, focus, errors and non-color status checks |
-| Hold cleanup | p95 expired hold release ≤60 s; transactional expiry checks preserve capacity correctness during worker outages |
-| Recovery | Proposed RPO ≤15 min, RTO ≤4 h for a defined recoverable database incident, only after purchased-plan verification and drill |
-| Integrity | Zero duplicate postings/overlapping blocking allocations in acceptance suite; no percentage allowance for financial duplication |
+| Mobile UX           | Core pages and checkout usable at 360 px; target p75 LCP ≤2.5 s under documented mobile test conditions                                                           |
+| Accessibility       | WCAG 2.2 AA target for core flows; keyboard, labels, focus, errors and non-color status checks                                                                    |
+| Hold cleanup        | p95 expired hold release ≤60 s; transactional expiry checks preserve capacity correctness during worker outages                                                   |
+| Recovery            | Proposed RPO ≤15 min, RTO ≤4 h for a defined recoverable database incident, only after purchased-plan verification and drill                                      |
+| Integrity           | Zero duplicate postings/overlapping blocking allocations in acceptance suite; no percentage allowance for financial duplication                                   |
 
 Recovery scope includes database, object manifest, application configuration and identity mappings. Use configured point-in-time recovery plus independent encrypted exports/backups as appropriate; test object restoration and deletion replay. Backups must never be treated as verified until restored and reconciled. A whole-provider regional outage requires a separate continuity analysis; the proposed incident target does not prove multi-region failover.
 

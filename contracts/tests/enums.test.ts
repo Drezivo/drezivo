@@ -12,7 +12,12 @@ import { describe, expect, it } from 'vitest';
 
 import { errorCode } from '../src/common/errors';
 import { pricingMode } from '../src/storefront/catalogue';
-import { paymentEvidenceStatus, paymentRail, paymentVerificationDecision, refundStatus } from '../src/finance/payment-status';
+import {
+  paymentEvidenceStatus,
+  paymentRail,
+  paymentVerificationDecision,
+  refundStatus,
+} from '../src/finance/payment-status';
 import { filePurpose } from '../src/files/uploads';
 import { reservationState } from '../src/reservations/state';
 import { fulfillmentMethod } from '../src/reservations/reservation';
@@ -74,6 +79,14 @@ describe('paymentEvidenceStatus — separate from payment lifecycle', () => {
     // "confirmed" is a valid reservation state but must not silently
     // validate as a payment status — the two enums are intentionally distinct.
     expect(paymentEvidenceStatus.safeParse('confirmed').success).toBe(false);
+  });
+});
+
+describe('membershipStatus — local authorization lifecycle', () => {
+  it('accepts every supported membership lifecycle status', () => {
+    for (const status of ['active', 'suspended', 'removed']) {
+      expect(membershipStatus.safeParse(status).success).toBe(true);
+    }
   });
 });
 

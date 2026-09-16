@@ -1,19 +1,105 @@
 # Drezivo API
 
-Express 5 + TypeScript scaffold for the Drezivo API. Drizzle/PostgreSQL is the intended data
-layer and Vitest is the test runner. The SQL migrations currently in `src/db/migrations/` are
-design scaffolding and have not been verified against a live database; do not run them in
-production without a migration review and rehearsal.
+Express 5 + TypeScript API and durable-worker entrypoints for Drezivo. Drizzle/PostgreSQL is the
+data layer and Vitest is the test runner. The public storefront read routes are wired for isolated
+testing; reservation mutations still return structured HTTP 501 (`NOT_IMPLEMENTED`) until the
+transactional reservation service is complete.
 
-The public storefront read routes are wired for isolated testing. Reservation mutations return
-structured HTTP 501 (`NOT_IMPLEMENTED`) until the transactional reservation service is complete.
-The worker is disabled by default (`WORKER_ENABLED=false`); notification delivery remains
-unavailable until a provider and delivery state integration are configured, and therefore fails
-closed for queued events rather than acknowledging unsent messages.
+The worker is disabled by default (`WORKER_ENABLED=false`). Notification delivery remains
+unavailable until a provider and delivery-state integration are configured, so queued events fail
+closed rather than being acknowledged as delivered. The object-storage adapter is also not wired
+yet; local MinIO is provisioned for the upcoming storage slice, but the API does not upload files
+to it today.
 
-Runtime Clerk, object storage, and database integrations are intentionally not mocked or invented
-by this scaffold. Inject mocks in tests or provide validated environment configuration when wiring
-those integrations.
+## Prerequisites
+
+- Node.js 22–24 (the repository requires `>=22 <25`).
+- npm with workspace support.
+- Docker Desktop or another Docker engine providing Docker Compose.
+
+## Local development
+
+Run these commands from the repository root (`D:\drezivo`):
+
+```powershell
+docker compose --env-file api/.env up -d
+docker compose --env-file api/.env ps
+```
+
+The explicit `--env-file api/.env` is required because Compose otherwise looks for a root
+`.env` file. Before starting, put your local Clerk development credentials and matching MinIO
+credentials in the ignored `api/.env`; never commit or paste secret values into documentation.
+The Compose stack exposes PostgreSQL on `127.0.0.1:5432`, MinIO on `127.0.0.1:9000`, and the
+MinIO console on `127.0.0.1:9001`. PostgreSQL should report `healthy` and `minio-init` should
+exit successfully after creating the private buckets.
+
+Apply the database migrations from either location:
+
+```powershell
+# From api/
+cd api
+npm run db:migrate
+
+# Or from the repository root
+npm run db:migrate --workspace @drezivo/api
+```
+
+Start the HTTP API:
+
+```powershell
+# From api/
+npm run dev
+
+# Or from the repository root
+npm run dev --workspace @drezivo/api
+```
+
+The server listens on `PORT` (3000 by default). Verify it with:
+
+```powershell
+curl http://localhost:3000/health
+```
+
+Start the optional worker in a second terminal only when `WORKER_ENABLED=true`:
+
+```powershell
+cd api
+npm run dev:worker
+```
+
+Stop the local services while retaining their volumes, or reset all local data when intended:
+
+```powershell
+docker compose --env-file api/.env down
+docker compose --env-file api/.env down --volumes
+```
+
+## API commands
+
+Run from `api/` (or add `--workspace @drezivo/api` from the repository root):
+
+```powershell
+npm run build           # Compile to dist/
+npm run typecheck       # TypeScript validation without emitting
+npm run lint            # ESLint
+npm run test            # Unit tests (integration tests excluded)
+npm run test:integration
+npm run db:generate     # Generate reviewed SQL migrations
+npm run db:studio       # Open Drizzle Studio
+npm start               # Run the compiled server
+npm run start:worker    # Run the compiled worker
+```
+
+## Environment and production
+
+The API loader reads host/process variables first, then `.env.<NODE_ENV>`, with `.env` as the
+shared local fallback for non-production modes. Production deliberately does not load the local
+`.env`; deploy `DATABASE_URL`, Clerk keys, AWS region/bucket names, and credentials through the
+deployment secret manager instead. Leave `S3_ENDPOINT` unset for AWS S3. For local MinIO,
+`S3_ENDPOINT=http://127.0.0.1:9000` and `S3_FORCE_PATH_STYLE=true` are used.
+
+Runtime Clerk, object-storage, and database integrations require validated environment
+configuration; tests should inject mocks rather than inventing credentials.
 
 ## License
 

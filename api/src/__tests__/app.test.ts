@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 
 process.env.NODE_ENV = 'test'; process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test';
-process.env.CLERK_SECRET_KEY = 'test'; process.env.CLERK_PUBLISHABLE_KEY = 'test'; process.env.CLERK_JWT_ISSUER = 'https://clerk.test';
+process.env.CLERK_SECRET_KEY = 'test'; process.env.CLERK_PUBLISHABLE_KEY = 'test';
 process.env.AWS_REGION = 'test'; process.env.S3_BUCKET_PRIVATE = 'private'; process.env.S3_BUCKET_PUBLIC = 'public';
 process.env.S3_ACCESS_KEY_ID = 'test'; process.env.S3_SECRET_ACCESS_KEY = 'test';
 // Keep unit tests deterministic without weakening production authentication. The real Clerk
@@ -16,7 +16,7 @@ vi.mock('@clerk/express', () => ({
 /* Keep configuration available before the dynamically imported app initializes. */
 /*
   process.env.NODE_ENV = 'test'; process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test';
-  process.env.CLERK_SECRET_KEY = 'test'; process.env.CLERK_PUBLISHABLE_KEY = 'test'; process.env.CLERK_JWT_ISSUER = 'https://clerk.test';
+  process.env.CLERK_SECRET_KEY = 'test'; process.env.CLERK_PUBLISHABLE_KEY = 'test';
   process.env.AWS_REGION = 'test'; process.env.S3_BUCKET_PRIVATE = 'private'; process.env.S3_BUCKET_PUBLIC = 'public';
   process.env.S3_ACCESS_KEY_ID = 'test'; process.env.S3_SECRET_ACCESS_KEY = 'test';
 */

@@ -1,6 +1,6 @@
 # Tenancy, Owner Onboarding, Clerk, Memberships, and Billing V1 Checklist
 
-**Status:** staged implementation plan, no task is complete yet
+**Status:** Phase 0 complete; Phase 1 onward remain staged and unimplemented
 **Canonical decision record:** [Second Brain architecture note](../Drezivo-Second-Brain/02-Architecture/Tenancy%2C%20Onboarding%2C%20Clerk%2C%20Memberships%2C%20and%20Billing%20Foundation.md)
 **Canonical specifications to align first:** [PRD](../docs/product/Drezivo-PRD.md),
 [TRD](../docs/architecture/Drezivo-TRD.md), [Data Model](../docs/architecture/Drezivo-Data-Model.md),
@@ -40,46 +40,48 @@ or billing tasks as authority for this work.
 
 ## Phase 0: Canonical decision and contract preparation
 
-- [ ] **TBF-000 — Align the canonical specifications**
+- [x] **TBF-000 — Align the canonical specifications**
   - **Depends on:** None.
   - **Outcome:** PRD, TRD, Data Model, ERD, and this checklist agree on the accepted lifecycle.
   - **Acceptance:**
-    - [ ] Replace 14-day trial and one-trial-per-tenant language with seven-day,
+    - [x] Replace 14-day trial and one-trial-per-tenant language with seven-day,
           one-trial-per-verified-person policy.
-    - [ ] Replace 50 / 200 / 1,000 asset limits with 75 / 250 / 1,000.
-    - [ ] State Front Desk caps of 1 / 3 / 10 and count active members plus unexpired invites.
-    - [ ] Document payment-pending onboarding, one current owned tenant, closure, and external
+    - [x] Replace 50 / 200 / 1,000 asset limits with 75 / 250 / 1,000.
+    - [x] State Front Desk caps of 1 / 3 / 10 and count active members plus unexpired invites.
+    - [x] Document payment-pending onboarding, one current owned tenant, closure, and external
           Clerk organization deletion restriction.
-    - [ ] Record that Clerk proves identity while Drezivo authorizes local membership and
+    - [x] Record that Clerk proves identity while Drezivo authorizes local membership and
           entitlements.
   - **Tests/evidence:** Documentation review finds no conflicting old lifecycle statement.
 
-- [ ] **TBF-001 — Define shared contracts and stable errors**
+- [x] **TBF-001 — Define shared contracts and stable errors**
   - **Depends on:** TBF-000.
   - **Outcome:** The contracts package owns onboarding, invitation, subscription, operator, and
     webhook-safe DTOs before API routes exist.
   - **Acceptance:**
-    - [ ] Add closed schemas for onboarding status, plan code, trial/billing state, invitation
+    - [x] Add closed schemas for onboarding status, plan code, trial/billing state, invitation
           status, actor context, and safe operator-action responses.
-    - [ ] Add request schemas for create/resume/abandon onboarding, choose plan, bootstrap,
+    - [x] Membership status accepts only `active`, `suspended`, and `removed`. `pending` is
+          invitation state, not membership state.
+    - [x] Add request schemas for create/resume/abandon onboarding, choose plan, bootstrap,
           invite/resend/cancel/claim, plan change, payment verification, closure, and owner transfer.
-    - [ ] Add stable error codes for trial consumed, existing owned tenant, incomplete onboarding,
+    - [x] Add stable error codes for trial consumed, existing owned tenant, incomplete onboarding,
           seat/asset overage, invalid invitation, stale provider state, and restricted tenant.
-    - [ ] Tenant-owned writes do not accept tenant ID, Clerk organization ID, role, price,
+    - [x] Tenant-owned writes do not accept tenant ID, Clerk organization ID, role, price,
           entitlement, or seat count as authority.
-    - [ ] OpenAPI and envelope behavior remain backward compatible.
+    - [x] OpenAPI and envelope behavior remain backward compatible.
   - **Tests/evidence:** Contract schema tests reject unknown states and client-supplied authority.
 
-- [ ] **TBF-002 — Define migration and rollback boundaries**
+- [x] **TBF-002 — Define migration and rollback boundaries**
   - **Depends on:** TBF-000.
   - **Outcome:** The database rollout is additive, ordered, and safe to deploy before consumers.
   - **Acceptance:**
-    - [ ] Identify new global pre-tenant versus tenant-owned tables and their RLS policy.
-    - [ ] Specify indexes and unique/partial-unique constraints for one unfinished onboarding,
+    - [x] Identify new global pre-tenant versus tenant-owned tables and their RLS policy.
+    - [x] Specify indexes and unique/partial-unique constraints for one unfinished onboarding,
           one Clerk organization mapping, current owned tenant, one current subscription, invite
           intent, and provider event dedupe.
-    - [ ] Specify backfill/default behavior for existing tenant and membership rows.
-    - [ ] Define rollback as application rollback plus forward-only corrective migration, never
+    - [x] Specify backfill/default behavior for existing tenant and membership rows.
+    - [x] Define rollback as application rollback plus forward-only corrective migration, never
           destructive schema reversal of live lifecycle data.
   - **Tests/evidence:** Migration review includes real Postgres constraint and RLS test plan.
 
@@ -134,8 +136,27 @@ or billing tasks as authority for this work.
     - [ ] Configuration is validated centrally and absent configuration fails closed.
   - **Tests/evidence:** Unit tests mock only the adapter boundary.
 
+- [ ] **TBF-022 — Add raw verified Clerk webhook intake**
+  - **Depends on:** TBF-020, existing webhook inbox.
+  - **Outcome:** Clerk events are signature-verified over raw bytes, deduplicated, persisted, and
+    queued for reconciliation before tenant behavior depends on them.
+  - **Acceptance:**
+    - [ ] Route precedes global JSON parsing.
+    - [ ] Allowlist only organization, organization-invitation, and organization-membership
+          event families. Reject or ignore all Clerk user-profile events; Drezivo does not mirror
+          Clerk user profile fields in v1.
+    - [ ] Route-specific raw-body size and rate limits apply before durable processing. Failures
+          are generic and disclose neither verification nor reconciliation state.
+    - [ ] Signature failure, malformed body, stale/unknown event, and duplicate provider ID fail
+          or no-op safely.
+    - [ ] Handler stores minimum safe payload and no raw secret/token is logged.
+    - [ ] Organization-created reconciliation can repair a missing incomplete onboarding but
+          cannot provision a tenant or start a trial.
+  - **Tests/evidence:** Exact-raw-body verification plus duplicate/out-of-order, disallowed-event,
+    rate-limit, and oversize-request tests.
+
 - [ ] **TBF-021 — Implement create-only owner onboarding commands**
-  - **Depends on:** TBF-011, TBF-012, TBF-020.
+  - **Depends on:** TBF-011, TBF-012, TBF-020, TBF-022.
   - **Outcome:** A verified public user can create, read/resume, and abandon one onboarding.
   - **Acceptance:**
     - [ ] API, not browser, creates the Clerk organization.
@@ -144,21 +165,12 @@ or billing tasks as authority for this work.
           selection.
     - [ ] An arbitrary existing Clerk-admin organization cannot be submitted for bootstrap.
     - [ ] Existing Front Desk membership elsewhere does not block first owner onboarding.
+    - [ ] Invitation recipients bypass owner onboarding and use the verified claim flow.
     - [ ] Current owned tenant or unfinished onboarding blocks a new owner journey.
-  - **Tests/evidence:** Provider success/local-write failure recovery and duplicate create tests.
-
-- [ ] **TBF-022 — Add raw verified Clerk webhook intake**
-  - **Depends on:** TBF-020, existing webhook inbox.
-  - **Outcome:** Clerk events are signature-verified over raw bytes, deduplicated, persisted, and
-    queued for reconciliation before tenant behavior depends on them.
-  - **Acceptance:**
-    - [ ] Route precedes global JSON parsing.
-    - [ ] Signature failure, malformed body, stale/unknown event, and duplicate provider ID fail
-          or no-op safely.
-    - [ ] Handler stores minimum safe payload and no raw secret/token is logged.
-    - [ ] Organization-created reconciliation can repair a missing incomplete onboarding but
-          cannot provision a tenant or start a trial.
-  - **Tests/evidence:** Exact-raw-body verification and duplicate/out-of-order delivery tests.
+    - [ ] Request-size and rate limits apply. Errors are generic and do not reveal another
+          account's or onboarding record's existence.
+  - **Tests/evidence:** Provider success/local-write failure recovery, duplicate create,
+    invitation-recipient, rate-limit, and request-size tests.
 
 ## Phase 3: Tenant bootstrap, context, and entitlements
 
@@ -183,6 +195,9 @@ or billing tasks as authority for this work.
     - [ ] Missing/mismatched/removed/suspended membership and unprovisioned organization deny.
     - [ ] A user can be Front Desk in one tenant and Owner in its single owned tenant.
     - [ ] Cross-tab organization switching uses the active organization on each request.
+    - [ ] A restricted tenant reaches the shared action-policy gate, not active or blanket
+          cancelled handling. Only explicitly approved settlement, return, refund, and export
+          paths may continue.
   - **Tests/evidence:** Cross-tenant, wrong-active-org, revoked-membership, and cross-tab tests.
 
 - [ ] **TBF-032 — Seed plans and build the entitlement service**
@@ -206,6 +221,8 @@ or billing tasks as authority for this work.
     - [ ] Downgrade blocks when current assets or counted seats exceed the new plan.
     - [ ] Trial ends to seven-day normal-access past_due grace, then restricted.
     - [ ] Restricted policy allows existing-rental settlement, returns, refunds, and exports only.
+    - [ ] One shared restricted-action matrix is used by tenant context and every endpoint, so
+          restricted access cannot accidentally inherit active or cancelled behavior.
     - [ ] Request-time state checks and durable expiry work agree.
   - **Tests/evidence:** Database-time boundary tests for every transition and duplicate job replay.
 
@@ -220,6 +237,8 @@ or billing tasks as authority for this work.
     - [ ] Seat count includes active Front Desk plus unexpired pending invitation.
     - [ ] Resend does not consume a second seat; cancellation/expiry releases it.
     - [ ] Front Desk receives no member/invitation management access.
+    - [ ] Owner-and-tenant rate limits apply. Generic responses do not disclose whether an email
+          already has an account or invitation.
   - **Tests/evidence:** Cap, expiry, resend, cancellation, and owner-vs-frontdesk authorization tests.
 
 - [ ] **TBF-041 — Dispatch Clerk invitation and membership changes through outbox**
@@ -239,7 +258,10 @@ or billing tasks as authority for this work.
           invitation correlation, expiry, role, and seat state.
     - [ ] Duplicate claim and duplicate webhook event activate one membership.
     - [ ] Unknown provider-created membership does not grant Drezivo access.
-  - **Tests/evidence:** Wrong organization, expired/cancelled invite, duplicate, and webhook-order tests.
+    - [ ] User and network rate limits apply. Generic failures do not distinguish invalid, expired,
+          revoked, or already-claimed invitations to an unauthorized caller.
+  - **Tests/evidence:** Wrong organization, expired/cancelled invite, duplicate, webhook-order,
+    and rate-limit tests.
 
 - [ ] **TBF-043 — Implement local-first membership removal and approved owner transfer**
   - **Depends on:** TBF-041, TBF-042.
@@ -247,9 +269,13 @@ or billing tasks as authority for this work.
   - **Acceptance:**
     - [ ] Local removal precedes queued Clerk removal and preserves history.
     - [ ] Existing protected request fails after removal despite valid Clerk session.
+    - [ ] A tenant always has at least one active Owner. The final active Owner cannot self-remove,
+          be removed, or be demoted; an approved transfer atomically installs a verified successor
+          before the prior Owner loses the role.
     - [ ] Owner transfer requires documented business-contact evidence, reason, and second internal
           approval before changes.
-  - **Tests/evidence:** Revocation race and missing-approval transfer tests.
+  - **Tests/evidence:** Revocation race, last-Owner rejection, successor-first transfer, and
+    missing-approval transfer tests.
 
 ## Phase 5: Operator payment, recovery, and closure
 
@@ -289,7 +315,8 @@ or billing tasks as authority for this work.
   - **Depends on:** TBF-050, TBF-051.
   - **Outcome:** The sole owner can later replace a permanently closed business without a second trial.
   - **Acceptance:**
-    - [ ] Closure is reason-coded and irreversible through ordinary tenant routes.
+    - [ ] Closure is reason-coded, sets the persisted tenant state to `cancelled`, and is
+          irreversible through ordinary tenant routes.
     - [ ] Former owner has only read-only settlement/export access.
     - [ ] Account current-owned-tenant link releases only after successful closure.
     - [ ] Replacement onboarding is payment-pending, never trialing.

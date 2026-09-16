@@ -26,6 +26,21 @@ export type BranchId = z.infer<typeof branchId>;
 export const membershipId = idSchema('MembershipId');
 export type MembershipId = z.infer<typeof membershipId>;
 
+export const accountId = idSchema('AccountId');
+export type AccountId = z.infer<typeof accountId>;
+
+export const organizationOnboardingId = idSchema('OrganizationOnboardingId');
+export type OrganizationOnboardingId = z.infer<typeof organizationOnboardingId>;
+
+export const membershipInvitationId = idSchema('MembershipInvitationId');
+export type MembershipInvitationId = z.infer<typeof membershipInvitationId>;
+
+export const subscriptionId = idSchema('SubscriptionId');
+export type SubscriptionId = z.infer<typeof subscriptionId>;
+
+export const operatorActionId = idSchema('OperatorActionId');
+export type OperatorActionId = z.infer<typeof operatorActionId>;
+
 export const customerId = idSchema('CustomerId');
 export type CustomerId = z.infer<typeof customerId>;
 

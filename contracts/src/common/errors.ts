@@ -26,9 +26,20 @@ export const errorCode = z.enum([
   // 404 — resource missing or concealed cross-tenant (never distinguished on the wire)
   'NOT_FOUND',
   // 409 — a concurrent conflict, one of three business-distinct reasons
+  'CONFLICT',
   'CAPACITY_CONFLICT',
   'STATE_CONFLICT',
   'IDEMPOTENCY_KEY_REUSED',
+  'TRIAL_CONSUMED',
+  'CURRENT_OWNED_TENANT_EXISTS',
+  'INCOMPLETE_ONBOARDING_EXISTS',
+  'SEAT_LIMIT_EXCEEDED',
+  'ASSET_LIMIT_EXCEEDED',
+  'INVALID_INVITATION',
+  'STALE_PROVIDER_STATE',
+  'TENANT_RESTRICTED',
+  'LAST_OWNER_CONFLICT',
+  'OPERATOR_APPROVAL_REQUIRED',
   // 422 — the request body failed validation
   'VALIDATION_FAILED',
   // 429 — rate limited

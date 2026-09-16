@@ -1,3 +1,5 @@
+import type { ErrorCode, ErrorField } from '@drezivo/contracts';
+
 /**
  * Typed error hierarchy mapped to the contract envelope:
  *   { success: false, error: { code, message, fields? }, request_id }
@@ -10,8 +12,6 @@
  * ForbiddenError — the TRD is explicit that tenant isolation fails closed by concealment,
  * not by a 403 that confirms the object exists.
  */
-
-import type { ErrorCode, ErrorField } from '@drezivo/contracts';
 
 export type { ErrorCode, ErrorField } from '@drezivo/contracts';
 

@@ -20,7 +20,27 @@ import {
   availabilityResult,
   catalogueItem,
   catalogueQuery,
+  changeSubscriptionPlanRequest,
+  claimMembershipInvitationRequest,
+  clerkWebhookInboxRecord,
+  clerkWebhookEventType,
+  closeTenantRequest,
   contractVersion,
+  createMembershipInvitationRequest,
+  createOwnerOnboardingRequest,
+  membershipInvitation,
+  membershipInvitationParams,
+  membershipInvitationStatus,
+  onboardingActorContext,
+  onboardingStatus,
+  operatorActionResponse,
+  planCode,
+  resendMembershipInvitationRequest,
+  cancelMembershipInvitationRequest,
+  abandonOwnerOnboardingRequest,
+  bootstrapTenantRequest,
+  chooseOnboardingPlanRequest,
+  organizationOnboarding,
   errorEnvelope,
   filePurpose,
   guestReservationView,
@@ -45,9 +65,13 @@ import {
   reservationReturnResponse,
   staffReservationCreateRequest,
   staffReservationCreateResponse,
+  subscriptionStatus,
+  subscriptionSummary,
   successEnvelope,
+  transferOwnershipRequest,
   uploadAuthorizationRequest,
   uploadAuthorizationResponse,
+  verifyOnboardingPaymentRequest,
 } from '../src';
 
 // Must run before any `.openapi()` call. This package's own schemas never
@@ -60,6 +84,32 @@ const registry = new OpenAPIRegistry();
 
 // ---- Shared components -----------------------------------------------
 registry.register('ErrorEnvelope', errorEnvelope);
+// These are public contract components for Phase 1 onboarding routes. Register
+// the boundary now without advertising paths that the API has not implemented.
+registry.register('OnboardingStatus', onboardingStatus);
+registry.register('PlanCode', planCode);
+registry.register('SubscriptionStatus', subscriptionStatus);
+registry.register('MembershipInvitationStatus', membershipInvitationStatus);
+registry.register('ClerkWebhookEventType', clerkWebhookEventType);
+registry.register('OrganizationOnboarding', organizationOnboarding);
+registry.register('OnboardingActorContext', onboardingActorContext);
+registry.register('MembershipInvitation', membershipInvitation);
+registry.register('SubscriptionSummary', subscriptionSummary);
+registry.register('OperatorActionResponse', operatorActionResponse);
+registry.register('ClerkWebhookInboxRecord', clerkWebhookInboxRecord);
+registry.register('CreateOwnerOnboardingRequest', createOwnerOnboardingRequest);
+registry.register('AbandonOwnerOnboardingRequest', abandonOwnerOnboardingRequest);
+registry.register('ChooseOnboardingPlanRequest', chooseOnboardingPlanRequest);
+registry.register('BootstrapTenantRequest', bootstrapTenantRequest);
+registry.register('CreateMembershipInvitationRequest', createMembershipInvitationRequest);
+registry.register('MembershipInvitationParams', membershipInvitationParams);
+registry.register('ResendMembershipInvitationRequest', resendMembershipInvitationRequest);
+registry.register('CancelMembershipInvitationRequest', cancelMembershipInvitationRequest);
+registry.register('ClaimMembershipInvitationRequest', claimMembershipInvitationRequest);
+registry.register('ChangeSubscriptionPlanRequest', changeSubscriptionPlanRequest);
+registry.register('VerifyOnboardingPaymentRequest', verifyOnboardingPaymentRequest);
+registry.register('CloseTenantRequest', closeTenantRequest);
+registry.register('TransferOwnershipRequest', transferOwnershipRequest);
 
 const jsonError = (description: string) => ({
   description,

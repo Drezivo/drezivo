@@ -1,3 +1,5 @@
+import './load-env.js';
+
 import { z } from 'zod';
 
 /**
@@ -18,13 +20,15 @@ const envSchema = z.object({
 
   CLERK_SECRET_KEY: z.string().min(1, 'CLERK_SECRET_KEY is required'),
   CLERK_PUBLISHABLE_KEY: z.string().min(1, 'CLERK_PUBLISHABLE_KEY is required'),
-  CLERK_JWT_ISSUER: z.string().url('CLERK_JWT_ISSUER must be a valid URL'),
 
   AWS_REGION: z.string().min(1, 'AWS_REGION is required'),
   S3_BUCKET_PRIVATE: z.string().min(1, 'S3_BUCKET_PRIVATE is required'),
   S3_BUCKET_PUBLIC: z.string().min(1, 'S3_BUCKET_PUBLIC is required'),
   S3_ACCESS_KEY_ID: z.string().min(1, 'S3_ACCESS_KEY_ID is required'),
   S3_SECRET_ACCESS_KEY: z.string().min(1, 'S3_SECRET_ACCESS_KEY is required'),
+  // Optional for AWS; set to the local MinIO API URL and enable path-style addressing in dev.
+  S3_ENDPOINT: z.string().url('S3_ENDPOINT must be a valid URL').optional(),
+  S3_FORCE_PATH_STYLE: z.coerce.boolean().default(false),
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 
