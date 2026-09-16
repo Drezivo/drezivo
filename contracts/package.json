@@ -1,6 +1,6 @@
 {
   "name": "@drezivo/contracts",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Drezivo HTTP API contract — Zod schemas and generated OpenAPI 3.1 shared by api, app, and web.",
   "license": "UNLICENSED",
   "private": false,
