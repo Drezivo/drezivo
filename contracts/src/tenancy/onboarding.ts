@@ -37,12 +37,20 @@ export const clerkWebhookEventType = z.enum([
 export type ClerkWebhookEventType = z.infer<typeof clerkWebhookEventType>;
 
 const organizationName = z.string().trim().min(1).max(160);
+const organizationSlug = z
+  .string()
+  .trim()
+  .min(3)
+  .max(100)
+  .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, 'Use lowercase letters, numbers, and single hyphens.');
 const safeReason = z.string().trim().min(1).max(500);
 const safeReference = z.string().trim().min(1).max(200);
 
 /** Safe API projection. Clerk identifiers stay inside API/provider boundaries. */
 export const organizationOnboarding = z.object({
   id: organizationOnboardingId,
+  organization_name: organizationName,
+  requested_slug: organizationSlug.nullable(),
   status: onboardingStatus,
   selected_plan_code: planCode.nullable(),
   is_trial_eligible: z.boolean(),
@@ -94,7 +102,9 @@ export const clerkWebhookInboxRecord = z.object({
 });
 export type ClerkWebhookInboxRecord = z.infer<typeof clerkWebhookInboxRecord>;
 
-export const createOwnerOnboardingRequest = z.object({ organization_name: organizationName }).strict();
+export const createOwnerOnboardingRequest = z
+  .object({ organization_name: organizationName, slug: organizationSlug.optional() })
+  .strict();
 export type CreateOwnerOnboardingRequest = z.infer<typeof createOwnerOnboardingRequest>;
 
 export const resumeOwnerOnboardingRequest = z.object({}).strict();

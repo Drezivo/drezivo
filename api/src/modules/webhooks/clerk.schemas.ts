@@ -37,6 +37,8 @@ const providerEventEnvelope = z.object({
 
 const organizationData = z.object({
   id: providerId,
+  name: z.string().trim().min(1).max(160).optional(),
+  slug: z.string().trim().min(1).max(100).optional(),
   created_by: providerId.optional(),
   private_metadata: z.record(z.unknown()).optional(),
 });
@@ -72,8 +74,7 @@ export interface NormalizedClerkWebhookEvent {
 }
 
 export type NormalizeClerkWebhookResult =
-  | { kind: 'supported'; event: NormalizedClerkWebhookEvent }
-  | { kind: 'ignored' };
+  { kind: 'supported'; event: NormalizedClerkWebhookEvent } | { kind: 'ignored' };
 
 function addIfPresent(
   target: Record<string, unknown>,
@@ -93,9 +94,14 @@ function parseSupportedData<T>(schema: z.ZodType<T>, data: unknown): T {
   return result.data;
 }
 
-function mapOrganizationData(data: unknown, eventType: ClerkWebhookEventType): NormalizedClerkWebhookEvent {
+function mapOrganizationData(
+  data: unknown,
+  eventType: ClerkWebhookEventType,
+): NormalizedClerkWebhookEvent {
   const parsed = parseSupportedData(organizationData, data);
   const safePayload: Record<string, unknown> = { organization_id: parsed.id };
+  addIfPresent(safePayload, 'organization_name', parsed.name);
+  addIfPresent(safePayload, 'organization_slug', parsed.slug);
   addIfPresent(safePayload, 'created_by_user_id', parsed.created_by);
 
   if (eventType === 'organization.created') {
@@ -108,7 +114,10 @@ function mapOrganizationData(data: unknown, eventType: ClerkWebhookEventType): N
   return { eventType, safePayload };
 }
 
-function mapInvitationData(data: unknown, eventType: ClerkWebhookEventType): NormalizedClerkWebhookEvent {
+function mapInvitationData(
+  data: unknown,
+  eventType: ClerkWebhookEventType,
+): NormalizedClerkWebhookEvent {
   const parsed = parseSupportedData(invitationData, data);
   const safePayload: Record<string, unknown> = {
     organization_id: parsed.organization_id,
@@ -120,7 +129,10 @@ function mapInvitationData(data: unknown, eventType: ClerkWebhookEventType): Nor
   return { eventType, safePayload };
 }
 
-function mapMembershipData(data: unknown, eventType: ClerkWebhookEventType): NormalizedClerkWebhookEvent {
+function mapMembershipData(
+  data: unknown,
+  eventType: ClerkWebhookEventType,
+): NormalizedClerkWebhookEvent {
   const parsed = parseSupportedData(membershipData, data);
   const safePayload: Record<string, unknown> = {
     organization_id: parsed.organization.id,

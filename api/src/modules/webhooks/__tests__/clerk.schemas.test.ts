@@ -60,7 +60,7 @@ describe('Clerk webhook normalization', () => {
       kind: 'supported',
       event: {
         eventType: 'organization.created',
-        safePayload: { organization_id: 'org_1' },
+        safePayload: { organization_id: 'org_1', organization_name: 'Private studio name' },
       },
     });
   });

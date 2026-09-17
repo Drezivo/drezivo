@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { DependencyUnavailableError, ValidationError } from '../../../shared/errors.js';
+import {
+  DependencyUnavailableError,
+  StateConflictError,
+  ValidationError,
+} from '../../../shared/errors.js';
 import type { ClerkProviderClient } from '../clerk.adapter.js';
 
 process.env.NODE_ENV = 'test';
@@ -77,6 +81,20 @@ describe('Clerk server adapter', () => {
     });
   });
 
+  it('maps a provider slug conflict to a safe state conflict', async () => {
+    const { provider, organizations } = createProvider();
+    organizations.createOrganization.mockRejectedValue({ status: 409 });
+    const adapter = createClerkServerAdapter(provider);
+
+    await expect(
+      adapter.createOrganization({
+        name: 'Drezivo Studio',
+        createdByUserId: 'user_123',
+        slug: 'drezivo-studio',
+      }),
+    ).rejects.toBeInstanceOf(StateConflictError);
+  });
+
   it('sends the typed private onboarding marker without exposing it as a public field', async () => {
     const { provider, organizations } = createProvider();
     organizations.createOrganization.mockResolvedValue(organization);
@@ -132,7 +150,10 @@ describe('Clerk server adapter', () => {
   it('creates and revokes invitations with only the supported provider fields', async () => {
     const { provider, organizations } = createProvider();
     organizations.createOrganizationInvitation.mockResolvedValue(invitation);
-    organizations.revokeOrganizationInvitation.mockResolvedValue({ ...invitation, status: 'revoked' });
+    organizations.revokeOrganizationInvitation.mockResolvedValue({
+      ...invitation,
+      status: 'revoked',
+    });
     const adapter = createClerkServerAdapter(provider);
 
     await expect(
@@ -170,15 +191,26 @@ describe('Clerk server adapter', () => {
   it('supports membership create, update, and delete through one typed boundary', async () => {
     const { provider, organizations } = createProvider();
     organizations.createOrganizationMembership.mockResolvedValue(membership);
-    organizations.updateOrganizationMembership.mockResolvedValue({ ...membership, role: 'org:admin' });
+    organizations.updateOrganizationMembership.mockResolvedValue({
+      ...membership,
+      role: 'org:admin',
+    });
     organizations.deleteOrganizationMembership.mockResolvedValue(membership);
     const adapter = createClerkServerAdapter(provider);
 
     await expect(
-      adapter.createMembership({ organizationId: 'org_123', userId: 'user_456', role: 'org:member' }),
+      adapter.createMembership({
+        organizationId: 'org_123',
+        userId: 'user_456',
+        role: 'org:member',
+      }),
     ).resolves.toMatchObject({ id: 'mem_123', role: 'org:member' });
     await expect(
-      adapter.updateMembership({ organizationId: 'org_123', userId: 'user_456', role: 'org:admin' }),
+      adapter.updateMembership({
+        organizationId: 'org_123',
+        userId: 'user_456',
+        role: 'org:admin',
+      }),
     ).resolves.toMatchObject({ id: 'mem_123', role: 'org:admin' });
     await expect(
       adapter.deleteMembership({ organizationId: 'org_123', userId: 'user_456' }),
@@ -225,7 +257,11 @@ describe('Clerk server adapter', () => {
     const adapter = createClerkServerAdapter(provider);
 
     await expect(
-      adapter.createMembership({ organizationId: 'org_123', userId: 'user_456', role: 'org:member' }),
+      adapter.createMembership({
+        organizationId: 'org_123',
+        userId: 'user_456',
+        role: 'org:member',
+      }),
     ).rejects.toBeInstanceOf(DependencyUnavailableError);
   });
 });

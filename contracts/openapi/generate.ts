@@ -120,6 +120,65 @@ const idempotencyKeyHeader = z.object({
   'Idempotency-Key': z.string().min(8).max(255),
 });
 
+// ---- owner onboarding ----------------------------------------------------
+registry.registerPath({
+  method: 'post',
+  path: '/onboarding',
+  tags: ['onboarding'],
+  summary: 'Create the one pre-tenant owner onboarding journey.',
+  request: {
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: createOwnerOnboardingRequest } } },
+  },
+  responses: {
+    201: {
+      description: 'Clerk organization and local onboarding created.',
+      content: { 'application/json': { schema: successEnvelope(organizationOnboarding) } },
+    },
+    200: {
+      description: 'Existing unfinished onboarding resumed.',
+      content: { 'application/json': { schema: successEnvelope(organizationOnboarding) } },
+    },
+    409: jsonError('An owned tenant, unfinished onboarding, or unavailable slug prevents creation.'),
+    429: jsonError('Owner onboarding create rate limit exceeded.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/onboarding/current',
+  tags: ['onboarding'],
+  summary: 'Read the authenticated owner onboarding projection.',
+  responses: {
+    200: {
+      description: 'Safe onboarding and account lifecycle context.',
+      content: { 'application/json': { schema: successEnvelope(onboardingActorContext) } },
+    },
+    429: jsonError('Owner onboarding read rate limit exceeded.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/onboarding/{onboardingId}/abandon',
+  tags: ['onboarding'],
+  summary: 'Abandon an unfinished owner onboarding while retaining history.',
+  request: {
+    params: z.object({ onboardingId: z.string().uuid() }),
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: abandonOwnerOnboardingRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Onboarding abandoned or an identical abandonment replayed.',
+      content: { 'application/json': { schema: successEnvelope(organizationOnboarding) } },
+    },
+    404: jsonError('The onboarding was not found for this account.'),
+    409: jsonError('Provisioned onboarding cannot be abandoned, or the key is in progress.'),
+    429: jsonError('Owner onboarding abandon rate limit exceeded.'),
+  },
+});
+
 // ---- storefront ---------------------------------------------------------
 registry.registerPath({
   method: 'get',

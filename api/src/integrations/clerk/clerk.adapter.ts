@@ -2,7 +2,11 @@ import { createClerkClient, type ClerkClient } from '@clerk/express';
 import { z } from 'zod';
 
 import { config } from '../../config/index.js';
-import { DependencyUnavailableError, ValidationError } from '../../shared/errors.js';
+import {
+  DependencyUnavailableError,
+  StateConflictError,
+  ValidationError,
+} from '../../shared/errors.js';
 
 /**
  * The only Clerk organization roles Drezivo sends in v1. Clerk may expose additional custom
@@ -46,14 +50,13 @@ export interface ClerkServerAdapter {
     userId: string,
   ): Promise<ClerkOrganizationMembership | null>;
   createInvitation(input: CreateClerkInvitationInput): Promise<ClerkOrganizationInvitation>;
-  getInvitation(
-    organizationId: string,
-    invitationId: string,
-  ): Promise<ClerkOrganizationInvitation>;
+  getInvitation(organizationId: string, invitationId: string): Promise<ClerkOrganizationInvitation>;
   revokeInvitation(input: RevokeClerkInvitationInput): Promise<ClerkOrganizationInvitation>;
   createMembership(input: ClerkMembershipInput): Promise<ClerkOrganizationMembership>;
   updateMembership(input: ClerkMembershipInput): Promise<ClerkOrganizationMembership>;
-  deleteMembership(input: Pick<ClerkMembershipInput, 'organizationId' | 'userId'>): Promise<ClerkOrganizationMembership>;
+  deleteMembership(
+    input: Pick<ClerkMembershipInput, 'organizationId' | 'userId'>,
+  ): Promise<ClerkOrganizationMembership>;
 }
 
 /**
@@ -151,7 +154,9 @@ function parseProviderDate(value: unknown): Date {
   return date;
 }
 
-function mapOrganization(organization: Awaited<ReturnType<ClerkProviderClient['organizations']['getOrganization']>>): ClerkOrganization {
+function mapOrganization(
+  organization: Awaited<ReturnType<ClerkProviderClient['organizations']['getOrganization']>>,
+): ClerkOrganization {
   return {
     id: organization.id,
     name: organization.name,
@@ -161,7 +166,9 @@ function mapOrganization(organization: Awaited<ReturnType<ClerkProviderClient['o
 }
 
 function mapMembership(
-  membership: Awaited<ReturnType<ClerkProviderClient['organizations']['createOrganizationMembership']>>,
+  membership: Awaited<
+    ReturnType<ClerkProviderClient['organizations']['createOrganizationMembership']>
+  >,
   fallbackOrganizationId: string,
   fallbackUserId: string,
 ): ClerkOrganizationMembership {
@@ -174,7 +181,9 @@ function mapMembership(
 }
 
 function mapInvitation(
-  invitation: Awaited<ReturnType<ClerkProviderClient['organizations']['createOrganizationInvitation']>>,
+  invitation: Awaited<
+    ReturnType<ClerkProviderClient['organizations']['createOrganizationInvitation']>
+  >,
 ): ClerkOrganizationInvitation {
   return {
     id: invitation.id,
@@ -186,17 +195,37 @@ function mapInvitation(
   };
 }
 
-async function providerCall<T>(call: () => Promise<T>): Promise<T> {
+async function providerCall<T>(call: () => Promise<T>, conflictMessage?: string): Promise<T> {
   try {
     return await call();
   } catch (error) {
     if (error instanceof DependencyUnavailableError) {
       throw error;
     }
+    if (conflictMessage && isProviderConflict(error)) {
+      throw new StateConflictError(conflictMessage);
+    }
     // Deliberately do not log or expose Clerk's raw body, request ID, or error message. The
     // global error handler can safely turn this typed failure into a generic 503 response.
     throw new DependencyUnavailableError('Clerk is temporarily unavailable. Please try again.');
   }
+}
+
+function isProviderConflict(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const record = error as { status?: unknown; statusCode?: unknown; errors?: unknown };
+  if (record.status === 409 || record.statusCode === 409) return true;
+  return (
+    Array.isArray(record.errors) &&
+    record.errors.some((entry) => {
+      if (!entry || typeof entry !== 'object') return false;
+      const item = entry as { code?: unknown; message?: unknown };
+      return (
+        item.code === 'form_param_taken' ||
+        (typeof item.message === 'string' && /slug/i.test(item.message))
+      );
+    })
+  );
 }
 
 export function createClerkServerAdapter(
@@ -226,7 +255,7 @@ export function createClerkServerAdapter(
           };
         }
         return mapOrganization(await client.organizations.createOrganization(params));
-      });
+      }, 'That organization slug is unavailable. Choose another.');
     },
 
     async getOrganization(organizationId) {
@@ -252,9 +281,7 @@ export function createClerkServerAdapter(
           throw new DependencyUnavailableError('Clerk returned an invalid membership response.');
         }
         const membership = response.data[0];
-        return membership
-          ? mapMembership(membership, parsed.organizationId, parsed.userId)
-          : null;
+        return membership ? mapMembership(membership, parsed.organizationId, parsed.userId) : null;
       });
     },
 
@@ -296,7 +323,8 @@ export function createClerkServerAdapter(
           organizationId: parsed.organizationId,
           invitationId: parsed.invitationId,
         };
-        if (parsed.requestingUserId !== undefined) params.requestingUserId = parsed.requestingUserId;
+        if (parsed.requestingUserId !== undefined)
+          params.requestingUserId = parsed.requestingUserId;
         return mapInvitation(await client.organizations.revokeOrganizationInvitation(params));
       });
     },
@@ -339,6 +367,3 @@ export function createClerkServerAdapter(
     },
   };
 }
-
-/** Shared configured adapter for application services. Provider calls remain behind this module. */
-export const clerkServerAdapter = createClerkServerAdapter();
