@@ -3,6 +3,7 @@ import type { PoolClient } from 'pg';
 import { z } from 'zod';
 
 import { ValidationError } from '../../shared/errors.js';
+import { withSystemGlobalTransaction } from '../../db/client.js';
 
 export type WebhookInboxStatus = 'received' | 'processed' | 'rejected';
 
@@ -26,6 +27,15 @@ export interface WebhookInboxRow {
 }
 
 export type InsertWebhookInboxResult = 'inserted' | 'duplicate';
+
+/** API-side persistence boundary; the route never reads the inbox after inserting. */
+export async function persistClerkWebhookInbox(
+  input: InsertWebhookInboxInput,
+): Promise<InsertWebhookInboxResult> {
+  return withSystemGlobalTransaction('clerk:webhook', (client) =>
+    insertClerkWebhookInbox(client, input),
+  );
+}
 
 const insertInput = z.object({
   providerEventId: z.string().trim().min(1).max(255),

@@ -3,7 +3,7 @@ title: Drezivo Architecture
 type: architecture
 status: current
 source: ../../Drezivo-TRD.md
-updated: 2026-09-16
+updated: 2026-09-17
 tags: [drezivo, architecture, trd]
 ---
 
@@ -25,3 +25,7 @@ flowchart LR
 The API is the authority for authorization, tenant scope, money, availability, and state
 transitions. The browser is a client, never a trust boundary. The [TRD](../../Drezivo-TRD.md)
 and [data model](../../Drezivo-Data-Model.md) contain the complete technical contract.
+
+The backend follows explicit feature boundaries between routes, controllers, services,
+repositories, DTOs, and schemas. See [[02-Architecture/API Module Boundaries and Layering]] for
+the accepted cleanup policy and infrastructure-module exception.
