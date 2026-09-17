@@ -26,6 +26,7 @@ process.env.DATABASE_URL = buildAppRoleDatabaseUrl(adminUrl);
 process.env.DATABASE_POOL_MAX ??= '10';
 process.env.CLERK_SECRET_KEY ??= 'test';
 process.env.CLERK_PUBLISHABLE_KEY ??= 'test';
+process.env.CLERK_WEBHOOK_SIGNING_SECRET ??= 'test';
 process.env.AWS_REGION ??= 'test';
 process.env.S3_BUCKET_PRIVATE ??= 'private';
 process.env.S3_BUCKET_PUBLIC ??= 'public';

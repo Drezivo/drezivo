@@ -18,7 +18,7 @@ TBF-010 onward own the reviewed SQL migrations and service behavior.
 | `onboarding_payment_verification`                                          | Global pre-tenant | Owner receives a safe status projection only. Operator payment evidence is not broadly readable.                                 |
 | `bootstrap_idempotency_record`                                             | Global pre-tenant | Scoped to the authenticated account and operation. It never reuses tenant-scoped idempotency.                                    |
 | `global_audit_event`                                                       | Global pre-tenant | Append-only account/operator/system history. Owner reads are account-scoped; operator/system reads require explicit context and filters. |
-| `webhook_inbox`                                                            | Global pre-tenant | Existing provider-event dedupe remains restricted to webhook/reconciliation processing.                                          |
+| `webhook_inbox`                                                            | Global pre-tenant | Exact-raw verified provider-event dedupe. API inserts only through a duplicate-safe function; worker reads/transitions rows and neither runtime role deletes them. |
 | `membership_invitation`                                                    | Tenant-owned      | Standard tenant RLS plus local Owner authorization. Protected recipient data never appears in ordinary logs or list projections. |
 | `membership`, `subscription`, `subscription_event`, `subscription_payment` | Tenant-owned      | Existing tenant RLS applies. New lifecycle behavior is gated in services, not inferred from Clerk claims.                        |
 
@@ -41,6 +41,14 @@ tenancy-onboarding expansion. It creates:
 The same expansion adds RLS policies for global account-owned records using
 `current_setting('app.principal_id', true)`. It extends the existing tenant-owned RLS list for
 `membership_invitation`; it does not weaken the existing `webhook_inbox` restriction.
+
+TBF-022 adds the forward-only `0013_webhook_inbox_privileges.sql` migration. It expands the
+existing inbox with a canonical `event_type`, gives `drezivo_app` only an insert path (the
+duplicate-safe `ON CONFLICT DO NOTHING` write is behind a security-definer function because
+PostgreSQL's conflict check otherwise requires table SELECT), and gives `drezivo_worker` only
+SELECT/UPDATE. No runtime role can delete inbox history. The same migration adds the narrowly
+scoped system policy used by deferred organization-created marker repair; it cannot provision a
+tenant, membership, subscription, or trial.
 
 ## Required constraints
 

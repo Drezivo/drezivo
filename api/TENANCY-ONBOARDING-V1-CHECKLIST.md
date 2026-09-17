@@ -148,24 +148,28 @@ or billing tasks as authority for this work.
     organization creation, provider-fact membership reads, invitation create/revoke, membership
     mutations, input validation, malformed provider responses, and safe typed provider failures.
 
-- [ ] **TBF-022 — Add raw verified Clerk webhook intake**
+- [x] **TBF-022 — Add raw verified Clerk webhook intake**
   - **Depends on:** TBF-020, existing webhook inbox.
   - **Outcome:** Clerk events are signature-verified over raw bytes, deduplicated, persisted, and
     queued for reconciliation before tenant behavior depends on them.
   - **Acceptance:**
-    - [ ] Route precedes global JSON parsing.
-    - [ ] Allowlist only organization, organization-invitation, and organization-membership
+    - [x] Route precedes global JSON parsing.
+    - [x] Allowlist only organization, organization-invitation, and organization-membership
           event families. Reject or ignore all Clerk user-profile events; Drezivo does not mirror
           Clerk user profile fields in v1.
-    - [ ] Route-specific raw-body size and rate limits apply before durable processing. Failures
+    - [x] Route-specific raw-body size and rate limits apply before durable processing. Failures
           are generic and disclose neither verification nor reconciliation state.
-    - [ ] Signature failure, malformed body, stale/unknown event, and duplicate provider ID fail
+    - [x] Signature failure, malformed body, stale/unknown event, and duplicate provider ID fail
           or no-op safely.
-    - [ ] Handler stores minimum safe payload and no raw secret/token is logged.
-    - [ ] Organization-created reconciliation can repair a missing incomplete onboarding but
+    - [x] Handler stores minimum safe payload and no raw secret/token is logged.
+    - [x] Organization-created reconciliation can repair a missing incomplete onboarding but
           cannot provision a tenant or start a trial.
-  - **Tests/evidence:** Exact-raw-body verification plus duplicate/out-of-order, disallowed-event,
-    rate-limit, and oversize-request tests.
+  - **Tests/evidence:** Unit coverage verifies exact raw bytes, Clerk/Svix signatures, canonical
+    normalization, safe redaction, duplicate/disallowed no-ops, malformed/oversized requests,
+    and rate limiting. PostgreSQL integration coverage passed as `drezivo_app`/`drezivo_worker`
+    with insert-only/read-update privilege checks, duplicate ingestion, marker repair, competing
+    onboarding, and proof that repair creates no tenant, branch, membership, subscription, or
+    trial side effect.
 
 - [ ] **TBF-021 — Implement create-only owner onboarding commands**
   - **Depends on:** TBF-011, TBF-012, TBF-020, TBF-022.

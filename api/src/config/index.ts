@@ -20,6 +20,7 @@ const envSchema = z.object({
 
   CLERK_SECRET_KEY: z.string().min(1, 'CLERK_SECRET_KEY is required'),
   CLERK_PUBLISHABLE_KEY: z.string().min(1, 'CLERK_PUBLISHABLE_KEY is required'),
+  CLERK_WEBHOOK_SIGNING_SECRET: z.string().min(1, 'CLERK_WEBHOOK_SIGNING_SECRET is required'),
 
   AWS_REGION: z.string().min(1, 'AWS_REGION is required'),
   S3_BUCKET_PRIVATE: z.string().min(1, 'S3_BUCKET_PRIVATE is required'),

@@ -58,6 +58,8 @@ export const webhookInbox = pgTable(
     ...idColumn,
     provider: text('provider').notNull(),
     providerEventId: text('provider_event_id').notNull(),
+    /** Canonical contract event name; nullable only for legacy pre-TBF-022 rows. */
+    eventType: text('event_type'),
     payloadDigest: text('payload_digest').notNull(),
     safePayload: jsonb('safe_payload').$type<Record<string, unknown>>().notNull(),
     status: webhookStatusEnum('status').notNull().default('received'),
