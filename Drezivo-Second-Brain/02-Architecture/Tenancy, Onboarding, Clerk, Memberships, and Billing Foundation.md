@@ -106,20 +106,34 @@ mean a Clerk identity automatically becomes an Owner membership, or that an invi
 
 ### Create-only organization onboarding
 
-The client submits an organization/business display name to a Drezivo onboarding command. The API:
+The client submits an organization/business display name and, optionally, a validated lowercase
+slug to a Drezivo onboarding command. The API:
 
 1. verifies the Clerk user and locks that account's onboarding state;
 2. rejects a second `incomplete` or `payment_pending` onboarding;
 3. rejects a new onboarding while the account owns a current tenant;
 4. creates the Clerk organization with the authenticated person as creator and administrator;
-5. writes an `organization_onboarding` record containing the Clerk organization ID and creator; and
-6. returns that record so the client can activate the new Clerk organization and resume setup.
+5. writes an `organization_onboarding` record containing the Clerk organization correlation,
+   display name, and requested slug; and
+6. returns a safe projection so the client can activate the new Clerk organization and resume
+   setup. Provider identifiers remain outside the public projection.
 
-The provider call and database transaction are not one distributed transaction. The command is
-idempotent and records a recoverable external-operation state, preventing a second Clerk
-organization on retry. If the browser disconnects after Clerk succeeds but before the local write,
-the signed `organization.created` webhook repairs the missing incomplete record. A webhook is a
-recovery path, not the authoritative start of onboarding.
+Owner name, contact email, business type, branch address, hours, payment instructions, policies,
+and the first asset are collected during tenant bootstrap and setup. They are not copied from
+Clerk profile fields into the pre-tenant account record.
+
+The provider call and database transaction are not one distributed transaction. The command first
+claims an account-scoped `Idempotency-Key`, serializes concurrent owner starts, and records a
+recoverable external-operation state, preventing a second Clerk organization on retry. If the
+browser disconnects after Clerk succeeds but before the local write, the signed
+`organization.created` webhook repairs the missing incomplete record. A webhook is a recovery
+path, not the authoritative start of onboarding.
+
+The HTTP commands are `POST /api/v1/onboarding`, `GET /api/v1/onboarding/current`, and
+`POST /api/v1/onboarding/:onboardingId/abandon`. Create is limited to five requests per minute
+per verified user, reads to thirty, abandonment to ten, and owner JSON bodies to 16 KiB. Incomplete
+onboarding remains until the owner explicitly abandons it. Invitation recipients use the later
+verified invitation-claim flow instead of this owner-create command.
 
 The app never offers an arbitrary Clerk organization picker during onboarding. Organization
 switching comes later and lists only businesses with active local membership.

@@ -1,6 +1,6 @@
 # Tenancy and onboarding migration plan
 
-**Status:** approved Phase 0 migration design, not yet applied  
+**Status:** approved Phase 0 migration design with additive Phase 2 owner identity migration applied in code
 **Owner:** API and database maintainers  
 **Source:** `Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation` in the Second Brain, 16 September 2026  
 **Updated:** 16 September 2026  
@@ -11,16 +11,16 @@ TBF-010 onward own the reviewed SQL migrations and service behavior.
 
 ## Scope and ownership
 
-| Record                                                                     | Scope             | Access and RLS boundary                                                                                                          |
-| -------------------------------------------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `account`                                                                  | Global            | The authenticated Clerk subject reads only its own row through transaction-local `app.principal_id`. No profile mirror.          |
-| `organization_onboarding`                                                  | Global pre-tenant | The creator reads only its own record. Operators use separately authorized, audited paths.                                       |
-| `onboarding_payment_verification`                                          | Global pre-tenant | Owner receives a safe status projection only. Operator payment evidence is not broadly readable.                                 |
-| `bootstrap_idempotency_record`                                             | Global pre-tenant | Scoped to the authenticated account and operation. It never reuses tenant-scoped idempotency.                                    |
-| `global_audit_event`                                                       | Global pre-tenant | Append-only account/operator/system history. Owner reads are account-scoped; operator/system reads require explicit context and filters. |
+| Record                                                                     | Scope             | Access and RLS boundary                                                                                                                                            |
+| -------------------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `account`                                                                  | Global            | The authenticated Clerk subject reads only its own row through transaction-local `app.principal_id`. No profile mirror.                                            |
+| `organization_onboarding`                                                  | Global pre-tenant | The creator reads only its own record. Operators use separately authorized, audited paths.                                                                         |
+| `onboarding_payment_verification`                                          | Global pre-tenant | Owner receives a safe status projection only. Operator payment evidence is not broadly readable.                                                                   |
+| `bootstrap_idempotency_record`                                             | Global pre-tenant | Scoped to the authenticated account and operation. It never reuses tenant-scoped idempotency.                                                                      |
+| `global_audit_event`                                                       | Global pre-tenant | Append-only account/operator/system history. Owner reads are account-scoped; operator/system reads require explicit context and filters.                           |
 | `webhook_inbox`                                                            | Global pre-tenant | Exact-raw verified provider-event dedupe. API inserts only through a duplicate-safe function; worker reads/transitions rows and neither runtime role deletes them. |
-| `membership_invitation`                                                    | Tenant-owned      | Standard tenant RLS plus local Owner authorization. Protected recipient data never appears in ordinary logs or list projections. |
-| `membership`, `subscription`, `subscription_event`, `subscription_payment` | Tenant-owned      | Existing tenant RLS applies. New lifecycle behavior is gated in services, not inferred from Clerk claims.                        |
+| `membership_invitation`                                                    | Tenant-owned      | Standard tenant RLS plus local Owner authorization. Protected recipient data never appears in ordinary logs or list projections.                                   |
+| `membership`, `subscription`, `subscription_event`, `subscription_payment` | Tenant-owned      | Existing tenant RLS applies. New lifecycle behavior is gated in services, not inferred from Clerk claims.                                                          |
 
 ## Expand migration design
 
@@ -29,9 +29,9 @@ tenancy-onboarding expansion. It creates:
 
 - `account` with unique `clerk_user_id`, nullable `trial_consumed_at`, and nullable
   `current_owned_tenant_id`.
-- `organization_onboarding` with unique `clerk_org_id`, selected plan, recoverable operation
-  state, and a partial unique index permitting only one `incomplete` or `payment_pending` row per
-  account.
+- `organization_onboarding` with unique `clerk_org_id`, owner-supplied `organization_name`, an
+  optional validated `requested_slug`, selected plan, recoverable operation state, and a partial
+  unique index permitting only one `incomplete` or `payment_pending` row per account.
 - immutable `onboarding_payment_verification`, global `bootstrap_idempotency_record`, and
   append-only `global_audit_event`.
 - tenant-owned `membership_invitation`, including protected recipient lookup material, seven-day
@@ -50,11 +50,28 @@ SELECT/UPDATE. No runtime role can delete inbox history. The same migration adds
 scoped system policy used by deferred organization-created marker repair; it cannot provision a
 tenant, membership, subscription, or trial.
 
+TBF-021 adds the forward-only `0014_owner_onboarding_details.sql` migration. It stores the
+business display name and optional lowercase Clerk slug requested by the owner. The API exposes
+these fields through safe onboarding projections while keeping Clerk identifiers and profile
+fields inside the provider boundary. The owner commands are `POST /api/v1/onboarding`,
+`GET /api/v1/onboarding/current`, and `POST /api/v1/onboarding/:onboardingId/abandon`.
+
+Every owner mutation requires `Idempotency-Key` and uses `bootstrap_idempotency_record`, not the
+tenant-scoped ledger. A seven-day idempotency retention window is used. The create command allows
+5 requests per minute per verified user, current-state reads allow 30, abandonment allows 10,
+and the JSON body is capped at 16 KiB. Incomplete onboarding is not automatically expired in
+this phase. Explicit abandonment retains history and permits a replacement. Provider success
+followed by local write failure is repaired by the signed `organization.created` webhook marker;
+the webhook never provisions a tenant or starts a trial.
+
 ## Required constraints
 
 - One Clerk user maps to one account; one Clerk organization maps to at most one onboarding and
   at most one tenant.
 - One account has at most one unfinished onboarding and one current owned tenant.
+- Owner onboarding captures only organization display name and optional slug before tenant
+  bootstrap. Owner name, contact email, business type, branch address, and operating details are
+  collected by the later tenant bootstrap/setup wizard rather than mirrored from Clerk.
 - One tenant has one current subscription and one local membership per Clerk user.
 - A pending invitation is unique for its tenant and protected recipient identity; active Front Desk
   membership plus unexpired pending invitations is counted under the tenant lock.

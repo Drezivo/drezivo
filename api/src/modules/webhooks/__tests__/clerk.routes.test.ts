@@ -39,9 +39,7 @@ function buildApp(options: {
   };
   if (options.verify) dependencies.verify = options.verify;
   if (options.ingest) dependencies.ingest = options.ingest;
-  app.use(
-    createClerkWebhookRouter(dependencies),
-  );
+  app.use(createClerkWebhookRouter(dependencies));
   app.use(errorHandler);
   return app;
 }
@@ -128,7 +126,9 @@ describe('Clerk webhook intake route', () => {
   });
 
   it('passes exact raw bytes to verification and stores only the normalized safe projection', async () => {
-    const raw = Buffer.from(` {"data":${JSON.stringify(organizationCreated.data)},"type":"organization.created"} `);
+    const raw = Buffer.from(
+      ` {"data":${JSON.stringify(organizationCreated.data)},"type":"organization.created"} `,
+    );
     let verifiedBody: Buffer | undefined;
     let ingested: Record<string, unknown> | undefined;
     const app = buildApp({
@@ -153,6 +153,7 @@ describe('Clerk webhook intake route', () => {
     expect(verifiedBody).toEqual(raw);
     expect(ingested).toEqual({
       organization_id: 'org_123',
+      organization_name: 'Never persisted',
       created_by_user_id: 'user_123',
       drezivo_onboarding: {
         source: 'owner_onboarding_v1',
@@ -160,7 +161,6 @@ describe('Clerk webhook intake route', () => {
         attempt_id: '22222222-2222-4222-8222-222222222222',
       },
     });
-    expect(JSON.stringify(ingested)).not.toContain('Never persisted');
     expect(JSON.stringify(ingested)).not.toContain('owner@example.com');
     expect(JSON.stringify(ingested)).not.toContain('secret-token');
     expect(JSON.stringify(ingested)).not.toContain('https://');
@@ -195,7 +195,7 @@ describe('Clerk webhook intake route', () => {
   it('acknowledges duplicate and validly signed disallowed events without persistence', async () => {
     let calls = 0;
     const app = buildApp({
-      verify: () => Promise.resolve({ type: 'user.created', data: { id: 'user_123' }}),
+      verify: () => Promise.resolve({ type: 'user.created', data: { id: 'user_123' } }),
       ingest: () => {
         calls += 1;
         return Promise.resolve('duplicate');

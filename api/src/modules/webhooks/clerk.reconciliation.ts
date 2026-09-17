@@ -12,12 +12,13 @@ export type OrganizationCreatedRepairResult =
   | { kind: 'skipped' };
 
 export type DeferredClerkReconciliationResult =
-  | OrganizationCreatedRepairResult
-  | { kind: 'deferred' };
+  OrganizationCreatedRepairResult | { kind: 'deferred' };
 
 interface OrganizationCreatedRepairInput {
   organizationId: string;
   marker: ClerkOnboardingMarker;
+  organizationName?: string;
+  organizationSlug?: string;
 }
 
 /**
@@ -40,7 +41,12 @@ export async function reconcileDeferredClerkEvent(input: {
     return { kind: 'skipped' };
   }
 
-  return reconcileOrganizationCreatedMarker({ organizationId, marker: marker.data });
+  const repairInput: OrganizationCreatedRepairInput = { organizationId, marker: marker.data };
+  if (typeof input.safePayload.organization_name === 'string')
+    repairInput.organizationName = input.safePayload.organization_name;
+  if (typeof input.safePayload.organization_slug === 'string')
+    repairInput.organizationSlug = input.safePayload.organization_slug;
+  return reconcileOrganizationCreatedMarker(repairInput);
 }
 
 /** Repair one missing incomplete onboarding, without provisioning any tenant-side records. */
@@ -100,11 +106,17 @@ export async function reconcileOrganizationCreatedMarkerInTransaction(
   }
 
   const inserted = await client.query<{ id: string }>(
-    `INSERT INTO organization_onboarding (account_id, clerk_org_id, status)
-     VALUES ($1, $2, 'incomplete')
+    `INSERT INTO organization_onboarding
+       (account_id, clerk_org_id, organization_name, requested_slug, status)
+     VALUES ($1, $2, $3, $4, 'incomplete')
      ON CONFLICT (clerk_org_id) DO NOTHING
      RETURNING id`,
-    [accountRow.id, input.organizationId],
+    [
+      accountRow.id,
+      input.organizationId,
+      input.organizationName ?? 'Unspecified organization',
+      input.organizationSlug ?? null,
+    ],
   );
   return inserted.rows[0]
     ? { kind: 'repaired', onboardingId: inserted.rows[0].id }

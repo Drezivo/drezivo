@@ -7,6 +7,7 @@ import { requestId } from './middleware/request-id.js';
 import { reservationsRouter } from './modules/reservations/reservations.routes.js';
 import { storefrontRouter } from './modules/storefront/storefront.routes.js';
 import { clerkWebhookRouter } from './modules/webhooks/clerk.routes.js';
+import { onboardingRouter } from './modules/onboarding/onboarding.routes.js';
 import { logger } from './shared/logger.js';
 import { sendError } from './shared/response.js';
 
@@ -62,6 +63,7 @@ export function createApp(): Express {
   const v1 = express.Router();
   v1.use(storefrontRouter);
   v1.use(reservationsRouter);
+  v1.use(onboardingRouter);
   app.use('/api/v1', v1);
 
   app.use(errorHandler);

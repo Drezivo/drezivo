@@ -21,6 +21,8 @@ Table organization_onboarding {
   id uuid [pk, not null]
   account_id uuid [not null]
   clerk_org_id varchar(200) [not null]
+  organization_name varchar(160) [not null]
+  requested_slug varchar(100)
   status varchar(30) [not null]
   selected_plan_code varchar(30)
   provisioned_tenant_id uuid

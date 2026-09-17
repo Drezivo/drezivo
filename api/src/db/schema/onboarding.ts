@@ -13,6 +13,8 @@ export const organizationOnboarding = pgTable(
       .notNull()
       .references(() => account.id),
     clerkOrgId: text('clerk_org_id').notNull(),
+    organizationName: text('organization_name').notNull(),
+    requestedSlug: text('requested_slug'),
     status: text('status').notNull().default('incomplete'),
     selectedPlanCode: text('selected_plan_code'),
     provisionedTenantId: uuid('provisioned_tenant_id').references(() => tenant.id),
