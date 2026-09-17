@@ -79,10 +79,15 @@ const providerId = z.string().trim().min(1).max(200);
 const organizationName = z.string().trim().min(1).max(160);
 const emailAddress = z.string().trim().email().max(320);
 const organizationRole = z.enum(clerkOrganizationRoles);
+const onboardingMarker = z.object({
+  accountId: z.string().uuid(),
+  attemptId: z.string().uuid(),
+});
 const organizationInput = z.object({
   name: organizationName,
   createdByUserId: providerId,
   slug: z.string().trim().min(1).max(200).optional(),
+  onboardingMarker: onboardingMarker.optional(),
 });
 const invitationInput = z.object({
   organizationId: providerId,
@@ -210,6 +215,15 @@ export function createClerkServerAdapter(
         };
         if (parsed.slug !== undefined) {
           params.slug = parsed.slug;
+        }
+        if (parsed.onboardingMarker !== undefined) {
+          params.privateMetadata = {
+            drezivo_onboarding: {
+              source: 'owner_onboarding_v1',
+              account_id: parsed.onboardingMarker.accountId,
+              attempt_id: parsed.onboardingMarker.attemptId,
+            },
+          };
         }
         return mapOrganization(await client.organizations.createOrganization(params));
       });

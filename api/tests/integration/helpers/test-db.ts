@@ -24,8 +24,11 @@ import { Client } from 'pg';
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const APP_ROLE = 'drezivo_app';
+const WORKER_ROLE = 'drezivo_worker';
 /** Test-only password for the local app role; charset-restricted because ALTER ROLE cannot take a bind parameter. */
 const APP_ROLE_TEST_PASSWORD = process.env.TEST_DATABASE_APP_PASSWORD ?? 'drezivo_app_local_test';
+const WORKER_ROLE_TEST_PASSWORD =
+  process.env.TEST_DATABASE_WORKER_PASSWORD ?? 'drezivo_worker_local_test';
 
 const MIGRATIONS_DIR = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -62,6 +65,14 @@ export function buildAppRoleDatabaseUrl(adminUrl: string): string {
   const parsed = new URL(adminUrl);
   parsed.username = APP_ROLE;
   parsed.password = APP_ROLE_TEST_PASSWORD;
+  return parsed.toString();
+}
+
+/** Same database, authenticated as the dedicated worker role for inbox read/status tests. */
+export function buildWorkerRoleDatabaseUrl(adminUrl: string): string {
+  const parsed = new URL(adminUrl);
+  parsed.username = WORKER_ROLE;
+  parsed.password = WORKER_ROLE_TEST_PASSWORD;
   return parsed.toString();
 }
 
@@ -122,6 +133,19 @@ export async function ensureAppRoleLogin(adminUrl: string): Promise<void> {
   }
 }
 
+export async function ensureWorkerRoleLogin(adminUrl: string): Promise<void> {
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(WORKER_ROLE_TEST_PASSWORD)) {
+    throw new Error('TEST_DATABASE_WORKER_PASSWORD must be 8-128 chars of [A-Za-z0-9_-]');
+  }
+  const client = new Client({ connectionString: adminUrl });
+  await client.connect();
+  try {
+    await client.query(`ALTER ROLE ${WORKER_ROLE} WITH LOGIN PASSWORD '${WORKER_ROLE_TEST_PASSWORD}'`);
+  } finally {
+    await client.end();
+  }
+}
+
 /**
  * Wipes tenant-tenancy state between tests. Runs as the admin URL because TRUNCATE is an
  * owner-level privilege the app role deliberately lacks. `schema_migrations` is never
@@ -132,7 +156,7 @@ export async function resetTestDatabase(adminUrl: string): Promise<void> {
   await client.connect();
   try {
     await client.query(
-      'TRUNCATE TABLE global_audit_event, bootstrap_idempotency_record, onboarding_payment_verification, organization_onboarding, account, membership, branch_membership, branch, tenant RESTART IDENTITY CASCADE',
+      'TRUNCATE TABLE webhook_inbox, global_audit_event, bootstrap_idempotency_record, onboarding_payment_verification, organization_onboarding, account, membership, branch_membership, branch, tenant RESTART IDENTITY CASCADE',
     );
   } finally {
     await client.end();

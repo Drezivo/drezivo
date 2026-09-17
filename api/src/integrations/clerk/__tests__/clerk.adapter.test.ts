@@ -7,6 +7,7 @@ process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test';
 process.env.CLERK_SECRET_KEY = 'test';
 process.env.CLERK_PUBLISHABLE_KEY = 'test';
+process.env.CLERK_WEBHOOK_SIGNING_SECRET = 'test';
 process.env.AWS_REGION = 'test';
 process.env.S3_BUCKET_PRIVATE = 'private';
 process.env.S3_BUCKET_PUBLIC = 'public';
@@ -73,6 +74,32 @@ describe('Clerk server adapter', () => {
     expect(organizations.createOrganization).toHaveBeenCalledWith({
       name: 'Drezivo Studio',
       createdBy: 'user_123',
+    });
+  });
+
+  it('sends the typed private onboarding marker without exposing it as a public field', async () => {
+    const { provider, organizations } = createProvider();
+    organizations.createOrganization.mockResolvedValue(organization);
+    const adapter = createClerkServerAdapter(provider);
+
+    await adapter.createOrganization({
+      name: 'Drezivo Studio',
+      createdByUserId: 'user_123',
+      onboardingMarker: {
+        accountId: '11111111-1111-4111-8111-111111111111',
+        attemptId: '22222222-2222-4222-8222-222222222222',
+      },
+    });
+    expect(organizations.createOrganization).toHaveBeenCalledWith({
+      name: 'Drezivo Studio',
+      createdBy: 'user_123',
+      privateMetadata: {
+        drezivo_onboarding: {
+          source: 'owner_onboarding_v1',
+          account_id: '11111111-1111-4111-8111-111111111111',
+          attempt_id: '22222222-2222-4222-8222-222222222222',
+        },
+      },
     });
   });
 

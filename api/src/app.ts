@@ -6,6 +6,7 @@ import { errorHandler } from './middleware/error-handler.js';
 import { requestId } from './middleware/request-id.js';
 import { reservationsRouter } from './modules/reservations/reservations.routes.js';
 import { storefrontRouter } from './modules/storefront/storefront.routes.js';
+import { clerkWebhookRouter } from './modules/webhooks/clerk.routes.js';
 import { logger } from './shared/logger.js';
 import { sendError } from './shared/response.js';
 
@@ -17,9 +18,10 @@ const pinoHttp = pinoHttpExport as unknown as (options: Record<string, unknown>)
  *   1. request-id      — every later log line and every error response needs this.
  *   2. pino-http        — structured request logging; relies on request-id already being set.
  *   3. clerkContext      — attaches Clerk's verifier; does not itself reject (public routes exist).
- *   4. express.json()   — bounded body size (TRD §4: "Restrict content types, body size").
- *   5. /api/v1 routes    — each route composes its own auth/tenant/idempotency middleware.
- *   6. errorHandler      — must be LAST; Express only treats a 4-arg handler as error middleware
+ *   4. /webhooks/clerk   — raw bytes must reach Clerk/Svix before the global JSON parser.
+ *   5. express.json()   — bounded body size (TRD §4: "Restrict content types, body size").
+ *   6. /api/v1 routes    — each route composes its own auth/tenant/idempotency middleware.
+ *   7. errorHandler      — must be LAST; Express only treats a 4-arg handler as error middleware
  *                          when it is registered after every route that can throw.
  */
 export function createApp(): Express {
@@ -44,6 +46,7 @@ export function createApp(): Express {
     }),
   );
   app.use(clerkContext);
+  app.use(clerkWebhookRouter);
   app.use(express.json({ limit: '256kb' }));
 
   app.get('/health', (_req, res) => {

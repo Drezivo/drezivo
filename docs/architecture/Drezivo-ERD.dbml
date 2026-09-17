@@ -685,6 +685,7 @@ Table webhook_inbox {
   id uuid [pk, not null]
   provider varchar(40) [not null]
   provider_event_id varchar(200) [not null]
+  event_type varchar(80)
   payload_digest char(64) [not null]
   safe_payload jsonb [not null]
   status varchar(20) [not null]
@@ -693,7 +694,7 @@ Table webhook_inbox {
   indexes {
     (provider, provider_event_id) [unique]
   }
-  Note: 'V1. Global pre-tenant inbox, separate restricted worker role; no raw token/PII payload. Verify signature before insert; provider data fetched/reconciled securely.'
+  Note: 'V1. Global pre-tenant inbox. Exact-raw Clerk/Svix verification precedes insert. API has insert-only ingestion (duplicate-safe through a security-definer function); worker alone reads and transitions rows. Canonical event type and minimal safe payload only; no raw token/PII payload.'
 }
 
 Table notification_delivery {
