@@ -132,7 +132,7 @@ export async function resetTestDatabase(adminUrl: string): Promise<void> {
   await client.connect();
   try {
     await client.query(
-      'TRUNCATE TABLE onboarding_payment_verification, organization_onboarding, account, membership, branch_membership, branch, tenant RESTART IDENTITY CASCADE',
+      'TRUNCATE TABLE global_audit_event, bootstrap_idempotency_record, onboarding_payment_verification, organization_onboarding, account, membership, branch_membership, branch, tenant RESTART IDENTITY CASCADE',
     );
   } finally {
     await client.end();

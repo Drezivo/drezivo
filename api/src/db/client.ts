@@ -62,9 +62,10 @@ export async function withTenantTransaction<T>(
 }
 
 /**
- * Runs `fn` inside a transaction with ONLY `app.principal_id` set — the pre-tenant execution
- * context for global records. Account-owned global records use `app.principal_id` in their RLS
- * policy; provider-only records such as webhook_inbox have their own restricted access path.
+ * Runs `fn` inside a transaction with the authenticated account's `app.principal_id` and
+ * `app.actor_kind = 'account'` set — the default pre-tenant execution context for global
+ * records. Account-owned global records use both values in their RLS policy; provider-only
+ * records such as webhook_inbox have their own restricted access path.
  *
  * Deliberately sets NO `app.tenant_id`: every tenant-owned RLS policy (0008) then matches zero
  * rows, so this can never become a side door into tenant data — the same fail-closed property
@@ -84,6 +85,7 @@ export async function withGlobalTransaction<T>(
   try {
     await client.query('BEGIN');
     await client.query('SELECT set_config($1, $2, true)', ['app.principal_id', principalId]);
+    await client.query('SELECT set_config($1, $2, true)', ['app.actor_kind', 'account']);
     const result = await fn(client);
     await client.query('COMMIT');
     return result;
@@ -106,6 +108,17 @@ export async function withOperatorGlobalTransaction<T>(
 ): Promise<T> {
   return withGlobalTransaction(operatorSubject, async (client) => {
     await client.query('SELECT set_config($1, $2, true)', ['app.actor_kind', 'operator']);
+    return fn(client);
+  });
+}
+
+/** Runs a pre-tenant system operation with an explicit system actor namespace. */
+export async function withSystemGlobalTransaction<T>(
+  systemKey: string,
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  return withGlobalTransaction(systemKey, async (client) => {
+    await client.query('SELECT set_config($1, $2, true)', ['app.actor_kind', 'system']);
     return fn(client);
   });
 }
