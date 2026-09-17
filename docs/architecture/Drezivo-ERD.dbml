@@ -56,6 +56,7 @@ Table bootstrap_idempotency_record {
   intent_key varchar(255) [not null]
   payload_hash varchar(128) [not null]
   status varchar(30) [not null]
+  response_code integer
   safe_response jsonb
   expires_at timestamptz [not null]
   created_at timestamptz [not null]
@@ -63,6 +64,25 @@ Table bootstrap_idempotency_record {
     (account_id, operation, intent_key) [unique]
   }
   Note: 'V1 foundation global idempotency. It exists because idempotency_record is tenant-scoped.'
+}
+
+Table global_audit_event {
+  id uuid [pk, not null]
+  account_id uuid
+  actor_kind varchar(20) [not null]
+  actor_key varchar(200) [not null]
+  action varchar(100) [not null]
+  entity_type varchar(100) [not null]
+  entity_id uuid
+  outcome varchar(20) [not null]
+  redacted_summary jsonb [not null]
+  request_id varchar(200) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (account_id, created_at)
+    (entity_type, entity_id, created_at)
+  }
+  Note: 'V1 foundation append-only pre-tenant audit history. Account reads are owner-scoped; operator/system reads require explicit context and filters.'
 }
 
 Table tenant {
@@ -995,6 +1015,7 @@ Ref: organization_onboarding.account_id > account.id [delete: restrict, update: 
 Ref: organization_onboarding.provisioned_tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: onboarding_payment_verification.organization_onboarding_id > organization_onboarding.id [delete: restrict, update: no action]
 Ref: bootstrap_idempotency_record.account_id > account.id [delete: restrict, update: no action]
+Ref: global_audit_event.account_id > account.id [delete: restrict, update: no action]
 Ref: membership.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: membership_invitation.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: branch_membership.tenant_id > tenant.id [delete: restrict, update: no action]
@@ -1133,6 +1154,7 @@ TableGroup V1_Core {
   organization_onboarding
   onboarding_payment_verification
   bootstrap_idempotency_record
+  global_audit_event
   tenant
   branch
   membership

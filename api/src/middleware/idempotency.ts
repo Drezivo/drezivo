@@ -1,10 +1,9 @@
-import { createHash } from 'node:crypto';
-
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
 import { config } from '../config/index.js';
 import { withTenantTransaction } from '../db/client.js';
 import { IdempotencyKeyReusedError, StateConflictError, ValidationError } from '../shared/errors.js';
+import { canonicalRequestHash } from '../shared/idempotency.js';
 import { logger } from '../shared/logger.js';
 import { sendError } from '../shared/response.js';
 
@@ -16,7 +15,6 @@ export interface IdempotencyScope {
   principalKey: string;
   operation: string;
 }
-
 /**
  * TRD §4 idempotency contract, implemented once, shared by every mutating route:
  *
@@ -56,7 +54,7 @@ async function handle(
     }
 
     const { tenantId, principalKey } = resolveScope(req);
-    const payloadHash = canonicalHash(req.body as unknown);
+    const payloadHash = canonicalRequestHash(req.body as unknown);
 
     const claim = await withTenantTransaction(tenantId, principalKey, async (client) => {
       const expiresAt = new Date(Date.now() + config.IDEMPOTENCY_RETENTION_DAYS * 24 * 60 * 60 * 1000);
@@ -175,26 +173,4 @@ function finalizeOnResponse(
       logger.error({ err: error, tenantId, operation }, 'failed to finalize idempotency record');
     });
   });
-}
-
-/** Deterministic hash over the validated request body: same intent -> same hash regardless of key ordering. */
-function canonicalHash(body: unknown): string {
-  const canonical = JSON.stringify(sortKeysDeep(body));
-  return createHash('sha256').update(canonical).digest('hex');
-}
-
-function sortKeysDeep(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortKeysDeep);
-  }
-  if (value && typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    return Object.keys(value)
-      .sort()
-      .reduce<Record<string, unknown>>((acc, key) => {
-        acc[key] = sortKeysDeep(record[key]);
-        return acc;
-      }, {});
-  }
-  return value;
 }

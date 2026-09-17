@@ -117,16 +117,20 @@ or billing tasks as authority for this work.
         plan transitions, concurrent plan changes, immutable business-key payment records,
         owner-safe payment projections, and no tenant/subscription side effect.
 
-- [ ] **TBF-012 — Add bootstrap-safe idempotency and audit primitives**
+- [x] **TBF-012 — Add bootstrap-safe idempotency and audit primitives**
   - **Depends on:** TBF-010, TBF-011.
   - **Outcome:** Pre-tenant commands use global idempotency rather than tenant-scoped request
     records.
   - **Acceptance:**
-    - [ ] Same intent/retry returns the first safe response.
-    - [ ] Reused key with changed payload fails safely.
-    - [ ] Audit records identify account/operator/system actor namespace, action, outcome,
+    - [x] Same intent/retry returns the first safe response.
+    - [x] Reused key with changed payload fails safely.
+    - [x] Audit records identify account/operator/system actor namespace, action, outcome,
           request ID, and UTC time without sensitive payloads.
-  - **Tests/evidence:** Sequential and Promise.all duplicate tests create one business effect.
+  - **Tests/evidence:** `tests/integration/bootstrap-primitives.test.ts` runs as the
+    non-superuser `drezivo_app` role; the PostgreSQL suite passed with 27 tests covering
+    sequential/concurrent claims, changed payloads, account/operation scope, expired-key reclaim,
+    in-progress claims, atomic rollback, owner and tenant RLS isolation, account/operator/system
+    audit reads, bounded JSON, and immutable audit privileges.
 
 ## Phase 2: Clerk integration and owner onboarding
 

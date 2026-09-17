@@ -17,6 +17,7 @@ TBF-010 onward own the reviewed SQL migrations and service behavior.
 | `organization_onboarding`                                                  | Global pre-tenant | The creator reads only its own record. Operators use separately authorized, audited paths.                                       |
 | `onboarding_payment_verification`                                          | Global pre-tenant | Owner receives a safe status projection only. Operator payment evidence is not broadly readable.                                 |
 | `bootstrap_idempotency_record`                                             | Global pre-tenant | Scoped to the authenticated account and operation. It never reuses tenant-scoped idempotency.                                    |
+| `global_audit_event`                                                       | Global pre-tenant | Append-only account/operator/system history. Owner reads are account-scoped; operator/system reads require explicit context and filters. |
 | `webhook_inbox`                                                            | Global pre-tenant | Existing provider-event dedupe remains restricted to webhook/reconciliation processing.                                          |
 | `membership_invitation`                                                    | Tenant-owned      | Standard tenant RLS plus local Owner authorization. Protected recipient data never appears in ordinary logs or list projections. |
 | `membership`, `subscription`, `subscription_event`, `subscription_payment` | Tenant-owned      | Existing tenant RLS applies. New lifecycle behavior is gated in services, not inferred from Clerk claims.                        |
@@ -31,7 +32,8 @@ tenancy-onboarding expansion. It creates:
 - `organization_onboarding` with unique `clerk_org_id`, selected plan, recoverable operation
   state, and a partial unique index permitting only one `incomplete` or `payment_pending` row per
   account.
-- immutable `onboarding_payment_verification` and global `bootstrap_idempotency_record`.
+- immutable `onboarding_payment_verification`, global `bootstrap_idempotency_record`, and
+  append-only `global_audit_event`.
 - tenant-owned `membership_invitation`, including protected recipient lookup material, seven-day
   expiry, provider correlation, and a partial unique pending-intent index.
 - nullable `clerk_membership_id` plus unique provider correlation on `membership`.
