@@ -250,10 +250,23 @@ are plain numbered `.sql` files under `src/db/migrations/` applied in order — 
 directory's `README.md` for the expand/backfill/validate/switch/contract rule. Never hand-edit
 a migration file that has already been merged; write a new one.
 
-**Integration tests need a real database.** `npm run test:integration` runs HTTP tests in
-`tests/integration/` against an actual Postgres connection (set via `DATABASE_URL`) because the
-behavior under test — GiST exclusion constraints, row-level security, conditional
-state-transition updates — cannot be faithfully emulated by SQLite or an in-memory mock.
+**Integration tests need a real, disposable test database.** `npm run test:integration` runs the
+tests in `tests/integration/` against an actual Postgres connection because the behavior under
+test — GiST exclusion constraints, row-level security under the real runtime roles, conditional
+state-transition updates — cannot be faithfully emulated by SQLite or an in-memory mock. The
+suite connects ONLY through `TEST_DATABASE_URL`, never `DATABASE_URL`, and the harness
+(`tests/integration/helpers/test-db.ts`) refuses to run unless that URL is localhost AND the
+database name contains "test" — tests truncate their database between cases, so the local
+development database must never be a target. The application pool connects as the
+non-superuser `drezivo_app` role (password set by the harness, localhost only) so RLS genuinely
+binds. A disposable container works well:
+
+```
+docker run -d --name drezivo-test-db -e POSTGRES_USER=drezivo -e POSTGRES_PASSWORD=test \
+  -e POSTGRES_DB=drezivo_test -p 127.0.0.1:55432:5432 postgres:17.11-alpine3.24
+TEST_DATABASE_URL="postgres://drezivo:test@localhost:55432/drezivo_test" npm run test:integration
+```
+
 `npm test` (unit/service tests under `src/**/__tests__/`) does not require a database.
 
 **Deploy artifacts.** One image, two entrypoints. `Dockerfile` builds a single production

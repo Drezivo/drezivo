@@ -31,6 +31,14 @@ export default tseslint.config(
   },
   {
     files: ['**/__tests__/**/*.ts', 'tests/**/*.ts', '*.config.ts', 'scripts/**/*.ts'],
+    languageOptions: {
+      parserOptions: {
+        // Test/config/script files live outside the build tsconfig's `src` rootDir; they get
+        // their own project (tsconfig.test.json) so typed linting still applies to them.
+        project: './tsconfig.test.json',
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
     rules: {
       '@typescript-eslint/explicit-function-return-type': 'off',
     },

@@ -40,6 +40,12 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 - `DATABASE_URL_DIRECT` — the direct (non-pooled) Neon connection string, used first by
   migration and admin tooling when supplied. Local compose uses its direct loopback PostgreSQL
   endpoint for both variables.
+- `TEST_DATABASE_URL` — test-only; the integration suite (`api` `npm run test:integration`)
+  connects exclusively through this, never `DATABASE_URL`. The harness refuses any value that is
+  not localhost or whose database name does not contain "test", because tests truncate their
+  database between cases. Optional `TEST_DATABASE_APP_PASSWORD` overrides the local
+  `drezivo_app` role password the harness sets (localhost only) so RLS binds under the real
+  runtime role. Never set either in production environments.
 - `DATABASE_MIGRATION_ROLE` / the fact that migrations run under a distinct, more privileged
   Postgres role than the application's request-time runtime role — the runtime role itself must
   have no ownership, DDL, `BYPASSRLS`, or blanket administrative grant (TRD §3). Name the actual

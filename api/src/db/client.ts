@@ -61,6 +61,55 @@ export async function withTenantTransaction<T>(
   }
 }
 
+/**
+ * Runs `fn` inside a transaction with ONLY `app.principal_id` set — the pre-tenant execution
+ * context for global records. Account-owned global records use `app.principal_id` in their RLS
+ * policy; provider-only records such as webhook_inbox have their own restricted access path.
+ *
+ * Deliberately sets NO `app.tenant_id`: every tenant-owned RLS policy (0008) then matches zero
+ * rows, so this can never become a side door into tenant data — the same fail-closed property
+ * `withTenantTransaction` documents, but reached from the other direction. A query against a
+ * tenant-owned table returns empty, while a principal-scoped global table is limited by its own
+ * RLS policy, which integration tests assert rather than assume.
+ */
+export async function withGlobalTransaction<T>(
+  principalId: string,
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  if (!principalId) {
+    throw new Error('withGlobalTransaction: principalId is required (never an anonymous write)');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT set_config($1, $2, true)', ['app.principal_id', principalId]);
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Runs a pre-tenant operator operation with an explicit actor namespace. The caller must have
+ * already verified the platform-operator allowlist; this helper only makes that decision
+ * visible to PostgreSQL RLS and keeps the context transaction-local.
+ */
+export async function withOperatorGlobalTransaction<T>(
+  operatorSubject: string,
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  return withGlobalTransaction(operatorSubject, async (client) => {
+    await client.query('SELECT set_config($1, $2, true)', ['app.actor_kind', 'operator']);
+    return fn(client);
+  });
+}
+
 export async function closePool(): Promise<void> {
   await pool.end();
 }
