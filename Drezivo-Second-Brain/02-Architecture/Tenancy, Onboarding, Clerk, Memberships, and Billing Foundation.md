@@ -116,23 +116,27 @@ slug to a Drezivo onboarding command. The API:
 5. writes an `organization_onboarding` record containing the Clerk organization correlation,
    display name, and requested slug; and
 6. returns a safe projection so the client can activate the new Clerk organization and resume
-   setup. Provider identifiers remain outside the public projection.
+   setup. The projection includes the authenticated owner's opaque `clerk_org_id`; Clerk profile
+   fields and email addresses remain outside the projection.
 
 Owner name, contact email, business type, branch address, hours, payment instructions, policies,
 and the first asset are collected during tenant bootstrap and setup. They are not copied from
 Clerk profile fields into the pre-tenant account record.
 
 The provider call and database transaction are not one distributed transaction. The command first
-claims an account-scoped `Idempotency-Key`, serializes concurrent owner starts, and records a
-recoverable external-operation state, preventing a second Clerk organization on retry. If the
-browser disconnects after Clerk succeeds but before the local write, the signed
-`organization.created` webhook repairs the missing incomplete record. A webhook is a recovery
-path, not the authoritative start of onboarding.
+claims an account-scoped `Idempotency-Key`, serializes concurrent owner starts on the account row,
+and records a durable provider-attempt UUID with the original requested details before calling
+Clerk. An unknown provider outcome remains in progress and is never automatically retried into
+a second Clerk organization. If the browser disconnects after Clerk succeeds but before the
+local write, the signed `organization.created` webhook repairs the missing incomplete record only
+when its source, account UUID, attempt UUID, and provider organization ID match exactly. A
+webhook is a recovery path, not the authoritative start of onboarding.
 
 The HTTP commands are `POST /api/v1/onboarding`, `GET /api/v1/onboarding/current`, and
 `POST /api/v1/onboarding/:onboardingId/abandon`. Create is limited to five requests per minute
-per verified user, reads to thirty, abandonment to ten, and owner JSON bodies to 16 KiB. Incomplete
-onboarding remains until the owner explicitly abandons it. Invitation recipients use the later
+per verified user, reads to thirty, abandonment to ten, and owner raw JSON bodies to 16 KiB before
+parsing. Incomplete onboarding remains until the owner explicitly abandons it. Abandonment stores
+only a closed reason category (`not_now`, `wrong_details`, `payment_concern`, or `other`). Invitation recipients use the later
 verified invitation-claim flow instead of this owner-create command.
 
 The app never offers an arbitrary Clerk organization picker during onboarding. Organization

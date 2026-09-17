@@ -51,6 +51,25 @@ Table onboarding_payment_verification {
   Note: 'V1 foundation global immutable operator-verification record. No tenant exists until activation succeeds.'
 }
 
+Table owner_onboarding_attempt {
+  id uuid [pk, not null]
+  account_id uuid [not null]
+  idempotency_record_id uuid [not null]
+  attempt_id uuid [not null]
+  organization_name varchar(160) [not null]
+  requested_slug varchar(100)
+  provider_org_id varchar(200)
+  status varchar(30) [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  indexes {
+    (idempotency_record_id)
+    (attempt_id) [unique]
+    (account_id, status)
+  }
+  Note: 'V1 foundation durable single-flight state for Clerk organization creation. Unknown provider outcomes are repaired by exact signed marker; no automatic duplicate retry.'
+}
+
 Table bootstrap_idempotency_record {
   id uuid [pk, not null]
   account_id uuid [not null]
@@ -1017,6 +1036,8 @@ Ref: account.current_owned_tenant_id > tenant.id [delete: restrict, update: no a
 Ref: organization_onboarding.account_id > account.id [delete: restrict, update: no action]
 Ref: organization_onboarding.provisioned_tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: onboarding_payment_verification.organization_onboarding_id > organization_onboarding.id [delete: restrict, update: no action]
+Ref: owner_onboarding_attempt.account_id > account.id [delete: restrict, update: no action]
+Ref: owner_onboarding_attempt.idempotency_record_id > bootstrap_idempotency_record.id [delete: restrict, update: no action]
 Ref: bootstrap_idempotency_record.account_id > account.id [delete: restrict, update: no action]
 Ref: global_audit_event.account_id > account.id [delete: restrict, update: no action]
 Ref: membership.tenant_id > tenant.id [delete: restrict, update: no action]
@@ -1156,6 +1177,7 @@ TableGroup V1_Core {
   account
   organization_onboarding
   onboarding_payment_verification
+  owner_onboarding_attempt
   bootstrap_idempotency_record
   global_audit_event
   tenant

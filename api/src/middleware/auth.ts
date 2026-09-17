@@ -1,7 +1,8 @@
 import { clerkMiddleware, getAuth } from '@clerk/express';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
-import { UnauthenticatedError } from '../shared/errors.js';
+import { createClerkServerAdapter } from '../integrations/clerk/clerk.adapter.js';
+import { DependencyUnavailableError, ForbiddenError, UnauthenticatedError } from '../shared/errors.js';
 
 declare module 'express-serve-static-core' {
   interface Request {
@@ -39,4 +40,38 @@ export function requireStaffAuth(req: Request, _res: Response, next: NextFunctio
     clerkOrgId: auth.orgId ?? null,
   };
   next();
+}
+
+/**
+ * Owner onboarding requires proof that the authenticated Clerk user controls a verified
+ * primary email. The lookup stays behind the Clerk adapter and runs before any local account,
+ * idempotency, or organization mutation. Provider failures fail closed.
+ */
+export async function requireVerifiedStaffAuth(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
+  requireStaffAuth(req, _res, async (error?: unknown) => {
+    if (error) {
+      next(error);
+      return;
+    }
+    try {
+      const verified = await createClerkServerAdapter().getUserVerificationState(
+        req.clerkPrincipal!.clerkUserId,
+      );
+      if (!verified.primaryEmailVerified) {
+        next(new ForbiddenError('Email verification is required.'));
+        return;
+      }
+      next();
+    } catch (verificationError) {
+      next(
+        verificationError instanceof DependencyUnavailableError
+          ? verificationError
+          : new DependencyUnavailableError('Identity verification is temporarily unavailable.'),
+      );
+    }
+  });
 }

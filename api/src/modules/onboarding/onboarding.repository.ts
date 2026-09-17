@@ -9,7 +9,8 @@ import { withGlobalTransaction, withOperatorGlobalTransaction } from '../../db/c
  * This module deliberately stops at the pre-tenant boundary. It does not call Clerk, create a
  * tenant, start a trial, or expose an HTTP command. Every mutation serializes on the account
  * row first, then applies a conditional onboarding transition. The result unions are intended
- * for the later HTTP layer to map to contract errors without leaking provider identifiers.
+ * for the later HTTP layer to map to contract errors without leaking unrelated provider
+ * identifiers; the authenticated owner projection may include its own opaque Clerk org ID.
  */
 
 export interface OwnerOnboardingRecord {
@@ -141,7 +142,10 @@ export async function createOrResumeOnboardingInTransaction(
     if (row.account_id !== account.id) {
       return { kind: 'organization_conflict' };
     }
-    return { kind: 'existing', onboarding: toOwnerOnboarding(row) };
+    if (row.status === 'incomplete' || row.status === 'payment_pending') {
+      return { kind: 'existing', onboarding: toOwnerOnboarding(row) };
+    }
+    return { kind: 'organization_conflict' };
   }
 
   const active = await client.query<OnboardingRow>(
@@ -204,7 +208,7 @@ export async function getCurrentOwnerOnboarding(
   });
 }
 
-/** Read one owner-safe onboarding projection without returning Clerk/provider identifiers. */
+/** Read one owner-safe onboarding projection, including the opaque Clerk organization ID. */
 export async function getOwnerOnboarding(
   onboardingId: string,
   principalId: string,

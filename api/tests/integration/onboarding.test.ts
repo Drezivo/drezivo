@@ -39,6 +39,10 @@ describe('TBF-011 onboarding persistence', async () => {
     recordVerifiedOnboardingPayment,
   } = await import('../../src/modules/onboarding/onboarding.repository.js');
   const { createTestTenant } = await import('./helpers/factories.js');
+  const { claimOwnerOnboardingStart } = await import(
+    '../../src/modules/onboarding/onboarding-attempt.repository.js'
+  );
+  const { canonicalRequestHash } = await import('../../src/shared/idempotency.js');
 
   beforeAll(async () => {
     await migrateTestDatabase(adminUrl);
@@ -64,6 +68,37 @@ describe('TBF-011 onboarding persistence', async () => {
     expect(results.filter((result) => result.kind === 'existing')).toHaveLength(1);
     const current = await getCurrentOwnerOnboarding('user_onboarding_same');
     expect(current?.status).toBe('incomplete');
+  });
+
+  it('serializes different owner-start keys before the provider call', async () => {
+    const account = await ensureAccount('user_onboarding_single_flight');
+    const results = await Promise.all(
+      ['first', 'second'].map((intentKey) =>
+        withGlobalTransaction('user_onboarding_single_flight', (client) =>
+          claimOwnerOnboardingStart(client, {
+            account,
+            operation: 'onboarding.create',
+            intentKey,
+            payloadHash: canonicalRequestHash({ intentKey }),
+            organizationName: 'Single Flight Studio',
+            requestedSlug: null,
+          }),
+        ),
+      ),
+    );
+
+    expect(results.filter((result) => result.claim.kind === 'claimed')).toHaveLength(2);
+    expect(results.filter((result) => result.otherInProgress)).toHaveLength(1);
+    const attemptCount = await withGlobalTransaction(
+      'user_onboarding_single_flight',
+      async (client) => {
+        const result = await client.query<{ count: number }>(
+          `SELECT count(*)::int AS count FROM owner_onboarding_attempt`,
+        );
+        return result.rows[0]?.count ?? -1;
+      },
+    );
+    expect(attemptCount).toBe(2);
   });
 
   it('allows only one active onboarding for an account and rejects a foreign organization conflict', async () => {

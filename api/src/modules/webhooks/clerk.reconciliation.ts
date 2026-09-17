@@ -75,6 +75,35 @@ export async function reconcileOrganizationCreatedMarkerInTransaction(
     return { kind: 'skipped' };
   }
 
+  const attempt = await client.query<{
+    organization_name: string;
+    requested_slug: string | null;
+    provider_org_id: string | null;
+    status: string;
+  }>(
+    `SELECT organization_name, requested_slug, provider_org_id, status
+     FROM owner_onboarding_attempt
+     WHERE account_id = $1 AND attempt_id = $2
+     FOR UPDATE`,
+    [accountRow.id, input.marker.attempt_id],
+  );
+  const attemptRow = attempt.rows[0];
+  if (
+    !attemptRow ||
+    (attemptRow.provider_org_id !== null && attemptRow.provider_org_id !== input.organizationId) ||
+    (attemptRow.status !== 'pending' && attemptRow.status !== 'provider_created')
+  ) {
+    return { kind: 'skipped' };
+  }
+  if (attemptRow.provider_org_id === null) {
+    await client.query(
+      `UPDATE owner_onboarding_attempt
+       SET provider_org_id = $1, status = 'provider_created', updated_at = now()
+       WHERE account_id = $2 AND attempt_id = $3`,
+      [input.organizationId, accountRow.id, input.marker.attempt_id],
+    );
+  }
+
   const byOrganization = await client.query<{
     id: string;
     account_id: string;
@@ -114,11 +143,16 @@ export async function reconcileOrganizationCreatedMarkerInTransaction(
     [
       accountRow.id,
       input.organizationId,
-      input.organizationName ?? 'Unspecified organization',
-      input.organizationSlug ?? null,
+      attemptRow.organization_name,
+      attemptRow.requested_slug,
     ],
   );
-  return inserted.rows[0]
-    ? { kind: 'repaired', onboardingId: inserted.rows[0].id }
-    : { kind: 'skipped' };
+  if (!inserted.rows[0]) return { kind: 'skipped' };
+  await client.query(
+    `UPDATE owner_onboarding_attempt
+     SET status = 'local_persisted', updated_at = now()
+     WHERE account_id = $1 AND attempt_id = $2`,
+    [accountRow.id, input.marker.attempt_id],
+  );
+  return { kind: 'repaired', onboardingId: inserted.rows[0].id };
 }

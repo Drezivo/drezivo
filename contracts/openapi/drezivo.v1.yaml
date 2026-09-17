@@ -318,12 +318,15 @@ components:
     AbandonOwnerOnboardingRequest:
       type: object
       properties:
-        reason:
+        reason_code:
           type: string
-          minLength: 1
-          maxLength: 500
+          enum:
+            - not_now
+            - wrong_details
+            - payment_concern
+            - other
       required:
-        - reason
+        - reason_code
       additionalProperties: false
     ChooseOnboardingPlanRequest:
       type: object
@@ -485,6 +488,10 @@ paths:
                       id:
                         type: string
                         format: uuid
+                      clerk_org_id:
+                        type: string
+                        minLength: 1
+                        maxLength: 200
                       organization_name:
                         type: string
                         minLength: 1
@@ -514,6 +521,7 @@ paths:
                         format: date-time
                     required:
                       - id
+                      - clerk_org_id
                       - organization_name
                       - requested_slug
                       - status
@@ -825,12 +833,15 @@ paths:
             schema:
               type: object
               properties:
-                reason:
+                reason_code:
                   type: string
-                  minLength: 1
-                  maxLength: 500
+                  enum:
+                    - not_now
+                    - wrong_details
+                    - payment_concern
+                    - other
               required:
-                - reason
+                - reason_code
               additionalProperties: false
       responses:
         "200":
@@ -850,6 +861,10 @@ paths:
                       id:
                         type: string
                         format: uuid
+                      clerk_org_id:
+                        type: string
+                        minLength: 1
+                        maxLength: 200
                       organization_name:
                         type: string
                         minLength: 1
@@ -879,6 +894,7 @@ paths:
                         format: date-time
                     required:
                       - id
+                      - clerk_org_id
                       - organization_name
                       - requested_slug
                       - status
@@ -1751,6 +1767,7 @@ paths:
                             format: date-time
                         required:
                           - id
+                          - clerk_org_id
                           - reference_code
                           - status
                           - branch_id

@@ -1,5 +1,4 @@
-import { randomUUID } from 'node:crypto';
-import { Router, type NextFunction, type Request, type Response } from 'express';
+import { Router, type Request } from 'express';
 
 import {
   abandonOwnerOnboardingRequest,
@@ -7,7 +6,7 @@ import {
   idempotencyKey as idempotencyKeySchema,
 } from '@drezivo/contracts';
 
-import { requireStaffAuth } from '../../middleware/auth.js';
+import { requireVerifiedStaffAuth } from '../../middleware/auth.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
 import { withGlobalTransaction } from '../../db/client.js';
 import { createClerkServerAdapter } from '../../integrations/clerk/clerk.adapter.js';
@@ -24,6 +23,12 @@ import {
   type OwnerOnboardingRecord,
 } from './onboarding.repository.js';
 import {
+  claimOwnerOnboardingStart,
+  markOwnerAttemptFailed,
+  markOwnerAttemptLocalPersisted,
+  markOwnerAttemptProviderCreated,
+} from './onboarding-attempt.repository.js';
+import {
   DependencyUnavailableError,
   IdempotencyKeyReusedError,
   NotFoundError,
@@ -35,12 +40,12 @@ import {
 import { canonicalRequestHash } from '../../shared/idempotency.js';
 import { sendSuccess, type FailureEnvelope, type SuccessEnvelope } from '../../shared/response.js';
 
-const MAX_BODY_BYTES = 16 * 1024;
 const CREATE_OPERATION = 'onboarding.create';
 const ABANDON_OPERATION = 'onboarding.abandon';
 
 type PublicOnboarding = {
   id: string;
+  clerk_org_id: string;
   organization_name: string;
   requested_slug: string | null;
   status: OwnerOnboardingRecord['status'];
@@ -53,6 +58,7 @@ type PublicOnboarding = {
 function toPublicOnboarding(record: OwnerOnboardingRecord): PublicOnboarding {
   return {
     id: record.id,
+    clerk_org_id: record.clerkOrgId,
     organization_name: record.organizationName,
     requested_slug: record.requestedSlug,
     status: record.status,
@@ -73,14 +79,6 @@ function readIdempotencyKey(req: Request): string {
   const parsed = idempotencyKeySchema.safeParse(req.header('Idempotency-Key')?.trim());
   if (!parsed.success) throw new ValidationError('A valid Idempotency-Key header is required.');
   return parsed.data;
-}
-
-function bodyLimit(req: Request, _res: Response, next: NextFunction): void {
-  if (Buffer.byteLength(JSON.stringify(req.body ?? {}), 'utf8') > MAX_BODY_BYTES) {
-    next(new ValidationError('Request body is too large.'));
-    return;
-  }
-  next();
 }
 
 function successBody<T>(req: Request, data: T): SuccessEnvelope<T> {
@@ -144,7 +142,7 @@ export const onboardingRouter = Router();
 
 onboardingRouter.get(
   '/onboarding/current',
-  requireStaffAuth,
+  requireVerifiedStaffAuth,
   rateLimit({
     windowMs: 60_000,
     max: 30,
@@ -170,8 +168,7 @@ onboardingRouter.get(
 
 onboardingRouter.post(
   '/onboarding',
-  requireStaffAuth,
-  bodyLimit,
+  requireVerifiedStaffAuth,
   rateLimit({
     windowMs: 60_000,
     max: 5,
@@ -182,26 +179,21 @@ onboardingRouter.post(
     try {
       const parsed = createOwnerOnboardingRequest.safeParse(req.body);
       if (!parsed.success) throw new ValidationError('Onboarding request is invalid.');
+      const request = parsed.data as { organization_name: string; slug?: string };
       const intentKey = readIdempotencyKey(req);
       const payloadHash = canonicalRequestHash(parsed.data);
-      const account = await ensureAccount(userId);
-      const claim = await withGlobalTransaction(userId, async (client) => {
-        const claimed = await claimBootstrapIdempotency(client, {
-          accountId: account.id,
+      const ensuredAccount = await ensureAccount(userId);
+      const claim = await withGlobalTransaction(userId, (client) =>
+        claimOwnerOnboardingStart(client, {
+          account: ensuredAccount,
           operation: CREATE_OPERATION,
           intentKey,
           payloadHash,
-        });
-        if (claimed.kind !== 'claimed') return { claim: claimed, otherInProgress: false };
-        const other = await client.query<{ id: string }>(
-          `SELECT id FROM bootstrap_idempotency_record
-           WHERE account_id = $1 AND operation = $2 AND status = 'in_progress'
-             AND expires_at > now() AND id <> $3
-           LIMIT 1`,
-          [account.id, CREATE_OPERATION, claimed.recordId],
-        );
-        return { claim: claimed, otherInProgress: Boolean(other.rows[0]) };
-      });
+          organizationName: request.organization_name,
+          requestedSlug: request.slug ?? null,
+        }),
+      );
+      const account = claim.account;
 
       if (claim.claim.kind === 'replayed') {
         res.status(claim.claim.responseCode).json(claim.claim.safeResponse);
@@ -214,10 +206,13 @@ onboardingRouter.post(
       }
       if (claim.claim.kind === 'in_progress') {
         const repaired = await getCurrentOwnerOnboarding(userId);
+        const attempt = claim.attempt;
         if (
+          attempt?.providerOrgId &&
           repaired &&
-          repaired.organizationName === parsed.data.organization_name &&
-          repaired.requestedSlug === (parsed.data.slug ?? null)
+          repaired.clerkOrgId === attempt.providerOrgId &&
+          repaired.organizationName === attempt.organizationName &&
+          repaired.requestedSlug === attempt.requestedSlug
         ) {
           const response = successBody(req, toPublicOnboarding(repaired));
           await withGlobalTransaction(userId, async (client) => {
@@ -270,6 +265,10 @@ onboardingRouter.post(
         );
         res.status(409).json(response);
         return;
+      }
+
+      if (!claim.attempt) {
+        throw new StateConflictError('Onboarding could not establish a durable provider attempt.');
       }
 
       if (account.currentOwnedTenantId) {
@@ -326,10 +325,10 @@ onboardingRouter.post(
       >;
       try {
         organization = await createClerkServerAdapter().createOrganization({
-          name: parsed.data.organization_name,
+          name: request.organization_name,
           createdByUserId: userId,
-          slug: parsed.data.slug,
-          onboardingMarker: { accountId: account.id, attemptId: randomUUID() },
+          slug: request.slug,
+          onboardingMarker: { accountId: account.id, attemptId: claim.attempt.attemptId },
         });
       } catch (error) {
         const appError = isAppError(error)
@@ -342,21 +341,37 @@ onboardingRouter.post(
             ? appError.message
             : 'Onboarding provider is temporarily unavailable.',
         );
-        await finalizeFailure(
-          userId,
-          account.id,
-          CREATE_OPERATION,
-          intentKey,
-          payloadHash,
-          claim.claim.recordId,
-          response,
-          req.requestId,
-          'onboarding.create.failed',
-          appError.status === 409 ? 409 : 503,
-        );
+        if (appError.code === 'STATE_CONFLICT') {
+          await withGlobalTransaction(userId, (client) =>
+            claim.attempt
+              ? markOwnerAttemptFailed(client, claim.attempt.attemptId)
+              : Promise.resolve(),
+          );
+          await finalizeFailure(
+            userId,
+            account.id,
+            CREATE_OPERATION,
+            intentKey,
+            payloadHash,
+            claim.claim.recordId,
+            response,
+            req.requestId,
+            'onboarding.create.failed',
+            409,
+          );
+        }
+        // A dependency failure has an unknown provider outcome. Leave both the attempt and
+        // idempotency claim in progress so a retry cannot issue a second Clerk create; the
+        // exact signed organization.created marker is the recovery path.
         next(appError);
         return;
       }
+
+      await withGlobalTransaction(userId, (client) =>
+        claim.attempt
+          ? markOwnerAttemptProviderCreated(client, claim.attempt.attemptId, organization.id)
+          : Promise.resolve(),
+      );
 
       let outcome: { status: number; body: SuccessEnvelope<PublicOnboarding> | FailureEnvelope };
       try {
@@ -367,11 +382,12 @@ onboardingRouter.post(
             organization.id,
             userId,
             {
-              organizationName: parsed.data.organization_name,
-              requestedSlug: parsed.data.slug ?? null,
+              organizationName: request.organization_name,
+              requestedSlug: request.slug ?? null,
             },
           );
           if (result.kind === 'created' || result.kind === 'existing') {
+            if (claim.attempt) await markOwnerAttemptLocalPersisted(client, claim.attempt.attemptId);
             const body = successBody(req, toPublicOnboarding(result.onboarding));
             await appendGlobalAuditEvent(client, {
               accountId: account.id,
@@ -435,8 +451,7 @@ onboardingRouter.post(
 
 onboardingRouter.post(
   '/onboarding/:onboardingId/abandon',
-  requireStaffAuth,
-  bodyLimit,
+  requireVerifiedStaffAuth,
   rateLimit({
     windowMs: 60_000,
     max: 10,
@@ -451,8 +466,11 @@ onboardingRouter.post(
       }
       const parsedBody = abandonOwnerOnboardingRequest.safeParse(req.body);
       if (!parsedBody.success) throw new ValidationError('Abandon request is invalid.');
+      const abandonRequest = parsedBody.data as unknown as {
+        reason_code: 'not_now' | 'wrong_details' | 'payment_concern' | 'other';
+      };
       const intentKey = readIdempotencyKey(req);
-      const payloadHash = canonicalRequestHash({ onboarding_id: onboardingId, ...parsedBody.data });
+      const payloadHash = canonicalRequestHash({ onboarding_id: onboardingId, ...abandonRequest });
       const account = await ensureAccount(userId);
       const claim = await withGlobalTransaction(userId, (client) =>
         claimBootstrapIdempotency(client, {
@@ -537,7 +555,7 @@ onboardingRouter.post(
           entityType: 'organization_onboarding',
           entityId: result.onboarding.id,
           outcome: 'succeeded',
-          redactedSummary: { reason_provided: true },
+          redactedSummary: { reason_code: abandonRequest.reason_code },
           requestId: req.requestId,
         });
         await finalizeBootstrapIdempotency(client, {
