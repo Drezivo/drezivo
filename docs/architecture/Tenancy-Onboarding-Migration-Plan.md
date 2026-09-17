@@ -1,13 +1,13 @@
 # Tenancy and onboarding migration plan
 
-**Status:** approved Phase 0 migration design with additive Phase 2 owner identity migration applied in code
+**Status:** approved tenancy/onboarding foundation with additive owner identity and tenant bootstrap migrations applied in code
 **Owner:** API and database maintainers  
 **Source:** `Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation` in the Second Brain, 16 September 2026  
-**Updated:** 16 September 2026  
+**Updated:** 18 September 2026
 **Related:** [TRD](Drezivo-TRD.md), [Data Model](Drezivo-Data-Model.md), [ERD](Drezivo-ERD.dbml), [migration runbook](../runbooks/migrations.md)
 
-This document defines the forward-only database work for TBF-002. It does not create the tables.
-TBF-010 onward own the reviewed SQL migrations and service behavior.
+This document defines the forward-only database work for tenancy onboarding. Reviewed SQL
+migrations and service behavior are owned by their corresponding TBF tasks.
 
 ## Scope and ownership
 
@@ -78,6 +78,16 @@ the webhook never provisions a tenant or starts a trial.
 Invitation recipients are explicitly outside this command boundary until TBF-040/042 provides
 local invitation persistence and claim state; they must not be treated as owners by a future
 owner-eligibility implementation.
+
+TBF-030 adds the authenticated owner bootstrap command at
+`POST /api/v1/onboarding/{onboardingId}/bootstrap`. It requires a strict empty body, the active
+Clerk organization matching the onboarding record, and an account-scoped `Idempotency-Key`.
+Migration `0016_tenant_bootstrap.sql` seeds immutable version-1 Starter, Professional, and Business
+plans and their 75/250/1,000 physical-asset and 1/3/10 Front Desk-seat limits. The winning
+database transaction creates the tenant, `Main Branch`, Owner membership/grant, draft storefront,
+trialing subscription, `trial_started` event, both audit records, and a `tenant.bootstrapped`
+outbox event, then finalizes the safe response. A no-op worker handler acknowledges that event
+until later consumers are introduced.
 
 ## Required constraints
 

@@ -98,6 +98,55 @@ export async function withGlobalTransaction<T>(
 }
 
 /**
+ * Transaction context used by owner tenant bootstrap. It starts in the account/global
+ * namespace, can enter exactly one tenant namespace for tenant-owned writes, and can return to
+ * the global namespace before finalizing account-scoped records. The caller keeps one checked-out
+ * connection for the entire graph so no partial tenant can escape a rollback.
+ */
+export interface BootstrapTransactionContext {
+  client: PoolClient;
+  setTenantContext(tenantId: string): Promise<void>;
+  clearTenantContext(): Promise<void>;
+}
+
+export async function withBootstrapTransaction<T>(
+  principalId: string,
+  fn: (context: BootstrapTransactionContext) => Promise<T>,
+): Promise<T> {
+  if (!principalId) {
+    throw new Error('withBootstrapTransaction: principalId is required (never an anonymous write)');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT set_config($1, $2, true)', ['app.principal_id', principalId]);
+    await client.query('SELECT set_config($1, $2, true)', ['app.actor_kind', 'account']);
+    await client.query('SELECT set_config($1, $2, true)', ['app.tenant_id', '']);
+    const context: BootstrapTransactionContext = {
+      client,
+      setTenantContext: async (tenantId) => {
+        if (!tenantId) {
+          throw new Error('Bootstrap tenant context requires a tenant ID');
+        }
+        await client.query('SELECT set_config($1, $2, true)', ['app.tenant_id', tenantId]);
+      },
+      clearTenantContext: async () => {
+        await client.query('SELECT set_config($1, $2, true)', ['app.tenant_id', '']);
+      },
+    };
+    const result = await fn(context);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Runs a pre-tenant operator operation with an explicit actor namespace. The caller must have
  * already verified the platform-operator allowlist; this helper only makes that decision
  * visible to PostgreSQL RLS and keeps the context transaction-local.

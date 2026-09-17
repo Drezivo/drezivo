@@ -67,6 +67,7 @@ import {
   staffReservationCreateResponse,
   subscriptionStatus,
   subscriptionSummary,
+  tenantBootstrapResponse,
   successEnvelope,
   transferOwnershipRequest,
   uploadAuthorizationRequest,
@@ -101,6 +102,7 @@ registry.register('CreateOwnerOnboardingRequest', createOwnerOnboardingRequest);
 registry.register('AbandonOwnerOnboardingRequest', abandonOwnerOnboardingRequest);
 registry.register('ChooseOnboardingPlanRequest', chooseOnboardingPlanRequest);
 registry.register('BootstrapTenantRequest', bootstrapTenantRequest);
+registry.register('TenantBootstrapResponse', tenantBootstrapResponse);
 registry.register('CreateMembershipInvitationRequest', createMembershipInvitationRequest);
 registry.register('MembershipInvitationParams', membershipInvitationParams);
 registry.register('ResendMembershipInvitationRequest', resendMembershipInvitationRequest);
@@ -141,6 +143,27 @@ registry.registerPath({
     },
     409: jsonError('An owned tenant, unfinished onboarding, or unavailable slug prevents creation.'),
     429: jsonError('Owner onboarding create rate limit exceeded.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/onboarding/{onboardingId}/bootstrap',
+  tags: ['onboarding'],
+  summary: 'Atomically provision the owner tenant from an eligible onboarding.',
+  request: {
+    params: z.object({ onboardingId: z.string().uuid() }),
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: bootstrapTenantRequest } } },
+  },
+  responses: {
+    201: {
+      description: 'Tenant graph provisioned and trial started.',
+      content: { 'application/json': { schema: successEnvelope(tenantBootstrapResponse) } },
+    },
+    404: jsonError('The onboarding was not found for this account.'),
+    409: jsonError('The onboarding is not eligible for bootstrap or the slug is unavailable.'),
+    429: jsonError('Owner tenant bootstrap rate limit exceeded.'),
   },
 });
 

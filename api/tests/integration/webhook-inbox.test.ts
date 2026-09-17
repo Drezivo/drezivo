@@ -28,7 +28,7 @@ process.env.S3_ACCESS_KEY_ID ??= 'test';
 process.env.S3_SECRET_ACCESS_KEY ??= 'test';
 
 describe('TBF-022 webhook inbox and deferred repair', async () => {
-  const { closePool } = await import('../../src/db/client.js');
+  const { closePool, withGlobalTransaction } = await import('../../src/db/client.js');
   const { ensureAccount } = await import('../../src/modules/accounts/account.repository.js');
   const { reconcileDeferredClerkEvent, reconcileOrganizationCreatedMarker } = await import(
     '../../src/modules/webhooks/clerk.reconciliation.js'
@@ -41,6 +41,10 @@ describe('TBF-022 webhook inbox and deferred repair', async () => {
   const { getCurrentOwnerOnboarding, createOrResumeOnboarding } = await import(
     '../../src/modules/onboarding/onboarding.repository.js'
   );
+  const { claimOwnerOnboardingStart } = await import(
+    '../../src/modules/onboarding/onboarding-attempt.repository.js'
+  );
+  const { canonicalRequestHash } = await import('../../src/shared/idempotency.js');
 
   beforeAll(async () => {
     await migrateTestDatabase(adminUrl);
@@ -97,10 +101,21 @@ describe('TBF-022 webhook inbox and deferred repair', async () => {
 
   it('repairs only a matching incomplete onboarding and creates no tenant-side effect', async () => {
     const account = await ensureAccount('user_webhook_repair');
+    const attemptClaim = await withGlobalTransaction('user_webhook_repair', (client) =>
+      claimOwnerOnboardingStart(client, {
+        account,
+        operation: 'onboarding.create',
+        intentKey: 'webhook-repair-attempt',
+        payloadHash: canonicalRequestHash({ organization_name: 'Repaired Studio' }),
+        organizationName: 'Repaired Studio',
+        requestedSlug: null,
+      }),
+    );
+    if (!attemptClaim.attempt) throw new Error('expected provider attempt');
     const marker = {
       source: 'owner_onboarding_v1' as const,
       account_id: account.id,
-      attempt_id: '22222222-2222-4222-8222-222222222222',
+      attempt_id: attemptClaim.attempt.attemptId,
     };
     const repaired = await reconcileDeferredClerkEvent({
       eventType: 'organization.created',

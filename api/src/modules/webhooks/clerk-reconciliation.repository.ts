@@ -47,11 +47,13 @@ export async function reconcileOrganizationCreatedMarkerInTransaction(
   if (
     !attemptRow ||
     (attemptRow.provider_org_id !== null && attemptRow.provider_org_id !== input.organizationId) ||
-    (attemptRow.status !== 'pending' && attemptRow.status !== 'provider_created')
+    (attemptRow.status !== 'pending' &&
+      attemptRow.status !== 'provider_created' &&
+      attemptRow.status !== 'local_persisted')
   ) {
     return { kind: 'skipped' };
   }
-  if (attemptRow.provider_org_id === null) {
+  if (attemptRow.provider_org_id === null && attemptRow.status !== 'local_persisted') {
     await client.query(
       `UPDATE owner_onboarding_attempt
        SET provider_org_id = $1, status = 'provider_created', updated_at = now()

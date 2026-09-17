@@ -120,6 +120,10 @@ components:
         id:
           type: string
           format: uuid
+        clerk_org_id:
+          type: string
+          minLength: 1
+          maxLength: 200
         organization_name:
           type: string
           minLength: 1
@@ -149,6 +153,7 @@ components:
           format: date-time
       required:
         - id
+        - clerk_org_id
         - organization_name
         - requested_slug
         - status
@@ -167,6 +172,10 @@ components:
             id:
               type: string
               format: uuid
+            clerk_org_id:
+              type: string
+              minLength: 1
+              maxLength: 200
             organization_name:
               type: string
               minLength: 1
@@ -196,6 +205,7 @@ components:
               format: date-time
           required:
             - id
+            - clerk_org_id
             - organization_name
             - requested_slug
             - status
@@ -341,6 +351,142 @@ components:
       type: object
       properties: {}
       additionalProperties: false
+    TenantBootstrapResponse:
+      type: object
+      properties:
+        tenant:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+              minLength: 1
+            slug:
+              type: string
+              minLength: 1
+            status:
+              type: string
+              enum:
+                - active
+                - restricted
+                - cancelled
+            currency:
+              type: string
+              pattern: ^[A-Z]{3}$
+            timezone:
+              type: string
+              minLength: 1
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+          required:
+            - id
+            - name
+            - slug
+            - status
+            - currency
+            - timezone
+            - created_at
+            - updated_at
+        default_branch:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+              minLength: 1
+            code:
+              type: string
+              minLength: 1
+            is_default:
+              type: boolean
+            timezone:
+              type: string
+              minLength: 1
+            status:
+              type: string
+              enum:
+                - active
+                - archived
+          required:
+            - id
+            - name
+            - code
+            - is_default
+            - timezone
+            - status
+        membership:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            role:
+              type: string
+              enum:
+                - owner
+                - frontdesk
+            status:
+              type: string
+              enum:
+                - active
+                - suspended
+                - removed
+            updated_at:
+              type: string
+              format: date-time
+          required:
+            - id
+            - role
+            - status
+            - updated_at
+        branch_grants:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            properties:
+              branch_id:
+                type: string
+                format: uuid
+              permission_codes:
+                type: array
+                items:
+                  type: string
+                  enum:
+                    - assets.manage
+                    - assets.archive
+                    - reservations.manage
+                    - reservations.custody
+                    - payments.manage
+                    - payments.view
+                    - evidence.verify
+                    - evidence.view
+                    - documents.identity.view
+                    - documents.receipt.view
+                    - policies.manage
+                    - users.manage
+                    - exports.request
+                    - exports.manage
+                    - deletion.manage
+            required:
+              - branch_id
+              - permission_codes
+        subscription:
+          $ref: '#/components/schemas/SubscriptionSummary'
+      required:
+        - tenant
+        - default_branch
+        - membership
+        - branch_grants
+        - subscription
     CreateMembershipInvitationRequest:
       type: object
       properties:
@@ -685,6 +831,69 @@ paths:
                   - success
                   - error
                   - request_id
+  /onboarding/{onboardingId}/bootstrap:
+    post:
+      tags:
+        - onboarding
+      summary: Atomically provision the owner tenant from an eligible onboarding.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: onboardingId
+          in: path
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BootstrapTenantRequest'
+      responses:
+        "201":
+          description: Tenant graph provisioned and trial started.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: '#/components/schemas/TenantBootstrapResponse'
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "404":
+          description: The onboarding was not found for this account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "409":
+          description: The onboarding is not eligible for bootstrap or the slug is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "429":
+          description: Owner tenant bootstrap rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /onboarding/current:
     get:
       tags:

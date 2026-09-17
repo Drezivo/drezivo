@@ -164,7 +164,9 @@ operational capacity. Only verified operator payment can create the replacement 
 
 ### Tenant bootstrap
 
-For a trial-eligible owner, plan selection and completion run one idempotent transaction:
+The owner completes `POST /api/v1/onboarding/{onboardingId}/bootstrap` with a strict empty body and
+an account-scoped `Idempotency-Key`. The request must carry the same active Clerk organization as
+the onboarding record. For a trial-eligible owner, completion runs one idempotent transaction:
 
 1. lock the account and onboarding record;
 2. verify no trial is consumed and no current owned tenant exists;
@@ -175,10 +177,21 @@ For a trial-eligible owner, plan selection and completion run one idempotent tra
 7. set `trial_ends_at` from database time plus seven calendar days;
 8. append immutable `trial_started` event;
 9. mark account trial consumed and onboarding provisioned; and
-10. write audit and outbox records inside the same transaction.
+10. write global and tenant audit records plus a `tenant.bootstrapped` outbox record inside the
+    same transaction; and
+11. return the tenant, default branch, Owner membership, branch grants, and subscription summary.
+
+Bootstrap creates `Main Branch` (`main`) in `Asia/Manila` with empty address and operating-hours
+placeholders. A supplied slug is preserved exactly. When no slug was supplied, the server
+normalizes the organization name and adds a stable onboarding-derived suffix only if the shared
+tenant/storefront slug namespace is occupied. The Starter, Professional, and Business version-1
+plan rows are seeded before bootstrap can run, with 75/250/1,000 physical-asset limits and
+1/3/10 Front Desk seats.
 
 Duplicate requests return the original result. Concurrent requests create at most one tenant,
 membership, subscription, and trial. The first business needs no card or payment account.
+The outbox worker currently acknowledges `tenant.bootstrapped` without an external side effect;
+later consumers may subscribe without changing the bootstrap transaction.
 
 ### One owned business and closure
 

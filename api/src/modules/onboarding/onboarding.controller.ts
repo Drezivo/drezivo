@@ -7,8 +7,10 @@ import {
   getCurrentOwnerOnboardingContext,
   startOwnerOnboarding,
 } from './onboarding.service.js';
+import { bootstrapOwnerTenant as bootstrapOwnerTenantCommand } from './tenant-bootstrap.service.js';
 import type {
   AbandonOwnerOnboardingInput,
+  BootstrapTenantInput,
   CreateOwnerOnboardingInput,
   OwnerOnboardingIdParams,
 } from './onboarding.schemas.js';
@@ -44,6 +46,28 @@ export async function abandonOnboardingController(req: Request, res: Response): 
     request,
   });
   res.status(result.status).json(result.body);
+}
+
+export async function bootstrapTenantController(req: Request, res: Response): Promise<void> {
+  const principalId = readPrincipalId(req);
+  const idempotencyKey = readIdempotencyKey(req);
+  const result = await bootstrapOwnerTenantCommand({
+    principalId,
+    clerkOrgId: req.clerkPrincipal?.clerkOrgId ?? null,
+    requestId: req.requestId,
+    idempotencyKey,
+    onboardingId: readOnboardingId(req),
+    request: req.body as BootstrapTenantInput,
+  });
+  res.status(result.status).json(result.body);
+}
+
+function readOnboardingId(req: Request): string {
+  const value = req.params.onboardingId;
+  if (typeof value !== 'string') {
+    throw new ValidationError('Onboarding ID is required.');
+  }
+  return value;
 }
 
 function readPrincipalId(req: Request): string {

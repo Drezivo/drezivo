@@ -9,6 +9,7 @@ import {
 } from '../common/ids';
 import { moneyAmount } from '../common/money';
 import { isoInstant } from '../common/time';
+import { branch, branchGrant, membership, tenant } from './tenant';
 
 /** Global pre-tenant lifecycle, owned by Drezivo rather than Clerk. */
 export const onboardingStatus = z.enum(['incomplete', 'abandoned', 'payment_pending', 'provisioned']);
@@ -90,6 +91,16 @@ export const subscriptionSummary = z.object({
   grace_ends_at: isoInstant.nullable(),
 });
 export type SubscriptionSummary = z.infer<typeof subscriptionSummary>;
+
+/** Safe projection returned after the owner bootstrap transaction commits. */
+export const tenantBootstrapResponse = z.object({
+  tenant,
+  default_branch: branch,
+  membership,
+  branch_grants: z.array(branchGrant).min(1),
+  subscription: subscriptionSummary,
+});
+export type TenantBootstrapResponse = z.infer<typeof tenantBootstrapResponse>;
 
 export const operatorActionStatus = z.enum(['accepted', 'rejected', 'completed']);
 export type OperatorActionStatus = z.infer<typeof operatorActionStatus>;
