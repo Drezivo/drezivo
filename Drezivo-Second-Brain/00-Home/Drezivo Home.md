@@ -24,6 +24,7 @@ The navigation hub for the Drezivo second brain.
 - [[07-Glossary/Glossary]]
 - [[08-Daily/2026-09-16]]
 - [[08-Daily/2026-09-17]]
+- [[08-Daily/2026-09-18]]
 
 ## Current truth
 

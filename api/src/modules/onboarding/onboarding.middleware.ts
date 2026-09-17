@@ -5,6 +5,7 @@ import { idempotencyKey as idempotencyKeySchema } from '@drezivo/contracts';
 import { ValidationError } from '../../shared/errors.js';
 import {
   abandonOwnerOnboardingRequest,
+  bootstrapTenantRequest,
   createOwnerOnboardingRequest,
   ownerOnboardingIdParams,
 } from './onboarding.schemas.js';
@@ -45,6 +46,22 @@ export const validateAbandonOwnerOnboarding: RequestHandler = (req, _res, next):
   const body = abandonOwnerOnboardingRequest.safeParse(req.body);
   if (!body.success) {
     next(new ValidationError('Abandon request is invalid.'));
+    return;
+  }
+  req.params = params.data;
+  req.body = body.data;
+  next();
+};
+
+export const validateBootstrapTenant: RequestHandler = (req, _res, next): void => {
+  const params = ownerOnboardingIdParams.safeParse(req.params);
+  if (!params.success) {
+    next(new ValidationError('Onboarding ID is invalid.'));
+    return;
+  }
+  const body = bootstrapTenantRequest.safeParse(req.body);
+  if (!body.success) {
+    next(new ValidationError('Bootstrap request is invalid.'));
     return;
   }
   req.params = params.data;

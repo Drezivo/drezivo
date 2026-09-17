@@ -205,17 +205,23 @@ or billing tasks as authority for this work.
 
 ## Phase 3: Tenant bootstrap, context, and entitlements
 
-- [ ] **TBF-030 — Implement idempotent tenant bootstrap**
+- [x] **TBF-030 — Implement idempotent tenant bootstrap**
   - **Depends on:** TBF-021, TBF-012, TBF-001.
   - **Outcome:** A trial-eligible onboarding atomically creates tenant, default branch, Owner
     membership/grant, draft storefront, subscription, and trial event.
   - **Acceptance:**
-    - [ ] Database time starts the seven-day trial.
-    - [ ] Account trial state and current-owned-tenant link are updated in the same winning
+    - [x] Database time starts the seven-day trial.
+    - [x] Account trial state and current-owned-tenant link are updated in the same winning
           transaction.
-    - [ ] Provisioned onboarding cannot bootstrap again.
-    - [ ] Every tenant-owned row has server-resolved tenant scope and required RLS protection.
-  - **Tests/evidence:** Sequential/concurrent bootstrap creates exactly one complete tenant graph.
+    - [x] Provisioned onboarding cannot bootstrap again.
+    - [x] Every tenant-owned row has server-resolved tenant scope and required RLS protection.
+    - [x] The strict empty-body command requires the authenticated active Clerk organization and
+          account-scoped idempotency key.
+    - [x] The complete graph includes the default branch, Owner grant, draft storefront,
+          trialing subscription, immutable trial event, tenant audit, and outbox event.
+  - **Tests/evidence:** `tests/integration/tenant-bootstrap.test.ts` covers complete graph creation,
+    concurrent same-key replay, organization mismatch concealment, database-time trial period, and
+    single-graph assertions. Full PostgreSQL evidence requires the disposable `TEST_DATABASE_URL`.
 
 - [ ] **TBF-031 — Update actor, tenant, and workspace resolution**
   - **Depends on:** TBF-030.
@@ -231,12 +237,12 @@ or billing tasks as authority for this work.
           paths may continue.
   - **Tests/evidence:** Cross-tenant, wrong-active-org, revoked-membership, and cross-tab tests.
 
-- [ ] **TBF-032 — Seed plans and build the entitlement service**
+- [ ] **TBF-032 — Build the entitlement service over seeded plans**
   - **Depends on:** TBF-030.
   - **Outcome:** Versioned plans expose correct price and quota data through one server service.
   - **Acceptance:**
-    - [ ] Seed Starter/PHP 300/75 assets/1 Front Desk, Professional/PHP 499/250/3, and
-          Business/PHP 1,299/1,000/10 using minor units.
+    - [ ] Resolve the immutable TBF-030 Starter/Professional/Business v1 seed rows and reject
+          unknown or conflicting plan definitions.
     - [ ] Entitlement resolution rejects unknown/inactive plan versions.
     - [ ] Service exposes concurrency-safe guards for seat and active-asset quota.
     - [ ] Asset import preview remains read-only; any future commit/activation calls the same
