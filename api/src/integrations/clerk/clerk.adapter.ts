@@ -1,0 +1,330 @@
+import { createClerkClient, type ClerkClient } from '@clerk/express';
+import { z } from 'zod';
+
+import { config } from '../../config/index.js';
+import { DependencyUnavailableError, ValidationError } from '../../shared/errors.js';
+
+/**
+ * The only Clerk organization roles Drezivo sends in v1. Clerk may expose additional custom
+ * roles, but accepting arbitrary provider values here would let a caller bypass the local role
+ * policy. New Drezivo roles must be added deliberately at this boundary.
+ */
+export const clerkOrganizationRoles = ['org:admin', 'org:member'] as const;
+export type ClerkOrganizationRole = (typeof clerkOrganizationRoles)[number];
+
+export const clerkInvitationStatuses = ['pending', 'accepted', 'revoked', 'expired'] as const;
+export type ClerkInvitationStatus = (typeof clerkInvitationStatuses)[number];
+
+export interface ClerkOrganization {
+  id: string;
+  name: string;
+  slug: string;
+  createdByUserId: string | null;
+}
+
+export interface ClerkOrganizationMembership {
+  id: string;
+  organizationId: string;
+  userId: string;
+  role: ClerkOrganizationRole;
+}
+
+export interface ClerkOrganizationInvitation {
+  id: string;
+  organizationId: string;
+  emailAddress: string;
+  role: ClerkOrganizationRole;
+  status: ClerkInvitationStatus | null;
+  expiresAt: Date;
+}
+
+export interface ClerkServerAdapter {
+  createOrganization(input: CreateClerkOrganizationInput): Promise<ClerkOrganization>;
+  getOrganization(organizationId: string): Promise<ClerkOrganization>;
+  getOrganizationMembership(
+    organizationId: string,
+    userId: string,
+  ): Promise<ClerkOrganizationMembership | null>;
+  createInvitation(input: CreateClerkInvitationInput): Promise<ClerkOrganizationInvitation>;
+  getInvitation(
+    organizationId: string,
+    invitationId: string,
+  ): Promise<ClerkOrganizationInvitation>;
+  revokeInvitation(input: RevokeClerkInvitationInput): Promise<ClerkOrganizationInvitation>;
+  createMembership(input: ClerkMembershipInput): Promise<ClerkOrganizationMembership>;
+  updateMembership(input: ClerkMembershipInput): Promise<ClerkOrganizationMembership>;
+  deleteMembership(input: Pick<ClerkMembershipInput, 'organizationId' | 'userId'>): Promise<ClerkOrganizationMembership>;
+}
+
+/**
+ * Narrow provider surface used by the adapter. Callers and tests inject this boundary instead of
+ * importing or mocking Clerk throughout the application.
+ */
+export type ClerkProviderClient = {
+  organizations: Pick<
+    ClerkClient['organizations'],
+    | 'createOrganization'
+    | 'getOrganization'
+    | 'getOrganizationMembershipList'
+    | 'createOrganizationMembership'
+    | 'updateOrganizationMembership'
+    | 'deleteOrganizationMembership'
+    | 'createOrganizationInvitation'
+    | 'getOrganizationInvitation'
+    | 'revokeOrganizationInvitation'
+  >;
+};
+
+const providerId = z.string().trim().min(1).max(200);
+const organizationName = z.string().trim().min(1).max(160);
+const emailAddress = z.string().trim().email().max(320);
+const organizationRole = z.enum(clerkOrganizationRoles);
+const organizationInput = z.object({
+  name: organizationName,
+  createdByUserId: providerId,
+  slug: z.string().trim().min(1).max(200).optional(),
+});
+const invitationInput = z.object({
+  organizationId: providerId,
+  emailAddress,
+  role: organizationRole,
+  expiresInDays: z.number().int().min(1).max(30).optional(),
+  inviterUserId: providerId.optional(),
+  redirectUrl: z.string().url().max(2048).optional(),
+});
+const membershipInput = z.object({
+  organizationId: providerId,
+  userId: providerId,
+  role: organizationRole,
+});
+const revokeInvitationInput = z.object({
+  organizationId: providerId,
+  invitationId: providerId,
+  requestingUserId: providerId.optional(),
+});
+
+export type CreateClerkOrganizationInput = z.infer<typeof organizationInput>;
+export type CreateClerkInvitationInput = z.infer<typeof invitationInput>;
+export type ClerkMembershipInput = z.infer<typeof membershipInput>;
+export type RevokeClerkInvitationInput = z.infer<typeof revokeInvitationInput>;
+
+function parseInput<T>(schema: z.ZodType<T>, input: unknown, label: string): T {
+  const result = schema.safeParse(input);
+  if (!result.success) {
+    throw new ValidationError(`${label} is invalid.`);
+  }
+  return result.data;
+}
+
+function parseProviderRole(role: unknown): ClerkOrganizationRole {
+  const result = organizationRole.safeParse(role);
+  if (!result.success) {
+    throw new DependencyUnavailableError('Clerk returned an unsupported organization role.');
+  }
+  return result.data;
+}
+
+function parseProviderStatus(status: unknown): ClerkInvitationStatus | null {
+  if (status === undefined || status === null) {
+    return null;
+  }
+  const result = z.enum(clerkInvitationStatuses).safeParse(status);
+  if (!result.success) {
+    throw new DependencyUnavailableError('Clerk returned an unsupported invitation status.');
+  }
+  return result.data;
+}
+
+function parseProviderDate(value: unknown): Date {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new DependencyUnavailableError('Clerk returned an invalid expiration timestamp.');
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new DependencyUnavailableError('Clerk returned an invalid expiration timestamp.');
+  }
+  return date;
+}
+
+function mapOrganization(organization: Awaited<ReturnType<ClerkProviderClient['organizations']['getOrganization']>>): ClerkOrganization {
+  return {
+    id: organization.id,
+    name: organization.name,
+    slug: organization.slug,
+    createdByUserId: organization.createdBy ?? null,
+  };
+}
+
+function mapMembership(
+  membership: Awaited<ReturnType<ClerkProviderClient['organizations']['createOrganizationMembership']>>,
+  fallbackOrganizationId: string,
+  fallbackUserId: string,
+): ClerkOrganizationMembership {
+  return {
+    id: membership.id,
+    organizationId: membership.organization.id || fallbackOrganizationId,
+    userId: membership.publicUserData?.userId || fallbackUserId,
+    role: parseProviderRole(membership.role),
+  };
+}
+
+function mapInvitation(
+  invitation: Awaited<ReturnType<ClerkProviderClient['organizations']['createOrganizationInvitation']>>,
+): ClerkOrganizationInvitation {
+  return {
+    id: invitation.id,
+    organizationId: invitation.organizationId,
+    emailAddress: invitation.emailAddress,
+    role: parseProviderRole(invitation.role),
+    status: parseProviderStatus(invitation.status),
+    expiresAt: parseProviderDate(invitation.expiresAt),
+  };
+}
+
+async function providerCall<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    if (error instanceof DependencyUnavailableError) {
+      throw error;
+    }
+    // Deliberately do not log or expose Clerk's raw body, request ID, or error message. The
+    // global error handler can safely turn this typed failure into a generic 503 response.
+    throw new DependencyUnavailableError('Clerk is temporarily unavailable. Please try again.');
+  }
+}
+
+export function createClerkServerAdapter(
+  client: ClerkProviderClient = createClerkClient({
+    secretKey: config.CLERK_SECRET_KEY,
+    publishableKey: config.CLERK_PUBLISHABLE_KEY,
+  }),
+): ClerkServerAdapter {
+  return {
+    async createOrganization(input) {
+      const parsed = parseInput(organizationInput, input, 'Clerk organization');
+      return providerCall(async () => {
+        const params: Parameters<typeof client.organizations.createOrganization>[0] = {
+          name: parsed.name,
+          createdBy: parsed.createdByUserId,
+        };
+        if (parsed.slug !== undefined) {
+          params.slug = parsed.slug;
+        }
+        return mapOrganization(await client.organizations.createOrganization(params));
+      });
+    },
+
+    async getOrganization(organizationId) {
+      const parsed = parseInput(providerId, organizationId, 'Clerk organization ID');
+      return providerCall(async () =>
+        mapOrganization(await client.organizations.getOrganization({ organizationId: parsed })),
+      );
+    },
+
+    async getOrganizationMembership(organizationId, userId) {
+      const parsed = parseInput(
+        z.object({ organizationId: providerId, userId: providerId }),
+        { organizationId, userId },
+        'Clerk organization membership',
+      );
+      return providerCall(async () => {
+        const response = await client.organizations.getOrganizationMembershipList({
+          organizationId: parsed.organizationId,
+          userId: [parsed.userId],
+          limit: 1,
+        });
+        if (!Array.isArray(response.data)) {
+          throw new DependencyUnavailableError('Clerk returned an invalid membership response.');
+        }
+        const membership = response.data[0];
+        return membership
+          ? mapMembership(membership, parsed.organizationId, parsed.userId)
+          : null;
+      });
+    },
+
+    async createInvitation(input) {
+      const parsed = parseInput(invitationInput, input, 'Clerk organization invitation');
+      return providerCall(async () => {
+        const params: Parameters<typeof client.organizations.createOrganizationInvitation>[0] = {
+          organizationId: parsed.organizationId,
+          emailAddress: parsed.emailAddress,
+          role: parsed.role,
+        };
+        if (parsed.expiresInDays !== undefined) params.expiresInDays = parsed.expiresInDays;
+        if (parsed.inviterUserId !== undefined) params.inviterUserId = parsed.inviterUserId;
+        if (parsed.redirectUrl !== undefined) params.redirectUrl = parsed.redirectUrl;
+        return mapInvitation(await client.organizations.createOrganizationInvitation(params));
+      });
+    },
+
+    async getInvitation(organizationId, invitationId) {
+      const parsed = parseInput(
+        z.object({ organizationId: providerId, invitationId: providerId }),
+        { organizationId, invitationId },
+        'Clerk organization invitation',
+      );
+      return providerCall(async () =>
+        mapInvitation(
+          await client.organizations.getOrganizationInvitation({
+            organizationId: parsed.organizationId,
+            invitationId: parsed.invitationId,
+          }),
+        ),
+      );
+    },
+
+    async revokeInvitation(input) {
+      const parsed = parseInput(revokeInvitationInput, input, 'Clerk organization invitation');
+      return providerCall(async () => {
+        const params: Parameters<typeof client.organizations.revokeOrganizationInvitation>[0] = {
+          organizationId: parsed.organizationId,
+          invitationId: parsed.invitationId,
+        };
+        if (parsed.requestingUserId !== undefined) params.requestingUserId = parsed.requestingUserId;
+        return mapInvitation(await client.organizations.revokeOrganizationInvitation(params));
+      });
+    },
+
+    async createMembership(input) {
+      const parsed = parseInput(membershipInput, input, 'Clerk organization membership');
+      return providerCall(async () =>
+        mapMembership(
+          await client.organizations.createOrganizationMembership(parsed),
+          parsed.organizationId,
+          parsed.userId,
+        ),
+      );
+    },
+
+    async updateMembership(input) {
+      const parsed = parseInput(membershipInput, input, 'Clerk organization membership');
+      return providerCall(async () =>
+        mapMembership(
+          await client.organizations.updateOrganizationMembership(parsed),
+          parsed.organizationId,
+          parsed.userId,
+        ),
+      );
+    },
+
+    async deleteMembership(input) {
+      const parsed = parseInput(
+        z.object({ organizationId: providerId, userId: providerId }),
+        input,
+        'Clerk organization membership',
+      );
+      return providerCall(async () =>
+        mapMembership(
+          await client.organizations.deleteOrganizationMembership(parsed),
+          parsed.organizationId,
+          parsed.userId,
+        ),
+      );
+    },
+  };
+}
+
+/** Shared configured adapter for application services. Provider calls remain behind this module. */
+export const clerkServerAdapter = createClerkServerAdapter();

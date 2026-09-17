@@ -134,17 +134,19 @@ or billing tasks as authority for this work.
 
 ## Phase 2: Clerk integration and owner onboarding
 
-- [ ] **TBF-020 — Build one shared Clerk server adapter**
+- [x] **TBF-020 — Build one shared Clerk server adapter**
   - **Depends on:** TBF-001, TBF-010.
   - **Outcome:** API modules use a typed integration boundary instead of calling Clerk from
     arbitrary services.
   - **Acceptance:**
-    - [ ] Adapter creates organizations, invitations, and membership changes.
-    - [ ] Adapter reads only the provider facts required to verify current organization/member
+    - [x] Adapter creates organizations, invitations, and membership changes.
+    - [x] Adapter reads only the provider facts required to verify current organization/member
           state.
-    - [ ] Provider errors are mapped to safe typed failures; secrets and raw bodies are not logged.
-    - [ ] Configuration is validated centrally and absent configuration fails closed.
-  - **Tests/evidence:** Unit tests mock only the adapter boundary.
+    - [x] Provider errors are mapped to safe typed failures; secrets and raw bodies are not logged.
+    - [x] Configuration is validated centrally and absent configuration fails closed.
+  - **Tests/evidence:** `src/integrations/clerk/__tests__/clerk.adapter.test.ts` covers
+    organization creation, provider-fact membership reads, invitation create/revoke, membership
+    mutations, input validation, malformed provider responses, and safe typed provider failures.
 
 - [ ] **TBF-022 — Add raw verified Clerk webhook intake**
   - **Depends on:** TBF-020, existing webhook inbox.
