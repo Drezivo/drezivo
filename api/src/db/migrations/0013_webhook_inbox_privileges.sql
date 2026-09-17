@@ -60,7 +60,7 @@ GRANT SELECT, UPDATE ON webhook_inbox TO drezivo_worker;
 
 -- Organization-created marker repair runs later in the durable worker, but it needs a narrowly
 -- scoped system context to lock the matching account and insert one incomplete onboarding row.
--- The exact system principal is set by clerk.reconciliation.ts; ordinary account/operator/system
+-- The exact system principal is set by clerk-reconciliation.service.ts; ordinary account/operator/system
 -- transactions cannot use these policies as a read side door.
 CREATE POLICY account_clerk_webhook_repair_lock ON account
   FOR SELECT TO drezivo_app

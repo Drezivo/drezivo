@@ -14,6 +14,7 @@ The navigation hub for the Drezivo second brain.
 
 - [[01-Product/Drezivo Product Brief]]
 - [[02-Architecture/Drezivo Architecture]]
+- [[02-Architecture/API Module Boundaries and Layering]]
 - [[02-Architecture/Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation]]
 - [[02-Architecture/Drezivo System Canvas]]
 - [[03-Repositories/Repository Map]]
@@ -22,6 +23,7 @@ The navigation hub for the Drezivo second brain.
 - [[06-Research/Research Register]]
 - [[07-Glossary/Glossary]]
 - [[08-Daily/2026-09-16]]
+- [[08-Daily/2026-09-17]]
 
 ## Current truth
 
