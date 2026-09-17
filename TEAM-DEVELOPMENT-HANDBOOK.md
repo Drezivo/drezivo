@@ -248,9 +248,10 @@ For that pull request:
 The development dependency update that already merged should still be verified by the next local
 install and test run. Keep the root `package-lock.json` as the only lockfile.
 
-Dependabot can be kept enabled. Its version-update pull requests should remain subject to the same
-human review as any other pull request. Security updates receive priority, but urgency does not
-remove the need to inspect the diff and test the affected path.
+Dependabot can be kept enabled. Routine version updates are configured to ignore SemVer major
+releases, so a major framework or integration upgrade must be opened as planned engineering work.
+Security updates remain eligible even when their fix requires a major version, and still require
+diff review and affected-path testing.
 
 ## 8. Handoffs and daily teamwork
 
@@ -270,8 +271,9 @@ and the smallest decision needed. Do not silently change architecture to get aro
 
 ## 9. Current repository notes
 
-- The repository currently has one open production Dependabot pull request and several merged
-  feature and documentation pull requests.
+- The repository uses Dependabot for routine updates, while SemVer major version updates are
+  excluded from normal version-update pull requests and handled as planned work.
+- The previous grouped production update was closed because it combined several major upgrades.
 - The open documentation issue that lists required files should be converted into checkable reading
   tasks and linked pull requests.
 - The previous security workflow was removed because the repository plan did not support its checks.
