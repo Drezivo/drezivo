@@ -19,6 +19,7 @@ See `CONTRIBUTING.md` for branches, commit format and PR gates.
 Codex mirror: `.codex/README.md`. Update canonical `.claude` rules, then run the sync utility in `../docs/scripts/`; verify with `--check`.
 
 # Browser testing
+
 When making changes to the application:
 
 1. Start or use the existing development server.

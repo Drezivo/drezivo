@@ -7,6 +7,8 @@
 Read [Root Repository Architecture](ROOT-REPOSITORY-ARCHITECTURE.md) first for the complete
 monorepo folder map, workspace ownership, setup commands, release order, glossary, and agent
 instructions. New coding agents should also read [AI Agent Onboarding](AI-AGENT-ONBOARDING.md).
+Team members should also read the [team development handbook](TEAM-DEVELOPMENT-HANDBOOK.md) before
+opening their first issue or pull request.
 The companion [human architecture guide](Drezivo-Human-Repository-Architecture-Guide.docx)
 contains the same orientation in a visual Word document.
 
