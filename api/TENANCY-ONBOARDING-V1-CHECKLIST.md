@@ -87,16 +87,18 @@ or billing tasks as authority for this work.
 
 ## Phase 1: Global account and pre-tenant state
 
-- [ ] **TBF-010 — Add minimal global account persistence**
+- [x] **TBF-010 — Add minimal global account persistence**
   - **Depends on:** TBF-001, TBF-002.
   - **Outcome:** A minimal account record tracks Clerk identity, trial eligibility, and current
     owned-tenant link without mirroring Clerk profile data.
   - **Acceptance:**
-    - [ ] Clerk user ID is unique and is the only required identity field.
-    - [ ] No name, email, Clerk session, token, or profile sync is added.
-    - [ ] Trial consumption and current-owned-tenant update are serialized per account.
-    - [ ] A person can hold many Front Desk memberships but only one current owned tenant.
-  - **Tests/evidence:** Concurrent account/trial and owned-tenant tests produce one winner.
+    - [x] Clerk user ID is unique and is the only required identity field.
+    - [x] No name, email, Clerk session, token, or profile sync is added.
+    - [x] Trial consumption and current-owned-tenant update are serialized per account.
+    - [x] A person can hold many Front Desk memberships but only one current owned tenant.
+  - **Tests/evidence:** Local PostgreSQL integration tests cover concurrent account creation,
+        trial consumption, owned-tenant claims, cross-account RLS denial, and Front Desk
+        memberships (`npm run test:integration --workspace @drezivo/api`).
 
 - [ ] **TBF-011 — Add organization onboarding and pre-provision payment records**
   - **Depends on:** TBF-010.

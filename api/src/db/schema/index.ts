@@ -5,6 +5,7 @@
  * it.
  */
 export * from './tenancy.js';
+export * from './account.js';
 export * from './catalogue.js';
 export * from './files.js';
 export * from './storefront.js';
