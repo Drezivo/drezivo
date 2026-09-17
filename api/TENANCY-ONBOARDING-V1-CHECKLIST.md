@@ -100,18 +100,22 @@ or billing tasks as authority for this work.
         trial consumption, owned-tenant claims, cross-account RLS denial, and Front Desk
         memberships (`npm run test:integration --workspace @drezivo/api`).
 
-- [ ] **TBF-011 — Add organization onboarding and pre-provision payment records**
+- [x] **TBF-011 — Add organization onboarding and pre-provision payment records**
   - **Depends on:** TBF-010.
   - **Outcome:** Interrupted owner setup and later paid activation are durable without a tenant.
   - **Acceptance:**
-    - [ ] Onboarding has statuses incomplete, abandoned, payment-pending, and provisioned.
-    - [ ] Clerk organization ID is unique; one incomplete/payment-pending record exists per
+    - [x] Onboarding has statuses incomplete, abandoned, payment-pending, and provisioned.
+    - [x] Clerk organization ID is unique; one incomplete/payment-pending record exists per
           account.
-    - [ ] Abandonment retains history and provider correlation while allowing a replacement.
-    - [ ] Pre-provision payment verification is immutable, operator-audited, and linked to a
+    - [x] Abandonment retains history and provider correlation while allowing a replacement.
+    - [x] Pre-provision payment verification is immutable, operator-audited, and linked to a
           tenant only after successful activation.
-    - [ ] Global records are unavailable to ordinary tenant listing endpoints.
-  - **Tests/evidence:** Retry, abandon, and competing-incomplete-onboarding tests are green.
+    - [x] Global records are unavailable to ordinary tenant listing endpoints.
+  - **Tests/evidence:** PostgreSQL integration tests run as the non-superuser `drezivo_app`
+        role and cover concurrent same-organization retry, competing active onboardings,
+        owner/tenant RLS isolation, incomplete and payment-pending abandonment, trial-consumed
+        plan transitions, concurrent plan changes, immutable business-key payment records,
+        owner-safe payment projections, and no tenant/subscription side effect.
 
 - [ ] **TBF-012 — Add bootstrap-safe idempotency and audit primitives**
   - **Depends on:** TBF-010, TBF-011.

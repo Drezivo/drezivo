@@ -95,6 +95,21 @@ export async function withGlobalTransaction<T>(
   }
 }
 
+/**
+ * Runs a pre-tenant operator operation with an explicit actor namespace. The caller must have
+ * already verified the platform-operator allowlist; this helper only makes that decision
+ * visible to PostgreSQL RLS and keeps the context transaction-local.
+ */
+export async function withOperatorGlobalTransaction<T>(
+  operatorSubject: string,
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  return withGlobalTransaction(operatorSubject, async (client) => {
+    await client.query('SELECT set_config($1, $2, true)', ['app.actor_kind', 'operator']);
+    return fn(client);
+  });
+}
+
 export async function closePool(): Promise<void> {
   await pool.end();
 }
