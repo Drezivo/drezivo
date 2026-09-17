@@ -120,6 +120,17 @@ components:
         id:
           type: string
           format: uuid
+        organization_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        requested_slug:
+          type:
+            - string
+            - "null"
+          minLength: 3
+          maxLength: 100
+          pattern: ^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$
         status:
           type: string
           enum: *a1
@@ -138,6 +149,8 @@ components:
           format: date-time
       required:
         - id
+        - organization_name
+        - requested_slug
         - status
         - selected_plan_code
         - is_trial_eligible
@@ -154,6 +167,17 @@ components:
             id:
               type: string
               format: uuid
+            organization_name:
+              type: string
+              minLength: 1
+              maxLength: 160
+            requested_slug:
+              type:
+                - string
+                - "null"
+              minLength: 3
+              maxLength: 100
+              pattern: ^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$
             status:
               type: string
               enum: *a1
@@ -172,6 +196,8 @@ components:
               format: date-time
           required:
             - id
+            - organization_name
+            - requested_slug
             - status
             - selected_plan_code
             - is_trial_eligible
@@ -281,6 +307,11 @@ components:
           type: string
           minLength: 1
           maxLength: 160
+        slug:
+          type: string
+          minLength: 3
+          maxLength: 100
+          pattern: ^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$
       required:
         - organization_name
       additionalProperties: false
@@ -405,6 +436,596 @@ components:
       additionalProperties: false
   parameters: {}
 paths:
+  /onboarding:
+    post:
+      tags:
+        - onboarding
+      summary: Create the one pre-tenant owner onboarding journey.
+      parameters:
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                organization_name:
+                  type: string
+                  minLength: 1
+                  maxLength: 160
+                slug:
+                  type: string
+                  minLength: 3
+                  maxLength: 100
+                  pattern: ^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$
+              required:
+                - organization_name
+              additionalProperties: false
+      responses:
+        "200":
+          description: Existing unfinished onboarding resumed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      organization_name:
+                        type: string
+                        minLength: 1
+                        maxLength: 160
+                      requested_slug:
+                        type:
+                          - string
+                          - "null"
+                        minLength: 3
+                        maxLength: 100
+                        pattern: ^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$
+                      status:
+                        type: string
+                        enum: *a1
+                      selected_plan_code:
+                        type:
+                          - string
+                          - "null"
+                        enum: *a2
+                      is_trial_eligible:
+                        type: boolean
+                      created_at:
+                        type: string
+                        format: date-time
+                      updated_at:
+                        type: string
+                        format: date-time
+                    required:
+                      - id
+                      - organization_name
+                      - requested_slug
+                      - status
+                      - selected_plan_code
+                      - is_trial_eligible
+                      - created_at
+                      - updated_at
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "201":
+          description: Clerk organization and local onboarding created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      organization_name:
+                        type: string
+                        minLength: 1
+                        maxLength: 160
+                      requested_slug:
+                        type:
+                          - string
+                          - "null"
+                        minLength: 3
+                        maxLength: 100
+                        pattern: ^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$
+                      status:
+                        type: string
+                        enum: *a1
+                      selected_plan_code:
+                        type:
+                          - string
+                          - "null"
+                        enum: *a2
+                      is_trial_eligible:
+                        type: boolean
+                      created_at:
+                        type: string
+                        format: date-time
+                      updated_at:
+                        type: string
+                        format: date-time
+                    required:
+                      - id
+                      - organization_name
+                      - requested_slug
+                      - status
+                      - selected_plan_code
+                      - is_trial_eligible
+                      - created_at
+                      - updated_at
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "409":
+          description: An owned tenant, unfinished onboarding, or unavailable slug
+            prevents creation.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "429":
+          description: Owner onboarding create rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /onboarding/current:
+    get:
+      tags:
+        - onboarding
+      summary: Read the authenticated owner onboarding projection.
+      responses:
+        "200":
+          description: Safe onboarding and account lifecycle context.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      onboarding:
+                        type:
+                          - object
+                          - "null"
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          organization_name:
+                            type: string
+                            minLength: 1
+                            maxLength: 160
+                          requested_slug:
+                            type:
+                              - string
+                              - "null"
+                            minLength: 3
+                            maxLength: 100
+                            pattern: ^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$
+                          status:
+                            type: string
+                            enum: *a1
+                          selected_plan_code:
+                            type:
+                              - string
+                              - "null"
+                            enum: *a2
+                          is_trial_eligible:
+                            type: boolean
+                          created_at:
+                            type: string
+                            format: date-time
+                          updated_at:
+                            type: string
+                            format: date-time
+                        required:
+                          - id
+                          - organization_name
+                          - requested_slug
+                          - status
+                          - selected_plan_code
+                          - is_trial_eligible
+                          - created_at
+                          - updated_at
+                      has_current_owned_tenant:
+                        type: boolean
+                      has_consumed_lifetime_trial:
+                        type: boolean
+                    required:
+                      - onboarding
+                      - has_current_owned_tenant
+                      - has_consumed_lifetime_trial
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "429":
+          description: Owner onboarding read rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /onboarding/{onboardingId}/abandon:
+    post:
+      tags:
+        - onboarding
+      summary: Abandon an unfinished owner onboarding while retaining history.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: onboardingId
+          in: path
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 500
+              required:
+                - reason
+              additionalProperties: false
+      responses:
+        "200":
+          description: Onboarding abandoned or an identical abandonment replayed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      organization_name:
+                        type: string
+                        minLength: 1
+                        maxLength: 160
+                      requested_slug:
+                        type:
+                          - string
+                          - "null"
+                        minLength: 3
+                        maxLength: 100
+                        pattern: ^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$
+                      status:
+                        type: string
+                        enum: *a1
+                      selected_plan_code:
+                        type:
+                          - string
+                          - "null"
+                        enum: *a2
+                      is_trial_eligible:
+                        type: boolean
+                      created_at:
+                        type: string
+                        format: date-time
+                      updated_at:
+                        type: string
+                        format: date-time
+                    required:
+                      - id
+                      - organization_name
+                      - requested_slug
+                      - status
+                      - selected_plan_code
+                      - is_trial_eligible
+                      - created_at
+                      - updated_at
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "404":
+          description: The onboarding was not found for this account.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "409":
+          description: Provisioned onboarding cannot be abandoned, or the key is in
+            progress.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "429":
+          description: Owner onboarding abandon rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a6
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
   /public/stores/{slug}:
     get:
       tags:

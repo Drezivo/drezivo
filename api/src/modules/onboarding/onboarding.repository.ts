@@ -14,6 +14,9 @@ import { withGlobalTransaction, withOperatorGlobalTransaction } from '../../db/c
 
 export interface OwnerOnboardingRecord {
   id: string;
+  clerkOrgId: string;
+  organizationName: string;
+  requestedSlug: string | null;
   status: OnboardingStatus;
   selectedPlanCode: PlanCode | null;
   isTrialEligible: boolean;
@@ -73,6 +76,8 @@ interface OnboardingRow {
   id: string;
   account_id: string;
   clerk_org_id: string;
+  organization_name: string;
+  requested_slug: string | null;
   status: string;
   selected_plan_code: string | null;
   provisioned_tenant_id: string | null;
@@ -98,66 +103,86 @@ export async function createOrResumeOnboarding(
   accountId: string,
   clerkOrgId: string,
   principalId: string,
+  details: { organizationName?: string; requestedSlug?: string | null } = {},
 ): Promise<CreateOrResumeOnboardingResult> {
-  return withGlobalTransaction(principalId, async (client) => {
-    const account = await lockAccount(client, accountId, principalId);
-    if (!account) {
-      return { kind: 'not_found_or_forbidden' };
-    }
-    if (account.current_owned_tenant_id) {
-      return { kind: 'owned_tenant' };
-    }
+  return withGlobalTransaction(principalId, (client) =>
+    createOrResumeOnboardingInTransaction(client, accountId, clerkOrgId, principalId, details),
+  );
+}
 
-    // Check the provider correlation before the active-row check: retrying the same Clerk
-    // organization is idempotent even when its onboarding is already active.
-    const sameOrganization = await client.query<OnboardingRow>(
-      `${onboardingSelect}
+/** Transaction-aware form used when the onboarding row and bootstrap ledger must commit together. */
+export async function createOrResumeOnboardingInTransaction(
+  client: PoolClient,
+  accountId: string,
+  clerkOrgId: string,
+  principalId: string,
+  details: { organizationName?: string; requestedSlug?: string | null } = {},
+): Promise<CreateOrResumeOnboardingResult> {
+  const account = await lockAccount(client, accountId, principalId);
+  if (!account) {
+    return { kind: 'not_found_or_forbidden' };
+  }
+  if (account.current_owned_tenant_id) {
+    return { kind: 'owned_tenant' };
+  }
+
+  // Check the provider correlation before the active-row check: retrying the same Clerk
+  // organization is idempotent even when its onboarding is already active.
+  const sameOrganization = await client.query<OnboardingRow>(
+    `${onboardingSelect}
        FROM organization_onboarding o
        JOIN account a ON a.id = o.account_id
        WHERE o.clerk_org_id = $1
        FOR UPDATE OF o`,
-      [clerkOrgId],
-    );
-    if (sameOrganization.rows[0]) {
-      const row = sameOrganization.rows[0];
-      if (row.account_id !== account.id) {
-        return { kind: 'organization_conflict' };
-      }
-      return { kind: 'existing', onboarding: toOwnerOnboarding(row) };
+    [clerkOrgId],
+  );
+  if (sameOrganization.rows[0]) {
+    const row = sameOrganization.rows[0];
+    if (row.account_id !== account.id) {
+      return { kind: 'organization_conflict' };
     }
+    return { kind: 'existing', onboarding: toOwnerOnboarding(row) };
+  }
 
-    const active = await client.query<OnboardingRow>(
-      `${onboardingSelect}
+  const active = await client.query<OnboardingRow>(
+    `${onboardingSelect}
        FROM organization_onboarding o
        JOIN account a ON a.id = o.account_id
        WHERE o.account_id = $1
          AND o.status IN ('incomplete', 'payment_pending')
        FOR UPDATE OF o`,
-      [account.id],
-    );
-    if (active.rows[0]) {
-      return { kind: 'active_exists', onboarding: toOwnerOnboarding(active.rows[0]) };
-    }
+    [account.id],
+  );
+  if (active.rows[0]) {
+    return { kind: 'active_exists', onboarding: toOwnerOnboarding(active.rows[0]) };
+  }
 
-    const inserted = await client.query<OnboardingRow>(
-      `INSERT INTO organization_onboarding (account_id, clerk_org_id)
-       VALUES ($1, $2)
+  const inserted = await client.query<OnboardingRow>(
+    `INSERT INTO organization_onboarding (account_id, clerk_org_id, organization_name, requested_slug)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT (clerk_org_id) DO NOTHING
-       RETURNING id, account_id, clerk_org_id, status, selected_plan_code,
+       RETURNING id, account_id, clerk_org_id, organization_name, requested_slug, status, selected_plan_code,
                  provisioned_tenant_id, created_at, updated_at`,
-      [account.id, clerkOrgId],
-    );
-    if (inserted.rows[0]) {
-      return {
-        kind: 'created',
-        onboarding: toOwnerOnboarding({ ...inserted.rows[0], trial_consumed_at: account.trial_consumed_at }),
-      };
-    }
+    [
+      account.id,
+      clerkOrgId,
+      details.organizationName ?? 'Unspecified organization',
+      details.requestedSlug ?? null,
+    ],
+  );
+  if (inserted.rows[0]) {
+    return {
+      kind: 'created',
+      onboarding: toOwnerOnboarding({
+        ...inserted.rows[0],
+        trial_consumed_at: account.trial_consumed_at,
+      }),
+    };
+  }
 
-    // A conflicting provider organization can be hidden by the owner RLS policy. Do not
-    // fabricate an onboarding or expose whether another account owns it.
-    return { kind: 'organization_conflict' };
-  });
+  // A conflicting provider organization can be hidden by the owner RLS policy. Do not
+  // fabricate an onboarding or expose whether another account owns it.
+  return { kind: 'organization_conflict' };
 }
 
 /** Return the current owner-safe onboarding projection, if one exists. */
@@ -201,48 +226,56 @@ export async function abandonOnboarding(
   onboardingId: string,
   principalId: string,
 ): Promise<AbandonOnboardingResult> {
-  return withGlobalTransaction(principalId, async (client) => {
-    const accountId = await findOwnerAccountId(client, onboardingId, principalId);
-    if (!accountId) {
-      return { kind: 'not_found_or_forbidden' };
-    }
-    const account = await lockAccount(client, accountId, principalId);
-    if (!account) {
-      return { kind: 'not_found_or_forbidden' };
-    }
-    const row = await lockOwnerOnboarding(client, onboardingId, principalId);
-    if (!row) {
-      return { kind: 'not_found_or_forbidden' };
-    }
-    if (row.status === 'abandoned') {
-      return { kind: 'already_abandoned', onboarding: toOwnerOnboarding(row) };
-    }
-    if (row.status === 'provisioned') {
-      return { kind: 'provisioned', onboarding: toOwnerOnboarding(row) };
-    }
+  return withGlobalTransaction(principalId, async (client) =>
+    abandonOnboardingInTransaction(client, onboardingId, principalId),
+  );
+}
 
-    const updated = await client.query<OnboardingRow>(
-      `UPDATE organization_onboarding
+export async function abandonOnboardingInTransaction(
+  client: PoolClient,
+  onboardingId: string,
+  principalId: string,
+): Promise<AbandonOnboardingResult> {
+  const accountId = await findOwnerAccountId(client, onboardingId, principalId);
+  if (!accountId) {
+    return { kind: 'not_found_or_forbidden' };
+  }
+  const account = await lockAccount(client, accountId, principalId);
+  if (!account) {
+    return { kind: 'not_found_or_forbidden' };
+  }
+  const row = await lockOwnerOnboarding(client, onboardingId, principalId);
+  if (!row) {
+    return { kind: 'not_found_or_forbidden' };
+  }
+  if (row.status === 'abandoned') {
+    return { kind: 'already_abandoned', onboarding: toOwnerOnboarding(row) };
+  }
+  if (row.status === 'provisioned') {
+    return { kind: 'provisioned', onboarding: toOwnerOnboarding(row) };
+  }
+
+  const updated = await client.query<OnboardingRow>(
+    `UPDATE organization_onboarding
        SET status = 'abandoned', updated_at = now()
        WHERE id = $1 AND status IN ('incomplete', 'payment_pending')
-       RETURNING id, account_id, clerk_org_id, status, selected_plan_code,
+       RETURNING id, account_id, clerk_org_id, organization_name, requested_slug, status, selected_plan_code,
                  provisioned_tenant_id, created_at, updated_at`,
-      [onboardingId],
-    );
-    const updatedRow = updated.rows[0];
-    if (!updatedRow) {
-      const current = await lockOwnerOnboarding(client, onboardingId, principalId);
-      return current?.status === 'abandoned'
-        ? { kind: 'already_abandoned', onboarding: toOwnerOnboarding(current) }
-        : current
-          ? { kind: 'provisioned', onboarding: toOwnerOnboarding(current) }
-          : { kind: 'not_found_or_forbidden' };
-    }
-    return {
-      kind: 'abandoned',
-      onboarding: toOwnerOnboarding({ ...updatedRow, trial_consumed_at: account.trial_consumed_at }),
-    };
-  });
+    [onboardingId],
+  );
+  const updatedRow = updated.rows[0];
+  if (!updatedRow) {
+    const current = await lockOwnerOnboarding(client, onboardingId, principalId);
+    return current?.status === 'abandoned'
+      ? { kind: 'already_abandoned', onboarding: toOwnerOnboarding(current) }
+      : current
+        ? { kind: 'provisioned', onboarding: toOwnerOnboarding(current) }
+        : { kind: 'not_found_or_forbidden' };
+  }
+  return {
+    kind: 'abandoned',
+    onboarding: toOwnerOnboarding({ ...updatedRow, trial_consumed_at: account.trial_consumed_at }),
+  };
 }
 
 /** Choose a plan, moving lifetime-trial-consumed accounts to payment_pending. */
@@ -271,12 +304,14 @@ export async function chooseOnboardingPlan(
       return { kind: 'not_selectable', onboarding: toOwnerOnboarding(row) };
     }
 
-    const nextStatus: OnboardingStatus = account.trial_consumed_at ? 'payment_pending' : 'incomplete';
+    const nextStatus: OnboardingStatus = account.trial_consumed_at
+      ? 'payment_pending'
+      : 'incomplete';
     const updated = await client.query<OnboardingRow>(
       `UPDATE organization_onboarding
        SET selected_plan_code = $2, status = $3, updated_at = now()
        WHERE id = $1 AND status IN ('incomplete', 'payment_pending')
-       RETURNING id, account_id, clerk_org_id, status, selected_plan_code,
+       RETURNING id, account_id, clerk_org_id, organization_name, requested_slug, status, selected_plan_code,
                  provisioned_tenant_id, created_at, updated_at`,
       [onboardingId, planCode, nextStatus],
     );
@@ -289,7 +324,10 @@ export async function chooseOnboardingPlan(
     }
     return {
       kind: 'updated',
-      onboarding: toOwnerOnboarding({ ...updatedRow, trial_consumed_at: account.trial_consumed_at }),
+      onboarding: toOwnerOnboarding({
+        ...updatedRow,
+        trial_consumed_at: account.trial_consumed_at,
+      }),
     };
   });
 }
@@ -390,7 +428,8 @@ export async function listOwnerPaymentStatuses(
   });
 }
 
-const onboardingSelect = `SELECT o.id, o.account_id, o.clerk_org_id, o.status,
+const onboardingSelect = `SELECT o.id, o.account_id, o.clerk_org_id, o.organization_name,
+  o.requested_slug, o.status,
   o.selected_plan_code, o.provisioned_tenant_id, a.trial_consumed_at,
   o.created_at, o.updated_at`;
 
@@ -443,6 +482,9 @@ async function lockOwnerOnboarding(
 function toOwnerOnboarding(row: OnboardingRow): OwnerOnboardingRecord {
   return {
     id: row.id,
+    clerkOrgId: row.clerk_org_id,
+    organizationName: row.organization_name,
+    requestedSlug: row.requested_slug,
     status: requireOnboardingStatus(row.status),
     selectedPlanCode: row.selected_plan_code ? requirePlanCode(row.selected_plan_code) : null,
     isTrialEligible: row.trial_consumed_at === null,
@@ -466,7 +508,12 @@ function toOperatorPayment(row: PaymentRow): OperatorPaymentRecord {
 }
 
 function requireOnboardingStatus(value: string): OnboardingStatus {
-  if (value === 'incomplete' || value === 'abandoned' || value === 'payment_pending' || value === 'provisioned') {
+  if (
+    value === 'incomplete' ||
+    value === 'abandoned' ||
+    value === 'payment_pending' ||
+    value === 'provisioned'
+  ) {
     return value;
   }
   throw new Error(`Unexpected onboarding status from database: ${value}`);

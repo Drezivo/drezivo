@@ -97,8 +97,8 @@ or billing tasks as authority for this work.
     - [x] Trial consumption and current-owned-tenant update are serialized per account.
     - [x] A person can hold many Front Desk memberships but only one current owned tenant.
   - **Tests/evidence:** Local PostgreSQL integration tests cover concurrent account creation,
-        trial consumption, owned-tenant claims, cross-account RLS denial, and Front Desk
-        memberships (`npm run test:integration --workspace @drezivo/api`).
+    trial consumption, owned-tenant claims, cross-account RLS denial, and Front Desk
+    memberships (`npm run test:integration --workspace @drezivo/api`).
 
 - [x] **TBF-011 — Add organization onboarding and pre-provision payment records**
   - **Depends on:** TBF-010.
@@ -112,10 +112,10 @@ or billing tasks as authority for this work.
           tenant only after successful activation.
     - [x] Global records are unavailable to ordinary tenant listing endpoints.
   - **Tests/evidence:** PostgreSQL integration tests run as the non-superuser `drezivo_app`
-        role and cover concurrent same-organization retry, competing active onboardings,
-        owner/tenant RLS isolation, incomplete and payment-pending abandonment, trial-consumed
-        plan transitions, concurrent plan changes, immutable business-key payment records,
-        owner-safe payment projections, and no tenant/subscription side effect.
+    role and cover concurrent same-organization retry, competing active onboardings,
+    owner/tenant RLS isolation, incomplete and payment-pending abandonment, trial-consumed
+    plan transitions, concurrent plan changes, immutable business-key payment records,
+    owner-safe payment projections, and no tenant/subscription side effect.
 
 - [x] **TBF-012 — Add bootstrap-safe idempotency and audit primitives**
   - **Depends on:** TBF-010, TBF-011.
@@ -171,22 +171,28 @@ or billing tasks as authority for this work.
     onboarding, and proof that repair creates no tenant, branch, membership, subscription, or
     trial side effect.
 
-- [ ] **TBF-021 — Implement create-only owner onboarding commands**
+- [x] **TBF-021 — Implement create-only owner onboarding commands**
   - **Depends on:** TBF-011, TBF-012, TBF-020, TBF-022.
   - **Outcome:** A verified public user can create, read/resume, and abandon one onboarding.
   - **Acceptance:**
-    - [ ] API, not browser, creates the Clerk organization.
-    - [ ] The creator is made the provider organization administrator.
-    - [ ] The API persists incomplete state and returns safe data for Clerk active-organization
+    - [x] API, not browser, creates the Clerk organization.
+    - [x] The creator is made the provider organization administrator.
+    - [x] The API persists incomplete state and returns safe data for Clerk active-organization
           selection.
-    - [ ] An arbitrary existing Clerk-admin organization cannot be submitted for bootstrap.
-    - [ ] Existing Front Desk membership elsewhere does not block first owner onboarding.
-    - [ ] Invitation recipients bypass owner onboarding and use the verified claim flow.
-    - [ ] Current owned tenant or unfinished onboarding blocks a new owner journey.
-    - [ ] Request-size and rate limits apply. Errors are generic and do not reveal another
+    - [x] An arbitrary existing Clerk-admin organization cannot be submitted for bootstrap.
+    - [x] Existing Front Desk membership elsewhere does not block first owner onboarding.
+    - [x] Invitation recipients bypass owner onboarding and use the verified claim flow boundary;
+          invitation claim itself remains TBF-040.
+    - [x] Current owned tenant or unfinished onboarding blocks a new owner journey.
+    - [x] Request-size and rate limits apply. Errors are generic and do not reveal another
           account's or onboarding record's existence.
-  - **Tests/evidence:** Provider success/local-write failure recovery, duplicate create,
-    invitation-recipient, rate-limit, and request-size tests.
+  - **Tests/evidence:** `POST /api/v1/onboarding`, `GET /api/v1/onboarding/current`, and
+    `POST /api/v1/onboarding/:onboardingId/abandon` use account-scoped bootstrap idempotency.
+    Create is limited to 5 requests/minute per verified user, reads to 30/minute, abandonment to
+    10/minute, and JSON bodies to 16 KiB. Same-key retries replay, changed payloads fail with
+    `IDEMPOTENCY_KEY_REUSED`, and provider-success/local-write recovery uses the signed
+    `organization.created` marker. API unit tests pass; PostgreSQL integration tests require the
+    disposable `TEST_DATABASE_URL` described in `tests/integration/helpers/test-db.ts`.
 
 ## Phase 3: Tenant bootstrap, context, and entitlements
 
