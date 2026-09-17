@@ -178,21 +178,30 @@ or billing tasks as authority for this work.
     - [x] API, not browser, creates the Clerk organization.
     - [x] The creator is made the provider organization administrator.
     - [x] The API persists incomplete state and returns safe data for Clerk active-organization
-          selection.
+          selection, including the authenticated owner's opaque `clerk_org_id`.
+    - [x] Owner commands require a verified primary Clerk email before account, idempotency, or
+          provider mutation.
+    - [x] Concurrent owner starts serialize on the account row and persist one durable provider
+          attempt with the exact recovery marker and original requested details.
+    - [x] Unknown provider outcomes remain recoverable and are never automatically retried into a
+          second Clerk organization.
+    - [x] Abandonment accepts only the closed `reason_code` enum and stores no free text.
+    - [x] The 16 KiB onboarding limit is enforced on raw request bytes before JSON parsing.
     - [x] An arbitrary existing Clerk-admin organization cannot be submitted for bootstrap.
     - [x] Existing Front Desk membership elsewhere does not block first owner onboarding.
-    - [x] Invitation recipients bypass owner onboarding and use the verified claim flow boundary;
-          invitation claim itself remains TBF-040.
+    - [ ] Invitation recipients bypass owner onboarding and use the verified claim flow boundary;
+          invitation persistence and claim enforcement remain deferred to TBF-040/042.
     - [x] Current owned tenant or unfinished onboarding blocks a new owner journey.
     - [x] Request-size and rate limits apply. Errors are generic and do not reveal another
           account's or onboarding record's existence.
   - **Tests/evidence:** `POST /api/v1/onboarding`, `GET /api/v1/onboarding/current`, and
     `POST /api/v1/onboarding/:onboardingId/abandon` use account-scoped bootstrap idempotency.
     Create is limited to 5 requests/minute per verified user, reads to 30/minute, abandonment to
-    10/minute, and JSON bodies to 16 KiB. Same-key retries replay, changed payloads fail with
-    `IDEMPOTENCY_KEY_REUSED`, and provider-success/local-write recovery uses the signed
-    `organization.created` marker. API unit tests pass; PostgreSQL integration tests require the
-    disposable `TEST_DATABASE_URL` described in `tests/integration/helpers/test-db.ts`.
+    10/minute, and raw JSON bodies to 16 KiB. Same-key retries replay, changed payloads fail with
+    `IDEMPOTENCY_KEY_REUSED`, dependency failures remain single-flight, and provider-success/
+    local-write recovery uses the signed `organization.created` marker. Adapter, auth, parser,
+    contract, and API unit tests pass; PostgreSQL integration tests require the disposable
+    `TEST_DATABASE_URL` described in `tests/integration/helpers/test-db.ts`.
 
 ## Phase 3: Tenant bootstrap, context, and entitlements
 

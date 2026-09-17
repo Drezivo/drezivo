@@ -32,9 +32,13 @@ function createProvider() {
     getOrganizationInvitation: vi.fn(),
     revokeOrganizationInvitation: vi.fn(),
   };
+  const users = {
+    getUser: vi.fn(),
+  };
   return {
-    provider: { organizations } as unknown as ClerkProviderClient,
+    provider: { organizations, users } as unknown as ClerkProviderClient,
     organizations,
+    users,
   };
 }
 
@@ -62,6 +66,33 @@ const invitation = {
 };
 
 describe('Clerk server adapter', () => {
+  it('returns only primary email verification state', async () => {
+    const { provider, users } = createProvider();
+    users.getUser.mockResolvedValue({
+      primaryEmailAddressId: 'email_primary',
+      emailAddresses: [
+        { id: 'email_primary', verification: { status: 'verified' } },
+        { id: 'email_other', verification: { status: 'unverified' } },
+      ],
+    });
+    const adapter = createClerkServerAdapter(provider);
+
+    await expect(adapter.getUserVerificationState('user_123')).resolves.toEqual({
+      primaryEmailVerified: true,
+    });
+    expect(users.getUser).toHaveBeenCalledWith('user_123');
+  });
+
+  it('fails closed when there is no verified primary email', async () => {
+    const { provider, users } = createProvider();
+    users.getUser.mockResolvedValue({ primaryEmailAddressId: null, emailAddresses: [] });
+    const adapter = createClerkServerAdapter(provider);
+
+    await expect(adapter.getUserVerificationState('user_123')).resolves.toEqual({
+      primaryEmailVerified: false,
+    });
+  });
+
   it('creates an organization through the provider boundary and returns a safe projection', async () => {
     const { provider, organizations } = createProvider();
     organizations.createOrganization.mockResolvedValue(organization);

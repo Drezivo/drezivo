@@ -43,12 +43,20 @@ const organizationSlug = z
   .min(3)
   .max(100)
   .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, 'Use lowercase letters, numbers, and single hyphens.');
+export const onboardingAbandonReasonCode = z.enum([
+  'not_now',
+  'wrong_details',
+  'payment_concern',
+  'other',
+]);
+export type OnboardingAbandonReasonCode = z.infer<typeof onboardingAbandonReasonCode>;
 const safeReason = z.string().trim().min(1).max(500);
 const safeReference = z.string().trim().min(1).max(200);
 
-/** Safe API projection. Clerk identifiers stay inside API/provider boundaries. */
+/** Authenticated-owner projection. The Clerk organization ID is opaque, not a secret. */
 export const organizationOnboarding = z.object({
   id: organizationOnboardingId,
+  clerk_org_id: z.string().trim().min(1).max(200),
   organization_name: organizationName,
   requested_slug: organizationSlug.nullable(),
   status: onboardingStatus,
@@ -110,7 +118,9 @@ export type CreateOwnerOnboardingRequest = z.infer<typeof createOwnerOnboardingR
 export const resumeOwnerOnboardingRequest = z.object({}).strict();
 export type ResumeOwnerOnboardingRequest = z.infer<typeof resumeOwnerOnboardingRequest>;
 
-export const abandonOwnerOnboardingRequest = z.object({ reason: safeReason }).strict();
+export const abandonOwnerOnboardingRequest = z
+  .object({ reason_code: onboardingAbandonReasonCode })
+  .strict();
 export type AbandonOwnerOnboardingRequest = z.infer<typeof abandonOwnerOnboardingRequest>;
 
 export const chooseOnboardingPlanRequest = z.object({ plan_code: planCode }).strict();

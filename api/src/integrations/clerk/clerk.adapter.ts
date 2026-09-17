@@ -42,7 +42,12 @@ export interface ClerkOrganizationInvitation {
   expiresAt: Date;
 }
 
+export interface ClerkUserVerificationState {
+  primaryEmailVerified: boolean;
+}
+
 export interface ClerkServerAdapter {
+  getUserVerificationState(userId: string): Promise<ClerkUserVerificationState>;
   createOrganization(input: CreateClerkOrganizationInput): Promise<ClerkOrganization>;
   getOrganization(organizationId: string): Promise<ClerkOrganization>;
   getOrganizationMembership(
@@ -64,6 +69,7 @@ export interface ClerkServerAdapter {
  * importing or mocking Clerk throughout the application.
  */
 export type ClerkProviderClient = {
+  users: Pick<ClerkClient['users'], 'getUser'>;
   organizations: Pick<
     ClerkClient['organizations'],
     | 'createOrganization'
@@ -235,6 +241,20 @@ export function createClerkServerAdapter(
   }),
 ): ClerkServerAdapter {
   return {
+    async getUserVerificationState(userId) {
+      const parsed = parseInput(providerId, userId, 'Clerk user ID');
+      return providerCall(async () => {
+        const user = await client.users.getUser(parsed);
+        const primaryId = user.primaryEmailAddressId;
+        const primary = primaryId
+          ? user.emailAddresses.find((email) => email.id === primaryId)
+          : undefined;
+        return {
+          primaryEmailVerified: primary?.verification?.status === 'verified',
+        };
+      });
+    },
+
     async createOrganization(input) {
       const parsed = parseInput(organizationInput, input, 'Clerk organization');
       return providerCall(async () => {

@@ -10,6 +10,7 @@ import { clerkWebhookRouter } from './modules/webhooks/clerk.routes.js';
 import { onboardingRouter } from './modules/onboarding/onboarding.routes.js';
 import { logger } from './shared/logger.js';
 import { sendError } from './shared/response.js';
+import { ValidationError } from './shared/errors.js';
 
 const pinoHttp = pinoHttpExport as unknown as (options: Record<string, unknown>) => express.RequestHandler;
 
@@ -18,11 +19,12 @@ const pinoHttp = pinoHttpExport as unknown as (options: Record<string, unknown>)
  * later ones have set anything up:
  *   1. request-id      — every later log line and every error response needs this.
  *   2. pino-http        — structured request logging; relies on request-id already being set.
- *   3. clerkContext      — attaches Clerk's verifier; does not itself reject (public routes exist).
- *   4. /webhooks/clerk   — raw bytes must reach Clerk/Svix before the global JSON parser.
- *   5. express.json()   — bounded body size (TRD §4: "Restrict content types, body size").
- *   6. /api/v1 routes    — each route composes its own auth/tenant/idempotency middleware.
- *   7. errorHandler      — must be LAST; Express only treats a 4-arg handler as error middleware
+ *   3. onboarding parser — raw owner-command bytes are bounded before provider auth/parsing.
+ *   4. clerkContext     — attaches Clerk's verifier; does not itself reject (public routes exist).
+ *   5. /webhooks/clerk  — raw bytes must reach Clerk/Svix before the global JSON parser.
+ *   6. express.json()   — bounded body size (TRD §4: "Restrict content types, body size").
+ *   7. /api/v1 routes   — each route composes its own auth/tenant/idempotency middleware.
+ *   8. errorHandler     — must be LAST; Express only treats a 4-arg handler as error middleware
  *                          when it is registered after every route that can throw.
  */
 export function createApp(): Express {
@@ -46,6 +48,22 @@ export function createApp(): Express {
       },
     }),
   );
+  const onboardingJson = express.json({ limit: '16kb', type: 'application/json' });
+  app.use('/api/v1/onboarding', (req, res, next) => {
+    onboardingJson(req, res, (error) => {
+      if (error && typeof error === 'object' && 'type' in error) {
+        if (error.type === 'entity.too.large') {
+          next(new ValidationError('Request body is too large.'));
+          return;
+        }
+        if (error.type === 'entity.parse.failed') {
+          next(new ValidationError('Request body is invalid.'));
+          return;
+        }
+      }
+      next(error);
+    });
+  });
   app.use(clerkContext);
   app.use(clerkWebhookRouter);
   app.use(express.json({ limit: '256kb' }));

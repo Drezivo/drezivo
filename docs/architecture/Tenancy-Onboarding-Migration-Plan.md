@@ -16,6 +16,7 @@ TBF-010 onward own the reviewed SQL migrations and service behavior.
 | `account`                                                                  | Global            | The authenticated Clerk subject reads only its own row through transaction-local `app.principal_id`. No profile mirror.                                            |
 | `organization_onboarding`                                                  | Global pre-tenant | The creator reads only its own record. Operators use separately authorized, audited paths.                                                                         |
 | `onboarding_payment_verification`                                          | Global pre-tenant | Owner receives a safe status projection only. Operator payment evidence is not broadly readable.                                                                   |
+| `owner_onboarding_attempt`                                                 | Global pre-tenant | Account-locked single-flight provider state. Exact signed marker repair may update only the matching attempt.                                                     |
 | `bootstrap_idempotency_record`                                             | Global pre-tenant | Scoped to the authenticated account and operation. It never reuses tenant-scoped idempotency.                                                                      |
 | `global_audit_event`                                                       | Global pre-tenant | Append-only account/operator/system history. Owner reads are account-scoped; operator/system reads require explicit context and filters.                           |
 | `webhook_inbox`                                                            | Global pre-tenant | Exact-raw verified provider-event dedupe. API inserts only through a duplicate-safe function; worker reads/transitions rows and neither runtime role deletes them. |
@@ -34,6 +35,8 @@ tenancy-onboarding expansion. It creates:
   unique index permitting only one `incomplete` or `payment_pending` row per account.
 - immutable `onboarding_payment_verification`, global `bootstrap_idempotency_record`, and
   append-only `global_audit_event`.
+- `owner_onboarding_attempt` for account-locked, duplicate-safe Clerk organization creation and
+  exact provider-outcome recovery.
 - tenant-owned `membership_invitation`, including protected recipient lookup material, seven-day
   expiry, provider correlation, and a partial unique pending-intent index.
 - nullable `clerk_membership_id` plus unique provider correlation on `membership`.
@@ -52,17 +55,29 @@ tenant, membership, subscription, or trial.
 
 TBF-021 adds the forward-only `0014_owner_onboarding_details.sql` migration. It stores the
 business display name and optional lowercase Clerk slug requested by the owner. The API exposes
-these fields through safe onboarding projections while keeping Clerk identifiers and profile
-fields inside the provider boundary. The owner commands are `POST /api/v1/onboarding`,
+these fields plus the opaque `clerk_org_id` needed for Clerk active-organization selection; it
+never exposes Clerk profile fields. The owner commands are `POST /api/v1/onboarding`,
 `GET /api/v1/onboarding/current`, and `POST /api/v1/onboarding/:onboardingId/abandon`.
+
+Production hardening adds `0015_owner_onboarding_attempt.sql`. A verified primary email is
+required before account or provider mutation. An account row lock creates one durable provider
+attempt containing the original name, slug, idempotency record, and marker UUID before the API
+calls Clerk. Unknown provider outcomes remain in progress and are repaired only by an exact
+signed organization-created marker; they are never automatically retried into a second Clerk
+organization. Abandonment accepts only the closed reason codes `not_now`, `wrong_details`,
+`payment_concern`, and `other`.
 
 Every owner mutation requires `Idempotency-Key` and uses `bootstrap_idempotency_record`, not the
 tenant-scoped ledger. A seven-day idempotency retention window is used. The create command allows
 5 requests per minute per verified user, current-state reads allow 30, abandonment allows 10,
-and the JSON body is capped at 16 KiB. Incomplete onboarding is not automatically expired in
+and the raw JSON body is capped at 16 KiB before parsing. Incomplete onboarding is not automatically expired in
 this phase. Explicit abandonment retains history and permits a replacement. Provider success
 followed by local write failure is repaired by the signed `organization.created` webhook marker;
 the webhook never provisions a tenant or starts a trial.
+
+Invitation recipients are explicitly outside this command boundary until TBF-040/042 provides
+local invitation persistence and claim state; they must not be treated as owners by a future
+owner-eligibility implementation.
 
 ## Required constraints
 
