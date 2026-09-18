@@ -6,7 +6,8 @@
     {"id":"drezivo-front-004","type":"file","x":420,"y":220,"width":300,"height":180,"file":"03-Repositories/Repository Map.md","subpath":"#app-and-web"},
     {"id":"drezivo-docs-005","type":"file","x":840,"y":0,"width":300,"height":180,"file":"02-Architecture/Drezivo Architecture.md"},
     {"id":"drezivo-tenancy-foundation-006","type":"file","x":1220,"y":0,"width":360,"height":220,"file":"02-Architecture/Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation.md"},
-    {"id":"drezivo-api-boundaries-007","type":"file","x":1220,"y":280,"width":360,"height":220,"file":"02-Architecture/API Module Boundaries and Layering.md"}
+    {"id":"drezivo-api-boundaries-007","type":"file","x":1220,"y":280,"width":360,"height":220,"file":"02-Architecture/API Module Boundaries and Layering.md"},
+    {"id":"drezivo-tbf030-bootstrap-008","type":"text","x":1640,"y":0,"width":420,"height":240,"text":"TBF-030\nPOST /api/v1/onboarding/{onboardingId}/bootstrap\n\nOne transaction creates tenant, Main Branch, Owner grant, draft storefront, trial subscription, audits, and tenant.bootstrapped outbox event.\n\nStrict empty body + Idempotency-Key + matching active Clerk organization."}
   ],
   "edges": [
     {"id":"edge-home-contracts-01","fromNode":"drezivo-home-001","fromSide":"right","toNode":"drezivo-contracts-02","toSide":"left","toEnd":"arrow","label":"maps"},
@@ -14,6 +15,8 @@
     {"id":"edge-api-front-03","fromNode":"drezivo-api-003","fromSide":"right","toNode":"drezivo-front-004","toSide":"left","toEnd":"arrow","label":"REST"},
     {"id":"edge-api-docs-04","fromNode":"drezivo-api-003","fromSide":"right","toNode":"drezivo-docs-005","toSide":"left","toEnd":"arrow","label":"implements"},
     {"id":"edge-docs-tenancy-05","fromNode":"drezivo-docs-005","fromSide":"right","toNode":"drezivo-tenancy-foundation-006","toSide":"left","toEnd":"arrow","label":"defines"},
-    {"id":"edge-docs-api-boundaries-06","fromNode":"drezivo-docs-005","fromSide":"right","toNode":"drezivo-api-boundaries-007","toSide":"left","toEnd":"arrow","label":"defines"}
+    {"id":"edge-docs-api-boundaries-06","fromNode":"drezivo-docs-005","fromSide":"right","toNode":"drezivo-api-boundaries-007","toSide":"left","toEnd":"arrow","label":"defines"},
+    {"id":"edge-tenancy-tbf030-07","fromNode":"drezivo-tenancy-foundation-006","fromSide":"right","toNode":"drezivo-tbf030-bootstrap-008","toSide":"left","toEnd":"arrow","label":"bootstraps"},
+    {"id":"edge-api-tbf030-08","fromNode":"drezivo-api-003","fromSide":"right","toNode":"drezivo-tbf030-bootstrap-008","toSide":"left","toEnd":"arrow","label":"implements"}
   ]
 }

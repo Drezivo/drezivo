@@ -1,13 +1,13 @@
 # Tenancy and onboarding migration plan
 
-**Status:** approved Phase 0 migration design with additive Phase 2 owner identity migration applied in code
+**Status:** approved tenancy/onboarding foundation with additive owner identity and tenant bootstrap migrations applied in code
 **Owner:** API and database maintainers  
 **Source:** `Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation` in the Second Brain, 16 September 2026  
-**Updated:** 16 September 2026  
+**Updated:** 18 September 2026
 **Related:** [TRD](Drezivo-TRD.md), [Data Model](Drezivo-Data-Model.md), [ERD](Drezivo-ERD.dbml), [migration runbook](../runbooks/migrations.md)
 
-This document defines the forward-only database work for TBF-002. It does not create the tables.
-TBF-010 onward own the reviewed SQL migrations and service behavior.
+This document defines the forward-only database work for tenancy onboarding. Reviewed SQL
+migrations and service behavior are owned by their corresponding TBF tasks.
 
 ## Scope and ownership
 
@@ -22,6 +22,15 @@ TBF-010 onward own the reviewed SQL migrations and service behavior.
 | `webhook_inbox`                                                            | Global pre-tenant | Exact-raw verified provider-event dedupe. API inserts only through a duplicate-safe function; worker reads/transitions rows and neither runtime role deletes them. |
 | `membership_invitation`                                                    | Tenant-owned      | Standard tenant RLS plus local Owner authorization. Protected recipient data never appears in ordinary logs or list projections.                                   |
 | `membership`, `subscription`, `subscription_event`, `subscription_payment` | Tenant-owned      | Existing tenant RLS applies. New lifecycle behavior is gated in services, not inferred from Clerk claims.                                                          |
+
+TBF-031 adds the actor/workspace resolution boundary after bootstrap. Migration
+`0017_actor_workspace_resolution.sql` adds an index on `membership.clerk_user_id` and a narrow
+`resolve_actor_workspaces` SECURITY DEFINER function. The function accepts only transaction-local
+account principal context, returns safe workspace projections for active local memberships, and
+cannot run while a tenant GUC is set. The API enters tenant scope only after resolving the active
+Clerk organization, then reads the local membership, active branches, selected-branch grant,
+current subscription, and positive plan entitlements under normal forced RLS. No global RLS
+exception is granted to the HTTP process, and no Clerk role/claim is treated as authorization.
 
 ## Expand migration design
 
@@ -78,6 +87,25 @@ the webhook never provisions a tenant or starts a trial.
 Invitation recipients are explicitly outside this command boundary until TBF-040/042 provides
 local invitation persistence and claim state; they must not be treated as owners by a future
 owner-eligibility implementation.
+
+TBF-030 adds the authenticated owner bootstrap command at
+`POST /api/v1/onboarding/{onboardingId}/bootstrap`. It requires a strict empty body, the active
+Clerk organization matching the onboarding record, and an account-scoped `Idempotency-Key`.
+Migration `0016_tenant_bootstrap.sql` seeds immutable version-1 Starter, Professional, and Business
+plans and their 75/250/1,000 physical-asset and 1/3/10 Front Desk-seat limits. The winning
+database transaction creates the tenant, `Main Branch`, Owner membership/grant, draft storefront,
+trialing subscription, `trial_started` event, both audit records, and a `tenant.bootstrapped`
+outbox event, then finalizes the safe response. A no-op worker handler acknowledges that event
+until later consumers are introduced.
+
+TBF-031 adds `GET /api/v1/workspaces` and `GET /api/v1/actor-context`. Workspace discovery is
+account-scoped and returns only provisioned tenants with an active local membership. Actor context
+returns the current tenant, membership, all active branches and safe grants, the selected branch,
+subscription summary, and numeric entitlements. `X-Drezivo-Branch-Id` is only a verified selector;
+the Clerk token organization remains the tenant authority. Tenant lifecycle actions use one shared
+policy matrix: restricted and cancelled workspaces are resolved, then only explicitly permitted
+actions continue. Frontend workspace switching calls Clerk `setActive` with the opaque local
+organization ID and clears the branch selector.
 
 ## Required constraints
 

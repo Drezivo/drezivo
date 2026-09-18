@@ -2,6 +2,7 @@ import { config } from './config/index.js';
 import { closePool } from './db/client.js';
 import { outboxDispatcher } from './worker/handlers/outbox-dispatcher.js';
 import { expireDueHoldsForAllTenants } from './worker/handlers/hold-expirer.js';
+import { handleTenantBootstrapped } from './worker/handlers/tenant-bootstrap.js';
 import { WorkerRunner } from './worker/runner.js';
 import { logger } from './shared/logger.js';
 
@@ -18,6 +19,7 @@ import { logger } from './shared/logger.js';
  * given, not a code branch.
  */
 const runner = new WorkerRunner({
+  'tenant.bootstrapped': handleTenantBootstrapped,
   'reservation.held': outboxDispatcher,
   'reservation.confirmed': outboxDispatcher,
   'reservation.hold_expired': outboxDispatcher,

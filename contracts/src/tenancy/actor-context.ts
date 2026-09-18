@@ -8,11 +8,33 @@
  */
 import { z } from 'zod';
 
-import { branchGrant, membership, tenant } from './tenant';
+import { paginatedResponse } from '../common/pagination';
+import { isoInstant } from '../common/time';
+import { branch, branchGrant, membership, membershipRole, tenant } from './tenant';
+import { subscriptionSummary } from './onboarding';
 
 export const actorContext = z.object({
   tenant,
   membership,
+  branches: z.array(branch).min(1),
+  active_branch_id: branch.shape.id,
   branch_grants: z.array(branchGrant).min(1),
+  subscription: subscriptionSummary,
+  entitlements: z.object({
+    physical_assets_max: z.number().int().positive(),
+    frontdesk_seats_max: z.number().int().positive(),
+  }),
 });
 export type ActorContext = z.infer<typeof actorContext>;
+
+/** Safe workspace switcher projection. It never includes membership IDs or profile data. */
+export const workspaceSummary = z.object({
+  tenant,
+  clerk_org_id: z.string().trim().min(1).max(200),
+  role: membershipRole,
+  membership_updated_at: isoInstant,
+});
+export type WorkspaceSummary = z.infer<typeof workspaceSummary>;
+
+export const workspaceList = paginatedResponse(workspaceSummary);
+export type WorkspaceList = z.infer<typeof workspaceList>;

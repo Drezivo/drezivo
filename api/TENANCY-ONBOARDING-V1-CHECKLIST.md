@@ -205,38 +205,53 @@ or billing tasks as authority for this work.
 
 ## Phase 3: Tenant bootstrap, context, and entitlements
 
-- [ ] **TBF-030 — Implement idempotent tenant bootstrap**
+- [x] **TBF-030 — Implement idempotent tenant bootstrap**
   - **Depends on:** TBF-021, TBF-012, TBF-001.
   - **Outcome:** A trial-eligible onboarding atomically creates tenant, default branch, Owner
     membership/grant, draft storefront, subscription, and trial event.
   - **Acceptance:**
-    - [ ] Database time starts the seven-day trial.
-    - [ ] Account trial state and current-owned-tenant link are updated in the same winning
+    - [x] Database time starts the seven-day trial.
+    - [x] Account trial state and current-owned-tenant link are updated in the same winning
           transaction.
-    - [ ] Provisioned onboarding cannot bootstrap again.
-    - [ ] Every tenant-owned row has server-resolved tenant scope and required RLS protection.
-  - **Tests/evidence:** Sequential/concurrent bootstrap creates exactly one complete tenant graph.
+    - [x] Provisioned onboarding cannot bootstrap again.
+    - [x] Every tenant-owned row has server-resolved tenant scope and required RLS protection.
+    - [x] The strict empty-body command requires the authenticated active Clerk organization and
+          account-scoped idempotency key.
+    - [x] The complete graph includes the default branch, Owner grant, draft storefront,
+          trialing subscription, immutable trial event, tenant audit, and outbox event.
+  - **Tests/evidence:** `tests/integration/tenant-bootstrap.test.ts` covers complete graph creation,
+    concurrent same-key replay, organization mismatch concealment, database-time trial period, and
+    single-graph assertions. Full PostgreSQL evidence requires the disposable `TEST_DATABASE_URL`.
 
-- [ ] **TBF-031 — Update actor, tenant, and workspace resolution**
+- [x] **TBF-031 — Update actor, tenant, and workspace resolution**
   - **Depends on:** TBF-030.
   - **Outcome:** Protected routes resolve current Clerk identity, active organization, local active
     membership, branch grant, tenant state, and entitlement server-side.
   - **Acceptance:**
-    - [ ] Workspace listing shows only provisioned businesses with active local membership.
-    - [ ] Missing/mismatched/removed/suspended membership and unprovisioned organization deny.
-    - [ ] A user can be Front Desk in one tenant and Owner in its single owned tenant.
-    - [ ] Cross-tab organization switching uses the active organization on each request.
-    - [ ] A restricted tenant reaches the shared action-policy gate, not active or blanket
-          cancelled handling. Only explicitly approved settlement, return, refund, and export
-          paths may continue.
-  - **Tests/evidence:** Cross-tenant, wrong-active-org, revoked-membership, and cross-tab tests.
+    - [x] `GET /api/v1/workspaces` returns only provisioned tenants with an active local
+          membership through the narrow `resolve_actor_workspaces` database function.
+    - [x] `GET /api/v1/actor-context` derives tenant authority from the Clerk token organization,
+          then resolves active membership, branches, selected-branch grants, subscription, and
+          positive numeric entitlements under forced RLS.
+    - [x] Missing/mismatched/removed/suspended membership, unknown organization, missing default
+          branch, and invalid branch selectors fail closed without cross-tenant disclosure.
+    - [x] A user can be Front Desk in one tenant and Owner in its single owned tenant; role and
+          branch grants are local database state, never Clerk claims.
+    - [x] Workspace switching uses Clerk `setActive` with the opaque organization ID from the
+          server projection and clears the branch selector before refetching context.
+    - [x] Restricted and cancelled tenants resolve to the shared action-policy gate; they are not
+          blanket-denied by context middleware and do not inherit active permissions.
+  - **Tests/evidence:** Unit policy tests and the real PostgreSQL suite pass as the non-superuser
+    `drezivo_app` role. `tests/integration/actor-workspace-resolution.test.ts` covers
+    active-membership listing, wrong-principal/tenant-scoped RLS isolation, branch selection,
+    entitlements, and lifecycle resolution.
 
-- [ ] **TBF-032 — Seed plans and build the entitlement service**
+- [ ] **TBF-032 — Build the entitlement service over seeded plans**
   - **Depends on:** TBF-030.
   - **Outcome:** Versioned plans expose correct price and quota data through one server service.
   - **Acceptance:**
-    - [ ] Seed Starter/PHP 300/75 assets/1 Front Desk, Professional/PHP 499/250/3, and
-          Business/PHP 1,299/1,000/10 using minor units.
+    - [ ] Resolve the immutable TBF-030 Starter/Professional/Business v1 seed rows and reject
+          unknown or conflicting plan definitions.
     - [ ] Entitlement resolution rejects unknown/inactive plan versions.
     - [ ] Service exposes concurrency-safe guards for seat and active-asset quota.
     - [ ] Asset import preview remains read-only; any future commit/activation calls the same

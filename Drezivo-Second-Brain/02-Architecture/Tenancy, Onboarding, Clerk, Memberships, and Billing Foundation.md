@@ -164,7 +164,9 @@ operational capacity. Only verified operator payment can create the replacement 
 
 ### Tenant bootstrap
 
-For a trial-eligible owner, plan selection and completion run one idempotent transaction:
+The owner completes `POST /api/v1/onboarding/{onboardingId}/bootstrap` with a strict empty body and
+an account-scoped `Idempotency-Key`. The request must carry the same active Clerk organization as
+the onboarding record. For a trial-eligible owner, completion runs one idempotent transaction:
 
 1. lock the account and onboarding record;
 2. verify no trial is consumed and no current owned tenant exists;
@@ -175,10 +177,21 @@ For a trial-eligible owner, plan selection and completion run one idempotent tra
 7. set `trial_ends_at` from database time plus seven calendar days;
 8. append immutable `trial_started` event;
 9. mark account trial consumed and onboarding provisioned; and
-10. write audit and outbox records inside the same transaction.
+10. write global and tenant audit records plus a `tenant.bootstrapped` outbox record inside the
+    same transaction; and
+11. return the tenant, default branch, Owner membership, branch grants, and subscription summary.
+
+Bootstrap creates `Main Branch` (`main`) in `Asia/Manila` with empty address and operating-hours
+placeholders. A supplied slug is preserved exactly. When no slug was supplied, the server
+normalizes the organization name and adds a stable onboarding-derived suffix only if the shared
+tenant/storefront slug namespace is occupied. The Starter, Professional, and Business version-1
+plan rows are seeded before bootstrap can run, with 75/250/1,000 physical-asset limits and
+1/3/10 Front Desk seats.
 
 Duplicate requests return the original result. Concurrent requests create at most one tenant,
 membership, subscription, and trial. The first business needs no card or payment account.
+The outbox worker currently acknowledges `tenant.bootstrapped` without an external side effect;
+later consumers may subscribe without changing the bootstrap transaction.
 
 ### One owned business and closure
 
@@ -362,6 +375,7 @@ Clerk references consulted 2026-09-16:
 | Subscription and events         | Tenant-owned                      | One current subscription; immutable history; database-time transitions.                                           |
 | Webhook inbox                   | Global                            | Provider/event identity unique before tenant resolution; verified raw payload handling.                           |
 | Outbox event                    | Tenant-owned or explicitly global | Stable dedupe key, lease, bounded retry, terminal failure visibility.                                             |
+| Actor/workspace resolver        | Read boundary                     | `GET /workspaces` returns only provisioned tenants with active local membership; `GET /actor-context` resolves the token organization, selected branch grant, subscription, and numeric entitlements. |
 
 Tenant-owned rows retain explicit scope, same-tenant foreign keys, and row-level security.
 Pre-tenant records never appear in tenant listing routes and are filtered by verified creator or
@@ -386,6 +400,22 @@ implementation. Intended command groups are:
 Tenant-owned requests derive tenant from verified active Clerk organization and local membership.
 They never accept tenant ID, Clerk organization ID, role, seat count, entitlement, or plan price as
 client authority.
+
+### TBF-031 actor and workspace resolution
+
+Clerk's token `orgId` is the tenant authority for a protected request. A browser may ask for a
+branch with `X-Drezivo-Branch-Id`, but the API treats that value only as a selector among active
+branches already granted to the local membership. The API ignores legacy organization headers and
+does not trust Clerk roles or claims for Drezivo authorization.
+
+Workspace discovery is intentionally separate from tenant context. The API uses a narrow
+`resolve_actor_workspaces` SECURITY DEFINER function while the transaction is in the account
+principal namespace; the function returns only safe tenant and local-role projections for active
+memberships and refuses to run with a tenant GUC set. Once an organization is selected, the API
+enters normal forced-RLS tenant scope and resolves membership, active branches, all safe branch
+grants, subscription status, and positive plan entitlements. Restricted and cancelled tenants
+still resolve; the shared action policy decides whether a requested operation is allowed. A local
+workspace switch clears the branch selector before Clerk `setActive` and subsequent context reads.
 
 ## Security and operational requirements
 

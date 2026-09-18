@@ -42,6 +42,18 @@ export class ForbiddenError extends AppError {
   readonly code: ErrorCode = 'FORBIDDEN';
 }
 
+/** 409 — the tenant is temporarily restricted; the shared action policy decides what survives. */
+export class TenantRestrictedError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'TENANT_RESTRICTED';
+}
+
+/** 409 — the tenant is permanently closed; only explicitly allowed settlement/export reads survive. */
+export class TenantCancelledError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'TENANT_CANCELLED';
+}
+
 /** 404 — also used for any object that exists but belongs to a different tenant. */
 export class NotFoundError extends AppError {
   readonly status = 404;
