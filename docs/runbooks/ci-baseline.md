@@ -10,8 +10,8 @@ integration tests, and the API build. It also builds the backend container on pu
 `main` pushes. Version tags publish that image to GitHub Container Registry with the server and
 worker entrypoints in one image.
 
-The secrets job also runs Gitleaks. Repositories owned by a GitHub organization must provide the
-`GITLEAKS_LICENSE` repository secret required by that action.
+The secrets job also runs the standalone Gitleaks CLI in a read-only container mount, so it does
+not require the commercial Gitleaks Action license or an additional repository secret.
 
 This workflow does not deploy to a runtime host. The container host is still a documented decision
 point, and production deployment requires the environment-specific approval, migration plan,
