@@ -122,6 +122,17 @@ provider invitations; cancellations compensate provider state; stale dispatch ve
 The worker now claims only due rows and requires its lease token for completion and dead-lettering.
 Membership-removal dispatch remains TBF-043 and invitation claim remains TBF-042.
 
+TBF-042 is implemented as the verified invitation-claim boundary (integration evidence pending):
+the claim route requires a verified user, active Clerk organization, strict empty body, and
+Idempotency-Key. The service locks the tenant and invitation, verifies the accepted provider
+invitation through the exact TBF-041 dispatch marker/current version and `org:member` role,
+restores or creates one local Front Desk membership with the fixed default grant, accepts the
+invitation, persists provider membership correlation, and returns actor context. Accepted
+invitation webhook reconciliation reuses the same claim core; membership webhooks alone never
+grant local access. Generic failures, user/network limits, tenant RLS, and provider rollback
+remain acceptance requirements. PostgreSQL evidence is still required before marking the task
+complete.
+
 ---
 
 ## HIGH (P0) — owner workspace transactional core

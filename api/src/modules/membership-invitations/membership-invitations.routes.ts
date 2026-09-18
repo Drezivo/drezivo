@@ -6,14 +6,18 @@ import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
 import {
   cancelMembershipInvitationController,
+  claimMembershipInvitationController,
   createMembershipInvitationController,
   listMembershipInvitationsController,
   resendMembershipInvitationController,
 } from './membership-invitations.controller.js';
 import {
   requireMembershipInvitationIdempotencyKey,
+  requireMembershipInvitationClaimIdempotencyKey,
+  requireActiveClerkOrganization,
   requireMembershipInvitationOwner,
   validateCreateMembershipInvitation,
+  validateClaimMembershipInvitationBody,
   validateEmptyInvitationBody,
   validateMembershipInvitationPagination,
   validateMembershipInvitationTarget,
@@ -39,7 +43,31 @@ const readRateLimit = rateLimit({
   keyOf: (req) => req.clerkPrincipal?.clerkUserId ?? req.ip ?? 'unknown',
 });
 
+const claimUserRateLimit = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyOf: (req) => req.clerkPrincipal?.clerkUserId ?? req.ip ?? 'unknown',
+});
+
+const claimNetworkRateLimit = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  keyOf: (req) => req.ip ?? 'unknown',
+});
+
 const invitationPolicy = requireTenantAction('invitation');
+
+membershipInvitationsRouter.post(
+  '/membership-invitations/:invitationId/claim',
+  requireVerifiedStaffAuth,
+  claimUserRateLimit,
+  claimNetworkRateLimit,
+  validateMembershipInvitationTarget,
+  validateClaimMembershipInvitationBody,
+  requireActiveClerkOrganization,
+  requireMembershipInvitationClaimIdempotencyKey,
+  claimMembershipInvitationController,
+);
 
 membershipInvitationsRouter.get(
   '/membership-invitations',

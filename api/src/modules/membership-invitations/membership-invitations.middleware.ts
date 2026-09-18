@@ -2,9 +2,10 @@ import type { RequestHandler } from 'express';
 
 import { idempotencyKey as idempotencyKeySchema } from '@drezivo/contracts';
 
-import { ForbiddenError, ValidationError } from '../../shared/errors.js';
+import { ForbiddenError, NotFoundError, ValidationError } from '../../shared/errors.js';
 import {
   cancelMembershipInvitationRequest,
+  claimMembershipInvitationRequest,
   createMembershipInvitationRequest,
   membershipInvitationParams,
   paginationRequest,
@@ -14,6 +15,7 @@ import {
 declare module 'express-serve-static-core' {
   interface Request {
     membershipInvitationIdempotencyKey?: string;
+    membershipInvitationClaimIdempotencyKey?: string;
   }
 }
 
@@ -70,6 +72,36 @@ export const validateEmptyInvitationBody: RequestHandler = (req, _res, next): vo
     return;
   }
   req.body = parsed.data;
+  next();
+};
+
+export const validateClaimMembershipInvitationBody: RequestHandler = (req, _res, next): void => {
+  if (!claimMembershipInvitationRequest.safeParse(req.body).success) {
+    next(new ValidationError('Invitation claim request is invalid.'));
+    return;
+  }
+  next();
+};
+
+export const requireMembershipInvitationClaimIdempotencyKey: RequestHandler = (
+  req,
+  _res,
+  next,
+): void => {
+  const parsed = idempotencyKeySchema.safeParse(req.header('Idempotency-Key')?.trim());
+  if (!parsed.success) {
+    next(new ValidationError('A valid Idempotency-Key header is required.'));
+    return;
+  }
+  req.membershipInvitationClaimIdempotencyKey = parsed.data;
+  next();
+};
+
+export const requireActiveClerkOrganization: RequestHandler = (req, _res, next): void => {
+  if (!req.clerkPrincipal?.clerkOrgId) {
+    next(new NotFoundError('The invitation is not available.'));
+    return;
+  }
   next();
 };
 

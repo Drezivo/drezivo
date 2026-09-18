@@ -323,18 +323,26 @@ or billing tasks as authority for this work.
   - **Tests/evidence:** Adapter/dispatcher and worker tests are added; disposable PostgreSQL
         concurrency/RLS evidence remains open when `TEST_DATABASE_URL` is unavailable.
 
-- [ ] **TBF-042 — Implement verified invitation claim**
+- [ ] **TBF-042 — Implement verified invitation claim** *(implementation complete; integration evidence open)*
   - **Depends on:** TBF-040, TBF-041, TBF-022.
   - **Outcome:** Accepted Clerk invitation activates one local Front Desk membership and grant.
   - **Acceptance:**
-    - [ ] Claim verifies current authenticated user, active organization, Clerk membership, local
-          invitation correlation, expiry, role, and seat state.
-    - [ ] Duplicate claim and duplicate webhook event activate one membership.
-    - [ ] Unknown provider-created membership does not grant Drezivo access.
-    - [ ] User and network rate limits apply. Generic failures do not distinguish invalid, expired,
-          revoked, or already-claimed invitations to an unauthorized caller.
-  - **Tests/evidence:** Wrong organization, expired/cancelled invite, duplicate, webhook-order,
-    and rate-limit tests.
+    - [x] Claim verifies the authenticated user, active organization, accepted Clerk invitation,
+          exact dispatch marker/current version, `org:member` role, local expiry, and seat state.
+    - [x] Duplicate claims and duplicate accepted-invitation webhook events converge on one local
+          Front Desk membership, default branch grant, accepted invitation, and provider IDs.
+    - [x] Unknown provider-created memberships never grant Drezivo access; membership webhooks
+          alone are not an access path.
+    - [x] User and network rate limits apply. Generic failures do not distinguish invalid, expired,
+          revoked, foreign, or already-claimed invitations to an unauthorized caller.
+    - [x] Suspended/removed Front Desk memberships may be restored only through a matching claim;
+          Owner memberships are never demoted or overwritten.
+    - [x] Migration `0020_verified_invitation_claim.sql` adds nullable provider membership
+          correlation with a tenant-scoped uniqueness constraint.
+  - **Tests/evidence:** Focused contract, adapter, claim-service, and worker reconciliation tests
+        are present. Wrong-organization, expiry/cancellation, duplicate, webhook-order, rate-limit,
+        RLS, and provider-failure PostgreSQL evidence remains open until `TEST_DATABASE_URL` is
+        available; leave this task unchecked until that suite passes.
 
 - [ ] **TBF-043 — Implement local-first membership removal and approved owner transfer**
   - **Depends on:** TBF-041, TBF-042.

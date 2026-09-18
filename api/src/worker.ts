@@ -5,6 +5,7 @@ import { expireDueHoldsForAllTenants } from './worker/handlers/hold-expirer.js';
 import { handleTenantBootstrapped } from './worker/handlers/tenant-bootstrap.js';
 import { reconcileDueSubscriptionsForAllTenants } from './worker/handlers/subscription-lifecycle.js';
 import { handleMembershipInvitationDispatch } from './modules/membership-invitations/membership-invitations.dispatcher.js';
+import { reconcileDueClerkWebhooks } from './worker/handlers/clerk-webhook-reconciler.js';
 import { WorkerRunner } from './worker/runner.js';
 import { logger } from './shared/logger.js';
 
@@ -31,6 +32,7 @@ const runner = new WorkerRunner({
 
 let holdExpirySweepTimer: NodeJS.Timeout | undefined;
 let subscriptionLifecycleSweepTimer: NodeJS.Timeout | undefined;
+let clerkWebhookSweepTimer: NodeJS.Timeout | undefined;
 
 function scheduleHoldExpirySweep(): void {
   holdExpirySweepTimer = setInterval(() => {
@@ -48,12 +50,21 @@ function scheduleSubscriptionLifecycleSweep(): void {
   }, config.WORKER_POLL_INTERVAL_MS);
 }
 
+function scheduleClerkWebhookSweep(): void {
+  clerkWebhookSweepTimer = setInterval(() => {
+    reconcileDueClerkWebhooks().catch((error: unknown) => {
+      logger.error({ err: error }, 'Clerk webhook reconciliation failed; will retry on next interval');
+    });
+  }, config.WORKER_POLL_INTERVAL_MS);
+}
+
 logger.info({ enabled: config.WORKER_ENABLED }, 'worker process starting');
 if (!config.WORKER_ENABLED) {
   logger.warn('worker disabled by configuration; no jobs will be claimed');
 } else {
   scheduleHoldExpirySweep();
   scheduleSubscriptionLifecycleSweep();
+  scheduleClerkWebhookSweep();
 }
 if (config.WORKER_ENABLED) runner.start().catch((error: unknown) => {
   logger.error({ err: error }, 'worker runner crashed');
@@ -68,6 +79,9 @@ async function shutdown(signal: string): Promise<void> {
   }
   if (subscriptionLifecycleSweepTimer) {
     clearInterval(subscriptionLifecycleSweepTimer);
+  }
+  if (clerkWebhookSweepTimer) {
+    clearInterval(clerkWebhookSweepTimer);
   }
   await closePool();
   process.exit(0);

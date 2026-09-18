@@ -90,11 +90,12 @@ export async function assertFrontDeskSeatCapacity(
   client: PoolClient,
   tenantId: string,
   additional: number,
+  options?: { excludeInvitationId?: string },
 ): Promise<QuotaCheckResult> {
   validateAdditional(additional);
   await requireLockedTenant(client, tenantId);
   const entitlements = await resolveTenantEntitlements(client, tenantId);
-  const current = await countReservedFrontdeskSeats(client, tenantId);
+  const current = await countReservedFrontdeskSeats(client, tenantId, options?.excludeInvitationId);
   return ensureCapacity('frontdesk_seats', current, additional, entitlements.frontdeskSeatsMax);
 }
 

@@ -101,6 +101,7 @@ export async function countActiveFrontdeskMemberships(
 export async function countReservedFrontdeskSeats(
   client: PoolClient,
   tenantId: string,
+  excludeInvitationId?: string,
 ): Promise<number> {
   const result = await client.query<{ count: number }>(
     `SELECT (
@@ -109,10 +110,11 @@ export async function countReservedFrontdeskSeats(
          WHERE tenant_id = $1 AND role = 'frontdesk' AND status = 'active')
        +
        (SELECT count(*)::int
-          FROM membership_invitation
-         WHERE tenant_id = $1 AND status = 'pending' AND expires_at > now())
+         FROM membership_invitation
+         WHERE tenant_id = $1 AND status = 'pending' AND expires_at > now()
+           AND ($2::uuid IS NULL OR id <> $2::uuid))
      )::int AS count`,
-    [tenantId],
+    [tenantId, excludeInvitationId ?? null],
   );
   return result.rows[0]?.count ?? 0;
 }

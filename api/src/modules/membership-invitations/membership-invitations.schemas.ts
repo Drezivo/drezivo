@@ -1,5 +1,6 @@
 import {
   cancelMembershipInvitationRequest,
+  claimMembershipInvitationRequest,
   createMembershipInvitationRequest,
   membershipInvitationParams,
   paginationRequest,
@@ -10,6 +11,7 @@ import {
 
 export {
   cancelMembershipInvitationRequest,
+  claimMembershipInvitationRequest,
   createMembershipInvitationRequest,
   membershipInvitationParams,
   paginationRequest,

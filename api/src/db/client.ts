@@ -161,6 +161,46 @@ export async function withActorTenantResolutionTransaction<T>(
 }
 
 /**
+ * System counterpart used by provider-webhook reconciliation. It keeps tenant lookup and the
+ * tenant-scoped claim on one checked-out connection while making the actor namespace explicit in
+ * RLS and audit rows.
+ */
+export async function withSystemTenantResolutionTransaction<T>(
+  systemKey: string,
+  fn: (context: ActorTenantResolutionContext) => Promise<T>,
+): Promise<T> {
+  if (!systemKey) {
+    throw new Error('withSystemTenantResolutionTransaction: systemKey is required');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT set_config($1, $2, true)', ['app.principal_id', systemKey]);
+    await client.query('SELECT set_config($1, $2, true)', ['app.actor_kind', 'system']);
+    await client.query('SELECT set_config($1, $2, true)', ['app.tenant_id', '']);
+    const context: ActorTenantResolutionContext = {
+      client,
+      setTenantContext: async (tenantId) => {
+        if (!tenantId) throw new Error('System tenant context requires a tenant ID');
+        await client.query('SELECT set_config($1, $2, true)', ['app.tenant_id', tenantId]);
+      },
+      clearTenantContext: async () => {
+        await client.query('SELECT set_config($1, $2, true)', ['app.tenant_id', '']);
+      },
+    };
+    const result = await fn(context);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Transaction context used by owner tenant bootstrap. It starts in the account/global
  * namespace, can enter exactly one tenant namespace for tenant-owned writes, and can return to
  * the global namespace before finalizing account-scoped records. The caller keeps one checked-out

@@ -8,6 +8,7 @@ import {
   listMembershipInvitations,
   resendMembershipInvitation,
 } from './membership-invitations.service.js';
+import { claimMembershipInvitation } from './membership-invitation-claim.service.js';
 import type {
   CreateMembershipInvitationRequest,
   PaginationRequest,
@@ -61,6 +62,27 @@ export async function cancelMembershipInvitationController(
     requestId: req.requestId,
     idempotencyKey: requireIdempotencyKey(req),
     invitationId: requireInvitationId(req),
+  });
+  res.status(result.status).json(result.body);
+}
+
+export async function claimMembershipInvitationController(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const principal = req.clerkPrincipal;
+  const invitationId = requireInvitationId(req);
+  const idempotencyKey = req.membershipInvitationClaimIdempotencyKey;
+  if (!principal?.clerkUserId || !principal.clerkOrgId) {
+    throw new ValidationError('The invitation is not available.');
+  }
+  if (!idempotencyKey) throw new ValidationError('A valid Idempotency-Key header is required.');
+  const result = await claimMembershipInvitation({
+    invitationId,
+    clerkUserId: principal.clerkUserId,
+    clerkOrgId: principal.clerkOrgId,
+    requestId: req.requestId,
+    idempotencyKey,
   });
   res.status(result.status).json(result.body);
 }
