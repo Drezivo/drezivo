@@ -2,7 +2,7 @@
   "name": "@drezivo/app",
   "version": "0.1.0",
   "private": true,
-  "description": "Drezivo business dashboard (app.drezivo.com) — Next.js App Router client for tenant staff.",
+  "description": "Drezivo staff authentication and owner dashboard shell (app.drezivo.com).",
   "engines": {
     "node": ">=22 <25"
   },
@@ -19,12 +19,17 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^6.12.0",
-    "@drezivo/contracts": "0.2.0",
-    "@tanstack/react-query": "^5.66.0",
+    "@radix-ui/react-avatar": "^1.1.11",
+    "@radix-ui/react-dialog": "^1.1.14",
+    "@radix-ui/react-dropdown-menu": "^2.1.15",
+    "@radix-ui/react-separator": "^1.1.7",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
     "next": "15.5.24",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "zod": "^3.25.76"
+    "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
