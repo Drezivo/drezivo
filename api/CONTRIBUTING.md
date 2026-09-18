@@ -277,7 +277,8 @@ Deploy them as two separate services/containers from that one image, not as sepa
 
 **Required environment variables (names only — see `docs/runbooks/environments.md` for
 meanings; never commit values).** `NODE_ENV`, `PORT`, `DATABASE_URL`, `DATABASE_POOL_MAX`,
-`CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET`, `AWS_REGION`,
+`CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET`,
+`INVITATION_EMAIL_ENCRYPTION_KEY`, `INVITATION_EMAIL_DIGEST_KEY`, `AWS_REGION`,
 `S3_BUCKET_PRIVATE`, `S3_BUCKET_PUBLIC`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`,
 `LOG_LEVEL`, `WORKER_POLL_INTERVAL_MS`, `WORKER_LEASE_SECONDS`, `IDEMPOTENCY_RETENTION_DAYS`.
 `src/config/index.ts` is the single source of truth: it validates every one of these with Zod

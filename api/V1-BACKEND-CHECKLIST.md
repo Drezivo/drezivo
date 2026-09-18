@@ -106,8 +106,8 @@ and can become Front Desk only through the verified invitation-claim flow.
 
 TBF-032 is complete as an internal service slice: actor context and tenant bootstrap share the
 authoritative active v1 plan resolver, and catalogue/seat writers must use its tenant-lock quota
-guards. Pending invitation reservations are intentionally not counted until TBF-040 adds invitation
-persistence; the H06 and L02 lifecycle work remains open.
+guards. TBF-040 now extends Front Desk seat usage with unexpired pending invitation reservations;
+the invitation outbox is a TBF-041 dispatch boundary. The H06 and L02 lifecycle work remains open.
 
 TBF-033 is implemented as the Phase 3 lifecycle boundary: request-time actor resolution and the
 durable worker share database-time trial/grace transitions, the restricted/cancelled action matrix,

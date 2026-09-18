@@ -168,6 +168,7 @@ Table membership_invitation {
   expires_at timestamptz [not null]
   clerk_invitation_id varchar(200)
   business_key varchar(160) [not null]
+  dispatch_version int [not null]
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
   indexes {
@@ -175,7 +176,7 @@ Table membership_invitation {
     (tenant_id, business_key) [unique]
     (clerk_invitation_id) [unique]
   }
-  Note: 'V1 foundation tenant-owned Front Desk intent. Partial unique pending recipient index and seven-day expiry are migration constraints.'
+  Note: 'V1 foundation tenant-owned Front Desk intent. Recipient email is encrypted and keyed-deduped; dispatch_version supports resend without a second seat. Partial unique pending recipient index and seven-day database-time expiry are migration constraints.'
 }
 
 Table branch_membership {

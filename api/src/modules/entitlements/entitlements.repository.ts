@@ -98,6 +98,25 @@ export async function countActiveFrontdeskMemberships(
   return result.rows[0]?.count ?? 0;
 }
 
+export async function countReservedFrontdeskSeats(
+  client: PoolClient,
+  tenantId: string,
+): Promise<number> {
+  const result = await client.query<{ count: number }>(
+    `SELECT (
+       (SELECT count(*)::int
+          FROM membership
+         WHERE tenant_id = $1 AND role = 'frontdesk' AND status = 'active')
+       +
+       (SELECT count(*)::int
+          FROM membership_invitation
+         WHERE tenant_id = $1 AND status = 'pending' AND expires_at > now())
+     )::int AS count`,
+    [tenantId],
+  );
+  return result.rows[0]?.count ?? 0;
+}
+
 async function readRequiredEntitlements(
   client: PoolClient,
   planId: string,

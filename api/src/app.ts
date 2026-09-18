@@ -10,6 +10,7 @@ import { clerkWebhookRouter } from './modules/webhooks/clerk.routes.js';
 import { onboardingRouter } from './modules/onboarding/onboarding.routes.js';
 import { tenancyRouter } from './modules/tenancy/tenancy.routes.js';
 import { billingRouter } from './modules/billing/billing.routes.js';
+import { membershipInvitationsRouter } from './modules/membership-invitations/membership-invitations.routes.js';
 import { logger } from './shared/logger.js';
 import { sendError } from './shared/response.js';
 import { ValidationError } from './shared/errors.js';
@@ -88,6 +89,7 @@ export function createApp(): Express {
   v1.use(onboardingRouter);
   v1.use(tenancyRouter);
   v1.use(billingRouter);
+  v1.use(membershipInvitationsRouter);
   app.use('/api/v1', v1);
 
   app.use(errorHandler);

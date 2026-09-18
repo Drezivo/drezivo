@@ -234,10 +234,12 @@ Only a current Owner may invite Front Desk. The command:
 
 1. resolves the caller's active tenant and Owner membership;
 2. obtains subscription and entitlements under a tenant lock;
-3. counts active Front Desk memberships plus unexpired pending invitations;
+3. counts active Front Desk memberships plus unexpired pending invitations under the tenant lock;
 4. rejects an invite that exceeds the plan seat cap;
-5. creates a seven-day Drezivo invitation with stable business key;
-6. writes a Clerk invitation outbox event in the same transaction; and
+5. creates a seven-day Drezivo invitation with stable business key, keyed recipient digest, and
+   AES-GCM encrypted recipient material;
+6. writes a safe Clerk invitation outbox intent in the same transaction (provider dispatch is
+   TBF-041); and
 7. returns safe invitation status, never provider secrets or raw tokens.
 
 The email is retained only because it is needed to send and correlate the invitation. It is
@@ -427,11 +429,13 @@ Plan resolution is centralized in the internal entitlement service. Actor contex
 bootstrap both resolve the current active version-1 plan through this boundary; the service rejects
 missing, inactive, non-v1, unsupported, or malformed plan data instead of treating it as unlimited.
 Quota guards accept the caller's existing transaction client, lock the tenant row, count active
-physical assets or active Front Desk memberships, and retain the lock through the caller's write.
-The Owner membership is excluded from Front Desk seat usage. Pending invitation reservations are
-deferred to TBF-040, when invitation persistence exists. Migration `0018` verifies the seeded v1
-plan values and makes `plan` and `plan_entitlement` read-only to runtime app and worker roles;
-reviewed migrations or authorized tooling own future plan changes.
+physical assets or active Front Desk memberships plus unexpired pending invitations, and retain the
+lock through the caller's write. The Owner membership is excluded from Front Desk seat usage.
+TBF-040 owns the invitation reservation row and its database-time expiry through migration `0019`.
+Migration `0018` verifies the seeded v1 plan values and makes `plan` and `plan_entitlement`
+read-only to runtime app and worker roles; reviewed migrations or authorized tooling own future
+plan changes. Invitation mutations use tenant idempotency and write safe Clerk-dispatch outbox
+intents atomically; TBF-041 owns provider dispatch and this prerequisite must not ship alone.
 
 ## Security and operational requirements
 

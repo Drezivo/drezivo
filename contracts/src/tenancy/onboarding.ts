@@ -9,6 +9,7 @@ import {
 } from '../common/ids';
 import { moneyAmount } from '../common/money';
 import { isoInstant } from '../common/time';
+import { paginatedResponse } from '../common/pagination';
 import { branch, branchGrant, membership, tenant } from './tenant';
 
 /** Global pre-tenant lifecycle, owned by Drezivo rather than Clerk. */
@@ -83,6 +84,9 @@ export const membershipInvitation = z.object({
 });
 export type MembershipInvitation = z.infer<typeof membershipInvitation>;
 
+export const membershipInvitationList = paginatedResponse(membershipInvitation);
+export type MembershipInvitationList = z.infer<typeof membershipInvitationList>;
+
 export const subscriptionSummary = z.object({
   id: subscriptionId,
   plan_code: planCode,
@@ -145,7 +149,7 @@ export const createMembershipInvitationRequest = z
   .strict();
 export type CreateMembershipInvitationRequest = z.infer<typeof createMembershipInvitationRequest>;
 
-export const membershipInvitationParams = z.object({ invitation_id: membershipInvitationId }).strict();
+export const membershipInvitationParams = z.object({ invitationId: membershipInvitationId }).strict();
 export type MembershipInvitationParams = z.infer<typeof membershipInvitationParams>;
 
 export const resendMembershipInvitationRequest = z.object({}).strict();

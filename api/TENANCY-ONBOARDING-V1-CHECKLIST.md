@@ -286,18 +286,24 @@ or billing tasks as authority for this work.
 
 ## Phase 4: Front Desk invitation and membership
 
-- [ ] **TBF-040 — Add local invitation state and safe Owner routes**
+- [x] **TBF-040 — Add local invitation state and safe Owner routes**
   - **Depends on:** TBF-031, TBF-032.
   - **Outcome:** Only a current Owner can create, list, resend, or cancel Front Desk invitations.
   - **Acceptance:**
-    - [ ] Invitation has normalized protected email, seven-day expiry, provider correlation,
-          status, and stable business key.
-    - [ ] Seat count includes active Front Desk plus unexpired pending invitation.
-    - [ ] Resend does not consume a second seat; cancellation/expiry releases it.
-    - [ ] Front Desk receives no member/invitation management access.
-    - [ ] Owner-and-tenant rate limits apply. Generic responses do not disclose whether an email
-          already has an account or invitation.
-  - **Tests/evidence:** Cap, expiry, resend, cancellation, and owner-vs-frontdesk authorization tests.
+    - [x] Invitation stores a normalized keyed digest, AES-GCM protected email, seven-day
+          database-time expiry, provider correlation, status, dispatch version, and stable business key.
+    - [x] Seat count includes active Front Desk memberships plus unexpired pending invitations;
+          expired reservations are released under the tenant lock.
+    - [x] Resend retains one row and one seat while incrementing dispatch version; cancellation
+          and expiry release the reservation without deleting history.
+    - [x] Front Desk receives no invitation-management access; recipient/provider fields are
+          excluded from ordinary projections and logs.
+    - [x] Owner-and-tenant rate limits apply. Generic responses do not disclose whether an email
+          already has a Clerk or Drezivo account or an existing invitation.
+  - **Tests/evidence:** `tests/integration/membership-invitations.test.ts` covers protected
+        recipient reuse, seat reservation/release, resend versioning, safe list projections, and
+        Front Desk denial. Full PostgreSQL concurrency/RLS evidence requires the disposable
+        `TEST_DATABASE_URL`; dispatch remains intentionally deferred to TBF-041.
 
 - [ ] **TBF-041 — Dispatch Clerk invitation and membership changes through outbox**
   - **Depends on:** TBF-020, TBF-040, existing outbox worker.
