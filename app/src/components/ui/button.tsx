@@ -1,46 +1,66 @@
-import { forwardRef } from "react";
-import type { ButtonHTMLAttributes } from "react";
+import { cva, type VariantProps } from "class-variance-authority";
+import { forwardRef, type ButtonHTMLAttributes } from "react";
 
-type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
+import { cn } from "@/lib/utils";
 
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: ButtonVariant;
-  /**
-   * Pass a mutating control's `isPending` from useSubmitGuard directly. This both disables
-   * the button AND shows pending copy — the `disabled` attribute alone is not the
-   * double-submit guard (see lib/use-submit-guard.ts for the real, ref-backed guard); this
-   * prop is the visual half only.
-   */
-  isPending?: boolean;
-  pendingLabel?: string;
-}
+const buttonVariants = cva(
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30 disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        default: "bg-dashboard-accent text-white hover:bg-brand-700",
+        primary: "bg-brand-600 text-white hover:bg-brand-700",
+        secondary:
+          "border border-dashboard-border bg-dashboard-surface text-ink-900 hover:bg-brand-50",
+        danger: "bg-danger-500 text-white hover:bg-danger-500/90",
+        ghost: "text-ink-700 hover:bg-dashboard-active hover:text-dashboard-navy",
+      },
+      size: {
+        default: "h-10 px-4 py-2",
+        sm: "h-9 rounded-md px-3",
+        lg: "h-11 rounded-md px-6",
+        icon: "h-10 w-10",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+);
 
-const VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  primary: "bg-brand-600 text-white hover:bg-brand-700 disabled:bg-brand-600/50",
-  secondary: "bg-white text-ink-900 border border-ink-300 hover:bg-ink-100 disabled:opacity-50",
-  danger: "bg-danger-500 text-white hover:bg-danger-500/90 disabled:bg-danger-500/50",
-  ghost: "bg-transparent text-ink-700 hover:bg-ink-100 disabled:opacity-50",
-};
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
+  VariantProps<typeof buttonVariants> & {
+    isPending?: boolean;
+    pendingLabel?: string;
+  };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = "primary", isPending = false, pendingLabel, disabled, className = "", children, ...props },
+  {
+    className,
+    variant,
+    size,
+    isPending = false,
+    pendingLabel,
+    disabled,
+    children,
+    type = "button",
+    ...props
+  },
   ref
 ) {
   return (
     <button
       ref={ref}
-      type={props.type ?? "button"}
+      type={type}
       disabled={disabled || isPending}
       aria-busy={isPending}
-      className={[
-        "inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium",
-        "transition-colors disabled:cursor-not-allowed",
-        VARIANT_CLASSES[variant],
-        className,
-      ].join(" ")}
+      className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     >
       {isPending ? (pendingLabel ?? "Working…") : children}
     </button>
   );
 });
+
+export { buttonVariants };
