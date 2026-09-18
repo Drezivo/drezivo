@@ -13,17 +13,17 @@
  * This client unwraps `data` on success (callers type against the contract's data-payload
  * types) and throws `ApiError` carrying the failure envelope's details on error.
  *
- * Binding to Clerk: `getToken` and `organization` are read FRESH on every call, inside
- * the request function, never captured once and reused. TRD §3 calls out that a
- * background request fired from a stale closure after the user switches organizations in
- * another tab must not silently run against the old organization — reading both values at
- * call time (not at hook-mount time) is what prevents that.
+ * Binding to Clerk: the latest `getToken` and `orgId` values are dependencies of the request
+ * callback, so a render caused by an organization switch replaces the callback before the next
+ * request. TRD §3 calls out that a background request fired from a stale closure after the user
+ * switches organizations in another tab must not silently run against the old organization.
  */
 
-import { useAuth, useOrganization } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import { useCallback } from "react";
 import { apiEnvelope, type ErrorField } from "@drezivo/contracts";
 import { z } from "zod";
+import { useWorkspace } from "./workspace-context";
 
 const API_BASE_URL = process.env["NEXT_PUBLIC_API_BASE_URL"];
 const responseEnvelope = apiEnvelope(z.unknown());
@@ -37,7 +37,13 @@ export class ApiError extends Error {
   readonly requestId: string;
   readonly fields?: ErrorField[] | undefined;
 
-  constructor(status: number, code: string, message: string, requestId: string, fields?: ErrorField[]) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    requestId: string,
+    fields?: ErrorField[]
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
@@ -54,6 +60,7 @@ interface RequestOptions {
   body?: unknown | undefined;
   idempotencyKey?: string | undefined;
   signal?: AbortSignal | undefined;
+  branchId?: string | undefined;
 }
 
 export interface DrezivoApiClient {
@@ -79,7 +86,10 @@ export interface DrezivoApiClient {
  * mutating method and no key has bypassed the guard — fail closed instead of sending an
  * un-keyed write the API cannot deduplicate.
  */
-function assertMutationHasIdempotencyKey(method: HttpMethod, idempotencyKey: string | undefined): void {
+function assertMutationHasIdempotencyKey(
+  method: HttpMethod,
+  idempotencyKey: string | undefined
+): void {
   if (method !== "GET" && !idempotencyKey) {
     throw new Error(
       `Drezivo api-client: ${method} is a mutation and must go through useSubmitGuard so it ` +
@@ -89,8 +99,8 @@ function assertMutationHasIdempotencyKey(method: HttpMethod, idempotencyKey: str
 }
 
 export function useApiClient(): DrezivoApiClient {
-  const { getToken } = useAuth();
-  const { organization } = useOrganization();
+  const { getToken, orgId } = useAuth();
+  const { activeBranchId } = useWorkspace();
 
   const request = useCallback(
     async <TResponse>(path: string, options: RequestOptions): Promise<TResponse> => {
@@ -101,9 +111,12 @@ export function useApiClient(): DrezivoApiClient {
           "NEXT_PUBLIC_API_BASE_URL is not configured. See CONTRIBUTING.md for required env vars."
         );
       }
-      if (!organization) {
+      const isPreTenantOnboarding = path === "/onboarding" || path.startsWith("/onboarding/");
+      const isUnscopedRoute =
+        isPreTenantOnboarding || (options.method === "GET" && path === "/workspaces");
+      if (!orgId && !isUnscopedRoute) {
         throw new Error(
-          "No active Clerk organization in context; refusing to send a request with no tenant scope."
+          "No active Clerk organization in context; refusing to send a tenant-scoped request."
         );
       }
 
@@ -116,8 +129,10 @@ export function useApiClient(): DrezivoApiClient {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token ?? ""}`,
-          "X-Drezivo-Organization-Id": organization.id,
           "X-Request-Id": requestId,
+          ...((options.branchId ?? activeBranchId)
+            ? { "X-Drezivo-Branch-Id": options.branchId ?? activeBranchId }
+            : {}),
           ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
         },
         ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
@@ -137,7 +152,7 @@ export function useApiClient(): DrezivoApiClient {
           response.status,
           "unknown_error",
           "The request failed and returned no usable error body.",
-          requestId,
+          requestId
         );
       }
 
@@ -158,7 +173,7 @@ export function useApiClient(): DrezivoApiClient {
 
       return parsed.data.data as TResponse;
     },
-    [getToken, organization]
+    [getToken, orgId, activeBranchId]
   );
 
   return {
@@ -167,7 +182,8 @@ export function useApiClient(): DrezivoApiClient {
       request(path, { method: "POST", body, idempotencyKey, signal }),
     patch: (path, body, idempotencyKey, signal) =>
       request(path, { method: "PATCH", body, idempotencyKey, signal }),
-    del: (path, idempotencyKey, signal) => request(path, { method: "DELETE", idempotencyKey, signal }),
+    del: (path, idempotencyKey, signal) =>
+      request(path, { method: "DELETE", idempotencyKey, signal }),
   };
 }
 
@@ -187,6 +203,6 @@ function toApiError(status: number, envelope: FailureEnvelope): ApiError {
     envelope.error.code,
     envelope.error.message,
     envelope.request_id,
-    envelope.error.fields,
+    envelope.error.fields
   );
 }
