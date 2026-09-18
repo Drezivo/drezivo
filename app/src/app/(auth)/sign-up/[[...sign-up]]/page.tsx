@@ -1,9 +1,5 @@
-import { SignUp } from "@clerk/nextjs";
+import { StaffAuthPage } from "@/components/auth/staff-auth-page";
 
 export default function SignUpPage() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-ink-100 px-4">
-      <SignUp path="/sign-up" routing="path" signInUrl="/sign-in" fallbackRedirectUrl="/" />
-    </div>
-  );
+  return <StaffAuthPage mode="sign-up" />;
 }

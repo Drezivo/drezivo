@@ -237,29 +237,20 @@ startup with a clear message, never at the first request that needs it.
 
 ## 8. Repo specifics — app
 
-`app` is the business dashboard, served at **app.drezivo.com**. It is staff-facing only —
-tenant owners and front desk users signed in through Clerk with an active organization. The
-public storefront and marketing site live in `web`, not here.
+`app` is the staff authentication surface, served at **app.drezivo.com**. It is staff-facing
+only. The business dashboard is intentionally absent while it is being rebuilt; the public
+storefront and marketing site live in `web`, not here.
 
 ### What this repo is not
 
-This repo never contains business logic that belongs in the API. Next.js route handlers
-under `src/app/api/**` are readiness/health checks only (TRD §1) — a reservation
-confirmation, a payment verification, a refund, an inventory write, all of it goes through
-the Express API via `lib/api-client.ts`. If you find yourself writing a database query, a
-price calculation, or a state-transition check in this repo, stop: that belongs in `api`,
-behind a contract this repo consumes.
+This repo never contains business logic that belongs in the API. Next.js route handlers under
+`src/app/api/**` are readiness/health checks only (TRD §1). Business features will return here
+through contracts owned by `api` when the dashboard is rebuilt.
 
 ### The two non-negotiables specific to this repo
 
-- **Every mutating control uses `useSubmitGuard`** (`src/lib/use-submit-guard.ts`). Not a
-  hand-rolled `onClick` with a `useState` pending flag — the shared hook, every time. See
-  `.claude/rules/lessons.md` for why a per-screen guard is the wrong shape.
-- **`@drezivo/contracts` is upgraded deliberately, never with a floating range.** It is
-  pinned to an exact version in `package.json` (currently `0.1.0`). Bumping it is its own
-  PR: read the contract's changelog, update every call site the type-checker flags, and
-  note the contract PR it corresponds to. Never widen the dependency to `^0.1.0` or `*` to
-  make a local error disappear.
+- **Clerk remains the authentication authority.** Keep custom auth UI on Clerk's supported
+  client flows and never persist Clerk tokens in browser storage.
 
 ### Required environment variables
 
@@ -267,8 +258,6 @@ Names only — no values, no `.env` file of any kind is ever committed (see `.gi
 `.claude/rules/no-tracked-env.md`). Document meanings in `docs/runbooks/environments.md` in
 the same PR that introduces a new one.
 
-- `NEXT_PUBLIC_API_BASE_URL` — base URL of the Express API this app calls through
-  `lib/api-client.ts`.
 - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` — Clerk publishable key for this environment.
 - `CLERK_SECRET_KEY` — Clerk secret key, server-side only (middleware, any server action).
 - `NEXT_PUBLIC_CLERK_SIGN_IN_URL` / `NEXT_PUBLIC_CLERK_SIGN_UP_URL` — Clerk hosted or
@@ -277,7 +266,7 @@ the same PR that introduces a new one.
 ### Local commands
 
 ```bash
-npm run dev         # start the dashboard against NEXT_PUBLIC_API_BASE_URL
+npm run dev         # start the authentication surface
 npm run typecheck
 npm run lint
 npm test            # Vitest unit tests

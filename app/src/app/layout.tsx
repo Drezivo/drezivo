@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
-import { AppQueryProvider } from "@/lib/query-client";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -8,17 +7,24 @@ export const metadata: Metadata = {
     default: "Drezivo",
     template: "%s · Drezivo",
   },
-  description: "Drezivo business dashboard — manage reservations, inventory, and payments.",
+  description: "Drezivo staff authentication.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body>
-          <AppQueryProvider>{children}</AppQueryProvider>
-        </body>
-      </html>
-    </ClerkProvider>
+    <html lang="en">
+      <body>
+        <ClerkProvider
+          signInUrl="/sign-in"
+          signUpUrl="/sign-up"
+          signInFallbackRedirectUrl="/"
+          signUpFallbackRedirectUrl="/"
+          signInForceRedirectUrl="/"
+          signUpForceRedirectUrl="/"
+        >
+          {children}
+        </ClerkProvider>
+      </body>
+    </html>
   );
 }

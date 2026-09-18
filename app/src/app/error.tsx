@@ -2,20 +2,19 @@
 
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { ApiError } from "@/lib/api-client";
 
 /**
- * Route-level error boundary. Shows the TRD §4 request_id so a merchant can quote it to
- * support — never a raw stack trace or a swallowed blank screen.
+ * Route-level error boundary. Shows a safe reference when one is available and never exposes
+ * a raw stack trace or swallowed blank screen.
  */
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     // Structured, redacted logging only (TRD §6/§8) — no request bodies, no secrets.
     // eslint-disable-next-line no-console -- placeholder until the observability sink lands
-    console.error("Unhandled dashboard error", { message: error.message, digest: error.digest });
+    console.error("Unhandled app error", { message: error.message, digest: error.digest });
   }, [error]);
 
-  const requestId = error instanceof ApiError ? error.requestId : error.digest;
+  const requestId = error.digest;
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-ink-100 px-6 text-center">
