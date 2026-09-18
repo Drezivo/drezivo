@@ -17,6 +17,16 @@ export interface OutboxRow {
 
 export type EventHandler = (row: OutboxRow) => Promise<void>;
 
+/** Handler errors that cannot succeed on retry (malformed payload or permanently invalid state). */
+export class PermanentOutboxError extends Error {
+  readonly permanent = true;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'PermanentOutboxError';
+  }
+}
+
 /**
  * Lease-claim polling loop with bounded retry to a terminal state (TRD §8). Polling, not
  * `LISTEN`/`NOTIFY`, per TRD §9: "Polling, not session LISTEN, is the initial design" — Neon's
@@ -63,7 +73,7 @@ export class WorkerRunner {
       const { rows } = await client.query<OutboxRow>(
         `WITH due AS (
            SELECT id FROM outbox_event
-           WHERE status = 'pending'
+           WHERE (status = 'pending' AND available_at <= now())
               OR (status = 'leased' AND lease_until < now())
            ORDER BY available_at
            FOR UPDATE SKIP LOCKED
@@ -115,9 +125,10 @@ export class WorkerRunner {
   private async retryOrDie(row: OutboxRow, error: unknown): Promise<void> {
     const attempts = row.attempts + 1;
     const safeMessage = error instanceof Error ? error.message : 'unknown error';
-    logger.warn({ outboxId: row.id, attempts, err: error }, 'outbox handler failed');
+    const isPermanent = error instanceof PermanentOutboxError;
+    logger.warn({ outboxId: row.id, attempts, error: safeMessage }, 'outbox handler failed');
 
-    if (attempts >= row.max_attempts) {
+    if (isPermanent || attempts >= row.max_attempts) {
       await this.markDead(row, safeMessage);
       logger.error({ outboxId: row.id, tenantId: row.tenant_id, eventType: row.event_type }, 'outbox event moved to dead-letter');
       return;
@@ -136,9 +147,11 @@ export class WorkerRunner {
 
   private async markDead(row: OutboxRow, safeMessage: string): Promise<void> {
     await pool.query(
-      `UPDATE outbox_event SET status = 'dead', attempts = $2, safe_last_error = $3
-       WHERE id = $1`,
-      [row.id, row.attempts + 1, safeMessage],
+      `UPDATE outbox_event
+          SET status = 'dead', attempts = $3, safe_last_error = $4,
+              lease_token = NULL, lease_until = NULL
+        WHERE id = $1 AND lease_token = $2`,
+      [row.id, row._leaseToken, row.attempts + 1, safeMessage],
     );
   }
 }

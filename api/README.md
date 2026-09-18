@@ -11,6 +11,10 @@ closed rather than being acknowledged as delivered. The object-storage adapter i
 yet; local MinIO is provisioned for the upcoming storage slice, but the API does not upload files
 to it today.
 
+Owner invitation state is persisted locally with tenant RLS, keyed recipient lookup, encrypted
+recipient material, seven-day database-time expiry, and pending-seat reservations. TBF-040 writes
+safe Clerk-dispatch outbox intent only; Clerk delivery is intentionally implemented by TBF-041.
+
 ## Prerequisites
 
 - Node.js 22–24 (the repository requires `>=22 <25`).
@@ -122,7 +126,9 @@ deployment secret manager instead. Leave `S3_ENDPOINT` unset for AWS S3. For loc
 `S3_ENDPOINT=http://127.0.0.1:9000` and `S3_FORCE_PATH_STYLE=true` are used.
 
 Runtime Clerk, object-storage, and database integrations require validated environment
-configuration; tests should inject mocks rather than inventing credentials.
+configuration. Invitation protection additionally requires separate 32-byte base64url
+`INVITATION_EMAIL_ENCRYPTION_KEY` and `INVITATION_EMAIL_DIGEST_KEY` values; tests should inject
+test-only values rather than inventing production credentials.
 
 ## License
 

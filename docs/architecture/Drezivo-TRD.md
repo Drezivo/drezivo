@@ -147,7 +147,8 @@ context and bootstrap. It accepts only the caller's existing database client, va
 version-1 plan and its required positive entitlements, and fails closed for missing, inactive,
 unsupported, or malformed plan data. Physical-asset and Front Desk-seat guards lock the tenant
 row before counting active usage and retain the lock through the caller's write. Front Desk
-counts include active memberships only; pending invitations will be reserved by TBF-040. Plan
+counts include active memberships plus unexpired pending invitation reservations; the Owner is
+never counted as a Front Desk seat. Plan
 and entitlement writes are migration/tooling operations, not runtime application writes.
 
 **The contract enforces this.** `@drezivo/contracts` must not define `tenant_id`, `organization_id` or `branch_id` as an accepted field on any tenant-owned write. If the schema cannot express it, a frontend cannot send it and a reviewer cannot miss it. A branch identifier may appear as a **selector** on a request, and §3 step 3 still applies: it selects among branches the actor already has, and it never grants access to one they do not.

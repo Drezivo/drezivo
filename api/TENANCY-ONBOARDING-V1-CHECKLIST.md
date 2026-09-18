@@ -286,40 +286,63 @@ or billing tasks as authority for this work.
 
 ## Phase 4: Front Desk invitation and membership
 
-- [ ] **TBF-040 — Add local invitation state and safe Owner routes**
+- [x] **TBF-040 — Add local invitation state and safe Owner routes**
   - **Depends on:** TBF-031, TBF-032.
   - **Outcome:** Only a current Owner can create, list, resend, or cancel Front Desk invitations.
   - **Acceptance:**
-    - [ ] Invitation has normalized protected email, seven-day expiry, provider correlation,
-          status, and stable business key.
-    - [ ] Seat count includes active Front Desk plus unexpired pending invitation.
-    - [ ] Resend does not consume a second seat; cancellation/expiry releases it.
-    - [ ] Front Desk receives no member/invitation management access.
-    - [ ] Owner-and-tenant rate limits apply. Generic responses do not disclose whether an email
-          already has an account or invitation.
-  - **Tests/evidence:** Cap, expiry, resend, cancellation, and owner-vs-frontdesk authorization tests.
+    - [x] Invitation stores a normalized keyed digest, AES-GCM protected email, seven-day
+          database-time expiry, provider correlation, status, dispatch version, and stable business key.
+    - [x] Seat count includes active Front Desk memberships plus unexpired pending invitations;
+          expired reservations are released under the tenant lock.
+    - [x] Resend retains one row and one seat while incrementing dispatch version; cancellation
+          and expiry release the reservation without deleting history.
+    - [x] Front Desk receives no invitation-management access; recipient/provider fields are
+          excluded from ordinary projections and logs.
+    - [x] Owner-and-tenant rate limits apply. Generic responses do not disclose whether an email
+          already has a Clerk or Drezivo account or an existing invitation.
+  - **Tests/evidence:** `tests/integration/membership-invitations.test.ts` covers protected
+        recipient reuse, seat reservation/release, resend versioning, safe list projections, and
+        Front Desk denial. Full PostgreSQL concurrency/RLS evidence requires the disposable
+        `TEST_DATABASE_URL`; provider dispatch evidence is tracked under TBF-041.
 
 - [ ] **TBF-041 — Dispatch Clerk invitation and membership changes through outbox**
   - **Depends on:** TBF-020, TBF-040, existing outbox worker.
   - **Outcome:** Local invitation/removal state survives provider outage and worker restart.
   - **Acceptance:**
-    - [ ] Local state and outbox event commit together.
-    - [ ] Lease, retry bound, provider idempotency/correlation, and terminal failure are visible.
-    - [ ] No fire-and-forget Clerk request exists.
-  - **Tests/evidence:** Crash-before/after-provider-acceptance and duplicate worker-claim tests.
+    - [x] Local invitation state and safe create/resend/cancel outbox intents remain committed
+          together through the TBF-040 tenant transaction.
+    - [x] The worker claims only due rows, preserves the eight-attempt backoff policy, requires
+          the lease token for completion/dead-letter writes, and clears leases at terminal state.
+    - [x] Clerk dispatch uses a private marker (`membership_invitation_dispatch_v1`, local UUID,
+          dispatch version, operation) to recover provider acceptance before local persistence;
+          resend revokes prior active provider invitations and cancellation compensates races.
+    - [x] Provider calls are awaited and safe terminal provider states are acknowledged without
+          exposing recipient email, ciphertext, metadata, tokens, or raw provider responses.
+    - [ ] PostgreSQL evidence proves crash recovery, duplicate claims, lease expiry, RLS/privileges,
+          resend/cancel races, and transient-to-dead-letter behavior.
+  - **Tests/evidence:** Adapter/dispatcher and worker tests are added; disposable PostgreSQL
+        concurrency/RLS evidence remains open when `TEST_DATABASE_URL` is unavailable.
 
-- [ ] **TBF-042 — Implement verified invitation claim**
+- [ ] **TBF-042 — Implement verified invitation claim** *(implementation complete; integration evidence open)*
   - **Depends on:** TBF-040, TBF-041, TBF-022.
   - **Outcome:** Accepted Clerk invitation activates one local Front Desk membership and grant.
   - **Acceptance:**
-    - [ ] Claim verifies current authenticated user, active organization, Clerk membership, local
-          invitation correlation, expiry, role, and seat state.
-    - [ ] Duplicate claim and duplicate webhook event activate one membership.
-    - [ ] Unknown provider-created membership does not grant Drezivo access.
-    - [ ] User and network rate limits apply. Generic failures do not distinguish invalid, expired,
-          revoked, or already-claimed invitations to an unauthorized caller.
-  - **Tests/evidence:** Wrong organization, expired/cancelled invite, duplicate, webhook-order,
-    and rate-limit tests.
+    - [x] Claim verifies the authenticated user, active organization, accepted Clerk invitation,
+          exact dispatch marker/current version, `org:member` role, local expiry, and seat state.
+    - [x] Duplicate claims and duplicate accepted-invitation webhook events converge on one local
+          Front Desk membership, default branch grant, accepted invitation, and provider IDs.
+    - [x] Unknown provider-created memberships never grant Drezivo access; membership webhooks
+          alone are not an access path.
+    - [x] User and network rate limits apply. Generic failures do not distinguish invalid, expired,
+          revoked, foreign, or already-claimed invitations to an unauthorized caller.
+    - [x] Suspended/removed Front Desk memberships may be restored only through a matching claim;
+          Owner memberships are never demoted or overwritten.
+    - [x] Migration `0020_verified_invitation_claim.sql` adds nullable provider membership
+          correlation with a tenant-scoped uniqueness constraint.
+  - **Tests/evidence:** Focused contract, adapter, claim-service, and worker reconciliation tests
+        are present. Wrong-organization, expiry/cancellation, duplicate, webhook-order, rate-limit,
+        RLS, and provider-failure PostgreSQL evidence remains open until `TEST_DATABASE_URL` is
+        available; leave this task unchecked until that suite passes.
 
 - [ ] **TBF-043 — Implement local-first membership removal and approved owner transfer**
   - **Depends on:** TBF-041, TBF-042.

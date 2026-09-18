@@ -242,6 +242,29 @@ components:
         - status
         - expires_at
         - created_at
+    MembershipInvitationList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MembershipInvitation'
+        page_meta:
+          type: object
+          properties:
+            next_cursor:
+              type:
+                - string
+                - "null"
+              minLength: 1
+            has_more:
+              type: boolean
+          required:
+            - next_cursor
+            - has_more
+      required:
+        - items
+        - page_meta
     SubscriptionSummary:
       type: object
       properties:
@@ -739,11 +762,11 @@ components:
     MembershipInvitationParams:
       type: object
       properties:
-        invitation_id:
+        invitationId:
           type: string
           format: uuid
       required:
-        - invitation_id
+        - invitationId
       additionalProperties: false
     ResendMembershipInvitationRequest:
       type: object
@@ -1584,6 +1607,213 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         "429":
           description: Actor context rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /membership-invitations:
+    get:
+      tags:
+        - membership-invitations
+      summary: List safe Front Desk invitation state for the active tenant.
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+          required: false
+          name: cursor
+          in: query
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          required: false
+          name: limit
+          in: query
+      responses:
+        "200":
+          description: Safe invitation projections without recipient or provider data.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: '#/components/schemas/MembershipInvitationList'
+                  request_id:
+                    type: string
+                    minLength: 1
+                required: [success, data, request_id]
+        "403":
+          description: Only the active Owner can list invitations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "429":
+          description: Invitation list rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      tags:
+        - membership-invitations
+      summary: Create or safely reuse one Owner-managed Front Desk invitation.
+      parameters:
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMembershipInvitationRequest'
+      responses:
+        "200":
+          description: Invitation created or an existing pending invitation safely reused.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: '#/components/schemas/MembershipInvitation'
+                  request_id:
+                    type: string
+                    minLength: 1
+                required: [success, data, request_id]
+        "403":
+          description: Only the active Owner can manage invitations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "409":
+          description: The invitation state, seat capacity, or idempotency key is not valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "429":
+          description: Invitation mutation rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /membership-invitations/{invitationId}/resend:
+    post:
+      tags:
+        - membership-invitations
+      summary: Resend one Owner-managed Front Desk invitation.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: invitationId
+          in: path
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendMembershipInvitationRequest'
+      responses:
+        "200":
+          description: Invitation state updated or an identical mutation replayed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: '#/components/schemas/MembershipInvitation'
+                  request_id:
+                    type: string
+                    minLength: 1
+                required: [success, data, request_id]
+        "404":
+          description: Invitation not found for the active tenant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "409":
+          description: The invitation state, seat capacity, or idempotency key is not valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /membership-invitations/{invitationId}/cancel:
+    post:
+      tags:
+        - membership-invitations
+      summary: Cancel one Owner-managed Front Desk invitation.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: invitationId
+          in: path
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelMembershipInvitationRequest'
+      responses:
+        "200":
+          description: Invitation state updated or an identical mutation replayed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: '#/components/schemas/MembershipInvitation'
+                  request_id:
+                    type: string
+                    minLength: 1
+                required: [success, data, request_id]
+        "404":
+          description: Invitation not found for the active tenant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "409":
+          description: The invitation state or idempotency key is not valid.
           content:
             application/json:
               schema:

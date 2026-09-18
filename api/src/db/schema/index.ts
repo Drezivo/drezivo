@@ -17,3 +17,4 @@ export * from './billing.js';
 export * from './jobs.js';
 export * from './audit.js';
 export * from './bootstrap.js';
+export * from './invitations.js';

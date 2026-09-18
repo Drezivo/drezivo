@@ -67,12 +67,19 @@ export const membership = pgTable(
       .notNull()
       .references(() => tenant.id),
     clerkUserId: text('clerk_user_id').notNull(),
+    clerkMembershipId: text('clerk_membership_id'),
     role: membershipRoleEnum('role').notNull(),
     status: membershipStatusEnum('status').notNull().default('active'),
     authzVersion: integer('authz_version').notNull().default(1),
     ...updatableTimestamps,
   },
-  (table) => [uniqueIndex('membership_tenant_clerk_user_key').on(table.tenantId, table.clerkUserId)],
+  (table) => [
+    uniqueIndex('membership_tenant_clerk_user_key').on(table.tenantId, table.clerkUserId),
+    uniqueIndex('membership_tenant_clerk_membership_key').on(
+      table.tenantId,
+      table.clerkMembershipId,
+    ),
+  ],
 );
 
 /** V1: one default grant per membership. Permission codes are allowlisted at the service layer, never free text from the client. */

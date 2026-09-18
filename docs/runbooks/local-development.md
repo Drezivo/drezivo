@@ -27,8 +27,9 @@ the [MinIO Compose example](https://github.com/minio/minio/blob/master/docs/orch
 2. Fill the credential entries in the ignored `api/.env` file. `MINIO_ROOT_PASSWORD` and
    `S3_SECRET_ACCESS_KEY` must be the same value; use a unique local value. The API uses
    `http://127.0.0.1:9000` with path-style addressing for MinIO; production leaves the endpoint
-   unset for AWS S3. Copy your Clerk development-instance values there as well. Do not commit
-   any `.env*` file.
+   unset for AWS S3. Copy your Clerk development-instance values there as well. Generate separate
+   32-byte base64url values for `INVITATION_EMAIL_ENCRYPTION_KEY` and
+   `INVITATION_EMAIL_DIGEST_KEY`. Do not commit any `.env*` file.
 3. Run `docker compose --env-file api/.env up -d` from the repository root. This is the supported
    startup command. Compose needs the explicit file because it otherwise discovers only a root
    `.env` file and cannot interpolate the required MinIO credentials.

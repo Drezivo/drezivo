@@ -29,6 +29,7 @@ import {
   createMembershipInvitationRequest,
   createOwnerOnboardingRequest,
   membershipInvitation,
+  membershipInvitationList,
   membershipInvitationParams,
   membershipInvitationStatus,
   onboardingActorContext,
@@ -99,6 +100,7 @@ registry.register('ClerkWebhookEventType', clerkWebhookEventType);
 registry.register('OrganizationOnboarding', organizationOnboarding);
 registry.register('OnboardingActorContext', onboardingActorContext);
 registry.register('MembershipInvitation', membershipInvitation);
+registry.register('MembershipInvitationList', membershipInvitationList);
 registry.register('SubscriptionSummary', subscriptionSummary);
 registry.register('OperatorActionResponse', operatorActionResponse);
 registry.register('ClerkWebhookInboxRecord', clerkWebhookInboxRecord);
@@ -243,6 +245,73 @@ registry.registerPath({
     429: jsonError('Owner onboarding abandon rate limit exceeded.'),
   },
 });
+
+// ---- Owner Front Desk invitations ---------------------------------------
+registry.registerPath({
+  method: 'post',
+  path: '/membership-invitations',
+  tags: ['membership-invitations'],
+  summary: 'Create or safely reuse one Owner-managed Front Desk invitation.',
+  request: {
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: createMembershipInvitationRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Invitation created or an existing pending invitation safely reused.',
+      content: { 'application/json': { schema: successEnvelope(membershipInvitation) } },
+    },
+    403: jsonError('Only the active Owner can manage invitations.'),
+    409: jsonError('The invitation state, seat capacity, or idempotency key is not valid.'),
+    429: jsonError('Invitation mutation rate limit exceeded.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/membership-invitations',
+  tags: ['membership-invitations'],
+  summary: 'List safe Front Desk invitation state for the active tenant.',
+  request: { query: paginationRequest },
+  responses: {
+    200: {
+      description: 'Safe invitation projections without recipient or provider data.',
+      content: { 'application/json': { schema: successEnvelope(membershipInvitationList) } },
+    },
+    403: jsonError('Only the active Owner can list invitations.'),
+    429: jsonError('Invitation list rate limit exceeded.'),
+  },
+});
+
+for (const action of ['resend', 'cancel'] as const) {
+  registry.registerPath({
+    method: 'post',
+    path: `/membership-invitations/{invitationId}/${action}`,
+    tags: ['membership-invitations'],
+    summary: `${action === 'resend' ? 'Resend' : 'Cancel'} one Owner-managed Front Desk invitation.`,
+    request: {
+      params: membershipInvitationParams,
+      headers: idempotencyKeyHeader,
+      body: {
+        content: {
+          'application/json': {
+            schema: action === 'resend' ? resendMembershipInvitationRequest : cancelMembershipInvitationRequest,
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Invitation state updated or an identical mutation replayed.',
+        content: { 'application/json': { schema: successEnvelope(membershipInvitation) } },
+      },
+      403: jsonError('Only the active Owner can manage invitations.'),
+      404: jsonError('Invitation not found for the active tenant.'),
+      409: jsonError('The invitation state, seat capacity, or idempotency key is not valid.'),
+      429: jsonError('Invitation mutation rate limit exceeded.'),
+    },
+  });
+}
 
 // ---- subscription lifecycle ---------------------------------------------
 registry.registerPath({

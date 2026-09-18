@@ -17,6 +17,8 @@ process.env.S3_BUCKET_PRIVATE = 'private';
 process.env.S3_BUCKET_PUBLIC = 'public';
 process.env.S3_ACCESS_KEY_ID = 'test';
 process.env.S3_SECRET_ACCESS_KEY = 'test';
+process.env.INVITATION_EMAIL_ENCRYPTION_KEY = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+process.env.INVITATION_EMAIL_DIGEST_KEY = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
 
 const { createClerkServerAdapter } = await import('../clerk.adapter.js');
 
@@ -29,6 +31,7 @@ function createProvider() {
     updateOrganizationMembership: vi.fn(),
     deleteOrganizationMembership: vi.fn(),
     createOrganizationInvitation: vi.fn(),
+    getOrganizationInvitationList: vi.fn(),
     getOrganizationInvitation: vi.fn(),
     revokeOrganizationInvitation: vi.fn(),
   };
@@ -217,6 +220,60 @@ describe('Clerk server adapter', () => {
       organizationId: 'org_123',
       invitationId: 'inv_123',
     });
+  });
+
+  it('writes and recovers an exact private dispatch marker without exposing metadata', async () => {
+    const { provider, organizations } = createProvider();
+    organizations.createOrganizationInvitation.mockResolvedValue(invitation);
+    organizations.getOrganizationInvitationList.mockResolvedValue({
+      data: [
+        {
+          ...invitation,
+          privateMetadata: {
+            drezivo_dispatch: {
+              source: 'membership_invitation_dispatch_v1',
+              invitation_id: '11111111-1111-4111-8111-111111111111',
+              dispatch_version: 2,
+              operation: 'resend',
+            },
+          },
+        },
+      ],
+    });
+    const adapter = createClerkServerAdapter(provider);
+    const marker = {
+      source: 'membership_invitation_dispatch_v1' as const,
+      invitationId: '11111111-1111-4111-8111-111111111111',
+      dispatchVersion: 2,
+      operation: 'resend' as const,
+    };
+
+    await adapter.createInvitation({
+      organizationId: 'org_123',
+      emailAddress: 'frontdesk@example.com',
+      role: 'org:member',
+      dispatchMarker: marker,
+    });
+    expect(organizations.createOrganizationInvitation).toHaveBeenCalledWith({
+      organizationId: 'org_123',
+      emailAddress: 'frontdesk@example.com',
+      role: 'org:member',
+      privateMetadata: {
+        drezivo_dispatch: {
+          source: 'membership_invitation_dispatch_v1',
+          invitation_id: marker.invitationId,
+          dispatch_version: 2,
+          operation: 'resend',
+        },
+      },
+    });
+
+    await expect(adapter.findInvitationByDispatchMarker('org_123', marker)).resolves.toMatchObject({
+      id: 'inv_123',
+      emailAddress: 'frontdesk@example.com',
+    });
+    expect(await adapter.findInvitationsByInvitationId('org_123', marker.invitationId)).toHaveLength(1);
+    expect((await adapter.findInvitationByDispatchMarker('org_123', marker)) as unknown as Record<string, unknown>).not.toHaveProperty('privateMetadata');
   });
 
   it('supports membership create, update, and delete through one typed boundary', async () => {

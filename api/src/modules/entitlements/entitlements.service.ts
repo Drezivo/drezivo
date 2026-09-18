@@ -3,8 +3,8 @@ import type { PoolClient } from 'pg';
 
 import { CapacityConflictError, StateConflictError, ValidationError } from '../../shared/errors.js';
 import {
-  countActiveFrontdeskMemberships,
   countActivePhysicalAssets,
+  countReservedFrontdeskSeats,
   lockTenantForQuota,
   readActiveV1Plan,
   readTenantPlan,
@@ -83,18 +83,19 @@ export async function assertPhysicalAssetCapacity(
 }
 
 /**
- * Guard a Front Desk membership or invitation reservation. Pending invitations are intentionally
- * not counted until TBF-040 adds their durable table and claim lifecycle.
+ * Guard a Front Desk membership or invitation reservation. Pending invitations reserve a seat
+ * until their database-time expiry, while the Owner remains outside this count.
  */
 export async function assertFrontDeskSeatCapacity(
   client: PoolClient,
   tenantId: string,
   additional: number,
+  options?: { excludeInvitationId?: string },
 ): Promise<QuotaCheckResult> {
   validateAdditional(additional);
   await requireLockedTenant(client, tenantId);
   const entitlements = await resolveTenantEntitlements(client, tenantId);
-  const current = await countActiveFrontdeskMemberships(client, tenantId);
+  const current = await countReservedFrontdeskSeats(client, tenantId, options?.excludeInvitationId);
   return ensureCapacity('frontdesk_seats', current, additional, entitlements.frontdeskSeatsMax);
 }
 
@@ -109,7 +110,7 @@ export async function assertPlanCapacity(
   target: TenantEntitlementSnapshot,
 ): Promise<PlanCapacityCheckResult> {
   const currentAssets = await countActivePhysicalAssets(client, tenantId);
-  const currentFrontdesk = await countActiveFrontdeskMemberships(client, tenantId);
+  const currentFrontdesk = await countReservedFrontdeskSeats(client, tenantId);
   return {
     physicalAssets: ensureCapacity('physical_assets', currentAssets, 0, target.physicalAssetsMax),
     frontdeskSeats: ensureCapacity('frontdesk_seats', currentFrontdesk, 0, target.frontdeskSeatsMax),

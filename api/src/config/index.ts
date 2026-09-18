@@ -22,6 +22,9 @@ const envSchema = z.object({
   CLERK_PUBLISHABLE_KEY: z.string().min(1, 'CLERK_PUBLISHABLE_KEY is required'),
   CLERK_WEBHOOK_SIGNING_SECRET: z.string().min(1, 'CLERK_WEBHOOK_SIGNING_SECRET is required'),
 
+  INVITATION_EMAIL_ENCRYPTION_KEY: base64Key('INVITATION_EMAIL_ENCRYPTION_KEY'),
+  INVITATION_EMAIL_DIGEST_KEY: base64Key('INVITATION_EMAIL_DIGEST_KEY'),
+
   AWS_REGION: z.string().min(1, 'AWS_REGION is required'),
   S3_BUCKET_PRIVATE: z.string().min(1, 'S3_BUCKET_PRIVATE is required'),
   S3_BUCKET_PUBLIC: z.string().min(1, 'S3_BUCKET_PUBLIC is required'),
@@ -43,6 +46,13 @@ const envSchema = z.object({
 });
 
 export type Config = z.infer<typeof envSchema>;
+
+function base64Key(name: string): z.ZodType<string> {
+  return z
+    .string()
+    .min(1, `${name} is required`)
+    .refine((value) => Buffer.from(value, 'base64url').length === 32, `${name} must decode to 32 bytes`);
+}
 
 function loadConfig(): Config {
   const parsed = envSchema.safeParse(process.env);

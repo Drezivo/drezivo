@@ -264,6 +264,23 @@ async function resolveInsideTenant(
   };
 }
 
+/** Reuse the actor projection on a caller-owned tenant-resolution transaction. */
+export async function resolveActorContextInExistingTransaction(
+  context: ActorTenantResolutionContext,
+  input: { principalId: string; clerkOrgId: string; branchId?: string },
+): Promise<ResolveActorResult> {
+  const result = await context.client.query<TenantRow>(
+    `SELECT id, clerk_org_id, name, slug, status, currency, timezone, created_at, updated_at
+       FROM tenant
+      WHERE clerk_org_id = $1
+      LIMIT 1`,
+    [input.clerkOrgId],
+  );
+  const tenant = result.rows[0];
+  if (!tenant) return { kind: 'state_conflict' };
+  return resolveInsideTenant(context, tenant, input);
+}
+
 function toWorkspaceSummary(row: WorkspaceRow): WorkspaceSummary {
   return {
     tenant: {

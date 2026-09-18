@@ -55,6 +55,10 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   issuer, expiry, audience/authorized-party) per TRD §3.
 - `CLERK_WEBHOOK_SIGNING_SECRET` — verifies the signature on Clerk's membership-change webhooks
   before they enter the signed, deduplicated webhook inbox (TRD §3, "Membership freshness").
+- `INVITATION_EMAIL_ENCRYPTION_KEY` — deployment-managed 32-byte base64url key used to encrypt
+  tenant invitation recipient email before it is stored. Keep it separate from the digest key.
+- `INVITATION_EMAIL_DIGEST_KEY` — deployment-managed 32-byte base64url HMAC key used for exact
+  tenant-local pending-recipient dedupe. It is never exposed to clients or logs.
 - `AWS_REGION` — region for S3 and any AWS-hosted dependency.
 - `S3_BUCKET_PRIVATE_EVIDENCE` — bucket name for private evidence (receipts, verification
   documents). Originals are private; access is short-lived (TRD §7, proposed five-minute

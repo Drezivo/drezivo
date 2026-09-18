@@ -20,7 +20,7 @@ migrations and service behavior are owned by their corresponding TBF tasks.
 | `bootstrap_idempotency_record`                                             | Global pre-tenant | Scoped to the authenticated account and operation. It never reuses tenant-scoped idempotency.                                                                      |
 | `global_audit_event`                                                       | Global pre-tenant | Append-only account/operator/system history. Owner reads are account-scoped; operator/system reads require explicit context and filters.                           |
 | `webhook_inbox`                                                            | Global pre-tenant | Exact-raw verified provider-event dedupe. API inserts only through a duplicate-safe function; worker reads/transitions rows and neither runtime role deletes them. |
-| `membership_invitation`                                                    | Tenant-owned      | Standard tenant RLS plus local Owner authorization. Protected recipient data never appears in ordinary logs or list projections.                                   |
+| `membership_invitation`                                                    | Tenant-owned      | Standard tenant RLS plus local Owner authorization. Recipient email is AES-GCM encrypted and keyed-deduped; protected material never appears in ordinary logs or list projections.                                   |
 | `membership`, `subscription`, `subscription_event`, `subscription_payment` | Tenant-owned      | Existing tenant RLS applies. New lifecycle behavior is gated in services, not inferred from Clerk claims.                                                          |
 
 TBF-031 adds the actor/workspace resolution boundary after bootstrap. Migration
@@ -46,8 +46,9 @@ tenancy-onboarding expansion. It creates:
   append-only `global_audit_event`.
 - `owner_onboarding_attempt` for account-locked, duplicate-safe Clerk organization creation and
   exact provider-outcome recovery.
-- tenant-owned `membership_invitation`, including protected recipient lookup material, seven-day
-  expiry, provider correlation, and a partial unique pending-intent index.
+- tenant-owned `membership_invitation`, including encrypted recipient material, keyed lookup
+  digest, seven-day database-time expiry, dispatch revision, provider correlation, and a partial
+  unique pending-intent index.
 - nullable `clerk_membership_id` plus unique provider correlation on `membership`.
 
 The same expansion adds RLS policies for global account-owned records using
@@ -103,7 +104,8 @@ It verifies the immutable v1 seed values and revokes runtime `INSERT`, `UPDATE`,
 on `plan` and `plan_entitlement` while preserving `SELECT` for the app and worker roles. The
 shared entitlement service resolves the active v1 plan and required limits for actor context and
 bootstrap, and its same-client quota guards lock the tenant before counting active physical assets
-or active Front Desk memberships. Pending invitation reservations remain a TBF-040 extension.
+or active Front Desk memberships. TBF-040 extends the Front Desk count with unexpired pending
+invitation reservations under the same tenant lock.
 
 TBF-033 completes the Phase 3 lifecycle boundary without adding a new table. The existing
 `subscription` and `subscription_event` records are transitioned by one shared database-time
@@ -114,6 +116,34 @@ returning the projection, and the worker repeats the same per-tenant transition 
 delayed jobs. The Owner-only `POST /api/v1/subscription/plan` command uses tenant idempotency,
 the TBF-032 resolver, active-usage downgrade checks, immutable plan-change events, and tenant
 audit records. Paid-plan changes and payment activation remain later billing work.
+
+TBF-040 adds `0019_membership_invitations.sql` and four authenticated tenant-context Owner routes
+for local invitation state. Recipient email is normalized, HMAC-digested for exact tenant-local
+dedupe, and AES-GCM encrypted with a separate deployment key; safe projections never expose the
+email, digest, ciphertext, business key, or Clerk correlation. Pending rows reserve Front Desk
+seats until database-time expiry, resend extends the same row and increments `dispatch_version`,
+and cancellation/expiry release the reservation without deleting history. Create, resend, and
+cancel write safe Clerk-dispatch outbox intents atomically with tenant idempotency. TBF-041 owns
+provider dispatch, so this branch-internal prerequisite must not be deployed independently.
+
+TBF-041 consumes those invitation intents through the durable outbox worker. The Clerk adapter
+stores a backend-only private marker containing a fixed source, local invitation UUID, dispatch
+version, and create/resend operation. Before creating an invitation, the worker searches the
+provider by that exact marker; this recovers a provider acceptance after a worker crash and keeps
+same-intent retries duplicate-safe. Resend revokes older active provider invitations for the same
+local identity before creating its replacement. Cancellation revokes the locally correlated
+provider invitation or searches all matching markers when correlation was not persisted yet;
+revoked, expired, accepted, and missing provider rows are terminal safe no-ops.
+
+The worker locks the tenant invitation, verifies pending status and dispatch version, resolves the
+Clerk organization from the tenant row, and decrypts recipient email only inside the worker. A
+conditional local update persists provider correlation; if cancellation or a newer dispatch wins
+while Clerk is running, the newly created/found invitation is revoked as compensation. Every
+provider call is awaited, and malformed local payloads/decryption failures become permanent
+dead-letter outcomes while transient provider failures use the existing eight-attempt exponential
+backoff. Pending outbox claims require `available_at <= now()`, and completion/dead-letter writes
+require the exact lease token. TBF-041 dispatches invitation intents only; verified claiming is
+TBF-042 and membership-removal dispatch is TBF-043.
 
 TBF-031 adds `GET /api/v1/workspaces` and `GET /api/v1/actor-context`. Workspace discovery is
 account-scoped and returns only provisioned tenants with an active local membership. Actor context

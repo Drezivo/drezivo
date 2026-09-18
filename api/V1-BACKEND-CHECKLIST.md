@@ -106,13 +106,32 @@ and can become Front Desk only through the verified invitation-claim flow.
 
 TBF-032 is complete as an internal service slice: actor context and tenant bootstrap share the
 authoritative active v1 plan resolver, and catalogue/seat writers must use its tenant-lock quota
-guards. Pending invitation reservations are intentionally not counted until TBF-040 adds invitation
-persistence; the H06 and L02 lifecycle work remains open.
+guards. TBF-040 now extends Front Desk seat usage with unexpired pending invitation reservations;
+the invitation outbox is a TBF-041 dispatch boundary. The H06 and L02 lifecycle work remains open.
 
 TBF-033 is implemented as the Phase 3 lifecycle boundary: request-time actor resolution and the
 durable worker share database-time trial/grace transitions, the restricted/cancelled action matrix,
 and the Owner-only trial plan-change command. Paid-plan changes, payment activation, and recurring
 billing remain L03/L05 work after TBF-051.
+
+TBF-041 is implemented as the invitation provider-dispatch boundary (integration evidence pending):
+the durable worker validates TBF-040 payloads, locks the tenant invitation, resolves the persisted
+Clerk organization, decrypts recipient data only inside the worker, and uses a private dispatch
+marker to recover accepted provider invitations without duplicates. Resends revoke prior active
+provider invitations; cancellations compensate provider state; stale dispatch versions are no-ops.
+The worker now claims only due rows and requires its lease token for completion and dead-lettering.
+Membership-removal dispatch remains TBF-043 and invitation claim remains TBF-042.
+
+TBF-042 is implemented as the verified invitation-claim boundary (integration evidence pending):
+the claim route requires a verified user, active Clerk organization, strict empty body, and
+Idempotency-Key. The service locks the tenant and invitation, verifies the accepted provider
+invitation through the exact TBF-041 dispatch marker/current version and `org:member` role,
+restores or creates one local Front Desk membership with the fixed default grant, accepts the
+invitation, persists provider membership correlation, and returns actor context. Accepted
+invitation webhook reconciliation reuses the same claim core; membership webhooks alone never
+grant local access. Generic failures, user/network limits, tenant RLS, and provider rollback
+remain acceptance requirements. PostgreSQL evidence is still required before marking the task
+complete.
 
 ---
 

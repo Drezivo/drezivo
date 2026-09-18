@@ -19,6 +19,18 @@ export type ClerkOrganizationRole = (typeof clerkOrganizationRoles)[number];
 export const clerkInvitationStatuses = ['pending', 'accepted', 'revoked', 'expired'] as const;
 export type ClerkInvitationStatus = (typeof clerkInvitationStatuses)[number];
 
+export const clerkInvitationDispatchOperations = ['create', 'resend'] as const;
+export type ClerkInvitationDispatchOperation = (typeof clerkInvitationDispatchOperations)[number];
+
+export const clerkInvitationDispatchSource = 'membership_invitation_dispatch_v1' as const;
+
+export interface ClerkInvitationDispatchMarker {
+  source: typeof clerkInvitationDispatchSource;
+  invitationId: string;
+  dispatchVersion: number;
+  operation: ClerkInvitationDispatchOperation;
+}
+
 export interface ClerkOrganization {
   id: string;
   name: string;
@@ -55,8 +67,23 @@ export interface ClerkServerAdapter {
     userId: string,
   ): Promise<ClerkOrganizationMembership | null>;
   createInvitation(input: CreateClerkInvitationInput): Promise<ClerkOrganizationInvitation>;
+  findInvitation(
+    organizationId: string,
+    invitationId: string,
+  ): Promise<ClerkOrganizationInvitation | null>;
+  findInvitationByDispatchMarker(
+    organizationId: string,
+    marker: ClerkInvitationDispatchMarker,
+  ): Promise<ClerkOrganizationInvitation | null>;
+  findInvitationsByInvitationId(
+    organizationId: string,
+    invitationId: string,
+  ): Promise<ClerkOrganizationInvitation[]>;
   getInvitation(organizationId: string, invitationId: string): Promise<ClerkOrganizationInvitation>;
   revokeInvitation(input: RevokeClerkInvitationInput): Promise<ClerkOrganizationInvitation>;
+  revokeInvitationIfPresent(
+    input: RevokeClerkInvitationInput,
+  ): Promise<ClerkOrganizationInvitation | null>;
   createMembership(input: ClerkMembershipInput): Promise<ClerkOrganizationMembership>;
   updateMembership(input: ClerkMembershipInput): Promise<ClerkOrganizationMembership>;
   deleteMembership(
@@ -79,6 +106,7 @@ export type ClerkProviderClient = {
     | 'updateOrganizationMembership'
     | 'deleteOrganizationMembership'
     | 'createOrganizationInvitation'
+    | 'getOrganizationInvitationList'
     | 'getOrganizationInvitation'
     | 'revokeOrganizationInvitation'
   >;
@@ -105,6 +133,14 @@ const invitationInput = z.object({
   expiresInDays: z.number().int().min(1).max(30).optional(),
   inviterUserId: providerId.optional(),
   redirectUrl: z.string().url().max(2048).optional(),
+  dispatchMarker: z
+    .object({
+      source: z.literal(clerkInvitationDispatchSource),
+      invitationId: z.string().uuid(),
+      dispatchVersion: z.number().int().positive(),
+      operation: z.enum(clerkInvitationDispatchOperations),
+    })
+    .optional(),
 });
 const membershipInput = z.object({
   organizationId: providerId,
@@ -121,6 +157,13 @@ export type CreateClerkOrganizationInput = z.infer<typeof organizationInput>;
 export type CreateClerkInvitationInput = z.infer<typeof invitationInput>;
 export type ClerkMembershipInput = z.infer<typeof membershipInput>;
 export type RevokeClerkInvitationInput = z.infer<typeof revokeInvitationInput>;
+
+const dispatchMarkerSchema = z.object({
+  source: z.literal(clerkInvitationDispatchSource),
+  invitationId: z.string().uuid(),
+  dispatchVersion: z.number().int().positive(),
+  operation: z.enum(clerkInvitationDispatchOperations),
+});
 
 function parseInput<T>(schema: z.ZodType<T>, input: unknown, label: string): T {
   const result = schema.safeParse(input);
@@ -201,10 +244,58 @@ function mapInvitation(
   };
 }
 
-async function providerCall<T>(call: () => Promise<T>, conflictMessage?: string): Promise<T> {
+function readDispatchMarker(value: unknown): ClerkInvitationDispatchMarker | null {
+  if (!value || typeof value !== 'object') return null;
+  const metadata = (value as { privateMetadata?: unknown }).privateMetadata;
+  if (!metadata || typeof metadata !== 'object') return null;
+  const marker = (metadata as { drezivo_dispatch?: unknown }).drezivo_dispatch;
+  if (!marker || typeof marker !== 'object') return null;
+  const raw = marker as {
+    source?: unknown;
+    invitation_id?: unknown;
+    dispatch_version?: unknown;
+    operation?: unknown;
+  };
+  const result = dispatchMarkerSchema.safeParse(
+    {
+      source: raw.source,
+      invitationId: raw.invitation_id,
+      dispatchVersion: raw.dispatch_version,
+      operation: raw.operation,
+    },
+  );
+  return result.success ? result.data : null;
+}
+
+function isProviderNotFound(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const record = error as { status?: unknown; statusCode?: unknown; errors?: unknown };
+  if (record.status === 404 || record.statusCode === 404) return true;
+  return (
+    Array.isArray(record.errors) &&
+    record.errors.some((entry) => {
+      if (!entry || typeof entry !== 'object') return false;
+      const code = (entry as { code?: unknown }).code;
+      return code === 'resource_not_found' || code === 'not_found';
+    })
+  );
+}
+
+async function providerCall<T>(call: () => Promise<T>, conflictMessage?: string): Promise<T>;
+async function providerCall<T>(
+  call: () => Promise<T>,
+  conflictMessage: string | undefined,
+  notFoundValue: T,
+): Promise<T>;
+async function providerCall<T>(
+  call: () => Promise<T>,
+  conflictMessage?: string,
+  notFoundValue?: T,
+): Promise<T> {
   try {
     return await call();
   } catch (error) {
+    if (notFoundValue !== undefined && isProviderNotFound(error)) return notFoundValue;
     if (error instanceof DependencyUnavailableError) {
       throw error;
     }
@@ -215,6 +306,30 @@ async function providerCall<T>(call: () => Promise<T>, conflictMessage?: string)
     // global error handler can safely turn this typed failure into a generic 503 response.
     throw new DependencyUnavailableError('Clerk is temporarily unavailable. Please try again.');
   }
+}
+
+async function listProviderInvitations(
+  client: ClerkProviderClient,
+  organizationId: string,
+): Promise<Awaited<ReturnType<ClerkProviderClient['organizations']['getOrganizationInvitationList']>>['data']> {
+  const rows: Awaited<
+    ReturnType<ClerkProviderClient['organizations']['getOrganizationInvitationList']>
+  >['data'][number][] = [];
+  const limit = 500;
+  for (let offset = 0; offset <= 10000; offset += limit) {
+    const page = await client.organizations.getOrganizationInvitationList({
+      organizationId,
+      limit,
+      offset,
+      status: [...clerkInvitationStatuses],
+    });
+    if (!page || !Array.isArray(page.data)) {
+      throw new DependencyUnavailableError('Clerk returned an invalid invitation response.');
+    }
+    rows.push(...page.data);
+    if (page.data.length < limit) return rows;
+  }
+  throw new DependencyUnavailableError('Clerk returned too many invitations.');
 }
 
 function isProviderConflict(error: unknown): boolean {
@@ -316,7 +431,71 @@ export function createClerkServerAdapter(
         if (parsed.expiresInDays !== undefined) params.expiresInDays = parsed.expiresInDays;
         if (parsed.inviterUserId !== undefined) params.inviterUserId = parsed.inviterUserId;
         if (parsed.redirectUrl !== undefined) params.redirectUrl = parsed.redirectUrl;
+        if (parsed.dispatchMarker !== undefined) {
+          params.privateMetadata = {
+            drezivo_dispatch: {
+              source: parsed.dispatchMarker.source,
+              invitation_id: parsed.dispatchMarker.invitationId,
+              dispatch_version: parsed.dispatchMarker.dispatchVersion,
+              operation: parsed.dispatchMarker.operation,
+            },
+          };
+        }
         return mapInvitation(await client.organizations.createOrganizationInvitation(params));
+      });
+    },
+
+    async findInvitation(organizationId, invitationId) {
+      const parsed = parseInput(
+        z.object({ organizationId: providerId, invitationId: providerId }),
+        { organizationId, invitationId },
+        'Clerk organization invitation',
+      );
+      return providerCall(
+        async () =>
+          mapInvitation(
+            await client.organizations.getOrganizationInvitation({
+              organizationId: parsed.organizationId,
+              invitationId: parsed.invitationId,
+            }),
+          ),
+        undefined,
+        null,
+      );
+    },
+
+    async findInvitationByDispatchMarker(organizationId, marker) {
+      const parsed = parseInput(
+        z.object({ organizationId: providerId, marker: dispatchMarkerSchema }),
+        { organizationId, marker },
+        'Clerk invitation dispatch marker',
+      );
+      return providerCall(async () => {
+        const invitations = await listProviderInvitations(client, parsed.organizationId);
+        const match = invitations.find((invitation) => {
+          const candidate = readDispatchMarker(invitation);
+          return (
+            candidate?.source === parsed.marker.source &&
+            candidate.invitationId === parsed.marker.invitationId &&
+            candidate.dispatchVersion === parsed.marker.dispatchVersion &&
+            candidate.operation === parsed.marker.operation
+          );
+        });
+        return match ? mapInvitation(match) : null;
+      });
+    },
+
+    async findInvitationsByInvitationId(organizationId, invitationId) {
+      const parsed = parseInput(
+        z.object({ organizationId: providerId, invitationId: z.string().uuid() }),
+        { organizationId, invitationId },
+        'Clerk invitation dispatch identity',
+      );
+      return providerCall(async () => {
+        const invitations = await listProviderInvitations(client, parsed.organizationId);
+        return invitations
+          .filter((invitation) => readDispatchMarker(invitation)?.invitationId === parsed.invitationId)
+          .map((invitation) => mapInvitation(invitation));
       });
     },
 
@@ -347,6 +526,30 @@ export function createClerkServerAdapter(
           params.requestingUserId = parsed.requestingUserId;
         return mapInvitation(await client.organizations.revokeOrganizationInvitation(params));
       });
+    },
+
+    async revokeInvitationIfPresent(input) {
+      const parsed = parseInput(revokeInvitationInput, input, 'Clerk organization invitation');
+      try {
+        return await providerCall(
+          async () => {
+            const params: Parameters<
+              typeof client.organizations.revokeOrganizationInvitation
+            >[0] = {
+              organizationId: parsed.organizationId,
+              invitationId: parsed.invitationId,
+            };
+            if (parsed.requestingUserId !== undefined)
+              params.requestingUserId = parsed.requestingUserId;
+            return mapInvitation(await client.organizations.revokeOrganizationInvitation(params));
+          },
+          'Invitation is no longer revocable.',
+          null,
+        );
+      } catch (error) {
+        if (error instanceof StateConflictError) return null;
+        throw error;
+      }
     },
 
     async createMembership(input) {
