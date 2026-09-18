@@ -17,7 +17,33 @@
   --color-warning-500: #b76e00;
   --color-danger-500: #c0362c;
 
+  --color-auth-paper: #fdf9f5;
+  --color-auth-ink: #1f1b18;
+  --color-auth-muted: #7d7b7a;
+  --color-auth-border: #dec7ac;
+  --color-auth-gold: #b48a55;
+  --color-auth-gold-dark: #96703f;
+  --color-auth-brown: #876751;
+  --color-auth-night: #171717;
+  --color-auth-panel: #181818;
+  --color-auth-text: #f7f5f2;
+  --color-auth-dark-muted: #b4b0ac;
+  --color-auth-line: #44413f;
+  --color-auth-hover: #292725;
+  --color-auth-button: #f7f5f2;
+  --color-auth-button-hover: #dedbd6;
+  --color-auth-button-ink: #181818;
+  --color-auth-link: #9b8cff;
+  --color-auth-focus: #b1a5ff;
+  --color-auth-error: #ff9f9f;
+
+  --color-google-blue: #4285f4;
+  --color-google-green: #34a853;
+  --color-google-yellow: #fbbc05;
+  --color-google-red: #ea4335;
+
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: Georgia, "Times New Roman", serif;
 }
 
 html {
@@ -37,4 +63,38 @@ body {
 :focus-visible {
   outline: 2px solid var(--color-brand-500);
   outline-offset: 2px;
+}
+
+.auth-layout {
+  position: relative;
+  min-height: 100svh;
+  overflow: hidden;
+  background: var(--color-auth-night);
+  color-scheme: dark;
+}
+
+.auth-panel {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  background: var(--color-auth-panel);
+}
+
+.auth-image {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .auth-panel {
+    width: 55%;
+    clip-path: polygon(0 0, 100% 0, 91% 100%, 0 100%);
+  }
+
+  .auth-image {
+    left: 42%;
+    display: block;
+  }
 }
