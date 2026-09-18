@@ -145,6 +145,19 @@ backoff. Pending outbox claims require `available_at <= now()`, and completion/d
 require the exact lease token. TBF-041 dispatches invitation intents only; verified claiming is
 TBF-042 and membership-removal dispatch is TBF-043.
 
+TBF-042 adds `0020_verified_invitation_claim.sql` with nullable `membership.clerk_membership_id`
+and a tenant-scoped provider-correlation uniqueness index. The claim endpoint requires a verified
+Clerk user, active organization, accepted invitation, exact current dispatch marker, and
+`org:member` provider membership before it creates or restores local Front Desk access. It locks
+the invitation and tenant, excludes the invitation's own pending seat reservation during the
+capacity check, installs the fixed v1 default branch grant, persists provider IDs, and returns the
+existing actor-context projection through tenant idempotency. The accepted-invitation webhook
+reuses the same transaction core under a system actor and leaves the inbox row received when
+provider membership visibility is delayed; membership webhook events alone never grant access.
+Invalid, foreign, expired, revoked, consumed, or Owner-role cases remain generic safe failures.
+PostgreSQL concurrency, RLS, provider-ordering, and rollback evidence is required before this
+task is marked complete.
+
 TBF-031 adds `GET /api/v1/workspaces` and `GET /api/v1/actor-context`. Workspace discovery is
 account-scoped and returns only provisioned tenants with an active local membership. Actor context
 returns the current tenant, membership, all active branches and safe grants, the selected branch,
