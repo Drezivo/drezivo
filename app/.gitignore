@@ -41,5 +41,5 @@ npm-debug.log*
 next-env.d.ts
 .vercel
 
-# clerk configuration (can include secrets)
+# Clerk configuration (can include secrets)
 /.clerk/
