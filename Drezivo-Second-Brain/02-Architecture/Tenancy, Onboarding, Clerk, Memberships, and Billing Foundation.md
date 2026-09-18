@@ -289,17 +289,21 @@ not consume a Front Desk seat.
 ### Trial, plan changes, and downgrade
 
 - The first trial is seven days from database time and applies the selected plan immediately.
-- The owner may change plan during trial. The new entitlement set is checked and applied
-  immediately, with an immutable plan-change event.
+- The owner may change plan during trial through `POST /api/v1/subscription/plan`. The new
+  entitlement set is resolved from the active version-1 plan, checked against current usage, and
+  applied immediately with an immutable plan-change event and tenant audit record. Paid-plan
+  changes remain deferred to later operator/payment work.
 - A downgrade is rejected when active assets or counted seats exceed the new plan. Nothing is
   automatically suspended or deactivated.
-- Trial expiry transitions `trialing` to `past_due`, sets a seven-day `grace_ends_at`, and keeps
-  normal operational access.
+- Trial expiry transitions `trialing` to `past_due`, sets `grace_ends_at` to seven days after the
+  original trial boundary, and keeps normal operational access.
 - Grace expiry transitions subscription and tenant to `restricted` unless verified payment has
   started a paid period.
 
-Request-time checks are authoritative. A durable expiry worker performs the same transitions for
-prompt convergence, but a late worker can never create extra access.
+Request-time checks are authoritative. Actor-context resolution runs the same database-time
+transition service before returning the tenant projection. A durable per-tenant expiry worker
+performs the same transitions for prompt convergence, while deterministic subscription-event keys
+make request/worker races and duplicate jobs safe. A late worker can never create extra access.
 
 ### Restricted and cancelled behavior
 

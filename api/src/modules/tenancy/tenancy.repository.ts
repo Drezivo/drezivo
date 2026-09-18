@@ -16,6 +16,7 @@ import {
 } from '../../db/client.js';
 import { StateConflictError, ValidationError } from '../../shared/errors.js';
 import { resolveTenantEntitlements } from '../entitlements/entitlements.service.js';
+import { reconcileTenantLifecycle } from '../billing/billing.service.js';
 
 interface WorkspaceRow {
   tenant_id: string;
@@ -133,6 +134,7 @@ export async function resolveActorContext(input: {
   principalId: string;
   clerkOrgId: string;
   branchId?: string;
+  requestId?: string;
 }): Promise<ResolveActorResult> {
   return withActorTenantResolutionTransaction(input.principalId, async (context) => {
     const tenantResult = await context.client.query<TenantRow>(
@@ -145,7 +147,18 @@ export async function resolveActorContext(input: {
 
     await context.setTenantContext(tenant.id);
     try {
-      return await resolveInsideTenant(context, tenant, input);
+      await reconcileTenantLifecycle(context.client, tenant.id, {
+        actorKey: input.principalId,
+        requestId: input.requestId ?? 'request:actor-context',
+      });
+      const refreshedTenantResult = await context.client.query<TenantRow>(
+        `SELECT id, clerk_org_id, name, slug, status, currency, timezone, created_at, updated_at
+         FROM tenant WHERE id = $1 LIMIT 1`,
+        [tenant.id],
+      );
+      const refreshedTenant = refreshedTenantResult.rows[0];
+      if (!refreshedTenant) return { kind: 'state_conflict' };
+      return await resolveInsideTenant(context, refreshedTenant, input);
     } finally {
       await context.clearTenantContext();
     }

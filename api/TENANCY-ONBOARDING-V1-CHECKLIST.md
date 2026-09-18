@@ -264,19 +264,25 @@ or billing tasks as authority for this work.
     privilege enforcement, rollback, exact limits, tenant isolation, and concurrent seat/asset
     claims. Full PostgreSQL evidence requires the disposable `TEST_DATABASE_URL`.
 
-- [ ] **TBF-033 — Implement trial lifecycle and request-time gates**
+- [x] **TBF-033 — Implement trial lifecycle and request-time gates**
   - **Depends on:** TBF-030, TBF-032.
   - **Outcome:** Trialing, normal past-due grace, and restricted state are reliable even when the
     worker is delayed.
   - **Acceptance:**
-    - [ ] Trial change applies a new plan's limits immediately and records immutable event.
-    - [ ] Downgrade blocks when current assets or counted seats exceed the new plan.
-    - [ ] Trial ends to seven-day normal-access past_due grace, then restricted.
-    - [ ] Restricted policy allows existing-rental settlement, returns, refunds, and exports only.
-    - [ ] One shared restricted-action matrix is used by tenant context and every endpoint, so
+    - [x] Trial change applies a new plan's limits immediately and records an immutable event through
+          `POST /api/v1/subscription/plan`; paid-plan changes remain deferred.
+    - [x] Downgrade blocks when current active assets or counted Front Desk seats exceed the new plan.
+    - [x] Trial ends to a seven-day normal-access `past_due` grace, then `restricted`, using database
+          time and the original trial boundary.
+    - [x] Restricted policy allows existing-rental settlement, returns, refunds, and exports only.
+    - [x] One shared restricted-action matrix is used by tenant context and every endpoint, so
           restricted access cannot accidentally inherit active or cancelled behavior.
-    - [ ] Request-time state checks and durable expiry work agree.
-  - **Tests/evidence:** Database-time boundary tests for every transition and duplicate job replay.
+    - [x] Request-time state checks and the durable subscription expiry sweep use the same transition
+          service and deterministic event keys.
+  - **Tests/evidence:** `tests/integration/subscription-lifecycle.test.ts` covers database-time trial
+    and grace boundaries, delayed-worker catch-up, request-time actor-context reconciliation, replay-safe
+    plan changes, owner-only authorization, and downgrade capacity rejection. Full PostgreSQL evidence
+    requires the disposable `TEST_DATABASE_URL`.
 
 ## Phase 4: Front Desk invitation and membership
 

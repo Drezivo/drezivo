@@ -167,7 +167,7 @@ Partial monetary refunds and damage deductions belong in V1. Partial physical re
 
 ## 8. SaaS billing, files and durable jobs
 
-`plan` is versioned by `(code,version)`: confirmed monthly amounts are **30000 / 49900 / 129900 PHP minor units** for Starter/Professional/Business. Entitlement and release availability must both pass; a null numerical limit is not implicitly unlimited. `subscription` is current state, `subscription_event` preserves changes and `subscription_payment` records Drezivo collections only. They never feed renter-payment balances.
+`plan` is versioned by `(code,version)`: confirmed monthly amounts are **30000 / 49900 / 129900 PHP minor units** for Starter/Professional/Business. Entitlement and release availability must both pass; a null numerical limit is not implicitly unlimited. `subscription` is current state, `subscription_event` preserves changes and `subscription_payment` records Drezivo collections only. They never feed renter-payment balances. TBF-033 reconciles trial and grace expiry from database time at request time and in the durable worker; deterministic event keys make delayed or duplicate jobs safe. Only the Owner may change a trial plan, and target-plan capacity is checked against active physical assets and active Front Desk memberships before the plan pointer changes.
 
 The TBF-032 entitlement service is the single runtime resolver for the current active
 version-1 plan. It validates the subscription, plan, and required `physical_assets.max` and

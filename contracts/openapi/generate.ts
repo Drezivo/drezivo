@@ -244,6 +244,27 @@ registry.registerPath({
   },
 });
 
+// ---- subscription lifecycle ---------------------------------------------
+registry.registerPath({
+  method: 'post',
+  path: '/subscription/plan',
+  tags: ['subscription'],
+  summary: 'Change the owner workspace plan during the trial.',
+  request: {
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: changeSubscriptionPlanRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Trial plan changed or an identical plan change replayed.',
+      content: { 'application/json': { schema: successEnvelope(subscriptionSummary) } },
+    },
+    403: jsonError('Only the active tenant owner can change the trial plan.'),
+    409: jsonError('The trial state, idempotency key, or requested plan is not valid.'),
+    429: jsonError('Subscription plan change rate limit exceeded.'),
+  },
+});
+
 // ---- storefront ---------------------------------------------------------
 registry.registerPath({
   method: 'get',

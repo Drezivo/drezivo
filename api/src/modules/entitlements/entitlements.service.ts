@@ -32,6 +32,11 @@ export interface QuotaCheckResult {
   remaining: number;
 }
 
+export interface PlanCapacityCheckResult {
+  physicalAssets: QuotaCheckResult;
+  frontdeskSeats: QuotaCheckResult;
+}
+
 /** Resolve a selected v1 plan without opening a transaction or hiding malformed seed data. */
 export async function resolvePlanEntitlements(
   client: PoolClient,
@@ -91,6 +96,24 @@ export async function assertFrontDeskSeatCapacity(
   const entitlements = await resolveTenantEntitlements(client, tenantId);
   const current = await countActiveFrontdeskMemberships(client, tenantId);
   return ensureCapacity('frontdesk_seats', current, additional, entitlements.frontdeskSeatsMax);
+}
+
+/**
+ * Compares current usage with a target plan while the caller owns the tenant lock. This is used
+ * for trial plan changes; it intentionally performs no write so the billing transaction can
+ * decide which subscription/event rows must commit together.
+ */
+export async function assertPlanCapacity(
+  client: PoolClient,
+  tenantId: string,
+  target: TenantEntitlementSnapshot,
+): Promise<PlanCapacityCheckResult> {
+  const currentAssets = await countActivePhysicalAssets(client, tenantId);
+  const currentFrontdesk = await countActiveFrontdeskMemberships(client, tenantId);
+  return {
+    physicalAssets: ensureCapacity('physical_assets', currentAssets, 0, target.physicalAssetsMax),
+    frontdeskSeats: ensureCapacity('frontdesk_seats', currentFrontdesk, 0, target.frontdeskSeatsMax),
+  };
 }
 
 async function requireLockedTenant(client: PoolClient, tenantId: string): Promise<void> {

@@ -105,6 +105,16 @@ shared entitlement service resolves the active v1 plan and required limits for a
 bootstrap, and its same-client quota guards lock the tenant before counting active physical assets
 or active Front Desk memberships. Pending invitation reservations remain a TBF-040 extension.
 
+TBF-033 completes the Phase 3 lifecycle boundary without adding a new table. The existing
+`subscription` and `subscription_event` records are transitioned by one shared database-time
+service: an expired trial becomes `past_due` with grace ending seven days after the original
+trial boundary, and an expired grace becomes `restricted` while preserving the tenant's approved
+settlement, return, refund, and export actions. Actor-context requests reconcile state before
+returning the projection, and the worker repeats the same per-tenant transition transaction for
+delayed jobs. The Owner-only `POST /api/v1/subscription/plan` command uses tenant idempotency,
+the TBF-032 resolver, active-usage downgrade checks, immutable plan-change events, and tenant
+audit records. Paid-plan changes and payment activation remain later billing work.
+
 TBF-031 adds `GET /api/v1/workspaces` and `GET /api/v1/actor-context`. Workspace discovery is
 account-scoped and returns only provisioned tenants with an active local membership. Actor context
 returns the current tenant, membership, all active branches and safe grants, the selected branch,

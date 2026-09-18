@@ -109,6 +109,11 @@ authoritative active v1 plan resolver, and catalogue/seat writers must use its t
 guards. Pending invitation reservations are intentionally not counted until TBF-040 adds invitation
 persistence; the H06 and L02 lifecycle work remains open.
 
+TBF-033 is implemented as the Phase 3 lifecycle boundary: request-time actor resolution and the
+durable worker share database-time trial/grace transitions, the restricted/cancelled action matrix,
+and the Owner-only trial plan-change command. Paid-plan changes, payment activation, and recurring
+billing remain L03/L05 work after TBF-051.
+
 ---
 
 ## HIGH (P0) — owner workspace transactional core
