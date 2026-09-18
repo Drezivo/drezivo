@@ -15,9 +15,9 @@ Tokens live in `src/app/globals.css` under the Tailwind v4 `@theme` block (`--co
 
 ## Design Principles
 
-This is an operations dashboard, not a marketing site: flat design, data-dense tables, high
-contrast, minimal decoration. Do not introduce glassmorphism, neumorphism, or gradient
-hero treatments here — save those for `web`.
+This is the staff-facing application shell and authentication surface: keep it clear, high
+contrast, and restrained. Do not introduce glassmorphism, neumorphism, or gradient hero
+treatments here — save those for `web`.
 
 ## Component Framework
 
@@ -25,13 +25,17 @@ Tailwind CSS v4 for styling. Primitives live in `src/components/ui/` (button, in
 dialog, table, badge, empty-state, skeleton) — extend that set before reaching for a new
 UI library. No competing CSS-in-JS or component kit.
 
+Prefer shadcn-compatible primitives in `src/components/ui/` for reusable interaction patterns.
+Use Radix primitives for focus management, keyboard behavior, portals, and overlays. Build
+custom components only for Drezivo-specific composition or behavior, and do not add a competing
+component library.
+
 ## Layout
 
-- CSS Grid for the dashboard shell (`src/app/(dashboard)/layout.tsx`), Flexbox within
-  components. Use `gap`, not margin hacks.
-- Semantic HTML: `<header>`, `<nav>`, `<main>`, `<section>`, `<table>` with `<caption>`.
-- Mobile-first is not the priority for this repo (staff use desktop/tablet at the counter),
-  but nothing may break below 768px — no fixed-width layouts.
+- Use Flexbox and CSS Grid within components. Use `gap`, not margin hacks.
+- Semantic HTML: `<header>`, `<nav>`, `<main>`, and `<section>` where they describe the
+  page structure.
+- Nothing may break below 768px — no fixed-width layouts.
 
 ## Accessibility (non-negotiable)
 
@@ -41,13 +45,10 @@ UI library. No competing CSS-in-JS or component kit.
 - Contrast: 4.5:1 normal text, 3:1 large text — check against the tokens in `globals.css`.
 - Visible focus indicators (`:focus-visible` in `globals.css`). Never `outline: none`
   without a replacement.
-- Status is never color-only: pair every `Badge` with a text label (see
-  `reservation-status-badge.tsx`).
+- Status is never color-only: pair visual state with a text label.
 
 ## Performance
 
-- `TableSkeleton` / `Skeleton` for loading states — never a blank screen during a fetch.
-- TanStack Query owns caching (`staleTime`, `retry`) — don't hand-roll a second cache.
-- Virtualize any list expected to exceed ~200 rows before it ships; none does yet.
-- Bundle size: don't import a whole library for one formatter — see `lib/money.ts`, which
-  uses `Intl.NumberFormat` instead of a currency-formatting dependency.
+- Use a visible loading state rather than a blank screen during an asynchronous operation.
+- Do not add a client-side cache for the authentication surface.
+- Bundle size: do not import a whole library for one small helper.

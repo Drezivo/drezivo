@@ -1,67 +1,128 @@
-import type { ReactNode } from "react";
+import { forwardRef } from "react";
 
-export interface TableColumn<TRow> {
-  key: string;
-  header: string;
-  render: (row: TRow) => ReactNode;
-  /** Right-align numeric/money columns. */
-  align?: "left" | "right";
-}
+import { cn } from "@/lib/utils";
 
-export interface TableProps<TRow> {
-  columns: TableColumn<TRow>[];
-  rows: TRow[];
-  /** Stable row identity for React keys — never array index (rows can reorder on refetch). */
-  getRowId: (row: TRow) => string;
-  onRowClick?: (row: TRow) => void;
-  caption: string;
-}
-
-export function Table<TRow>({ columns, rows, getRowId, onRowClick, caption }: TableProps<TRow>) {
+const Table = forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(function Table(
+  { className, ...props },
+  ref
+) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-ink-300 bg-white">
-      <table className="w-full min-w-[640px] border-collapse text-sm">
-        <caption className="sr-only">{caption}</caption>
-        <thead>
-          <tr className="border-b border-ink-300 bg-ink-100 text-left text-xs font-medium uppercase tracking-wide text-ink-500">
-            {columns.map((column) => (
-              <th
-                key={column.key}
-                scope="col"
-                className={["px-4 py-3", column.align === "right" ? "text-right" : "text-left"].join(" ")}
-              >
-                {column.header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const rowId = getRowId(row);
-            return (
-              <tr
-                key={rowId}
-                onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={[
-                  "border-b border-ink-100 last:border-b-0",
-                  onRowClick ? "cursor-pointer hover:bg-brand-50" : "",
-                ].join(" ")}
-              >
-                {columns.map((column) => (
-                  <td
-                    key={column.key}
-                    className={["px-4 py-3 text-ink-900", column.align === "right" ? "text-right" : "text-left"].join(
-                      " "
-                    )}
-                  >
-                    {column.render(row)}
-                  </td>
-                ))}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="relative w-full overflow-x-auto">
+      <table
+        ref={ref}
+        data-slot="table"
+        className={cn("w-full caption-bottom text-sm", className)}
+        {...props}
+      />
     </div>
   );
-}
+});
+
+const TableHeader = forwardRef<
+  HTMLTableSectionElement,
+  React.HTMLAttributes<HTMLTableSectionElement>
+>(function TableHeader({ className, ...props }, ref) {
+  return (
+    <thead
+      ref={ref}
+      data-slot="table-header"
+      className={cn("[&_tr]:border-b", className)}
+      {...props}
+    />
+  );
+});
+
+const TableBody = forwardRef<
+  HTMLTableSectionElement,
+  React.HTMLAttributes<HTMLTableSectionElement>
+>(function TableBody({ className, ...props }, ref) {
+  return (
+    <tbody
+      ref={ref}
+      data-slot="table-body"
+      className={cn("[&_tr:last-child]:border-0", className)}
+      {...props}
+    />
+  );
+});
+
+const TableFooter = forwardRef<
+  HTMLTableSectionElement,
+  React.HTMLAttributes<HTMLTableSectionElement>
+>(function TableFooter({ className, ...props }, ref) {
+  return (
+    <tfoot
+      ref={ref}
+      data-slot="table-footer"
+      className={cn(
+        "border-t bg-dashboard-active/40 font-medium [&>tr]:last:border-b-0",
+        className
+      )}
+      {...props}
+    />
+  );
+});
+
+const TableRow = forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTMLTableRowElement>>(
+  function TableRow({ className, ...props }, ref) {
+    return (
+      <tr
+        ref={ref}
+        data-slot="table-row"
+        className={cn(
+          "border-b border-dashboard-border transition-colors hover:bg-dashboard-canvas",
+          className
+        )}
+        {...props}
+      />
+    );
+  }
+);
+
+const TableHead = forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<HTMLTableCellElement>>(
+  function TableHead({ className, ...props }, ref) {
+    return (
+      <th
+        ref={ref}
+        data-slot="table-head"
+        className={cn(
+          "h-12 whitespace-nowrap px-4 text-left align-middle text-xs font-semibold text-dashboard-muted [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+          className
+        )}
+        {...props}
+      />
+    );
+  }
+);
+
+const TableCell = forwardRef<HTMLTableCellElement, React.TdHTMLAttributes<HTMLTableCellElement>>(
+  function TableCell({ className, ...props }, ref) {
+    return (
+      <td
+        ref={ref}
+        data-slot="table-cell"
+        className={cn(
+          "whitespace-nowrap px-4 py-3 align-middle [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+          className
+        )}
+        {...props}
+      />
+    );
+  }
+);
+
+const TableCaption = forwardRef<
+  HTMLTableCaptionElement,
+  React.HTMLAttributes<HTMLTableCaptionElement>
+>(function TableCaption({ className, ...props }, ref) {
+  return (
+    <caption
+      ref={ref}
+      data-slot="table-caption"
+      className={cn("mt-4 text-sm text-dashboard-muted", className)}
+      {...props}
+    />
+  );
+});
+
+export { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow };

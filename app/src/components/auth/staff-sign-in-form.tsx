@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useSignIn } from "@clerk/nextjs";
+import { useSignIn, useSignUp } from "@clerk/nextjs";
+import { isClerkAPIResponseError } from "@clerk/nextjs/errors";
 
+type AuthFlow = "sign-in" | "sign-up";
 type VerificationStep = "email" | "first-factor" | "second-factor";
 type SecondFactorStrategy = "email_code" | "phone_code" | "totp" | "backup_code";
 
@@ -12,7 +14,7 @@ type SecondFactorTarget =
   | { strategy: "totp" }
   | { strategy: "backup_code" };
 
-const GENERIC_ERROR = "We couldn't sign you in. Please check your details and try again.";
+const GENERIC_ERROR = "We couldn't continue. Please check your details and try again.";
 
 function getSecondFactorLabel(strategy: SecondFactorStrategy) {
   switch (strategy) {
@@ -27,9 +29,15 @@ function getSecondFactorLabel(strategy: SecondFactorStrategy) {
   }
 }
 
-export function StaffSignInForm() {
-  const { isLoaded, signIn, setActive } = useSignIn();
+type StaffSignInFormProps = {
+  initialFlow?: AuthFlow;
+};
+
+export function StaffSignInForm({ initialFlow = "sign-in" }: StaffSignInFormProps) {
+  const { isLoaded: isSignInLoaded, signIn, setActive: setActiveFromSignIn } = useSignIn();
+  const { isLoaded: isSignUpLoaded, signUp, setActive: setActiveFromSignUp } = useSignUp();
   const [step, setStep] = useState<VerificationStep>("email");
+  const [flow, setFlow] = useState<AuthFlow>(initialFlow);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [firstFactorEmailAddressId, setFirstFactorEmailAddressId] = useState<string | null>(null);
@@ -37,7 +45,8 @@ export function StaffSignInForm() {
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isReady = isLoaded && Boolean(signIn && setActive);
+  const setActive = setActiveFromSignIn ?? setActiveFromSignUp;
+  const isReady = isSignInLoaded && isSignUpLoaded && Boolean(signIn && signUp && setActive);
 
   async function prepareSecondFactor(attempt: NonNullable<typeof signIn>) {
     const factor = attempt.supportedSecondFactors?.find((candidate) =>
@@ -83,9 +92,29 @@ export function StaffSignInForm() {
     setError("Additional verification is required. Please try again.");
   }
 
+  async function startEmailSignUp(normalizedEmail: string) {
+    if (!signUp) return;
+
+    await signUp.create({ emailAddress: normalizedEmail });
+    await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+    setEmail(normalizedEmail);
+    setFlow("sign-up");
+    setCode("");
+    setStep("first-factor");
+  }
+
+  async function resolveSignUpAttempt(attempt: NonNullable<typeof signUp>) {
+    if (attempt.status === "complete" && attempt.createdSessionId && setActive) {
+      await setActive({ session: attempt.createdSessionId, redirectUrl: "/" });
+      return;
+    }
+
+    setError("Additional account verification is required. Please try again.");
+  }
+
   async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!isReady || !signIn) return;
+    if (!isReady || !signIn || !signUp) return;
 
     const normalizedEmail = email.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
@@ -97,6 +126,11 @@ export function StaffSignInForm() {
     setIsPending(true);
 
     try {
+      if (flow === "sign-up") {
+        await startEmailSignUp(normalizedEmail);
+        return;
+      }
+
       const attempt = await signIn.create({ identifier: normalizedEmail });
       const factor = attempt.supportedFirstFactors?.find((candidate) => candidate.strategy === "email_code");
 
@@ -109,8 +143,23 @@ export function StaffSignInForm() {
       setEmail(normalizedEmail);
       setFirstFactorEmailAddressId(factor.emailAddressId);
       setCode("");
+      setFlow("sign-in");
       setStep("first-factor");
-    } catch {
+    } catch (caughtError) {
+      if (
+        flow === "sign-in" &&
+        isClerkAPIResponseError(caughtError) &&
+        caughtError.errors[0]?.code === "form_identifier_not_found"
+      ) {
+        try {
+          await startEmailSignUp(normalizedEmail);
+          return;
+        } catch {
+          setError(GENERIC_ERROR);
+          return;
+        }
+      }
+
       setError(GENERIC_ERROR);
     } finally {
       setIsPending(false);
@@ -125,8 +174,13 @@ export function StaffSignInForm() {
     setIsPending(true);
 
     try {
-      const attempt = await signIn.attemptFirstFactor({ strategy: "email_code", code: code.trim() });
-      await resolveAttempt(attempt);
+      if (flow === "sign-up") {
+        const attempt = await signUp?.attemptEmailAddressVerification({ code: code.trim() });
+        if (attempt) await resolveSignUpAttempt(attempt);
+      } else {
+        const attempt = await signIn.attemptFirstFactor({ strategy: "email_code", code: code.trim() });
+        await resolveAttempt(attempt);
+      }
     } catch {
       setError(GENERIC_ERROR);
     } finally {
@@ -166,7 +220,9 @@ export function StaffSignInForm() {
     setIsPending(true);
 
     try {
-      if (step === "first-factor" && firstFactorEmailAddressId) {
+      if (step === "first-factor" && flow === "sign-up" && signUp) {
+        await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+      } else if (step === "first-factor" && firstFactorEmailAddressId) {
         await signIn.prepareFirstFactor({ strategy: "email_code", emailAddressId: firstFactorEmailAddressId });
       } else if (step === "second-factor" && secondFactorTarget?.strategy === "email_code") {
         await signIn.prepareSecondFactor({ strategy: "email_code", emailAddressId: secondFactorTarget.emailAddressId });
@@ -187,11 +243,19 @@ export function StaffSignInForm() {
     setIsPending(true);
 
     try {
-      await signIn.authenticateWithRedirect({
-        strategy: "oauth_google",
-        redirectUrl: "/sso-callback",
-        redirectUrlComplete: "/",
-      });
+      if (flow === "sign-up") {
+        await signUp?.authenticateWithRedirect({
+          strategy: "oauth_google",
+          redirectUrl: "/sso-callback",
+          redirectUrlComplete: "/",
+        });
+      } else {
+        await signIn.authenticateWithRedirect({
+          strategy: "oauth_google",
+          redirectUrl: "/sso-callback",
+          redirectUrlComplete: "/",
+        });
+      }
     } catch {
       setError(GENERIC_ERROR);
       setIsPending(false);
@@ -203,6 +267,7 @@ export function StaffSignInForm() {
     setCode("");
     setFirstFactorEmailAddressId(null);
     setSecondFactorTarget(null);
+    setFlow(initialFlow);
     setStep("email");
   }
 
@@ -237,12 +302,13 @@ export function StaffSignInForm() {
             />
             <p className="text-xs text-auth-dark-muted">We&apos;ll send you a verification code.</p>
           </div>
+          <div id="clerk-captcha" data-cl-theme="dark" data-cl-size="flexible" />
           <button
             type="submit"
             disabled={!isReady || isPending}
             className="h-12 rounded-full bg-auth-button px-5 text-sm font-semibold text-auth-button-ink transition-colors hover:bg-auth-button-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-auth-focus focus-visible:ring-offset-2 focus-visible:ring-offset-auth-panel disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isPending ? "Sending…" : "Continue"}
+            {isPending ? "Sending…" : flow === "sign-up" ? "Create account" : "Continue"}
           </button>
         </form>
       )}
@@ -268,14 +334,18 @@ export function StaffSignInForm() {
               onChange={(event) => setCode(event.target.value)}
               className="h-12 rounded-lg border border-auth-line bg-transparent px-4 text-center text-lg tracking-[0.35em] text-auth-text placeholder:text-auth-dark-muted focus:border-auth-focus focus:outline-none focus:ring-2 focus:ring-auth-focus/40"
             />
-            <p className="text-xs text-auth-dark-muted">{step === "first-factor" ? `Code sent to ${email}.` : verificationLabel}</p>
+            <p className="text-xs text-auth-dark-muted">
+              {step === "first-factor"
+                ? `${flow === "sign-up" ? "Verification code sent to" : "Code sent to"} ${email}.`
+                : verificationLabel}
+            </p>
           </div>
           <button
             type="submit"
             disabled={!isReady || isPending}
             className="h-12 rounded-full bg-auth-button px-5 text-sm font-semibold text-auth-button-ink transition-colors hover:bg-auth-button-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-auth-focus focus-visible:ring-offset-2 focus-visible:ring-offset-auth-panel disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isPending ? "Verifying…" : "Verify"}
+            {isPending ? "Verifying…" : flow === "sign-up" ? "Create account" : "Verify"}
           </button>
         </form>
       )}

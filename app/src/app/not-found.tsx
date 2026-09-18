@@ -9,7 +9,7 @@ export default function NotFound() {
         organization.
       </p>
       <Link href="/" className="text-sm font-medium text-brand-600 hover:underline">
-        Back to dashboard
+        Back to sign in
       </Link>
     </div>
   );

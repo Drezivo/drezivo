@@ -4,11 +4,17 @@ import { StaffSignInForm } from "@/components/auth/staff-sign-in-form";
 
 const clerk = vi.hoisted(() => ({
   useSignIn: vi.fn(),
+  useSignUp: vi.fn(),
   setActive: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({
   useSignIn: clerk.useSignIn,
+  useSignUp: clerk.useSignUp,
+}));
+
+vi.mock("@clerk/nextjs/errors", () => ({
+  isClerkAPIResponseError: (error: unknown) => Boolean(error && typeof error === "object" && "errors" in error),
 }));
 
 function createSignInMock() {
@@ -49,6 +55,34 @@ function createSignInMock() {
   return signIn;
 }
 
+function createSignUpMock() {
+  const signUp = {
+    status: "missing_requirements",
+    createdSessionId: null,
+    create: vi.fn(),
+    prepareEmailAddressVerification: vi.fn(),
+    attemptEmailAddressVerification: vi.fn(),
+    authenticateWithRedirect: vi.fn(),
+  };
+
+  signUp.create.mockResolvedValue(signUp);
+  signUp.prepareEmailAddressVerification.mockResolvedValue(signUp);
+  signUp.attemptEmailAddressVerification.mockResolvedValue({
+    ...signUp,
+    status: "complete",
+    createdSessionId: "session_signup",
+  });
+  signUp.authenticateWithRedirect.mockResolvedValue(undefined);
+
+  return signUp;
+}
+
+function useClerkMocks(signIn = createSignInMock(), signUp = createSignUpMock()) {
+  clerk.useSignIn.mockReturnValue({ isLoaded: true, signIn, setActive: clerk.setActive });
+  clerk.useSignUp.mockReturnValue({ isLoaded: true, signUp, setActive: clerk.setActive });
+  return { signIn, signUp };
+}
+
 function submitCurrentForm() {
   const form = screen.getByTestId("staff-sign-in-form").querySelector("form");
   if (!form) throw new Error("Expected a sign-in form");
@@ -59,12 +93,14 @@ describe("StaffSignInForm", () => {
   beforeEach(() => {
     clerk.setActive.mockReset().mockResolvedValue(undefined);
     clerk.useSignIn.mockReset();
+    clerk.useSignUp.mockReset();
   });
 
   it("starts email verification with the configured email factor", async () => {
-    const signIn = createSignInMock();
-    clerk.useSignIn.mockReturnValue({ isLoaded: true, signIn, setActive: clerk.setActive });
+    const { signIn } = useClerkMocks();
     render(<StaffSignInForm />);
+
+    expect(document.getElementById("clerk-captcha")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "staff@example.com" } });
     submitCurrentForm();
@@ -74,9 +110,38 @@ describe("StaffSignInForm", () => {
     expect(screen.getByLabelText("Verification code")).toBeVisible();
   });
 
+  it("starts email sign-up when Clerk cannot find the account", async () => {
+    const { signIn, signUp } = useClerkMocks();
+    signIn.create.mockRejectedValue({
+      errors: [{ code: "form_identifier_not_found" }],
+    });
+    render(<StaffSignInForm />);
+
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new-owner@example.com" } });
+    submitCurrentForm();
+
+    await waitFor(() => expect(signUp.create).toHaveBeenCalledWith({ emailAddress: "new-owner@example.com" }));
+    expect(signUp.prepareEmailAddressVerification).toHaveBeenCalledWith({ strategy: "email_code" });
+    expect(screen.getByLabelText("Verification code")).toBeVisible();
+  });
+
+  it("verifies a new account and activates only the completed sign-up session", async () => {
+    const { signUp } = useClerkMocks();
+    render(<StaffSignInForm initialFlow="sign-up" />);
+
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new-owner@example.com" } });
+    submitCurrentForm();
+    await screen.findByLabelText("Verification code");
+
+    fireEvent.change(screen.getByLabelText("Verification code"), { target: { value: "123456" } });
+    submitCurrentForm();
+
+    await waitFor(() => expect(signUp.attemptEmailAddressVerification).toHaveBeenCalledWith({ code: "123456" }));
+    expect(clerk.setActive).toHaveBeenCalledWith({ session: "session_signup", redirectUrl: "/" });
+  });
+
   it("shows a safe validation error for an invalid email", async () => {
-    const signIn = createSignInMock();
-    clerk.useSignIn.mockReturnValue({ isLoaded: true, signIn, setActive: clerk.setActive });
+    const { signIn } = useClerkMocks();
     render(<StaffSignInForm />);
 
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "not-an-email" } });
@@ -87,14 +152,13 @@ describe("StaffSignInForm", () => {
   });
 
   it("activates a session only after the first factor is complete", async () => {
-    const signIn = createSignInMock();
+    const { signIn } = useClerkMocks();
     signIn.attemptFirstFactor.mockResolvedValue({
       ...signIn,
       status: "needs_second_factor",
       createdSessionId: null,
       supportedSecondFactors: [{ strategy: "totp" }],
     });
-    clerk.useSignIn.mockReturnValue({ isLoaded: true, signIn, setActive: clerk.setActive });
     render(<StaffSignInForm />);
 
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "staff@example.com" } });
@@ -120,9 +184,8 @@ describe("StaffSignInForm", () => {
   });
 
   it("shows a generic error when the verification code is rejected", async () => {
-    const signIn = createSignInMock();
+    const { signIn } = useClerkMocks();
     signIn.attemptFirstFactor.mockRejectedValue(new Error("provider detail"));
-    clerk.useSignIn.mockReturnValue({ isLoaded: true, signIn, setActive: clerk.setActive });
     render(<StaffSignInForm />);
 
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "staff@example.com" } });
@@ -132,13 +195,12 @@ describe("StaffSignInForm", () => {
     fireEvent.change(screen.getByLabelText("Verification code"), { target: { value: "000000" } });
     submitCurrentForm();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("We couldn't sign you in. Please check your details and try again.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("We couldn't continue. Please check your details and try again.");
     expect(screen.queryByText("provider detail")).not.toBeInTheDocument();
   });
 
   it("resends the code and can restart the email flow", async () => {
-    const signIn = createSignInMock();
-    clerk.useSignIn.mockReturnValue({ isLoaded: true, signIn, setActive: clerk.setActive });
+    const { signIn } = useClerkMocks();
     render(<StaffSignInForm />);
 
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "staff@example.com" } });
@@ -152,9 +214,23 @@ describe("StaffSignInForm", () => {
     expect(screen.getByLabelText("Email")).toBeVisible();
   });
 
+  it("resends a sign-up code and can restart the sign-up flow", async () => {
+    const { signUp } = useClerkMocks();
+    render(<StaffSignInForm initialFlow="sign-up" />);
+
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new-owner@example.com" } });
+    submitCurrentForm();
+    await screen.findByLabelText("Verification code");
+
+    fireEvent.click(screen.getByRole("button", { name: "Resend code" }));
+    await waitFor(() => expect(signUp.prepareEmailAddressVerification).toHaveBeenCalledTimes(2));
+
+    fireEvent.click(screen.getByRole("button", { name: "Start over" }));
+    expect(screen.getByLabelText("Email")).toBeVisible();
+  });
+
   it("uses only the Google OAuth strategy", async () => {
-    const signIn = createSignInMock();
-    clerk.useSignIn.mockReturnValue({ isLoaded: true, signIn, setActive: clerk.setActive });
+    const { signIn } = useClerkMocks();
     render(<StaffSignInForm />);
 
     await act(async () => {
@@ -169,12 +245,11 @@ describe("StaffSignInForm", () => {
   });
 
   it("disables the email submit button while a request is pending", async () => {
-    const signIn = createSignInMock();
+    const { signIn } = useClerkMocks();
     let resolveCreate: (value: typeof signIn) => void = () => undefined;
     signIn.create.mockReturnValue(new Promise<typeof signIn>((resolve) => {
       resolveCreate = resolve;
     }));
-    clerk.useSignIn.mockReturnValue({ isLoaded: true, signIn, setActive: clerk.setActive });
     render(<StaffSignInForm />);
 
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "staff@example.com" } });

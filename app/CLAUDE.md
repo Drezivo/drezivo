@@ -1,8 +1,8 @@
 # Drezivo App
 
-Business dashboard (app.drezivo.com) for Drezivo, a Philippines-first multi-tenant clothing
-rental SaaS. Next.js 15 App Router, TypeScript strict, Tailwind v4, Clerk, TanStack Query.
-Staff-only: Owner and Front desk roles sign in with an active organization.
+Staff authentication and owner dashboard shell (app.drezivo.com) for Drezivo. Next.js 15 App
+Router, TypeScript strict, Tailwind v4, shadcn-style Radix primitives, and Clerk. The operational
+dashboard data pages and API client are still being rebuilt.
 
 ## Commands
 
@@ -11,12 +11,10 @@ Staff-only: Owner and Front desk roles sign in with an active organization.
 
 ## Key decisions
 
-- Business writes live in the Express API, never in a Next.js route handler
-  (`src/app/api/**` is readiness-only — TRD §1).
-- Every mutating control goes through `lib/use-submit-guard.ts` — a shared hook, never
-  per-screen code (`.claude/rules/lessons.md`).
-- API types come only from `@drezivo/contracts`, pinned exact — no hand-written API type.
-- `lib/permissions.ts` gates UX only, never authorization; the API re-checks every route.
+- `src/app/api/**` is readiness-only; business routes are not present in this workspace.
+- Clerk owns sign-in, sign-up, email verification, and Google SSO.
+- The protected dashboard route currently renders the navigation shell and an empty workspace until
+  the operational dashboard data flows are rebuilt.
 
 @.claude/rules/idempotency-concurrency.md
 @.claude/rules/engineering-standards.md

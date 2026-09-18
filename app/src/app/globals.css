@@ -37,6 +37,15 @@
   --color-auth-focus: #b1a5ff;
   --color-auth-error: #ff9f9f;
 
+  --color-dashboard-canvas: #fbfdff;
+  --color-dashboard-surface: #ffffff;
+  --color-dashboard-border: #e4eaf4;
+  --color-dashboard-muted: #7180a5;
+  --color-dashboard-navy: #122a73;
+  --color-dashboard-active: #eef4ff;
+  --color-dashboard-accent: #1f5bd7;
+  --color-dashboard-danger: #e11d48;
+
   --color-google-blue: #4285f4;
   --color-google-green: #34a853;
   --color-google-yellow: #fbbc05;
@@ -51,13 +60,13 @@ html {
 }
 
 body {
-  background-color: var(--color-ink-100);
+  background-color: var(--color-dashboard-canvas);
   color: var(--color-ink-900);
   font-family: var(--font-sans);
 }
 
 * {
-  border-color: var(--color-ink-300);
+  border-color: var(--color-dashboard-border);
 }
 
 :focus-visible {

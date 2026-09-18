@@ -12,8 +12,7 @@ paths:
 
 - No premature abstractions. Three similar list/detail pages beat a generic
   `<EntityListPage>` used once.
-- Don't add features beyond what was asked — this repo already has enough surface area
-  across nine route groups.
+- Don't add features beyond what was asked — keep the authentication surface narrow.
 - Don't refactor adjacent code while fixing a bug.
 - No dead code or commented-out blocks. Git has history.
 - WHY comments, never WHAT. If code needs a "what" comment, rename instead.
@@ -21,7 +20,7 @@ paths:
 ## Naming
 
 - Files: PascalCase is not used for components in this repo — everything is kebab-case
-  (`reservation-status-badge.tsx`, `use-submit-guard.ts`), matching the existing tree.
+  (`staff-sign-in-form.tsx`), matching the existing tree.
   Follow that, not a generic React convention.
 - Booleans: `is` / `has` / `should` / `can` prefix (`isPending`, `canConfirm`). Handlers:
   `handle*` internal, `on*` as props (`onConfirmed`, `onClose`).
@@ -37,8 +36,8 @@ cite the PRD/TRD section a business rule comes from; keep that pattern. Never `X
 
 ## File Organization
 
-- Imports: builtins, external (`react`, `@clerk/nextjs`, `@tanstack/react-query`), internal
-  `@/lib` / `@/components`, relative, then `type` imports from `@drezivo/contracts` last.
+- Imports: builtins, external (`react`, `@clerk/nextjs`), internal `@/lib` / `@/components`,
+  then relative imports.
 - Exports: named over default, except Next.js route files (`page.tsx`, `layout.tsx`) which
   Next.js requires as default exports.
 - One component per file. Colocate a domain component's small helper components in the same
