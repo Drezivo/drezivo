@@ -142,6 +142,14 @@ Multi-tenancy is the property most easily broken by a workspace boundary, becaus
 
 **One resolver.** `api` is the only workspace that resolves tenant identity. It derives the tenant from the verified Clerk organization (staff) or from the published storefront slug (public), never from a body field, a query parameter or a header supplied by the browser. Staff workspace discovery is a separate account-scoped projection: `GET /api/v1/workspaces` uses a narrow SECURITY DEFINER resolver that accepts only the transaction-local Clerk principal and returns tenants where the actor has an active local membership. `GET /api/v1/actor-context` then enters normal tenant RLS and resolves membership, active branches, the selected branch grant, subscription and positive entitlements. The optional `X-Drezivo-Branch-Id` is a selector only; it never grants access.
 
+The internal TBF-032 entitlement service owns plan resolution and quota enforcement for both actor
+context and bootstrap. It accepts only the caller's existing database client, validates an active
+version-1 plan and its required positive entitlements, and fails closed for missing, inactive,
+unsupported, or malformed plan data. Physical-asset and Front Desk-seat guards lock the tenant
+row before counting active usage and retain the lock through the caller's write. Front Desk
+counts include active memberships only; pending invitations will be reserved by TBF-040. Plan
+and entitlement writes are migration/tooling operations, not runtime application writes.
+
 **The contract enforces this.** `@drezivo/contracts` must not define `tenant_id`, `organization_id` or `branch_id` as an accepted field on any tenant-owned write. If the schema cannot express it, a frontend cannot send it and a reviewer cannot miss it. A branch identifier may appear as a **selector** on a request, and §3 step 3 still applies: it selects among branches the actor already has, and it never grants access to one they do not.
 
 **The frontends hold no authority.** `app` and `web` may display an organization and a branch, and may hide controls the actor cannot use. That is presentation. Every one of those checks is repeated server-side, and a divergence between them is a UI bug, never a security boundary. `web` in particular renders only published projections: an unpublished or foreign store returns `notFound()`, matching the API's rule that a foreign object is a `404` and never a `403` that confirms it exists.

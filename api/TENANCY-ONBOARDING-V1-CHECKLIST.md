@@ -246,17 +246,23 @@ or billing tasks as authority for this work.
     active-membership listing, wrong-principal/tenant-scoped RLS isolation, branch selection,
     entitlements, and lifecycle resolution.
 
-- [ ] **TBF-032 — Build the entitlement service over seeded plans**
+- [x] **TBF-032 — Build the entitlement service over seeded plans**
   - **Depends on:** TBF-030.
   - **Outcome:** Versioned plans expose correct price and quota data through one server service.
   - **Acceptance:**
-    - [ ] Resolve the immutable TBF-030 Starter/Professional/Business v1 seed rows and reject
+    - [x] Resolve the immutable TBF-030 Starter/Professional/Business v1 seed rows and reject
           unknown or conflicting plan definitions.
-    - [ ] Entitlement resolution rejects unknown/inactive plan versions.
-    - [ ] Service exposes concurrency-safe guards for seat and active-asset quota.
-    - [ ] Asset import preview remains read-only; any future commit/activation calls the same
-          guard before writes.
-  - **Tests/evidence:** Plan seed and overage tests include concurrent seat/asset claims.
+    - [x] Entitlement resolution rejects unknown, inactive, malformed, and non-v1 plan versions.
+    - [x] Same-client guards lock the tenant row and enforce active physical-asset and Front Desk
+          membership quotas under concurrency.
+    - [x] Asset import preview remains read-only; future commit/activation paths must call the
+          same guard before writes. Pending invitation reservations remain TBF-040 behavior.
+    - [x] Runtime API and worker roles can read plan data but cannot mutate plan or entitlement
+          rows; reviewed migrations remain the plan-management boundary.
+  - **Tests/evidence:** `src/modules/entitlements/__tests__/entitlements.service.test.ts` and
+    `tests/integration/entitlements.test.ts` cover seed resolution, malformed/inactive plans,
+    privilege enforcement, rollback, exact limits, tenant isolation, and concurrent seat/asset
+    claims. Full PostgreSQL evidence requires the disposable `TEST_DATABASE_URL`.
 
 - [ ] **TBF-033 — Implement trial lifecycle and request-time gates**
   - **Depends on:** TBF-030, TBF-032.

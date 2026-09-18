@@ -417,6 +417,18 @@ grants, subscription status, and positive plan entitlements. Restricted and canc
 still resolve; the shared action policy decides whether a requested operation is allowed. A local
 workspace switch clears the branch selector before Clerk `setActive` and subsequent context reads.
 
+### TBF-032 entitlement service
+
+Plan resolution is centralized in the internal entitlement service. Actor context and tenant
+bootstrap both resolve the current active version-1 plan through this boundary; the service rejects
+missing, inactive, non-v1, unsupported, or malformed plan data instead of treating it as unlimited.
+Quota guards accept the caller's existing transaction client, lock the tenant row, count active
+physical assets or active Front Desk memberships, and retain the lock through the caller's write.
+The Owner membership is excluded from Front Desk seat usage. Pending invitation reservations are
+deferred to TBF-040, when invitation persistence exists. Migration `0018` verifies the seeded v1
+plan values and makes `plan` and `plan_entitlement` read-only to runtime app and worker roles;
+reviewed migrations or authorized tooling own future plan changes.
+
 ## Security and operational requirements
 
 - Every state-changing command has idempotency and sequential plus concurrent double-fire tests.

@@ -169,6 +169,15 @@ Partial monetary refunds and damage deductions belong in V1. Partial physical re
 
 `plan` is versioned by `(code,version)`: confirmed monthly amounts are **30000 / 49900 / 129900 PHP minor units** for Starter/Professional/Business. Entitlement and release availability must both pass; a null numerical limit is not implicitly unlimited. `subscription` is current state, `subscription_event` preserves changes and `subscription_payment` records Drezivo collections only. They never feed renter-payment balances.
 
+The TBF-032 entitlement service is the single runtime resolver for the current active
+version-1 plan. It validates the subscription, plan, and required `physical_assets.max` and
+`frontdesk_seats.max` rows before returning the safe plan snapshot used by actor context and
+tenant bootstrap. Quota guards lock the tenant row on the caller's transaction, count active
+physical assets and active Front Desk memberships, and hold that lock through the caller's write;
+the Owner membership is not a seat and pending invitations are intentionally deferred to TBF-040.
+Plan and entitlement rows remain migration-owned: `0018_entitlement_runtime_privileges.sql`
+leaves runtime roles read-only for those tables.
+
 Bootstrap starts a seven-day trial from database time. Trial expiry enters a seven-day normal-access
 `past_due` grace. Restrictions preserve existing-rental fulfillment, refunds and export. One current
 subscription per tenant; no silent repricing of an existing period.

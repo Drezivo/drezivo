@@ -104,6 +104,11 @@ The API creates the Clerk organization for a verified owner. An operator does no
 owner's organization as the normal signup path. A user with an invitation bypasses owner onboarding
 and can become Front Desk only through the verified invitation-claim flow.
 
+TBF-032 is complete as an internal service slice: actor context and tenant bootstrap share the
+authoritative active v1 plan resolver, and catalogue/seat writers must use its tenant-lock quota
+guards. Pending invitation reservations are intentionally not counted until TBF-040 adds invitation
+persistence; the H06 and L02 lifecycle work remains open.
+
 ---
 
 ## HIGH (P0) — owner workspace transactional core

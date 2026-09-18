@@ -159,22 +159,6 @@ export async function lockBootstrapOnboarding(
   return result.rows[0] ?? null;
 }
 
-export async function findActiveBootstrapPlan(
-  client: PoolClient,
-  code: string,
-): Promise<PlanRow | null> {
-  const result = await client.query<PlanRow>(
-    `SELECT id, code
-     FROM plan
-     WHERE code = $1 AND version = 1 AND active = true
-     FOR SHARE`,
-    [code],
-  );
-  const row = result.rows[0];
-  if (!row || !isPlanCode(row.code)) return null;
-  return { id: row.id, code: row.code };
-}
-
 /** Creates the tenant graph while the caller owns one transaction and one checked-out client. */
 export async function createTenantBootstrapGraph(
   context: BootstrapTransactionContext,
@@ -461,8 +445,4 @@ function hashSuffix(value: string, length: number): string {
 function withStableSuffix(base: string, suffix: string): string {
   const available = Math.max(1, 100 - suffix.length - 1);
   return `${base.slice(0, available).replace(/-+$/g, '')}-${suffix}`;
-}
-
-function isPlanCode(value: string): value is PlanRow['code'] {
-  return value === 'starter' || value === 'professional' || value === 'business';
 }

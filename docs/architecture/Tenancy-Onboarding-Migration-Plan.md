@@ -98,6 +98,13 @@ trialing subscription, `trial_started` event, both audit records, and a `tenant.
 outbox event, then finalizes the safe response. A no-op worker handler acknowledges that event
 until later consumers are introduced.
 
+TBF-032 adds `0018_entitlement_runtime_privileges.sql` as the forward-only plan-data boundary.
+It verifies the immutable v1 seed values and revokes runtime `INSERT`, `UPDATE`, and `DELETE`
+on `plan` and `plan_entitlement` while preserving `SELECT` for the app and worker roles. The
+shared entitlement service resolves the active v1 plan and required limits for actor context and
+bootstrap, and its same-client quota guards lock the tenant before counting active physical assets
+or active Front Desk memberships. Pending invitation reservations remain a TBF-040 extension.
+
 TBF-031 adds `GET /api/v1/workspaces` and `GET /api/v1/actor-context`. Workspace discovery is
 account-scoped and returns only provisioned tenants with an active local membership. Actor context
 returns the current tenant, membership, all active branches and safe grants, the selected branch,
