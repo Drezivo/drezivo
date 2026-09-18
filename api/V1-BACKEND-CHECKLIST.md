@@ -114,6 +114,14 @@ durable worker share database-time trial/grace transitions, the restricted/cance
 and the Owner-only trial plan-change command. Paid-plan changes, payment activation, and recurring
 billing remain L03/L05 work after TBF-051.
 
+TBF-041 is implemented as the invitation provider-dispatch boundary (integration evidence pending):
+the durable worker validates TBF-040 payloads, locks the tenant invitation, resolves the persisted
+Clerk organization, decrypts recipient data only inside the worker, and uses a private dispatch
+marker to recover accepted provider invitations without duplicates. Resends revoke prior active
+provider invitations; cancellations compensate provider state; stale dispatch versions are no-ops.
+The worker now claims only due rows and requires its lease token for completion and dead-lettering.
+Membership-removal dispatch remains TBF-043 and invitation claim remains TBF-042.
+
 ---
 
 ## HIGH (P0) — owner workspace transactional core

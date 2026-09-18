@@ -21,6 +21,15 @@ export interface SafeInvitationRow {
   created_at: Date;
 }
 
+export interface InvitationDispatchSnapshot {
+  invitation: InvitationRow;
+  clerk_org_id: string;
+}
+
+interface InvitationDispatchQueryRow extends InvitationRow {
+  clerk_org_id: string;
+}
+
 export async function lockInvitationTenant(client: PoolClient, tenantId: string): Promise<boolean> {
   const result = await client.query<{ id: string }>(
     'SELECT id FROM tenant WHERE id = $1 FOR UPDATE',
@@ -127,6 +136,48 @@ export async function lockInvitation(
     [tenantId, invitationId],
   );
   return result.rows[0] ?? null;
+}
+
+/** Worker-only snapshot: lock both the invitation and its tenant before calling Clerk. */
+export async function lockInvitationForDispatch(
+  client: PoolClient,
+  tenantId: string,
+  invitationId: string,
+): Promise<InvitationDispatchSnapshot | null> {
+  const result = await client.query<InvitationDispatchQueryRow>(
+    `SELECT i.id, i.tenant_id, i.recipient_email_digest, i.recipient_email_ciphertext, i.status,
+            i.expires_at, i.clerk_invitation_id, i.business_key, i.dispatch_version,
+            i.created_at, i.updated_at, t.clerk_org_id
+       FROM membership_invitation i
+       JOIN tenant t ON t.id = i.tenant_id
+      WHERE i.tenant_id = $1 AND i.id = $2
+      FOR UPDATE OF i, t`,
+    [tenantId, invitationId],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  const { clerk_org_id, ...invitation } = row;
+  return { invitation, clerk_org_id };
+}
+
+/** Persist provider correlation only while the exact local dispatch is still current. */
+export async function updateInvitationProviderCorrelation(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    invitationId: string;
+    dispatchVersion: number;
+    providerInvitationId: string;
+  },
+): Promise<boolean> {
+  const result = await client.query(
+    `UPDATE membership_invitation
+        SET clerk_invitation_id = $4, updated_at = now()
+      WHERE tenant_id = $1 AND id = $2 AND status = 'pending' AND dispatch_version = $3
+      RETURNING id`,
+    [input.tenantId, input.invitationId, input.dispatchVersion, input.providerInvitationId],
+  );
+  return result.rows.length === 1;
 }
 
 export async function updateInvitationForResend(

@@ -4,6 +4,7 @@ import { outboxDispatcher } from './worker/handlers/outbox-dispatcher.js';
 import { expireDueHoldsForAllTenants } from './worker/handlers/hold-expirer.js';
 import { handleTenantBootstrapped } from './worker/handlers/tenant-bootstrap.js';
 import { reconcileDueSubscriptionsForAllTenants } from './worker/handlers/subscription-lifecycle.js';
+import { handleMembershipInvitationDispatch } from './modules/membership-invitations/membership-invitations.dispatcher.js';
 import { WorkerRunner } from './worker/runner.js';
 import { logger } from './shared/logger.js';
 
@@ -24,6 +25,8 @@ const runner = new WorkerRunner({
   'reservation.held': outboxDispatcher,
   'reservation.confirmed': outboxDispatcher,
   'reservation.hold_expired': outboxDispatcher,
+  'clerk.invitation.dispatch_requested': handleMembershipInvitationDispatch,
+  'clerk.invitation.revoke_requested': handleMembershipInvitationDispatch,
 });
 
 let holdExpirySweepTimer: NodeJS.Timeout | undefined;

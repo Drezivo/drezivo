@@ -126,6 +126,25 @@ and cancellation/expiry release the reservation without deleting history. Create
 cancel write safe Clerk-dispatch outbox intents atomically with tenant idempotency. TBF-041 owns
 provider dispatch, so this branch-internal prerequisite must not be deployed independently.
 
+TBF-041 consumes those invitation intents through the durable outbox worker. The Clerk adapter
+stores a backend-only private marker containing a fixed source, local invitation UUID, dispatch
+version, and create/resend operation. Before creating an invitation, the worker searches the
+provider by that exact marker; this recovers a provider acceptance after a worker crash and keeps
+same-intent retries duplicate-safe. Resend revokes older active provider invitations for the same
+local identity before creating its replacement. Cancellation revokes the locally correlated
+provider invitation or searches all matching markers when correlation was not persisted yet;
+revoked, expired, accepted, and missing provider rows are terminal safe no-ops.
+
+The worker locks the tenant invitation, verifies pending status and dispatch version, resolves the
+Clerk organization from the tenant row, and decrypts recipient email only inside the worker. A
+conditional local update persists provider correlation; if cancellation or a newer dispatch wins
+while Clerk is running, the newly created/found invitation is revoked as compensation. Every
+provider call is awaited, and malformed local payloads/decryption failures become permanent
+dead-letter outcomes while transient provider failures use the existing eight-attempt exponential
+backoff. Pending outbox claims require `available_at <= now()`, and completion/dead-letter writes
+require the exact lease token. TBF-041 dispatches invitation intents only; verified claiming is
+TBF-042 and membership-removal dispatch is TBF-043.
+
 TBF-031 adds `GET /api/v1/workspaces` and `GET /api/v1/actor-context`. Workspace discovery is
 account-scoped and returns only provisioned tenants with an active local membership. Actor context
 returns the current tenant, membership, all active branches and safe grants, the selected branch,

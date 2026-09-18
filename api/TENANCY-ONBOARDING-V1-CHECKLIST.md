@@ -303,16 +303,25 @@ or billing tasks as authority for this work.
   - **Tests/evidence:** `tests/integration/membership-invitations.test.ts` covers protected
         recipient reuse, seat reservation/release, resend versioning, safe list projections, and
         Front Desk denial. Full PostgreSQL concurrency/RLS evidence requires the disposable
-        `TEST_DATABASE_URL`; dispatch remains intentionally deferred to TBF-041.
+        `TEST_DATABASE_URL`; provider dispatch evidence is tracked under TBF-041.
 
 - [ ] **TBF-041 — Dispatch Clerk invitation and membership changes through outbox**
   - **Depends on:** TBF-020, TBF-040, existing outbox worker.
   - **Outcome:** Local invitation/removal state survives provider outage and worker restart.
   - **Acceptance:**
-    - [ ] Local state and outbox event commit together.
-    - [ ] Lease, retry bound, provider idempotency/correlation, and terminal failure are visible.
-    - [ ] No fire-and-forget Clerk request exists.
-  - **Tests/evidence:** Crash-before/after-provider-acceptance and duplicate worker-claim tests.
+    - [x] Local invitation state and safe create/resend/cancel outbox intents remain committed
+          together through the TBF-040 tenant transaction.
+    - [x] The worker claims only due rows, preserves the eight-attempt backoff policy, requires
+          the lease token for completion/dead-letter writes, and clears leases at terminal state.
+    - [x] Clerk dispatch uses a private marker (`membership_invitation_dispatch_v1`, local UUID,
+          dispatch version, operation) to recover provider acceptance before local persistence;
+          resend revokes prior active provider invitations and cancellation compensates races.
+    - [x] Provider calls are awaited and safe terminal provider states are acknowledged without
+          exposing recipient email, ciphertext, metadata, tokens, or raw provider responses.
+    - [ ] PostgreSQL evidence proves crash recovery, duplicate claims, lease expiry, RLS/privileges,
+          resend/cancel races, and transient-to-dead-letter behavior.
+  - **Tests/evidence:** Adapter/dispatcher and worker tests are added; disposable PostgreSQL
+        concurrency/RLS evidence remains open when `TEST_DATABASE_URL` is unavailable.
 
 - [ ] **TBF-042 — Implement verified invitation claim**
   - **Depends on:** TBF-040, TBF-041, TBF-022.
