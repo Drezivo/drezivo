@@ -1818,6 +1818,71 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /membership-invitations/{invitationId}/claim:
+    post:
+      tags:
+        - membership-invitations
+      summary: Claim one accepted Clerk Front Desk invitation.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: invitationId
+          in: path
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimMembershipInvitationRequest'
+      responses:
+        "200":
+          description: Invitation claimed and the authenticated actor context is returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: '#/components/schemas/ActorContext'
+                  request_id:
+                    type: string
+                    minLength: 1
+                required: [success, data, request_id]
+        "404":
+          description: The invitation is not available.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "409":
+          description: The invitation claim or idempotency key is not valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "429":
+          description: Invitation claim rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "503":
+          description: The identity provider is temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /subscription/plan:
     post:
       tags:
