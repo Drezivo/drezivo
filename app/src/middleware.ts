@@ -1,8 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 // Only the auth pages and the readiness probe are public. Everything else in this app is
-// staff-only (TRD §3 staff request path) — fail closed by default rather than listing
-// dashboard routes as an allowlist that a new route could accidentally miss.
+// staff-only — fail closed by default rather than relying on a route allowlist.
 const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
@@ -10,11 +9,19 @@ const isPublicRoute = createRouteMatcher([
   "/api/health",
 ]);
 
-export default clerkMiddleware(async (auth, request) => {
-  if (!isPublicRoute(request)) {
-    await auth.protect();
-  }
-});
+export default clerkMiddleware(
+  async (auth, request) => {
+    if (!isPublicRoute(request)) {
+      await auth.protect();
+    }
+  },
+  {
+    // Keep unauthenticated app requests inside Drezivo. Without this
+    // explicit path, Clerk falls back to the hosted accounts.dev sign-in page.
+    signInUrl: "/sign-in",
+    signUpUrl: "/sign-up",
+  },
+);
 
 export const config = {
   matcher: [
