@@ -23,6 +23,15 @@ migrations and service behavior are owned by their corresponding TBF tasks.
 | `membership_invitation`                                                    | Tenant-owned      | Standard tenant RLS plus local Owner authorization. Protected recipient data never appears in ordinary logs or list projections.                                   |
 | `membership`, `subscription`, `subscription_event`, `subscription_payment` | Tenant-owned      | Existing tenant RLS applies. New lifecycle behavior is gated in services, not inferred from Clerk claims.                                                          |
 
+TBF-031 adds the actor/workspace resolution boundary after bootstrap. Migration
+`0017_actor_workspace_resolution.sql` adds an index on `membership.clerk_user_id` and a narrow
+`resolve_actor_workspaces` SECURITY DEFINER function. The function accepts only transaction-local
+account principal context, returns safe workspace projections for active local memberships, and
+cannot run while a tenant GUC is set. The API enters tenant scope only after resolving the active
+Clerk organization, then reads the local membership, active branches, selected-branch grant,
+current subscription, and positive plan entitlements under normal forced RLS. No global RLS
+exception is granted to the HTTP process, and no Clerk role/claim is treated as authorization.
+
 ## Expand migration design
 
 The next migration number after the existing reviewed sequence is reserved for an additive
@@ -88,6 +97,15 @@ database transaction creates the tenant, `Main Branch`, Owner membership/grant, 
 trialing subscription, `trial_started` event, both audit records, and a `tenant.bootstrapped`
 outbox event, then finalizes the safe response. A no-op worker handler acknowledges that event
 until later consumers are introduced.
+
+TBF-031 adds `GET /api/v1/workspaces` and `GET /api/v1/actor-context`. Workspace discovery is
+account-scoped and returns only provisioned tenants with an active local membership. Actor context
+returns the current tenant, membership, all active branches and safe grants, the selected branch,
+subscription summary, and numeric entitlements. `X-Drezivo-Branch-Id` is only a verified selector;
+the Clerk token organization remains the tenant authority. Tenant lifecycle actions use one shared
+policy matrix: restricted and cancelled workspaces are resolved, then only explicitly permitted
+actions continue. Frontend workspace switching calls Clerk `setActive` with the opaque local
+organization ID and clears the branch selector.
 
 ## Required constraints
 

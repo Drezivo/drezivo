@@ -223,19 +223,28 @@ or billing tasks as authority for this work.
     concurrent same-key replay, organization mismatch concealment, database-time trial period, and
     single-graph assertions. Full PostgreSQL evidence requires the disposable `TEST_DATABASE_URL`.
 
-- [ ] **TBF-031 — Update actor, tenant, and workspace resolution**
+- [x] **TBF-031 — Update actor, tenant, and workspace resolution**
   - **Depends on:** TBF-030.
   - **Outcome:** Protected routes resolve current Clerk identity, active organization, local active
     membership, branch grant, tenant state, and entitlement server-side.
   - **Acceptance:**
-    - [ ] Workspace listing shows only provisioned businesses with active local membership.
-    - [ ] Missing/mismatched/removed/suspended membership and unprovisioned organization deny.
-    - [ ] A user can be Front Desk in one tenant and Owner in its single owned tenant.
-    - [ ] Cross-tab organization switching uses the active organization on each request.
-    - [ ] A restricted tenant reaches the shared action-policy gate, not active or blanket
-          cancelled handling. Only explicitly approved settlement, return, refund, and export
-          paths may continue.
-  - **Tests/evidence:** Cross-tenant, wrong-active-org, revoked-membership, and cross-tab tests.
+    - [x] `GET /api/v1/workspaces` returns only provisioned tenants with an active local
+          membership through the narrow `resolve_actor_workspaces` database function.
+    - [x] `GET /api/v1/actor-context` derives tenant authority from the Clerk token organization,
+          then resolves active membership, branches, selected-branch grants, subscription, and
+          positive numeric entitlements under forced RLS.
+    - [x] Missing/mismatched/removed/suspended membership, unknown organization, missing default
+          branch, and invalid branch selectors fail closed without cross-tenant disclosure.
+    - [x] A user can be Front Desk in one tenant and Owner in its single owned tenant; role and
+          branch grants are local database state, never Clerk claims.
+    - [x] Workspace switching uses Clerk `setActive` with the opaque organization ID from the
+          server projection and clears the branch selector before refetching context.
+    - [x] Restricted and cancelled tenants resolve to the shared action-policy gate; they are not
+          blanket-denied by context middleware and do not inherit active permissions.
+  - **Tests/evidence:** Unit policy tests and the real PostgreSQL suite pass as the non-superuser
+    `drezivo_app` role. `tests/integration/actor-workspace-resolution.test.ts` covers
+    active-membership listing, wrong-principal/tenant-scoped RLS isolation, branch selection,
+    entitlements, and lifecycle resolution.
 
 - [ ] **TBF-032 — Build the entitlement service over seeded plans**
   - **Depends on:** TBF-030.

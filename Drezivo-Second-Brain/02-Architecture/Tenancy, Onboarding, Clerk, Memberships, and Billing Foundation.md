@@ -375,6 +375,7 @@ Clerk references consulted 2026-09-16:
 | Subscription and events         | Tenant-owned                      | One current subscription; immutable history; database-time transitions.                                           |
 | Webhook inbox                   | Global                            | Provider/event identity unique before tenant resolution; verified raw payload handling.                           |
 | Outbox event                    | Tenant-owned or explicitly global | Stable dedupe key, lease, bounded retry, terminal failure visibility.                                             |
+| Actor/workspace resolver        | Read boundary                     | `GET /workspaces` returns only provisioned tenants with active local membership; `GET /actor-context` resolves the token organization, selected branch grant, subscription, and numeric entitlements. |
 
 Tenant-owned rows retain explicit scope, same-tenant foreign keys, and row-level security.
 Pre-tenant records never appear in tenant listing routes and are filtered by verified creator or
@@ -399,6 +400,22 @@ implementation. Intended command groups are:
 Tenant-owned requests derive tenant from verified active Clerk organization and local membership.
 They never accept tenant ID, Clerk organization ID, role, seat count, entitlement, or plan price as
 client authority.
+
+### TBF-031 actor and workspace resolution
+
+Clerk's token `orgId` is the tenant authority for a protected request. A browser may ask for a
+branch with `X-Drezivo-Branch-Id`, but the API treats that value only as a selector among active
+branches already granted to the local membership. The API ignores legacy organization headers and
+does not trust Clerk roles or claims for Drezivo authorization.
+
+Workspace discovery is intentionally separate from tenant context. The API uses a narrow
+`resolve_actor_workspaces` SECURITY DEFINER function while the transaction is in the account
+principal namespace; the function returns only safe tenant and local-role projections for active
+memberships and refuses to run with a tenant GUC set. Once an organization is selected, the API
+enters normal forced-RLS tenant scope and resolves membership, active branches, all safe branch
+grants, subscription status, and positive plan entitlements. Restricted and cancelled tenants
+still resolve; the shared action policy decides whether a requested operation is allowed. A local
+workspace switch clears the branch selector before Clerk `setActive` and subsequent context reads.
 
 ## Security and operational requirements
 

@@ -38,6 +38,7 @@ export const errorCode = z.enum([
   'INVALID_INVITATION',
   'STALE_PROVIDER_STATE',
   'TENANT_RESTRICTED',
+  'TENANT_CANCELLED',
   'LAST_OWNER_CONFLICT',
   'OPERATOR_APPROVAL_REQUIRED',
   // 422 — the request body failed validation

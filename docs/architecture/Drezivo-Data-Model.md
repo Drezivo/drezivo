@@ -57,6 +57,24 @@ Historical branch fields on bookings/custody are immutable facts. Changing an as
 
 `audit_event` holds redacted action metadata. `support_grant` defines an operator subject, permissions, reason, expiry and revocation for one tenant. Its actor namespace accommodates staff/operator/system identities; an operator is not automatically a tenant member. Private evidence access needs an explicit additional capability.
 
+### Request-time actor and workspace resolution (TBF-031)
+
+The Clerk token's active organization is the only tenant selector accepted by the staff API. The
+API resolves that opaque organization ID to `tenant`, verifies the authenticated Clerk user has an
+active local `membership`, and then resolves active `branch` rows, the selected branch's
+`branch_membership` grant, the current `subscription`, and the selected plan's
+`plan_entitlement` limits in one actor-context read. A branch header is a selector among branches
+already authorized by that membership; it is never an authority or a substitute for the token
+organization.
+
+Workspace discovery is intentionally a narrow global read rather than a global RLS bypass. The
+`resolve_actor_workspaces` SECURITY DEFINER function accepts only transaction-local account
+principal context and returns tenant identity, lifecycle status, and role for active memberships.
+It refuses to operate while `app.tenant_id` is set. All subsequent tenant reads use the ordinary
+forced-RLS transaction context. Missing, foreign, suspended, or removed memberships fail closed;
+restricted and cancelled tenant states resolve so the shared action policy can decide which safe
+operations remain available.
+
 ## 5. Catalogue, planned availability and actual custody
 
 ### Three identities

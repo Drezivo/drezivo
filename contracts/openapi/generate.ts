@@ -48,6 +48,7 @@ import {
   holdIntentResponse,
   itemDetail,
   paginatedResponse,
+  paginationRequest,
   paymentReceiptSubmitRequest,
   paymentReceiptSubmitResponse,
   publicStorefront,
@@ -68,6 +69,9 @@ import {
   subscriptionStatus,
   subscriptionSummary,
   tenantBootstrapResponse,
+  actorContext,
+  workspaceList,
+  workspaceSummary,
   successEnvelope,
   transferOwnershipRequest,
   uploadAuthorizationRequest,
@@ -103,6 +107,9 @@ registry.register('AbandonOwnerOnboardingRequest', abandonOwnerOnboardingRequest
 registry.register('ChooseOnboardingPlanRequest', chooseOnboardingPlanRequest);
 registry.register('BootstrapTenantRequest', bootstrapTenantRequest);
 registry.register('TenantBootstrapResponse', tenantBootstrapResponse);
+registry.register('ActorContext', actorContext);
+registry.register('WorkspaceSummary', workspaceSummary);
+registry.register('WorkspaceList', workspaceList);
 registry.register('CreateMembershipInvitationRequest', createMembershipInvitationRequest);
 registry.register('MembershipInvitationParams', membershipInvitationParams);
 registry.register('ResendMembershipInvitationRequest', resendMembershipInvitationRequest);
@@ -178,6 +185,41 @@ registry.registerPath({
       content: { 'application/json': { schema: successEnvelope(onboardingActorContext) } },
     },
     429: jsonError('Owner onboarding read rate limit exceeded.'),
+  },
+});
+
+// ---- authenticated workspace context ------------------------------------
+registry.registerPath({
+  method: 'get',
+  path: '/workspaces',
+  tags: ['tenancy'],
+  summary: 'List provisioned workspaces where the authenticated actor is an active member.',
+  request: { query: paginationRequest },
+  responses: {
+    200: {
+      description: 'Safe workspace switcher projections.',
+      content: { 'application/json': { schema: successEnvelope(workspaceList) } },
+    },
+    429: jsonError('Workspace list rate limit exceeded.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/actor-context',
+  tags: ['tenancy'],
+  summary: 'Resolve the active Clerk organization to local membership, branch grants, and entitlements.',
+  request: {
+    headers: z.object({ 'X-Drezivo-Branch-Id': z.string().uuid().optional() }),
+  },
+  responses: {
+    200: {
+      description: 'Current actor and workspace context.',
+      content: { 'application/json': { schema: successEnvelope(actorContext) } },
+    },
+    404: jsonError('The active workspace or branch could not be found.'),
+    409: jsonError('The workspace access state is incomplete.'),
+    429: jsonError('Actor context rate limit exceeded.'),
   },
 });
 
