@@ -62,6 +62,21 @@ export async function withTenantTransaction<T>(
 }
 
 /**
+ * Runs a tenant-scoped transaction with an explicit system actor namespace. Worker jobs use
+ * this instead of impersonating an account so tenant audit rows retain a durable system actor.
+ */
+export async function withSystemTenantTransaction<T>(
+  tenantId: string,
+  systemKey: string,
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  return withTenantTransaction(tenantId, systemKey, async (client) => {
+    await client.query('SELECT set_config($1, $2, true)', ['app.actor_kind', 'system']);
+    return fn(client);
+  });
+}
+
+/**
  * Runs `fn` inside a transaction with the authenticated account's `app.principal_id` and
  * `app.actor_kind = 'account'` set — the default pre-tenant execution context for global
  * records. Account-owned global records use both values in their RLS policy; provider-only

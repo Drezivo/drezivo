@@ -289,17 +289,21 @@ not consume a Front Desk seat.
 ### Trial, plan changes, and downgrade
 
 - The first trial is seven days from database time and applies the selected plan immediately.
-- The owner may change plan during trial. The new entitlement set is checked and applied
-  immediately, with an immutable plan-change event.
+- The owner may change plan during trial through `POST /api/v1/subscription/plan`. The new
+  entitlement set is resolved from the active version-1 plan, checked against current usage, and
+  applied immediately with an immutable plan-change event and tenant audit record. Paid-plan
+  changes remain deferred to later operator/payment work.
 - A downgrade is rejected when active assets or counted seats exceed the new plan. Nothing is
   automatically suspended or deactivated.
-- Trial expiry transitions `trialing` to `past_due`, sets a seven-day `grace_ends_at`, and keeps
-  normal operational access.
+- Trial expiry transitions `trialing` to `past_due`, sets `grace_ends_at` to seven days after the
+  original trial boundary, and keeps normal operational access.
 - Grace expiry transitions subscription and tenant to `restricted` unless verified payment has
   started a paid period.
 
-Request-time checks are authoritative. A durable expiry worker performs the same transitions for
-prompt convergence, but a late worker can never create extra access.
+Request-time checks are authoritative. Actor-context resolution runs the same database-time
+transition service before returning the tenant projection. A durable per-tenant expiry worker
+performs the same transitions for prompt convergence, while deterministic subscription-event keys
+make request/worker races and duplicate jobs safe. A late worker can never create extra access.
 
 ### Restricted and cancelled behavior
 
@@ -416,6 +420,18 @@ enters normal forced-RLS tenant scope and resolves membership, active branches, 
 grants, subscription status, and positive plan entitlements. Restricted and cancelled tenants
 still resolve; the shared action policy decides whether a requested operation is allowed. A local
 workspace switch clears the branch selector before Clerk `setActive` and subsequent context reads.
+
+### TBF-032 entitlement service
+
+Plan resolution is centralized in the internal entitlement service. Actor context and tenant
+bootstrap both resolve the current active version-1 plan through this boundary; the service rejects
+missing, inactive, non-v1, unsupported, or malformed plan data instead of treating it as unlimited.
+Quota guards accept the caller's existing transaction client, lock the tenant row, count active
+physical assets or active Front Desk memberships, and retain the lock through the caller's write.
+The Owner membership is excluded from Front Desk seat usage. Pending invitation reservations are
+deferred to TBF-040, when invitation persistence exists. Migration `0018` verifies the seeded v1
+plan values and makes `plan` and `plan_entitlement` read-only to runtime app and worker roles;
+reviewed migrations or authorized tooling own future plan changes.
 
 ## Security and operational requirements
 

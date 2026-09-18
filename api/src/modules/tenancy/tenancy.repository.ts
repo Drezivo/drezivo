@@ -15,6 +15,8 @@ import {
   type ActorTenantResolutionContext,
 } from '../../db/client.js';
 import { StateConflictError, ValidationError } from '../../shared/errors.js';
+import { resolveTenantEntitlements } from '../entitlements/entitlements.service.js';
+import { reconcileTenantLifecycle } from '../billing/billing.service.js';
 
 interface WorkspaceRow {
   tenant_id: string;
@@ -116,7 +118,7 @@ interface GrantRow {
 interface SubscriptionRow {
   id: string;
   plan_id: string;
-  plan_code: 'starter' | 'professional' | 'business';
+  plan_code: string;
   status: 'trialing' | 'active' | 'past_due' | 'restricted' | 'cancelled';
   trial_ends_at: Date | null;
   grace_ends_at: Date | null;
@@ -132,6 +134,7 @@ export async function resolveActorContext(input: {
   principalId: string;
   clerkOrgId: string;
   branchId?: string;
+  requestId?: string;
 }): Promise<ResolveActorResult> {
   return withActorTenantResolutionTransaction(input.principalId, async (context) => {
     const tenantResult = await context.client.query<TenantRow>(
@@ -144,7 +147,18 @@ export async function resolveActorContext(input: {
 
     await context.setTenantContext(tenant.id);
     try {
-      return await resolveInsideTenant(context, tenant, input);
+      await reconcileTenantLifecycle(context.client, tenant.id, {
+        actorKey: input.principalId,
+        requestId: input.requestId ?? 'request:actor-context',
+      });
+      const refreshedTenantResult = await context.client.query<TenantRow>(
+        `SELECT id, clerk_org_id, name, slug, status, currency, timezone, created_at, updated_at
+         FROM tenant WHERE id = $1 LIMIT 1`,
+        [tenant.id],
+      );
+      const refreshedTenant = refreshedTenantResult.rows[0];
+      if (!refreshedTenant) return { kind: 'state_conflict' };
+      return await resolveInsideTenant(context, refreshedTenant, input);
     } finally {
       await context.clearTenantContext();
     }
@@ -201,19 +215,10 @@ async function resolveInsideTenant(
   const subscription = subscriptionResult.rows[0];
   if (!subscription) return { kind: 'state_conflict' };
 
-  const entitlementResult = await context.client.query<{
-    capability: string;
-    limit_value: number | null;
-    enabled: boolean;
-  }>(
-    `SELECT capability, limit_value, enabled
-     FROM plan_entitlement
-     WHERE plan_id = $1
-       AND capability IN ('physical_assets.max', 'frontdesk_seats.max')`,
-    [subscription.plan_id],
-  );
-  const entitlements = toEntitlements(entitlementResult.rows);
-  if (!entitlements) return { kind: 'state_conflict' };
+  const entitlementSnapshot = await resolveTenantEntitlements(context.client, tenant.id);
+  if (subscription.plan_id !== entitlementSnapshot.planId || subscription.plan_code !== entitlementSnapshot.planCode) {
+    throw new StateConflictError('Workspace entitlement state is inconsistent.');
+  }
 
   const effectiveTenantStatus = effectiveStatus(tenant.status, subscription.status);
   return {
@@ -245,7 +250,10 @@ async function resolveInsideTenant(
         trial_ends_at: subscription.trial_ends_at?.toISOString() ?? null,
         grace_ends_at: subscription.grace_ends_at?.toISOString() ?? null,
       },
-      entitlements,
+      entitlements: {
+        physical_assets_max: entitlementSnapshot.physicalAssetsMax,
+        frontdesk_seats_max: entitlementSnapshot.frontdeskSeatsMax,
+      },
       effectiveTenantStatus,
       // Lifecycle state is an authorization boundary. Keep the complete grant projection for
       // safe context display, but never expose active capabilities to policy checks while the
@@ -295,23 +303,6 @@ function toGrant(row: GrantRow): ActorContext['branch_grants'][number] {
     throw new StateConflictError('Invalid branch permission grant.');
   }
   return { branch_id: branchId.parse(row.branch_id), permission_codes: permissionCodes };
-}
-
-function toEntitlements(
-  rows: Array<{ capability: string; limit_value: number | null; enabled: boolean }>,
-): ActorContext['entitlements'] | null {
-  const values = new Map(rows.map((row) => [row.capability, row]));
-  const assets = values.get('physical_assets.max');
-  const seats = values.get('frontdesk_seats.max');
-  if (
-    !assets?.enabled ||
-    !seats?.enabled ||
-    assets.limit_value === null ||
-    seats.limit_value === null
-  )
-    return null;
-  if (assets.limit_value <= 0 || seats.limit_value <= 0) return null;
-  return { physical_assets_max: assets.limit_value, frontdesk_seats_max: seats.limit_value };
 }
 
 function effectiveStatus(

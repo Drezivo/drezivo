@@ -64,6 +64,7 @@ export async function requireTenantContext(
     const result = await resolveActorContext({
       principalId: clerkPrincipal.clerkUserId,
       clerkOrgId: clerkPrincipal.clerkOrgId,
+      requestId: req.requestId,
       ...(rawBranchId ? { branchId: rawBranchId } : {}),
     });
     if (result.kind === 'not_found') {

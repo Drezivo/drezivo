@@ -1,13 +1,14 @@
 import type { FailureEnvelope, SuccessEnvelope } from '../../shared/response.js';
+import { StateConflictError } from '../../shared/errors.js';
 import { withBootstrapTransaction, type BootstrapTransactionContext } from '../../db/client.js';
 import {
   claimBootstrapIdempotency,
   finalizeBootstrapIdempotency,
 } from '../bootstrap/bootstrap.repository.js';
+import { resolvePlanEntitlements } from '../entitlements/entitlements.service.js';
 import {
   appendBootstrapGlobalAudit,
   createTenantBootstrapGraph,
-  findActiveBootstrapPlan,
   lockBootstrapAccount,
   lockBootstrapOnboarding,
 } from './tenant-bootstrap.repository.js';
@@ -70,8 +71,12 @@ export async function runTenantBootstrap(input: RunBootstrapInput): Promise<Boot
       return rejectAndFinalize(context, account.id, input, claim.recordId, 409, 'STATE_CONFLICT', 'Onboarding is not eligible for bootstrap.', 'state_conflict');
     }
 
-    const plan = await findActiveBootstrapPlan(client, onboarding.selected_plan_code);
-    if (!plan) {
+    let plan;
+    try {
+      const entitlementSnapshot = await resolvePlanEntitlements(client, onboarding.selected_plan_code);
+      plan = { id: entitlementSnapshot.planId, code: entitlementSnapshot.planCode };
+    } catch (error) {
+      if (!(error instanceof StateConflictError)) throw error;
       return rejectAndFinalize(context, account.id, input, claim.recordId, 409, 'STATE_CONFLICT', 'The selected plan is unavailable.', 'plan_unavailable');
     }
 

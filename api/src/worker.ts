@@ -3,6 +3,7 @@ import { closePool } from './db/client.js';
 import { outboxDispatcher } from './worker/handlers/outbox-dispatcher.js';
 import { expireDueHoldsForAllTenants } from './worker/handlers/hold-expirer.js';
 import { handleTenantBootstrapped } from './worker/handlers/tenant-bootstrap.js';
+import { reconcileDueSubscriptionsForAllTenants } from './worker/handlers/subscription-lifecycle.js';
 import { WorkerRunner } from './worker/runner.js';
 import { logger } from './shared/logger.js';
 
@@ -26,6 +27,7 @@ const runner = new WorkerRunner({
 });
 
 let holdExpirySweepTimer: NodeJS.Timeout | undefined;
+let subscriptionLifecycleSweepTimer: NodeJS.Timeout | undefined;
 
 function scheduleHoldExpirySweep(): void {
   holdExpirySweepTimer = setInterval(() => {
@@ -35,11 +37,20 @@ function scheduleHoldExpirySweep(): void {
   }, config.WORKER_POLL_INTERVAL_MS);
 }
 
+function scheduleSubscriptionLifecycleSweep(): void {
+  subscriptionLifecycleSweepTimer = setInterval(() => {
+    reconcileDueSubscriptionsForAllTenants().catch((error: unknown) => {
+      logger.error({ err: error }, 'subscription lifecycle sweep failed; will retry on next interval');
+    });
+  }, config.WORKER_POLL_INTERVAL_MS);
+}
+
 logger.info({ enabled: config.WORKER_ENABLED }, 'worker process starting');
 if (!config.WORKER_ENABLED) {
   logger.warn('worker disabled by configuration; no jobs will be claimed');
 } else {
   scheduleHoldExpirySweep();
+  scheduleSubscriptionLifecycleSweep();
 }
 if (config.WORKER_ENABLED) runner.start().catch((error: unknown) => {
   logger.error({ err: error }, 'worker runner crashed');
@@ -51,6 +62,9 @@ async function shutdown(signal: string): Promise<void> {
   runner.stop();
   if (holdExpirySweepTimer) {
     clearInterval(holdExpirySweepTimer);
+  }
+  if (subscriptionLifecycleSweepTimer) {
+    clearInterval(subscriptionLifecycleSweepTimer);
   }
   await closePool();
   process.exit(0);

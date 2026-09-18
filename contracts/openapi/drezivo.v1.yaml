@@ -1588,6 +1588,63 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /subscription/plan:
+    post:
+      tags:
+        - subscription
+      summary: Change the owner workspace plan during the trial.
+      parameters:
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeSubscriptionPlanRequest'
+      responses:
+        "200":
+          description: Trial plan changed or an identical plan change replayed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: '#/components/schemas/SubscriptionSummary'
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Only the active tenant owner can change the trial plan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "409":
+          description: The trial state, idempotency key, or requested plan is not valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "429":
+          description: Subscription plan change rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /public/stores/{slug}:
     get:
       tags:
