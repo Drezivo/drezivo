@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/coverage
+**/.next
+**/.cache
+.git
+.github
+**/.env*
+**/*.log
+Drezivo-Second-Brain/.obsidian
