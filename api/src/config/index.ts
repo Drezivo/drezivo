@@ -62,7 +62,6 @@ function loadConfig(): Config {
       .join('\n');
     // Intentionally not using the shared pino logger here: config must be able to fail
     // before the logger (which itself reads config) can be constructed.
-    // eslint-disable-next-line no-console
     console.error(`Invalid environment configuration:\n${details}`);
     process.exit(1);
   }

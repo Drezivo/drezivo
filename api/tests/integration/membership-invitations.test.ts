@@ -162,7 +162,8 @@ describe('TBF-040 membership invitations', async () => {
     await withTenantTransaction(context.tenantId, context.principalId, (client) =>
       client.query(
         `UPDATE membership_invitation
-            SET expires_at = now() - interval '1 second'
+            SET created_at = now() - interval '2 seconds',
+                expires_at = now() - interval '1 second'
           WHERE id = $1`,
         [firstId],
       ),

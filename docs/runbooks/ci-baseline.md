@@ -35,21 +35,21 @@ backend workflow does not claim that frontend or documentation checks pass.
 
 ## Current local evidence
 
-- The root dependency installation dry-run passes. A full local reinstall was blocked by an
-  in-use native `lightningcss` file in the existing `node_modules` tree.
-- Before that failed reinstall, contracts tests passed locally: 52 tests, API type-checking passed,
-  and API unit tests passed: 56 tests.
-- Before that reinstall, API linting reported 18 pre-existing errors and one warning.
-- Before that reinstall, contracts type-checking reported existing Node type and Zod/OpenAPI
-  typing failures, and contracts build hit an existing local `tsup`/TypeScript runtime mismatch.
-- A clean Linux Node 22 container install now completes after the lockfile gains the required
-  Linux optional binaries. The contracts declaration build still fails in `tsup` with the
-  existing TypeScript 7 dependency, so container publication remains blocked until that
-  dependency compatibility issue is reviewed.
-- The failed reinstall left the ignored local `node_modules` incomplete, so follow-up local checks
-  cannot currently resolve `tsc`, ESLint, or Vitest.
-- API integration tests require a disposable PostgreSQL instance; Docker Compose is not available
-  in the current local Docker installation.
+- The root dependency installation dry-run passes.
+- Backend verification passes locally: contracts build, contracts lint, 52 contracts tests, API
+  type-checking, API lint, API build, and 56 API unit tests.
+- API integration tests pass: 10 files and 60 tests, using the same PostgreSQL 17.11 image and
+  test environment variables configured by the GitHub workflow. Docker Compose is unavailable
+  locally, so the disposable service was started with `docker run`.
+- The complete Linux Node 22 backend container build passes, including clean `npm ci`, contracts
+  JavaScript/declaration output, API output, production pruning, and runtime image assembly. The
+  lockfile includes the Linux optional binaries required by Rollup and esbuild.
+- The separate contracts type-check still reports existing Node type and Zod/OpenAPI typing
+  failures in `openapi/generate.ts`; it is outside the backend workflow until that scaffold
+  tooling is reconciled.
+- A clean dependency install reports 9 audit findings (5 moderate, 4 high); production-pruned
+  container dependencies report 3 (1 moderate, 2 high). Dependency remediation requires a
+  separate review because available fixes include breaking upgrades.
 
-Until the remaining failures are fixed, release reviews use the local evidence above and must call
-out the failures in the pull request.
+The backend workflow is now locally green. The full monorepo gate remains deferred until the
+application scaffold and contracts OpenAPI type-check are green.

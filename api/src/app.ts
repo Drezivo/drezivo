@@ -55,13 +55,14 @@ export function createApp(): Express {
   );
   const onboardingJson = express.json({ limit: '16kb', type: 'application/json' });
   app.use('/api/v1/onboarding', (req, res, next) => {
-    onboardingJson(req, res, (error) => {
-      if (error && typeof error === 'object' && 'type' in error) {
-        if (error.type === 'entity.too.large') {
+    onboardingJson(req, res, (error: unknown) => {
+      if (typeof error === 'object' && error !== null && 'type' in error) {
+        const errorType = error.type;
+        if (errorType === 'entity.too.large') {
           next(new ValidationError('Request body is too large.'));
           return;
         }
-        if (error.type === 'entity.parse.failed') {
+        if (errorType === 'entity.parse.failed') {
           next(new ValidationError('Request body is invalid.'));
           return;
         }

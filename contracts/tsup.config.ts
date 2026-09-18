@@ -1,12 +1,16 @@
 import { defineConfig } from 'tsup';
 
-// Dual ESM/CJS build with declarations, per README "how to install" — api,
+// Dual ESM/CJS build — declarations are emitted by the TypeScript compiler in
+// tsconfig.build.json because rollup-plugin-dts is not compatible with the
+// TypeScript version used by this workspace.
+//
+// api,
 // app, and web use different module systems and must not each need their
 // own bundler workaround to consume this package.
 export default defineConfig({
   entry: ['src/index.ts'],
   format: ['esm', 'cjs'],
-  dts: true,
+  dts: false,
   sourcemap: true,
   clean: true,
   splitting: false,
