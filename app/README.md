@@ -1,8 +1,8 @@
-# Drezivo staff authentication and dashboard shell
+# Drezivo staff authentication and owner dashboard
 
 Next.js 15 App Router authentication surface and owner dashboard shell for `app.drezivo.com`.
-The shell contains the responsive navigation, header controls, and empty dashboard workspace;
-operational data pages are still being rebuilt.
+The app contains the responsive navigation, header controls, and an operational dashboard overview
+with local reference fixtures; operational data pages are still being rebuilt.
 
 ## Development
 
@@ -14,4 +14,3 @@ credentials, protected pages remain unavailable by design.
 ## License
 
 This repository is proprietary Drezivo software. Use is limited to the permission in [LICENSE.md](LICENSE.md); third-party dependencies retain their own licenses.
-

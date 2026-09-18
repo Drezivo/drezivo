@@ -28,7 +28,7 @@ export function DashboardHeader() {
   const { signOut } = useClerk();
 
   return (
-    <header className="flex min-h-[72px] items-center justify-between gap-2 border-b border-dashboard-border bg-dashboard-surface px-4 py-4 sm:gap-6 sm:px-10">
+    <header className="flex min-h-[72px] items-center justify-between gap-2 border-b border-dashboard-border bg-dashboard-surface px-4 py-4 sm:gap-6 sm:px-6">
       <div className="flex min-w-0 items-center gap-3">
         <SidebarTrigger />
         <div className="min-w-0">
