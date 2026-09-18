@@ -66,6 +66,18 @@ The server listens on `PORT` (3000 by default). Verify it with:
 curl http://localhost:3000/health
 ```
 
+## Staff actor and workspace context
+
+After Clerk authentication, the staff app uses `GET /api/v1/workspaces` to list provisioned
+businesses where the current Clerk subject has an active local membership. Selecting a row changes
+Clerk's active organization; the API does not trust an organization header from the browser.
+`GET /api/v1/actor-context` then resolves the token organization to the local membership, active
+branches, branch grants, subscription, and plan entitlements. The optional
+`X-Drezivo-Branch-Id` header selects an already-authorized active branch; it never grants access.
+Restricted and cancelled tenants resolve to the shared lifecycle policy so each later command can
+allow or reject the action explicitly. The resolver fails closed for unknown organizations and
+suspended or removed memberships.
+
 Start the optional worker in a second terminal only when `WORKER_ENABLED=true`:
 
 ```powershell

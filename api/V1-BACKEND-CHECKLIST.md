@@ -166,10 +166,23 @@ end-to-end: catalogue → booking → payment verification → pickup → return
 - **Depends on:** H01, H03, TBF-030, TBF-031, TBF-040 through TBF-043.
 - **Basis:** TRD §3 (staff request path, membership freshness); PRD §5 (Owner manages users; Front Desk read-only); `contracts/src/tenancy/{tenant,actor-context}.ts`; `src/middleware/tenant-context.ts`; migration 0001.
 - **Outcome:** the `app` frontend can resolve a provisioned business, active local membership,
-  branch grant, and entitlement context. Owner staff-management routes consume the invitation and
-  membership lifecycle defined by TBF-040 through TBF-043.
+  branch grant, subscription state, and entitlement context. Workspace discovery and active
+  organization resolution are server-owned; Owner staff-management routes consume the invitation
+  and membership lifecycle defined by TBF-040 through TBF-043.
 - **Acceptance criteria:**
-  - [ ] `GET` actor-context endpoint returns the contract `actorContext` shape (tenant, membership, branch grants) for any authenticated active member.
+  - [x] `GET /api/v1/workspaces` returns only provisioned tenants where the authenticated Clerk
+        subject has an active local membership; it uses the narrow account-scoped workspace
+        resolver instead of a global RLS exception.
+  - [x] `GET /api/v1/actor-context` returns the contract `actorContext` shape (tenant,
+        membership, active branches, selected-branch grants, subscription, and numeric
+        entitlements) for an authenticated active member whose token organization matches the
+        local tenant.
+  - [x] `X-Drezivo-Branch-Id` is validated as a selector among active branches and never grants
+        authority; missing, foreign, suspended, or removed memberships fail closed.
+  - [x] Restricted and cancelled tenant states reach one shared lifecycle policy gate, with
+        `TENANT_CANCELLED` represented in the closed contract error enum.
+  - [x] PostgreSQL integration evidence passes for cross-tenant workspace isolation, tenant-scope
+        denial, branch selection, and lifecycle resolution (`tests/integration/actor-workspace-resolution.test.ts`).
   - [ ] Owner-only membership list and removal endpoints; Front Desk actors receive 403 and can
         only read their own membership context.
   - [ ] Removal or suspension takes effect on the member's next request even with a still-valid

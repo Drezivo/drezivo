@@ -1,6 +1,6 @@
 Project Drezivo {
   database_type: 'PostgreSQL'
-  Note: 'ERD-ready logical specification. V1/V1.1/V2 tables are grouped; do not deploy all phases blindly. SQL invariants in Drezivo-Data-Model.md are mandatory.'
+  Note: 'ERD-ready logical specification. V1/V1.1/V2 tables are grouped; do not deploy all phases blindly. SQL invariants in Drezivo-Data-Model.md are mandatory. TBF-031 workspace discovery uses a narrow resolver function, not a new entity.'
 }
 
 Table account {
@@ -120,7 +120,7 @@ Table tenant {
     (clerk_org_id) [unique]
     (slug) [unique]
   }
-  Note: 'V1. Business isolation boundary. Status active/restricted/cancelled; current state is not historical booking policy.'
+  Note: 'V1. Business isolation boundary. Status active/restricted/cancelled; current state is not historical booking policy. TBF-031 resolves this row from the Clerk token organization before entering tenant RLS.'
 }
 
 Table branch {
@@ -156,7 +156,7 @@ Table membership {
     (tenant_id, clerk_user_id) [unique]
     (clerk_membership_id) [unique]
   }
-  Note: 'V1. owner/frontdesk initially; active/suspended/removed local status check required on every protected request.'
+  Note: 'V1. owner/frontdesk initially; active/suspended/removed local status check required on every protected request. TBF-031 workspace discovery returns only active local memberships; actor context then resolves branch grants and entitlements.'
 }
 
 Table membership_invitation {

@@ -117,10 +117,16 @@ the complete change before a release tag.
 ### Staff request path
 
 1. Verify Clerk JWT signature, issuer, expiry and supported audience/authorized-party configuration using the SDK. For REST, return JSON `401`, not a redirect to an HTML login page.
-2. Map verified organization identity to the unique local tenant; resolve the local active membership and server-defined capability. Deny missing, suspended, unknown or mismatched context.
-3. Check the requested branch, record ownership and action. A branch ID from the browser is a selector, never permission.
-4. Start a transaction using a checked-out connection. Set tenant/principal context transaction-locally; every query remains on that connection until commit/rollback.
-5. Use explicit tenant predicates and same-tenant foreign keys as well as RLS. Give the runtime role no ownership, DDL, `BYPASSRLS`, or blanket administrative grant.
+2. If the session has no active organization, list only provisioned workspaces where the Clerk
+   subject has an active local membership. The workspace list is a narrow account-scoped read;
+   it is not a global RLS bypass.
+3. Map the token's active organization to the unique local tenant; resolve the local active
+   membership, active branches, selected branch grant, subscription, and positive entitlements.
+   Deny missing, suspended, unknown or mismatched context. Restricted and cancelled tenants
+   resolve to the shared action-policy gate rather than being blanket-denied here.
+4. Check the requested branch, record ownership and action. A branch ID from the browser is a selector, never permission.
+5. Start a transaction using a checked-out connection. Set tenant/principal context transaction-locally; every query remains on that connection until commit/rollback.
+6. Use explicit tenant predicates and same-tenant foreign keys as well as RLS. Give the runtime role no ownership, DDL, `BYPASSRLS`, or blanket administrative grant.
 
 Clerk supplies identity and organization context, but Drezivo authorizes current local membership, role, branch grant, tenant lifecycle, and entitlement. The backend creates the Clerk organization for a verified owner candidate; a signed organization-created event may repair a missing incomplete record but never starts a tenant or trial. Drezivo accepts only organization, organization-invitation, and organization-membership events for reconciliation, never Clerk user-profile synchronization. An external Clerk organization deletion immediately restricts the mapped tenant and public intake while records remain available for operator recovery.
 
@@ -134,13 +140,18 @@ RLS is defense against accidental query scope errors, not protection from a full
 
 Multi-tenancy is the property most easily broken by a workspace boundary, because a tenant identifier that travels between two code bases looks like ordinary data. It is not data; it is authority. The rules below make the boundary explicit.
 
-**One resolver.** `api` is the only workspace that resolves tenant identity. It derives the tenant from the verified Clerk organization (staff) or from the published storefront slug (public), never from a body field, a query parameter or a header supplied by the browser.
+**One resolver.** `api` is the only workspace that resolves tenant identity. It derives the tenant from the verified Clerk organization (staff) or from the published storefront slug (public), never from a body field, a query parameter or a header supplied by the browser. Staff workspace discovery is a separate account-scoped projection: `GET /api/v1/workspaces` uses a narrow SECURITY DEFINER resolver that accepts only the transaction-local Clerk principal and returns tenants where the actor has an active local membership. `GET /api/v1/actor-context` then enters normal tenant RLS and resolves membership, active branches, the selected branch grant, subscription and positive entitlements. The optional `X-Drezivo-Branch-Id` is a selector only; it never grants access.
 
 **The contract enforces this.** `@drezivo/contracts` must not define `tenant_id`, `organization_id` or `branch_id` as an accepted field on any tenant-owned write. If the schema cannot express it, a frontend cannot send it and a reviewer cannot miss it. A branch identifier may appear as a **selector** on a request, and §3 step 3 still applies: it selects among branches the actor already has, and it never grants access to one they do not.
 
 **The frontends hold no authority.** `app` and `web` may display an organization and a branch, and may hide controls the actor cannot use. That is presentation. Every one of those checks is repeated server-side, and a divergence between them is a UI bug, never a security boundary. `web` in particular renders only published projections: an unpublished or foreign store returns `notFound()`, matching the API's rule that a foreign object is a `404` and never a `403` that confirms it exists.
 
-**Organization switching is explicit, in both frontends.** Clerk's own documentation warns that background requests from a tab left open in another organization can carry the wrong token. Both `app` and `web` must attach the active organization explicitly per request rather than relying on ambient state, and both must discard in-flight queries on switch. The cross-tab organization-switch test belongs in the root gate when automatic CI is enabled.
+**Organization switching is explicit on the staff surface.** Clerk's own documentation warns that
+background requests from a tab left open in another organization can carry the wrong token. The
+`app` workspace switcher sets Clerk's active organization from the server projection, sends the
+current token on each request, and discards in-flight queries on switch. `web` is public storefront
+traffic and does not carry a staff organization context. The cross-tab organization-switch test
+belongs in the root gate when automatic CI is enabled.
 
 **The worker carries tenant context per job, not per process.** The worker runs outside any HTTP request, so nothing sets its tenant context for it. Every outbox and job row stores the owning `tenant_id`; the worker sets the context transaction-locally for each claimed job and fails the job closed if the row has no resolvable tenant. A worker process must never hold a long-lived session-level tenant setting — a leaked setting across jobs is a cross-tenant write.
 
