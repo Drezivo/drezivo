@@ -1,0 +1,32 @@
+{
+  "nodes": [
+    {"id":"drezivo-home-001","type":"file","x":0,"y":0,"width":320,"height":180,"file":"00-Home/Drezivo Home.md"},
+    {"id":"drezivo-contracts-02","type":"file","x":420,"y":-220,"width":300,"height":180,"file":"03-Repositories/Repository Map.md","subpath":"#contracts"},
+    {"id":"drezivo-api-003","type":"file","x":420,"y":0,"width":300,"height":180,"file":"03-Repositories/Repository Map.md","subpath":"#api"},
+    {"id":"drezivo-front-004","type":"file","x":420,"y":220,"width":300,"height":180,"file":"03-Repositories/Repository Map.md","subpath":"#app-and-web"},
+    {"id":"drezivo-docs-005","type":"file","x":840,"y":0,"width":300,"height":180,"file":"02-Architecture/Drezivo Architecture.md"},
+    {"id":"drezivo-tenancy-foundation-006","type":"file","x":1220,"y":0,"width":360,"height":220,"file":"02-Architecture/Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation.md"},
+    {"id":"drezivo-api-boundaries-007","type":"file","x":1220,"y":280,"width":360,"height":220,"file":"02-Architecture/API Module Boundaries and Layering.md"},
+    {"id":"drezivo-tbf030-bootstrap-008","type":"text","x":1640,"y":0,"width":420,"height":240,"text":"TBF-030\nPOST /api/v1/onboarding/{onboardingId}/bootstrap\n\nOne transaction creates tenant, Main Branch, Owner grant, draft storefront, trial subscription, audits, and tenant.bootstrapped outbox event.\n\nStrict empty body + Idempotency-Key + matching active Clerk organization."},
+    {"id":"drezivo-tbf033-lifecycle-009","type":"text","x":1640,"y":300,"width":420,"height":260,"text":"TBF-033\nTrial lifecycle and request-time gates\n\nActor-context requests and the durable worker share database-time trial/grace transitions.\n\nPOST /api/v1/subscription/plan is Owner-only during trial, uses the entitlement resolver, tenant idempotency, capacity checks, immutable events, and audit records.\n\nNo paid-plan activation or recurring billing."},
+    {"id":"drezivo-tbf040-invitations-010","type":"text","x":1640,"y":620,"width":420,"height":280,"text":"TBF-040\nLocal invitation state and safe Owner routes\n\nTenant-owned membership_invitation rows protect recipient email with keyed digest + AES-GCM ciphertext. Pending invitations reserve Front Desk seats until database-time expiry.\n\nOwner-only create/list/resend/cancel routes use tenant idempotency and safe outbox intents; TBF-041 consumes those intents through the worker."},
+    {"id":"drezivo-tbf041-dispatch-011","type":"text","x":2140,"y":620,"width":460,"height":300,"text":"TBF-041\nDurable Clerk invitation dispatch\n\nThe outbox worker validates create/resend/cancel payloads, locks the local invitation, resolves the tenant's Clerk organization, and decrypts recipient data only at the provider boundary.\n\nA private dispatch marker makes retries crash-safe; resend revokes prior active provider invitations, cancellation compensates races, and stale versions are no-ops. Lease-token completion/dead-letter writes prevent stale workers from mutating reclaimed rows.\n\nTBF-042 claims invitations; TBF-043 owns membership removal dispatch."}
+  ],
+  "edges": [
+    {"id":"edge-home-contracts-01","fromNode":"drezivo-home-001","fromSide":"right","toNode":"drezivo-contracts-02","toSide":"left","toEnd":"arrow","label":"maps"},
+    {"id":"edge-contracts-api-02","fromNode":"drezivo-contracts-02","fromSide":"right","toNode":"drezivo-api-003","toSide":"left","toEnd":"arrow","label":"exact contract"},
+    {"id":"edge-api-front-03","fromNode":"drezivo-api-003","fromSide":"right","toNode":"drezivo-front-004","toSide":"left","toEnd":"arrow","label":"REST"},
+    {"id":"edge-api-docs-04","fromNode":"drezivo-api-003","fromSide":"right","toNode":"drezivo-docs-005","toSide":"left","toEnd":"arrow","label":"implements"},
+    {"id":"edge-docs-tenancy-05","fromNode":"drezivo-docs-005","fromSide":"right","toNode":"drezivo-tenancy-foundation-006","toSide":"left","toEnd":"arrow","label":"defines"},
+    {"id":"edge-docs-api-boundaries-06","fromNode":"drezivo-docs-005","fromSide":"right","toNode":"drezivo-api-boundaries-007","toSide":"left","toEnd":"arrow","label":"defines"},
+    {"id":"edge-tenancy-tbf030-07","fromNode":"drezivo-tenancy-foundation-006","fromSide":"right","toNode":"drezivo-tbf030-bootstrap-008","toSide":"left","toEnd":"arrow","label":"bootstraps"},
+    {"id":"edge-api-tbf030-08","fromNode":"drezivo-api-003","fromSide":"right","toNode":"drezivo-tbf030-bootstrap-008","toSide":"left","toEnd":"arrow","label":"implements"},
+    {"id":"edge-tenancy-tbf033-09","fromNode":"drezivo-tenancy-foundation-006","fromSide":"right","toNode":"drezivo-tbf033-lifecycle-009","toSide":"left","toEnd":"arrow","label":"lifecycle"},
+    {"id":"edge-api-tbf033-10","fromNode":"drezivo-api-003","fromSide":"right","toNode":"drezivo-tbf033-lifecycle-009","toSide":"left","toEnd":"implements"},
+    {"id":"edge-tenancy-tbf040-11","fromNode":"drezivo-tenancy-foundation-006","fromSide":"right","toNode":"drezivo-tbf040-invitations-010","toSide":"left","toEnd":"invites"},
+    {"id":"edge-api-tbf040-12","fromNode":"drezivo-api-003","fromSide":"right","toNode":"drezivo-tbf040-invitations-010","toSide":"left","toEnd":"implements"},
+    {"id":"edge-tenancy-tbf041-13","fromNode":"drezivo-tenancy-foundation-006","fromSide":"right","toNode":"drezivo-tbf041-dispatch-011","toSide":"left","toEnd":"dispatches"},
+    {"id":"edge-api-tbf041-14","fromNode":"drezivo-api-003","fromSide":"right","toNode":"drezivo-tbf041-dispatch-011","toSide":"left","toEnd":"worker"},
+    {"id":"edge-tbf040-tbf041-15","fromNode":"drezivo-tbf040-invitations-010","fromSide":"right","toNode":"drezivo-tbf041-dispatch-011","toSide":"left","toEnd":"outbox"}
+  ]
+}

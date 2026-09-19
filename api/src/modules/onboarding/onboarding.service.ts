@@ -148,6 +148,7 @@ export async function startOwnerOnboarding(
   if (!claim.attempt) {
     throw new StateConflictError('Onboarding could not establish a durable provider attempt.');
   }
+  const attemptId = claim.attempt.attemptId;
   if (account.currentOwnedTenantId) {
     const error = errorForCreate('owned_tenant');
     const body = failureBody(input.requestId, error.code, error.message);
@@ -190,7 +191,7 @@ export async function startOwnerOnboarding(
       name: input.request.organization_name,
       createdByUserId: input.principalId,
       slug: input.request.slug,
-      onboardingMarker: { accountId: account.id, attemptId: claim.attempt.attemptId },
+        onboardingMarker: { accountId: account.id, attemptId },
     });
   } catch (error) {
     const appError = isAppError(error)
@@ -198,7 +199,7 @@ export async function startOwnerOnboarding(
       : new DependencyUnavailableError('Onboarding provider is unavailable.');
     if (appError.code === 'STATE_CONFLICT') {
       await withOnboardingTransaction(input.principalId, (transaction) =>
-        transaction.markAttemptFailed(claim.attempt!.attemptId),
+        transaction.markAttemptFailed(attemptId),
       );
       const body = failureBody(input.requestId, 'STATE_CONFLICT', appError.message);
       await finalizeFailure(input, account.id, claim.claim.recordId, payloadHash, body, 409);
@@ -208,7 +209,7 @@ export async function startOwnerOnboarding(
   }
 
   await withOnboardingTransaction(input.principalId, (transaction) =>
-    transaction.markAttemptProviderCreated(claim.attempt!.attemptId, organization.id),
+    transaction.markAttemptProviderCreated(attemptId, organization.id),
   );
 
   return withOnboardingTransaction(input.principalId, async (transaction) => {
@@ -220,7 +221,7 @@ export async function startOwnerOnboarding(
       requestedSlug: input.request.slug ?? null,
     });
     if (result.kind === 'created' || result.kind === 'existing') {
-      await transaction.markAttemptLocalPersisted(claim.attempt!.attemptId);
+      await transaction.markAttemptLocalPersisted(attemptId);
       const body = successBody(input.requestId, toPublicOnboarding(result.onboarding));
       await transaction.appendAudit({
         accountId: account.id,

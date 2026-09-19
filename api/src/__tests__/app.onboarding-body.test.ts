@@ -22,7 +22,7 @@ describe('owner onboarding raw body limit', () => {
       .send(`{"organization_name":"Studio"}${' '.repeat(16 * 1024)}`);
 
     expect(response.status).toBe(422);
-    expect(response.body.error.code).toBe('VALIDATION_FAILED');
+    expect((response.body as { error: { code: string } }).error.code).toBe('VALIDATION_FAILED');
   });
 
   it('maps malformed JSON to the generic validation envelope', async () => {
@@ -32,6 +32,6 @@ describe('owner onboarding raw body limit', () => {
       .send('{"organization_name":');
 
     expect(response.status).toBe(422);
-    expect(response.body.error.code).toBe('VALIDATION_FAILED');
+    expect((response.body as { error: { code: string } }).error.code).toBe('VALIDATION_FAILED');
   });
 });

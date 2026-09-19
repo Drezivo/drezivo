@@ -3,7 +3,7 @@ title: Tenancy Checklist - What, Why, and How
 type: architecture
 status: current
 owner: Drezivo platform team
-source: "[Tenancy checklist](../../api/TENANCY-ONBOARDING-V1-CHECKLIST.md); [Backend checklist](../../api/V1-BACKEND-CHECKLIST.md); [[02-Architecture/Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation]]; [TRD](../../docs/architecture/Drezivo-TRD.md); [Data Model](../../docs/architecture/Drezivo-Data-Model.md)"
+source: "[Tenancy checklist](../../api/TENANCY-ONBOARDING-V1-CHECKLIST.md); [Backend checklist](../../api/V1-BACKEND-CHECKLIST.md); [[02-Architecture/Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation]]; [TRD](../../docs/architecture/Drezivo-TRD.md); [Data Model](../../docs/architecture/Drezivo-Data-Model.md); [ERD](../../docs/architecture/Drezivo-ERD.dbml); [Migration plan](../../docs/architecture/Tenancy-Onboarding-Migration-Plan.md)"
 updated: 2026-09-18
 tags:
   - drezivo
@@ -37,8 +37,9 @@ failures, worker delays, and revoked access.
 
 ## Delivery status
 
-The task-level implementation status is **TBF-000 through TBF-041 implemented**, with TBF-041's
-disposable-PostgreSQL integration evidence still open, and **TBF-042 through TBF-062 planned**. Some
+The task-level implementation status is **TBF-000 through TBF-042 implemented**, with TBF-041 and
+TBF-042's disposable-PostgreSQL integration evidence still open, and **TBF-043 through TBF-062
+planned**. Some
 completed tasks still require a disposable PostgreSQL environment for their full integration
 evidence; that does not change the implementation status recorded in the checklists.
 
@@ -284,13 +285,14 @@ Drezivo, and a tenant must never lose its final active Owner.
 
 **How:** TBF-040 stores a protected recipient identity, seven-day expiry, provider correlation, and
 stable business key locally, counts active Front Desk memberships plus unexpired pending invitations
-under a tenant lock, and commits safe outbox intents without calling Clerk. TBF-041 will dispatch
-those intents with bounded retry. A later claim verifies the current user, organization, provider
-membership, local invitation, role, expiry, and seat capacity. Removal disables local access before
+under a tenant lock, and commits safe outbox intents without calling Clerk. TBF-041 dispatches
+those intents with bounded retry. TBF-042 verifies the current user, organization, provider
+membership, local invitation, role, expiry, and seat capacity, including accepted-invitation webhook
+reconciliation. Removal disables local access before
 queuing provider removal; transfer installs a verified successor before changing the current Owner.
 
-**Status:** TBF-040 complete; TBF-041 implemented with PostgreSQL integration evidence pending;
-TBF-042 and TBF-043 planned.
+**Status:** TBF-040 complete; TBF-041 and TBF-042 implemented with PostgreSQL integration
+evidence pending; TBF-043 planned.
 
 ### TBF-040 - Add local invitation state and safe Owner routes
 
@@ -328,12 +330,20 @@ TBF-042 and TBF-043 planned.
 ### TBF-042 - Implement verified invitation claim
 
 - **Why:** A provider invitation or organization membership must not grant Drezivo access by itself.
-- **What:** An invited user can claim exactly one local Front Desk membership and branch grant after
-  proving the current identity, organization, invitation correlation, role, expiry, and seat state.
-- **How:** The claim path and webhook reconciliation will be idempotent and generic to unauthorized
-  callers. Unknown provider-created memberships will not create local access.
+- **What:** An invited user can claim exactly one local Front Desk membership and fixed default
+  branch grant after proving the current identity, active organization, accepted invitation,
+  exact dispatch marker/current version, provider role, expiry, and seat state. Suspended/removed
+  Front Desk memberships are restored; Owner memberships are never demoted.
+- **How:** The claim route requires verified auth, active organization, a strict empty body, and
+  Idempotency-Key. One tenant transaction locks the invitation and tenant, excludes its own pending
+  reservation from the seat check, writes membership/provider correlation, accepts the invitation,
+  appends a redacted audit event, and returns actor context. Accepted-invitation webhook
+  reconciliation reuses the same core under a system actor and retries when provider membership
+  visibility is delayed. Membership webhooks alone never grant local access; invalid/foreign/
+  expired/revoked/consumed cases remain generic safe failures.
 - **Dependencies:** TBF-040, TBF-041, TBF-022.
-- **Status:** Planned.
+- **Status:** Implemented; disposable-PostgreSQL concurrency/RLS/provider-ordering evidence remains
+  open before deployment.
 
 ### TBF-043 - Implement local-first membership removal and approved Owner transfer
 
@@ -478,11 +488,12 @@ cover webhook replay, payment, provider loss, closure, transfer, and terminal jo
 - The accepted plan limits are 75 / 250 / 1,000 active physical assets and 1 / 3 / 10 Front Desk
   seats. The older PRD table showing 50 / 200 / 1,000 is stale.
 - The checklist header still says only Phase 0 is complete, but its task-level checkboxes and the
-  backend checklist mark TBF-000 through TBF-041 implemented. This guide follows the task-level
-  status and keeps the TBF-041 integration-evidence gate explicit.
+  backend checklist mark TBF-000 through TBF-042 implemented. This guide follows the task-level
+  status and keeps the TBF-041/TBF-042 integration-evidence gates explicit.
 - TBF-040 protects recipient email locally and writes safe provider-dispatch intents; TBF-041
   consumes those intents through Clerk with private-marker recovery and compensation. TBF-042 is
-  the verified claim boundary, and TBF-043 is the local-first removal/transfer boundary.
+  the verified claim boundary, including accepted-invitation webhook reconciliation, and TBF-043
+  is the local-first removal/transfer boundary.
 - TBF-050 through TBF-053 are operator/payment/recovery/closure work. TBF-060 through TBF-062 are
   reconciliation, adversarial evidence, and final documentation work.
 
