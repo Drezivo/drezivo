@@ -5,6 +5,7 @@ import { isoInstant } from '../common/time';
 
 const safeText = (max: number) => z.string().trim().min(1).max(max);
 const permissionCode = z.string().trim().min(1).max(100).regex(/^[a-z][a-z0-9._:-]*$/);
+const operatorSubject = z.string().trim().min(1).max(200).regex(/^[A-Za-z0-9_.:-]+$/);
 
 export const operatorActivityQuery = z.object({
   tenant_id: tenantId.optional(),
@@ -25,14 +26,14 @@ export const operatorActivity = z.object({
   event_id: auditEventId,
   tenant_id: tenantId,
   actor_kind: z.enum(['staff', 'operator', 'system']),
-  actor_key: safeText(200),
+  actor_key: operatorSubject,
   action: safeText(120),
   entity_type: safeText(120),
   entity_id: z.string().uuid().nullable(),
   support_grant_id: supportGrantId.nullable(),
   outcome: z.enum(['succeeded', 'rejected', 'failed']),
   redacted_summary: z.string().nullable(),
-  request_id: safeText(255),
+  request_id: operatorSubject,
   occurred_at: isoInstant,
 }).strict();
 export type OperatorActivity = z.infer<typeof operatorActivity>;
@@ -49,7 +50,7 @@ export const createSupportGrantRequest = z.object({
   reason: safeText(500),
   starts_at: isoInstant,
   expires_at: isoInstant,
-  operator_subject: safeText(200),
+  operator_subject: operatorSubject,
 }).strict().refine((value) => value.starts_at < value.expires_at, {
   message: 'starts_at must be before expires_at', path: ['expires_at'],
 });
@@ -61,7 +62,7 @@ export const retryCommandParams = z.object({ resource_id: outboxEventId }).stric
 export const supportGrant = z.object({
   grant_id: supportGrantId,
   tenant_id: tenantId,
-  operator_subject: safeText(200),
+  operator_subject: operatorSubject,
   permission_codes: z.array(permissionCode),
   starts_at: isoInstant,
   expires_at: isoInstant,
@@ -70,12 +71,12 @@ export const supportGrant = z.object({
 }).strict();
 export type SupportGrant = z.infer<typeof supportGrant>;
 
-export const revokeSupportGrantRequest = z.object({ operator_subject: safeText(200) }).strict();
+export const revokeSupportGrantRequest = z.object({ operator_subject: operatorSubject }).strict();
 export type RevokeSupportGrantRequest = z.infer<typeof revokeSupportGrantRequest>;
 
 export const retryCommandRequest = z.object({
   reason: safeText(500),
-  operator_subject: safeText(200),
+  operator_subject: operatorSubject,
 }).strict();
 export type RetryCommandRequest = z.infer<typeof retryCommandRequest>;
 
@@ -84,7 +85,7 @@ export const retryCommandResponse = z.object({
   command_kind: z.enum(['job.retry', 'notification.retry']),
   resource_id: outboxEventId,
   status: z.literal('accepted'),
-  request_id: safeText(255),
+  request_id: operatorSubject,
   accepted_at: isoInstant,
 }).strict();
 
