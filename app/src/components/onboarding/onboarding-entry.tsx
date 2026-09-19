@@ -11,6 +11,8 @@ import {
   type OrganizationOnboarding,
 } from "@drezivo/contracts";
 
+import { AuthBrand } from "@/components/auth/auth-brand";
+import { AuthSplitLayout } from "@/components/auth/auth-split-layout";
 import { OnboardingStatusPage } from "@/components/onboarding/onboarding-status-page";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
@@ -210,40 +212,41 @@ function OrganizationSetup({
   }
 
   return (
-    <section
-      aria-labelledby="onboarding-heading"
-      className="w-full max-w-xl rounded-2xl border border-dashboard-border bg-dashboard-surface p-6 shadow-sm sm:p-8"
-    >
-      <ProgressIndicator current="organization" />
-      <div className="mt-8">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-dashboard-accent">
-          Your workspace
+    <section aria-labelledby="onboarding-heading" className="mx-auto w-full max-w-xl py-8 sm:py-10">
+      <div className="text-center">
+        <AuthBrand />
+        <p className="mt-2 text-xs font-medium tracking-[0.35em] text-auth-dark-muted">
+          FOR PROFESSIONALS
         </p>
-        <h1
-          id="onboarding-heading"
-          className="mt-3 text-3xl font-semibold tracking-tight text-dashboard-navy"
-        >
+      </div>
+
+      <div className="mt-10">
+        <ProgressIndicator current="organization" />
+      </div>
+
+      <div className="mt-12 text-center">
+        <h1 id="onboarding-heading" className="font-display text-4xl leading-tight text-auth-text sm:text-5xl">
           Set up your business
         </h1>
-        <p className="mt-3 text-sm leading-6 text-dashboard-muted">
-          Tell us the name of the clothing-rental business you want to manage in Drezivo.
+        <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-auth-dark-muted sm:text-base">
+          Tell us what your rental business is called to create your workspace.
         </p>
       </div>
 
       {error && (
         <div
           role="alert"
-          className="mt-6 rounded-lg border border-dashboard-danger/30 bg-red-50 px-4 py-3 text-sm text-dashboard-danger"
+          className="mt-7 rounded-lg border border-auth-error/50 bg-auth-error/10 px-4 py-3 text-sm text-auth-error"
         >
           <p>{error.message}</p>
           {error.requestId && <p className="mt-1 text-xs">Support reference: {error.requestId}</p>}
         </div>
       )}
 
-      <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
+      <form className="mt-9 space-y-5" onSubmit={handleSubmit}>
         <div>
-          <label htmlFor="organization-name" className="text-sm font-medium text-dashboard-navy">
-            Organization name
+          <label htmlFor="organization-name" className="text-sm font-semibold text-auth-text">
+            Business name
           </label>
           <input
             id="organization-name"
@@ -261,8 +264,8 @@ function OrganizationSetup({
           />
         </div>
         <div>
-          <label htmlFor="organization-slug" className="text-sm font-medium text-dashboard-navy">
-            Workspace slug <span className="font-normal text-dashboard-muted">(optional)</span>
+          <label htmlFor="organization-slug" className="text-sm font-semibold text-auth-text">
+            Slug <span className="font-normal text-auth-dark-muted">(optional)</span>
           </label>
           <input
             id="organization-slug"
@@ -278,49 +281,77 @@ function OrganizationSetup({
             className={inputClass}
             placeholder="lunas-gown-rentals"
           />
-          <p className="mt-2 text-xs text-dashboard-muted">
-            Use lowercase letters, numbers, and hyphens.
+          <p className="mt-2 text-xs text-auth-dark-muted">
+            Lowercase letters, numbers, and hyphens only.
           </p>
         </div>
         <button type="submit" disabled={isSubmitting} className={primaryButtonClass}>
           {isSubmitting ? "Creating workspace…" : "Continue"}
         </button>
       </form>
+
+      <div className="mt-8 border-t border-auth-line pt-7 text-center">
+        <p className="text-sm text-auth-dark-muted">
+          Need help? <span className="font-medium text-auth-gold">Contact support</span>
+        </p>
+      </div>
     </section>
   );
 }
 
 function OnboardingFrame({ children }: { children: React.ReactNode }) {
   return (
-    <main className="flex min-h-[100svh] items-center justify-center bg-dashboard-canvas px-4 py-10 sm:px-6">
-      {children}
-    </main>
+    <AuthSplitLayout
+      backHref="/sign-up"
+      backAriaLabel="Back to sign up"
+      panelAriaLabel="Drezivo business onboarding"
+    >
+      <div className="flex flex-1 items-center">{children}</div>
+    </AuthSplitLayout>
   );
 }
 
 function ProgressIndicator({ current }: { current: "organization" }) {
+  const steps = [
+    ["organization", "Organization"],
+    ["plan", "Plan"],
+    ["launch", "Launch"],
+  ] as const;
+
   return (
-    <ol
-      aria-label="Onboarding progress"
-      className="grid grid-cols-3 gap-2 text-center text-xs font-medium text-dashboard-muted"
-    >
-      {[
-        ["organization", "Organization"],
-        ["plan", "Plan"],
-        ["launch", "Launch"],
-      ].map(([step, label], index) => (
-        <li key={step} className={step === current ? "text-dashboard-accent" : undefined}>
-          <span className="flex items-center justify-center gap-1.5">
+    <ol aria-label="Onboarding progress" className="flex items-start text-center">
+      {steps.map(([step, label], index) => {
+        const isCurrent = step === current;
+        return (
+          <li key={step} className="flex min-w-0 flex-1 flex-col items-center">
+            <div className="flex w-full items-center">
+              {index > 0 ? <span aria-hidden="true" className="h-px flex-1 bg-auth-line" /> : null}
+              <span
+                aria-current={isCurrent ? "step" : undefined}
+                className={[
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold",
+                  isCurrent
+                    ? "border-auth-gold text-auth-text ring-1 ring-auth-gold/40"
+                    : "border-auth-line text-auth-dark-muted",
+                ].join(" ")}
+              >
+                {index + 1}
+              </span>
+              {index < steps.length - 1 ? (
+                <span aria-hidden="true" className="h-px flex-1 bg-auth-line" />
+              ) : null}
+            </div>
             <span
-              aria-hidden="true"
-              className="flex h-6 w-6 items-center justify-center rounded-full border border-current"
+              className={[
+                "mt-3 text-xs font-medium sm:text-sm",
+                isCurrent ? "text-auth-text" : "text-auth-dark-muted",
+              ].join(" ")}
             >
-              {index + 1}
+              {label}
             </span>
-            <span>{label}</span>
-          </span>
-        </li>
-      ))}
+          </li>
+        );
+      })}
     </ol>
   );
 }
@@ -341,14 +372,25 @@ function StatusCard({
   title: string;
 }) {
   return (
-    <section className="w-full max-w-xl rounded-2xl border border-dashboard-border bg-dashboard-surface p-8 shadow-sm">
-      <ProgressIndicator current="organization" />
-      <h1 className="mt-8 text-2xl font-semibold text-dashboard-navy">{title}</h1>
-      <p className="mt-3 text-sm leading-6 text-dashboard-muted">{description}</p>
+    <section className="mx-auto w-full max-w-xl py-8 text-center sm:py-10">
+      <AuthBrand />
+      <p className="mt-2 text-xs font-medium tracking-[0.35em] text-auth-dark-muted">
+        FOR PROFESSIONALS
+      </p>
+      <div className="mt-10">
+        <ProgressIndicator current="organization" />
+      </div>
+      <h1 className="mt-12 font-display text-4xl leading-tight text-auth-text">{title}</h1>
+      <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-auth-dark-muted">{description}</p>
       {requestId && (
-        <p className="mt-3 text-xs text-dashboard-muted">Support reference: {requestId}</p>
+        <p className="mt-3 text-xs text-auth-dark-muted">Support reference: {requestId}</p>
       )}
       <div className="mt-8">{action}</div>
+      <div className="mt-8 border-t border-auth-line pt-7">
+        <p className="text-sm text-auth-dark-muted">
+          Need help? <span className="font-medium text-auth-gold">Contact support</span>
+        </p>
+      </div>
     </section>
   );
 }
@@ -361,6 +403,6 @@ function toDrezivoApiError(error: unknown): DrezivoApiError {
 }
 
 const inputClass =
-  "mt-2 h-12 w-full rounded-lg border border-dashboard-border bg-dashboard-canvas px-4 text-sm text-dashboard-navy outline-none transition focus:border-dashboard-accent focus:ring-2 focus:ring-dashboard-accent/20";
+  "mt-2 h-12 w-full rounded-lg border border-auth-line bg-transparent px-4 text-sm text-auth-text outline-none transition placeholder:text-auth-dark-muted focus:border-auth-gold focus:ring-2 focus:ring-auth-gold/20";
 const primaryButtonClass =
-  "inline-flex min-h-11 items-center justify-center rounded-lg bg-dashboard-accent px-5 text-sm font-semibold text-white transition hover:bg-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex min-h-12 w-full items-center justify-center rounded-full bg-auth-button px-6 text-sm font-semibold text-auth-button-ink transition hover:bg-auth-button-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-auth-focus focus-visible:ring-offset-2 focus-visible:ring-offset-auth-panel disabled:cursor-not-allowed disabled:opacity-60";

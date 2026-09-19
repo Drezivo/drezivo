@@ -62,8 +62,8 @@ describe("OnboardingEntry", () => {
     renderEntry();
 
     expect(await screen.findByRole("heading", { name: "Set up your business" })).toBeVisible();
-    expect(screen.getByLabelText("Organization name")).toBeVisible();
-    expect(screen.getByLabelText(/Workspace slug/)).toBeVisible();
+    expect(screen.getByLabelText("Business name")).toBeVisible();
+    expect(screen.getByLabelText(/Slug/)).toBeVisible();
   });
 
   it("creates an organization with only the allowed fields and activates the returned organization", async () => {
@@ -84,10 +84,10 @@ describe("OnboardingEntry", () => {
 
     renderEntry();
     await screen.findByRole("heading", { name: "Set up your business" });
-    fireEvent.change(screen.getByLabelText("Organization name"), {
+    fireEvent.change(screen.getByLabelText("Business name"), {
       target: { value: " Luna Rentals " },
     });
-    fireEvent.change(screen.getByLabelText(/Workspace slug/), {
+    fireEvent.change(screen.getByLabelText(/Slug/), {
       target: { value: "luna-rentals" },
     });
     fireEvent.submit(screen.getByRole("button", { name: "Continue" }).closest("form")!);
@@ -111,7 +111,7 @@ describe("OnboardingEntry", () => {
 
     renderEntry();
     await screen.findByRole("heading", { name: "Set up your business" });
-    fireEvent.change(screen.getByLabelText("Organization name"), {
+    fireEvent.change(screen.getByLabelText("Business name"), {
       target: { value: "Luna Rentals" },
     });
     const form = screen.getByRole("button", { name: "Continue" }).closest("form");
@@ -129,7 +129,7 @@ describe("OnboardingEntry", () => {
 
     renderEntry();
     await screen.findByRole("heading", { name: "Set up your business" });
-    fireEvent.change(screen.getByLabelText("Organization name"), {
+    fireEvent.change(screen.getByLabelText("Business name"), {
       target: { value: "Luna Rentals" },
     });
     const form = screen.getByRole("button", { name: "Continue" }).closest("form");
