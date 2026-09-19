@@ -1,0 +1,144 @@
+name: backend
+
+on:
+  pull_request:
+    paths:
+      - "api/**"
+      - "contracts/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/ci.yml"
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+    paths:
+      - "api/**"
+      - "contracts/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: secret-file hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Reject tracked environment files
+        shell: bash
+        run: |
+          if git ls-files | grep -E '(^|/)\.env($|\.)'; then
+            echo "::error::A .env file is tracked. Remove it and rotate every value in it."
+            exit 1
+          fi
+      - name: Scan repository for leaked secrets
+        shell: bash
+        run: |
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/repo:ro" \
+            ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
+            dir --redact --no-banner /repo
+
+  backend:
+    name: contracts and API checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17.11-alpine3.24
+        env:
+          POSTGRES_DB: drezivo_test
+          POSTGRES_USER: drezivo
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U drezivo -d drezivo_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+          --health-start-period 5s
+    env:
+      NODE_ENV: test
+      TEST_DATABASE_URL: postgres://drezivo:test@127.0.0.1:5432/drezivo_test
+      TEST_DATABASE_APP_PASSWORD: drezivo_app_ci_test
+      TEST_DATABASE_WORKER_PASSWORD: drezivo_worker_ci_test
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build shared contracts
+        run: npm run build --workspace @drezivo/contracts
+      - name: Lint shared contracts
+        run: npm run lint --workspace @drezivo/contracts
+      - name: Test shared contracts
+        run: npm run test --workspace @drezivo/contracts
+      - name: Type-check API
+        run: npm run typecheck --workspace @drezivo/api
+      - name: Lint API
+        run: npm run lint --workspace @drezivo/api
+      - name: Run API unit tests
+        run: npm run test --workspace @drezivo/api
+      - name: Run API integration tests
+        run: npm run test:integration --workspace @drezivo/api
+      - name: Build API
+        run: npm run build --workspace @drezivo/api
+
+  container:
+    name: build backend container
+    needs: [backend, secrets]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build server and worker image
+        run: docker build --file api/Dockerfile --tag drezivo-api:${{ github.sha }} .
+
+  publish:
+    name: publish versioned backend image
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [container]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Log in to GitHub Container Registry
+        shell: bash
+        env:
+          CR_PAT: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$CR_PAT" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Build and publish versioned image
+        shell: bash
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}/api
+          VERSION: ${{ github.ref_name }}
+        run: |
+          IMAGE="${IMAGE,,}"
+          docker build \
+            --file api/Dockerfile \
+            --tag "$IMAGE:$VERSION" \
+            --tag "$IMAGE:${GITHUB_SHA}" \
+            .
+          docker push "$IMAGE:$VERSION"
+          docker push "$IMAGE:${GITHUB_SHA}"

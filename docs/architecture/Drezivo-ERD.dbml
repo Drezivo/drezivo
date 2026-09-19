@@ -154,9 +154,9 @@ Table membership {
   indexes {
     (tenant_id, id) [pk]
     (tenant_id, clerk_user_id) [unique]
-    (clerk_membership_id) [unique]
+    (tenant_id, clerk_membership_id) [unique]
   }
-  Note: 'V1. owner/frontdesk initially; active/suspended/removed local status check required on every protected request. TBF-031 workspace discovery returns only active local memberships; actor context then resolves branch grants and entitlements.'
+  Note: 'V1. owner/frontdesk initially; active/suspended/removed local status check required on every protected request. TBF-031 workspace discovery returns only active local memberships; actor context then resolves branch grants and entitlements. TBF-042 records the exact Clerk membership ID only after a verified invitation claim; provider membership webhooks alone never grant local access.'
 }
 
 Table membership_invitation {
@@ -176,7 +176,7 @@ Table membership_invitation {
     (tenant_id, business_key) [unique]
     (clerk_invitation_id) [unique]
   }
-  Note: 'V1 foundation tenant-owned Front Desk intent. Recipient email is encrypted and keyed-deduped; dispatch_version supports resend without a second seat. Partial unique pending recipient index and seven-day database-time expiry are migration constraints.'
+  Note: 'V1 foundation tenant-owned Front Desk intent. Recipient email is encrypted and keyed-deduped; dispatch_version supports resend without a second seat. Partial unique pending recipient index and seven-day database-time expiry are migration constraints. TBF-042 accepts the row only after exact provider marker, accepted invitation, organization, role, and membership checks.'
 }
 
 Table branch_membership {

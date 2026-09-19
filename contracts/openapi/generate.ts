@@ -313,6 +313,32 @@ for (const action of ['resend', 'cancel'] as const) {
   });
 }
 
+registry.registerPath({
+  method: 'post',
+  path: '/membership-invitations/{invitationId}/claim',
+  tags: ['membership-invitations'],
+  summary: 'Claim one accepted Clerk Front Desk invitation.',
+  request: {
+    params: membershipInvitationParams,
+    headers: idempotencyKeyHeader,
+    body: {
+      content: {
+        'application/json': { schema: claimMembershipInvitationRequest },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Invitation claimed and the authenticated actor context is returned.',
+      content: { 'application/json': { schema: successEnvelope(actorContext) } },
+    },
+    404: jsonError('The invitation is not available.'),
+    409: jsonError('The invitation claim or idempotency key is not valid.'),
+    429: jsonError('Invitation claim rate limit exceeded.'),
+    503: jsonError('The identity provider is temporarily unavailable.'),
+  },
+});
+
 // ---- subscription lifecycle ---------------------------------------------
 registry.registerPath({
   method: 'post',
