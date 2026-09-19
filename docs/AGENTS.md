@@ -2,7 +2,8 @@ This workspace is part of the Drezivo monorepo. The root Git history, root licen
 
 # Drezivo docs
 
-Scope: specs, architecture, decisions and runbooks only.
+Scope: specs, architecture, decisions and runbooks. The nested `second-brain/` folder is a
+project-only, non-authoritative Obsidian memory layer and follows its own README and vault rules.
 Read `.codex/rules/documentation-conventions.md` and `.codex/rules/idempotency-concurrency.md` before edits.
 Read `.codex/rules/git-workflow.md` and `.codex/rules/no-tracked-env.md` before Git operations.
 Record durable corrections in `.codex/rules/lessons.md`, then synchronize the `.codex` mirror.

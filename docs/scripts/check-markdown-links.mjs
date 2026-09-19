@@ -29,7 +29,14 @@ for (const file of files) {
   for (const [, raw] of text.matchAll(re)) {
     if (/^(?:https?:|mailto:|tel:|data:)/i.test(raw)) continue;
     const [target, anchor] = raw.split('#', 2);
-    const resolved = target ? path.resolve(path.dirname(file), target) : file;
+    let decodedTarget = target;
+    try {
+      decodedTarget = target ? decodeURIComponent(target) : target;
+    } catch {
+      failures.push(`${path.relative(root, file)}: invalid encoded link ${raw}`);
+      continue;
+    }
+    const resolved = decodedTarget ? path.resolve(path.dirname(file), decodedTarget) : file;
     if (!fs.existsSync(resolved) || (fs.statSync(resolved).isDirectory() && !fs.existsSync(path.join(resolved, 'README.md')))) {
       failures.push(`${path.relative(root, file)}: missing ${raw}`); continue;
     }

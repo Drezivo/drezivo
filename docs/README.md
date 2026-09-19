@@ -4,6 +4,13 @@ Start with the [current PRD](product/Drezivo-PRD.md), [TRD](architecture/Drezivo
 [logical data model](architecture/Drezivo-Data-Model.md), and [ERD input](architecture/Drezivo-ERD.dbml).
 Historical product documents remain available with precedence banners.
 
+## Second Brain
+
+Open [`second-brain/`](second-brain/) as the project-only Obsidian vault and begin at
+[`00-Home/Drezivo Home.md`](second-brain/00-Home/Drezivo%20Home.md). It is a linked memory and
+navigation layer; the current specifications and accepted decisions in this workspace remain
+authoritative.
+
 ## Legal drafts
 
 The Philippines-first [Terms of Service](product/legal/Drezivo-Terms-of-Service.md) and

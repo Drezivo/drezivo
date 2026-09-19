@@ -115,11 +115,7 @@ describe('TBF-011 onboarding persistence', async () => {
 
     const other = await ensureAccount('user_onboarding_other');
     expect(
-      await createOrResumeOnboarding(
-        other.id,
-        created.onboarding.clerkOrgId,
-        'user_onboarding_other',
-      ),
+      await createOrResumeOnboarding(other.id, created.onboarding.clerkOrgId, 'user_onboarding_other'),
     ).toEqual({ kind: 'organization_conflict' });
   });
 

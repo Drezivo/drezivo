@@ -47,31 +47,36 @@ export function requireStaffAuth(req: Request, _res: Response, next: NextFunctio
  * primary email. The lookup stays behind the Clerk adapter and runs before any local account,
  * idempotency, or organization mutation. Provider failures fail closed.
  */
-export async function requireVerifiedStaffAuth(
+export function requireVerifiedStaffAuth(
   req: Request,
   _res: Response,
   next: NextFunction,
-): Promise<void> {
-  requireStaffAuth(req, _res, async (error?: unknown) => {
+): void {
+  requireStaffAuth(req, _res, (error?: unknown) => {
     if (error) {
       next(error);
       return;
     }
-    try {
-      const verified = await createClerkServerAdapter().getUserVerificationState(
-        req.clerkPrincipal!.clerkUserId,
-      );
-      if (!verified.primaryEmailVerified) {
-        next(new ForbiddenError('Email verification is required.'));
-        return;
-      }
-      next();
-    } catch (verificationError) {
-      next(
-        verificationError instanceof DependencyUnavailableError
-          ? verificationError
-          : new DependencyUnavailableError('Identity verification is temporarily unavailable.'),
-      );
+    const clerkUserId = req.clerkPrincipal?.clerkUserId;
+    if (!clerkUserId) {
+      next(new UnauthenticatedError('Sign-in required.'));
+      return;
     }
+    void (async () => {
+      try {
+        const verified = await createClerkServerAdapter().getUserVerificationState(clerkUserId);
+        if (!verified.primaryEmailVerified) {
+          next(new ForbiddenError('Email verification is required.'));
+          return;
+        }
+        next();
+      } catch (verificationError) {
+        next(
+          verificationError instanceof DependencyUnavailableError
+            ? verificationError
+            : new DependencyUnavailableError('Identity verification is temporarily unavailable.'),
+        );
+      }
+    })();
   });
 }

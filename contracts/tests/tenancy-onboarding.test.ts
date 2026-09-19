@@ -6,6 +6,7 @@ import {
   createOwnerOnboardingRequest,
   abandonOwnerOnboardingRequest,
   bootstrapTenantRequest,
+  claimMembershipInvitationRequest,
   membershipInvitationStatus,
   onboardingStatus,
   organizationOnboarding,
@@ -50,7 +51,7 @@ describe('tenancy onboarding contracts', () => {
         successor_membership_id: '9fbd891f-cab6-48a9-a965-e84deea05df6',
         reason: 'Verified business handover',
         evidence_reference: 'case-123',
-        tenant_id: '41bf891f-cab6-48a9-a965-e84deea05df6',
+        tenant_id: '41bf891f-481b-47fd-a24e-6208f44e62ad',
       }).success,
     ).toBe(false);
   });
@@ -119,5 +120,10 @@ describe('tenancy onboarding contracts', () => {
         },
       }).success,
     ).toBe(true);
+  });
+
+  it('keeps invitation claim intentionally empty and server-authorized', () => {
+    expect(claimMembershipInvitationRequest.safeParse({}).success).toBe(true);
+    expect(claimMembershipInvitationRequest.safeParse({ tenant_id: 'nope' }).success).toBe(false);
   });
 });

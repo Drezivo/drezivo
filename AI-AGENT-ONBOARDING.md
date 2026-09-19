@@ -73,7 +73,7 @@ isolation, production recovery, payment correctness, or availability concurrency
 
 ## 6. Shared Obsidian second brain
 
-Open `Drezivo-Second-Brain/` as a project-only Obsidian vault and begin at
+Open `docs/second-brain/` as a project-only Obsidian vault and begin at
 `00-Home/Drezivo Home.md`. Use vault-relative wikilinks, YAML properties, source/date fields, and
 the numbered folders. Update the Canvas only when relationships change and keep node IDs stable.
 Use private Obsidian Sync or a private Git repository; never sync credentials, customer PII,

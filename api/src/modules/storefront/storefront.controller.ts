@@ -6,13 +6,13 @@ import type { AvailabilityQuery, StorefrontSlugParams } from './storefront.schem
 
 const notImplementedMessage = 'Public storefront reads are not available in this scaffold.';
 
-export async function getStorefrontController(req: Request, res: Response): Promise<void> {
-  await getPublicStorefront(req.params as unknown as StorefrontSlugParams);
+export function getStorefrontController(req: Request, res: Response): void {
+  getPublicStorefront(req.params as unknown as StorefrontSlugParams);
   sendError(res, 501, 'NOT_IMPLEMENTED', notImplementedMessage, req.requestId);
 }
 
-export async function getAvailabilityController(req: Request, res: Response): Promise<void> {
-  await getPublicAvailability(
+export function getAvailabilityController(req: Request, res: Response): void {
+  getPublicAvailability(
     req.params as unknown as StorefrontSlugParams,
     req.query as unknown as AvailabilityQuery,
   );

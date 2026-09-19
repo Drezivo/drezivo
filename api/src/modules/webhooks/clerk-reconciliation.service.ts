@@ -2,7 +2,7 @@ import type { ClerkWebhookEventType } from '@drezivo/contracts';
 import type { PoolClient } from 'pg';
 
 import { withSystemGlobalTransaction } from '../../db/client.js';
-import { onboardingMarker, type ClerkOnboardingMarker } from './clerk.schemas.js';
+import { onboardingMarker } from './clerk.schemas.js';
 import {
   reconcileOrganizationCreatedMarkerInTransaction as persistOrganizationCreatedMarkerInTransaction,
   type OrganizationCreatedRepairInput,
