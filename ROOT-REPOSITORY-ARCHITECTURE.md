@@ -66,12 +66,11 @@ Drezivo/
 ├── SECURITY-FOUNDATION.template.md     public pointer for the private security baseline
 ├── LICENSE.md                         organization and monorepo proprietary license
 ├── LICENSE-POLICY.md                  licensing decisions and GitHub checklist
-├── Drezivo-Second-Brain/              project-only Obsidian vault
 ├── contracts/                         packages/contracts, shared API contract
 ├── api/                               services/api, Express API and worker
 ├── app/                               apps/app, authenticated staff dashboard
 ├── web/                               apps/web, marketing and public storefront
-├── docs/                              packages/docs, canonical specifications and runbooks
+├── docs/                              packages/docs, canonical specifications, runbooks, and the project-only Obsidian vault
 ├── .claude/                           editable root agent rules and skills
 ├── .codex/                            matching Codex mirror
 ├── RootResource/                      supplied design and reference assets

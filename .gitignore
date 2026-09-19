@@ -17,10 +17,10 @@
 .polyrepo-git-archives/
 
 # Local Obsidian state and secrets
-Drezivo-Second-Brain/.obsidian/workspace*.json
-Drezivo-Second-Brain/.obsidian/cache/
-Drezivo-Second-Brain/**/.env*
-Drezivo-Second-Brain/**/secrets*/
+docs/second-brain/.obsidian/workspace*.json
+docs/second-brain/.obsidian/cache/
+docs/second-brain/**/.env*
+docs/second-brain/**/secrets*/
 
 **/*.tgz
 

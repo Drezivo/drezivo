@@ -105,6 +105,9 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 - `API_BASE_URL` — the `api` server's base URL for this environment. Next.js server rendering
   calls the API through scoped service/request adapters (TRD §1); it never holds a database
   connection string directly.
+- `NEXT_PUBLIC_API_ORIGIN` — the browser-reachable API origin used by the authenticated onboarding
+  client. This is an origin only, without a secret or token; Clerk still supplies the bearer token
+  for each request.
 - `NEXT_PUBLIC_APP_ENV` — surfaces the environment name in client UI (e.g., a staging banner)
   without leaking anything sensitive.
 

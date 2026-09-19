@@ -14,11 +14,11 @@ contains the same orientation in a visual Word document.
 
 ## Read in this order
 
-1. [Enhanced PRD](Drezivo-PRD.md) — V1 scope, V1.1/V2/V3 progression, workflows, permissions, prices and release gates.
-2. [Market research](Drezivo-Market-Research.md) — competitor/Philippine evidence, original gaps, assumptions and validation plan.
-3. [TRD](Drezivo-TRD.md) — recommended implementation using Next.js/TypeScript, Express/TypeScript, Neon, Clerk, S3 and REST.
-4. [Logical data model](Drezivo-Data-Model.md) — entity dictionary, invariants, state transitions and transaction rules.
-5. [ERD input](Drezivo-ERD.dbml) — 50 entities and 132 relationships, grouped by release. Import into a DBML-compatible diagram tool. Do not treat exported SQL as complete production migrations.
+1. [Enhanced PRD](docs/product/Drezivo-PRD.md) — V1 scope, V1.1/V2/V3 progression, workflows, permissions, prices and release gates.
+2. [Market research](docs/product/Drezivo-Market-Research.md) — competitor/Philippine evidence, original gaps, assumptions and validation plan.
+3. [TRD](docs/architecture/Drezivo-TRD.md) — recommended implementation using Next.js/TypeScript, Express/TypeScript, Neon, Clerk, S3 and REST.
+4. [Logical data model](docs/architecture/Drezivo-Data-Model.md) — entity dictionary, invariants, state transitions and transaction rules.
+5. [ERD input](docs/architecture/Drezivo-ERD.dbml) — 50 entities and 132 relationships, grouped by release. Import into a DBML-compatible diagram tool. Do not treat exported SQL as complete production migrations.
 6. [Legal drafts](docs/product/legal/) — Philippines-first Terms of Service and Privacy Policy for counsel and Data Protection Officer review.
 7. [Security foundation template](SECURITY-FOUNDATION.template.md) — instructions for obtaining the private session, tenant isolation, risk, bot, monitoring, and incident guidance.
 8. [GitHub ruleset runbook](docs/runbooks/github-ruleset.md) — exact `main` protection settings and the plan/CI prerequisites.
@@ -55,7 +55,7 @@ the whole change.
 
 ## Drezivo second brain
 
-`Drezivo-Second-Brain/` is the project-only Obsidian vault. Start at
-[`00-Home/Drezivo Home.md`](Drezivo-Second-Brain/00-Home/Drezivo%20Home.md), then use the Canvas,
-Base view, decision register, and [hosting runbook](Drezivo-Second-Brain/05-Operations/Hosting%20the%20Vault.md). The Codex and Claude copies of the upstream
+`docs/second-brain/` is the project-only Obsidian vault. Start at
+[`00-Home/Drezivo Home.md`](docs/second-brain/00-Home/Drezivo%20Home.md), then use the Canvas,
+Base view, decision register, and [hosting runbook](docs/second-brain/05-Operations/Hosting%20the%20Vault.md). The Codex and Claude copies of the upstream
 Obsidian skills live under `.codex/skills/obsidian-skills/` and `.claude/skills/obsidian-skills/`.

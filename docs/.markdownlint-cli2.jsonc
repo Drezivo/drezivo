@@ -17,6 +17,7 @@
   "ignores": [
     "node_modules/**",
     "archive/**",
+    "second-brain/**",
     "frontend-references/**",
     ".claude/**",
     ".codex/**",
