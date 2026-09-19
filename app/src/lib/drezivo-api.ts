@@ -2,16 +2,24 @@
 
 import {
   abandonOwnerOnboardingRequest,
+  actorContext,
   apiEnvelope,
+  bootstrapTenantRequest,
   chooseOnboardingPlanRequest,
   createOwnerOnboardingRequest,
   onboardingActorContext,
   organizationOnboarding,
+  tenantBootstrapResponse,
+  workspaceList,
   type AbandonOwnerOnboardingRequest,
+  type ActorContext,
+  type BootstrapTenantRequest,
   type ChooseOnboardingPlanRequest,
   type CreateOwnerOnboardingRequest,
   type OnboardingActorContext,
   type OrganizationOnboarding,
+  type TenantBootstrapResponse,
+  type WorkspaceList,
 } from "@drezivo/contracts";
 
 type TokenGetter = () => Promise<string | null>;
@@ -81,6 +89,33 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "POST",
         path: `/api/v1/onboarding/${encodeURIComponent(onboardingId)}/abandon`,
         responseSchema: apiEnvelope(organizationOnboarding),
+      }),
+    bootstrapOnboarding: (
+      onboardingId: string,
+      input: BootstrapTenantRequest,
+      idempotencyKey: string
+    ) =>
+      request<TenantBootstrapResponse>({
+        getToken,
+        body: bootstrapTenantRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/onboarding/${encodeURIComponent(onboardingId)}/bootstrap`,
+        responseSchema: apiEnvelope(tenantBootstrapResponse),
+      }),
+    getWorkspaces: () =>
+      request<WorkspaceList>({
+        getToken,
+        method: "GET",
+        path: "/api/v1/workspaces",
+        responseSchema: apiEnvelope(workspaceList),
+      }),
+    getActorContext: () =>
+      request<ActorContext>({
+        getToken,
+        method: "GET",
+        path: "/api/v1/actor-context",
+        responseSchema: apiEnvelope(actorContext),
       }),
   };
 }

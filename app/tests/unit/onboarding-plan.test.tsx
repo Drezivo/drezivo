@@ -1,15 +1,21 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { organizationOnboarding, type OrganizationOnboarding } from "@drezivo/contracts";
 import { OnboardingPlan } from "@/components/onboarding/onboarding-plan";
 
 const clerk = vi.hoisted(() => ({
   getToken: vi.fn(),
+  setActive: vi.fn(),
   useAuth: vi.fn(),
+  useClerk: vi.fn(),
 }));
 
 const api = vi.hoisted(() => ({
+  bootstrapOnboarding: vi.fn(),
+  getActorContext: vi.fn(),
   getCurrentOnboarding: vi.fn(),
+  getWorkspaces: vi.fn(),
   selectOnboardingPlan: vi.fn(),
 }));
 
@@ -17,6 +23,7 @@ const router = vi.hoisted(() => ({ replace: vi.fn() }));
 
 vi.mock("@clerk/nextjs", () => ({
   useAuth: clerk.useAuth,
+  useClerk: clerk.useClerk,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -37,35 +44,88 @@ vi.mock("@/lib/drezivo-api", () => ({
   createDrezivoApiClient: () => api,
 }));
 
-const onboarding = {
+const onboarding: OrganizationOnboarding = organizationOnboarding.parse({
   id: "9fbd891f-cab6-48a9-a965-e84deea05df6",
   clerk_org_id: "org_123",
   organization_name: "Luna Rentals",
   requested_slug: "luna-rentals",
-  status: "incomplete" as const,
+  status: "incomplete",
   selected_plan_code: null,
   is_trial_eligible: true,
   created_at: "2026-09-19T00:00:00.000Z",
   updated_at: "2026-09-19T00:00:00.000Z",
+});
+
+const professionalOnboarding = {
+  ...onboarding,
+  selected_plan_code: "professional" as const,
+};
+
+const bootstrap = {
+  tenant: {
+    id: "tenant_123",
+    name: "Luna Rentals",
+    slug: "luna-rentals",
+    status: "active" as const,
+    currency: "PHP",
+    timezone: "Asia/Manila",
+    created_at: "2026-09-19T00:00:00.000Z",
+    updated_at: "2026-09-19T00:00:00.000Z",
+  },
+  default_branch: {
+    id: "branch_123",
+    name: "Main Branch",
+    code: "main",
+    is_default: true,
+    timezone: "Asia/Manila",
+    status: "active" as const,
+  },
+  membership: {
+    id: "membership_123",
+    role: "owner" as const,
+    status: "active" as const,
+    updated_at: "2026-09-19T00:00:00.000Z",
+  },
+  branch_grants: [{ branch_id: "branch_123", permission_codes: ["assets.manage"] }],
+  subscription: {
+    id: "subscription_123",
+    plan_code: "professional" as const,
+    status: "trialing" as const,
+    trial_ends_at: "2026-09-26T00:00:00.000Z",
+    grace_ends_at: null,
+  },
+};
+
+const workspace = {
+  tenant: bootstrap.tenant,
+  clerk_org_id: "org_123",
+  role: "owner" as const,
+  membership_updated_at: "2026-09-19T00:00:00.000Z",
 };
 
 function renderPlan() {
   clerk.useAuth.mockReturnValue({ getToken: clerk.getToken, isLoaded: true, isSignedIn: true });
+  clerk.useClerk.mockReturnValue({ setActive: clerk.setActive });
   return render(<OnboardingPlan />);
+}
+
+function mockCurrent(currentOnboarding: OrganizationOnboarding = onboarding) {
+  api.getCurrentOnboarding.mockResolvedValue({
+    data: {
+      onboarding: currentOnboarding,
+      has_current_owned_tenant: false,
+      has_consumed_lifetime_trial: false,
+    },
+    requestId: "req-current",
+  });
 }
 
 describe("OnboardingPlan", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clerk.getToken.mockResolvedValue("clerk-token");
-    api.getCurrentOnboarding.mockResolvedValue({
-      data: {
-        onboarding,
-        has_current_owned_tenant: false,
-        has_consumed_lifetime_trial: false,
-      },
-      requestId: "req-current",
-    });
+    clerk.setActive.mockResolvedValue(undefined);
+    mockCurrent();
   });
 
   it("renders the three authoritative plan options and defaults to Professional", async () => {
@@ -81,7 +141,7 @@ describe("OnboardingPlan", () => {
     expect(screen.getByText("1,000 active assets")).toBeVisible();
   });
 
-  it("submits only plan_code through the API client", async () => {
+  it("persists only plan_code and moves to launch review", async () => {
     api.selectOnboardingPlan.mockResolvedValue({
       data: { ...onboarding, selected_plan_code: "starter" as const },
       requestId: "req-plan",
@@ -99,7 +159,8 @@ describe("OnboardingPlan", () => {
       { plan_code: "starter" },
       expect.any(String)
     );
-    expect(await screen.findByText("Plan saved.")).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Review and launch" })).toBeVisible();
+    expect(screen.getByText("Starter")).toBeVisible();
   });
 
   it("guards duplicate submits while the first plan request is pending", async () => {
@@ -126,7 +187,7 @@ describe("OnboardingPlan", () => {
     });
   });
 
-  it("reuses the same idempotency key when retrying the same selection", async () => {
+  it("reuses the same idempotency key when retrying the same plan selection", async () => {
     api.selectOnboardingPlan.mockRejectedValueOnce(new Error("network failure"));
     api.selectOnboardingPlan.mockResolvedValueOnce({
       data: { ...onboarding, selected_plan_code: "starter" },
@@ -145,20 +206,89 @@ describe("OnboardingPlan", () => {
     expect(api.selectOnboardingPlan.mock.calls[0]?.[2]).toBe(api.selectOnboardingPlan.mock.calls[1]?.[2]);
   });
 
-  it("resumes a saved plan selection instead of overwriting it", async () => {
-    api.getCurrentOnboarding.mockResolvedValue({
-      data: {
-        onboarding: { ...onboarding, selected_plan_code: "business" },
-        has_current_owned_tenant: false,
-        has_consumed_lifetime_trial: false,
-      },
-      requestId: "req-current",
-    });
+  it("loads a persisted plan directly into review without starting the trial", async () => {
+    mockCurrent(professionalOnboarding);
 
     renderPlan();
 
-    expect(await screen.findByRole("radio", { name: /Business/ })).toBeChecked();
-    expect(screen.getByRole("button", { name: "Plan saved" })).toBeDisabled();
-    expect(api.selectOnboardingPlan).not.toHaveBeenCalled();
+    expect(await screen.findByRole("heading", { name: "Review and launch" })).toBeVisible();
+    expect(screen.getByText("Professional")).toBeVisible();
+    expect(screen.getByText("250 active assets", { exact: false })).toBeVisible();
+    expect(api.bootstrapOnboarding).not.toHaveBeenCalled();
+  });
+
+  it("requires trial confirmation before bootstrap and completes workspace handoff once", async () => {
+    mockCurrent(professionalOnboarding);
+    api.bootstrapOnboarding.mockResolvedValue({ data: bootstrap, requestId: "req-bootstrap" });
+    api.getWorkspaces.mockResolvedValue({
+      data: { items: [workspace], page_meta: { next_cursor: null, has_more: false } },
+      requestId: "req-workspaces",
+    });
+    api.getActorContext.mockResolvedValue({
+      data: {
+        tenant: bootstrap.tenant,
+        membership: bootstrap.membership,
+        branches: [bootstrap.default_branch],
+        active_branch_id: bootstrap.default_branch.id,
+        branch_grants: bootstrap.branch_grants,
+        subscription: bootstrap.subscription,
+        entitlements: { physical_assets_max: 250, frontdesk_seats_max: 3 },
+      },
+      requestId: "req-actor",
+    });
+
+    renderPlan();
+    fireEvent.click(await screen.findByRole("button", { name: /Launch Workspace/i }));
+
+    expect(screen.getByRole("dialog", { name: "Start your 7-day trial?" })).toBeVisible();
+    expect(screen.getByText(/No credit card is required during the trial period/i)).toBeVisible();
+    expect(api.bootstrapOnboarding).not.toHaveBeenCalled();
+
+    const confirm = screen.getByRole("button", { name: "Start 7-day trial" });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(api.bootstrapOnboarding).toHaveBeenCalledTimes(1));
+    expect(api.bootstrapOnboarding).toHaveBeenCalledWith(onboarding.id, {}, expect.any(String));
+    await waitFor(() => expect(api.getWorkspaces).toHaveBeenCalledTimes(1));
+    expect(clerk.setActive).toHaveBeenCalledWith({ organization: "org_123" });
+    expect(api.getActorContext).toHaveBeenCalledTimes(1);
+    expect(router.replace).toHaveBeenCalledWith("/");
+  });
+
+  it("retries only workspace loading after bootstrap succeeds", async () => {
+    mockCurrent(professionalOnboarding);
+    api.bootstrapOnboarding.mockResolvedValue({ data: bootstrap, requestId: "req-bootstrap" });
+    api.getWorkspaces
+      .mockRejectedValueOnce(new Error("temporary workspace read failure"))
+      .mockResolvedValueOnce({
+        data: { items: [workspace], page_meta: { next_cursor: null, has_more: false } },
+        requestId: "req-workspaces",
+      });
+    api.getActorContext.mockResolvedValue({
+      data: {
+        tenant: bootstrap.tenant,
+        membership: bootstrap.membership,
+        branches: [bootstrap.default_branch],
+        active_branch_id: bootstrap.default_branch.id,
+        branch_grants: bootstrap.branch_grants,
+        subscription: bootstrap.subscription,
+        entitlements: { physical_assets_max: 250, frontdesk_seats_max: 3 },
+      },
+      requestId: "req-actor",
+    });
+
+    renderPlan();
+    fireEvent.click(await screen.findByRole("button", { name: /Launch Workspace/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Start 7-day trial" }));
+
+    expect(await screen.findByRole("heading", { name: "Your workspace was created" })).toBeVisible();
+    expect(api.bootstrapOnboarding).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try loading workspace again" }));
+
+    await waitFor(() => expect(api.getWorkspaces).toHaveBeenCalledTimes(2));
+    expect(api.bootstrapOnboarding).toHaveBeenCalledTimes(1);
+    expect(router.replace).toHaveBeenCalledWith("/");
   });
 });
