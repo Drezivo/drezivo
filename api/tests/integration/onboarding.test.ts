@@ -26,9 +26,8 @@ process.env.S3_SECRET_ACCESS_KEY ??= 'test';
 describe('TBF-011 onboarding persistence', async () => {
   const { closePool, withGlobalTransaction, withOperatorGlobalTransaction, withTenantTransaction } =
     await import('../../src/db/client.js');
-  const { consumeTrial, ensureAccount, getAccountByClerkUserId } = await import(
-    '../../src/modules/accounts/account.repository.js'
-  );
+  const { consumeTrial, ensureAccount, getAccountByClerkUserId } =
+    await import('../../src/modules/accounts/account.repository.js');
   const {
     abandonOnboarding,
     chooseOnboardingPlan,
@@ -39,9 +38,8 @@ describe('TBF-011 onboarding persistence', async () => {
     recordVerifiedOnboardingPayment,
   } = await import('../../src/modules/onboarding/onboarding.repository.js');
   const { createTestTenant } = await import('./helpers/factories.js');
-  const { claimOwnerOnboardingStart } = await import(
-    '../../src/modules/onboarding/onboarding-attempt.repository.js'
-  );
+  const { claimOwnerOnboardingStart } =
+    await import('../../src/modules/onboarding/onboarding-attempt.repository.js');
   const { canonicalRequestHash } = await import('../../src/shared/idempotency.js');
 
   beforeAll(async () => {
@@ -123,34 +121,51 @@ describe('TBF-011 onboarding persistence', async () => {
 
   it('is owner-isolated and unavailable in tenant-scoped transactions', async () => {
     const owner = await ensureAccount('user_onboarding_owner');
-    const created = await createOrResumeOnboarding(owner.id, 'org_isolated', 'user_onboarding_owner');
+    const created = await createOrResumeOnboarding(
+      owner.id,
+      'org_isolated',
+      'user_onboarding_owner',
+    );
     if (created.kind !== 'created') throw new Error('expected onboarding creation');
 
     expect(await getCurrentOwnerOnboarding('user_onboarding_other')).toBeNull();
-    const globalForeignRead = await withGlobalTransaction('user_onboarding_other', async (client) => {
-      const result = await client.query<{ count: number }>(
-        'SELECT count(*)::int AS count FROM organization_onboarding',
-      );
-      return result.rows[0]?.count ?? -1;
-    });
+    const globalForeignRead = await withGlobalTransaction(
+      'user_onboarding_other',
+      async (client) => {
+        const result = await client.query<{ count: number }>(
+          'SELECT count(*)::int AS count FROM organization_onboarding',
+        );
+        return result.rows[0]?.count ?? -1;
+      },
+    );
     expect(globalForeignRead).toBe(0);
 
     const tenant = await createTestTenant();
-    const tenantRead = await withTenantTransaction(tenant.id, 'user_onboarding_owner', async (client) => {
-      const result = await client.query<{ count: number }>(
-        'SELECT count(*)::int AS count FROM organization_onboarding',
-      );
-      return result.rows[0]?.count ?? -1;
-    });
+    const tenantRead = await withTenantTransaction(
+      tenant.id,
+      'user_onboarding_owner',
+      async (client) => {
+        const result = await client.query<{ count: number }>(
+          'SELECT count(*)::int AS count FROM organization_onboarding',
+        );
+        return result.rows[0]?.count ?? -1;
+      },
+    );
     expect(tenantRead).toBe(0);
   });
 
   it('abandons incomplete onboarding, preserves it, and permits a replacement', async () => {
     const account = await ensureAccount('user_onboarding_abandon');
-    const first = await createOrResumeOnboarding(account.id, 'org_abandon_old', 'user_onboarding_abandon');
+    const first = await createOrResumeOnboarding(
+      account.id,
+      'org_abandon_old',
+      'user_onboarding_abandon',
+    );
     if (first.kind !== 'created') throw new Error('expected onboarding creation');
 
-    expect((await abandonOnboarding(first.onboarding.id, 'user_onboarding_abandon')).kind).toBe('abandoned');
+    expect((await abandonOnboarding(first.onboarding.id, 'user_onboarding_abandon')).kind).toBe(
+      'abandoned',
+    );
     expect((await abandonOnboarding(first.onboarding.id, 'user_onboarding_abandon')).kind).toBe(
       'already_abandoned',
     );
@@ -179,7 +194,9 @@ describe('TBF-011 onboarding persistence', async () => {
       'user_onboarding_trial_eligible',
     );
     expect(eligibleChoice.kind).toBe('updated');
-    expect(eligibleChoice.kind === 'updated' && eligibleChoice.onboarding.status).toBe('incomplete');
+    expect(eligibleChoice.kind === 'updated' && eligibleChoice.onboarding.status).toBe(
+      'incomplete',
+    );
 
     const consumed = await ensureAccount('user_onboarding_trial_consumed');
     expect(await consumeTrial(consumed.id, 'user_onboarding_trial_consumed')).toBe('consumed');
@@ -195,14 +212,22 @@ describe('TBF-011 onboarding persistence', async () => {
       'user_onboarding_trial_consumed',
     );
     expect(pendingChoice.kind).toBe('updated');
-    expect(pendingChoice.kind === 'updated' && pendingChoice.onboarding.status).toBe('payment_pending');
-    expect(pendingChoice.kind === 'updated' && pendingChoice.onboarding.isTrialEligible).toBe(false);
+    expect(pendingChoice.kind === 'updated' && pendingChoice.onboarding.status).toBe(
+      'payment_pending',
+    );
+    expect(pendingChoice.kind === 'updated' && pendingChoice.onboarding.isTrialEligible).toBe(
+      false,
+    );
   });
 
   it('serializes concurrent plan changes and allows pending abandonment', async () => {
     const account = await ensureAccount('user_onboarding_plan_race');
     await consumeTrial(account.id, 'user_onboarding_plan_race');
-    const created = await createOrResumeOnboarding(account.id, 'org_plan_race', 'user_onboarding_plan_race');
+    const created = await createOrResumeOnboarding(
+      account.id,
+      'org_plan_race',
+      'user_onboarding_plan_race',
+    );
     if (created.kind !== 'created') throw new Error('expected onboarding creation');
 
     const results = await Promise.all([
@@ -212,15 +237,23 @@ describe('TBF-011 onboarding persistence', async () => {
     expect(results.every((result) => result.kind === 'updated')).toBe(true);
     const abandoned = await abandonOnboarding(created.onboarding.id, 'user_onboarding_plan_race');
     expect(abandoned.kind).toBe('abandoned');
-    expect((await getCurrentOwnerOnboarding('user_onboarding_plan_race'))).toBeNull();
+    expect(await getCurrentOwnerOnboarding('user_onboarding_plan_race')).toBeNull();
   });
 
   it('records verified payment immutably and makes business-key retries safe', async () => {
     const account = await ensureAccount('user_onboarding_payment');
     await consumeTrial(account.id, 'user_onboarding_payment');
-    const created = await createOrResumeOnboarding(account.id, 'org_payment', 'user_onboarding_payment');
+    const created = await createOrResumeOnboarding(
+      account.id,
+      'org_payment',
+      'user_onboarding_payment',
+    );
     if (created.kind !== 'created') throw new Error('expected onboarding creation');
-    const selected = await chooseOnboardingPlan(created.onboarding.id, 'starter', 'user_onboarding_payment');
+    const selected = await chooseOnboardingPlan(
+      created.onboarding.id,
+      'starter',
+      'user_onboarding_payment',
+    );
     if (selected.kind !== 'updated') throw new Error('expected plan selection');
 
     const evidence = {
@@ -248,14 +281,19 @@ describe('TBF-011 onboarding persistence', async () => {
       }),
     ).toEqual({ kind: 'business_key_conflict' });
 
-    const ownerView = await listOwnerPaymentStatuses(created.onboarding.id, 'user_onboarding_payment');
+    const ownerView = await listOwnerPaymentStatuses(
+      created.onboarding.id,
+      'user_onboarding_payment',
+    );
     expect(ownerView).toHaveLength(1);
     expect(Object.keys(ownerView[0] ?? {}).sort()).toEqual(['createdAt', 'id', 'status']);
     expect(ownerView[0]?.status).toBe('verified');
 
     await expect(
       withOperatorGlobalTransaction('operator_one', async (client) => {
-        await client.query('UPDATE onboarding_payment_verification SET payment_reference = $1', ['nope']);
+        await client.query('UPDATE onboarding_payment_verification SET payment_reference = $1', [
+          'nope',
+        ]);
       }),
     ).rejects.toMatchObject({ code: '42501' });
   });
@@ -277,21 +315,21 @@ describe('TBF-011 onboarding persistence', async () => {
       'user_onboarding_no_side_effect',
     );
     if (selected.kind !== 'updated') throw new Error('expected plan selection');
-    expect((await abandonOnboarding(created.onboarding.id, 'user_onboarding_no_side_effect')).kind).toBe(
-      'abandoned',
-    );
+    expect(
+      (await abandonOnboarding(created.onboarding.id, 'user_onboarding_no_side_effect')).kind,
+    ).toBe('abandoned');
 
     const state = await withGlobalTransaction('user_onboarding_no_side_effect', async (client) => {
       const accountResult = await client.query<{
         current_owned_tenant_id: string | null;
         trial_consumed_at: Date | null;
-      }>(
-        'SELECT current_owned_tenant_id, trial_consumed_at FROM account',
-      );
-      const onboardingResult = await client.query<{ provisioned_tenant_id: string | null; status: string }>(
-        'SELECT provisioned_tenant_id, status FROM organization_onboarding WHERE id = $1',
-        [created.onboarding.id],
-      );
+      }>('SELECT current_owned_tenant_id, trial_consumed_at FROM account');
+      const onboardingResult = await client.query<{
+        provisioned_tenant_id: string | null;
+        status: string;
+      }>('SELECT provisioned_tenant_id, status FROM organization_onboarding WHERE id = $1', [
+        created.onboarding.id,
+      ]);
       const subscriptionResult = await client.query<{ count: number }>(
         'SELECT count(*)::int AS count FROM subscription',
       );
