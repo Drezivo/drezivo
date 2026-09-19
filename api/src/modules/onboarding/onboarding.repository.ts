@@ -288,52 +288,60 @@ export async function chooseOnboardingPlan(
   planCode: PlanCode,
   principalId: string,
 ): Promise<ChooseOnboardingPlanResult> {
-  return withGlobalTransaction(principalId, async (client) => {
-    const accountId = await findOwnerAccountId(client, onboardingId, principalId);
-    if (!accountId) {
-      return { kind: 'not_found_or_forbidden' };
-    }
-    const account = await lockAccount(client, accountId, principalId);
-    if (!account) {
-      return { kind: 'not_found_or_forbidden' };
-    }
-    if (account.current_owned_tenant_id) {
-      return { kind: 'owned_tenant' };
-    }
-    const row = await lockOwnerOnboarding(client, onboardingId, principalId);
-    if (!row) {
-      return { kind: 'not_found_or_forbidden' };
-    }
-    if (row.status !== 'incomplete' && row.status !== 'payment_pending') {
-      return { kind: 'not_selectable', onboarding: toOwnerOnboarding(row) };
-    }
+  return withGlobalTransaction(principalId, (client) =>
+    chooseOnboardingPlanInTransaction(client, onboardingId, planCode, principalId),
+  );
+}
 
-    const nextStatus: OnboardingStatus = account.trial_consumed_at
-      ? 'payment_pending'
-      : 'incomplete';
-    const updated = await client.query<OnboardingRow>(
-      `UPDATE organization_onboarding
-       SET selected_plan_code = $2, status = $3, updated_at = now()
-       WHERE id = $1 AND status IN ('incomplete', 'payment_pending')
-       RETURNING id, account_id, clerk_org_id, organization_name, requested_slug, status, selected_plan_code,
-                 provisioned_tenant_id, created_at, updated_at`,
-      [onboardingId, planCode, nextStatus],
-    );
-    const updatedRow = updated.rows[0];
-    if (!updatedRow) {
-      const current = await lockOwnerOnboarding(client, onboardingId, principalId);
-      return current
-        ? { kind: 'not_selectable', onboarding: toOwnerOnboarding(current) }
-        : { kind: 'not_found_or_forbidden' };
-    }
-    return {
-      kind: 'updated',
-      onboarding: toOwnerOnboarding({
-        ...updatedRow,
-        trial_consumed_at: account.trial_consumed_at,
-      }),
-    };
-  });
+/** Transaction-aware plan selection used by the idempotent HTTP command. */
+export async function chooseOnboardingPlanInTransaction(
+  client: PoolClient,
+  onboardingId: string,
+  planCode: PlanCode,
+  principalId: string,
+): Promise<ChooseOnboardingPlanResult> {
+  const accountId = await findOwnerAccountId(client, onboardingId, principalId);
+  if (!accountId) {
+    return { kind: 'not_found_or_forbidden' };
+  }
+  const account = await lockAccount(client, accountId, principalId);
+  if (!account) {
+    return { kind: 'not_found_or_forbidden' };
+  }
+  if (account.current_owned_tenant_id) {
+    return { kind: 'owned_tenant' };
+  }
+  const row = await lockOwnerOnboarding(client, onboardingId, principalId);
+  if (!row) {
+    return { kind: 'not_found_or_forbidden' };
+  }
+  if (row.status !== 'incomplete' && row.status !== 'payment_pending') {
+    return { kind: 'not_selectable', onboarding: toOwnerOnboarding(row) };
+  }
+
+  const nextStatus: OnboardingStatus = account.trial_consumed_at ? 'payment_pending' : 'incomplete';
+  const updated = await client.query<OnboardingRow>(
+    `UPDATE organization_onboarding
+     SET selected_plan_code = $2, status = $3, updated_at = now()
+     WHERE id = $1 AND status IN ('incomplete', 'payment_pending')
+     RETURNING id, account_id, clerk_org_id, organization_name, requested_slug, status, selected_plan_code,
+               provisioned_tenant_id, created_at, updated_at`,
+    [onboardingId, planCode, nextStatus],
+  );
+  const updatedRow = updated.rows[0];
+  if (!updatedRow) {
+    const current = await lockOwnerOnboarding(client, onboardingId, principalId);
+    return current
+      ? { kind: 'not_selectable', onboarding: toOwnerOnboarding(current) }
+      : { kind: 'not_found_or_forbidden' };
+  }
+  return {
+    kind: 'updated',
+    onboarding: toOwnerOnboarding({
+      ...updatedRow,
+      trial_consumed_at: account.trial_consumed_at,
+    }),
+  };
 }
 
 /** Append one immutable, verified operator payment record using a stable business key. */

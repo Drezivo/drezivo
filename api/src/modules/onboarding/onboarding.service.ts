@@ -21,10 +21,12 @@ import {
 import { toPublicOnboarding, type OwnerOnboardingContextDTO } from './onboarding.dto.js';
 import type {
   AbandonOwnerOnboardingInput as AbandonOwnerOnboardingRequestInput,
+  ChooseOnboardingPlanInput as ChooseOnboardingPlanRequestInput,
   CreateOwnerOnboardingInput,
 } from './onboarding.schemas.js';
 
 const CREATE_OPERATION = 'onboarding.create';
+const SELECT_PLAN_OPERATION = 'onboarding.plan.select';
 const ABANDON_OPERATION = 'onboarding.abandon';
 
 type CommandBody = SuccessEnvelope<ReturnType<typeof toPublicOnboarding>> | FailureEnvelope;
@@ -43,6 +45,14 @@ export interface StartOwnerOnboardingInput {
   requestId: string;
   idempotencyKey: string;
   request: CreateOwnerOnboardingInput;
+}
+
+export interface SelectOnboardingPlanInput {
+  principalId: string;
+  requestId: string;
+  idempotencyKey: string;
+  onboardingId: string;
+  request: ChooseOnboardingPlanRequestInput;
 }
 
 export interface AbandonOwnerOnboardingInput {
@@ -265,6 +275,106 @@ export async function startOwnerOnboarding(
       intentKey: input.idempotencyKey,
       payloadHash,
       recordId: claim.claim.recordId,
+      status: 'failed',
+      responseCode: error.status,
+      safeResponse: body,
+    });
+    return { status: error.status, body };
+  });
+}
+
+export async function selectOnboardingPlan(
+  input: SelectOnboardingPlanInput,
+): Promise<OnboardingCommandResponse> {
+  const account = await getAccountByClerkUserId(input.principalId);
+  if (!account) {
+    throw new NotFoundError('Onboarding could not be found.');
+  }
+
+  const payloadHash = canonicalRequestHash({
+    onboarding_id: input.onboardingId,
+    ...input.request,
+  });
+
+  return withOnboardingTransaction(input.principalId, async (transaction) => {
+    const claim = await transaction.claimIdempotency({
+      accountId: account.id,
+      operation: SELECT_PLAN_OPERATION,
+      intentKey: input.idempotencyKey,
+      payloadHash,
+    });
+
+    if (claim.kind === 'replayed') {
+      return {
+        status: claim.responseCode,
+        body: claim.safeResponse as CommandBody,
+      };
+    }
+    if (claim.kind === 'key_reused') {
+      throw new IdempotencyKeyReusedError(
+        'This Idempotency-Key was already used for another request.',
+      );
+    }
+    if (claim.kind === 'in_progress') {
+      throw new StateConflictError(
+        'An identical plan selection is already being processed. Retry with the same key.',
+      );
+    }
+
+    const result = await transaction.choosePlan({
+      onboardingId: input.onboardingId,
+      planCode: input.request.plan_code,
+      principalId: input.principalId,
+    });
+
+    if (result.kind === 'updated') {
+      const body = successBody(input.requestId, toPublicOnboarding(result.onboarding));
+      await transaction.appendAudit({
+        accountId: account.id,
+        actorKind: 'account',
+        actorKey: input.principalId,
+        action: 'onboarding.plan.selected',
+        entityType: 'organization_onboarding',
+        entityId: result.onboarding.id,
+        outcome: 'succeeded',
+        redactedSummary: { plan_code: input.request.plan_code },
+        requestId: input.requestId,
+      });
+      await transaction.finalizeIdempotency({
+        accountId: account.id,
+        operation: SELECT_PLAN_OPERATION,
+        intentKey: input.idempotencyKey,
+        payloadHash,
+        recordId: claim.recordId,
+        status: 'succeeded',
+        responseCode: 200,
+        safeResponse: body,
+      });
+      return { status: 200, body };
+    }
+
+    const error =
+      result.kind === 'not_found_or_forbidden'
+        ? new NotFoundError('Onboarding could not be found.')
+        : new StateConflictError('Onboarding is not eligible for plan selection.');
+    const body = failureBody(input.requestId, error.code, error.message);
+    await transaction.appendAudit({
+      accountId: account.id,
+      actorKind: 'account',
+      actorKey: input.principalId,
+      action: 'onboarding.plan.rejected',
+      entityType: 'organization_onboarding',
+      entityId: input.onboardingId,
+      outcome: 'rejected',
+      redactedSummary: { reason: error.code },
+      requestId: input.requestId,
+    });
+    await transaction.finalizeIdempotency({
+      accountId: account.id,
+      operation: SELECT_PLAN_OPERATION,
+      intentKey: input.idempotencyKey,
+      payloadHash,
+      recordId: claim.recordId,
       status: 'failed',
       responseCode: error.status,
       safeResponse: body,

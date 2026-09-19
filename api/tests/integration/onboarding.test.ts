@@ -38,6 +38,7 @@ describe('TBF-011 onboarding persistence', async () => {
     recordVerifiedOnboardingPayment,
   } = await import('../../src/modules/onboarding/onboarding.repository.js');
   const { createTestTenant } = await import('./helpers/factories.js');
+  const { selectOnboardingPlan } = await import('../../src/modules/onboarding/onboarding.service.js');
   const { claimOwnerOnboardingStart } =
     await import('../../src/modules/onboarding/onboarding-attempt.repository.js');
   const { canonicalRequestHash } = await import('../../src/shared/idempotency.js');
@@ -218,6 +219,83 @@ describe('TBF-011 onboarding persistence', async () => {
     expect(pendingChoice.kind === 'updated' && pendingChoice.onboarding.isTrialEligible).toBe(
       false,
     );
+  });
+
+  it('replays identical plan-selection commands without a second business effect', async () => {
+    const account = await ensureAccount('user_onboarding_plan_idempotent');
+    const created = await createOrResumeOnboarding(
+      account.id,
+      'org_plan_idempotent',
+      'user_onboarding_plan_idempotent',
+    );
+    if (created.kind !== 'created') throw new Error('expected onboarding creation');
+
+    const input = {
+      principalId: 'user_onboarding_plan_idempotent',
+      requestId: 'req-plan-idempotent',
+      idempotencyKey: 'plan-idempotent-001',
+      onboardingId: created.onboarding.id,
+      request: { plan_code: 'professional' as const },
+    };
+
+    const first = await selectOnboardingPlan(input);
+    const second = await selectOnboardingPlan(input);
+
+    expect(first.status).toBe(200);
+    expect(second).toEqual(first);
+    const current = await getCurrentOwnerOnboarding('user_onboarding_plan_idempotent');
+    expect(current?.selectedPlanCode).toBe('professional');
+
+    const auditCount = await withGlobalTransaction(
+      'user_onboarding_plan_idempotent',
+      async (client) => {
+        const result = await client.query<{ count: number }>(
+          `SELECT count(*)::int AS count
+           FROM global_audit_event
+           WHERE account_id = $1 AND action = 'onboarding.plan.selected'`,
+          [account.id],
+        );
+        return result.rows[0]?.count ?? -1;
+      },
+    );
+    expect(auditCount).toBe(1);
+  });
+
+  it('serializes concurrent identical plan-selection commands to one audited effect', async () => {
+    const account = await ensureAccount('user_onboarding_plan_concurrent_key');
+    const created = await createOrResumeOnboarding(
+      account.id,
+      'org_plan_concurrent_key',
+      'user_onboarding_plan_concurrent_key',
+    );
+    if (created.kind !== 'created') throw new Error('expected onboarding creation');
+
+    const input = {
+      principalId: 'user_onboarding_plan_concurrent_key',
+      requestId: 'req-plan-concurrent',
+      idempotencyKey: 'plan-concurrent-001',
+      onboardingId: created.onboarding.id,
+      request: { plan_code: 'starter' as const },
+    };
+
+    const results = await Promise.all([selectOnboardingPlan(input), selectOnboardingPlan(input)]);
+    expect(results.every((result) => result.status === 200 || result.status === 409)).toBe(true);
+
+    const current = await getCurrentOwnerOnboarding('user_onboarding_plan_concurrent_key');
+    expect(current?.selectedPlanCode).toBe('starter');
+    const auditCount = await withGlobalTransaction(
+      'user_onboarding_plan_concurrent_key',
+      async (client) => {
+        const result = await client.query<{ count: number }>(
+          `SELECT count(*)::int AS count
+           FROM global_audit_event
+           WHERE account_id = $1 AND action = 'onboarding.plan.selected'`,
+          [account.id],
+        );
+        return result.rows[0]?.count ?? -1;
+      },
+    );
+    expect(auditCount).toBe(1);
   });
 
   it('serializes concurrent plan changes and allows pending abandonment', async () => {

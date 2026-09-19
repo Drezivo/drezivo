@@ -12,10 +12,13 @@ import {
   type FinalizeBootstrapIdempotencyInput,
 } from '../bootstrap/bootstrap.repository.js';
 import type { AccountRecord } from '../accounts/account.repository.js';
+import type { PlanCode } from '@drezivo/contracts';
 import {
   abandonOnboardingInTransaction,
+  chooseOnboardingPlanInTransaction,
   createOrResumeOnboardingInTransaction,
   type AbandonOnboardingResult,
+  type ChooseOnboardingPlanResult,
   type CreateOrResumeOnboardingResult,
 } from './onboarding.repository.js';
 import {
@@ -27,6 +30,7 @@ import {
 } from './onboarding-attempt.repository.js';
 
 export interface OnboardingTransaction {
+  claimIdempotency(input: Parameters<typeof claimBootstrapIdempotency>[1]): Promise<BootstrapIdempotencyClaim>;
   claimStart(input: {
     account: AccountRecord;
     operation: string;
@@ -43,6 +47,11 @@ export interface OnboardingTransaction {
     requestedSlug: string | null;
   }): Promise<CreateOrResumeOnboardingResult>;
   abandon(input: { onboardingId: string; principalId: string }): Promise<AbandonOnboardingResult>;
+  choosePlan(input: {
+    onboardingId: string;
+    planCode: PlanCode;
+    principalId: string;
+  }): Promise<ChooseOnboardingPlanResult>;
   markAttemptProviderCreated(attemptId: string, providerOrgId: string): Promise<void>;
   markAttemptLocalPersisted(attemptId: string): Promise<void>;
   markAttemptFailed(attemptId: string): Promise<void>;
@@ -63,6 +72,7 @@ export async function withOnboardingTransaction<T>(
 
 function createTransaction(client: PoolClient): OnboardingTransaction {
   return {
+    claimIdempotency: (input) => claimBootstrapIdempotency(client, input),
     claimStart: (input) => claimOwnerOnboardingStart(client, input),
     createOrResume: (input) =>
       createOrResumeOnboardingInTransaction(
@@ -76,6 +86,8 @@ function createTransaction(client: PoolClient): OnboardingTransaction {
         },
       ),
     abandon: (input) => abandonOnboardingInTransaction(client, input.onboardingId, input.principalId),
+    choosePlan: (input) =>
+      chooseOnboardingPlanInTransaction(client, input.onboardingId, input.planCode, input.principalId),
     markAttemptProviderCreated: (attemptId, providerOrgId) =>
       markOwnerAttemptProviderCreated(client, attemptId, providerOrgId),
     markAttemptLocalPersisted: (attemptId) => markOwnerAttemptLocalPersisted(client, attemptId),

@@ -13,6 +13,7 @@ import {
 
 import { AuthBrand } from "@/components/auth/auth-brand";
 import { AuthSplitLayout } from "@/components/auth/auth-split-layout";
+import { OnboardingProgress } from "@/components/onboarding/onboarding-progress";
 import { OnboardingStatusPage } from "@/components/onboarding/onboarding-status-page";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
@@ -79,8 +80,7 @@ export function OnboardingEntry() {
         <OrganizationSetup
           getToken={getToken}
           onCreated={() => {
-            router.replace("/onboarding");
-            void loadCurrent();
+            router.replace("/onboarding/plan");
           }}
           setActive={setActive}
         />
@@ -109,7 +109,7 @@ export function OnboardingEntry() {
       <OnboardingFrame>
         <StatusCard
           action={
-            <Link href="/onboarding" className={primaryButtonClass}>
+            <Link href="/onboarding/plan" className={primaryButtonClass}>
               Continue setup
             </Link>
           }
@@ -221,7 +221,7 @@ function OrganizationSetup({
       </div>
 
       <div className="mt-10">
-        <ProgressIndicator current="organization" />
+        <OnboardingProgress current="organization" />
       </div>
 
       <div className="mt-12 text-center">
@@ -311,51 +311,6 @@ function OnboardingFrame({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ProgressIndicator({ current }: { current: "organization" }) {
-  const steps = [
-    ["organization", "Organization"],
-    ["plan", "Plan"],
-    ["launch", "Launch"],
-  ] as const;
-
-  return (
-    <ol aria-label="Onboarding progress" className="flex items-start text-center">
-      {steps.map(([step, label], index) => {
-        const isCurrent = step === current;
-        return (
-          <li key={step} className="flex min-w-0 flex-1 flex-col items-center">
-            <div className="flex w-full items-center">
-              {index > 0 ? <span aria-hidden="true" className="h-px flex-1 bg-auth-line" /> : null}
-              <span
-                aria-current={isCurrent ? "step" : undefined}
-                className={[
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold",
-                  isCurrent
-                    ? "border-auth-gold text-auth-text ring-1 ring-auth-gold/40"
-                    : "border-auth-line text-auth-dark-muted",
-                ].join(" ")}
-              >
-                {index + 1}
-              </span>
-              {index < steps.length - 1 ? (
-                <span aria-hidden="true" className="h-px flex-1 bg-auth-line" />
-              ) : null}
-            </div>
-            <span
-              className={[
-                "mt-3 text-xs font-medium sm:text-sm",
-                isCurrent ? "text-auth-text" : "text-auth-dark-muted",
-              ].join(" ")}
-            >
-              {label}
-            </span>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
 function LoadingState() {
   return <OnboardingStatusPage />;
 }
@@ -378,7 +333,7 @@ function StatusCard({
         FOR PROFESSIONALS
       </p>
       <div className="mt-10">
-        <ProgressIndicator current="organization" />
+        <OnboardingProgress current="organization" />
       </div>
       <h1 className="mt-12 font-display text-4xl leading-tight text-auth-text">{title}</h1>
       <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-auth-dark-muted">{description}</p>

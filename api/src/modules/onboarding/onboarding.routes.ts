@@ -7,11 +7,13 @@ import {
   bootstrapTenantController,
   createOnboardingController,
   getCurrentOnboardingController,
+  selectOnboardingPlanController,
 } from './onboarding.controller.js';
 import {
   requireOnboardingIdempotencyKey,
-  validateBootstrapTenant,
   validateAbandonOwnerOnboarding,
+  validateBootstrapTenant,
+  validateChooseOnboardingPlan,
   validateCreateOwnerOnboarding,
 } from './onboarding.middleware.js';
 
@@ -39,6 +41,19 @@ onboardingRouter.post(
   validateCreateOwnerOnboarding,
   requireOnboardingIdempotencyKey,
   createOnboardingController,
+);
+
+onboardingRouter.post(
+  '/onboarding/:onboardingId/plan',
+  requireVerifiedStaffAuth,
+  rateLimit({
+    windowMs: 60_000,
+    max: 10,
+    keyOf: (req) => req.clerkPrincipal?.clerkUserId ?? req.ip ?? 'unknown',
+  }),
+  validateChooseOnboardingPlan,
+  requireOnboardingIdempotencyKey,
+  selectOnboardingPlanController,
 );
 
 onboardingRouter.post(

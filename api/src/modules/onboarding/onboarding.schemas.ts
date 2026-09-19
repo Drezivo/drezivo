@@ -2,12 +2,18 @@ import { z } from 'zod';
 
 import {
   abandonOwnerOnboardingRequest,
-  createOwnerOnboardingRequest,
   bootstrapTenantRequest,
+  chooseOnboardingPlanRequest,
+  createOwnerOnboardingRequest,
   organizationOnboardingId,
 } from '@drezivo/contracts';
 
-export { abandonOwnerOnboardingRequest, bootstrapTenantRequest, createOwnerOnboardingRequest };
+export {
+  abandonOwnerOnboardingRequest,
+  bootstrapTenantRequest,
+  chooseOnboardingPlanRequest,
+  createOwnerOnboardingRequest,
+};
 type ContractCreateOwnerOnboardingInput = z.infer<typeof createOwnerOnboardingRequest>;
 type ContractAbandonOwnerOnboardingInput = z.infer<typeof abandonOwnerOnboardingRequest>;
 
@@ -18,6 +24,7 @@ export type AbandonOwnerOnboardingInput = Omit<ContractAbandonOwnerOnboardingInp
   reason_code: 'not_now' | 'wrong_details' | 'payment_concern' | 'other';
 };
 export type BootstrapTenantInput = z.infer<typeof bootstrapTenantRequest>;
+export type ChooseOnboardingPlanInput = z.infer<typeof chooseOnboardingPlanRequest>;
 
 export const ownerOnboardingIdParams = z.object({ onboardingId: organizationOnboardingId }).strict();
 export type OwnerOnboardingIdParams = z.infer<typeof ownerOnboardingIdParams>;

@@ -1,5 +1,6 @@
 # --- secrets: every local environment variant, including the local example ---
 .env*
+!.env.example
 
 # dependencies
 node_modules/

@@ -5,12 +5,14 @@ import { ValidationError } from '../../shared/errors.js';
 import {
   abandonOwnerOnboarding,
   getCurrentOwnerOnboardingContext,
+  selectOnboardingPlan,
   startOwnerOnboarding,
 } from './onboarding.service.js';
 import { bootstrapOwnerTenant as bootstrapOwnerTenantCommand } from './tenant-bootstrap.service.js';
 import type {
   AbandonOwnerOnboardingInput,
   BootstrapTenantInput,
+  ChooseOnboardingPlanInput,
   CreateOwnerOnboardingInput,
   OwnerOnboardingIdParams,
 } from './onboarding.schemas.js';
@@ -29,6 +31,20 @@ export async function createOnboardingController(req: Request, res: Response): P
     requestId: req.requestId,
     idempotencyKey,
     request: req.body as CreateOwnerOnboardingInput,
+  });
+  res.status(result.status).json(result.body);
+}
+
+export async function selectOnboardingPlanController(req: Request, res: Response): Promise<void> {
+  const principalId = readPrincipalId(req);
+  const idempotencyKey = readIdempotencyKey(req);
+  const params = req.params as unknown as OwnerOnboardingIdParams;
+  const result = await selectOnboardingPlan({
+    principalId,
+    requestId: req.requestId,
+    idempotencyKey,
+    onboardingId: params.onboardingId,
+    request: req.body as ChooseOnboardingPlanInput,
   });
   res.status(result.status).json(result.body);
 }

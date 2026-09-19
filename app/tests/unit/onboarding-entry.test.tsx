@@ -98,7 +98,7 @@ describe("OnboardingEntry", () => {
       expect.any(String)
     );
     expect(clerk.setActive).toHaveBeenCalledWith({ organization: "org_123" });
-    expect(router.replace).toHaveBeenCalledWith("/onboarding");
+    expect(router.replace).toHaveBeenCalledWith("/onboarding/plan");
   });
 
   it("guards duplicate organization submissions while the first request is pending", async () => {

@@ -2,9 +2,11 @@
 
 import {
   apiEnvelope,
+  chooseOnboardingPlanRequest,
   createOwnerOnboardingRequest,
   onboardingActorContext,
   organizationOnboarding,
+  type ChooseOnboardingPlanRequest,
   type CreateOwnerOnboardingRequest,
   type OnboardingActorContext,
   type OrganizationOnboarding,
@@ -50,6 +52,19 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         idempotencyKey,
         method: "POST",
         path: "/api/v1/onboarding",
+        responseSchema: apiEnvelope(organizationOnboarding),
+      }),
+    selectOnboardingPlan: (
+      onboardingId: string,
+      input: ChooseOnboardingPlanRequest,
+      idempotencyKey: string
+    ) =>
+      request<OrganizationOnboarding>({
+        getToken,
+        body: chooseOnboardingPlanRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/onboarding/${encodeURIComponent(onboardingId)}/plan`,
         responseSchema: apiEnvelope(organizationOnboarding),
       }),
   };
