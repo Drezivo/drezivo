@@ -1,4 +1,4 @@
-import { bigint, index, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 import { idColumn, timestamps, updatableTimestamps } from './_shared.js';
 import { account } from './account.js';
@@ -47,6 +47,33 @@ export const onboardingPaymentVerification = pgTable(
 );
 
 /** Durable provider-operation state for owner onboarding. */
+export const clerkOrganizationCleanupJob = pgTable(
+  'clerk_organization_cleanup_job',
+  {
+    ...idColumn,
+    onboardingId: uuid('onboarding_id')
+      .notNull()
+      .references(() => organizationOnboarding.id),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => account.id),
+    clerkOrgId: text('clerk_org_id').notNull(),
+    status: text('status').notNull().default('pending'),
+    leaseToken: uuid('lease_token'),
+    leaseUntil: timestamp('lease_until', { withTimezone: true }),
+    attempts: integer('attempts').notNull().default(0),
+    maxAttempts: integer('max_attempts').notNull().default(8),
+    availableAt: timestamp('available_at', { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    safeLastError: text('safe_last_error'),
+    ...updatableTimestamps,
+  },
+  (table) => [
+    uniqueIndex('clerk_organization_cleanup_job_onboarding_key').on(table.onboardingId),
+    index('clerk_organization_cleanup_job_due_idx').on(table.availableAt),
+  ],
+);
+
 export const ownerOnboardingAttempt = pgTable(
   'owner_onboarding_attempt',
   {

@@ -80,7 +80,7 @@ export function StaffSignInForm({ initialFlow = "sign-in" }: StaffSignInFormProp
 
   async function resolveAttempt(attempt: NonNullable<typeof signIn>) {
     if (attempt.status === "complete" && attempt.createdSessionId && setActive) {
-      await setActive({ session: attempt.createdSessionId, redirectUrl: "/" });
+      await setActive({ session: attempt.createdSessionId, redirectUrl: "/auth/resolve" });
       return;
     }
 
@@ -253,7 +253,7 @@ export function StaffSignInForm({ initialFlow = "sign-in" }: StaffSignInFormProp
         await signIn.authenticateWithRedirect({
           strategy: "oauth_google",
           redirectUrl: "/sso-callback",
-          redirectUrlComplete: "/",
+          redirectUrlComplete: "/auth/resolve",
         });
       }
     } catch {

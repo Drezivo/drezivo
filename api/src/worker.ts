@@ -6,6 +6,7 @@ import { handleTenantBootstrapped } from './worker/handlers/tenant-bootstrap.js'
 import { reconcileDueSubscriptionsForAllTenants } from './worker/handlers/subscription-lifecycle.js';
 import { handleMembershipInvitationDispatch } from './modules/membership-invitations/membership-invitations.dispatcher.js';
 import { reconcileDueClerkWebhooks } from './worker/handlers/clerk-webhook-reconciler.js';
+import { cleanupAbandonedClerkOrganizations } from './worker/handlers/clerk-organization-cleanup.js';
 import { WorkerRunner } from './worker/runner.js';
 import { logger } from './shared/logger.js';
 
@@ -33,6 +34,7 @@ const runner = new WorkerRunner({
 let holdExpirySweepTimer: NodeJS.Timeout | undefined;
 let subscriptionLifecycleSweepTimer: NodeJS.Timeout | undefined;
 let clerkWebhookSweepTimer: NodeJS.Timeout | undefined;
+let clerkOrganizationCleanupSweepTimer: NodeJS.Timeout | undefined;
 
 function scheduleHoldExpirySweep(): void {
   holdExpirySweepTimer = setInterval(() => {
@@ -58,6 +60,14 @@ function scheduleClerkWebhookSweep(): void {
   }, config.WORKER_POLL_INTERVAL_MS);
 }
 
+function scheduleClerkOrganizationCleanupSweep(): void {
+  clerkOrganizationCleanupSweepTimer = setInterval(() => {
+    cleanupAbandonedClerkOrganizations().catch((error: unknown) => {
+      logger.error({ err: error }, 'Clerk organization cleanup failed; will retry on next interval');
+    });
+  }, config.WORKER_POLL_INTERVAL_MS);
+}
+
 logger.info({ enabled: config.WORKER_ENABLED }, 'worker process starting');
 if (!config.WORKER_ENABLED) {
   logger.warn('worker disabled by configuration; no jobs will be claimed');
@@ -65,6 +75,7 @@ if (!config.WORKER_ENABLED) {
   scheduleHoldExpirySweep();
   scheduleSubscriptionLifecycleSweep();
   scheduleClerkWebhookSweep();
+  scheduleClerkOrganizationCleanupSweep();
 }
 if (config.WORKER_ENABLED) runner.start().catch((error: unknown) => {
   logger.error({ err: error }, 'worker runner crashed');
@@ -82,6 +93,9 @@ async function shutdown(signal: string): Promise<void> {
   }
   if (clerkWebhookSweepTimer) {
     clearInterval(clerkWebhookSweepTimer);
+  }
+  if (clerkOrganizationCleanupSweepTimer) {
+    clearInterval(clerkOrganizationCleanupSweepTimer);
   }
   await closePool();
   process.exit(0);

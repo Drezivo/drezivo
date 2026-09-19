@@ -26,6 +26,7 @@ function createProvider() {
   const organizations = {
     createOrganization: vi.fn(),
     getOrganization: vi.fn(),
+    deleteOrganization: vi.fn(),
     getOrganizationMembershipList: vi.fn(),
     createOrganizationMembership: vi.fn(),
     updateOrganizationMembership: vi.fn(),
@@ -303,6 +304,16 @@ describe('Clerk server adapter', () => {
     await expect(
       adapter.deleteMembership({ organizationId: 'org_123', userId: 'user_456' }),
     ).resolves.toMatchObject({ id: 'mem_123', role: 'org:member' });
+  });
+
+  it('deletes an organization idempotently when it is already absent in Clerk', async () => {
+    const { provider, organizations } = createProvider();
+    const adapter = createClerkServerAdapter(provider);
+
+    organizations.deleteOrganization.mockResolvedValueOnce(organization).mockRejectedValueOnce({ status: 404 });
+
+    await expect(adapter.deleteOrganizationIfPresent('org_123')).resolves.toBe(true);
+    await expect(adapter.deleteOrganizationIfPresent('org_123')).resolves.toBe(false);
   });
 
   it('rejects invalid input before calling Clerk', async () => {

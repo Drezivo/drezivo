@@ -12,6 +12,7 @@ function provider(overrides: Partial<ClerkServerAdapter> = {}): ClerkServerAdapt
     getUserVerificationState: vi.fn(),
     createOrganization: vi.fn(),
     getOrganization: vi.fn(),
+    deleteOrganizationIfPresent: vi.fn(),
     getOrganizationMembership: vi.fn(),
     createInvitation: vi.fn(),
     findInvitation: vi.fn(),

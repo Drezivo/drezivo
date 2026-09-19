@@ -17,9 +17,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ClerkProvider
           signInUrl="/sign-in"
           signUpUrl="/sign-up"
-          signInFallbackRedirectUrl="/"
+          signInFallbackRedirectUrl="/auth/resolve"
           signUpFallbackRedirectUrl="/onboarding"
-          signInForceRedirectUrl="/"
+          signInForceRedirectUrl="/auth/resolve"
           signUpForceRedirectUrl="/onboarding"
         >
           {children}

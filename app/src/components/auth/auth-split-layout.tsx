@@ -9,6 +9,8 @@ type AuthSplitLayoutProps = {
   backAriaLabel?: string;
   panelAriaLabel: string;
   lockViewport?: boolean;
+  backControl?: ReactNode;
+  showBackButton?: boolean;
 };
 
 export function AuthSplitLayout({
@@ -17,6 +19,8 @@ export function AuthSplitLayout({
   backAriaLabel = "Go back",
   panelAriaLabel,
   lockViewport = false,
+  backControl,
+  showBackButton = true,
 }: AuthSplitLayoutProps) {
   return (
     <main
@@ -32,11 +36,14 @@ export function AuthSplitLayout({
           lockViewport ? "lg:h-[100svh] lg:min-h-0 lg:max-h-[100svh] lg:overflow-y-auto" : "",
         ].join(" ")}
       >
-        {backHref ? (
-          <AuthBackButton href={backHref} ariaLabel={backAriaLabel} />
-        ) : (
-          <AuthBackButton />
-        )}
+        {showBackButton
+          ? backControl ??
+            (backHref ? (
+              <AuthBackButton href={backHref} ariaLabel={backAriaLabel} />
+            ) : (
+              <AuthBackButton />
+            ))
+          : null}
         {children}
       </section>
 

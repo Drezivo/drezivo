@@ -62,6 +62,7 @@ export interface ClerkServerAdapter {
   getUserVerificationState(userId: string): Promise<ClerkUserVerificationState>;
   createOrganization(input: CreateClerkOrganizationInput): Promise<ClerkOrganization>;
   getOrganization(organizationId: string): Promise<ClerkOrganization>;
+  deleteOrganizationIfPresent(organizationId: string): Promise<boolean>;
   getOrganizationMembership(
     organizationId: string,
     userId: string,
@@ -101,6 +102,7 @@ export type ClerkProviderClient = {
     ClerkClient['organizations'],
     | 'createOrganization'
     | 'getOrganization'
+    | 'deleteOrganization'
     | 'getOrganizationMembershipList'
     | 'createOrganizationMembership'
     | 'updateOrganizationMembership'
@@ -397,6 +399,18 @@ export function createClerkServerAdapter(
       const parsed = parseInput(providerId, organizationId, 'Clerk organization ID');
       return providerCall(async () =>
         mapOrganization(await client.organizations.getOrganization({ organizationId: parsed })),
+      );
+    },
+
+    async deleteOrganizationIfPresent(organizationId) {
+      const parsed = parseInput(providerId, organizationId, 'Clerk organization ID');
+      return providerCall(
+        async () => {
+          await client.organizations.deleteOrganization(parsed);
+          return true;
+        },
+        undefined,
+        false,
       );
     },
 
