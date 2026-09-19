@@ -221,7 +221,7 @@ function OrganizationSetup({
   }
 
   return (
-    <section aria-labelledby="onboarding-heading" className="mx-auto w-full max-w-xl py-8 sm:py-10">
+    <section aria-labelledby="onboarding-heading" className="mx-auto w-full max-w-lg py-6 sm:py-8">
       <div className="text-center">
         <AuthBrand />
         <p className="mt-2 text-xs font-medium tracking-[0.35em] text-auth-dark-muted">
@@ -229,15 +229,15 @@ function OrganizationSetup({
         </p>
       </div>
 
-      <div className="mt-10">
+      <div className="mt-8">
         <OnboardingProgress current="organization" />
       </div>
 
-      <div className="mt-12 text-center">
-        <h1 id="onboarding-heading" className="font-display text-4xl leading-tight text-auth-text sm:text-5xl">
+      <div className="mt-9 text-center">
+        <h1 id="onboarding-heading" className="font-display text-3xl leading-tight text-auth-text sm:text-4xl">
           Set up your business
         </h1>
-        <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-auth-dark-muted sm:text-base">
+        <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-auth-dark-muted">
           Tell us what your rental business is called to create your workspace.
         </p>
       </div>
@@ -252,7 +252,7 @@ function OrganizationSetup({
         </div>
       )}
 
-      <form className="mt-9 space-y-5" onSubmit={handleSubmit}>
+      <form className="mt-7 space-y-4" onSubmit={handleSubmit}>
         <div>
           <label htmlFor="organization-name" className="text-sm font-semibold text-auth-text">
             Business name
@@ -299,7 +299,7 @@ function OrganizationSetup({
         </button>
       </form>
 
-      <div className="mt-8 border-t border-auth-line pt-7 text-center">
+      <div className="mt-7 border-t border-auth-line pt-6 text-center">
         <p className="text-sm text-auth-dark-muted">
           Need help? <span className="font-medium text-auth-gold">Contact support</span>
         </p>
@@ -367,8 +367,8 @@ function toDrezivoApiError(error: unknown): DrezivoApiError {
 }
 
 const inputClass =
-  "mt-2 h-12 w-full rounded-lg border border-auth-line bg-transparent px-4 text-sm text-auth-text outline-none transition placeholder:text-auth-dark-muted focus:border-auth-gold focus:ring-2 focus:ring-auth-gold/20";
+  "mt-2 h-10 w-full rounded-lg border border-auth-line bg-transparent px-3.5 text-sm text-auth-text outline-none transition placeholder:text-auth-dark-muted focus:border-auth-gold focus:ring-2 focus:ring-auth-gold/20";
 const primaryButtonClass =
-  "inline-flex min-h-12 w-full items-center justify-center rounded-full bg-auth-button px-6 text-sm font-semibold text-auth-button-ink transition hover:bg-auth-button-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-auth-focus focus-visible:ring-offset-2 focus-visible:ring-offset-auth-panel disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex min-h-10 w-full items-center justify-center rounded-full bg-auth-button px-5 text-sm font-semibold text-auth-button-ink transition hover:bg-auth-button-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-auth-focus focus-visible:ring-offset-2 focus-visible:ring-offset-auth-panel disabled:cursor-not-allowed disabled:opacity-60";
 const secondaryButtonClass =
   "inline-flex min-h-12 w-full items-center justify-center rounded-full border border-auth-line bg-transparent px-6 text-sm font-semibold text-auth-text transition hover:border-auth-gold hover:text-auth-gold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-auth-focus focus-visible:ring-offset-2 focus-visible:ring-offset-auth-panel disabled:cursor-not-allowed disabled:opacity-60";
