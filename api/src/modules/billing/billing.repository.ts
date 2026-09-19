@@ -139,8 +139,9 @@ export async function appendTenantAuditEvent(
 ): Promise<void> {
   await client.query(
     `INSERT INTO audit_event
-       (tenant_id, actor_key, action, entity_type, entity_id, redacted_summary, request_id)
-     VALUES ($1, $2, $3, 'subscription', $4, $5::jsonb, $6)`,
+       (tenant_id, actor_kind, actor_key, action, entity_type, entity_id,
+        redacted_summary, request_id, occurred_at, outcome)
+     VALUES ($1, 'staff', $2, $3, 'subscription', $4, $5::jsonb, $6, now(), 'succeeded')`,
     [
       input.tenantId,
       input.actorKey,
