@@ -2,6 +2,8 @@ import './load-env.js';
 
 import { z } from 'zod';
 
+import { parseCorsAllowedOrigins } from './cors-origins.js';
+
 /**
  * Every environment variable the application reads is declared and validated HERE, once, at
  * import time — never scattered `process.env.X` reads across features (AGENTS.md). A missing
@@ -21,6 +23,18 @@ const envSchema = z.object({
   CLERK_SECRET_KEY: z.string().min(1, 'CLERK_SECRET_KEY is required'),
   CLERK_PUBLISHABLE_KEY: z.string().min(1, 'CLERK_PUBLISHABLE_KEY is required'),
   CLERK_WEBHOOK_SIGNING_SECRET: z.string().min(1, 'CLERK_WEBHOOK_SIGNING_SECRET is required'),
+
+  CORS_ALLOWED_ORIGINS: z.string().min(1, 'CORS_ALLOWED_ORIGINS is required').transform((value, ctx) => {
+    try {
+      return parseCorsAllowedOrigins(value);
+    } catch (error) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: error instanceof Error ? error.message : 'CORS_ALLOWED_ORIGINS is invalid',
+      });
+      return z.NEVER;
+    }
+  }),
 
   INVITATION_EMAIL_ENCRYPTION_KEY: base64Key('INVITATION_EMAIL_ENCRYPTION_KEY'),
   INVITATION_EMAIL_DIGEST_KEY: base64Key('INVITATION_EMAIL_DIGEST_KEY'),

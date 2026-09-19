@@ -2,6 +2,7 @@ import express, { type Express } from 'express';
 import pinoHttpExport from 'pino-http';
 
 import { clerkContext } from './middleware/auth.js';
+import { corsMiddleware } from './middleware/cors.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { requestId } from './middleware/request-id.js';
 import { reservationsRouter } from './modules/reservations/reservations.routes.js';
@@ -24,12 +25,13 @@ const pinoHttp = pinoHttpExport as unknown as (
  * later ones have set anything up:
  *   1. request-id      — every later log line and every error response needs this.
  *   2. pino-http        — structured request logging; relies on request-id already being set.
- *   3. onboarding parser — raw owner-command bytes are bounded before provider auth/parsing.
- *   4. clerkContext     — attaches Clerk's verifier; does not itself reject (public routes exist).
- *   5. /webhooks/clerk  — raw bytes must reach Clerk/Svix before the global JSON parser.
- *   6. express.json()   — bounded body size (TRD §4: "Restrict content types, body size").
- *   7. /api/v1 routes   — each route composes its own auth/tenant/idempotency middleware.
- *   8. errorHandler     — must be LAST; Express only treats a 4-arg handler as error middleware
+ *   3. cors             — exact browser allowlist and preflight before auth/body parsing.
+ *   4. onboarding parser — raw owner-command bytes are bounded before provider auth/parsing.
+ *   5. clerkContext     — attaches Clerk's verifier; does not itself reject (public routes exist).
+ *   6. /webhooks/clerk  — raw bytes must reach Clerk/Svix before the global JSON parser.
+ *   7. express.json()   — bounded body size (TRD §4: "Restrict content types, body size").
+ *   8. /api/v1 routes   — each route composes its own auth/tenant/idempotency middleware.
+ *   9. errorHandler     — must be LAST; Express only treats a 4-arg handler as error middleware
  *                          when it is registered after every route that can throw.
  */
 export function createApp(): Express {
@@ -53,6 +55,7 @@ export function createApp(): Express {
       },
     }),
   );
+  app.use(corsMiddleware);
   const onboardingJson = express.json({ limit: '16kb', type: 'application/json' });
   app.use('/api/v1/onboarding', (req, res, next) => {
     onboardingJson(req, res, (error: unknown) => {

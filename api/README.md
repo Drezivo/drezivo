@@ -70,6 +70,13 @@ The server listens on `PORT` (3000 by default). Verify it with:
 curl http://localhost:3000/health
 ```
 
+Browser requests are protected by the API's explicit `CORS_ALLOWED_ORIGINS` allowlist. For local
+frontend testing, set it to `http://localhost:3000` in the ignored `api/.env` file. Values are
+comma-separated origins only; wildcards, paths, and credentials in an origin are rejected at
+startup. The API supports credentialed requests only from an allowlisted origin, which is required
+by the public guest-cookie flow. Production must provide its own deployment-managed allowlist and
+must never use `*` or inherit the local origin.
+
 ## Staff actor and workspace context
 
 After Clerk authentication, the staff app uses `GET /api/v1/workspaces` to list provisioned
@@ -128,7 +135,8 @@ deployment secret manager instead. Leave `S3_ENDPOINT` unset for AWS S3. For loc
 Runtime Clerk, object-storage, and database integrations require validated environment
 configuration. Invitation protection additionally requires separate 32-byte base64url
 `INVITATION_EMAIL_ENCRYPTION_KEY` and `INVITATION_EMAIL_DIGEST_KEY` values; tests should inject
-test-only values rather than inventing production credentials.
+test-only values rather than inventing production credentials. `CORS_ALLOWED_ORIGINS` is a required
+comma-separated list of exact browser origins; set `http://localhost:3000` for local development.
 
 ## License
 

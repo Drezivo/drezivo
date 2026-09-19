@@ -51,6 +51,19 @@ describe('tenant bootstrap HTTP boundary', () => {
     });
   });
 
+  it('answers the frontend preflight before Clerk authentication or JSON parsing', async () => {
+    const response = await request(createApp())
+      .options('/api/v1/onboarding')
+      .set('Origin', 'http://localhost:3000')
+      .set('Access-Control-Request-Method', 'POST')
+      .set('Access-Control-Request-Headers', 'Authorization, Content-Type');
+
+    expect(response.status).toBe(204);
+    expect(response.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+    expect(response.headers['access-control-allow-credentials']).toBe('true');
+    expect(mocks.getAuth).not.toHaveBeenCalled();
+  });
+
   it('passes the strict empty body and idempotency key to the controller service', async () => {
     const onboardingId = '9fbd891f-cab6-48a9-a965-e84deea05df6';
     const response = await request(createApp())

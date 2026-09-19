@@ -55,6 +55,10 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   issuer, expiry, audience/authorized-party) per TRD §3.
 - `CLERK_WEBHOOK_SIGNING_SECRET` — verifies the signature on Clerk's membership-change webhooks
   before they enter the signed, deduplicated webhook inbox (TRD §3, "Membership freshness").
+- `CORS_ALLOWED_ORIGINS` — required comma-separated exact browser origins. Development uses
+  `http://localhost:3000`; production must use an explicit deployment-managed allowlist. Wildcards,
+  paths, credentials, and empty entries are rejected at startup. Credentialed requests are enabled
+  only after an incoming `Origin` exactly matches this list.
 - `INVITATION_EMAIL_ENCRYPTION_KEY` — deployment-managed 32-byte base64url key used to encrypt
   tenant invitation recipient email before it is stored. Keep it separate from the digest key.
 - `INVITATION_EMAIL_DIGEST_KEY` — deployment-managed 32-byte base64url HMAC key used for exact
