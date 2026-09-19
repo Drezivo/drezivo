@@ -14,7 +14,8 @@ vi.mock("@clerk/nextjs", () => ({
 }));
 
 vi.mock("@clerk/nextjs/errors", () => ({
-  isClerkAPIResponseError: (error: unknown) => Boolean(error && typeof error === "object" && "errors" in error),
+  isClerkAPIResponseError: (error: unknown) =>
+    Boolean(error && typeof error === "object" && "errors" in error),
 }));
 
 function createSignInMock() {
@@ -105,8 +106,13 @@ describe("StaffSignInForm", () => {
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "staff@example.com" } });
     submitCurrentForm();
 
-    await waitFor(() => expect(signIn.create).toHaveBeenCalledWith({ identifier: "staff@example.com" }));
-    expect(signIn.prepareFirstFactor).toHaveBeenCalledWith({ strategy: "email_code", emailAddressId: "email_123" });
+    await waitFor(() =>
+      expect(signIn.create).toHaveBeenCalledWith({ identifier: "staff@example.com" })
+    );
+    expect(signIn.prepareFirstFactor).toHaveBeenCalledWith({
+      strategy: "email_code",
+      emailAddressId: "email_123",
+    });
     expect(screen.getByLabelText("Verification code")).toBeVisible();
   });
 
@@ -117,10 +123,14 @@ describe("StaffSignInForm", () => {
     });
     render(<StaffSignInForm />);
 
-    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new-owner@example.com" } });
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "new-owner@example.com" },
+    });
     submitCurrentForm();
 
-    await waitFor(() => expect(signUp.create).toHaveBeenCalledWith({ emailAddress: "new-owner@example.com" }));
+    await waitFor(() =>
+      expect(signUp.create).toHaveBeenCalledWith({ emailAddress: "new-owner@example.com" })
+    );
     expect(signUp.prepareEmailAddressVerification).toHaveBeenCalledWith({ strategy: "email_code" });
     expect(screen.getByLabelText("Verification code")).toBeVisible();
   });
@@ -129,15 +139,22 @@ describe("StaffSignInForm", () => {
     const { signUp } = useClerkMocks();
     render(<StaffSignInForm initialFlow="sign-up" />);
 
-    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new-owner@example.com" } });
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "new-owner@example.com" },
+    });
     submitCurrentForm();
     await screen.findByLabelText("Verification code");
 
     fireEvent.change(screen.getByLabelText("Verification code"), { target: { value: "123456" } });
     submitCurrentForm();
 
-    await waitFor(() => expect(signUp.attemptEmailAddressVerification).toHaveBeenCalledWith({ code: "123456" }));
-    expect(clerk.setActive).toHaveBeenCalledWith({ session: "session_signup", redirectUrl: "/" });
+    await waitFor(() =>
+      expect(signUp.attemptEmailAddressVerification).toHaveBeenCalledWith({ code: "123456" })
+    );
+    expect(clerk.setActive).toHaveBeenCalledWith({
+      session: "session_signup",
+      redirectUrl: "/onboarding",
+    });
   });
 
   it("shows a safe validation error for an invalid email", async () => {
@@ -147,7 +164,9 @@ describe("StaffSignInForm", () => {
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "not-an-email" } });
     submitCurrentForm();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Enter a valid email address to continue.");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Enter a valid email address to continue."
+    );
     expect(signIn.create).not.toHaveBeenCalled();
   });
 
@@ -168,7 +187,12 @@ describe("StaffSignInForm", () => {
     fireEvent.change(screen.getByLabelText("Verification code"), { target: { value: "123456" } });
     submitCurrentForm();
 
-    await waitFor(() => expect(signIn.attemptFirstFactor).toHaveBeenCalledWith({ strategy: "email_code", code: "123456" }));
+    await waitFor(() =>
+      expect(signIn.attemptFirstFactor).toHaveBeenCalledWith({
+        strategy: "email_code",
+        code: "123456",
+      })
+    );
     expect(clerk.setActive).not.toHaveBeenCalled();
     expect(await screen.findByText("Enter the code from your authenticator app.")).toBeVisible();
 
@@ -180,7 +204,9 @@ describe("StaffSignInForm", () => {
     fireEvent.change(screen.getByLabelText("Verification code"), { target: { value: "654321" } });
     submitCurrentForm();
 
-    await waitFor(() => expect(clerk.setActive).toHaveBeenCalledWith({ session: "session_456", redirectUrl: "/" }));
+    await waitFor(() =>
+      expect(clerk.setActive).toHaveBeenCalledWith({ session: "session_456", redirectUrl: "/" })
+    );
   });
 
   it("shows a generic error when the verification code is rejected", async () => {
@@ -195,7 +221,9 @@ describe("StaffSignInForm", () => {
     fireEvent.change(screen.getByLabelText("Verification code"), { target: { value: "000000" } });
     submitCurrentForm();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("We couldn't continue. Please check your details and try again.");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We couldn't continue. Please check your details and try again."
+    );
     expect(screen.queryByText("provider detail")).not.toBeInTheDocument();
   });
 
@@ -218,7 +246,9 @@ describe("StaffSignInForm", () => {
     const { signUp } = useClerkMocks();
     render(<StaffSignInForm initialFlow="sign-up" />);
 
-    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new-owner@example.com" } });
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "new-owner@example.com" },
+    });
     submitCurrentForm();
     await screen.findByLabelText("Verification code");
 
@@ -244,12 +274,29 @@ describe("StaffSignInForm", () => {
     });
   });
 
+  it("sends Google sign-up completions to onboarding", async () => {
+    const { signUp } = useClerkMocks();
+    render(<StaffSignInForm initialFlow="sign-up" />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Continue with Google" }));
+    });
+
+    expect(signUp.authenticateWithRedirect).toHaveBeenCalledWith({
+      strategy: "oauth_google",
+      redirectUrl: "/sso-callback",
+      redirectUrlComplete: "/onboarding",
+    });
+  });
+
   it("disables the email submit button while a request is pending", async () => {
     const { signIn } = useClerkMocks();
     let resolveCreate: (value: typeof signIn) => void = () => undefined;
-    signIn.create.mockReturnValue(new Promise<typeof signIn>((resolve) => {
-      resolveCreate = resolve;
-    }));
+    signIn.create.mockReturnValue(
+      new Promise<typeof signIn>((resolve) => {
+        resolveCreate = resolve;
+      })
+    );
     render(<StaffSignInForm />);
 
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "staff@example.com" } });

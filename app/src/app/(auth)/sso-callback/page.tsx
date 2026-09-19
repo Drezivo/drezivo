@@ -10,9 +10,9 @@ export default function SsoCallbackPage() {
         signInUrl="/sign-in"
         signUpUrl="/sign-up"
         signInFallbackRedirectUrl="/"
-        signUpFallbackRedirectUrl="/"
+        signUpFallbackRedirectUrl="/onboarding"
         signInForceRedirectUrl="/"
-        signUpForceRedirectUrl="/"
+        signUpForceRedirectUrl="/onboarding"
       />
     </main>
   );
