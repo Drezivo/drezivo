@@ -34,11 +34,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <SidebarProvider className={theme === "dark" ? "dashboard-theme-dark" : ""}>
+    <SidebarProvider
+      className={`h-svh min-h-0 overflow-hidden ${theme === "dark" ? "dashboard-theme-dark" : ""}`}
+    >
       <DashboardSidebar />
-      <SidebarInset>
+      <SidebarInset className="h-svh min-h-0 overflow-hidden">
         <DashboardHeader theme={theme} onToggleTheme={toggleTheme} />
-        <main className="min-h-0 flex-1 bg-dashboard-canvas">{children}</main>
+        <main className="min-h-0 flex-1 overflow-y-auto bg-dashboard-canvas">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   );
