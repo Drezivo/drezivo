@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import '../../src/config/load-env.js';
@@ -230,10 +232,11 @@ describe('TBF-011 onboarding persistence', async () => {
     );
     if (created.kind !== 'created') throw new Error('expected onboarding creation');
 
+    const idempotencyKey = randomUUID();
     const input = {
       principalId: 'user_onboarding_plan_idempotent',
       requestId: 'req-plan-idempotent',
-      idempotencyKey: 'plan-idempotent-001',
+      idempotencyKey,
       onboardingId: created.onboarding.id,
       request: { plan_code: 'professional' as const },
     };
@@ -270,10 +273,11 @@ describe('TBF-011 onboarding persistence', async () => {
     );
     if (created.kind !== 'created') throw new Error('expected onboarding creation');
 
+    const idempotencyKey = randomUUID();
     const input = {
       principalId: 'user_onboarding_plan_concurrent_key',
       requestId: 'req-plan-concurrent',
-      idempotencyKey: 'plan-concurrent-001',
+      idempotencyKey,
       onboardingId: created.onboarding.id,
       request: { plan_code: 'starter' as const },
     };

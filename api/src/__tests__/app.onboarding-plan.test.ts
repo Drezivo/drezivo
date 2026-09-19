@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -69,10 +71,11 @@ describe('onboarding plan-selection HTTP boundary', () => {
   });
 
   it('passes only the validated plan code and idempotency key to the command service', async () => {
+    const idempotencyKey = randomUUID();
     const response = await request(createApp())
       .post(`/api/v1/onboarding/${onboardingId}/plan`)
       .set('content-type', 'application/json')
-      .set('Idempotency-Key', 'plan-http-001')
+      .set('Idempotency-Key', idempotencyKey)
       .send({ plan_code: 'professional' });
 
     expect(response.status).toBe(200);
@@ -80,7 +83,7 @@ describe('onboarding plan-selection HTTP boundary', () => {
     const call = mocks.selectOnboardingPlan.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
     expect(call).toMatchObject({
       principalId: 'user_plan',
-      idempotencyKey: 'plan-http-001',
+      idempotencyKey,
       onboardingId,
       request: { plan_code: 'professional' },
     });
@@ -91,7 +94,7 @@ describe('onboarding plan-selection HTTP boundary', () => {
     const response = await request(createApp())
       .post(`/api/v1/onboarding/${onboardingId}/plan`)
       .set('content-type', 'application/json')
-      .set('Idempotency-Key', 'plan-http-002')
+      .set('Idempotency-Key', randomUUID())
       .send({ plan_code: 'professional', monthly_minor: 1, physical_assets_max: 999999 });
 
     expect(response.status).toBe(422);
