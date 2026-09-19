@@ -5,7 +5,7 @@ description: Maintain the project-only Drezivo Obsidian vault as a linked, sourc
 
 # Drezivo Second Brain
 
-The vault is `Drezivo-Second-Brain/`. It is a project knowledge base, not an application database
+The vault is `docs/second-brain/`. It is a project knowledge base, not an application database
 and never a place for credentials or customer PII. Read the root `ROOT-REPOSITORY-ARCHITECTURE.md`
 before creating notes.
 
