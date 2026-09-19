@@ -314,6 +314,7 @@ function OnboardingFrame({ children }: { children: React.ReactNode }) {
       backHref="/sign-up"
       backAriaLabel="Back to sign up"
       panelAriaLabel="Drezivo business onboarding"
+      lockViewport
     >
       <div className="flex flex-1 items-center">{children}</div>
     </AuthSplitLayout>

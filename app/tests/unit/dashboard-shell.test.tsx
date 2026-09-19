@@ -24,6 +24,8 @@ describe("DashboardShell", () => {
 
   beforeEach(() => {
     clerk.useClerk.mockReturnValue({ signOut: vi.fn() });
+    window.localStorage.clear();
+    delete document.documentElement.dataset["dashboardTheme"];
   });
 
   it("renders the reference navigation with Dashboard active", () => {
@@ -54,6 +56,22 @@ describe("DashboardShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Toggle navigation" }));
 
     expect(reservationsLink).not.toHaveTextContent("Reservations");
+  });
+
+  it("defaults to the charcoal and gold dark theme and lets the user switch themes", async () => {
+    render(
+      <DashboardShell>
+        <div>Shell content</div>
+      </DashboardShell>
+    );
+
+    await waitFor(() => expect(document.documentElement.dataset["dashboardTheme"]).toBe("dark"));
+    const themeToggle = screen.getByRole("button", { name: "Switch to light mode" });
+    fireEvent.click(themeToggle);
+
+    expect(document.documentElement.dataset["dashboardTheme"]).toBe("light");
+    expect(window.localStorage.getItem("drezivo.dashboard.theme")).toBe("light");
+    expect(screen.getByRole("button", { name: "Switch to dark mode" })).toBeVisible();
   });
 
   it("opens notifications and account menus when clicked", async () => {

@@ -36,7 +36,7 @@ export function OnboardingProgress({ current }: { current: OnboardingStep }) {
                   isComplete
                     ? "border-auth-gold bg-auth-gold text-auth-panel"
                     : isCurrent
-                      ? "border-auth-gold text-auth-text ring-1 ring-auth-gold/40"
+                      ? "border-2 border-auth-gold text-auth-text ring-2 ring-auth-gold/20"
                       : "border-auth-line text-auth-dark-muted",
                 ].join(" ")}
               >

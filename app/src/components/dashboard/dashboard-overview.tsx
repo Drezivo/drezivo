@@ -23,24 +23,24 @@ import {
 } from "./dashboard-data";
 
 const metricToneClasses: Record<DashboardTone, string> = {
-  purple: "bg-[#f1edff] text-[#5f39d2]",
-  mint: "bg-[#e5f8f1] text-[#159a72]",
-  blue: "bg-[#e9f2ff] text-[#2464d8]",
-  orange: "bg-[#fff0e4] text-[#f17b1c]",
-  lavender: "bg-[#f2edff] text-[#633dd4]",
+  purple: "dashboard-tone-purple",
+  mint: "dashboard-tone-mint",
+  blue: "dashboard-tone-blue",
+  orange: "dashboard-tone-orange",
+  lavender: "dashboard-tone-lavender",
 };
 
 const eventToneClasses: Record<ScheduleEventType, string> = {
-  Fitting: "border-transparent bg-[#f1edff] text-[#673ed2]",
-  Pickup: "border-transparent bg-[#e8f2ff] text-[#2366d8]",
-  Return: "border-transparent bg-[#fff0e4] text-[#ee7412]",
-  Reservation: "border-transparent bg-[#edf1f8] text-[#516282]",
+  Fitting: "dashboard-event-fitting",
+  Pickup: "dashboard-event-pickup",
+  Return: "dashboard-event-return",
+  Reservation: "dashboard-event-reservation",
 };
 
 const statusToneClasses: Record<ScheduleStatus, string> = {
-  Confirmed: "border-transparent bg-[#ddf7ed] text-[#159a72]",
-  Upcoming: "border-transparent bg-[#fff0e4] text-[#ee7412]",
-  Pending: "border-transparent bg-[#fff0e4] text-[#ee7412]",
+  Confirmed: "dashboard-status-confirmed",
+  Upcoming: "dashboard-status-upcoming",
+  Pending: "dashboard-status-pending",
 };
 
 function EventBadge({ type }: { type: ScheduleEventType }) {

@@ -1,7 +1,9 @@
 "use client";
 
 import { useClerk } from "@clerk/nextjs";
-import { Bell, ChevronDown, LogOut, Settings, UserRound } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Moon, Settings, Sun, UserRound } from "lucide-react";
+
+import type { DashboardTheme } from "@/components/shell/dashboard-shell";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -24,8 +26,15 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
-export function DashboardHeader() {
+export function DashboardHeader({
+  onToggleTheme,
+  theme,
+}: {
+  onToggleTheme: () => void;
+  theme: DashboardTheme;
+}) {
   const { signOut } = useClerk();
+  const isDark = theme === "dark";
 
   return (
     <header className="flex min-h-[72px] items-center justify-between gap-2 border-b border-dashboard-border bg-dashboard-surface px-4 py-4 sm:gap-6 sm:px-6">
@@ -68,6 +77,18 @@ export function DashboardHeader() {
             <DropdownMenuItem>Payment receipt ready for review</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+          aria-pressed={isDark}
+          title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+          onClick={onToggleTheme}
+          className="border border-dashboard-border bg-dashboard-surface text-dashboard-accent hover:bg-dashboard-active hover:text-dashboard-accent"
+        >
+          {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+        </Button>
         <Separator orientation="vertical" className="h-8" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
