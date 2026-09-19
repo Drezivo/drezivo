@@ -46,6 +46,13 @@
   --color-dashboard-accent: #1f5bd7;
   --color-dashboard-danger: #e11d48;
 
+  --color-dashboard-gold-soft: #f3e7d4;
+  --color-dashboard-gold-text: #9a6423;
+  --color-dashboard-green-soft: #e5f8f1;
+  --color-dashboard-green-text: #159a72;
+  --color-dashboard-neutral-soft: #edf1f8;
+  --color-dashboard-neutral-text: #516282;
+
   --color-google-blue: #4285f4;
   --color-google-green: #34a853;
   --color-google-yellow: #fbbc05;
@@ -57,6 +64,125 @@
 
 html {
   color-scheme: light;
+}
+
+.dashboard-theme-dark,
+html[data-dashboard-theme="dark"] {
+  --color-dashboard-canvas: #141414;
+  --color-dashboard-surface: #1a1a1a;
+  --color-dashboard-border: #383633;
+  --color-dashboard-muted: #aaa39b;
+  --color-dashboard-navy: #f5f1eb;
+  --color-dashboard-active: #342a1f;
+  --color-dashboard-accent: #d2a15b;
+  --color-dashboard-danger: #ff4d6d;
+  --color-dashboard-gold-soft: #322819;
+  --color-dashboard-gold-text: #e2ad61;
+  --color-dashboard-green-soft: #193126;
+  --color-dashboard-green-text: #72d89e;
+  --color-dashboard-neutral-soft: #292929;
+  --color-dashboard-neutral-text: #c5c0ba;
+  color-scheme: dark;
+}
+
+.dashboard-tone-purple {
+  background: #f1edff;
+  color: #5f39d2;
+}
+.dashboard-tone-mint {
+  background: #e5f8f1;
+  color: #159a72;
+}
+.dashboard-tone-blue {
+  background: #e9f2ff;
+  color: #2464d8;
+}
+.dashboard-tone-orange {
+  background: #fff0e4;
+  color: #f17b1c;
+}
+.dashboard-tone-lavender {
+  background: #f2edff;
+  color: #633dd4;
+}
+
+.dashboard-event-fitting {
+  border-color: transparent;
+  background: #f1edff;
+  color: #673ed2;
+}
+.dashboard-event-pickup {
+  border-color: transparent;
+  background: #e8f2ff;
+  color: #2366d8;
+}
+.dashboard-event-return,
+.dashboard-status-upcoming,
+.dashboard-status-pending {
+  border-color: transparent;
+  background: #fff0e4;
+  color: #ee7412;
+}
+.dashboard-event-reservation {
+  border-color: transparent;
+  background: #edf1f8;
+  color: #516282;
+}
+.dashboard-status-confirmed {
+  border-color: transparent;
+  background: #ddf7ed;
+  color: #159a72;
+}
+
+.dashboard-theme-dark .dashboard-tone-purple,
+.dashboard-theme-dark .dashboard-tone-blue,
+.dashboard-theme-dark .dashboard-tone-orange,
+.dashboard-theme-dark .dashboard-tone-lavender,
+html[data-dashboard-theme="dark"] .dashboard-tone-purple,
+html[data-dashboard-theme="dark"] .dashboard-tone-blue,
+html[data-dashboard-theme="dark"] .dashboard-tone-orange,
+html[data-dashboard-theme="dark"] .dashboard-tone-lavender {
+  background: var(--color-dashboard-gold-soft);
+  color: var(--color-dashboard-gold-text);
+}
+
+.dashboard-theme-dark .dashboard-tone-mint,
+html[data-dashboard-theme="dark"] .dashboard-tone-mint {
+  background: var(--color-dashboard-green-soft);
+  color: var(--color-dashboard-green-text);
+}
+
+.dashboard-theme-dark .dashboard-event-fitting,
+.dashboard-theme-dark .dashboard-event-return,
+.dashboard-theme-dark .dashboard-status-upcoming,
+.dashboard-theme-dark .dashboard-status-pending,
+html[data-dashboard-theme="dark"] .dashboard-event-fitting,
+html[data-dashboard-theme="dark"] .dashboard-event-return,
+html[data-dashboard-theme="dark"] .dashboard-status-upcoming,
+html[data-dashboard-theme="dark"] .dashboard-status-pending {
+  border-color: transparent;
+  background: var(--color-dashboard-gold-soft);
+  color: var(--color-dashboard-gold-text);
+}
+
+.dashboard-theme-dark .dashboard-event-pickup,
+.dashboard-theme-dark .dashboard-event-reservation,
+html[data-dashboard-theme="dark"] .dashboard-event-pickup,
+html[data-dashboard-theme="dark"] .dashboard-event-reservation {
+  border-color: transparent;
+  background: var(--color-dashboard-neutral-soft);
+  color: var(--color-dashboard-neutral-text);
+}
+
+.dashboard-theme-dark .dashboard-status-confirmed,
+html[data-dashboard-theme="dark"] .dashboard-status-confirmed {
+  border-color: transparent;
+  background: var(--color-dashboard-green-soft);
+  color: var(--color-dashboard-green-text);
+}
+
+html[data-dashboard-theme="dark"] :focus-visible {
+  outline-color: var(--color-dashboard-accent);
 }
 
 body {

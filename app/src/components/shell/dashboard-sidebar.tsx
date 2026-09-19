@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -40,25 +41,14 @@ const NAV_ITEMS = [
 
 function DrezivoMark() {
   return (
-    <svg
+    <Image
+      src="/drezivo-mark-reference.png"
+      alt=""
       aria-hidden="true"
-      className="h-8 w-8 shrink-0 text-dashboard-navy"
-      viewBox="0 0 48 48"
-      fill="none"
-    >
-      <path
-        d="M8 18.5c6.1-.2 8.8-5.3 13.4-8.5 2.1-1.5 4.8-.6 4.8 2.2 0 4.2-3.6 7.3-8 10.6-3.7 2.8-7.8 5.8-8.8 9.5-.9 3.5 1.7 6.2 5.2 6.2 4.9 0 8.5-4.5 11.6-8.8 2.6-3.6 5.6-7.4 10.6-7.4 1.7 0 3.2.6 4.2 1.5"
-        stroke="currentColor"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-      />
-      <path
-        d="M12 29.4c4.2 1.7 8.2 1.4 11.9-.6 3.2-1.8 5.7-4.7 7.8-7.8"
-        stroke="currentColor"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-      />
-    </svg>
+      width={32}
+      height={32}
+      className="h-8 w-8 shrink-0 object-contain"
+    />
   );
 }
 
