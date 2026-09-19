@@ -9,9 +9,9 @@ export default function SsoCallbackPage() {
       <AuthenticateWithRedirectCallback
         signInUrl="/sign-in"
         signUpUrl="/sign-up"
-        signInFallbackRedirectUrl="/"
+        signInFallbackRedirectUrl="/auth/resolve"
         signUpFallbackRedirectUrl="/onboarding"
-        signInForceRedirectUrl="/"
+        signInForceRedirectUrl="/auth/resolve"
         signUpForceRedirectUrl="/onboarding"
       />
     </main>

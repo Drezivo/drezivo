@@ -2,6 +2,7 @@ import type { OnboardingStatus, PlanCode } from '@drezivo/contracts';
 import type { PoolClient } from 'pg';
 
 import { withGlobalTransaction, withOperatorGlobalTransaction } from '../../db/client.js';
+import { enqueueClerkOrganizationCleanup } from './onboarding-cleanup.repository.js';
 
 /**
  * TBF-011 — global owner onboarding persistence.
@@ -253,6 +254,11 @@ export async function abandonOnboardingInTransaction(
     return { kind: 'not_found_or_forbidden' };
   }
   if (row.status === 'abandoned') {
+    await enqueueClerkOrganizationCleanup(client, {
+      onboardingId: row.id,
+      accountId,
+      clerkOrgId: row.clerk_org_id,
+    });
     return { kind: 'already_abandoned', onboarding: toOwnerOnboarding(row) };
   }
   if (row.status === 'provisioned') {
@@ -276,6 +282,11 @@ export async function abandonOnboardingInTransaction(
         ? { kind: 'provisioned', onboarding: toOwnerOnboarding(current) }
         : { kind: 'not_found_or_forbidden' };
   }
+  await enqueueClerkOrganizationCleanup(client, {
+    onboardingId: updatedRow.id,
+    accountId,
+    clerkOrgId: updatedRow.clerk_org_id,
+  });
   return {
     kind: 'abandoned',
     onboarding: toOwnerOnboarding({ ...updatedRow, trial_consumed_at: account.trial_consumed_at }),

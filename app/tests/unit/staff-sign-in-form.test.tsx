@@ -205,7 +205,10 @@ describe("StaffSignInForm", () => {
     submitCurrentForm();
 
     await waitFor(() =>
-      expect(clerk.setActive).toHaveBeenCalledWith({ session: "session_456", redirectUrl: "/" })
+      expect(clerk.setActive).toHaveBeenCalledWith({
+        session: "session_456",
+        redirectUrl: "/auth/resolve",
+      })
     );
   });
 
@@ -270,7 +273,7 @@ describe("StaffSignInForm", () => {
     expect(signIn.authenticateWithRedirect).toHaveBeenCalledWith({
       strategy: "oauth_google",
       redirectUrl: "/sso-callback",
-      redirectUrlComplete: "/",
+      redirectUrlComplete: "/auth/resolve",
     });
   });
 

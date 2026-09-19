@@ -13,6 +13,7 @@ import {
 
 import { AuthBrand } from "@/components/auth/auth-brand";
 import { AuthSplitLayout } from "@/components/auth/auth-split-layout";
+import { ExitOnboardingDialog } from "@/components/onboarding/exit-onboarding-dialog";
 import { OnboardingProgress } from "@/components/onboarding/onboarding-progress";
 import { RestartOnboardingDialog } from "@/components/onboarding/restart-onboarding-dialog";
 import { OnboardingStatusPage } from "@/components/onboarding/onboarding-status-page";
@@ -57,7 +58,7 @@ export function OnboardingEntry() {
 
   if (state.kind === "error") {
     return (
-      <OnboardingFrame>
+      <OnboardingFrame getToken={getToken} onboarding={null}>
         <StatusCard
           action={
             <button type="button" onClick={() => void loadCurrent()} className={primaryButtonClass}>
@@ -77,7 +78,7 @@ export function OnboardingEntry() {
 
   if (!onboarding && !context.has_current_owned_tenant) {
     return (
-      <OnboardingFrame>
+      <OnboardingFrame getToken={getToken} onboarding={null}>
         <OrganizationSetup
           getToken={getToken}
           onCreated={() => {
@@ -91,7 +92,7 @@ export function OnboardingEntry() {
 
   if (onboarding?.status === "payment_pending") {
     return (
-      <OnboardingFrame>
+      <OnboardingFrame getToken={getToken} onboarding={onboarding}>
         <StatusCard
           action={
             <button type="button" onClick={() => void loadCurrent()} className={primaryButtonClass}>
@@ -107,7 +108,7 @@ export function OnboardingEntry() {
 
   if (onboarding?.status === "incomplete") {
     return (
-      <OnboardingFrame>
+      <OnboardingFrame getToken={getToken} onboarding={onboarding}>
         <StatusCard
           action={
             <div className="space-y-3">
@@ -139,7 +140,7 @@ export function OnboardingEntry() {
     context.has_current_owned_tenant
   ) {
     return (
-      <OnboardingFrame>
+      <OnboardingFrame getToken={getToken} onboarding={null}>
         <StatusCard
           action={
             <button
@@ -158,7 +159,7 @@ export function OnboardingEntry() {
   }
 
   return (
-    <OnboardingFrame>
+    <OnboardingFrame getToken={getToken} onboarding={null}>
       <StatusCard
         action={
           <button type="button" onClick={() => void loadCurrent()} className={primaryButtonClass}>
@@ -308,13 +309,24 @@ function OrganizationSetup({
   );
 }
 
-function OnboardingFrame({ children }: { children: React.ReactNode }) {
+function OnboardingFrame({
+  children,
+  getToken,
+  onboarding,
+}: {
+  children: React.ReactNode;
+  getToken?: () => Promise<string | null>;
+  onboarding?: OrganizationOnboarding | null;
+}) {
   return (
     <AuthSplitLayout
       backHref="/sign-up"
       backAriaLabel="Back to sign up"
       panelAriaLabel="Drezivo business onboarding"
       lockViewport
+      backControl={
+        getToken ? <ExitOnboardingDialog getToken={getToken} onboarding={onboarding ?? null} /> : undefined
+      }
     >
       <div className="flex flex-1 items-center">{children}</div>
     </AuthSplitLayout>

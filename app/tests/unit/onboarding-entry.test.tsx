@@ -6,6 +6,7 @@ import { OnboardingEntry } from "@/components/onboarding/onboarding-entry";
 const clerk = vi.hoisted(() => ({
   getToken: vi.fn(),
   setActive: vi.fn(),
+  signOut: vi.fn(),
   useAuth: vi.fn(),
   useClerk: vi.fn(),
 }));
@@ -44,7 +45,7 @@ const noOnboardingContext = {
 
 function renderEntry() {
   clerk.useAuth.mockReturnValue({ getToken: clerk.getToken, isLoaded: true, isSignedIn: true });
-  clerk.useClerk.mockReturnValue({ setActive: clerk.setActive });
+  clerk.useClerk.mockReturnValue({ setActive: clerk.setActive, signOut: clerk.signOut });
   return render(<OnboardingEntry />);
 }
 
@@ -53,6 +54,7 @@ describe("OnboardingEntry", () => {
     vi.clearAllMocks();
     clerk.getToken.mockResolvedValue("clerk-token");
     clerk.setActive.mockResolvedValue(undefined);
+    clerk.signOut.mockResolvedValue(undefined);
     api.getCurrentOnboarding.mockResolvedValue({
       data: noOnboardingContext,
       requestId: "req-current",
@@ -212,11 +214,63 @@ describe("OnboardingEntry", () => {
     fireEvent.click(restartButtons[restartButtons.length - 1]!);
 
     await waitFor(() => expect(api.abandonOnboarding).toHaveBeenCalledTimes(1));
+    expect(clerk.setActive).toHaveBeenCalledWith({ organization: null });
     expect(api.abandonOnboarding).toHaveBeenCalledWith(
       "onboarding_123",
       { reason_code: "not_now" },
       expect.any(String)
     );
     expect(await screen.findByRole("heading", { name: "Set up your business" })).toBeVisible();
+  });
+
+  it("confirms leaving before an organization exists and signs out without abandoning", async () => {
+    renderEntry();
+    await screen.findByRole("heading", { name: "Set up your business" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Leave setup" }));
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(screen.getByText(/signed out and can return later/i)).toBeVisible();
+
+    const leaveButtons = screen.getAllByRole("button", { name: "Leave setup" });
+    fireEvent.click(leaveButtons[leaveButtons.length - 1]!);
+
+    await waitFor(() => expect(clerk.signOut).toHaveBeenCalledWith({ redirectUrl: "/sign-in" }));
+    expect(api.abandonOnboarding).not.toHaveBeenCalled();
+  });
+
+  it("abandons an incomplete setup before signing out", async () => {
+    const onboarding = {
+      id: "onboarding_exit",
+      clerk_org_id: "org_exit",
+      organization_name: "Exit Rentals",
+      requested_slug: null,
+      status: "incomplete",
+      selected_plan_code: null,
+      is_trial_eligible: true,
+      created_at: "2026-09-19T00:00:00.000Z",
+      updated_at: "2026-09-19T00:00:00.000Z",
+    } as const;
+    api.getCurrentOnboarding.mockResolvedValue({
+      data: { ...noOnboardingContext, onboarding },
+      requestId: "req-current-exit",
+    });
+    api.abandonOnboarding.mockResolvedValue({
+      data: { ...onboarding, status: "abandoned" },
+      requestId: "req-abandon-exit",
+    });
+
+    renderEntry();
+    await screen.findByRole("heading", { name: "Continue setting up Exit Rentals" });
+    fireEvent.click(screen.getByRole("button", { name: "Leave setup" }));
+    const leaveButtons = screen.getAllByRole("button", { name: "Leave setup" });
+    fireEvent.click(leaveButtons[leaveButtons.length - 1]!);
+
+    await waitFor(() => expect(api.abandonOnboarding).toHaveBeenCalledTimes(1));
+    expect(api.abandonOnboarding).toHaveBeenCalledWith(
+      "onboarding_exit",
+      { reason_code: "not_now" },
+      expect.any(String)
+    );
+    expect(clerk.signOut).toHaveBeenCalledWith({ redirectUrl: "/sign-in" });
   });
 });

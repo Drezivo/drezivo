@@ -172,6 +172,17 @@ describe('TBF-011 onboarding persistence', async () => {
     expect((await abandonOnboarding(first.onboarding.id, 'user_onboarding_abandon')).kind).toBe(
       'already_abandoned',
     );
+    const cleanupJobs = await withGlobalTransaction(
+      'user_onboarding_abandon',
+      async (client) =>
+        client.query<{ count: number }>(
+          `SELECT count(*)::int AS count
+           FROM clerk_organization_cleanup_job
+           WHERE onboarding_id = $1 AND clerk_org_id = $2`,
+          [first.onboarding.id, 'org_abandon_old'],
+        ),
+    );
+    expect(cleanupJobs.rows[0]?.count).toBe(1);
     const replacement = await createOrResumeOnboarding(
       account.id,
       'org_abandon_new',

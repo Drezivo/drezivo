@@ -81,9 +81,15 @@ Every owner mutation requires `Idempotency-Key` and uses `bootstrap_idempotency_
 tenant-scoped ledger. A seven-day idempotency retention window is used. The create command allows
 5 requests per minute per verified user, current-state reads allow 30, abandonment allows 10,
 and the raw JSON body is capped at 16 KiB before parsing. Incomplete onboarding is not automatically expired in
-this phase. Explicit abandonment retains history and permits a replacement. Provider success
-followed by local write failure is repaired by the signed `organization.created` webhook marker;
-the webhook never provisions a tenant or starts a trial.
+this phase. Explicit abandonment retains local onboarding and audit history and permits a replacement.
+Migration `0021_clerk_organization_cleanup.sql` adds a durable pre-tenant cleanup queue: abandonment
+and cleanup enqueue commit atomically, then the worker deletes only a Clerk organization that is
+still abandoned, has no provisioned tenant, matches the onboarding record, and can be traced to a
+durable owner-onboarding provider attempt. Provider deletion is idempotent and bounded-retry; unsafe
+or provisioned organizations are never deleted by this flow. The signed Clerk webhook remains a
+reconciliation input only and does not initiate cleanup. Provider success followed by local write
+failure is repaired by the signed `organization.created` webhook marker; the webhook never provisions
+a tenant or starts a trial.
 
 Invitation recipients are explicitly outside this command boundary until TBF-040/042 provides
 local invitation persistence and claim state; they must not be treated as owners by a future

@@ -26,6 +26,7 @@ import {
 
 import { AuthBrand } from "@/components/auth/auth-brand";
 import { AuthSplitLayout } from "@/components/auth/auth-split-layout";
+import { ExitOnboardingDialog } from "@/components/onboarding/exit-onboarding-dialog";
 import { OnboardingProgress } from "@/components/onboarding/onboarding-progress";
 import { OnboardingStatusPage } from "@/components/onboarding/onboarding-status-page";
 import { RestartOnboardingDialog } from "@/components/onboarding/restart-onboarding-dialog";
@@ -314,7 +315,7 @@ export function OnboardingPlan() {
   }
 
   return (
-    <PlanFrame>
+    <PlanFrame getToken={getToken} onboarding={activeOnboarding}>
       <section aria-labelledby="plan-heading" className="mx-auto w-full max-w-4xl py-8 sm:py-10">
         <BrandHeader />
         <div className="mx-auto mt-9 max-w-2xl">
@@ -401,7 +402,7 @@ function LaunchReview({
   const isLaunching = launchPhase === "bootstrapping";
 
   return (
-    <PlanFrame>
+    <PlanFrame getToken={getToken} onboarding={onboarding}>
       <section aria-labelledby="launch-heading" className="mx-auto w-full max-w-[52rem] py-4 sm:py-5">
         <BrandHeader />
         <div className="mx-auto mt-6 max-w-xl">
@@ -649,13 +650,24 @@ function InlineError({ error }: { error: DrezivoApiError }) {
   );
 }
 
-function PlanFrame({ children }: { children: React.ReactNode }) {
+function PlanFrame({
+  children,
+  getToken,
+  onboarding,
+}: {
+  children: React.ReactNode;
+  getToken?: () => Promise<string | null>;
+  onboarding?: OrganizationOnboarding | null;
+}) {
   return (
     <AuthSplitLayout
       backHref="/onboarding"
       backAriaLabel="Back to onboarding"
       panelAriaLabel="Drezivo onboarding"
       lockViewport
+      backControl={
+        getToken ? <ExitOnboardingDialog getToken={getToken} onboarding={onboarding ?? null} /> : undefined
+      }
     >
       <div className="flex flex-1 items-center">{children}</div>
     </AuthSplitLayout>
