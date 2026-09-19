@@ -32,7 +32,7 @@ describe('TBF-042 verified invitation claim', async () => {
   const { claimMembershipInvitation } = await import(
     '../../src/modules/membership-invitations/membership-invitation-claim.service.js'
   );
-  const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
+  const { createTestMembership, createTestTenant, testKey } = await import('./helpers/factories.js');
   const { actorContext } = await import('@drezivo/contracts');
   const { randomUUID } = await import('node:crypto');
 
@@ -114,7 +114,7 @@ describe('TBF-042 verified invitation claim', async () => {
       clerkUserId: claimantUserId,
       clerkOrgId: tenant.clerkOrgId,
       requestId: 'req-tbf042-claim-1',
-      idempotencyKey: 'tbf042-claim',
+      idempotencyKey: testKey('tbf042-claim'),
       clerk,
     });
     const replay = await claimMembershipInvitation({
@@ -122,7 +122,7 @@ describe('TBF-042 verified invitation claim', async () => {
       clerkUserId: claimantUserId,
       clerkOrgId: tenant.clerkOrgId,
       requestId: 'req-tbf042-claim-2',
-      idempotencyKey: 'tbf042-claim',
+      idempotencyKey: testKey('tbf042-claim'),
       clerk,
     });
 

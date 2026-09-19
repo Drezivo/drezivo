@@ -31,7 +31,7 @@ describe('TBF-040 membership invitations', async () => {
     listMembershipInvitations,
     resendMembershipInvitation,
   } = await import('../../src/modules/membership-invitations/membership-invitations.service.js');
-  const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
+  const { createTestMembership, createTestTenant, testKey } = await import('./helpers/factories.js');
 
   beforeAll(async () => {
     await migrateTestDatabase(adminUrl);
@@ -130,7 +130,7 @@ describe('TBF-040 membership invitations', async () => {
     const input = {
       ...context,
       requestId: 'req-tbf040-idempotency-1',
-      idempotencyKey: 'idempotency-1',
+      idempotencyKey: testKey('idempotency-1'),
       request: { email: 'same@example.com' },
     };
 

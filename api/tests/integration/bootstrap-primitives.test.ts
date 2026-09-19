@@ -41,7 +41,7 @@ describe('TBF-012 bootstrap idempotency and global audit primitives', async () =
     appendGlobalAuditEvent,
     readGlobalAuditEvents,
   } = await import('../../src/modules/audit/global-audit.repository.js');
-  const { createTestTenant } = await import('./helpers/factories.js');
+  const { createTestTenant, testKey } = await import('./helpers/factories.js');
 
   beforeAll(async () => {
     await migrateTestDatabase(adminUrl);
@@ -310,7 +310,7 @@ describe('TBF-012 bootstrap idempotency and global audit primitives', async () =
       appendGlobalAuditEvent(client, {
         accountId: account.id,
         actorKind: 'operator',
-        actorKey: 'operator_tbf012',
+        actorKey: testKey('operator_tbf012'),
         action: 'onboarding.reviewed',
         entityType: 'organization_onboarding',
         outcome: 'rejected',
