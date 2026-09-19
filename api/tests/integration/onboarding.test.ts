@@ -107,12 +107,18 @@ describe('TBF-011 onboarding persistence', async () => {
       createOrResumeOnboarding(account.id, 'org_compete_a', 'user_onboarding_compete'),
       createOrResumeOnboarding(account.id, 'org_compete_b', 'user_onboarding_compete'),
     ]);
-    expect([first.kind, second.kind].sort()).toEqual(['active_exists', 'created']);
+    const outcomes = [first, second];
+    expect(outcomes.map((result) => result.kind).sort()).toEqual(['active_exists', 'created']);
+
+    const created = outcomes.find((result) => result.kind === 'created');
+    if (!created || created.kind !== 'created') {
+      throw new Error('expected one concurrent onboarding request to create an organization');
+    }
 
     const other = await ensureAccount('user_onboarding_other');
-    expect(await createOrResumeOnboarding(other.id, 'org_compete_a', 'user_onboarding_other')).toEqual({
-      kind: 'organization_conflict',
-    });
+    expect(
+      await createOrResumeOnboarding(other.id, created.onboarding.clerkOrgId, 'user_onboarding_other'),
+    ).toEqual({ kind: 'organization_conflict' });
   });
 
   it('is owner-isolated and unavailable in tenant-scoped transactions', async () => {
