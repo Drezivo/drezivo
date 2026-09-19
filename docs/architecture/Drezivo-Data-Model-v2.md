@@ -41,6 +41,9 @@ erDiagram
   CHARGE ||--o{ PAYMENT_ALLOCATION : receives
   PAYMENT ||--o{ REFUND : returns
   RESERVATION ||--o{ DEPOSIT_ENTRY : accounts_for
+  TENANT ||--o{ SUPPORT_GRANT : authorizes_operator
+  SUPPORT_GRANT ||--o{ AUDIT_EVENT : scopes_activity
+  OPERATOR_COMMAND ||--o{ AUDIT_EVENT : correlates
 ```
 
 SQL FKs enforce children belonging to existing parents; services/constraint triggers enforce at least one line in an accepted reservation and one default branch. Draft styles may have no variants; a published rentable style may not.
@@ -61,7 +64,22 @@ Historical branch fields on bookings/custody are immutable facts. Changing an as
 operator subject, tenant, reason, request ID, idempotency intent, resource kind and resource ID to
 one state transition. A retry command must create or replay this record before enqueueing work; it
 cannot mutate an outbox or notification row directly from an HTTP handler. The command row is also
-the audit correlation point for support activity and post-event review.
+the audit correlation point for support activity and post-event review. Request IDs remain bounded
+text so distributed tracing identifiers from HTTP and worker paths are preserved; they are not
+required to be UUIDs.
+
+The database keeps `redacted_summary` as validated JSONB for structured internal evidence. The
+operator projection serializes only a short, allowlisted summary string; it never exposes raw JSON,
+provider payloads, credentials, or unrestricted personal data.
+
+### v2 rollout order
+
+The v2 migration is intentionally staged. `0021_operator_command_audit_v2.sql` adds the new
+nullable audit fields, performs a bounded backfill, and creates the command table without changing
+the old writer's required columns. Deploy the writer that supplies the new fields, verify the
+backfill, then apply `0022_operator_v2_constraints.sql` to enforce the actor/outcome checks and
+stable activity indexes. This keeps rolling deployments compatible and avoids a single migration
+holding a large unbounded update or breaking the previous API version.
 
 ### Request-time actor and workspace resolution (TBF-031)
 

@@ -749,7 +749,7 @@ Table audit_event {
   entity_id uuid
   outcome varchar(20) [not null]
   redacted_summary jsonb [not null]
-  request_id uuid [not null]
+  request_id varchar(128) [not null]
   occurred_at timestamptz [not null]
   created_at timestamptz [not null]
   indexes {
@@ -901,7 +901,7 @@ Table operator_command {
   resource_id uuid [not null]
   operator_subject varchar(200) [not null]
   reason text [not null]
-  request_id uuid [not null]
+  request_id varchar(128) [not null]
   intent_key varchar(200) [not null]
   status varchar(20) [not null]
   accepted_at timestamptz [not null]
@@ -910,6 +910,7 @@ Table operator_command {
   created_at timestamptz [not null]
   indexes {
     (tenant_id, id) [pk]
+    (tenant_id, id) [unique]
     (tenant_id, operator_subject, command_kind, intent_key) [unique]
     (tenant_id, resource_kind, resource_id, created_at)
   }

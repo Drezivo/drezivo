@@ -280,9 +280,10 @@ export async function createTenantBootstrapGraph(
     );
     await client.query(
       `INSERT INTO audit_event
-         (id, tenant_id, actor_key, action, entity_type, entity_id,
-          redacted_summary, request_id)
-       VALUES ($1, $2, $3, 'tenant.bootstrap.completed', 'tenant', $4, $5::jsonb, $6)`,
+         (id, tenant_id, actor_kind, actor_key, action, entity_type, entity_id,
+          redacted_summary, request_id, occurred_at, outcome)
+       VALUES ($1, $2, 'staff', $3, 'tenant.bootstrap.completed', 'tenant', $4,
+               $5::jsonb, $6, now(), 'succeeded')`,
       [auditId, tenantId, input.principalId, tenantId, JSON.stringify({ source: 'owner_onboarding' }), input.requestId],
     );
 

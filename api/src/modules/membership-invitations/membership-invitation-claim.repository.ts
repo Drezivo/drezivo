@@ -205,8 +205,10 @@ export async function appendClaimAudit(
 ): Promise<void> {
   await client.query(
     `INSERT INTO audit_event
-       (tenant_id, actor_key, action, entity_type, entity_id, redacted_summary, request_id)
-     VALUES ($1, $2, 'membership_invitation.claimed', 'membership', $3, $4::jsonb, $5)`,
+       (tenant_id, actor_kind, actor_key, action, entity_type, entity_id,
+        redacted_summary, request_id, occurred_at, outcome)
+     VALUES ($1, 'staff', $2, 'membership_invitation.claimed', 'membership', $3,
+             $4::jsonb, $5, now(), 'succeeded')`,
     [
       input.tenantId,
       input.actorKey,
