@@ -42,6 +42,7 @@ describe('TBF-012 bootstrap idempotency and global audit primitives', async () =
     readGlobalAuditEvents,
   } = await import('../../src/modules/audit/global-audit.repository.js');
   const { createTestTenant, testKey } = await import('./helpers/factories.js');
+  const operatorKey = testKey('operator_tbf012');
 
   beforeAll(async () => {
     await migrateTestDatabase(adminUrl);
@@ -306,11 +307,11 @@ describe('TBF-012 bootstrap idempotency and global audit primitives', async () =
         requestId: 'req-tbf012-account',
       }),
     );
-    const operatorEvent = await withOperatorGlobalTransaction('operator_tbf012', (client) =>
+    const operatorEvent = await withOperatorGlobalTransaction(operatorKey, (client) =>
       appendGlobalAuditEvent(client, {
         accountId: account.id,
         actorKind: 'operator',
-        actorKey: testKey('operator_tbf012'),
+        actorKey: operatorKey,
         action: 'onboarding.reviewed',
         entityType: 'organization_onboarding',
         outcome: 'rejected',
@@ -351,7 +352,7 @@ describe('TBF-012 bootstrap idempotency and global audit primitives', async () =
     );
     expect(ownerRead).toHaveLength(3);
     expect(ownerRead.map((event) => event.actorKind).sort()).toEqual(['account', 'operator', 'system']);
-    const operatorRead = await withOperatorGlobalTransaction('operator_tbf012', (client) =>
+    const operatorRead = await withOperatorGlobalTransaction(operatorKey, (client) =>
       readGlobalAuditEvents(client, { accountId: account.id }),
     );
     expect(operatorRead).toHaveLength(3);
@@ -395,12 +396,12 @@ describe('TBF-012 bootstrap idempotency and global audit primitives', async () =
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
 
     await expect(
-      withOperatorGlobalTransaction('operator_tbf012', async (client) => {
+      withOperatorGlobalTransaction(operatorKey, async (client) => {
         await client.query('UPDATE global_audit_event SET action = $1', ['tampered']);
       }),
     ).rejects.toMatchObject({ code: '42501' });
     await expect(
-      withOperatorGlobalTransaction('operator_tbf012', async (client) => {
+      withOperatorGlobalTransaction(operatorKey, async (client) => {
         await client.query('DELETE FROM global_audit_event');
       }),
     ).rejects.toMatchObject({ code: '42501' });
