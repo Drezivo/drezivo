@@ -12,7 +12,7 @@ export function OnboardingProgress({ current }: { current: OnboardingStep }) {
   const currentIndex = STEPS.findIndex((step) => step.id === current);
 
   return (
-    <ol aria-label="Onboarding progress" className="flex items-start text-center">
+    <ol aria-label="Onboarding progress" className="mx-auto flex w-full max-w-md items-start text-center">
       {STEPS.map((step, index) => {
         const isCurrent = index === currentIndex;
         const isComplete = index < currentIndex;
@@ -32,7 +32,7 @@ export function OnboardingProgress({ current }: { current: OnboardingStep }) {
               <span
                 aria-current={isCurrent ? "step" : undefined}
                 className={[
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold",
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold",
                   isComplete
                     ? "border-auth-gold bg-auth-gold text-auth-panel"
                     : isCurrent
@@ -40,7 +40,7 @@ export function OnboardingProgress({ current }: { current: OnboardingStep }) {
                       : "border-auth-line text-auth-dark-muted",
                 ].join(" ")}
               >
-                {isComplete ? <Check aria-hidden="true" className="h-4 w-4" strokeWidth={2.4} /> : index + 1}
+                {isComplete ? <Check aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2.4} /> : index + 1}
               </span>
               {index < STEPS.length - 1 ? (
                 <span
@@ -54,7 +54,7 @@ export function OnboardingProgress({ current }: { current: OnboardingStep }) {
             </div>
             <span
               className={[
-                "mt-3 text-xs font-medium sm:text-sm",
+                "mt-2 text-[11px] font-medium sm:text-xs",
                 isCurrent || isComplete ? "text-auth-text" : "text-auth-dark-muted",
               ].join(" ")}
             >
