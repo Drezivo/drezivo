@@ -11,6 +11,7 @@ const clerk = vi.hoisted(() => ({
 }));
 
 const api = vi.hoisted(() => ({
+  abandonOnboarding: vi.fn(),
   createOnboarding: vi.fn(),
   getCurrentOnboarding: vi.fn(),
 }));
@@ -146,7 +147,7 @@ describe("OnboardingEntry", () => {
     expect(screen.getByRole("alert")).not.toHaveTextContent("provider secret details");
   });
 
-  it("renders the saved incomplete onboarding state", async () => {
+  it("renders continue and restart actions for saved incomplete onboarding", async () => {
     api.getCurrentOnboarding.mockResolvedValue({
       data: {
         ...noOnboardingContext,
@@ -170,8 +171,52 @@ describe("OnboardingEntry", () => {
     expect(
       await screen.findByRole("heading", { name: "Continue setting up Luna Rentals" })
     ).toBeVisible();
-    expect(
-      screen.getByText("Your organization is saved. Plan selection will be the next step.")
-    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Continue setup" })).toHaveAttribute(
+      "href",
+      "/onboarding/plan"
+    );
+    expect(screen.getByRole("button", { name: "Restart setup" })).toBeVisible();
+  });
+
+  it("confirms restart, abandons the unfinished onboarding once, and returns to organization setup", async () => {
+    const incompleteContext = {
+      ...noOnboardingContext,
+      onboarding: {
+        id: "onboarding_123",
+        clerk_org_id: "org_123",
+        organization_name: "Luna Rentals",
+        requested_slug: null,
+        status: "incomplete",
+        selected_plan_code: null,
+        is_trial_eligible: true,
+        created_at: "2026-09-19T00:00:00.000Z",
+        updated_at: "2026-09-19T00:00:00.000Z",
+      },
+    };
+    api.getCurrentOnboarding
+      .mockResolvedValueOnce({ data: incompleteContext, requestId: "req-current" })
+      .mockResolvedValueOnce({ data: noOnboardingContext, requestId: "req-current-after-restart" });
+    api.abandonOnboarding.mockResolvedValue({
+      data: { ...incompleteContext.onboarding, status: "abandoned" },
+      requestId: "req-abandon",
+    });
+
+    renderEntry();
+    fireEvent.click(await screen.findByRole("button", { name: "Restart setup" }));
+
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(screen.getByText(/current setup for Luna Rentals will be archived/i)).toBeVisible();
+
+    const restartButtons = screen.getAllByRole("button", { name: "Restart setup" });
+    fireEvent.click(restartButtons[restartButtons.length - 1]!);
+    fireEvent.click(restartButtons[restartButtons.length - 1]!);
+
+    await waitFor(() => expect(api.abandonOnboarding).toHaveBeenCalledTimes(1));
+    expect(api.abandonOnboarding).toHaveBeenCalledWith(
+      "onboarding_123",
+      { reason_code: "not_now" },
+      expect.any(String)
+    );
+    expect(await screen.findByRole("heading", { name: "Set up your business" })).toBeVisible();
   });
 });

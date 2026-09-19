@@ -1,11 +1,13 @@
 "use client";
 
 import {
+  abandonOwnerOnboardingRequest,
   apiEnvelope,
   chooseOnboardingPlanRequest,
   createOwnerOnboardingRequest,
   onboardingActorContext,
   organizationOnboarding,
+  type AbandonOwnerOnboardingRequest,
   type ChooseOnboardingPlanRequest,
   type CreateOwnerOnboardingRequest,
   type OnboardingActorContext,
@@ -65,6 +67,19 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         idempotencyKey,
         method: "POST",
         path: `/api/v1/onboarding/${encodeURIComponent(onboardingId)}/plan`,
+        responseSchema: apiEnvelope(organizationOnboarding),
+      }),
+    abandonOnboarding: (
+      onboardingId: string,
+      input: AbandonOwnerOnboardingRequest,
+      idempotencyKey: string
+    ) =>
+      request<OrganizationOnboarding>({
+        getToken,
+        body: abandonOwnerOnboardingRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/onboarding/${encodeURIComponent(onboardingId)}/abandon`,
         responseSchema: apiEnvelope(organizationOnboarding),
       }),
   };
