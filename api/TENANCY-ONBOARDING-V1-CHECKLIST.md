@@ -1,7 +1,7 @@
 # Tenancy, Owner Onboarding, Clerk, Memberships, and Billing V1 Checklist
 
 **Status:** Phase 0 complete; Phase 1 onward remain staged and unimplemented
-**Canonical decision record:** [Second Brain architecture note](../Drezivo-Second-Brain/02-Architecture/Tenancy%2C%20Onboarding%2C%20Clerk%2C%20Memberships%2C%20and%20Billing%20Foundation.md)
+**Canonical decision record:** [Second Brain architecture note](../docs/second-brain/02-Architecture/Tenancy%2C%20Onboarding%2C%20Clerk%2C%20Memberships%2C%20and%20Billing%20Foundation.md)
 **Canonical specifications to align first:** [PRD](../docs/product/Drezivo-PRD.md),
 [TRD](../docs/architecture/Drezivo-TRD.md), [Data Model](../docs/architecture/Drezivo-Data-Model.md),
 and [ERD](../docs/architecture/Drezivo-ERD.dbml)
