@@ -1,4 +1,4 @@
-import { jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 import { idColumn, timestamps } from './_shared.js';
 
@@ -23,7 +23,10 @@ export const auditEvent = pgTable('audit_event', {
   redactedSummary: jsonb('redacted_summary').$type<Record<string, unknown>>().notNull(),
   requestId: text('request_id').notNull(),
   ...timestamps,
-});
+}, (table) => [
+  index('audit_event_tenant_action_created_idx').on(table.tenantId, table.action, table.createdAt),
+  index('audit_event_tenant_entity_created_idx').on(table.tenantId, table.entityType, table.createdAt),
+]);
 
 export const supportGrant = pgTable('support_grant', {
   ...idColumn,
@@ -36,4 +39,4 @@ export const supportGrant = pgTable('support_grant', {
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
   ...timestamps,
-});
+}, (table) => [index('support_grant_tenant_subject_created_idx').on(table.tenantId, table.operatorSubject, table.createdAt)]);
