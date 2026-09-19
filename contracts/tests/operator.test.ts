@@ -13,8 +13,8 @@ describe('operator contracts', () => {
   });
 
   it('requires a bounded grant and validates its time window', () => {
-    expect(createSupportGrantRequest.safeParse({ tenant_id: tenant, permission_codes: ['tenant.read'], reason: 'support reason', starts_at: '2026-01-01T00:00:00Z', expires_at: '2026-01-02T00:00:00Z' }).success).toBe(true);
-    expect(createSupportGrantRequest.safeParse({ tenant_id: tenant, permission_codes: [], reason: 'support reason', starts_at: '2026-01-02T00:00:00Z', expires_at: '2026-01-01T00:00:00Z' }).success).toBe(false);
+    expect(createSupportGrantRequest.safeParse({ tenant_id: tenant, permission_codes: ['tenant.read'], reason: 'support reason', starts_at: '2026-01-01T00:00:00Z', expires_at: '2026-01-02T00:00:00Z', operator_subject: 'operator-1' }).success).toBe(true);
+    expect(createSupportGrantRequest.safeParse({ tenant_id: tenant, permission_codes: [], reason: 'support reason', starts_at: '2026-01-02T00:00:00Z', expires_at: '2026-01-01T00:00:00Z', operator_subject: 'operator-1' }).success).toBe(false);
   });
 
   it('rejects unknown retry fields and malformed ids', () => {

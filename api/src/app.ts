@@ -12,6 +12,7 @@ import { onboardingRouter } from './modules/onboarding/onboarding.routes.js';
 import { tenancyRouter } from './modules/tenancy/tenancy.routes.js';
 import { billingRouter } from './modules/billing/billing.routes.js';
 import { membershipInvitationsRouter } from './modules/membership-invitations/membership-invitations.routes.js';
+import { createInternalOperatorRouter, type InternalOperatorRouteOptions } from './modules/internal-operator/index.js';
 import { logger } from './shared/logger.js';
 import { sendError } from './shared/response.js';
 import { ValidationError } from './shared/errors.js';
@@ -34,7 +35,11 @@ const pinoHttp = pinoHttpExport as unknown as (
  *   9. errorHandler     — must be LAST; Express only treats a 4-arg handler as error middleware
  *                          when it is registered after every route that can throw.
  */
-export function createApp(): Express {
+export interface AppOptions {
+  internalOperator?: InternalOperatorRouteOptions;
+}
+
+export function createApp(options: AppOptions = {}): Express {
   const app = express();
 
   app.disable('x-powered-by');
@@ -80,6 +85,10 @@ export function createApp(): Express {
   app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'ok' });
   });
+
+  // The operator boundary is always present, but remains fail-closed until the host injects
+  // service authentication, server-side authorization, and tenant-safe command handlers.
+  app.use('/internal/operator/v1', createInternalOperatorRouter(options.internalOperator));
 
   // Both routers declare their OWN full paths (e.g. `/public/stores/:slug/holds` lives in
   // reservations.routes.ts, not storefront.routes.ts, even though it is nested under

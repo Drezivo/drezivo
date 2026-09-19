@@ -102,14 +102,15 @@ open until this evidence is reviewed and recorded.
 | `GET /public/stores/{slug}` | `501 NOT_IMPLEMENTED` | No storefront data or availability claim exists |
 | `GET /public/stores/{slug}/availability` | `501 NOT_IMPLEMENTED` | No capacity guarantee exists |
 | `POST /public/stores/{slug}/holds` | `501 NOT_IMPLEMENTED` | No reservation, money, or outbox effect exists |
+| `GET /internal/operator/v1/support-activity` and operator commands | Mounted fail-closed boundary; requires injected service authentication, server authorization, tenant-safe service, and validated projections | Route contract, permission checks, subject/tenant binding, idempotency-key format, and safe error mapping are tested; persistence and real service wiring remain gated |
 
 ## Gap register and verification gates
 
 | ID | Gap / unknown | Owner | Verification gate before claiming readiness |
 | --- | --- | --- | --- |
 | G-01 | Exact permission matrix for every staff role, branch grant, subscription restriction, and support capability is incomplete | API + product/security | Route-by-route matrix reviewed; positive and cross-tenant/cross-branch negative tests pass |
-| G-02 | Support-grant issuance, use, expiry, revocation, emergency review, and private-evidence capability are not fully wired | API + operations | End-to-end grant lifecycle and immutable audit evidence reviewed |
-| G-03 | Retry/replay command authorization, UI/CLI surface, rate limits, and reconciliation workflow are unspecified | Operations + API | Runbook exercised against leased, dead, duplicate, and ambiguous provider jobs |
+| G-02 | Support-grant issuance, use, expiry, revocation, emergency review, and private-evidence capability are not fully wired; the HTTP boundary is present and fail-closed | API + operations | End-to-end grant lifecycle and immutable audit evidence reviewed |
+| G-03 | Retry/replay command authorization and wire contract are bounded at the HTTP boundary, but persistence, state eligibility, rate limits, and reconciliation workflow remain unspecified | Operations + API | Runbook exercised against leased, dead, duplicate, and ambiguous provider jobs |
 | G-04 | Repository scope enforcement and RLS behavior on a real supported Postgres/Neon configuration are unverified | API + database owner | Pooled-connection reuse, rollback, RLS, and tenant escape tests pass |
 | G-05 | Concurrent double-fire coverage for each new mutation is incomplete while routes remain scaffolded | API + contracts | Sequential and `Promise.all` duplicate tests prove one effect and stable replay/409 |
 | G-06 | Audit retention, access review, redaction tests, and alert ownership still need approved values | Security + operations | Retention schedule, redaction test, alert route, and incident drill recorded |

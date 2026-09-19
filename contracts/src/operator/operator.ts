@@ -49,6 +49,7 @@ export const createSupportGrantRequest = z.object({
   reason: safeText(500),
   starts_at: isoInstant,
   expires_at: isoInstant,
+  operator_subject: safeText(200),
 }).strict().refine((value) => value.starts_at < value.expires_at, {
   message: 'starts_at must be before expires_at', path: ['expires_at'],
 });
@@ -69,7 +70,7 @@ export const supportGrant = z.object({
 }).strict();
 export type SupportGrant = z.infer<typeof supportGrant>;
 
-export const revokeSupportGrantRequest = z.object({ reason: safeText(500) }).strict();
+export const revokeSupportGrantRequest = z.object({ operator_subject: safeText(200) }).strict();
 export type RevokeSupportGrantRequest = z.infer<typeof revokeSupportGrantRequest>;
 
 export const retryCommandRequest = z.object({
@@ -78,8 +79,14 @@ export const retryCommandRequest = z.object({
 }).strict();
 export type RetryCommandRequest = z.infer<typeof retryCommandRequest>;
 
-export const supportGrantResponse = z.object({ grant_id: supportGrantId, tenant_id: tenantId, expires_at: isoInstant }).strict();
-export const retryCommandResponse = z.object({ commandId: outboxEventId, status: z.literal('queued') }).strict();
+export const supportGrantResponse = supportGrant;
+export const retryCommandResponse = z.object({
+  command_kind: z.enum(['job.retry', 'notification.retry']),
+  resource_id: outboxEventId,
+  status: z.literal('accepted'),
+  request_id: safeText(255),
+  accepted_at: isoInstant,
+}).strict();
 
 export const operatorCommandResponse = z.object({
   command_id: outboxEventId,
