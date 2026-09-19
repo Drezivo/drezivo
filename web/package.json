@@ -32,7 +32,7 @@
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.0.1",
     "@testing-library/user-event": "^14.5.2",
-    "@types/node": "^26.5.1",
+    "@types/node": "^26.6.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.1.1",
@@ -46,7 +46,7 @@
     "prettier": "^3.3.3",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.1"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
