@@ -6,6 +6,7 @@ import { ValidationError } from '../../shared/errors.js';
 import {
   abandonOwnerOnboardingRequest,
   bootstrapTenantRequest,
+  chooseOnboardingPlanRequest,
   createOwnerOnboardingRequest,
   ownerOnboardingIdParams,
 } from './onboarding.schemas.js';
@@ -46,6 +47,22 @@ export const validateAbandonOwnerOnboarding: RequestHandler = (req, _res, next):
   const body = abandonOwnerOnboardingRequest.safeParse(req.body);
   if (!body.success) {
     next(new ValidationError('Abandon request is invalid.'));
+    return;
+  }
+  req.params = params.data;
+  req.body = body.data;
+  next();
+};
+
+export const validateChooseOnboardingPlan: RequestHandler = (req, _res, next): void => {
+  const params = ownerOnboardingIdParams.safeParse(req.params);
+  if (!params.success) {
+    next(new ValidationError('Onboarding ID is invalid.'));
+    return;
+  }
+  const body = chooseOnboardingPlanRequest.safeParse(req.body);
+  if (!body.success) {
+    next(new ValidationError('Plan selection request is invalid.'));
     return;
   }
   req.params = params.data;

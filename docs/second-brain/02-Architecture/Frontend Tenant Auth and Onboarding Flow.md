@@ -140,15 +140,12 @@ The business flow is: choose Starter, Professional, or Business, then bootstrap 
 limits are authoritative in the backend: 75/250/1,000 active physical assets and 1/3/10 Front
 Desk seats. The browser does not send prices or limits.
 
-Important current integration gap: the `chooseOnboardingPlan` contract and repository behavior
-exist, but there is not yet a public onboarding plan-selection controller/route. Do not invent an
-endpoint or call `POST /api/v1/subscription/plan` for this step; that route requires an existing
-tenant and is only for a trial subscription after bootstrap.
-
-Before wiring the plan-selection screen to production, backend work must expose the onboarding
-command (for example, a route scoped to the onboarding ID with `{ "plan_code": ... }` and an
-`Idempotency-Key`) and register it in OpenAPI. Until that command exists, the frontend can build
-the screen and state model but should leave the API call behind an explicit integration task.
+The pre-tenant plan-selection command is `POST /api/v1/onboarding/:onboardingId/plan` with the
+strict body `{ "plan_code": "starter" | "professional" | "business" }` and a mandatory
+`Idempotency-Key`. The command is account-scoped, validates the shared contract at the HTTP
+boundary, persists only the selected plan code, and is registered in OpenAPI. Do not call
+`POST /api/v1/subscription/plan` for this step; that route requires an existing tenant and is only
+for a trial subscription after bootstrap.
 
 The intended semantics are already defined:
 
@@ -263,9 +260,9 @@ pre-tenant onboarding API.
 ## Backend follow-up before frontend wiring is complete
 
 The core owner path is implemented through account creation, Clerk organization creation,
-resumable onboarding, tenant bootstrap, workspace discovery, and actor context. Before the plan
-selection screen can be connected end-to-end, expose the missing onboarding plan-selection command
-and add its route/OpenAPI/integration evidence.
+resumable onboarding, pre-tenant plan selection, tenant bootstrap, workspace discovery, and actor
+context. The plan-selection command is now exposed and documented; remaining work below is focused
+on later membership, operator, reconciliation, and launch-readiness gates.
 
 The remaining backend work does not block building the owner sign-up shell, but it does affect
 production completion:

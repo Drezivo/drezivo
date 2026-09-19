@@ -1093,6 +1093,69 @@ paths:
                   - success
                   - error
                   - request_id
+  /onboarding/{onboardingId}/plan:
+    post:
+      tags:
+        - onboarding
+      summary: Persist the selected plan for an unfinished owner onboarding.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: onboardingId
+          in: path
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChooseOnboardingPlanRequest'
+      responses:
+        "200":
+          description: Plan selection persisted on the onboarding journey.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: '#/components/schemas/OrganizationOnboarding'
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "404":
+          description: The onboarding was not found for this account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "409":
+          description: The onboarding is not eligible for plan selection or the key is in progress.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "429":
+          description: Owner onboarding plan-selection rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /onboarding/{onboardingId}/bootstrap:
     post:
       tags:

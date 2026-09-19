@@ -157,6 +157,27 @@ registry.registerPath({
 
 registry.registerPath({
   method: 'post',
+  path: '/onboarding/{onboardingId}/plan',
+  tags: ['onboarding'],
+  summary: 'Persist the selected plan for an unfinished owner onboarding.',
+  request: {
+    params: z.object({ onboardingId: z.string().uuid() }),
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: chooseOnboardingPlanRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Plan selection persisted on the onboarding journey.',
+      content: { 'application/json': { schema: successEnvelope(organizationOnboarding) } },
+    },
+    404: jsonError('The onboarding was not found for this account.'),
+    409: jsonError('The onboarding is not eligible for plan selection or the key is in progress.'),
+    429: jsonError('Owner onboarding plan-selection rate limit exceeded.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
   path: '/onboarding/{onboardingId}/bootstrap',
   tags: ['onboarding'],
   summary: 'Atomically provision the owner tenant from an eligible onboarding.',
