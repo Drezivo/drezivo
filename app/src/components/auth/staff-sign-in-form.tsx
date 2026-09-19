@@ -105,7 +105,7 @@ export function StaffSignInForm({ initialFlow = "sign-in" }: StaffSignInFormProp
 
   async function resolveSignUpAttempt(attempt: NonNullable<typeof signUp>) {
     if (attempt.status === "complete" && attempt.createdSessionId && setActive) {
-      await setActive({ session: attempt.createdSessionId, redirectUrl: "/" });
+      await setActive({ session: attempt.createdSessionId, redirectUrl: "/onboarding" });
       return;
     }
 
@@ -247,7 +247,7 @@ export function StaffSignInForm({ initialFlow = "sign-in" }: StaffSignInFormProp
         await signUp?.authenticateWithRedirect({
           strategy: "oauth_google",
           redirectUrl: "/sso-callback",
-          redirectUrlComplete: "/",
+          redirectUrlComplete: "/onboarding",
         });
       } else {
         await signIn.authenticateWithRedirect({
