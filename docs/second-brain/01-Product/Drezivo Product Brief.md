@@ -2,7 +2,7 @@
 title: Drezivo Product Brief
 type: product
 status: current
-source: ../Drezivo-PRD.md
+source: ../../product/Drezivo-PRD.md
 updated: 2026-09-16
 tags: [drezivo, product, prd]
 ---
@@ -17,5 +17,5 @@ V1 focuses on one branch, catalogue and physical garments, guest single-garment 
 holds, manual cash or QR evidence review, pickup, return inspection, cleaning readiness, deposits,
 exports, and audit. Branch expansion and enterprise controls arrive incrementally.
 
-The [current PRD](../../Drezivo-PRD.md) is authoritative for product scope. This note is a linked
+The [current PRD](../../product/Drezivo-PRD.md) is authoritative for product scope. This note is a linked
 orientation summary, not a replacement.

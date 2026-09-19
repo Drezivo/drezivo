@@ -3,7 +3,7 @@ title: Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation
 type: architecture
 status: accepted-for-staged-implementation
 owner: Drezivo platform team
-source: "Accepted product decisions, 2026-09-16; [[02-Architecture/Drezivo Architecture]]; [TRD](../../docs/architecture/Drezivo-TRD.md); [Data Model](../../docs/architecture/Drezivo-Data-Model.md); [ERD](../../docs/architecture/Drezivo-ERD.dbml)"
+source: "Accepted product decisions, 2026-09-16; [[02-Architecture/Drezivo Architecture]]; [TRD](../../architecture/Drezivo-TRD.md); [Data Model](../../architecture/Drezivo-Data-Model.md); [ERD](../../architecture/Drezivo-ERD.dbml)"
 updated: 2026-09-16
 tags:
   [drezivo, architecture, tenancy, onboarding, clerk, memberships, billing, v1]
@@ -18,9 +18,9 @@ person, Clerk organization, Drezivo tenant, subscription, and Front Desk members
 existence, and what happens when any of them fails or changes.
 
 It is an implementation map, not a replacement for canonical specifications. The
-[PRD](../../docs/product/Drezivo-PRD.md), [TRD](../../docs/architecture/Drezivo-TRD.md),
-[Data Model](../../docs/architecture/Drezivo-Data-Model.md), and
-[ERD](../../docs/architecture/Drezivo-ERD.dbml) remain authoritative. The first implementation
+[PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md),
+[Data Model](../../architecture/Drezivo-Data-Model.md), and
+[ERD](../../architecture/Drezivo-ERD.dbml) remain authoritative. The first implementation
 slice must align them with this decision before code changes behavior.
 
 This vault contains no credentials, customer records, payment evidence, or production identifiers.
@@ -457,7 +457,7 @@ intents atomically; TBF-041 owns provider dispatch and this prerequisite must no
 ## Implementation sequence and evidence
 
 The staged work is tracked in the
-[backend checklist](../../api/TENANCY-ONBOARDING-V1-CHECKLIST.md). It must not pull unrelated
+[backend checklist](../../../api/TENANCY-ONBOARDING-V1-CHECKLIST.md). It must not pull unrelated
 product modules into scope.
 
 1. Align canonical documents and add contracts.

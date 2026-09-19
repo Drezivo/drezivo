@@ -14,4 +14,4 @@ tags: [drezivo, decisions, adr]
 - [[Obsidian Second Brain]] - project-only linked notes, Canvas, and Bases with no secrets.
 
 Each decision records context, choice, consequences, and supersession. The accepted ADRs in
-`../../docs/decisions/` remain the engineering authority.
+`../../decisions/` remain the engineering authority.

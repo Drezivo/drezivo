@@ -10,9 +10,9 @@ gates.
 
 Source priority for every decision, in order:
 
-1. [../Drezivo-PRD.md](../Drezivo-PRD.md) — Product Requirements Document v2.0 (revised)
-2. [../Drezivo-TRD.md](../Drezivo-TRD.md) — Technical Requirements Document rev 1.1
-3. [../Drezivo-Data-Model.md](../Drezivo-Data-Model.md) and [../Drezivo-ERD.dbml](../Drezivo-ERD.dbml) — logical schema and entity relationships
+1. [../docs/product/Drezivo-PRD.md](../docs/product/Drezivo-PRD.md) — Product Requirements Document v2.0 (revised)
+2. [../docs/architecture/Drezivo-TRD.md](../docs/architecture/Drezivo-TRD.md) — Technical Requirements Document rev 1.1
+3. [../docs/architecture/Drezivo-Data-Model.md](../docs/architecture/Drezivo-Data-Model.md) and [../docs/architecture/Drezivo-ERD.dbml](../docs/architecture/Drezivo-ERD.dbml) — logical schema and entity relationships
 4. `../contracts/src/` — `@drezivo/contracts` 0.2.0 (the wire contract `api` implements and `app`/`web` consume)
 5. The existing scaffold in `src/` and `src/db/migrations/`
 

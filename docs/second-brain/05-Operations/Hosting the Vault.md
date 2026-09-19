@@ -11,12 +11,12 @@ tags: [drezivo, operations, security]
 ## Recommended shared setup
 
 Use **Obsidian Sync** with a private vault for the product team. Create one shared vault from
-the `Drezivo-Second-Brain` folder, enable end-to-end encryption, and invite only named team
+the `docs/second-brain` folder, enable end-to-end encryption, and invite only named team
 members. Sync is the simplest way to keep graph, Canvas, and Bases views consistent across devices.
 
 ### Owner setup
 
-1. Install Obsidian and choose **Open folder as vault** for `Drezivo-Second-Brain/`.
+1. Install Obsidian and choose **Open folder as vault** for `docs/second-brain/`.
 2. Confirm `00-Home/Drezivo Home.md`, the Canvas, and `Drezivo Knowledge Base.base` open.
 3. Subscribe to Obsidian Sync, create a private remote vault named `Drezivo Second Brain`, and
    enable end-to-end encryption. Store the recovery password in the team password manager.
@@ -40,7 +40,7 @@ small commit per decision or topic.
 ### Private Git setup
 
 1. Create a private `drezivo-second-brain` repository in the renamed GitHub organization.
-2. Copy only the contents of `Drezivo-Second-Brain/` into that repository; keep the vault as its
+2. Copy only the contents of `docs/second-brain/` into that repository; keep the vault as its
    repository root.
 3. Enable secret scanning and review the first commit for credentials, customer data, and local
    absolute paths.
@@ -62,7 +62,7 @@ the conditions that should trigger a revisit.
 
 - Never place API keys, Clerk tokens, database URLs, payment data, or customer PII in the vault.
 - Link to source code and external research; copy only durable conclusions and cite the source/date.
-- Treat `Drezivo-PRD.md`, `Drezivo-TRD.md`, and the root architecture guide as authoritative.
+- Treat `docs/product/Drezivo-PRD.md`, `docs/architecture/Drezivo-TRD.md`, and the root architecture guide as authoritative.
 - Move superseded notes to `99-Archive` and set `status: archived`; do not delete decision history.
 
 ## Update loop
