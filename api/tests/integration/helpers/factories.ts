@@ -19,6 +19,10 @@ export interface TestTenant {
   clerkOrgId: string;
 }
 
+export function testKey(label: string): string {
+  return `test-${label}`;
+}
+
 export async function createTestTenant(overrides?: { clerkOrgId?: string }): Promise<TestTenant> {
   const suffix = randomUUID().slice(0, 8);
   const clerkOrgId = overrides?.clerkOrgId ?? `org_test_${suffix}`;

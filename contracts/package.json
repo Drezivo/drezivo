@@ -34,7 +34,7 @@
     "url": "git+https://github.com/Drezivoo/contracts.git"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && tsc -p tsconfig.build.json",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

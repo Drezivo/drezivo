@@ -52,7 +52,7 @@ describe('verified staff authentication', () => {
     const response = await request(buildApp()).get('/owner');
 
     expect(response.status).toBe(403);
-    expect(response.body.error.code).toBe('FORBIDDEN');
+    expect((response.body as { error: { code: string } }).error.code).toBe('FORBIDDEN');
   });
 
   it('fails closed when Clerk verification is unavailable', async () => {

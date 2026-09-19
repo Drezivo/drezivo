@@ -3,8 +3,8 @@ import type { Request, Response } from 'express';
 import { sendError } from '../../shared/response.js';
 import { createPublicHold } from './reservations.service.js';
 
-export async function createPublicHoldController(req: Request, res: Response): Promise<void> {
-  await createPublicHold();
+export function createPublicHoldController(req: Request, res: Response): void {
+  createPublicHold();
   sendError(
     res,
     501,

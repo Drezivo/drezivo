@@ -30,7 +30,7 @@ describe('TBF-033 subscription lifecycle and gates', async () => {
     reconcileTenantLifecycle,
   } = await import('../../src/modules/billing/billing.service.js');
   const { resolveActorContext } = await import('../../src/modules/tenancy/tenancy.repository.js');
-  const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
+  const { createTestMembership, createTestTenant, testKey } = await import('./helpers/factories.js');
 
   beforeAll(async () => {
     await migrateTestDatabase(adminUrl);
@@ -181,7 +181,7 @@ describe('TBF-033 subscription lifecycle and gates', async () => {
       membershipId: ownerMembershipId,
       principalId: ownerId,
       requestId: 'req-tbf033-capacity',
-      idempotencyKey: 'tbf033-capacity-key',
+      idempotencyKey: testKey('tbf033-capacity-key'),
       request: { plan_code: 'starter' },
     });
 
