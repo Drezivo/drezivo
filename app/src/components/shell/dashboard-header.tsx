@@ -2,6 +2,7 @@
 
 import { useClerk } from "@clerk/nextjs";
 import { Bell, ChevronDown, LogOut, Moon, Settings, Sun, UserRound } from "lucide-react";
+import { usePathname } from "next/navigation";
 
 import type { DashboardTheme } from "@/components/shell/dashboard-shell";
 
@@ -26,6 +27,18 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
+function dashboardPageLabel(pathname: string) {
+  if (pathname.startsWith("/reservations")) return "Reservations";
+  if (pathname.startsWith("/calendar")) return "Calendar";
+  if (pathname.startsWith("/inventory")) return "Clothing / Inventory";
+  if (pathname.startsWith("/customers")) return "Customers";
+  if (pathname.startsWith("/fittings")) return "Fittings";
+  if (pathname.startsWith("/payments")) return "Payments";
+  if (pathname.startsWith("/storefront")) return "Storefront";
+  if (pathname.startsWith("/settings")) return "Settings";
+  return "Dashboard";
+}
+
 export function DashboardHeader({
   onToggleTheme,
   theme,
@@ -34,7 +47,9 @@ export function DashboardHeader({
   theme: DashboardTheme;
 }) {
   const { signOut } = useClerk();
+  const pathname = usePathname();
   const isDark = theme === "dark";
+  const pageLabel = dashboardPageLabel(pathname);
 
   return (
     <header className="flex min-h-[72px] items-center justify-between gap-2 border-b border-dashboard-border bg-dashboard-surface px-4 py-4 sm:gap-6 sm:px-6">
@@ -48,7 +63,7 @@ export function DashboardHeader({
               </BreadcrumbItem>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbPage>Dashboard</BreadcrumbPage>
+                <BreadcrumbPage>{pageLabel}</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
