@@ -85,3 +85,12 @@ export type ExportJobId = z.infer<typeof exportJobId>;
 
 export const guestAccessTokenId = idSchema('GuestAccessTokenId');
 export type GuestAccessTokenId = z.infer<typeof guestAccessTokenId>;
+
+export const supportGrantId = idSchema('SupportGrantId');
+export type SupportGrantId = z.infer<typeof supportGrantId>;
+
+export const auditEventId = idSchema('AuditEventId');
+export type AuditEventId = z.infer<typeof auditEventId>;
+
+export const outboxEventId = idSchema('OutboxEventId');
+export type OutboxEventId = z.infer<typeof outboxEventId>;

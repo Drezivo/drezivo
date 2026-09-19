@@ -1,4 +1,4 @@
-import { integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 import { idColumn, timestamps } from './_shared.js';
 
@@ -48,7 +48,10 @@ export const outboxEvent = pgTable(
     safeLastError: text('safe_last_error'),
     ...timestamps,
   },
-  (table) => [uniqueIndex('outbox_event_tenant_dedupe_key_key').on(table.tenantId, table.dedupeKey)],
+  (table) => [
+    uniqueIndex('outbox_event_tenant_dedupe_key_key').on(table.tenantId, table.dedupeKey),
+    index('outbox_event_tenant_status_available_idx').on(table.tenantId, table.status, table.availableAt),
+  ],
 );
 
 /** Global (pre-tenant) table — a provider webhook is authenticated by signature, not by a tenant a client claims. */

@@ -13,6 +13,7 @@ export * from './finance';
 export * from './files';
 export * from './tenancy';
 export * from './guest';
+export * from './operator';
 
 /**
  * The exact `@drezivo/contracts` version this build was compiled against.
