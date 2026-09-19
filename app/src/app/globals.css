@@ -77,7 +77,8 @@ body {
 .auth-layout {
   position: relative;
   min-height: 100svh;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--color-auth-night);
   color-scheme: dark;
 }
