@@ -7,6 +7,7 @@ export function OnboardingStatusPage() {
       backHref="/sign-up"
       backAriaLabel="Back to sign up"
       panelAriaLabel="Onboarding status"
+      lockViewport
     >
       <OnboardingStatusPanel />
     </AuthSplitLayout>

@@ -330,34 +330,36 @@ export function OnboardingPlan() {
           </p>
         </div>
 
-        <form className="mt-8" onSubmit={handlePlanSubmit}>
+        <form className="mt-7" onSubmit={handlePlanSubmit}>
           <fieldset>
             <legend className="sr-only">Drezivo subscription plan</legend>
-            <div className="grid gap-4 xl:grid-cols-3">
-              {PLAN_OPTIONS.map((option) => (
-                <PlanCard
-                  key={option.code}
-                  plan={option}
-                  selected={selectedPlan === option.code}
-                  disabled={planSubmit.isSubmitting}
-                  onSelect={() => handlePlanChange(option.code)}
-                />
-              ))}
+            <div className="mx-auto max-w-[52rem]">
+              <div className="grid gap-3 xl:grid-cols-3">
+                {PLAN_OPTIONS.map((option) => (
+                  <PlanCard
+                    key={option.code}
+                    plan={option}
+                    selected={selectedPlan === option.code}
+                    disabled={planSubmit.isSubmitting}
+                    onSelect={() => handlePlanChange(option.code)}
+                  />
+                ))}
+              </div>
             </div>
           </fieldset>
 
-          <p className="mt-6 text-center text-xs leading-5 text-auth-dark-muted sm:text-sm">
+          <p className="mt-4 text-center text-xs leading-5 text-auth-dark-muted sm:text-sm">
             All plans include core privacy, roles, exports, and safe financial lifecycle tools.
           </p>
 
           {planError ? <InlineError error={planError} /> : null}
 
-          <button type="submit" disabled={planSubmit.isSubmitting} className={`${primaryButtonClass} mt-6`}>
+          <button type="submit" disabled={planSubmit.isSubmitting} className={`${primaryButtonClass} mt-5`}>
             {planSubmit.isSubmitting ? "Saving plan…" : "Continue"}
           </button>
         </form>
 
-        <div className="mt-6 flex items-center gap-5">
+        <div className="mt-5 flex items-center gap-5">
           <span aria-hidden="true" className="h-px flex-1 bg-auth-line" />
           <button
             type="button"
@@ -400,22 +402,22 @@ function LaunchReview({
 
   return (
     <PlanFrame>
-      <section aria-labelledby="launch-heading" className="mx-auto w-full max-w-4xl py-8 sm:py-10">
+      <section aria-labelledby="launch-heading" className="mx-auto w-full max-w-[52rem] py-4 sm:py-5">
         <BrandHeader />
-        <div className="mx-auto mt-9 max-w-2xl">
+        <div className="mx-auto mt-6 max-w-xl">
           <OnboardingProgress current="launch" />
         </div>
 
-        <div className="mt-9 text-center">
-          <h1 id="launch-heading" className="font-display text-4xl leading-tight text-auth-text sm:text-5xl">
+        <div className="mt-6 text-center">
+          <h1 id="launch-heading" className="font-display text-3xl leading-tight text-auth-text sm:text-4xl">
             Review and launch
           </h1>
-          <p className="mt-3 text-sm text-auth-dark-muted sm:text-base">
+          <p className="mt-2 text-sm text-auth-dark-muted">
             Check your setup before creating your workspace.
           </p>
         </div>
 
-        <div className="mt-7 rounded-xl border border-auth-line px-5 sm:px-8">
+        <div className="mx-auto mt-5 max-w-[48rem] rounded-xl border border-auth-line px-4 sm:px-6">
           <ReviewRow label="Organization">
             <div className="min-w-0 flex-1">
               <p className="font-display text-xl text-auth-text">{onboarding.organization_name}</p>
@@ -451,7 +453,7 @@ function LaunchReview({
           </ReviewRow>
 
           <ReviewRow label="When you launch" last>
-            <div className="space-y-3 text-sm text-auth-dark-muted sm:text-base">
+            <div className="space-y-2.5 text-sm text-auth-dark-muted">
               <LaunchEffect>Create your workspace</LaunchEffect>
               <LaunchEffect>Start your 7-day trial</LaunchEffect>
               <LaunchEffect>Continue to your dashboard</LaunchEffect>
@@ -463,7 +465,7 @@ function LaunchReview({
 
         <Dialog.Root open={launchOpen} onOpenChange={onLaunchOpenChange}>
           <Dialog.Trigger asChild>
-            <button type="button" className={`${launchButtonClass} mt-6`}>
+            <button type="button" className={`${launchButtonClass} mx-auto mt-4 max-w-[48rem]`}>
               Launch Workspace <ArrowRight aria-hidden="true" className="h-5 w-5" />
             </button>
           </Dialog.Trigger>
@@ -501,11 +503,11 @@ function LaunchReview({
           </Dialog.Portal>
         </Dialog.Root>
 
-        <p className="mt-4 text-center text-xs text-auth-dark-muted sm:text-sm">
+        <p className="mt-3 text-center text-xs text-auth-dark-muted">
           Drezivo will load your workspace after launch.
         </p>
 
-        <div className="mt-6 flex items-center gap-5">
+        <div className="mx-auto mt-4 flex max-w-[48rem] items-center gap-5">
           <span aria-hidden="true" className="h-px flex-1 bg-auth-line" />
           <button type="button" onClick={onChangePlan} className="text-sm font-medium text-auth-text hover:text-auth-gold">
             Back
@@ -527,7 +529,7 @@ function ReviewRow({
   last?: boolean;
 }) {
   return (
-    <div className={`grid gap-3 py-6 sm:grid-cols-[9rem_1fr] ${last ? "" : "border-b border-auth-line"}`}>
+    <div className={`grid gap-3 py-4 sm:grid-cols-[7.5rem_1fr] ${last ? "" : "border-b border-auth-line"}`}>
       <p className="text-sm font-medium text-auth-dark-muted sm:text-base">{label}</p>
       <div className="flex min-w-0 items-start justify-between gap-4">{children}</div>
     </div>
@@ -583,7 +585,7 @@ function PlanCard({
   return (
     <label
       className={[
-        "relative flex min-h-64 cursor-pointer flex-col rounded-xl border p-5 transition",
+        "relative flex min-h-56 cursor-pointer flex-col rounded-xl border p-4 transition",
         selected
           ? "border-auth-gold bg-auth-gold/10 shadow-[0_0_0_1px_var(--color-auth-gold)]"
           : "border-auth-line bg-auth-panel/40 hover:border-auth-gold/60",
@@ -603,30 +605,30 @@ function PlanCard({
       <span
         aria-hidden="true"
         className={[
-          "absolute right-5 top-5 flex h-5 w-5 items-center justify-center rounded-full border",
+          "absolute right-4 top-4 flex h-4.5 w-4.5 items-center justify-center rounded-full border",
           selected ? "border-auth-gold" : "border-auth-dark-muted",
         ].join(" ")}
       >
-        {selected ? <span className="h-2.5 w-2.5 rounded-full bg-auth-text" /> : null}
+        {selected ? <span className="h-2 w-2 rounded-full bg-auth-text" /> : null}
       </span>
 
-      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-auth-hover text-auth-gold">
-        <Icon aria-hidden="true" className="h-6 w-6" strokeWidth={1.7} />
+      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-auth-hover text-auth-gold">
+        <Icon aria-hidden="true" className="h-5 w-5" strokeWidth={1.7} />
       </span>
-      <span className="mt-4 font-display text-2xl text-auth-text">{plan.name}</span>
-      <span className="mt-1 font-display text-2xl text-auth-gold">
-        {plan.monthlyPrice} <span className="text-base">/ month</span>
+      <span className="mt-3 font-display text-xl text-auth-text">{plan.name}</span>
+      <span className="mt-1 font-display text-xl text-auth-gold">
+        {plan.monthlyPrice} <span className="text-sm">/ month</span>
       </span>
-      <span className="mt-1 text-sm text-auth-text">7-day trial</span>
+      <span className="mt-1 text-xs text-auth-text">7-day trial</span>
 
-      <span className="my-4 h-px bg-auth-line" />
+      <span className="my-3 h-px bg-auth-line" />
 
-      <span className="mt-auto space-y-3 text-sm text-auth-dark-muted">
-        <span className="flex items-center gap-3">
+      <span className="mt-auto space-y-2 text-xs text-auth-dark-muted sm:text-sm">
+        <span className="flex items-center gap-2.5">
           <Package aria-hidden="true" className="h-4 w-4 text-auth-text" />
           {plan.assets}
         </span>
-        <span className="flex items-center gap-3">
+        <span className="flex items-center gap-2.5">
           <UsersRound aria-hidden="true" className="h-4 w-4 text-auth-text" />
           {plan.seats}
         </span>
@@ -653,6 +655,7 @@ function PlanFrame({ children }: { children: React.ReactNode }) {
       backHref="/onboarding"
       backAriaLabel="Back to onboarding"
       panelAriaLabel="Drezivo onboarding"
+      lockViewport
     >
       <div className="flex flex-1 items-center">{children}</div>
     </AuthSplitLayout>
@@ -667,9 +670,9 @@ function toDrezivoApiError(error: unknown): DrezivoApiError {
 }
 
 const primaryButtonClass =
-  "inline-flex min-h-12 w-full items-center justify-center rounded-full bg-auth-button px-6 text-sm font-semibold text-auth-button-ink transition hover:bg-auth-button-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-auth-focus focus-visible:ring-offset-2 focus-visible:ring-offset-auth-panel disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex min-h-10 w-full items-center justify-center rounded-full bg-auth-button px-6 text-sm font-semibold text-auth-button-ink transition hover:bg-auth-button-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-auth-focus focus-visible:ring-offset-2 focus-visible:ring-offset-auth-panel disabled:cursor-not-allowed disabled:opacity-60";
 const launchButtonClass =
-  "inline-flex min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-auth-gold px-6 text-base font-semibold text-auth-panel transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-auth-focus disabled:cursor-not-allowed disabled:opacity-60";
+  "flex min-h-10 w-full items-center justify-center gap-2 rounded-full bg-auth-gold px-5 text-sm font-semibold text-auth-panel transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-auth-focus disabled:cursor-not-allowed disabled:opacity-60";
 const changeButtonClass =
   "shrink-0 text-sm font-semibold text-auth-gold underline underline-offset-4 transition hover:text-auth-text";
 const dialogCancelButtonClass =
