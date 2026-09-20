@@ -70,7 +70,7 @@ The browser never receives a database connection string or unrestricted S3 crede
 | Module             | Owns                                                                            | Key dependency                                             |
 | ------------------ | ------------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | Tenancy/access     | Create-only owner onboarding, tenant bootstrap, local membership, branch grants | Clerk identity and narrowly reconciled organization events |
-| Catalogue/assets   | Styles, variants, measurements, physical assets, readiness                      | File metadata and branch ownership                         |
+| Catalogue/assets   | Styles, variants, reusable measurement-guide references, physical assets, readiness | File metadata/accepted guide bytes and branch ownership  |
 | Availability       | Authoritative planned asset intervals                                           | Reservations, maintenance; later fittings/transfers        |
 | Reservations       | Quote snapshots, state transitions, pickup/return policy                        | Availability and operational finance                       |
 | Finance            | Verified collections, charges, allocations, refunds, deposit liability          | Immutable sources and actor authorization                  |
@@ -81,6 +81,8 @@ The browser never receives a database connection string or unrestricted S3 crede
 | Operator/audit     | Support grants, incident actions, recovery records                              | Explicit privileged access                                 |
 
 Modules call domain services, not another module's private database helpers. All mutations capable of changing capacity or money use a shared transaction context. Reporting reads cannot rewrite transactional facts.
+
+Catalogue owns measurement-guide metadata and variant references; Files owns the accepted/frozen bytes. A staff Add Clothing command may accept shared color/pricing/timing plus selected sizes and expand them transactionally into variants and one initial physical asset per size. This V1 command convenience does not introduce a stock quantity column or prevent multiple assets from referencing one variant later. Asset quota checks run against the generated physical-asset count before commit.
 
 ### 2.1 Monorepo workspace topology
 

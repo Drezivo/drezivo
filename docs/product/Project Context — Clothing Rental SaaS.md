@@ -254,41 +254,24 @@ This is an important part of the product because owners can send customers direc
 
 # 8. Clothing / Inventory
 
-A clothing item is a **rental asset**, not simply an ecommerce product.
+Clothing is modeled as **style → variant → physical piece**, not as one ecommerce stock row. The Clothing page is primarily catalogue/inventory management; reservation and date availability are handled in their dedicated operational views.
 
-Each clothing product may contain:
+A clothing style contains shared information such as:
 
 - Name
 - Photos
 - Description
 - Category
-- Sizes
-- Measurements
-- Color
-- Rental price
-- Security deposit
-- Status
-- Availability
-- Rental rules
-- Internal notes
 
-In V1, a product can have multiple sizes, and each configured size represents one independently bookable rental unit. For example, a product with Small, Medium, Large, and XL has four date-tracked units. There is no quantity field and no support for multiple copies of the same size in V1.
+Each selected size becomes a variant with its size/color, pricing, deposit, rental timing, and measurement source. The Add Clothing UI enters common color/pricing/timing once and copies those values into generated variants instead of asking the owner to repeat the same form for every size.
 
-The owner can also configure a cleaning buffer for the product, such as one cleaning day. That buffer extends the blocked period after a rental's return date for the reserved size.
+Measurements may use the tenant's reusable default measurement-guide image, custom structured measurements for a specific size, or no measurements. The default guide is stored once and referenced by many variants; it is not duplicated for every clothing item. Replacing the business default does not silently change variants already referencing an older guide.
 
-Potential statuses:
+In the V1 Add Clothing workflow, selecting Small, Medium, Large, and XL creates four variants and four initial physical pieces. This is a simplified creation rule, not a permanent one-piece-per-size database restriction; multiple physical assets can reference the same variant later when a business owns duplicate copies.
 
-```text
-AVAILABLE
-RESERVED
-RENTED
-CLEANING
-MAINTENANCE
-UNAVAILABLE
-ARCHIVED
-```
+Preparation and turnaround/cleaning buffers belong to variant rental timing and extend the asset's blocked period around a reservation. Reserved, rented, cleaning, maintenance and unavailable are not one mutable product status. Planned blocks come from asset allocations while physical readiness/custody remain separate asset state.
 
-The system must understand that a clothing item can be unavailable for specific dates.
+The system must understand that each physical piece can be unavailable for specific dates.
 
 Example:
 

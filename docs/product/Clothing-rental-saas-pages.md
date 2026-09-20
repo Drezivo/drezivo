@@ -213,30 +213,35 @@ The main clothing management page.
 
 Owners can:
 
-- View clothing
+- View clothing styles
 - Search
 - Filter
 - Add clothing
 - Edit clothing
-- Archive clothing
-- Check status
+- Archive clothing while preserving reservation/history references
 
 ### Add Clothing
 
-Create a rental item with:
+The current V1 creation UX follows the authoritative style → variant → physical-asset model. The owner enters common data once and Drezivo expands it rather than exposing database mechanics.
 
-- Photos
+Create a clothing style with:
+
+- Shared photos
 - Name
 - Description
 - Category
-- Size
-- Measurements
-- Color
-- Rental price
+- Shared color
+- One or more selected sizes
+- Measurement source per selected size: reusable default guide, custom structured measurements, or none
+- Pricing entered once and copied to generated variants: fixed-duration package or daily rate
 - Security deposit
-- Rental rules
-- Availability
-- Internal notes
+- Optional preparation and turnaround buffers
+
+Each selected size creates one variant and one initial physical piece in the V1 UI. This is not a database quantity constraint: later workflows may add multiple physical assets to the same variant when a shop owns duplicate copies of one size.
+
+A business can upload one reusable default measurement-guide image in Settings. New variants may reference that exact guide without duplicating the file. A specific size can opt into custom measurements instead. Replacing the tenant default does not silently rewrite existing clothing that references an older guide.
+
+Availability, reservation state, cleaning, maintenance and custody are intentionally not configured as one mutable “clothing status” during creation. They are handled by the availability/reservation/asset workflows.
 
 ### Clothing Details
 
@@ -253,7 +258,7 @@ It should show:
 - Rental history
 - Maintenance/cleaning state
 
-A product may have several sizes, with each size representing one independently bookable unit. V1 has no quantity field and does not support duplicate units of the same size. Availability is tracked separately for each configured size.
+A product may have several size/color variants. Every actual rentable piece is a serialized physical asset. The V1 Add Clothing flow starts with one physical asset per selected size for simpler data entry, while the underlying model supports multiple pieces of the same variant later. Availability is computed from actual asset allocations and readiness, not from a product-level quantity or status.
 
 ### Clothing Availability
 

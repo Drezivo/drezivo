@@ -1,5 +1,7 @@
+import { sql } from 'drizzle-orm';
 import {
   boolean,
+  index,
   integer,
   jsonb,
   pgEnum,
@@ -26,6 +28,8 @@ import { idColumn, timestamps, updatableTimestamps } from './_shared.js';
 
 export const productStatusEnum = pgEnum('product_status', ['draft', 'active', 'archived']);
 export const pricingModeEnum = pgEnum('pricing_mode', ['fixed_duration', 'daily']);
+export const measurementModeEnum = pgEnum('measurement_mode', ['default_guide', 'custom', 'none']);
+export const measurementGuideStatusEnum = pgEnum('measurement_guide_status', ['active', 'archived']);
 export const assetLifecycleEnum = pgEnum('asset_lifecycle_status', ['active', 'retired', 'lost']);
 export const assetReadinessEnum = pgEnum('asset_readiness', ['ready', 'needs_cleaning', 'needs_repair', 'unready']);
 export const assetCustodyKindEnum = pgEnum('asset_custody_kind', ['at_branch', 'with_customer', 'in_transit']);
@@ -45,15 +49,35 @@ export const product = pgTable(
     ...idColumn,
     tenantId: uuid('tenant_id').notNull(),
     categoryId: uuid('category_id').references(() => category.id),
+    code: text('code').notNull(),
     name: text('name').notNull(),
     description: text('description'),
     status: productStatusEnum('status').notNull().default('draft'),
     ...updatableTimestamps,
   },
-  (table) => [uniqueIndex('product_tenant_status_idx').on(table.tenantId, table.status)],
+  (table) => [
+    index('product_tenant_status_idx').on(table.tenantId, table.status),
+    uniqueIndex('product_tenant_code_ci_key').on(table.tenantId, sql`lower(${table.code})`),
+  ],
 );
 
-/** Units are cm/in; `measurements` is a validated numeric map at the Zod boundary, not free-form JSON from the client. */
+export const measurementGuide = pgTable('measurement_guide', {
+  ...idColumn,
+  tenantId: uuid('tenant_id').notNull(),
+  fileId: uuid('file_id')
+    .notNull()
+    .references(() => file.id),
+  name: text('name').notNull(),
+  status: measurementGuideStatusEnum('status').notNull().default('active'),
+  isDefault: boolean('is_default').notNull().default(false),
+  ...updatableTimestamps,
+});
+
+/**
+ * Units are cm/in; `measurements` is a validated numeric map at the Zod boundary, not free-form
+ * JSON from the client. `measurementMode` makes an empty map unambiguous: it can mean either the
+ * selected reusable guide or intentionally no measurements, rather than silently overloading `{}`.
+ */
 export const productVariant = pgTable(
   'product_variant',
   {
@@ -67,6 +91,8 @@ export const productVariant = pgTable(
     colorLabel: text('color_label').notNull(),
     measurements: jsonb('measurements').$type<Record<string, number>>().notNull().default({}),
     measurementUnit: text('measurement_unit').notNull().default('cm'),
+    measurementMode: measurementModeEnum('measurement_mode').notNull().default('none'),
+    measurementGuideId: uuid('measurement_guide_id').references(() => measurementGuide.id),
     rentalPriceMinor: integer('rental_price_minor').notNull(),
     securityDepositMinor: integer('security_deposit_minor').notNull().default(0),
     currency: text('currency').notNull().default('PHP'),

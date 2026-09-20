@@ -275,8 +275,8 @@ describe('TBF-032 entitlement service', async () => {
         [tenant.id, branchId, membershipId],
       );
       const product = await client.query<{ id: string }>(
-        `INSERT INTO product (tenant_id, name, status)
-         VALUES ($1, 'Test Product', 'active')
+        `INSERT INTO product (tenant_id, code, name, status)
+         VALUES ($1, 'TEST-PRODUCT', 'Test Product', 'active')
          RETURNING id`,
         [tenant.id],
       );
