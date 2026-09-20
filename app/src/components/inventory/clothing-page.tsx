@@ -67,9 +67,18 @@ export function ClothingPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<DrezivoApiError | null>(null);
   const [reloadVersion, setReloadVersion] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const selectedCategory = categories.find((category) => category.id === categoryId) ?? null;
   const currentCursor = pageCursors[pageIndex] ?? null;
+
+  useEffect(() => {
+    const savedNotice = sessionStorage.getItem("drezivo:inventory-notice");
+    if (savedNotice === "draft-saved") {
+      setNotice("Draft saved");
+      sessionStorage.removeItem("drezivo:inventory-notice");
+    }
+  }, []);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -204,6 +213,15 @@ export function ClothingPage() {
             </Link>
           </div>
         </div>
+
+        {notice ? (
+          <div
+            role="status"
+            className="rounded-lg border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm font-medium text-success-500"
+          >
+            {notice}
+          </div>
+        ) : null}
 
         <Card className="gap-0 py-0">
           <CardContent className="flex flex-col gap-2 p-3 lg:flex-row lg:items-center">

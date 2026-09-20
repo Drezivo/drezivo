@@ -72,6 +72,7 @@ const secondItem = {
 describe("ClothingPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     clerk.getToken.mockResolvedValue("clerk-token");
     clerk.useAuth.mockReturnValue({
       getToken: clerk.getToken,
@@ -89,6 +90,15 @@ describe("ClothingPage", () => {
       },
       requestId: "req-clothing",
     });
+  });
+
+  it("shows a one-time draft-saved notice after returning from Add Clothing", async () => {
+    sessionStorage.setItem("drezivo:inventory-notice", "draft-saved");
+
+    render(<ClothingPage />);
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Draft saved");
+    expect(sessionStorage.getItem("drezivo:inventory-notice")).toBeNull();
   });
 
   it("renders clothing returned by GET catalogue/clothing instead of mock inventory data", async () => {

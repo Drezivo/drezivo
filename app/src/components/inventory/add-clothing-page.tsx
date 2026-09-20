@@ -547,7 +547,12 @@ export function AddClothingPage() {
       submitIntentRef.current = intent;
       const result = await createDrezivoApiClient(getToken).createClothing(requestBody, intent.key);
       photos.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
-      router.push(`/inventory/${result.data.product_id}`);
+      if (activate) {
+        router.push(`/inventory/${result.data.product_id}`);
+      } else {
+        sessionStorage.setItem("drezivo:inventory-notice", "draft-saved");
+        router.push("/inventory");
+      }
     } catch (error) {
       if (error instanceof DrezivoApiError && (error.code === "ASSET_LIMIT_EXCEEDED" || error.code === "CAPACITY_CONFLICT")) {
         setFormError("Your workspace has reached its active clothing-piece limit. Archive unused pieces or change plan before adding more.");

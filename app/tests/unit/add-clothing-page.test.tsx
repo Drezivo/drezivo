@@ -46,6 +46,7 @@ function renderPage() {
 describe("AddClothingPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     clerk.getToken.mockResolvedValue("clerk-token");
     clerk.useAuth.mockReturnValue({
       getToken: clerk.getToken,
@@ -358,11 +359,8 @@ describe("AddClothingPage", () => {
       measurement_guide_id: "00000000-0000-4000-8000-000000000099",
       measurements: {},
     });
-    await waitFor(() =>
-      expect(navigation.push).toHaveBeenCalledWith(
-        "/inventory/00000000-0000-4000-8000-000000000050"
-      )
-    );
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/inventory"));
+    expect(sessionStorage.getItem("drezivo:inventory-notice")).toBe("draft-saved");
   });
 
   it("accepts at most 10 photos, uploads/finalizes them, and submits their file ids in order", async () => {
@@ -456,5 +454,11 @@ describe("AddClothingPage", () => {
         (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`
       )
     );
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith(
+        "/inventory/00000000-0000-4000-8000-000000000050"
+      )
+    );
+    expect(sessionStorage.getItem("drezivo:inventory-notice")).toBeNull();
   });
 });
