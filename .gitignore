@@ -29,3 +29,4 @@ docs/second-brain/**/secrets*/
 # Private security design guide. Keep a local copy; commit only the public template.
 SECURITY-FOUNDATION.md
 
+.ship-plan-worktree/
