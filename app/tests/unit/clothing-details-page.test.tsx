@@ -128,6 +128,23 @@ describe("ClothingDetailsPage", () => {
     expect(screen.getByText("Confirmed reservation")).toBeVisible();
   });
 
+  it.each([
+    ["draft", "Draft"],
+    ["active", "Active"],
+    ["archived", "Archived"],
+  ] as const)("renders the backend %s lifecycle as a %s status badge", async (status, label) => {
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: { ...detail, status },
+      requestId: `req-detail-${status}`,
+    });
+
+    render(<ClothingDetailsPage productId={productId} />);
+
+    const badge = await screen.findByLabelText(`Clothing lifecycle: ${label}`);
+    expect(badge).toBeVisible();
+    expect(badge).toHaveTextContent(label);
+  });
+
   it("renders variants without a color as optional metadata", async () => {
     api.getCatalogueClothingDetail.mockResolvedValueOnce({
       data: {

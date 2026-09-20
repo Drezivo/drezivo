@@ -386,9 +386,17 @@ function EmptySection({ message }: { message: string }) {
 }
 
 function LifecycleBadge({ status }: { status: ClothingDetail["status"] }) {
+  const label = labelize(status);
+  const className = cn(
+    "border-transparent",
+    status === "active" && "dashboard-tone-mint",
+    status === "draft" && "dashboard-tone-orange",
+    status === "archived" && "bg-dashboard-neutral-soft text-dashboard-neutral-text"
+  );
+
   return (
-    <Badge variant={status === "active" ? "secondary" : "outline"}>
-      {labelize(status)}
+    <Badge variant="outline" className={className} aria-label={`Clothing lifecycle: ${label}`}>
+      {label}
     </Badge>
   );
 }
