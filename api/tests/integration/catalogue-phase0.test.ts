@@ -28,7 +28,9 @@ process.env.S3_SECRET_ACCESS_KEY ??= 'test';
 
 describe('CLT-002 catalogue integrity', async () => {
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
-  const { createTestTenant } = await import('./helpers/factories.js');
+  const { updateCatalogueCategoryStatus } = await import('../../src/modules/catalogue/catalogue.service.js');
+  const { findPublishedStorefrontBySlug } = await import('../../src/modules/storefront/storefront.repository.js');
+  const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
 
   beforeAll(async () => {
     await migrateTestDatabase(adminUrl);
@@ -189,6 +191,190 @@ describe('CLT-002 catalogue integrity', async () => {
         ),
       ).rejects.toMatchObject({ code: '23503' });
     });
+  });
+
+  it('toggles category visibility through an idempotent active/inactive command', async () => {
+    const tenant = await createTestTenant({ clerkOrgId: 'org_clt002_category_toggle' });
+    const principalId = 'user_clt002_category_toggle';
+    const membershipId = await createTestMembership(tenant.id, principalId, 'owner');
+    const categoryId = await withTenantTransaction(tenant.id, principalId, async (client) => {
+      const result = await client.query<{ id: string }>(
+        `INSERT INTO category (tenant_id, name, status, display_order)
+         VALUES ($1, 'Costumes', 'active', 50)
+         RETURNING id`,
+        [tenant.id],
+      );
+      return requireRow(result.rows, 'toggle category').id;
+    });
+
+    const input = {
+      tenantId: tenant.id,
+      branchId: '00000000-0000-4000-8000-000000000099',
+      membershipId,
+      principalId,
+      permissionCodes: ['assets.manage'] as const,
+      effectiveTenantStatus: 'active' as const,
+      requestId: 'req-clt002-category-toggle',
+      idempotencyKey: 'category-toggle-001',
+      categoryId,
+      request: { status: 'inactive' as const },
+    };
+
+    const results = await Promise.all([
+      updateCatalogueCategoryStatus({ ...input, permissionCodes: [...input.permissionCodes] }),
+      updateCatalogueCategoryStatus({ ...input, permissionCodes: [...input.permissionCodes] }),
+    ]);
+    expect(results).toHaveLength(2);
+    expect(results.every((result) => result.status === 200)).toBe(true);
+    expect(results.every((result) => result.body.success && result.body.data.status === 'inactive')).toBe(true);
+
+    const state = await withTenantTransaction(tenant.id, principalId, async (client) => {
+      const category = await client.query<{ status: string }>(
+        'SELECT status FROM category WHERE id = $1 AND tenant_id = $2',
+        [categoryId, tenant.id],
+      );
+      const audits = await client.query<{ count: number }>(
+        `SELECT count(*)::int AS count
+           FROM audit_event
+          WHERE entity_type = 'category' AND entity_id = $1
+            AND action = 'catalogue.category.status_updated'`,
+        [categoryId],
+      );
+      const idempotency = await client.query<{ count: number }>(
+        `SELECT count(*)::int AS count
+           FROM idempotency_record
+          WHERE operation = 'catalogue.category.status.update'
+            AND intent_key = 'category-toggle-001'`,
+      );
+      return {
+        status: category.rows[0]?.status,
+        auditCount: audits.rows[0]?.count ?? -1,
+        idempotencyCount: idempotency.rows[0]?.count ?? -1,
+      };
+    });
+    expect(state).toEqual({ status: 'inactive', auditCount: 1, idempotencyCount: 1 });
+
+    await expect(
+      updateCatalogueCategoryStatus({
+        ...input,
+        permissionCodes: [...input.permissionCodes],
+        requestId: 'req-clt002-category-toggle-reused',
+        request: { status: 'active' },
+      }),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+  });
+
+  it('conceals a foreign category during a category-status mutation', async () => {
+    const tenantA = await createTestTenant({ clerkOrgId: 'org_clt002_category_foreign_a' });
+    const tenantB = await createTestTenant({ clerkOrgId: 'org_clt002_category_foreign_b' });
+    const principalB = 'user_clt002_category_foreign_b';
+    const membershipB = await createTestMembership(tenantB.id, principalB, 'owner');
+    const categoryA = await withTenantTransaction(
+      tenantA.id,
+      'user_clt002_category_foreign_a',
+      async (client) => {
+        const result = await client.query<{ id: string }>(
+          `INSERT INTO category (tenant_id, name, status, display_order)
+           VALUES ($1, 'Gowns', 'active', 10)
+           RETURNING id`,
+          [tenantA.id],
+        );
+        return requireRow(result.rows, 'foreign toggle category').id;
+      },
+    );
+
+    const result = await updateCatalogueCategoryStatus({
+      tenantId: tenantB.id,
+      branchId: '00000000-0000-4000-8000-000000000098',
+      membershipId: membershipB,
+      principalId: principalB,
+      permissionCodes: ['assets.manage'],
+      effectiveTenantStatus: 'active',
+      requestId: 'req-clt002-category-foreign',
+      idempotencyKey: 'category-toggle-foreign-001',
+      categoryId: categoryA,
+      request: { status: 'inactive' },
+    });
+    expect(result.status).toBe(404);
+    expect(result.body).toMatchObject({
+      success: false,
+      error: { code: 'NOT_FOUND' },
+    });
+  });
+
+  it('excludes products in inactive categories from the public storefront', async () => {
+    const tenant = await createTestTenant({ clerkOrgId: 'org_clt002_public_category_status' });
+    const principalId = 'user_clt002_public_category_status';
+    const slug = 'public-category-status-shop';
+
+    await withTenantTransaction(tenant.id, principalId, async (client) => {
+      const branchResult = await client.query<{ id: string }>(
+        `INSERT INTO branch (tenant_id, name, code, is_default, timezone)
+         VALUES ($1, 'Main Branch', 'MAIN', true, 'Asia/Manila')
+         RETURNING id`,
+        [tenant.id],
+      );
+      const branchId = requireRow(branchResult.rows, 'public storefront branch').id;
+
+      const categoryResult = await client.query<{ id: string; status: string }>(
+        `INSERT INTO category (tenant_id, name, status, display_order)
+         VALUES
+           ($1, 'Gowns', 'active', 10),
+           ($1, 'Costumes', 'inactive', 50)
+         RETURNING id, status`,
+        [tenant.id],
+      );
+      const activeCategory = categoryResult.rows.find((row) => row.status === 'active');
+      const inactiveCategory = categoryResult.rows.find((row) => row.status === 'inactive');
+      if (!activeCategory || !inactiveCategory) {
+        throw new Error('Expected active and inactive storefront categories');
+      }
+
+      const activeProduct = await client.query<{ id: string }>(
+        `INSERT INTO product (tenant_id, category_id, code, name, status)
+         VALUES ($1, $2, 'GWN-PUBLIC', 'Public Gown', 'active')
+         RETURNING id`,
+        [tenant.id, activeCategory.id],
+      );
+      const hiddenProduct = await client.query<{ id: string }>(
+        `INSERT INTO product (tenant_id, category_id, code, name, status)
+         VALUES ($1, $2, 'CST-HIDDEN', 'Hidden Costume', 'active')
+         RETURNING id`,
+        [tenant.id, inactiveCategory.id],
+      );
+      const activeProductId = requireRow(activeProduct.rows, 'active public product').id;
+      const hiddenProductId = requireRow(hiddenProduct.rows, 'inactive-category product').id;
+
+      await client.query(
+        `INSERT INTO product_variant
+           (tenant_id, product_id, sku, size_label, color_label, rental_price_minor,
+            security_deposit_minor, pricing_mode, included_duration_minutes, status)
+         VALUES
+           ($1, $2, 'GWN-PUBLIC-M', 'M', 'Green', 10000, 0, 'daily', 1440, 'active'),
+           ($1, $3, 'CST-HIDDEN-M', 'M', 'Black', 10000, 0, 'daily', 1440, 'active')`,
+        [tenant.id, activeProductId, hiddenProductId],
+      );
+
+      const storefrontResult = await client.query<{ id: string }>(
+        `INSERT INTO storefront
+           (tenant_id, branch_id, slug, status, branding, contact, published_at)
+         VALUES ($1, $2, $3, 'published', '{}'::jsonb, '{}'::jsonb, now())
+         RETURNING id`,
+        [tenant.id, branchId, slug],
+      );
+      const storefrontId = requireRow(storefrontResult.rows, 'published storefront').id;
+      await client.query(
+        `INSERT INTO policy_snapshot
+           (tenant_id, storefront_id, version, rental_rules, deposit_rules,
+            cancellation_rules, delivery_rules, privacy_notice, effective_at)
+         VALUES ($1, $2, 1, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+                 'Test privacy notice', now())`,
+        [tenant.id, storefrontId],
+      );
+    });
+
+    const publicStorefront = await findPublishedStorefrontBySlug(slug);
+    expect(publicStorefront?.products.map((product) => product.name)).toEqual(['Public Gown']);
   });
 
   it('keeps catalogue reads and writes isolated by forced RLS for drezivo_app', async () => {

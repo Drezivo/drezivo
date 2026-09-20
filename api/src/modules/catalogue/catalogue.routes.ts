@@ -9,10 +9,12 @@ import {
   getDefaultMeasurementGuideController,
   listCatalogueCategoriesController,
   saveMeasurementGuideController,
+  updateCatalogueCategoryStatusController,
 } from './catalogue.controller.js';
 import {
   requireAssetManagePermission,
   requireCatalogueIdempotencyKey,
+  validateCatalogueCategoryStatusUpdate,
   validateCreateClothing,
   validateSaveMeasurementGuide,
 } from './catalogue.middleware.js';
@@ -42,6 +44,18 @@ catalogueRouter.get(
   readPolicy,
   requireAssetManagePermission,
   listCatalogueCategoriesController,
+);
+
+catalogueRouter.patch(
+  '/catalogue/categories/:categoryId/status',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateCatalogueCategoryStatusUpdate,
+  requireCatalogueIdempotencyKey,
+  updateCatalogueCategoryStatusController,
 );
 
 catalogueRouter.get(
