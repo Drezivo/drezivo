@@ -30,7 +30,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 function dashboardPageLabel(pathname: string) {
   if (pathname.startsWith("/reservations")) return "Reservations";
   if (pathname.startsWith("/calendar")) return "Calendar";
-  if (pathname.startsWith("/inventory")) return "Clothing / Inventory";
+  if (pathname.startsWith("/inventory")) return "Clothing";
   if (pathname.startsWith("/customers")) return "Customers";
   if (pathname.startsWith("/fittings")) return "Fittings";
   if (pathname.startsWith("/payments")) return "Payments";

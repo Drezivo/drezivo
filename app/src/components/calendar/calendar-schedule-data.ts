@@ -89,3 +89,78 @@ export const CALENDAR_MORE_COUNTS: Record<string, number> = {
   sat: 2,
   sun: 1,
 };
+
+const AGENDA_CUSTOMERS = [
+  "Alyssa Tan",
+  "Bea Lim",
+  "Christine Tan",
+  "Daniel Cruz",
+  "Ella Santos",
+  "Isabel Garcia",
+  "Janine Cruz",
+  "Kaye Santos",
+  "Martin Lopez",
+  "Miguel Santos",
+  "Paolo Dizon",
+  "Sofia Reyes",
+] as const;
+
+const AGENDA_CLOTHING = [
+  "Black Satin Gown",
+  "Red Evening Dress",
+  "Wedding Gown",
+  "Blue Dress",
+  "Filipiniana Dress",
+  "Barong Tagalog",
+  "Pink Gown",
+  "Beige Midi Dress",
+] as const;
+
+const AGENDA_TIMES = [
+  "8:00 AM",
+  "8:30 AM",
+  "9:00 AM",
+  "9:30 AM",
+  "10:00 AM",
+  "10:30 AM",
+  "11:00 AM",
+  "11:30 AM",
+  "12:00 PM",
+  "1:00 PM",
+  "1:30 PM",
+  "2:00 PM",
+  "2:30 PM",
+  "3:00 PM",
+  "3:30 PM",
+  "4:00 PM",
+  "4:30 PM",
+] as const;
+
+const AGENDA_TYPES: readonly CalendarActivityType[] = [
+  "Pickup",
+  "Return",
+  "Fitting",
+  "Reservation",
+];
+
+export const CALENDAR_DAY_AGENDA: Record<string, readonly CalendarActivity[]> = Object.fromEntries(
+  CALENDAR_DAYS.map((day, dayIndex) => {
+    const visible = CALENDAR_ACTIVITIES.filter((activity) => activity.day === day.key);
+    const missingCount = Math.max(0, day.activityCount - visible.length);
+    const generated: CalendarActivity[] = Array.from({ length: missingCount }, (_, index) => {
+      const sequence = dayIndex * 7 + index;
+      return {
+        id: `${day.key}-agenda-${index + 1}`,
+        day: day.key,
+        type: AGENDA_TYPES[sequence % AGENDA_TYPES.length]!,
+        customer: AGENDA_CUSTOMERS[sequence % AGENDA_CUSTOMERS.length]!,
+        clothing: AGENDA_CLOTHING[(sequence + 2) % AGENDA_CLOTHING.length]!,
+        time: AGENDA_TIMES[(index + dayIndex) % AGENDA_TIMES.length]!,
+        rowStart: ((index * 2 + dayIndex) % 19) + 1,
+        rowSpan: 2,
+      };
+    });
+
+    return [day.key, [...visible, ...generated].sort((a, b) => a.rowStart - b.rowStart)];
+  }),
+) as Record<string, readonly CalendarActivity[]>;
