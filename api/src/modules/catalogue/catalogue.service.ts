@@ -1,11 +1,16 @@
 import {
   catalogueCategory,
   catalogueCategoryList,
+  clothingDetail,
+  clothingListResponse,
   createClothingResponse,
   measurementGuide,
   measurementGuideDefaultResponse,
   type CatalogueCategory,
   type CatalogueCategoryList,
+  type ClothingDetail,
+  type ClothingListQuery,
+  type ClothingListResponse,
   type CreateClothingRequest,
   type CreateClothingResponse,
   type MeasurementGuide,
@@ -34,6 +39,10 @@ import {
   claimTenantIdempotency,
   finalizeTenantIdempotency,
 } from '../../shared/tenant-idempotency.js';
+import {
+  listClothingReadModel,
+  readClothingDetailModel,
+} from './catalogue.read.repository.js';
 import {
   appendCatalogueAuditEvent,
   categoryExists,
@@ -82,6 +91,136 @@ export async function getCatalogueCategories(
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
     const rows = await listCategories(client, input.tenantId);
     return catalogueCategoryList.parse({ items: rows });
+  });
+}
+
+export async function getCatalogueClothingList(
+  input: CatalogueContext,
+  query: ClothingListQuery,
+): Promise<ClothingListResponse> {
+  assertCatalogueReadContext(input);
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const page = await listClothingReadModel(client, {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      query,
+    });
+    return clothingListResponse.parse({
+      items: page.rows.map((row) => ({
+        product_id: row.product_id,
+        code: row.code,
+        name: row.name,
+        category:
+          row.category_id && row.category_name
+            ? { id: row.category_id, name: row.category_name }
+            : null,
+        product_status: row.product_status,
+        size_labels: row.size_labels,
+        price_from_minor: row.price_from_minor.toString(),
+        currency: row.currency,
+        primary_image_url: null,
+        readiness: {
+          active_assets: row.active_assets,
+          ready: row.ready,
+          needs_cleaning: row.needs_cleaning,
+          needs_repair: row.needs_repair,
+          unready: row.unready,
+        },
+        created_at: row.created_at.toISOString(),
+        updated_at: row.updated_at.toISOString(),
+      })),
+      page_meta: {
+        next_cursor: page.nextCursor,
+        has_more: page.hasMore,
+      },
+    });
+  });
+}
+
+export async function getCatalogueClothingDetail(
+  input: CatalogueContext,
+  productId: string,
+): Promise<ClothingDetail> {
+  assertCatalogueReadContext(input);
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const model = await readClothingDetailModel(client, {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      productId,
+    });
+    if (!model) {
+      throw new NotFoundError('The selected clothing item could not be found.');
+    }
+
+    const assetsByVariant = new Map<string, typeof model.assets>();
+    for (const asset of model.assets) {
+      const assets = assetsByVariant.get(asset.variant_id) ?? [];
+      assets.push(asset);
+      assetsByVariant.set(asset.variant_id, assets);
+    }
+
+    return clothingDetail.parse({
+      product_id: model.product.product_id,
+      code: model.product.code,
+      name: model.product.name,
+      description: model.product.description ?? '',
+      category:
+        model.product.category_id && model.product.category_name
+          ? { id: model.product.category_id, name: model.product.category_name }
+          : null,
+      status: model.product.product_status,
+      images: model.images.map((image) => ({
+        file_id: image.file_id,
+        display_order: image.display_order,
+        image_url: null,
+      })),
+      variants: model.variants.map((variant) => ({
+        id: variant.id,
+        sku: variant.sku,
+        size_label: variant.size_label,
+        color_label: variant.color_label,
+        measurement_mode: variant.measurement_mode,
+        measurement_guide_id: variant.measurement_guide_id,
+        measurement_unit: variant.measurement_unit,
+        measurements: variant.measurements,
+        rental_price_minor: variant.rental_price_minor.toString(),
+        security_deposit_minor: variant.security_deposit_minor.toString(),
+        currency: variant.currency,
+        pricing_mode: variant.pricing_mode,
+        included_duration_minutes: variant.included_duration_minutes,
+        extra_day_price_minor: variant.extra_day_price_minor.toString(),
+        prep_minutes: variant.prep_minutes,
+        turnaround_minutes: variant.turnaround_minutes,
+        status: variant.status,
+        assets: (assetsByVariant.get(variant.id) ?? []).map((asset) => ({
+          id: asset.id,
+          branch_id: asset.branch_id,
+          variant_id: asset.variant_id,
+          asset_code: asset.asset_code,
+          lifecycle_status: asset.lifecycle_status,
+          readiness: asset.readiness,
+          custody_kind: asset.custody_kind,
+          condition_note: asset.condition_note,
+          measurement_overrides: asset.measurement_overrides,
+          alteration_note: asset.alteration_note,
+          version: asset.version,
+          created_at: asset.created_at.toISOString(),
+          updated_at: asset.updated_at.toISOString(),
+        })),
+        created_at: variant.created_at.toISOString(),
+        updated_at: variant.updated_at.toISOString(),
+      })),
+      upcoming_allocations: model.upcomingAllocations.map((allocation) => ({
+        asset_id: allocation.asset_id,
+        reservation_line_id: allocation.reservation_line_id,
+        kind: allocation.kind,
+        starts_at: allocation.starts_at.toISOString(),
+        ends_at: allocation.ends_at.toISOString(),
+      })),
+      has_more_upcoming_allocations: model.hasMoreUpcomingAllocations,
+      created_at: model.product.created_at.toISOString(),
+      updated_at: model.product.updated_at.toISOString(),
+    });
   });
 }
 

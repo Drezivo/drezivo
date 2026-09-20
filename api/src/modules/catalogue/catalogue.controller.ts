@@ -13,6 +13,8 @@ import { sendSuccess } from '../../shared/response.js';
 import {
   createClothing,
   getCatalogueCategories,
+  getCatalogueClothingDetail,
+  getCatalogueClothingList,
   getDefaultMeasurementGuide,
   saveMeasurementGuide,
   updateCatalogueCategoryStatus,
@@ -20,6 +22,21 @@ import {
 
 export async function listCatalogueCategoriesController(req: Request, res: Response): Promise<void> {
   sendSuccess(req, res, await getCatalogueCategories(requireContext(req)));
+}
+
+export async function listCatalogueClothingController(req: Request, res: Response): Promise<void> {
+  const query = req.catalogueClothingListQuery;
+  if (!query) throw new ValidationError('A valid clothing list query is required.');
+  sendSuccess(req, res, await getCatalogueClothingList(requireContext(req), query));
+}
+
+export async function getCatalogueClothingDetailController(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const productId = req.catalogueProductId;
+  if (!productId) throw new ValidationError('A valid clothing product id is required.');
+  sendSuccess(req, res, await getCatalogueClothingDetail(requireContext(req), productId));
 }
 
 export async function updateCatalogueCategoryStatusController(

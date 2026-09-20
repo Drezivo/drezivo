@@ -206,6 +206,16 @@ describe('catalogue staff contract', () => {
           updated_at: instant,
         },
       ],
+      upcoming_allocations: [
+        {
+          asset_id: ids.asset,
+          reservation_line_id: null,
+          kind: 'maintenance',
+          starts_at: instant,
+          ends_at: '2026-09-21T08:00:00.000Z',
+        },
+      ],
+      has_more_upcoming_allocations: false,
       created_at: instant,
       updated_at: instant,
     });
