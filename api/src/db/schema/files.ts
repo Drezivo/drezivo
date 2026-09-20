@@ -23,6 +23,7 @@ export const fileLifecycleEnum = pgEnum('file_lifecycle_status', [
 ]);
 export const filePurposeEnum = pgEnum('file_purpose', [
   'catalogue_image',
+  'measurement_guide',
   'payment_receipt',
   'verification_document',
   'storefront_asset',

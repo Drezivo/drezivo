@@ -353,9 +353,9 @@ Available sizes:
 S / M / L
 ```
 
-If measurements are provided by the business, display them clearly.
+If measurement information is provided by the business, display the selected variant's configured source clearly. A variant may reference the business's reusable measurement-guide image, provide custom structured measurements, or intentionally provide no measurement information.
 
-Potential measurements:
+Potential custom measurements:
 
 - Bust
 - Waist
@@ -363,7 +363,7 @@ Potential measurements:
 - Length
 - Other relevant measurements
 
-Measurements are particularly important for rental clothing because customers need to determine whether an item is likely to fit.
+Do not duplicate the same business measurement-guide image for every product or size. Render the referenced guide when `measurement_mode = default_guide`; render structured values for `custom`; omit the section for `none`. Measurements are particularly important for rental clothing because customers need to determine whether an item is likely to fit.
 
 ---
 

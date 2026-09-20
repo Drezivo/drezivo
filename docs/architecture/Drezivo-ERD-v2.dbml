@@ -240,6 +240,22 @@ Table product {
   Note: 'V1. Style-level marketing entry, not stock quantity.'
 }
 
+Table measurement_guide {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  file_id uuid [not null]
+  name varchar(160) [not null]
+  status varchar(20) [not null]
+  is_default boolean [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, status, created_at)
+  }
+  Note: 'V1. Reusable tenant measurement/size-chart image. One active default per tenant is enforced with a partial unique index in SQL.'
+}
+
 Table product_variant {
   tenant_id uuid [not null]
   id uuid [not null]
@@ -249,6 +265,8 @@ Table product_variant {
   color_label varchar(80) [not null]
   measurements jsonb [not null]
   measurement_unit varchar(8) [not null]
+  measurement_mode varchar(30) [not null]
+  measurement_guide_id uuid
   rental_price_minor bigint [not null]
   security_deposit_minor bigint [not null]
   currency char(3) [not null]
@@ -263,7 +281,7 @@ Table product_variant {
     (tenant_id, id) [pk]
     (tenant_id, sku) [unique]
   }
-  Note: 'V1. Units cm/in, validated numeric measurement map. Pricing mode fixed_duration/daily; explicit nonnegative amounts and bounded minutes.'
+  Note: 'V1. Measurement mode is default_guide/custom/none. Default mode references one reusable guide; custom uses validated numeric JSON. Pricing mode fixed_duration/daily; explicit nonnegative amounts and bounded minutes.'
 }
 
 Table physical_asset {
@@ -1077,6 +1095,7 @@ Ref: branch_membership.tenant_id > tenant.id [delete: restrict, update: no actio
 Ref: customer.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: category.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: product.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: measurement_guide.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: product_variant.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: physical_asset.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: file_object.tenant_id > tenant.id [delete: restrict, update: no action]
@@ -1121,7 +1140,9 @@ Ref: transfer_event.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: branch_membership.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
 Ref: branch_membership.(tenant_id, membership_id) > membership.(tenant_id, id) [delete: restrict, update: no action]
 Ref: product.(tenant_id, category_id) > category.(tenant_id, id) [delete: restrict, update: no action]
+Ref: measurement_guide.(tenant_id, file_id) > file_object.(tenant_id, id) [delete: restrict, update: no action]
 Ref: product_variant.(tenant_id, product_id) > product.(tenant_id, id) [delete: restrict, update: no action]
+Ref: product_variant.(tenant_id, measurement_guide_id) > measurement_guide.(tenant_id, id) [delete: restrict, update: no action]
 Ref: physical_asset.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
 Ref: physical_asset.(tenant_id, variant_id) > product_variant.(tenant_id, id) [delete: restrict, update: no action]
 Ref: physical_asset.(tenant_id, location_id) > location.(tenant_id, id) [delete: restrict, update: no action]
@@ -1221,6 +1242,7 @@ TableGroup V1_Core {
   customer
   category
   product
+  measurement_guide
   product_variant
   physical_asset
   file_object

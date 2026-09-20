@@ -6,6 +6,7 @@
 import { version } from '../package.json';
 
 export * from './common';
+export * from './catalogue';
 export * from './storefront';
 export * from './availability';
 export * from './reservations';

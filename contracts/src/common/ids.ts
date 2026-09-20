@@ -44,6 +44,9 @@ export type OperatorActionId = z.infer<typeof operatorActionId>;
 export const customerId = idSchema('CustomerId');
 export type CustomerId = z.infer<typeof customerId>;
 
+export const categoryId = idSchema('CategoryId');
+export type CategoryId = z.infer<typeof categoryId>;
+
 export const productId = idSchema('ProductId');
 export type ProductId = z.infer<typeof productId>;
 
@@ -52,6 +55,9 @@ export type ProductVariantId = z.infer<typeof productVariantId>;
 
 export const physicalAssetId = idSchema('PhysicalAssetId');
 export type PhysicalAssetId = z.infer<typeof physicalAssetId>;
+
+export const measurementGuideId = idSchema('MeasurementGuideId');
+export type MeasurementGuideId = z.infer<typeof measurementGuideId>;
 
 export const storefrontId = idSchema('StorefrontId');
 export type StorefrontId = z.infer<typeof storefrontId>;

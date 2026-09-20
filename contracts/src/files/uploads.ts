@@ -26,7 +26,12 @@ import { isoInstant } from '../common/time';
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 /** Data-Model §2 `file_object.purpose`. PRD §5: identity documents are opt-in, never default. */
-export const filePurpose = z.enum(['catalogue_image', 'payment_evidence', 'identity_document']);
+export const filePurpose = z.enum([
+  'catalogue_image',
+  'measurement_guide',
+  'payment_evidence',
+  'identity_document',
+]);
 export type FilePurpose = z.infer<typeof filePurpose>;
 
 const allowedContentType = z.enum(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
