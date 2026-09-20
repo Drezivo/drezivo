@@ -1,5 +1,6 @@
 "use client";
 
+import * as Dialog from "@radix-ui/react-dialog";
 import { useAuth } from "@clerk/nextjs";
 
 import {
@@ -53,6 +54,7 @@ type PricingMode = "fixed_duration" | "daily";
 type MeasurementUnit = "in" | "cm";
 type MeasurementMode = "default_guide" | "custom" | "none";
 type PhotoStatus = "ready" | "uploading" | "uploaded" | "error";
+type PendingNavigation = { kind: "href"; href: string } | { kind: "back" };
 
 type GuideSetupIntent = {
   fingerprint: string;
@@ -87,6 +89,8 @@ export function AddClothingPage() {
   const guideFileInputRef = useRef<HTMLInputElement>(null);
   const submitIntentRef = useRef<{ fingerprint: string; key: string } | null>(null);
   const guideSetupIntentRef = useRef<GuideSetupIntent | null>(null);
+  const historyGuardArmedRef = useRef(false);
+  const bypassPopStateRef = useRef(false);
   const [categories, setCategories] = useState<CatalogueCategory[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [categoryLoading, setCategoryLoading] = useState(true);
@@ -132,6 +136,9 @@ export function AddClothingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStage, setSubmitStage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
 
   const activeCategories = useMemo(
     () => categories.filter((category) => category.status === "active"),
@@ -139,6 +146,117 @@ export function AddClothingPage() {
   );
   const selectedCategory =
     activeCategories.find((category) => category.id === categoryId) ?? null;
+
+  const markDirty = useCallback(() => setIsDirty(true), []);
+
+  const armHistoryGuard = useCallback(() => {
+    if (historyGuardArmedRef.current) return;
+    const currentState =
+      window.history.state && typeof window.history.state === "object" ? window.history.state : {};
+    window.history.pushState(
+      { ...currentState, __drezivoAddClothingGuard: true },
+      "",
+      window.location.href
+    );
+    historyGuardArmedRef.current = true;
+  }, []);
+
+  const stayOnPage = useCallback(() => {
+    if (pendingNavigation?.kind === "back") armHistoryGuard();
+    setPendingNavigation(null);
+    setDiscardDialogOpen(false);
+  }, [armHistoryGuard, pendingNavigation]);
+
+  const discardChanges = useCallback(() => {
+    const navigation = pendingNavigation;
+    setPendingNavigation(null);
+    setDiscardDialogOpen(false);
+    setIsDirty(false);
+    historyGuardArmedRef.current = false;
+
+    if (!navigation) return;
+    if (navigation.kind === "href") {
+      router.replace(navigation.href);
+      return;
+    }
+
+    bypassPopStateRef.current = true;
+    window.history.back();
+  }, [pendingNavigation, router]);
+
+  const handleDiscardDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) {
+        setDiscardDialogOpen(true);
+        return;
+      }
+      stayOnPage();
+    },
+    [stayOnPage]
+  );
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty]);
+
+  useEffect(() => {
+    if (!isDirty) {
+      historyGuardArmedRef.current = false;
+      return;
+    }
+
+    armHistoryGuard();
+    const handlePopState = () => {
+      if (bypassPopStateRef.current) {
+        bypassPopStateRef.current = false;
+        return;
+      }
+      historyGuardArmedRef.current = false;
+      setPendingNavigation({ kind: "back" });
+      setDiscardDialogOpen(true);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [armHistoryGuard, isDirty]);
+
+  useEffect(() => {
+    if (!isDirty) return;
+
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const anchor = target.closest<HTMLAnchorElement>("a[href]");
+      if (!anchor || anchor.target === "_blank" || anchor.hasAttribute("download")) return;
+
+      const url = new URL(anchor.href, window.location.href);
+      if (url.origin !== window.location.origin || url.href === window.location.href) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      setPendingNavigation({ kind: "href", href: `${url.pathname}${url.search}${url.hash}` });
+      setDiscardDialogOpen(true);
+    };
+
+    document.addEventListener("click", handleDocumentClick, true);
+    return () => document.removeEventListener("click", handleDocumentClick, true);
+  }, [isDirty]);
 
   const loadCategories = useCallback(async () => {
     if (!isLoaded || !isSignedIn) return;
@@ -204,12 +322,17 @@ export function AddClothingPage() {
   }, [extraDayPrice, includedDays, price, pricingMode]);
 
   const toggleSize = (size: ClothingSize) => {
+    markDirty();
     setSelectedSizes((current) =>
       current.includes(size) ? current.filter((item) => item !== size) : [...current, size]
     );
   };
 
   const setMeasurementMode = (size: ClothingSize, mode: MeasurementMode) => {
+    const clearsMeasurements =
+      mode !== "custom" && Object.values(measurements[size]).some((value) => value.trim().length > 0);
+    if (measurementModes[size] === mode && !clearsMeasurements) return;
+    markDirty();
     setMeasurementModes((current) => ({ ...current, [size]: mode }));
     if (mode !== "custom") {
       setMeasurements((current) => ({ ...current, [size]: { ...EMPTY_MEASUREMENTS } }));
@@ -217,6 +340,13 @@ export function AddClothingPage() {
   };
 
   const useDefaultGuideForAll = () => {
+    const changesForm = selectedSizes.some(
+      (size) =>
+        measurementModes[size] !== "default_guide" ||
+        Object.values(measurements[size]).some((value) => value.trim().length > 0)
+    );
+    if (!changesForm) return;
+    markDirty();
     setMeasurementModes((current) => {
       const next = { ...current };
       selectedSizes.forEach((size) => {
@@ -238,6 +368,7 @@ export function AddClothingPage() {
     field: keyof Measurements,
     value: string
   ) => {
+    markDirty();
     setMeasurements((current) => ({
       ...current,
       [size]: { ...current[size], [field]: value },
@@ -381,6 +512,7 @@ export function AddClothingPage() {
       return true;
     });
     if (accepted.length === 0) return;
+    markDirty();
     setPhotos((current) => [
       ...current,
       ...accepted.map((file) => ({
@@ -398,6 +530,7 @@ export function AddClothingPage() {
   };
 
   const removePhoto = (photoId: string) => {
+    markDirty();
     setPhotos((current) => {
       const target = current.find((photo) => photo.id === photoId);
       if (target) URL.revokeObjectURL(target.previewUrl);
@@ -451,7 +584,6 @@ export function AddClothingPage() {
   const buildCreateRequest = (activate: boolean, imageFileIds: string[]): CreateClothingRequest => {
     if (!categoryId) throw new Error("Choose an active category.");
     if (!name.trim()) throw new Error("Enter a clothing name.");
-    if (!color.trim()) throw new Error("Enter a clothing color.");
     if (selectedSizes.length === 0) throw new Error("Select at least one size.");
     if (needsDefaultGuide && !defaultGuide) {
       throw new Error("Set a default measurement guide, or use custom/no measurements for every selected size.");
@@ -508,7 +640,7 @@ export function AddClothingPage() {
       code: code.trim(),
       description: description.trim(),
       category_id: categoryId,
-      color_label: color.trim(),
+      color_label: color.trim() || null,
       image_file_ids: imageFileIds,
       sizes,
       pricing:
@@ -529,7 +661,10 @@ export function AddClothingPage() {
     setFormError(null);
     try {
       setSubmitStage("Validating clothing…");
-      buildCreateRequest(activate, []);
+      if (activate && photos.length === 0) {
+        throw new Error("Add at least one photo before adding clothing. You can still save it as a draft without a photo.");
+      }
+      buildCreateRequest(false, []);
       setSubmitStage(photos.length > 0 ? "Uploading photos…" : activate ? "Adding clothing…" : "Saving draft…");
       const imageFileIds: string[] = [];
       for (const photo of photos) {
@@ -545,7 +680,14 @@ export function AddClothingPage() {
       submitIntentRef.current = intent;
       const result = await createDrezivoApiClient(getToken).createClothing(requestBody, intent.key);
       photos.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
-      router.push(`/inventory/${result.data.product_id}`);
+      setIsDirty(false);
+      historyGuardArmedRef.current = false;
+      if (activate) {
+        router.replace(`/inventory/${result.data.product_id}`);
+      } else {
+        sessionStorage.setItem("drezivo:inventory-notice", "draft-saved");
+        router.replace("/inventory");
+      }
     } catch (error) {
       if (error instanceof DrezivoApiError && (error.code === "ASSET_LIMIT_EXCEEDED" || error.code === "CAPACITY_CONFLICT")) {
         setFormError("Your workspace has reached its active clothing-piece limit. Archive unused pieces or change plan before adding more.");
@@ -587,7 +729,7 @@ export function AddClothingPage() {
             <SectionCard
               icon={Images}
               title="Photos"
-              description="Upload up to 10 JPEG, PNG, or WebP photos. The first photo becomes the cover image."
+              description="Add at least one photo before activating this clothing. Drafts can be saved without photos. The first photo becomes the cover image."
             >
               <input
                 ref={fileInputRef}
@@ -660,7 +802,10 @@ export function AddClothingPage() {
                 <Field label="Clothing Name" required>
                   <Input
                     value={name}
-                    onChange={(event) => setName(event.target.value)}
+                    onChange={(event) => {
+                      setName(event.target.value);
+                      markDirty();
+                    }}
                     placeholder="e.g. Emerald Evening Gown"
                   />
                 </Field>
@@ -669,7 +814,10 @@ export function AddClothingPage() {
                     <Input
                       aria-label="Clothing Code"
                       value={code}
-                      onChange={(event) => setCode(event.target.value)}
+                      onChange={(event) => {
+                        setCode(event.target.value);
+                        markDirty();
+                      }}
                       placeholder="e.g. GWN-023"
                     />
                     <p className="mt-1.5 text-xs text-dashboard-muted">
@@ -699,7 +847,15 @@ export function AddClothingPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start" className="min-w-52">
                         {activeCategories.map((item) => (
-                          <DropdownMenuItem key={item.id} onSelect={() => setCategoryId(item.id)}>
+                          <DropdownMenuItem
+                            key={item.id}
+                            onSelect={() => {
+                              if (item.id !== categoryId) {
+                                setCategoryId(item.id);
+                                markDirty();
+                              }
+                            }}
+                          >
                             {item.name}
                           </DropdownMenuItem>
                         ))}
@@ -725,7 +881,10 @@ export function AddClothingPage() {
               <Field label="Description">
                 <textarea
                   value={description}
-                  onChange={(event) => setDescription(event.target.value)}
+                  onChange={(event) => {
+                    setDescription(event.target.value);
+                    markDirty();
+                  }}
                   placeholder="Describe this clothing style..."
                   rows={4}
                   className="w-full resize-y rounded-md border border-dashboard-border bg-dashboard-surface px-3 py-2 text-sm text-dashboard-navy outline-none transition placeholder:text-dashboard-muted focus:border-dashboard-accent focus:ring-2 focus:ring-dashboard-accent/20"
@@ -738,10 +897,13 @@ export function AddClothingPage() {
               title="Color, Sizes & Measurements"
               description="Choose the sizes you actually own. Each selected size creates one rentable piece in V1."
             >
-              <Field label="Color" required>
+              <Field label="Color (optional)">
                 <Input
                   value={color}
-                  onChange={(event) => setColor(event.target.value)}
+                  onChange={(event) => {
+                    setColor(event.target.value);
+                    markDirty();
+                  }}
                   placeholder="e.g. Emerald Green"
                   className="max-w-md"
                 />
@@ -900,7 +1062,12 @@ export function AddClothingPage() {
                                       key={unit}
                                       type="button"
                                       aria-pressed={measurementUnit === unit}
-                                      onClick={() => setMeasurementUnit(unit)}
+                                      onClick={() => {
+                                        if (measurementUnit !== unit) {
+                                          setMeasurementUnit(unit);
+                                          markDirty();
+                                        }
+                                      }}
                                       className={cn(
                                         "min-h-7 px-2.5 text-[0.68rem] font-medium uppercase",
                                         measurementUnit === unit
@@ -962,39 +1129,90 @@ export function AddClothingPage() {
                     selected={pricingMode === "fixed_duration"}
                     title="Fixed Package"
                     description="Example: ₱300 for 3 days"
-                    onClick={() => setPricingMode("fixed_duration")}
+                    onClick={() => {
+                      if (pricingMode !== "fixed_duration") {
+                        setPricingMode("fixed_duration");
+                        markDirty();
+                      }
+                    }}
                   />
                   <PricingModeButton
                     selected={pricingMode === "daily"}
                     title="Per Day"
                     description="Example: ₱300 per day"
-                    onClick={() => setPricingMode("daily")}
+                    onClick={() => {
+                      if (pricingMode !== "daily") {
+                        setPricingMode("daily");
+                        markDirty();
+                      }
+                    }}
                   />
                 </div>
               </div>
 
               {pricingMode === "fixed_duration" ? (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <MoneyField label="Package Price" value={price} onChange={setPrice} required />
+                  <MoneyField
+                    label="Package Price"
+                    value={price}
+                    onChange={(value) => {
+                      setPrice(value);
+                      markDirty();
+                    }}
+                    required
+                  />
                   <Field label="Included Duration" required>
                     <div className="relative">
                       <Input
                         aria-label="Included Duration"
                         inputMode="numeric"
                         value={includedDays}
-                        onChange={(event) => setIncludedDays(event.target.value)}
+                        onChange={(event) => {
+                          setIncludedDays(event.target.value);
+                          markDirty();
+                        }}
                         className="pr-14"
                       />
                       <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">days</span>
                     </div>
                   </Field>
-                  <MoneyField label="Extra Day Price" value={extraDayPrice} onChange={setExtraDayPrice} />
-                  <MoneyField label="Security Deposit" value={securityDeposit} onChange={setSecurityDeposit} />
+                  <MoneyField
+                    label="Extra Day Price"
+                    value={extraDayPrice}
+                    onChange={(value) => {
+                      setExtraDayPrice(value);
+                      markDirty();
+                    }}
+                  />
+                  <MoneyField
+                    label="Security Deposit"
+                    value={securityDeposit}
+                    onChange={(value) => {
+                      setSecurityDeposit(value);
+                      markDirty();
+                    }}
+                  />
                 </div>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <MoneyField label="Daily Rate" value={price} onChange={setPrice} required suffix="/ day" />
-                  <MoneyField label="Security Deposit" value={securityDeposit} onChange={setSecurityDeposit} />
+                  <MoneyField
+                    label="Daily Rate"
+                    value={price}
+                    onChange={(value) => {
+                      setPrice(value);
+                      markDirty();
+                    }}
+                    required
+                    suffix="/ day"
+                  />
+                  <MoneyField
+                    label="Security Deposit"
+                    value={securityDeposit}
+                    onChange={(value) => {
+                      setSecurityDeposit(value);
+                      markDirty();
+                    }}
+                  />
                 </div>
               )}
 
@@ -1035,7 +1253,10 @@ export function AddClothingPage() {
                         aria-label="Prep Days Before Rental"
                         inputMode="numeric"
                         value={prepDays}
-                        onChange={(event) => setPrepDays(event.target.value)}
+                        onChange={(event) => {
+                          setPrepDays(event.target.value);
+                          markDirty();
+                        }}
                         className="pr-12"
                       />
                       <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">days</span>
@@ -1050,7 +1271,10 @@ export function AddClothingPage() {
                         aria-label="Recovery Days After Return"
                         inputMode="numeric"
                         value={recoveryDays}
-                        onChange={(event) => setRecoveryDays(event.target.value)}
+                        onChange={(event) => {
+                          setRecoveryDays(event.target.value);
+                          markDirty();
+                        }}
                         className="pr-12"
                       />
                       <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">days</span>
@@ -1133,14 +1357,16 @@ export function AddClothingPage() {
                 </Button>
                 <Button
                   className="w-full"
-                  disabled={isSubmitting || selectedSizes.length === 0 || !categoryId}
+                  disabled={isSubmitting || selectedSizes.length === 0 || !categoryId || photos.length === 0}
                   onClick={() => void submitClothing(true)}
                 >
                   {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
                   Add Clothing
                 </Button>
                 <p className="text-center text-[0.68rem] leading-5 text-dashboard-muted">
-                  Add Clothing creates the selected variants and one physical piece for each size.
+                  {photos.length === 0
+                    ? "Add at least 1 photo to activate this clothing. You can still save it as a draft."
+                    : "Add Clothing creates the selected variants and one physical piece for each size."}
                 </p>
               </CardContent>
             </Card>
@@ -1268,6 +1494,28 @@ export function AddClothingPage() {
         open={measurementGuideOpen}
         onOpenChange={setMeasurementGuideOpen}
       />
+
+      <Dialog.Root open={discardDialogOpen} onOpenChange={handleDiscardDialogOpenChange}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-dashboard-canvas/80 backdrop-blur-sm" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-dashboard-border bg-dashboard-surface p-6 shadow-2xl outline-none sm:p-7">
+            <Dialog.Title className="font-display text-2xl font-semibold text-dashboard-navy">
+              Discard unsaved changes?
+            </Dialog.Title>
+            <Dialog.Description className="mt-3 text-sm leading-6 text-dashboard-muted">
+              You have changes that haven&apos;t been saved as a draft. Leaving this page will discard them.
+            </Dialog.Description>
+            <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <Button variant="secondary" onClick={stayOnPage}>
+                Stay on page
+              </Button>
+              <Button variant="danger" onClick={discardChanges}>
+                Discard changes
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }

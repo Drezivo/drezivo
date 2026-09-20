@@ -122,7 +122,7 @@ export const clothingVariantDetail = z.object({
   id: productVariantId,
   sku: z.string().trim().min(1).max(120),
   size_label: z.string().trim().min(1).max(40),
-  color_label: z.string().trim().min(1).max(80),
+  color_label: z.string().trim().min(1).max(80).nullable(),
   measurement_mode: measurementMode,
   measurement_guide_id: measurementGuideId.nullable(),
   measurement_unit: measurementUnit,
@@ -275,7 +275,7 @@ export const updateClothingVariantRequest = z
   .object({
     expected_updated_at: isoInstant,
     size_label: z.string().trim().min(1).max(40).optional(),
-    color_label: z.string().trim().min(1).max(80).optional(),
+    color_label: z.string().trim().min(1).max(80).nullable().optional(),
     measurement: variantMeasurementPatch.optional(),
     pricing: clothingPricingInput.optional(),
   })

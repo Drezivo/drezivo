@@ -20,6 +20,7 @@ const api = vi.hoisted(() => ({
 
 const navigation = vi.hoisted(() => ({
   push: vi.fn(),
+  replace: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({
@@ -27,7 +28,7 @@ vi.mock("@clerk/nextjs", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: navigation.push }),
+  useRouter: () => ({ push: navigation.push, replace: navigation.replace }),
 }));
 
 vi.mock("@/lib/drezivo-api", () => ({
@@ -46,6 +47,7 @@ function renderPage() {
 describe("AddClothingPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     clerk.getToken.mockResolvedValue("clerk-token");
     clerk.useAuth.mockReturnValue({
       getToken: clerk.getToken,
@@ -285,7 +287,73 @@ describe("AddClothingPage", () => {
     expect(screen.getByText("₱300 / day")).toBeVisible();
   });
 
-  it("submits real variants with stable default-guide references and custom measurements", async () => {
+  it("requires a photo to activate clothing while still allowing an image-less draft", async () => {
+    renderPage();
+    await screen.findByText("Default Size Guide");
+
+    expect(screen.getByRole("button", { name: "Add Clothing" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save as Draft" })).toBeEnabled();
+    expect(
+      screen.getByText("Add at least 1 photo to activate this clothing. You can still save it as a draft.")
+    ).toBeVisible();
+  });
+
+  it("guards internal navigation with a Drezivo discard dialog once the form is dirty", async () => {
+    renderPage();
+    await screen.findByText("Default Size Guide");
+
+    fireEvent.change(screen.getByLabelText("Clothing Name *"), {
+      target: { value: "Unsaved Gown" },
+    });
+    fireEvent.click(screen.getByRole("link", { name: "Clothing" }));
+
+    expect(await screen.findByRole("dialog")).toBeVisible();
+    expect(screen.getByText("Discard unsaved changes?")).toBeVisible();
+    expect(
+      screen.getByText("You have changes that haven't been saved as a draft. Leaving this page will discard them.")
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Stay on page" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(navigation.replace).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("link", { name: "Clothing" }));
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    expect(navigation.replace).toHaveBeenCalledWith("/inventory");
+  });
+
+  it("uses the native beforeunload guard for reload or tab close when dirty", async () => {
+    renderPage();
+    await screen.findByText("Default Size Guide");
+
+    fireEvent.change(screen.getByLabelText("Clothing Name *"), {
+      target: { value: "Unsaved Gown" },
+    });
+
+    const beforeUnload = new Event("beforeunload", { cancelable: true });
+    expect(window.dispatchEvent(beforeUnload)).toBe(false);
+    expect(beforeUnload.defaultPrevented).toBe(true);
+  });
+
+  it("guards browser Back with the same discard dialog", async () => {
+    const historyBack = vi.spyOn(window.history, "back").mockImplementation(() => undefined);
+    renderPage();
+    await screen.findByText("Default Size Guide");
+
+    fireEvent.change(screen.getByLabelText("Clothing Name *"), {
+      target: { value: "Unsaved Gown" },
+    });
+    window.dispatchEvent(new PopStateEvent("popstate"));
+
+    expect(await screen.findByRole("dialog")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(historyBack).toHaveBeenCalledTimes(1);
+    historyBack.mockRestore();
+  });
+
+  it("submits real draft variants with stable default-guide references and custom measurements", async () => {
     renderPage();
     expect(await screen.findByText("Default Size Guide")).toBeVisible();
 
@@ -294,9 +362,6 @@ describe("AddClothingPage", () => {
     });
     fireEvent.change(screen.getByLabelText("Clothing Code"), {
       target: { value: "GOWN-001" },
-    });
-    fireEvent.change(screen.getByLabelText("Color *"), {
-      target: { value: "Emerald Green" },
     });
     fireEvent.click(screen.getByRole("button", { name: /Rental Timing/ }));
     fireEvent.change(screen.getByLabelText("Prep Days Before Rental"), {
@@ -315,7 +380,7 @@ describe("AddClothingPage", () => {
     fireEvent.change(screen.getByLabelText("S waist"), { target: { value: "28" } });
     fireEvent.change(screen.getByLabelText("S hips"), { target: { value: "36" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "Add Clothing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save as Draft" }));
 
     await waitFor(() => expect(api.createClothing).toHaveBeenCalledTimes(1));
     const [requestBody, idempotencyKey] = api.createClothing.mock.calls[0]!;
@@ -324,7 +389,7 @@ describe("AddClothingPage", () => {
       name: "Emerald Evening Gown",
       code: "GOWN-001",
       category_id: "00000000-0000-4000-8000-000000000001",
-      color_label: "Emerald Green",
+      color_label: null,
       image_file_ids: [],
       pricing: {
         mode: "fixed_duration",
@@ -335,7 +400,7 @@ describe("AddClothingPage", () => {
         prep_minutes: 1440,
         turnaround_minutes: 2880,
       },
-      activate: true,
+      activate: false,
     });
     expect(requestBody.sizes).toHaveLength(4);
     expect(requestBody.sizes[0]).toMatchObject({
@@ -350,11 +415,13 @@ describe("AddClothingPage", () => {
       measurement_guide_id: "00000000-0000-4000-8000-000000000099",
       measurements: {},
     });
-    await waitFor(() =>
-      expect(navigation.push).toHaveBeenCalledWith(
-        "/inventory/00000000-0000-4000-8000-000000000050"
-      )
-    );
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("/inventory"));
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem("drezivo:inventory-notice")).toBe("draft-saved");
+
+    const beforeUnload = new Event("beforeunload", { cancelable: true });
+    expect(window.dispatchEvent(beforeUnload)).toBe(true);
+    expect(beforeUnload.defaultPrevented).toBe(false);
   });
 
   it("accepts at most 10 photos, uploads/finalizes them, and submits their file ids in order", async () => {
@@ -420,7 +487,7 @@ describe("AddClothingPage", () => {
     fireEvent.change(screen.getByLabelText("Clothing Name *"), {
       target: { value: "Photo Gown" },
     });
-    fireEvent.change(screen.getByLabelText("Color *"), {
+    fireEvent.change(screen.getByLabelText("Color (optional)"), {
       target: { value: "Gold" },
     });
 
@@ -441,11 +508,23 @@ describe("AddClothingPage", () => {
     await waitFor(() => expect(api.finalizeUpload).toHaveBeenCalledTimes(10));
     await waitFor(() => expect(api.createClothing).toHaveBeenCalledTimes(1));
     const [requestBody] = api.createClothing.mock.calls[0]!;
+    expect(requestBody.activate).toBe(true);
     expect(requestBody.image_file_ids).toEqual(
       Array.from(
         { length: 10 },
         (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`
       )
     );
+    await waitFor(() =>
+      expect(navigation.replace).toHaveBeenCalledWith(
+        "/inventory/00000000-0000-4000-8000-000000000050"
+      )
+    );
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem("drezivo:inventory-notice")).toBeNull();
+
+    const beforeUnload = new Event("beforeunload", { cancelable: true });
+    expect(window.dispatchEvent(beforeUnload)).toBe(true);
+    expect(beforeUnload.defaultPrevented).toBe(false);
   });
 });

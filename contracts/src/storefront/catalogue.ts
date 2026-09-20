@@ -51,7 +51,7 @@ export const catalogueVariant = z.object({
   variant_id: productVariantId,
   sku: z.string().min(1),
   size_label: z.string().min(1),
-  color_label: z.string().min(1),
+  color_label: z.string().min(1).nullable(),
   measurements: z.record(z.string(), z.number()),
   measurement_unit: measurementUnit,
   rental_price_minor: moneyString,

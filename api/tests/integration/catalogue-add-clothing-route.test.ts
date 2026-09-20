@@ -185,6 +185,71 @@ describe('CLT-021 Add Clothing HTTP route', async () => {
     expect(asEnvelope(response.body).error?.message).toBe('Request body is too large.');
   });
 
+  it('requires an image for active clothing while allowing an image-less draft', async () => {
+    const seed = await seedRouteTenant(
+      'org_clt021_active_image',
+      'user_clt021_active_image',
+      ['assets.manage'],
+    );
+    useClerk(seed);
+
+    const activeResponse = await request(createApp())
+      .post('/api/v1/catalogue/clothing')
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt021-active-no-image')
+      .send({ ...validRequest(seed.categoryId, 'ACTIVE-NO-IMAGE'), activate: true });
+
+    expect(activeResponse.status).toBe(422);
+    expectSafeError(activeResponse.body, 'VALIDATION_FAILED');
+    expect(await countProductCode(seed.tenantId, seed.principalId, 'ACTIVE-NO-IMAGE')).toBe(0);
+
+    const draftResponse = await request(createApp())
+      .post('/api/v1/catalogue/clothing')
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt021-draft-no-image')
+      .send(validRequest(seed.categoryId, 'DRAFT-NO-IMAGE'));
+
+    expect(draftResponse.status).toBe(201);
+    expect(draftResponse.body).toMatchObject({
+      success: true,
+      data: { code: 'DRAFT-NO-IMAGE', status: 'draft' },
+    });
+  });
+
+  it('accepts omitted or blank clothing color through the HTTP boundary', async () => {
+    const seed = await seedRouteTenant(
+      'org_clt021_optional_color',
+      'user_clt021_optional_color',
+      ['assets.manage'],
+    );
+    useClerk(seed);
+
+    const omittedColor = validRequest(seed.categoryId, 'NO-COLOR-OMITTED') as Record<string, unknown>;
+    delete omittedColor.color_label;
+    const omittedResponse = await request(createApp())
+      .post('/api/v1/catalogue/clothing')
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt021-no-color-omitted')
+      .send(omittedColor);
+
+    const blankResponse = await request(createApp())
+      .post('/api/v1/catalogue/clothing')
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt021-no-color-blank')
+      .send({ ...validRequest(seed.categoryId, 'NO-COLOR-BLANK'), color_label: '   ' });
+
+    expect(omittedResponse.status).toBe(201);
+    expect(omittedResponse.body).toMatchObject({
+      success: true,
+      data: { code: 'NO-COLOR-OMITTED', status: 'draft' },
+    });
+    expect(blankResponse.status).toBe(201);
+    expect(blankResponse.body).toMatchObject({
+      success: true,
+      data: { code: 'NO-COLOR-BLANK', status: 'draft' },
+    });
+  });
+
   it('creates through the route for authorized Front Desk staff and replays the same idempotency intent', async () => {
     const seed = await seedRouteTenant(
       'org_clt021_success',
@@ -193,7 +258,12 @@ describe('CLT-021 Add Clothing HTTP route', async () => {
       'frontdesk',
     );
     useClerk(seed);
-    const body = validRequest(seed.categoryId, 'HTTP-001');
+    const imageId = await seedAcceptedImage(seed, 'http-success');
+    const body = {
+      ...validRequest(seed.categoryId, 'HTTP-001'),
+      activate: true,
+      image_file_ids: [imageId],
+    };
 
     const first = await request(createApp())
       .post('/api/v1/catalogue/clothing')
@@ -335,6 +405,29 @@ describe('CLT-021 Add Clothing HTTP route', async () => {
     };
   }
 
+  async function seedAcceptedImage(
+    seed: Awaited<ReturnType<typeof seedRouteTenant>>,
+    label: string,
+  ): Promise<string> {
+    return withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ id: string }>(
+        `INSERT INTO file_object
+           (tenant_id, purpose, storage_key, version_id, sha256, mime_type, byte_size,
+            lifecycle_status, is_private, upload_expires_at, frozen_at)
+         VALUES ($1, 'catalogue_image', $2, $3, $4, 'image/png', 512,
+                 'accepted', true, now() + interval '10 minutes', now())
+         RETURNING id`,
+        [
+          seed.tenantId,
+          `tenant-files/${seed.tenantId}/${label}.png`,
+          `version-${label}`,
+          Buffer.alloc(32, 9).toString('base64'),
+        ],
+      );
+      return requireRow(result.rows, 'accepted catalogue image').id;
+    });
+  }
+
   async function setTenantStatus(tenantId: string, status: 'restricted' | 'cancelled') {
     const admin = new Client({ connectionString: adminUrl });
     await admin.connect();
@@ -379,7 +472,7 @@ describe('CLT-021 Add Clothing HTTP route', async () => {
         prep_minutes: 0,
         turnaround_minutes: 1440,
       },
-      activate: true,
+      activate: false,
     };
   }
 

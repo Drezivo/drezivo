@@ -11,6 +11,7 @@ import {
 
 const categoryId = '00000000-0000-4000-8000-000000000001';
 const measurementGuideId = '00000000-0000-4000-8000-000000000002';
+const imageFileId = '00000000-0000-4000-8000-000000000003';
 
 describe('catalogue admin contract', () => {
   it('uses an explicit active/inactive category status for storefront visibility', () => {
@@ -65,7 +66,7 @@ describe('catalogue admin contract', () => {
       description: '',
       category_id: categoryId,
       color_label: 'Emerald Green',
-      image_file_ids: [],
+      image_file_ids: [imageFileId],
       pricing: {
         mode: 'fixed_duration' as const,
         rental_price_minor: '30000',
@@ -81,6 +82,24 @@ describe('catalogue admin contract', () => {
     expect(
       createClothingRequest.safeParse({
         ...base,
+        activate: true,
+        image_file_ids: [],
+        sizes: [{ size_label: 'M', measurement_mode: 'none', measurement_unit: 'in' }],
+      }).success,
+    ).toBe(false);
+
+    expect(
+      createClothingRequest.safeParse({
+        ...base,
+        activate: false,
+        image_file_ids: [],
+        sizes: [{ size_label: 'M', measurement_mode: 'none', measurement_unit: 'in' }],
+      }).success,
+    ).toBe(true);
+
+    expect(
+      createClothingRequest.safeParse({
+        ...base,
         sizes: [
           {
             size_label: 'S',
@@ -92,6 +111,22 @@ describe('catalogue admin contract', () => {
         ],
       }).success,
     ).toBe(true);
+
+    const withoutColor = { ...base };
+    delete (withoutColor as { color_label?: string }).color_label;
+    expect(
+      createClothingRequest.parse({
+        ...withoutColor,
+        sizes: [{ size_label: 'M', measurement_mode: 'none', measurement_unit: 'in' }],
+      }).color_label,
+    ).toBeNull();
+    expect(
+      createClothingRequest.parse({
+        ...base,
+        color_label: '   ',
+        sizes: [{ size_label: 'M', measurement_mode: 'none', measurement_unit: 'in' }],
+      }).color_label,
+    ).toBeNull();
 
     expect(
       createClothingRequest.parse({

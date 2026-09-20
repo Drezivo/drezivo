@@ -158,7 +158,7 @@ function DetailContent({ item }: { item: ClothingDetail }) {
                   {item.variants.map((variant) => (
                     <TableRow key={variant.id}>
                       <TableCell className="font-semibold text-dashboard-navy">{variant.size_label}</TableCell>
-                      <TableCell className="text-dashboard-muted">{variant.color_label}</TableCell>
+                      <TableCell className="text-dashboard-muted">{variant.color_label ?? "—"}</TableCell>
                       <TableCell className="text-dashboard-muted">{variant.sku}</TableCell>
                       <TableCell className="font-medium text-dashboard-navy">
                         {formatMoney(variant.rental_price_minor, variant.currency)}
@@ -386,9 +386,17 @@ function EmptySection({ message }: { message: string }) {
 }
 
 function LifecycleBadge({ status }: { status: ClothingDetail["status"] }) {
+  const label = labelize(status);
+  const className = cn(
+    "border-transparent",
+    status === "active" && "dashboard-tone-mint",
+    status === "draft" && "dashboard-tone-orange",
+    status === "archived" && "bg-dashboard-neutral-soft text-dashboard-neutral-text"
+  );
+
   return (
-    <Badge variant={status === "active" ? "secondary" : "outline"}>
-      {labelize(status)}
+    <Badge variant="outline" className={className} aria-label={`Clothing lifecycle: ${label}`}>
+      {label}
     </Badge>
   );
 }

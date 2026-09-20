@@ -78,6 +78,7 @@ const CREATE_CLOTHING_OPERATION = 'catalogue.clothing.create';
 const UPDATE_CATEGORY_STATUS_OPERATION = 'catalogue.category.status.update';
 const REPLACE_CLOTHING_IMAGES_OPERATION = 'catalogue.clothing.images.replace';
 const MEASUREMENT_GUIDE_VIEW_EXPIRY_SECONDS = 5 * 60;
+const CATALOGUE_IMAGE_VIEW_EXPIRY_SECONDS = 5 * 60;
 const POSTGRES_INT_MAX = 2_147_483_647;
 
 interface CatalogueContext {
@@ -117,6 +118,7 @@ export async function getCatalogueCategories(
 export async function getCatalogueClothingList(
   input: CatalogueContext,
   query: ClothingListQuery,
+  storage: ObjectStorage = s3ObjectStorage,
 ): Promise<ClothingListResponse> {
   assertCatalogueReadContext(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
@@ -125,30 +127,46 @@ export async function getCatalogueClothingList(
       branchId: input.branchId,
       query,
     });
+    const items = await Promise.all(
+      page.rows.map(async (row) => {
+        const primaryImageUrl = row.primary_image_storage_key
+          ? (
+              await storage.authorizeRead({
+                storageKey: row.primary_image_storage_key,
+                versionId: row.primary_image_version_id,
+                expiresInSeconds: CATALOGUE_IMAGE_VIEW_EXPIRY_SECONDS,
+              })
+            ).readUrl
+          : null;
+
+        return {
+          product_id: row.product_id,
+          code: row.code,
+          name: row.name,
+          category:
+            row.category_id && row.category_name
+              ? { id: row.category_id, name: row.category_name }
+              : null,
+          product_status: row.product_status,
+          size_labels: row.size_labels,
+          price_from_minor: row.price_from_minor.toString(),
+          currency: row.currency,
+          primary_image_url: primaryImageUrl,
+          readiness: {
+            active_assets: row.active_assets,
+            ready: row.ready,
+            needs_cleaning: row.needs_cleaning,
+            needs_repair: row.needs_repair,
+            unready: row.unready,
+          },
+          created_at: row.created_at.toISOString(),
+          updated_at: row.updated_at.toISOString(),
+        };
+      }),
+    );
+
     return clothingListResponse.parse({
-      items: page.rows.map((row) => ({
-        product_id: row.product_id,
-        code: row.code,
-        name: row.name,
-        category:
-          row.category_id && row.category_name
-            ? { id: row.category_id, name: row.category_name }
-            : null,
-        product_status: row.product_status,
-        size_labels: row.size_labels,
-        price_from_minor: row.price_from_minor.toString(),
-        currency: row.currency,
-        primary_image_url: null,
-        readiness: {
-          active_assets: row.active_assets,
-          ready: row.ready,
-          needs_cleaning: row.needs_cleaning,
-          needs_repair: row.needs_repair,
-          unready: row.unready,
-        },
-        created_at: row.created_at.toISOString(),
-        updated_at: row.updated_at.toISOString(),
-      })),
+      items,
       page_meta: {
         next_cursor: page.nextCursor,
         has_more: page.hasMore,

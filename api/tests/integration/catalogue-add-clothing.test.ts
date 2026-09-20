@@ -4,8 +4,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   createClothingRequest,
+  fileObjectId,
   measurementGuideId,
   type CreateClothingRequest,
+  type FileObjectId,
   type MeasurementGuideId,
   type PermissionCode,
 } from '@drezivo/contracts';
@@ -60,8 +62,11 @@ describe('CLT-020 Add Clothing transactional service', async () => {
       name: 'Guide A',
       isDefault: true,
     });
+    const imageId = await seedAcceptedImage(seed.tenantId, 'user_clt020_atomic', 'atomic');
     const request = makeRequest(seed.categoryId, {
       code: 'EMERALD-001',
+      color_label: null,
+      image_file_ids: [imageId],
       sizes: [
         {
           size_label: 'M',
@@ -117,6 +122,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
     const medium = state.variants.find((variant) => variant.size_label === 'M');
     const large = state.variants.find((variant) => variant.size_label === 'L');
     expect(medium).toMatchObject({
+      color_label: null,
       measurement_mode: 'default_guide',
       measurement_guide_id: guideId,
       rental_price_minor: 150000,
@@ -126,6 +132,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
       currency: 'PHP',
     });
     expect(large).toMatchObject({
+      color_label: null,
       measurement_mode: 'custom',
       measurement_guide_id: null,
       measurements: { bust: 94, waist: 76 },
@@ -625,6 +632,30 @@ describe('CLT-020 Add Clothing transactional service', async () => {
     });
   }
 
+  async function seedAcceptedImage(
+    tenantId: string,
+    principalId: string,
+    label: string,
+  ): Promise<FileObjectId> {
+    return withTenantTransaction(tenantId, principalId, async (client) => {
+      const result = await client.query<{ id: string }>(
+        `INSERT INTO file_object
+           (tenant_id, purpose, storage_key, version_id, sha256, mime_type, byte_size,
+            lifecycle_status, is_private, upload_expires_at, frozen_at)
+         VALUES ($1, 'catalogue_image', $2, $3, $4, 'image/png', 512,
+                 'accepted', true, now() + interval '10 minutes', now())
+         RETURNING id`,
+        [
+          tenantId,
+          `tenant-files/${tenantId}/${label}.png`,
+          `version-${label}`,
+          Buffer.alloc(32, 7).toString('base64'),
+        ],
+      );
+      return fileObjectId.parse(requireRow(result.rows, 'accepted catalogue image').id);
+    });
+  }
+
   function makeRequest(
     categoryId: string,
     overrides: Partial<Omit<CreateClothingRequest, 'category_id'>> = {},
@@ -645,7 +676,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
         prep_minutes: 0,
         turnaround_minutes: 1440,
       },
-      activate: true,
+      activate: false,
       ...overrides,
     });
   }
@@ -661,6 +692,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
         ? await client.query<{
             id: string;
             size_label: string;
+            color_label: string | null;
             measurement_mode: string;
             measurement_guide_id: string | null;
             measurements: Record<string, number>;
@@ -670,7 +702,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
             extra_day_price_minor: number;
             included_duration_minutes: number;
           }>(
-            `SELECT id, size_label, measurement_mode, measurement_guide_id, measurements,
+            `SELECT id, size_label, color_label, measurement_mode, measurement_guide_id, measurements,
                     rental_price_minor, security_deposit_minor, currency, extra_day_price_minor,
                     included_duration_minutes
                FROM product_variant

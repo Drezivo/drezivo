@@ -13,6 +13,7 @@ import {
   Shirt,
   SlidersHorizontal,
   Tags,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -67,9 +68,24 @@ export function ClothingPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<DrezivoApiError | null>(null);
   const [reloadVersion, setReloadVersion] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const selectedCategory = categories.find((category) => category.id === categoryId) ?? null;
   const currentCursor = pageCursors[pageIndex] ?? null;
+
+  useEffect(() => {
+    const savedNotice = sessionStorage.getItem("drezivo:inventory-notice");
+    if (savedNotice === "draft-saved") {
+      setNotice("Draft saved");
+      sessionStorage.removeItem("drezivo:inventory-notice");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timeoutId = window.setTimeout(() => setNotice(null), 3000);
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -204,6 +220,23 @@ export function ClothingPage() {
             </Link>
           </div>
         </div>
+
+        {notice ? (
+          <div
+            role="status"
+            className="flex items-center justify-between gap-3 rounded-lg border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm font-medium text-success-500"
+          >
+            <span>{notice}</span>
+            <button
+              type="button"
+              aria-label="Dismiss draft saved message"
+              onClick={() => setNotice(null)}
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-success-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success-500/40"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
 
         <Card className="gap-0 py-0">
           <CardContent className="flex flex-col gap-2 p-3 lg:flex-row lg:items-center">
@@ -340,8 +373,17 @@ function ClothingRow({ item }: { item: ClothingListItem }) {
   return (
     <TableRow>
       <TableCell>
-        <div className="flex h-12 w-10 items-center justify-center rounded-lg bg-dashboard-active text-xs font-semibold text-dashboard-accent">
-          {initials(item.name)}
+        <div className="flex h-12 w-10 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-xs font-semibold text-dashboard-accent">
+          {item.primary_image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- signed catalogue URLs are dynamic and are not configured as stable next/image remote patterns.
+            <img
+              src={item.primary_image_url}
+              alt={`${item.name} catalogue photo`}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            initials(item.name)
+          )}
         </div>
       </TableCell>
       <TableCell>
