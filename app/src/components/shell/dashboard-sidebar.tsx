@@ -31,7 +31,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/reservations", label: "Reservations", icon: ClipboardList },
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
-  { href: "/inventory", label: "Clothing / Inventory", icon: Shirt },
+  { href: "/inventory", label: "Clothing", icon: Shirt },
   { href: "/customers", label: "Customers", icon: UsersRound },
   { href: "/fittings", label: "Fittings", icon: Ruler },
   { href: "/payments", label: "Payments", icon: CreditCard },
