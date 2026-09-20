@@ -1,8 +1,25 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AddClothingPage } from "@/components/inventory/add-clothing-page";
 import { MeasurementGuideProvider } from "@/components/settings/measurement-guide-context";
+
+const clerk = vi.hoisted(() => ({
+  getToken: vi.fn(),
+  useAuth: vi.fn(),
+}));
+
+const api = vi.hoisted(() => ({
+  getCatalogueCategories: vi.fn(),
+}));
+
+vi.mock("@clerk/nextjs", () => ({
+  useAuth: clerk.useAuth,
+}));
+
+vi.mock("@/lib/drezivo-api", () => ({
+  createDrezivoApiClient: () => api,
+}));
 
 function renderPage() {
   return render(
@@ -13,6 +30,29 @@ function renderPage() {
 }
 
 describe("AddClothingPage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clerk.getToken.mockResolvedValue("clerk-token");
+    clerk.useAuth.mockReturnValue({
+      getToken: clerk.getToken,
+      isLoaded: true,
+      isSignedIn: true,
+    });
+    api.getCatalogueCategories.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: "00000000-0000-4000-8000-000000000001",
+            name: "Gowns",
+            status: "active",
+            display_order: 10,
+          },
+        ],
+      },
+      requestId: "req-categories",
+    });
+  });
+
   it("shows an optional clothing code field", () => {
     renderPage();
 

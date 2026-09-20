@@ -1,5 +1,7 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
+
 import {
   ArrowLeft,
   CalendarClock,
@@ -19,7 +21,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+
+import type { CatalogueCategory } from "@drezivo/contracts";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,6 +36,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { useMeasurementGuide } from "@/components/settings/measurement-guide-context";
+import { createDrezivoApiClient } from "@/lib/drezivo-api";
 import { cn } from "@/lib/utils";
 
 const SIZE_OPTIONS = ["XS", "S", "M", "L", "XL", "XXL"] as const;
@@ -48,20 +53,13 @@ type Measurements = {
 
 const EMPTY_MEASUREMENTS: Measurements = { bust: "", waist: "", hips: "" };
 
-const CATEGORIES = [
-  "Evening Gown",
-  "Wedding Gown",
-  "Bridesmaid Dress",
-  "Debut Gown",
-  "Filipiniana",
-  "Barong",
-  "Formal Wear",
-  "Costume",
-] as const;
-
 export function AddClothingPage() {
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   const { guide } = useMeasurementGuide();
-  const [category, setCategory] = useState<string>("Evening Gown");
+  const [categories, setCategories] = useState<CatalogueCategory[]>([]);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [categoryLoading, setCategoryLoading] = useState(true);
+  const [categoryLoadError, setCategoryLoadError] = useState(false);
   const [selectedSizes, setSelectedSizes] = useState<ClothingSize[]>(["S", "M", "L", "XL"]);
   const [measurementUnit, setMeasurementUnit] = useState<MeasurementUnit>("in");
   const [measurementModes, setMeasurementModes] = useState<Record<ClothingSize, MeasurementMode>>(() =>
@@ -85,6 +83,39 @@ export function AddClothingPage() {
   const [turnaroundHours, setTurnaroundHours] = useState("24");
   const [timingOpen, setTimingOpen] = useState(false);
   const [measurementGuideOpen, setMeasurementGuideOpen] = useState(false);
+
+  const activeCategories = useMemo(
+    () => categories.filter((category) => category.status === "active"),
+    [categories]
+  );
+  const selectedCategory =
+    activeCategories.find((category) => category.id === categoryId) ?? null;
+
+  const loadCategories = useCallback(async () => {
+    if (!isLoaded || !isSignedIn) return;
+    setCategoryLoading(true);
+    setCategoryLoadError(false);
+    try {
+      const result = await createDrezivoApiClient(getToken).getCatalogueCategories();
+      setCategories(result.data.items);
+      const active = result.data.items.filter((category) => category.status === "active");
+      setCategoryId((current) =>
+        current && active.some((category) => category.id === current)
+          ? current
+          : (active[0]?.id ?? null)
+      );
+    } catch {
+      setCategoryLoadError(true);
+      setCategories([]);
+      setCategoryId(null);
+    } finally {
+      setCategoryLoading(false);
+    }
+  }, [getToken, isLoaded, isSignedIn]);
+
+  useEffect(() => {
+    void loadCategories();
+  }, [loadCategories]);
 
   const totalPieces = selectedSizes.length;
   const pricingSummary = useMemo(() => {
@@ -205,24 +236,47 @@ export function AddClothingPage() {
                   </div>
                 </Field>
                 <Field label="Category" required>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        className="w-full justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
-                      >
-                        {category}
-                        <ChevronDown className="h-4 w-4 text-dashboard-muted" aria-hidden="true" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="min-w-52">
-                      {CATEGORIES.map((item) => (
-                        <DropdownMenuItem key={item} onSelect={() => setCategory(item)}>
-                          {item}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          disabled={
+                            categoryLoading || !isLoaded || !isSignedIn || activeCategories.length === 0
+                          }
+                          className="w-full justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+                        >
+                          {selectedCategory?.name ??
+                            (categoryLoading
+                              ? "Loading categories…"
+                              : categoryLoadError
+                                ? "Could not load categories"
+                                : "No active categories")}
+                          <ChevronDown className="h-4 w-4 text-dashboard-muted" aria-hidden="true" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="min-w-52">
+                        {activeCategories.map((item) => (
+                          <DropdownMenuItem key={item.id} onSelect={() => setCategoryId(item.id)}>
+                            {item.name}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    {!categoryLoading && (categoryLoadError || activeCategories.length === 0) ? (
+                      <p className="mt-1.5 text-xs text-dashboard-muted">
+                        {categoryLoadError
+                          ? "Reload the page or manage your categories before continuing."
+                          : "Activate a category before adding clothing."}{" "}
+                        <Link
+                          href="/inventory/categories"
+                          className="font-medium text-dashboard-accent hover:underline"
+                        >
+                          Manage Categories
+                        </Link>
+                      </p>
+                    ) : null}
+                  </div>
                 </Field>
               </div>
 

@@ -5,20 +5,26 @@ import {
   actorContext,
   apiEnvelope,
   bootstrapTenantRequest,
+  catalogueCategory,
+  catalogueCategoryList,
   chooseOnboardingPlanRequest,
   createOwnerOnboardingRequest,
   onboardingActorContext,
   organizationOnboarding,
   tenantBootstrapResponse,
+  updateCatalogueCategoryStatusRequest,
   workspaceList,
   type AbandonOwnerOnboardingRequest,
   type ActorContext,
   type BootstrapTenantRequest,
   type ChooseOnboardingPlanRequest,
+  type CatalogueCategory,
+  type CatalogueCategoryList,
   type CreateOwnerOnboardingRequest,
   type OnboardingActorContext,
   type OrganizationOnboarding,
   type TenantBootstrapResponse,
+  type UpdateCatalogueCategoryStatusRequest,
   type WorkspaceList,
 } from "@drezivo/contracts";
 
@@ -117,6 +123,26 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         path: "/api/v1/actor-context",
         responseSchema: apiEnvelope(actorContext),
       }),
+    getCatalogueCategories: () =>
+      request<CatalogueCategoryList>({
+        getToken,
+        method: "GET",
+        path: "/api/v1/catalogue/categories",
+        responseSchema: apiEnvelope(catalogueCategoryList),
+      }),
+    updateCatalogueCategoryStatus: (
+      categoryId: string,
+      input: UpdateCatalogueCategoryStatusRequest,
+      idempotencyKey: string
+    ) =>
+      request<CatalogueCategory>({
+        getToken,
+        body: updateCatalogueCategoryStatusRequest.parse(input),
+        idempotencyKey,
+        method: "PATCH",
+        path: `/api/v1/catalogue/categories/${encodeURIComponent(categoryId)}/status`,
+        responseSchema: apiEnvelope(catalogueCategory),
+      }),
   };
 }
 
@@ -131,7 +157,7 @@ async function request<T>({
   body?: unknown;
   getToken: TokenGetter;
   idempotencyKey?: string;
-  method: "GET" | "POST";
+  method: "GET" | "PATCH" | "POST";
   path: string;
   responseSchema: ReturnType<typeof apiEnvelope>;
 }): Promise<ApiResult<T>> {

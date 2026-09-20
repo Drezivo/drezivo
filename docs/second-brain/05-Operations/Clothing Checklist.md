@@ -96,37 +96,37 @@ Before marking a task complete:
 
 ## Phase 1: Catalogue read model
 
-- [ ] **CLT-010 — Implement tenant-safe clothing list query**
+- [x] **CLT-010 — Implement tenant-safe clothing list query**
   - **Depends on:** CLT-001, CLT-002, actor-context foundation.
   - **Outcome:** `/inventory` can render real clothing data with bounded server-side pagination.
   - **Acceptance:**
-    - [ ] Query resolves tenant and branch from actor context, never browser authority fields.
-    - [ ] Search covers product name and tenant-local product code; category/size filters are server-side.
-    - [ ] Pagination is bounded and deterministic; prefer keyset/cursor semantics for scalable catalogue reads.
-    - [ ] Response includes only safe list projection fields needed by the Clothing page.
-    - [ ] Derived UI status does not claim future availability from a mutable asset flag.
-    - [ ] Foreign tenant IDs/codes cannot enumerate or influence results.
-  - **Tests/evidence:** Query tests cover search/filter/pagination, zero results, large tenant dataset, and cross-tenant isolation.
+    - [x] Query resolves tenant and branch from actor context, never browser authority fields.
+    - [x] Search covers product name and tenant-local product code; category/size filters are server-side.
+    - [x] Pagination is bounded and deterministic; keyset/cursor semantics are used for scalable catalogue reads.
+    - [x] Response includes only safe list projection fields needed by the Clothing page.
+    - [x] Derived UI status does not claim future availability from a mutable asset flag.
+    - [x] Foreign tenant IDs/codes cannot enumerate or influence results.
+  - **Tests/evidence:** `api/tests/integration/catalogue-read-model.test.ts` covers a 120-style dataset, keyset pagination, search/filtering, zero results, cursor validation, readiness projection, and cross-tenant isolation. See [[Clothing Phase 1 Read Model]].
 
-- [ ] **CLT-011 — Implement clothing detail query**
+- [x] **CLT-011 — Implement clothing detail query**
   - **Depends on:** CLT-010.
   - **Outcome:** A Clothing Details sheet/page can resolve the style, variants, serialized assets, pricing, measurement source, and safe readiness summary.
   - **Acceptance:**
-    - [ ] Product, variants, and physical assets are returned as distinct identities.
-    - [ ] Detail projection preserves per-variant/per-asset overrides instead of flattening away differences.
-    - [ ] Upcoming allocation/history links are references or bounded summaries, not unbounded reservation dumps.
-    - [ ] Internal notes remain staff-only.
-    - [ ] Archived styles remain readable to authorized staff and historical reservations.
-  - **Tests/evidence:** Detail tests cover active, archived, multiple-size, duplicate-asset, and foreign-ID cases.
+    - [x] Product, variants, and physical assets are returned as distinct identities.
+    - [x] Detail projection preserves per-variant/per-asset overrides instead of flattening away differences.
+    - [x] Upcoming allocation/history links are references or bounded summaries, not unbounded reservation dumps.
+    - [x] Internal notes remain staff-only; no internal-note field is exposed by the canonical staff detail projection.
+    - [x] Archived styles remain readable to authorized staff and historical references.
+  - **Tests/evidence:** Real PostgreSQL detail tests cover active/archived products, multiple sizes, multiple serialized assets, per-asset overrides, foreign-ID concealment, and 11 future allocations proving the 10-row bound plus `has_more_upcoming_allocations`. See [[Clothing Phase 1 Read Model]].
 
-- [ ] **CLT-012 — Implement category list/management read boundary**
+- [x] **CLT-012 — Implement category list/management read boundary**
   - **Depends on:** CLT-010.
-  - **Outcome:** Add/Edit Clothing uses real tenant categories without hard-coded frontend category values.
+  - **Outcome:** Add/Edit Clothing can use real tenant categories without hard-coded frontend category values.
   - **Acceptance:**
-    - [ ] Categories are tenant scoped.
-    - [ ] `active`/`inactive` category behavior is explicit in the staff management UI and public catalogue query.
-    - [ ] Existing products referencing a category remain historically valid.
-  - **Tests/evidence:** Tenant isolation and stable ordering tests.
+    - [x] Categories are tenant scoped.
+    - [x] `active`/`inactive` category behavior is explicit in the staff management UI and public catalogue query.
+    - [x] Existing products referencing a category remain historically valid.
+  - **Tests/evidence:** PostgreSQL tests cover tenant isolation/stable ordering; `categories-page.test.tsx` and `add-clothing-categories.test.tsx` cover staff management, retry-safe toggle behavior, and active-only Add Clothing selection. See [[Clothing Phase 1 Read Model]].
 
 ## Phase 2: Add Clothing command
 

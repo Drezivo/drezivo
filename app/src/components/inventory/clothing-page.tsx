@@ -90,10 +90,19 @@ export function ClothingPage() {
               Manage the clothing styles, variants, and total pieces your business offers.
             </p>
           </div>
-          <Link href="/inventory/new" className={buttonVariants()}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Add Clothing
-          </Link>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Link
+              href="/inventory/categories"
+              className={buttonVariants({ variant: "secondary" })}
+            >
+              <Tags className="h-4 w-4" aria-hidden="true" />
+              Manage Categories
+            </Link>
+            <Link href="/inventory/new" className={buttonVariants()}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Add Clothing
+            </Link>
+          </div>
         </div>
 
         <Card className="gap-0 py-0">
