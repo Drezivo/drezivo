@@ -216,6 +216,40 @@ describe('CLT-021 Add Clothing HTTP route', async () => {
     });
   });
 
+  it('accepts omitted or blank clothing color through the HTTP boundary', async () => {
+    const seed = await seedRouteTenant(
+      'org_clt021_optional_color',
+      'user_clt021_optional_color',
+      ['assets.manage'],
+    );
+    useClerk(seed);
+
+    const omittedColor = validRequest(seed.categoryId, 'NO-COLOR-OMITTED') as Record<string, unknown>;
+    delete omittedColor.color_label;
+    const omittedResponse = await request(createApp())
+      .post('/api/v1/catalogue/clothing')
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt021-no-color-omitted')
+      .send(omittedColor);
+
+    const blankResponse = await request(createApp())
+      .post('/api/v1/catalogue/clothing')
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt021-no-color-blank')
+      .send({ ...validRequest(seed.categoryId, 'NO-COLOR-BLANK'), color_label: '   ' });
+
+    expect(omittedResponse.status).toBe(201);
+    expect(omittedResponse.body).toMatchObject({
+      success: true,
+      data: { code: 'NO-COLOR-OMITTED', status: 'draft' },
+    });
+    expect(blankResponse.status).toBe(201);
+    expect(blankResponse.body).toMatchObject({
+      success: true,
+      data: { code: 'NO-COLOR-BLANK', status: 'draft' },
+    });
+  });
+
   it('creates through the route for authorized Front Desk staff and replays the same idempotency intent', async () => {
     const seed = await seedRouteTenant(
       'org_clt021_success',

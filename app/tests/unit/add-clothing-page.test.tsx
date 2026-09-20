@@ -522,5 +522,9 @@ describe("AddClothingPage", () => {
     );
     expect(navigation.push).not.toHaveBeenCalled();
     expect(sessionStorage.getItem("drezivo:inventory-notice")).toBeNull();
+
+    const beforeUnload = new Event("beforeunload", { cancelable: true });
+    expect(window.dispatchEvent(beforeUnload)).toBe(true);
+    expect(beforeUnload.defaultPrevented).toBe(false);
   });
 });
