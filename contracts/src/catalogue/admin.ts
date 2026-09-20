@@ -23,6 +23,8 @@ export const measurementGuide = z.object({
   id: measurementGuideId,
   name: z.string().trim().min(1).max(160),
   file_id: fileObjectId,
+  /** Short-lived signed URL for the accepted private guide image. */
+  image_url: z.string().url().nullable().default(null),
   is_default: z.boolean(),
   status: measurementGuideStatus,
   created_at: isoInstant,
@@ -168,6 +170,24 @@ export type ClothingSizeInput = z.infer<typeof clothingSizeInput>;
  * selected size into one product_variant and one initial physical_asset. The database still allows
  * multiple physical assets per variant later; this one-piece-per-size rule is only the V1 creation UX.
  */
+export const clothingImageFileIds = z
+  .array(fileObjectId)
+  .max(10)
+  .superRefine((fileIds, ctx) => {
+    const seen = new Set<string>();
+    fileIds.forEach((fileId, index) => {
+      if (seen.has(fileId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [index],
+          message: 'The same clothing photo cannot be attached more than once.',
+        });
+      }
+      seen.add(fileId);
+    });
+  });
+export type ClothingImageFileIds = z.infer<typeof clothingImageFileIds>;
+
 export const createClothingRequest = z
   .object({
     name: z.string().trim().min(1).max(200),
@@ -175,7 +195,7 @@ export const createClothingRequest = z
     description: z.string().trim().max(2_000).default(''),
     category_id: categoryId,
     color_label: z.string().trim().min(1).max(80),
-    image_file_ids: z.array(fileObjectId).max(10).default([]),
+    image_file_ids: clothingImageFileIds.default([]),
     sizes: z.array(clothingSizeInput).min(1).max(20),
     pricing: clothingPricingInput,
     activate: z.boolean().default(false),

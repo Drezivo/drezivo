@@ -10,6 +10,14 @@ import {
   clothingDetail,
   clothingListQuery,
   clothingListResponse,
+  createClothingRequest,
+  createClothingResponse,
+  measurementGuide,
+  measurementGuideDefaultResponse,
+  saveMeasurementGuideRequest,
+  uploadAuthorizationRequest,
+  uploadAuthorizationResponse,
+  uploadFinalizeResponse,
   chooseOnboardingPlanRequest,
   createOwnerOnboardingRequest,
   onboardingActorContext,
@@ -26,6 +34,14 @@ import {
   type ClothingDetail,
   type ClothingListQuery,
   type ClothingListResponse,
+  type CreateClothingRequest,
+  type CreateClothingResponse,
+  type MeasurementGuide,
+  type MeasurementGuideDefaultResponse,
+  type SaveMeasurementGuideRequest,
+  type UploadAuthorizationRequest,
+  type UploadAuthorizationResponse,
+  type UploadFinalizeResponse,
   type CreateOwnerOnboardingRequest,
   type OnboardingActorContext,
   type OrganizationOnboarding,
@@ -143,6 +159,52 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}`,
         responseSchema: apiEnvelope(clothingDetail),
       }),
+    getDefaultMeasurementGuide: () =>
+      request<MeasurementGuideDefaultResponse>({
+        getToken,
+        method: "GET",
+        path: "/api/v1/catalogue/measurement-guide/default",
+        responseSchema: apiEnvelope(measurementGuideDefaultResponse),
+      }),
+    saveMeasurementGuide: (
+      input: SaveMeasurementGuideRequest,
+      idempotencyKey: string
+    ) =>
+      request<MeasurementGuide>({
+        getToken,
+        body: saveMeasurementGuideRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/catalogue/measurement-guides",
+        responseSchema: apiEnvelope(measurementGuide),
+      }),
+    authorizeUpload: (input: UploadAuthorizationRequest, idempotencyKey: string) =>
+      request<UploadAuthorizationResponse>({
+        getToken,
+        body: uploadAuthorizationRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/uploads",
+        responseSchema: apiEnvelope(uploadAuthorizationResponse),
+      }),
+    finalizeUpload: (fileId: string, idempotencyKey: string) =>
+      request<UploadFinalizeResponse>({
+        getToken,
+        body: {},
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/uploads/${encodeURIComponent(fileId)}/finalize`,
+        responseSchema: apiEnvelope(uploadFinalizeResponse),
+      }),
+    createClothing: (input: CreateClothingRequest, idempotencyKey: string) =>
+      request<CreateClothingResponse>({
+        getToken,
+        body: createClothingRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/catalogue/clothing",
+        responseSchema: apiEnvelope(createClothingResponse),
+      }),
     getCatalogueClothing: (input: ClothingListQuery) => {
       const query = clothingListQuery.parse(input);
       const searchParams = new URLSearchParams();
@@ -190,7 +252,7 @@ async function request<T>({
   body?: unknown;
   getToken: TokenGetter;
   idempotencyKey?: string;
-  method: "GET" | "PATCH" | "POST";
+  method: "GET" | "PATCH" | "POST" | "PUT";
   path: string;
   responseSchema: ReturnType<typeof apiEnvelope>;
 }): Promise<ApiResult<T>> {

@@ -15,6 +15,7 @@ import { paginatedResponse, paginationRequest } from '../common/pagination';
 import { isoInstant } from '../common/time';
 import {
   cataloguePricingMode,
+  clothingImageFileIds,
   clothingPricingInput,
   clothingStyleCode,
   measurementMap,
@@ -147,6 +148,23 @@ export const clothingImageSummary = z.object({
   image_url: z.string().url().nullable(),
 });
 export type ClothingImageSummary = z.infer<typeof clothingImageSummary>;
+
+/**
+ * Replaces the complete ordered photo set for a style. Array order is authoritative and index 0
+ * is the cover image. Tenant/product authority never comes from this body.
+ */
+export const replaceClothingImagesRequest = z
+  .object({
+    file_ids: clothingImageFileIds,
+  })
+  .strict();
+export type ReplaceClothingImagesRequest = z.infer<typeof replaceClothingImagesRequest>;
+
+export const replaceClothingImagesResponse = z.object({
+  images: z.array(clothingImageSummary).max(10),
+  cover_file_id: fileObjectId.nullable(),
+});
+export type ReplaceClothingImagesResponse = z.infer<typeof replaceClothingImagesResponse>;
 
 export const clothingAllocationKind = z.enum([
   'reservation_hold',

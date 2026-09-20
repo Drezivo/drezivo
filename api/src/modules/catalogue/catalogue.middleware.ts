@@ -6,6 +6,7 @@ import {
   createClothingRequest,
   idempotencyKey,
   productId,
+  replaceClothingImagesRequest,
   saveMeasurementGuideRequest,
   updateCatalogueCategoryStatusRequest,
   type ClothingListQuery,
@@ -64,6 +65,16 @@ export const validateSaveMeasurementGuide: RequestHandler = (req, _res, next): v
   const parsed = saveMeasurementGuideRequest.safeParse(req.body);
   if (!parsed.success) {
     next(new ValidationError('Measurement guide request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  next();
+};
+
+export const validateReplaceClothingImages: RequestHandler = (req, _res, next): void => {
+  const parsed = replaceClothingImagesRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Clothing image request is invalid.'));
     return;
   }
   req.body = parsed.data;

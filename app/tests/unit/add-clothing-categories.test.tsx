@@ -10,13 +10,23 @@ const clerk = vi.hoisted(() => ({
 
 const api = vi.hoisted(() => ({
   getCatalogueCategories: vi.fn(),
+  getDefaultMeasurementGuide: vi.fn(),
+}));
+
+const navigation = vi.hoisted(() => ({
+  push: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({
   useAuth: clerk.useAuth,
 }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: navigation.push }),
+}));
+
 vi.mock("@/lib/drezivo-api", () => ({
+  DrezivoApiError: class DrezivoApiError extends Error {},
   createDrezivoApiClient: () => api,
 }));
 
@@ -38,6 +48,20 @@ describe("AddClothingPage categories", () => {
       getToken: clerk.getToken,
       isLoaded: true,
       isSignedIn: true,
+    });
+    api.getDefaultMeasurementGuide.mockResolvedValue({
+      data: {
+        guide: {
+          id: "00000000-0000-4000-8000-000000000099",
+          file_id: "00000000-0000-4000-8000-000000000098",
+          name: "Default Size Guide",
+          status: "active",
+          is_default: true,
+          created_at: "2026-09-21T00:00:00.000Z",
+          updated_at: "2026-09-21T00:00:00.000Z",
+        },
+      },
+      requestId: "req-guide",
     });
     api.getCatalogueCategories.mockResolvedValue({
       data: {
