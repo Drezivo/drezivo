@@ -76,7 +76,7 @@ export async function assertPhysicalAssetCapacity(
   additional: number,
 ): Promise<QuotaCheckResult> {
   validateAdditional(additional);
-  await requireLockedTenant(client, tenantId);
+  await lockTenantQuotaScope(client, tenantId);
   const entitlements = await resolveTenantEntitlements(client, tenantId);
   const current = await countActivePhysicalAssets(client, tenantId);
   return ensureCapacity('physical_assets', current, additional, entitlements.physicalAssetsMax);
@@ -93,7 +93,7 @@ export async function assertFrontDeskSeatCapacity(
   options?: { excludeInvitationId?: string },
 ): Promise<QuotaCheckResult> {
   validateAdditional(additional);
-  await requireLockedTenant(client, tenantId);
+  await lockTenantQuotaScope(client, tenantId);
   const entitlements = await resolveTenantEntitlements(client, tenantId);
   const current = await countReservedFrontdeskSeats(client, tenantId, options?.excludeInvitationId);
   return ensureCapacity('frontdesk_seats', current, additional, entitlements.frontdeskSeatsMax);
@@ -117,7 +117,7 @@ export async function assertPlanCapacity(
   };
 }
 
-async function requireLockedTenant(client: PoolClient, tenantId: string): Promise<void> {
+export async function lockTenantQuotaScope(client: PoolClient, tenantId: string): Promise<void> {
   if (!(await lockTenantForQuota(client, tenantId))) {
     throw new StateConflictError('Workspace entitlement state is unavailable.');
   }

@@ -4,7 +4,7 @@ import type { PoolClient } from 'pg';
 
 import type { CreateClothingRequest, MeasurementMap } from '@drezivo/contracts';
 
-import { StateConflictError } from '../../shared/errors.js';
+import { DuplicateClothingCodeError, StateConflictError } from '../../shared/errors.js';
 
 export interface CategoryRow {
   id: string;
@@ -67,18 +67,37 @@ export async function updateCategoryStatus(
   return result.rows[0] ?? null;
 }
 
-export async function categoryExists(
+export async function readCategoryForCreate(
   client: PoolClient,
   tenantId: string,
   categoryId: string,
-): Promise<boolean> {
-  const result = await client.query<{ exists: boolean }>(
-    `SELECT EXISTS (
-       SELECT 1 FROM category WHERE tenant_id = $1 AND id = $2
-     ) AS exists`,
+): Promise<CategoryRow | null> {
+  const result = await client.query<CategoryRow>(
+    `SELECT id, name, status, display_order
+       FROM category
+      WHERE tenant_id = $1 AND id = $2
+      LIMIT 1`,
     [tenantId, categoryId],
   );
-  return result.rows[0]?.exists === true;
+  return result.rows[0] ?? null;
+}
+
+export async function readMeasurementGuidesForCreate(
+  client: PoolClient,
+  tenantId: string,
+  guideIds: string[],
+): Promise<MeasurementGuideRow[]> {
+  if (guideIds.length === 0) return [];
+  const result = await client.query<MeasurementGuideRow>(
+    `SELECT id, file_id, name, status, is_default, created_at, updated_at
+       FROM measurement_guide
+      WHERE tenant_id = $1
+        AND id = ANY($2::uuid[])
+      ORDER BY id ASC
+      FOR SHARE`,
+    [tenantId, guideIds],
+  );
+  return result.rows;
 }
 
 export async function readDefaultMeasurementGuide(
@@ -176,7 +195,6 @@ export async function createClothingGraph(
     tenantId: string;
     branchId: string;
     request: CreateClothingRequest;
-    defaultGuideId: string | null;
     status: 'draft' | 'active';
     rentalPriceMinor: number;
     securityDepositMinor: number;
@@ -208,7 +226,7 @@ export async function createClothingGraph(
     const variantId = randomUUID();
     const sku = generatedCode('SKU', productId, size.size_label, index);
     const measurementGuideId =
-      size.measurement_mode === 'default_guide' ? input.defaultGuideId : null;
+      size.measurement_mode === 'default_guide' ? (size.measurement_guide_id ?? null) : null;
     const measurements: MeasurementMap =
       size.measurement_mode === 'custom' ? size.measurements : {};
 
@@ -330,7 +348,10 @@ async function insertProductWithCode(
     if (inserted) return inserted;
     if (input.requestedCode) break;
   }
-  throw new StateConflictError('That clothing code is already in use.');
+  if (input.requestedCode) {
+    throw new DuplicateClothingCodeError('That clothing code is already in use.');
+  }
+  throw new StateConflictError('Drezivo could not generate a unique clothing code. Try again.');
 }
 
 function generatedStyleCode(): string {

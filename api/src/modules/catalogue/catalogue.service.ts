@@ -3,6 +3,7 @@ import {
   catalogueCategoryList,
   clothingDetail,
   clothingListResponse,
+  createClothingRequest,
   createClothingResponse,
   measurementGuide,
   measurementGuideDefaultResponse,
@@ -22,10 +23,15 @@ import {
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
-import { assertPhysicalAssetCapacity } from '../entitlements/entitlements.service.js';
+import {
+  assertPhysicalAssetCapacity,
+  lockTenantQuotaScope,
+} from '../entitlements/entitlements.service.js';
 import {
   ForbiddenError,
   IdempotencyKeyReusedError,
+  InvalidCategoryError,
+  InvalidMeasurementGuideError,
   NotFoundError,
   StateConflictError,
   TenantCancelledError,
@@ -45,11 +51,12 @@ import {
 } from './catalogue.read.repository.js';
 import {
   appendCatalogueAuditEvent,
-  categoryExists,
   createClothingGraph,
   listCategories,
-  updateCategoryStatus,
+  readCategoryForCreate,
   readDefaultMeasurementGuide,
+  readMeasurementGuidesForCreate,
+  updateCategoryStatus,
   replaceDefaultMeasurementGuide,
   validateCatalogueImageFiles,
   validateMeasurementGuideFile,
@@ -363,9 +370,16 @@ export async function createClothing(input: CommandContext & {
   request: CreateClothingRequest;
 }): Promise<CatalogueCommandResponse<ClothingCommandBody>> {
   assertCatalogueWriteContext(input);
-  const payloadHash = canonicalRequestHash(input.request);
+  const parsedRequest = createClothingRequest.safeParse(input.request);
+  if (!parsedRequest.success) {
+    throw new ValidationError('Clothing request is invalid.');
+  }
+  const request = parsedRequest.data;
+  const payloadHash = canonicalRequestHash(request);
+  const physicalPieceCount = request.sizes.length;
 
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    await lockTenantQuotaScope(client, input.tenantId);
     const claim = await claimTenantIdempotency(client, {
       tenantId: input.tenantId,
       principalKey: input.membershipId,
@@ -377,33 +391,46 @@ export async function createClothing(input: CommandContext & {
     if (replay) return replay;
 
     try {
-      if (!(await categoryExists(client, input.tenantId, input.request.category_id))) {
+      const category = await readCategoryForCreate(client, input.tenantId, request.category_id);
+      if (!category) {
         throw new NotFoundError('The selected clothing category could not be found.');
       }
-      if (!(await validateCatalogueImageFiles(client, input.tenantId, input.request.image_file_ids))) {
+      if (category.status !== 'active') {
+        throw new InvalidCategoryError('The selected clothing category is inactive.');
+      }
+
+      if (!(await validateCatalogueImageFiles(client, input.tenantId, request.image_file_ids))) {
         throw new ValidationError('One or more clothing photos are not accepted catalogue images.');
       }
 
-      const usesDefaultGuide = input.request.sizes.some(
-        (size) => size.measurement_mode === 'default_guide',
+      const measurementGuideIds = Array.from(
+        new Set(
+          request.sizes.flatMap((size) =>
+            size.measurement_mode === 'default_guide' && size.measurement_guide_id
+              ? [size.measurement_guide_id]
+              : [],
+          ),
+        ),
       );
-      const defaultGuide = usesDefaultGuide
-        ? await readDefaultMeasurementGuide(client, input.tenantId)
-        : null;
-      if (usesDefaultGuide && !defaultGuide) {
-        throw new ValidationError(
-          'Set a default measurement guide or choose custom/no measurements for every size.',
-        );
+      const measurementGuides = await readMeasurementGuidesForCreate(
+        client,
+        input.tenantId,
+        measurementGuideIds,
+      );
+      if (measurementGuides.length !== measurementGuideIds.length) {
+        throw new NotFoundError('A selected measurement guide could not be found.');
+      }
+      if (measurementGuides.some((guide) => guide.status !== 'active')) {
+        throw new InvalidMeasurementGuideError('A selected measurement guide is not active.');
       }
 
-      await assertPhysicalAssetCapacity(client, input.tenantId, input.request.sizes.length);
-      const money = normalizePricing(input.request);
+      await assertPhysicalAssetCapacity(client, input.tenantId, physicalPieceCount);
+      const money = normalizePricing(request);
       const graph = await createClothingGraph(client, {
         tenantId: input.tenantId,
         branchId: input.branchId,
-        request: input.request,
-        defaultGuideId: defaultGuide?.id ?? null,
-        status: input.request.activate ? 'active' : 'draft',
+        request,
+        status: request.activate ? 'active' : 'draft',
         ...money,
       });
       const data = createClothingResponse.parse({
@@ -411,20 +438,20 @@ export async function createClothing(input: CommandContext & {
         code: graph.code,
         variant_count: graph.variantCount,
         physical_piece_count: graph.physicalPieceCount,
-        status: input.request.activate ? 'active' : 'draft',
+        status: request.activate ? 'active' : 'draft',
       });
       const body = successBody(input.requestId, data);
 
       await appendCatalogueAuditEvent(client, {
         tenantId: input.tenantId,
         actorKey: input.principalId,
-        action: input.request.activate ? 'catalogue.clothing.created_active' : 'catalogue.clothing.created_draft',
+        action: request.activate ? 'catalogue.clothing.created_active' : 'catalogue.clothing.created_draft',
         entityType: 'product',
         entityId: data.product_id,
         redactedSummary: {
           variant_count: data.variant_count,
           physical_piece_count: data.physical_piece_count,
-          uses_default_measurement_guide: usesDefaultGuide,
+          measurement_guide_count: measurementGuideIds.length,
         },
         requestId: input.requestId,
       });

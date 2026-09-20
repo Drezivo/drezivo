@@ -1,7 +1,7 @@
 ---
 title: Clothing V1 End-to-End Checklist
 type: implementation-checklist
-status: phase-0-complete
+status: phase-2-in-progress
 owner: Drezivo team
 updated: 2026-09-20
 tags: [drezivo, v1, clothing, catalogue, inventory, checklist]
@@ -9,7 +9,7 @@ tags: [drezivo, v1, clothing, catalogue, inventory, checklist]
 
 # Clothing V1 End-to-End Checklist
 
-**Status:** Phase 0 complete; current `/inventory` UI remains prototype/mock-data driven and Phase 1 is next.
+**Status:** Phase 1 catalogue reads and CLT-020 Add Clothing transactional service are complete; Phase 2 route/file tasks remain.
 **Canonical specifications:** [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
 **Foundation dependency:** [Tenancy, Owner Onboarding, Clerk, Memberships, and Billing V1 Checklist](../../../api/TENANCY-ONBOARDING-V1-CHECKLIST.md).
 
@@ -130,20 +130,20 @@ Before marking a task complete:
 
 ## Phase 2: Add Clothing command
 
-- [ ] **CLT-020 — Implement Add Clothing transactional service**
+- [x] **CLT-020 — Implement Add Clothing transactional service**
   - **Depends on:** CLT-001, CLT-002, entitlement service TBF-032.
   - **Outcome:** Owner/authorized staff can create a style with selected sizes and serialized garments atomically.
   - **Acceptance:**
-    - [ ] Validate request through the closed contract.
-    - [ ] Resolve tenant/branch/membership/permission server-side.
-    - [ ] Lock entitlement capacity through the shared active-physical-asset quota guard.
-    - [ ] Compute number of generated active physical assets before commit.
-    - [ ] Create product, variants, initial physical assets, measurement references, and audit row in one transaction.
-    - [ ] Selected sizes create one initial physical asset each in V1; no stock quantity shortcut.
-    - [ ] Rental/deposit money uses integer PHP minor units and server validation.
-    - [ ] Reusable default measurement-guide references remain stable if the tenant default later changes.
-    - [ ] Same user intent is idempotent; changed payload under the same key fails safely.
-  - **Tests/evidence:** Sequential/concurrent double-fire tests prove one catalogue graph and correct quota usage.
+    - [x] Validate request through the closed contract.
+    - [x] Resolve tenant/branch/membership/permission server-side; the service consumes only server-resolved command context and re-checks `assets.manage`/tenant lifecycle before writes.
+    - [x] Lock entitlement capacity through the shared active-physical-asset quota guard.
+    - [x] Compute number of generated active physical assets before commit.
+    - [x] Create product, variants, initial physical assets, measurement references, and audit row in one transaction.
+    - [x] Selected sizes create one initial physical asset each in V1; no stock quantity shortcut.
+    - [x] Rental/deposit money uses integer PHP minor units and server validation.
+    - [x] Reusable default measurement-guide references remain stable if the tenant default later changes.
+    - [x] Same user intent is idempotent; changed payload under the same key fails safely.
+  - **Tests/evidence:** `catalogue-add-clothing.test.ts` passes 10/10 against disposable local PostgreSQL, including sequential/concurrent double-fire, quota-edge serialization, rollback, contract/authz rejection, exact guide references, and money/category validation. Shared entitlement regression passes 9/9 and API units 82/82. See [[Clothing Phase 2 Add Clothing Service]].
 
 - [ ] **CLT-021 — Expose Add Clothing API route**
   - **Depends on:** CLT-020.
