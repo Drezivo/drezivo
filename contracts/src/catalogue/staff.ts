@@ -8,6 +8,7 @@ import {
   physicalAssetId,
   productId,
   productVariantId,
+  reservationLineId,
 } from '../common/ids';
 import { currencyCode, nonNegativeMoneyString } from '../common/money';
 import { paginatedResponse, paginationRequest } from '../common/pagination';
@@ -147,6 +148,26 @@ export const clothingImageSummary = z.object({
 });
 export type ClothingImageSummary = z.infer<typeof clothingImageSummary>;
 
+export const clothingAllocationKind = z.enum([
+  'reservation_hold',
+  'reservation_confirmed',
+  'maintenance',
+]);
+export type ClothingAllocationKind = z.infer<typeof clothingAllocationKind>;
+
+/**
+ * Bounded staff-only reference to future blocking work for one serialized garment. This is not
+ * a reservation/customer projection and intentionally omits payment, contact, and policy data.
+ */
+export const clothingUpcomingAllocationSummary = z.object({
+  asset_id: physicalAssetId,
+  reservation_line_id: reservationLineId.nullable(),
+  kind: clothingAllocationKind,
+  starts_at: isoInstant,
+  ends_at: isoInstant,
+});
+export type ClothingUpcomingAllocationSummary = z.infer<typeof clothingUpcomingAllocationSummary>;
+
 export const clothingDetail = z.object({
   product_id: productId,
   code: clothingStyleCode,
@@ -156,6 +177,8 @@ export const clothingDetail = z.object({
   status: clothingProductLifecycle,
   images: z.array(clothingImageSummary),
   variants: z.array(clothingVariantDetail),
+  upcoming_allocations: z.array(clothingUpcomingAllocationSummary).max(10),
+  has_more_upcoming_allocations: z.boolean(),
   created_at: isoInstant,
   updated_at: isoInstant,
 });
