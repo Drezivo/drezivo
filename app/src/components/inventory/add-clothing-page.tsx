@@ -451,7 +451,6 @@ export function AddClothingPage() {
   const buildCreateRequest = (activate: boolean, imageFileIds: string[]): CreateClothingRequest => {
     if (!categoryId) throw new Error("Choose an active category.");
     if (!name.trim()) throw new Error("Enter a clothing name.");
-    if (!color.trim()) throw new Error("Enter a clothing color.");
     if (selectedSizes.length === 0) throw new Error("Select at least one size.");
     if (needsDefaultGuide && !defaultGuide) {
       throw new Error("Set a default measurement guide, or use custom/no measurements for every selected size.");
@@ -508,7 +507,7 @@ export function AddClothingPage() {
       code: code.trim(),
       description: description.trim(),
       category_id: categoryId,
-      color_label: color.trim(),
+      color_label: color.trim() || null,
       image_file_ids: imageFileIds,
       sizes,
       pricing:
@@ -738,7 +737,7 @@ export function AddClothingPage() {
               title="Color, Sizes & Measurements"
               description="Choose the sizes you actually own. Each selected size creates one rentable piece in V1."
             >
-              <Field label="Color" required>
+              <Field label="Color (optional)">
                 <Input
                   value={color}
                   onChange={(event) => setColor(event.target.value)}

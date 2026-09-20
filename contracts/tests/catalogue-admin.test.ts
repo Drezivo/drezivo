@@ -93,6 +93,22 @@ describe('catalogue admin contract', () => {
       }).success,
     ).toBe(true);
 
+    const withoutColor = { ...base };
+    delete (withoutColor as { color_label?: string }).color_label;
+    expect(
+      createClothingRequest.parse({
+        ...withoutColor,
+        sizes: [{ size_label: 'M', measurement_mode: 'none', measurement_unit: 'in' }],
+      }).color_label,
+    ).toBeNull();
+    expect(
+      createClothingRequest.parse({
+        ...base,
+        color_label: '   ',
+        sizes: [{ size_label: 'M', measurement_mode: 'none', measurement_unit: 'in' }],
+      }).color_label,
+    ).toBeNull();
+
     expect(
       createClothingRequest.parse({
         ...base,

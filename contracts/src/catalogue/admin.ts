@@ -194,7 +194,13 @@ export const createClothingRequest = z
     code: optionalClothingStyleCode,
     description: z.string().trim().max(2_000).default(''),
     category_id: categoryId,
-    color_label: z.string().trim().min(1).max(80),
+    color_label: z.preprocess(
+      (value) =>
+        value === undefined || value === null || (typeof value === 'string' && value.trim() === '')
+          ? null
+          : value,
+      z.string().trim().min(1).max(80).nullable(),
+    ),
     image_file_ids: clothingImageFileIds.default([]),
     sizes: z.array(clothingSizeInput).min(1).max(20),
     pricing: clothingPricingInput,

@@ -57,7 +57,7 @@ export interface ClothingDetailVariantRow {
   id: string;
   sku: string;
   size_label: string;
-  color_label: string;
+  color_label: string | null;
   measurement_mode: 'default_guide' | 'custom' | 'none';
   measurement_guide_id: string | null;
   measurement_unit: 'cm' | 'in';

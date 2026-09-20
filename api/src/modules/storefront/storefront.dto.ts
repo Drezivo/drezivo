@@ -48,7 +48,7 @@ export interface PublicProductDTO {
 export interface PublicVariantDTO {
   id: string;
   size_label: string;
-  color_label: string;
+  color_label: string | null;
   /** Decimal string on the wire, minor-unit integer internally (TRD §4). */
   rental_price: string;
   security_deposit: string;
@@ -95,7 +95,7 @@ export interface ProductRowSource {
 export interface VariantRowSource {
   id: string;
   size_label: string;
-  color_label: string;
+  color_label: string | null;
   rental_price_minor: number;
   security_deposit_minor: number;
   currency: string;

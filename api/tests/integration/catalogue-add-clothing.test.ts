@@ -62,6 +62,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
     });
     const request = makeRequest(seed.categoryId, {
       code: 'EMERALD-001',
+      color_label: null,
       sizes: [
         {
           size_label: 'M',
@@ -117,6 +118,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
     const medium = state.variants.find((variant) => variant.size_label === 'M');
     const large = state.variants.find((variant) => variant.size_label === 'L');
     expect(medium).toMatchObject({
+      color_label: null,
       measurement_mode: 'default_guide',
       measurement_guide_id: guideId,
       rental_price_minor: 150000,
@@ -126,6 +128,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
       currency: 'PHP',
     });
     expect(large).toMatchObject({
+      color_label: null,
       measurement_mode: 'custom',
       measurement_guide_id: null,
       measurements: { bust: 94, waist: 76 },
@@ -661,6 +664,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
         ? await client.query<{
             id: string;
             size_label: string;
+            color_label: string | null;
             measurement_mode: string;
             measurement_guide_id: string | null;
             measurements: Record<string, number>;
@@ -670,7 +674,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
             extra_day_price_minor: number;
             included_duration_minutes: number;
           }>(
-            `SELECT id, size_label, measurement_mode, measurement_guide_id, measurements,
+            `SELECT id, size_label, color_label, measurement_mode, measurement_guide_id, measurements,
                     rental_price_minor, security_deposit_minor, currency, extra_day_price_minor,
                     included_duration_minutes
                FROM product_variant

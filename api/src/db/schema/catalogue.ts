@@ -134,7 +134,7 @@ export const productVariant = pgTable(
       .references(() => product.id),
     sku: text('sku').notNull(),
     sizeLabel: text('size_label').notNull(),
-    colorLabel: text('color_label').notNull(),
+    colorLabel: text('color_label'),
     measurements: jsonb('measurements').$type<Record<string, number>>().notNull().default({}),
     measurementUnit: text('measurement_unit').notNull().default('cm'),
     measurementMode: measurementModeEnum('measurement_mode').notNull().default('none'),

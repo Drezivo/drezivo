@@ -119,7 +119,7 @@ async function fetchPublishedProducts(client: PoolClient, tenantId: string): Pro
     const variants = await client.query<{
       id: string;
       size_label: string;
-      color_label: string;
+      color_label: string | null;
       rental_price_minor: number;
       security_deposit_minor: number;
       currency: string;

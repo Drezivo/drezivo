@@ -158,7 +158,7 @@ function DetailContent({ item }: { item: ClothingDetail }) {
                   {item.variants.map((variant) => (
                     <TableRow key={variant.id}>
                       <TableCell className="font-semibold text-dashboard-navy">{variant.size_label}</TableCell>
-                      <TableCell className="text-dashboard-muted">{variant.color_label}</TableCell>
+                      <TableCell className="text-dashboard-muted">{variant.color_label ?? "—"}</TableCell>
                       <TableCell className="text-dashboard-muted">{variant.sku}</TableCell>
                       <TableCell className="font-medium text-dashboard-navy">
                         {formatMoney(variant.rental_price_minor, variant.currency)}

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ClothingDetailsPage } from "@/components/inventory/clothing-details-page";
@@ -126,6 +126,23 @@ describe("ClothingDetailsPage", () => {
     expect(screen.getByText("AST-GWN-001-M-01")).toBeVisible();
     expect(screen.getByText("Needs Cleaning")).toBeVisible();
     expect(screen.getByText("Confirmed reservation")).toBeVisible();
+  });
+
+  it("renders variants without a color as optional metadata", async () => {
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: {
+        ...detail,
+        variants: [{ ...detail.variants[0]!, color_label: null }],
+      },
+      requestId: "req-detail-no-color",
+    });
+
+    render(<ClothingDetailsPage productId={productId} />);
+
+    const sku = await screen.findByText("GWN-001-M");
+    const row = sku.closest("tr");
+    if (!row) throw new Error("Expected variant to render in a table row.");
+    expect(within(row).getByText("—")).toBeVisible();
   });
 
   it("does not render the old fabricated rental or maintenance histories", async () => {

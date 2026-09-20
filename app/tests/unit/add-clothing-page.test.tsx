@@ -295,9 +295,6 @@ describe("AddClothingPage", () => {
     fireEvent.change(screen.getByLabelText("Clothing Code"), {
       target: { value: "GOWN-001" },
     });
-    fireEvent.change(screen.getByLabelText("Color *"), {
-      target: { value: "Emerald Green" },
-    });
     fireEvent.click(screen.getByRole("button", { name: /Rental Timing/ }));
     fireEvent.change(screen.getByLabelText("Prep Days Before Rental"), {
       target: { value: "1" },
@@ -324,7 +321,7 @@ describe("AddClothingPage", () => {
       name: "Emerald Evening Gown",
       code: "GOWN-001",
       category_id: "00000000-0000-4000-8000-000000000001",
-      color_label: "Emerald Green",
+      color_label: null,
       image_file_ids: [],
       pricing: {
         mode: "fixed_duration",
@@ -420,7 +417,7 @@ describe("AddClothingPage", () => {
     fireEvent.change(screen.getByLabelText("Clothing Name *"), {
       target: { value: "Photo Gown" },
     });
-    fireEvent.change(screen.getByLabelText("Color *"), {
+    fireEvent.change(screen.getByLabelText("Color (optional)"), {
       target: { value: "Gold" },
     });
 
