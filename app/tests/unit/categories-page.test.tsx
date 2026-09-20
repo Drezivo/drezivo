@@ -11,6 +11,7 @@ const clerk = vi.hoisted(() => ({
 
 const api = vi.hoisted(() => ({
   getCatalogueCategories: vi.fn(),
+  getCatalogueClothing: vi.fn(),
   updateCatalogueCategoryStatus: vi.fn(),
 }));
 
@@ -56,6 +57,10 @@ describe("CategoriesPage", () => {
     api.getCatalogueCategories.mockResolvedValue({
       data: { items: categories },
       requestId: "req-categories",
+    });
+    api.getCatalogueClothing.mockResolvedValue({
+      data: { items: [], page_meta: { next_cursor: null, has_more: false } },
+      requestId: "req-clothing",
     });
   });
 

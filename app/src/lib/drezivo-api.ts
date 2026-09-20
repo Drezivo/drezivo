@@ -7,6 +7,9 @@ import {
   bootstrapTenantRequest,
   catalogueCategory,
   catalogueCategoryList,
+  clothingDetail,
+  clothingListQuery,
+  clothingListResponse,
   chooseOnboardingPlanRequest,
   createOwnerOnboardingRequest,
   onboardingActorContext,
@@ -20,6 +23,9 @@ import {
   type ChooseOnboardingPlanRequest,
   type CatalogueCategory,
   type CatalogueCategoryList,
+  type ClothingDetail,
+  type ClothingListQuery,
+  type ClothingListResponse,
   type CreateOwnerOnboardingRequest,
   type OnboardingActorContext,
   type OrganizationOnboarding,
@@ -130,6 +136,33 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         path: "/api/v1/catalogue/categories",
         responseSchema: apiEnvelope(catalogueCategoryList),
       }),
+    getCatalogueClothingDetail: (productId: string) =>
+      request<ClothingDetail>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}`,
+        responseSchema: apiEnvelope(clothingDetail),
+      }),
+    getCatalogueClothing: (input: ClothingListQuery) => {
+      const query = clothingListQuery.parse(input);
+      const searchParams = new URLSearchParams();
+      if (query.cursor) searchParams.set("cursor", query.cursor);
+      searchParams.set("limit", String(query.limit));
+      if (query.search) searchParams.set("search", query.search);
+      if (query.category_id) searchParams.set("category_id", query.category_id);
+      if (query.size_label) searchParams.set("size_label", query.size_label);
+      if (query.product_status) searchParams.set("product_status", query.product_status);
+      if (query.asset_lifecycle) searchParams.set("asset_lifecycle", query.asset_lifecycle);
+      if (query.readiness) searchParams.set("readiness", query.readiness);
+      searchParams.set("sort", query.sort);
+
+      return request<ClothingListResponse>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/catalogue/clothing?${searchParams.toString()}`,
+        responseSchema: apiEnvelope(clothingListResponse),
+      });
+    },
     updateCatalogueCategoryStatus: (
       categoryId: string,
       input: UpdateCatalogueCategoryStatusRequest,

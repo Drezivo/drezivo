@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
 import {
   Archive,
   Boxes,
@@ -14,7 +15,15 @@ import {
   Tags,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import type { CatalogueCategory, ClothingListItem } from "@drezivo/contracts";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -33,50 +42,141 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { cn } from "@/lib/utils";
 
-import {
-  CLOTHING_CATEGORIES,
-  CLOTHING_ITEMS,
-  CLOTHING_SIZES,
-  type ClothingItem,
-} from "./clothing-data";
-
 const PAGE_SIZE = 10;
+const SIZE_OPTIONS = ["All Sizes", "XS", "S", "M", "L", "XL", "XXL"] as const;
+
+type PageMeta = {
+  next_cursor: string | null;
+  has_more: boolean;
+};
 
 export function ClothingPage() {
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("All Categories");
-  const [size, setSize] = useState("All Sizes");
-  const [page, setPage] = useState(1);
+  const deferredQuery = useDeferredValue(query.trim());
+  const [categoryId, setCategoryId] = useState<CatalogueCategory["id"] | null>(null);
+  const [size, setSize] = useState<(typeof SIZE_OPTIONS)[number]>("All Sizes");
+  const [categories, setCategories] = useState<CatalogueCategory[]>([]);
+  const [rows, setRows] = useState<ClothingListItem[]>([]);
+  const [pageMeta, setPageMeta] = useState<PageMeta>({ next_cursor: null, has_more: false });
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageCursors, setPageCursors] = useState<Array<string | null>>([null]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<DrezivoApiError | null>(null);
+  const [reloadVersion, setReloadVersion] = useState(0);
 
-  const filtered = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    return CLOTHING_ITEMS.filter((item) => {
-      const searchMatch =
-        !normalized ||
-        item.name.toLowerCase().includes(normalized) ||
-        item.code.toLowerCase().includes(normalized) ||
-        item.category.toLowerCase().includes(normalized);
-      const categoryMatch = category === "All Categories" || item.category === category;
-      const sizeMatch = size === "All Sizes" || item.sizes.includes(size);
-      return searchMatch && categoryMatch && sizeMatch;
-    });
-  }, [category, query, size]);
+  const selectedCategory = categories.find((category) => category.id === categoryId) ?? null;
+  const currentCursor = pageCursors[pageIndex] ?? null;
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const start = (currentPage - 1) * PAGE_SIZE;
-  const rows = filtered.slice(start, start + PAGE_SIZE);
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    let cancelled = false;
 
-  const updateFilter = (fn: () => void) => {
-    fn();
-    setPage(1);
+    void createDrezivoApiClient(getToken)
+      .getCatalogueCategories()
+      .then((result) => {
+        if (!cancelled) setCategories(result.data.items);
+      })
+      .catch(() => {
+        if (!cancelled) setCategories([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, isLoaded, isSignedIn]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+
+    const api = createDrezivoApiClient(getToken);
+    void api
+      .getCatalogueClothing({
+        limit: PAGE_SIZE,
+        sort: "name_asc",
+        ...(currentCursor ? { cursor: currentCursor } : {}),
+        ...(deferredQuery ? { search: deferredQuery } : {}),
+        ...(categoryId ? { category_id: categoryId } : {}),
+        ...(size !== "All Sizes" ? { size_label: size } : {}),
+      })
+      .then((result) => {
+        if (cancelled) return;
+        setRows(result.data.items);
+        setPageMeta(result.data.page_meta);
+      })
+      .catch((caughtError) => {
+        if (cancelled) return;
+        setRows([]);
+        setPageMeta({ next_cursor: null, has_more: false });
+        setError(toDrezivoApiError(caughtError));
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    categoryId,
+    currentCursor,
+    deferredQuery,
+    getToken,
+    isLoaded,
+    isSignedIn,
+    reloadVersion,
+    size,
+  ]);
+
+  const resetPagination = useCallback(() => {
+    setPageIndex(0);
+    setPageCursors([null]);
+  }, []);
+
+  const updateSearch = (value: string) => {
+    setQuery(value);
+    resetPagination();
   };
 
-  const physicalGarments = CLOTHING_ITEMS.reduce((sum, item) => sum + item.physicalUnits, 0);
-  const categoryCount = new Set(CLOTHING_ITEMS.map((item) => item.category)).size;
-  const archivedCount = CLOTHING_ITEMS.filter((item) => item.archived).length;
+  const updateCategory = (value: CatalogueCategory["id"] | null) => {
+    setCategoryId(value);
+    resetPagination();
+  };
+
+  const updateSize = (value: (typeof SIZE_OPTIONS)[number]) => {
+    setSize(value);
+    resetPagination();
+  };
+
+  const goNext = () => {
+    if (!pageMeta.has_more || !pageMeta.next_cursor) return;
+    const nextCursor = pageMeta.next_cursor;
+    setPageCursors((current) => {
+      const next = current.slice(0, pageIndex + 1);
+      next[pageIndex + 1] = nextCursor;
+      return next;
+    });
+    setPageIndex((current) => current + 1);
+  };
+
+  const goPrevious = () => {
+    setPageIndex((current) => Math.max(0, current - 1));
+  };
+
+  const pageMetrics = useMemo(
+    () => ({
+      styles: rows.length,
+      pieces: rows.reduce((total, item) => total + item.readiness.active_assets, 0),
+      archived: rows.filter((item) => item.product_status === "archived").length,
+    }),
+    [rows]
+  );
 
   return (
     <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
@@ -87,7 +187,7 @@ export function ClothingPage() {
               Clothing
             </h1>
             <p className="mt-1 text-sm text-dashboard-muted">
-              Manage the clothing styles, variants, and total pieces your business offers.
+              Manage the clothing styles, variants, and serialized pieces in this workspace.
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -115,20 +215,20 @@ export function ClothingPage() {
               <Input
                 aria-label="Search clothing"
                 value={query}
-                onChange={(event) => updateFilter(() => setQuery(event.target.value))}
-                placeholder="Search clothing by name, code, or category..."
+                onChange={(event) => updateSearch(event.target.value)}
+                placeholder="Search clothing by name or code..."
                 className="pl-9"
               />
             </div>
-            <FilterMenu
-              label={category}
-              options={CLOTHING_CATEGORIES}
-              onSelect={(value) => updateFilter(() => setCategory(value))}
+            <CategoryFilterMenu
+              categories={categories}
+              selected={selectedCategory}
+              onSelect={updateCategory}
             />
             <FilterMenu
               label={size}
-              options={CLOTHING_SIZES}
-              onSelect={(value) => updateFilter(() => setSize(value))}
+              options={SIZE_OPTIONS}
+              onSelect={updateSize}
             />
             <Button
               variant="ghost"
@@ -141,10 +241,10 @@ export function ClothingPage() {
         </Card>
 
         <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-          <MetricCard label="Total Styles" value={CLOTHING_ITEMS.length} icon={Shirt} tone="blue" />
-          <MetricCard label="Total Pieces" value={physicalGarments} icon={Boxes} tone="mint" />
-          <MetricCard label="Categories" value={categoryCount} icon={Tags} tone="purple" />
-          <MetricCard label="Archived" value={archivedCount} icon={Archive} tone="neutral" />
+          <MetricCard label="Styles This Page" value={pageMetrics.styles} icon={Shirt} tone="blue" />
+          <MetricCard label="Active Pieces This Page" value={pageMetrics.pieces} icon={Boxes} tone="mint" />
+          <MetricCard label="Categories" value={categories.length} icon={Tags} tone="purple" />
+          <MetricCard label="Archived This Page" value={pageMetrics.archived} icon={Archive} tone="neutral" />
         </div>
 
         <Card className="gap-0 overflow-hidden py-0">
@@ -155,65 +255,74 @@ export function ClothingPage() {
                   <TableHead className="w-14">Photo</TableHead>
                   <TableHead>Clothing</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead>Sizes / Variants</TableHead>
+                  <TableHead>Sizes</TableHead>
                   <TableHead>Rental Price</TableHead>
-                  <TableHead>Total Pieces</TableHead>
+                  <TableHead>Active Pieces</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.length === 0 ? (
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-16 text-center text-dashboard-muted">
+                      Loading clothing…
+                    </TableCell>
+                  </TableRow>
+                ) : error ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-14 text-center">
+                      <div className="mx-auto flex max-w-md flex-col items-center gap-3">
+                        <div>
+                          <p className="font-medium text-dashboard-navy">Could not load clothing</p>
+                          <p className="mt-1 text-sm text-dashboard-muted">{error.message}</p>
+                          {error.requestId ? (
+                            <p className="mt-1 text-xs text-dashboard-muted">
+                              Support reference: {error.requestId}
+                            </p>
+                          ) : null}
+                        </div>
+                        <Button type="button" onClick={() => setReloadVersion((value) => value + 1)}>
+                          Try again
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : rows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="py-16 text-center text-dashboard-muted">
                       No clothing items match your filters.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  rows.map((item) => (
-                    <ClothingRow key={item.id} item={item} />
-                  ))
+                  rows.map((item) => <ClothingRow key={item.product_id} item={item} />)
                 )}
               </TableBody>
             </Table>
 
             <div className="flex flex-col gap-3 border-t border-dashboard-border px-4 py-3 text-xs text-dashboard-muted sm:flex-row sm:items-center sm:justify-between">
               <p>
-                Showing {filtered.length === 0 ? 0 : start + 1}–
-                {Math.min(start + rows.length, filtered.length)} of {filtered.length} clothing styles
+                Page {pageIndex + 1} · {rows.length} {rows.length === 1 ? "style" : "styles"} loaded
               </p>
               <div className="flex items-center gap-1">
                 <Button
                   variant="ghost"
                   size="icon"
                   aria-label="Previous clothing page"
-                  disabled={currentPage === 1}
-                  onClick={() => setPage((value) => Math.max(1, value - 1))}
+                  disabled={pageIndex === 0 || isLoading}
+                  onClick={goPrevious}
                   className="h-8 w-8"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                {Array.from({ length: pageCount }, (_, index) => index + 1).map((pageNumber) => (
-                  <Button
-                    key={pageNumber}
-                    variant="ghost"
-                    aria-current={pageNumber === currentPage ? "page" : undefined}
-                    onClick={() => setPage(pageNumber)}
-                    className={cn(
-                      "h-8 min-w-8 px-2",
-                      pageNumber === currentPage
-                        ? "bg-dashboard-active text-dashboard-accent"
-                        : "text-dashboard-muted"
-                    )}
-                  >
-                    {pageNumber}
-                  </Button>
-                ))}
+                <span className="min-w-8 px-2 text-center font-medium text-dashboard-navy">
+                  {pageIndex + 1}
+                </span>
                 <Button
                   variant="ghost"
                   size="icon"
                   aria-label="Next clothing page"
-                  disabled={currentPage === pageCount}
-                  onClick={() => setPage((value) => Math.min(pageCount, value + 1))}
+                  disabled={!pageMeta.has_more || isLoading}
+                  onClick={goNext}
                   className="h-8 w-8"
                 >
                   <ChevronRight className="h-4 w-4" />
@@ -227,12 +336,12 @@ export function ClothingPage() {
   );
 }
 
-function ClothingRow({ item }: { item: ClothingItem }) {
+function ClothingRow({ item }: { item: ClothingListItem }) {
   return (
     <TableRow>
       <TableCell>
         <div className="flex h-12 w-10 items-center justify-center rounded-lg bg-dashboard-active text-xs font-semibold text-dashboard-accent">
-          {item.initials}
+          {initials(item.name)}
         </div>
       </TableCell>
       <TableCell>
@@ -241,23 +350,32 @@ function ClothingRow({ item }: { item: ClothingItem }) {
             <p className="font-semibold text-dashboard-navy">{item.name}</p>
             <p className="mt-1 text-xs text-dashboard-muted">{item.code}</p>
           </div>
-          {item.archived ? (
+          {item.product_status === "archived" ? (
             <span className="rounded-full bg-dashboard-neutral-soft px-2 py-1 text-[0.65rem] font-medium text-dashboard-neutral-text">
               Archived
             </span>
           ) : null}
+          {item.product_status === "draft" ? (
+            <span className="rounded-full bg-dashboard-active px-2 py-1 text-[0.65rem] font-medium text-dashboard-muted">
+              Draft
+            </span>
+          ) : null}
         </div>
       </TableCell>
-      <TableCell className="text-dashboard-muted">{item.category}</TableCell>
+      <TableCell className="text-dashboard-muted">{item.category?.name ?? "Uncategorized"}</TableCell>
       <TableCell>
-        <p className="text-sm font-medium text-dashboard-navy">{item.sizes.join(" · ")}</p>
+        <p className="text-sm font-medium text-dashboard-navy">
+          {item.size_labels.length > 0 ? item.size_labels.join(" · ") : "—"}
+        </p>
         <p className="mt-1 text-xs text-dashboard-muted">
-          {item.variantCount} {item.variantCount === 1 ? "variant" : "variants"}
+          {item.size_labels.length} {item.size_labels.length === 1 ? "size" : "sizes"}
         </p>
       </TableCell>
       <TableCell>
-        <p className="font-semibold text-dashboard-navy">{formatPrice(item)}</p>
-        <p className="mt-1 text-xs text-dashboard-muted">per day</p>
+        <p className="font-semibold text-dashboard-navy">
+          {formatMinorMoney(item.price_from_minor, item.currency)}
+        </p>
+        <p className="mt-1 text-xs text-dashboard-muted">from listed variants</p>
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-2">
@@ -265,8 +383,10 @@ function ClothingRow({ item }: { item: ClothingItem }) {
             <Layers3 className="h-4 w-4" aria-hidden="true" />
           </span>
           <span>
-            <span className="block text-sm font-semibold text-dashboard-navy">{item.physicalUnits}</span>
-            <span className="mt-0.5 block text-xs text-dashboard-muted">pieces</span>
+            <span className="block text-sm font-semibold text-dashboard-navy">
+              {item.readiness.active_assets}
+            </span>
+            <span className="mt-0.5 block text-xs text-dashboard-muted">active pieces</span>
           </span>
         </div>
       </TableCell>
@@ -284,10 +404,10 @@ function ClothingRow({ item }: { item: ClothingItem }) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem asChild>
-              <Link href={`/inventory/${item.id}`}>View details</Link>
+              <Link href={`/inventory/${item.product_id}`}>View details</Link>
             </DropdownMenuItem>
             <DropdownMenuItem>Edit</DropdownMenuItem>
-            <DropdownMenuItem>{item.archived ? "Restore" : "Archive"}</DropdownMenuItem>
+            <DropdownMenuItem>{item.product_status === "archived" ? "Restore" : "Archive"}</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </TableCell>
@@ -295,20 +415,46 @@ function ClothingRow({ item }: { item: ClothingItem }) {
   );
 }
 
-function formatPrice(item: ClothingItem) {
-  const minimum = `₱${item.minPricePerDay.toLocaleString()}`;
-  if (item.minPricePerDay === item.maxPricePerDay) return minimum;
-  return `${minimum}–₱${item.maxPricePerDay.toLocaleString()}`;
+function CategoryFilterMenu({
+  categories,
+  selected,
+  onSelect,
+}: {
+  categories: CatalogueCategory[];
+  selected: CatalogueCategory | null;
+  onSelect: (value: CatalogueCategory["id"] | null) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          className="min-w-36 justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+        >
+          {selected?.name ?? "All Categories"}
+          <ChevronRight className="h-3.5 w-3.5 rotate-90 text-dashboard-muted" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuItem onSelect={() => onSelect(null)}>All Categories</DropdownMenuItem>
+        {categories.map((category) => (
+          <DropdownMenuItem key={category.id} onSelect={() => onSelect(category.id)}>
+            {category.name}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
-function FilterMenu({
+function FilterMenu<Option extends string>({
   label,
   options,
   onSelect,
 }: {
   label: string;
-  options: readonly string[];
-  onSelect: (value: string) => void;
+  options: readonly Option[];
+  onSelect: (value: Option) => void;
 }) {
   return (
     <DropdownMenu>
@@ -330,6 +476,27 @@ function FilterMenu({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+function formatMinorMoney(value: string, currency: string) {
+  const amount = Number(value) / 100;
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "—";
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("");
+}
+
+function toDrezivoApiError(error: unknown): DrezivoApiError {
+  if (error instanceof DrezivoApiError) return error;
+  return new DrezivoApiError("We could not load clothing. Please try again.", { status: 500 });
 }
 
 function MetricCard({
