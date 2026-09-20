@@ -1,4 +1,13 @@
-import { boolean, integer, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 import { idColumn, timestamps } from './_shared.js';
 
@@ -30,21 +39,25 @@ export const filePurposeEnum = pgEnum('file_purpose', [
   'export_result',
 ]);
 
-export const file = pgTable('file_object', {
-  ...idColumn,
-  tenantId: uuid('tenant_id').notNull(),
-  purpose: filePurposeEnum('purpose').notNull(),
-  storageKey: text('storage_key').notNull(),
-  versionId: text('version_id'),
-  sha256: text('sha256'),
-  mimeType: text('mime_type').notNull(),
-  byteSize: integer('byte_size').notNull(),
-  lifecycleStatus: fileLifecycleEnum('lifecycle_status').notNull().default('pending_upload'),
-  isPrivate: boolean('is_private').notNull().default(true),
-  uploadExpiresAt: timestamp('upload_expires_at', { withTimezone: true }).notNull(),
-  frozenAt: timestamp('frozen_at', { withTimezone: true }),
-  retentionUntil: timestamp('retention_until', { withTimezone: true }),
-  legalHold: boolean('legal_hold').notNull().default(false),
-  deletedAt: timestamp('deleted_at', { withTimezone: true }),
-  ...timestamps,
-});
+export const file = pgTable(
+  'file_object',
+  {
+    ...idColumn,
+    tenantId: uuid('tenant_id').notNull(),
+    purpose: filePurposeEnum('purpose').notNull(),
+    storageKey: text('storage_key').notNull(),
+    versionId: text('version_id'),
+    sha256: text('sha256'),
+    mimeType: text('mime_type').notNull(),
+    byteSize: integer('byte_size').notNull(),
+    lifecycleStatus: fileLifecycleEnum('lifecycle_status').notNull().default('pending_upload'),
+    isPrivate: boolean('is_private').notNull().default(true),
+    uploadExpiresAt: timestamp('upload_expires_at', { withTimezone: true }).notNull(),
+    frozenAt: timestamp('frozen_at', { withTimezone: true }),
+    retentionUntil: timestamp('retention_until', { withTimezone: true }),
+    legalHold: boolean('legal_hold').notNull().default(false),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [unique('file_object_tenant_id_id_key').on(table.tenantId, table.id)],
+);

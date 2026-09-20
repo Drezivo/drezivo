@@ -8,6 +8,7 @@ import {
 } from '../src';
 
 const categoryId = '00000000-0000-4000-8000-000000000001';
+const measurementGuideId = '00000000-0000-4000-8000-000000000002';
 
 describe('catalogue admin contract', () => {
   it('supports reusable measurement guides without structured measurements', () => {
@@ -17,6 +18,7 @@ describe('catalogue admin contract', () => {
       clothingSizeInput.parse({
         size_label: 'M',
         measurement_mode: 'default_guide',
+        measurement_guide_id: measurementGuideId,
         measurement_unit: 'in',
         measurements: {},
       }),
@@ -66,7 +68,12 @@ describe('catalogue admin contract', () => {
       createClothingRequest.safeParse({
         ...base,
         sizes: [
-          { size_label: 'S', measurement_mode: 'default_guide', measurement_unit: 'in' },
+          {
+            size_label: 'S',
+            measurement_mode: 'default_guide',
+            measurement_guide_id: measurementGuideId,
+            measurement_unit: 'in',
+          },
           { size_label: 'M', measurement_mode: 'none', measurement_unit: 'in' },
         ],
       }).success,
@@ -76,7 +83,14 @@ describe('catalogue admin contract', () => {
       createClothingRequest.parse({
         ...base,
         code: 'GWN-023',
-        sizes: [{ size_label: 'S', measurement_mode: 'default_guide', measurement_unit: 'in' }],
+        sizes: [
+          {
+            size_label: 'S',
+            measurement_mode: 'default_guide',
+            measurement_guide_id: measurementGuideId,
+            measurement_unit: 'in',
+          },
+        ],
       }).code,
     ).toBe('GWN-023');
 
@@ -84,8 +98,18 @@ describe('catalogue admin contract', () => {
       createClothingRequest.safeParse({
         ...base,
         sizes: [
-          { size_label: 'M', measurement_mode: 'default_guide', measurement_unit: 'in' },
-          { size_label: 'm', measurement_mode: 'default_guide', measurement_unit: 'in' },
+          {
+            size_label: 'M',
+            measurement_mode: 'default_guide',
+            measurement_guide_id: measurementGuideId,
+            measurement_unit: 'in',
+          },
+          {
+            size_label: 'm',
+            measurement_mode: 'default_guide',
+            measurement_guide_id: measurementGuideId,
+            measurement_unit: 'in',
+          },
         ],
       }).success,
     ).toBe(false);

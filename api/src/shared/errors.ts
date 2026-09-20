@@ -78,6 +78,36 @@ export class IdempotencyKeyReusedError extends AppError {
   readonly code: ErrorCode = 'IDEMPOTENCY_KEY_REUSED';
 }
 
+/** 409 — a tenant-local clothing/style code already belongs to another product. */
+export class DuplicateClothingCodeError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'DUPLICATE_CLOTHING_CODE';
+}
+
+/** 422 — the selected category is not a valid category for this tenant/action. */
+export class InvalidCategoryError extends AppError {
+  readonly status = 422;
+  readonly code: ErrorCode = 'INVALID_CATEGORY';
+}
+
+/** 422 — the selected reusable measurement guide is unavailable for this tenant/action. */
+export class InvalidMeasurementGuideError extends AppError {
+  readonly status = 422;
+  readonly code: ErrorCode = 'INVALID_MEASUREMENT_GUIDE';
+}
+
+/** 409 — retirement/archive cannot proceed while physical custody remains unresolved. */
+export class UnresolvedCustodyError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'UNRESOLVED_CUSTODY';
+}
+
+/** 409 — an optimistic catalogue write targeted a stale version/timestamp. */
+export class StaleVersionError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'STALE_VERSION';
+}
+
 /** 422 — well-formed request, semantically invalid input (Zod boundary failures land here). */
 export class ValidationError extends AppError {
   readonly status = 422;
