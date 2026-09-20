@@ -34,6 +34,14 @@ export interface CatalogueFileRow {
   sha256: string | null;
 }
 
+export interface MeasurementGuideFileViewRow {
+  storage_key: string;
+  version_id: string | null;
+  mime_type: string;
+  lifecycle_status: string;
+  frozen_at: Date | null;
+}
+
 export interface ProductImageRow {
   file_id: string;
   display_order: number;
@@ -116,6 +124,21 @@ export async function readDefaultMeasurementGuide(
       WHERE tenant_id = $1 AND status = 'active' AND is_default = true
       LIMIT 1`,
     [tenantId],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function readMeasurementGuideFileForView(
+  client: PoolClient,
+  tenantId: string,
+  fileId: string,
+): Promise<MeasurementGuideFileViewRow | null> {
+  const result = await client.query<MeasurementGuideFileViewRow>(
+    `SELECT storage_key, version_id, mime_type, lifecycle_status, frozen_at
+       FROM file_object
+      WHERE tenant_id = $1 AND id = $2 AND purpose = 'measurement_guide'
+      LIMIT 1`,
+    [tenantId, fileId],
   );
   return result.rows[0] ?? null;
 }

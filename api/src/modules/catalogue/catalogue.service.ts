@@ -27,6 +27,8 @@ import {
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
+import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
+import { s3ObjectStorage } from '../../integrations/storage/s3-object-storage.js';
 import {
   assertPhysicalAssetCapacity,
   lockTenantQuotaScope,
@@ -60,6 +62,7 @@ import {
   readCategoryForCreate,
   readCatalogueImageFiles,
   readDefaultMeasurementGuide,
+  readMeasurementGuideFileForView,
   readMeasurementGuidesForCreate,
   readProductForImageMutation,
   replaceDefaultMeasurementGuide,
@@ -74,6 +77,7 @@ const SAVE_GUIDE_OPERATION = 'catalogue.measurement_guide.save';
 const CREATE_CLOTHING_OPERATION = 'catalogue.clothing.create';
 const UPDATE_CATEGORY_STATUS_OPERATION = 'catalogue.category.status.update';
 const REPLACE_CLOTHING_IMAGES_OPERATION = 'catalogue.clothing.images.replace';
+const MEASUREMENT_GUIDE_VIEW_EXPIRY_SECONDS = 5 * 60;
 const POSTGRES_INT_MAX = 2_147_483_647;
 
 interface CatalogueContext {
@@ -310,11 +314,14 @@ export async function updateCatalogueCategoryStatus(
 
 export async function getDefaultMeasurementGuide(
   input: CatalogueContext,
+  storage: ObjectStorage = s3ObjectStorage,
 ): Promise<MeasurementGuideDefaultResponse> {
   assertCatalogueReadContext(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
     const row = await readDefaultMeasurementGuide(client, input.tenantId);
-    return measurementGuideDefaultResponse.parse({ guide: row ? toMeasurementGuide(row) : null });
+    if (!row) return measurementGuideDefaultResponse.parse({ guide: null });
+    const imageUrl = await measurementGuideImageUrl(client, input.tenantId, row.file_id, storage);
+    return measurementGuideDefaultResponse.parse({ guide: toMeasurementGuide(row, imageUrl) });
   });
 }
 
@@ -637,10 +644,34 @@ function boundedDbMoney(value: string, label: string): number {
   return Number(parsed);
 }
 
-function toMeasurementGuide(row: MeasurementGuideRow): MeasurementGuide {
+async function measurementGuideImageUrl(
+  client: Parameters<typeof readMeasurementGuideFileForView>[0],
+  tenantId: string,
+  fileId: string,
+  storage: ObjectStorage,
+): Promise<string | null> {
+  const file = await readMeasurementGuideFileForView(client, tenantId, fileId);
+  if (
+    !file ||
+    file.lifecycle_status !== 'accepted' ||
+    !file.frozen_at ||
+    !['image/jpeg', 'image/png', 'image/webp'].includes(file.mime_type)
+  ) {
+    return null;
+  }
+  const authorization = await storage.authorizeRead({
+    storageKey: file.storage_key,
+    versionId: file.version_id,
+    expiresInSeconds: MEASUREMENT_GUIDE_VIEW_EXPIRY_SECONDS,
+  });
+  return authorization.readUrl;
+}
+
+function toMeasurementGuide(row: MeasurementGuideRow, imageUrl: string | null = null): MeasurementGuide {
   return {
     id: row.id as MeasurementGuide['id'],
     file_id: row.file_id as MeasurementGuide['file_id'],
+    image_url: imageUrl,
     name: row.name,
     status: row.status,
     is_default: row.is_default,

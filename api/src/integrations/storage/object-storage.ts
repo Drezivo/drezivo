@@ -12,6 +12,11 @@ export interface UploadedObjectMetadata {
   prefix: Uint8Array;
 }
 
+export interface ReadAuthorization {
+  readUrl: string;
+  expiresAt: Date;
+}
+
 export interface ObjectStorage {
   authorizeUpload(input: {
     storageKey: string;
@@ -19,5 +24,10 @@ export interface ObjectStorage {
     sha256: string;
     expiresInSeconds: number;
   }): Promise<UploadAuthorization>;
+  authorizeRead(input: {
+    storageKey: string;
+    versionId?: string | null;
+    expiresInSeconds: number;
+  }): Promise<ReadAuthorization>;
   inspectUploadedObject(storageKey: string): Promise<UploadedObjectMetadata | null>;
 }

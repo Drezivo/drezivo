@@ -2,7 +2,12 @@ import { createHash, createHmac } from 'node:crypto';
 
 import { config } from '../../config/index.js';
 import { DependencyUnavailableError } from '../../shared/errors.js';
-import type { ObjectStorage, UploadAuthorization, UploadedObjectMetadata } from './object-storage.js';
+import type {
+  ObjectStorage,
+  ReadAuthorization,
+  UploadAuthorization,
+  UploadedObjectMetadata,
+} from './object-storage.js';
 
 const SERVICE = 's3';
 const EMPTY_SHA256 = createHash('sha256').update('').digest('hex');
@@ -61,6 +66,49 @@ export class S3ObjectStorage implements ObjectStorage {
       },
       expiresAt,
     });
+  }
+
+  authorizeRead(input: {
+    storageKey: string;
+    versionId?: string | null;
+    expiresInSeconds: number;
+  }): Promise<ReadAuthorization> {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + input.expiresInSeconds * 1000);
+    const url = objectUrl(input.storageKey);
+    const amzDate = toAmzDate(now);
+    const dateStamp = amzDate.slice(0, 8);
+    const signedHeaders = 'host';
+    const credentialScope = `${dateStamp}/${config.AWS_REGION}/${SERVICE}/aws4_request`;
+    const query = new URLSearchParams();
+    if (input.versionId) query.set('versionId', input.versionId);
+    query.set('X-Amz-Algorithm', SIGNING_ALGORITHM);
+    query.set('X-Amz-Credential', `${config.S3_ACCESS_KEY_ID}/${credentialScope}`);
+    query.set('X-Amz-Date', amzDate);
+    query.set('X-Amz-Expires', String(input.expiresInSeconds));
+    query.set('X-Amz-SignedHeaders', signedHeaders);
+
+    const canonicalQuery = canonicalQueryString(query);
+    const canonicalHeaders = `host:${url.host}\n`;
+    const canonicalRequest = [
+      'GET',
+      canonicalUri(url),
+      canonicalQuery,
+      canonicalHeaders,
+      signedHeaders,
+      'UNSIGNED-PAYLOAD',
+    ].join('\n');
+    const stringToSign = [
+      SIGNING_ALGORITHM,
+      amzDate,
+      credentialScope,
+      sha256Hex(canonicalRequest),
+    ].join('\n');
+    const signature = signString(dateStamp, stringToSign);
+    query.set('X-Amz-Signature', signature);
+    url.search = canonicalQueryString(query);
+
+    return Promise.resolve({ readUrl: url.toString(), expiresAt });
   }
 
   async inspectUploadedObject(storageKey: string): Promise<UploadedObjectMetadata | null> {

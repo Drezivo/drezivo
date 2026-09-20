@@ -23,6 +23,8 @@ export const measurementGuide = z.object({
   id: measurementGuideId,
   name: z.string().trim().min(1).max(160),
   file_id: fileObjectId,
+  /** Short-lived signed URL for the accepted private guide image. */
+  image_url: z.string().url().nullable().default(null),
   is_default: z.boolean(),
   status: measurementGuideStatus,
   created_at: isoInstant,

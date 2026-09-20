@@ -46,6 +46,11 @@ class FakeStorage {
     expiresInSeconds: number;
   }> = [];
   readonly inspected: string[] = [];
+  readonly authorizedReads: Array<{
+    storageKey: string;
+    versionId?: string | null;
+    expiresInSeconds: number;
+  }> = [];
   readonly objects = new Map<
     string,
     {
@@ -75,6 +80,18 @@ class FakeStorage {
     });
   }
 
+  authorizeRead(input: {
+    storageKey: string;
+    versionId?: string | null;
+    expiresInSeconds: number;
+  }) {
+    this.authorizedReads.push(input);
+    return Promise.resolve({
+      readUrl: `https://reads.example.test/${encodeURIComponent(input.storageKey)}?version=${encodeURIComponent(input.versionId ?? '')}`,
+      expiresAt: new Date('2026-09-21T00:05:00.000Z'),
+    });
+  }
+
   inspectUploadedObject(storageKey: string) {
     this.inspected.push(storageKey);
     if (this.failInspection) {
@@ -87,7 +104,7 @@ class FakeStorage {
 describe('CLT-022 clothing file attachment flow', async () => {
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
   const { authorizeUpload, finalizeUpload } = await import('../../src/modules/files/files.service.js');
-  const { replaceClothingImages } = await import('../../src/modules/catalogue/catalogue.service.js');
+  const { getDefaultMeasurementGuide, replaceClothingImages } = await import('../../src/modules/catalogue/catalogue.service.js');
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
 
   beforeAll(async () => {
@@ -101,6 +118,44 @@ describe('CLT-022 clothing file attachment flow', async () => {
 
   afterAll(async () => {
     await closePool();
+  });
+
+  it('returns a short-lived signed image URL for the accepted default measurement guide', async () => {
+    const seed = await seedTenant('org_clt022_guide_view', 'user_clt022_guide_view');
+    const storage = new FakeStorage();
+    const seeded = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const file = await client.query<{ id: string; storage_key: string }>(
+        `INSERT INTO file_object
+           (tenant_id, purpose, storage_key, version_id, sha256, mime_type, byte_size,
+            lifecycle_status, is_private, upload_expires_at, frozen_at)
+         VALUES ($1, 'measurement_guide', $2, 'guide-version-1', $3, 'image/png', 512,
+                 'accepted', true, now() + interval '10 minutes', now())
+         RETURNING id, storage_key`,
+        [seed.tenantId, `tenant-files/${seed.tenantId}/guide-view/source`, SHA_A],
+      );
+      const fileRow = requireRow(file.rows, 'guide file');
+      const guide = await client.query<{ id: string }>(
+        `INSERT INTO measurement_guide (tenant_id, file_id, name, status, is_default)
+         VALUES ($1, $2, 'Standard Size Guide', 'active', true)
+         RETURNING id`,
+        [seed.tenantId, fileRow.id],
+      );
+      return { fileId: fileRow.id, storageKey: fileRow.storage_key, guideId: requireRow(guide.rows, 'guide').id };
+    });
+
+    const result = await getDefaultMeasurementGuide(seed.catalogueContext, storage);
+
+    expect(result.guide?.id).toBe(seeded.guideId);
+    expect(result.guide?.file_id).toBe(seeded.fileId);
+    expect(result.guide?.name).toBe('Standard Size Guide');
+    expect(result.guide?.image_url).toContain('https://reads.example.test/');
+    expect(storage.authorizedReads).toEqual([
+      {
+        storageKey: seeded.storageKey,
+        versionId: 'guide-version-1',
+        expiresInSeconds: 300,
+      },
+    ]);
   });
 
   it('authorizes a bounded private catalogue upload and accepts only the verified frozen object', async () => {
