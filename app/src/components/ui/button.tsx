@@ -8,10 +8,9 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-dashboard-accent text-white hover:bg-brand-700",
+        default: "dashboard-button-default",
         primary: "bg-brand-600 text-white hover:bg-brand-700",
-        secondary:
-          "border border-dashboard-border bg-dashboard-surface text-ink-900 hover:bg-brand-50",
+        secondary: "dashboard-button-secondary border border-dashboard-border",
         danger: "bg-danger-500 text-white hover:bg-danger-500/90",
         ghost: "text-ink-700 hover:bg-dashboard-active hover:text-dashboard-navy",
       },

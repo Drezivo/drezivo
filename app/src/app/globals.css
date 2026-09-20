@@ -87,6 +87,49 @@ html[data-dashboard-theme="dark"] {
   color-scheme: dark;
 }
 
+.dashboard-button-default {
+  background: var(--color-dashboard-accent);
+  color: white;
+}
+
+.dashboard-button-default:hover {
+  background: var(--color-brand-700);
+}
+
+.dashboard-button-secondary {
+  background: var(--color-dashboard-surface);
+  color: var(--color-dashboard-navy);
+}
+
+.dashboard-button-secondary:hover {
+  background: color-mix(in srgb, var(--color-dashboard-muted) 15%, transparent);
+  color: var(--color-dashboard-navy);
+}
+
+.dashboard-theme-dark .dashboard-button-default,
+html[data-dashboard-theme="dark"] .dashboard-button-default {
+  background: var(--color-dashboard-accent);
+  color: white;
+}
+
+.dashboard-theme-dark .dashboard-button-default:hover,
+html[data-dashboard-theme="dark"] .dashboard-button-default:hover {
+  background: color-mix(in srgb, var(--color-dashboard-accent) 82%, transparent);
+  color: white;
+}
+
+.dashboard-theme-dark .dashboard-button-secondary,
+html[data-dashboard-theme="dark"] .dashboard-button-secondary {
+  background: color-mix(in srgb, white 10%, transparent);
+  color: white;
+}
+
+.dashboard-theme-dark .dashboard-button-secondary:hover,
+html[data-dashboard-theme="dark"] .dashboard-button-secondary:hover {
+  background: color-mix(in srgb, white 18%, transparent);
+  color: white;
+}
+
 .dashboard-tone-purple {
   background: #f1edff;
   color: #5f39d2;
