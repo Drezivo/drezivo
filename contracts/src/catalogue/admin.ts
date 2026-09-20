@@ -208,6 +208,14 @@ export const createClothingRequest = z
   })
   .strict()
   .superRefine((value, ctx) => {
+    if (value.activate && value.image_file_ids.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['image_file_ids'],
+        message: 'Active clothing requires at least one image.',
+      });
+    }
+
     const seen = new Set<string>();
     value.sizes.forEach((size, index) => {
       const key = size.size_label.toLocaleLowerCase();

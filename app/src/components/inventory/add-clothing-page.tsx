@@ -528,7 +528,10 @@ export function AddClothingPage() {
     setFormError(null);
     try {
       setSubmitStage("Validating clothing…");
-      buildCreateRequest(activate, []);
+      if (activate && photos.length === 0) {
+        throw new Error("Add at least one photo before adding clothing. You can still save it as a draft without a photo.");
+      }
+      buildCreateRequest(false, []);
       setSubmitStage(photos.length > 0 ? "Uploading photos…" : activate ? "Adding clothing…" : "Saving draft…");
       const imageFileIds: string[] = [];
       for (const photo of photos) {
@@ -586,7 +589,7 @@ export function AddClothingPage() {
             <SectionCard
               icon={Images}
               title="Photos"
-              description="Upload up to 10 JPEG, PNG, or WebP photos. The first photo becomes the cover image."
+              description="Add at least one photo before activating this clothing. Drafts can be saved without photos. The first photo becomes the cover image."
             >
               <input
                 ref={fileInputRef}
@@ -1132,14 +1135,16 @@ export function AddClothingPage() {
                 </Button>
                 <Button
                   className="w-full"
-                  disabled={isSubmitting || selectedSizes.length === 0 || !categoryId}
+                  disabled={isSubmitting || selectedSizes.length === 0 || !categoryId || photos.length === 0}
                   onClick={() => void submitClothing(true)}
                 >
                   {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
                   Add Clothing
                 </Button>
                 <p className="text-center text-[0.68rem] leading-5 text-dashboard-muted">
-                  Add Clothing creates the selected variants and one physical piece for each size.
+                  {photos.length === 0
+                    ? "Add at least 1 photo to activate this clothing. You can still save it as a draft."
+                    : "Add Clothing creates the selected variants and one physical piece for each size."}
                 </p>
               </CardContent>
             </Card>

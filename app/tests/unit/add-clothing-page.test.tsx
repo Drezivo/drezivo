@@ -285,7 +285,18 @@ describe("AddClothingPage", () => {
     expect(screen.getByText("₱300 / day")).toBeVisible();
   });
 
-  it("submits real variants with stable default-guide references and custom measurements", async () => {
+  it("requires a photo to activate clothing while still allowing an image-less draft", async () => {
+    renderPage();
+    await screen.findByText("Default Size Guide");
+
+    expect(screen.getByRole("button", { name: "Add Clothing" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save as Draft" })).toBeEnabled();
+    expect(
+      screen.getByText("Add at least 1 photo to activate this clothing. You can still save it as a draft.")
+    ).toBeVisible();
+  });
+
+  it("submits real draft variants with stable default-guide references and custom measurements", async () => {
     renderPage();
     expect(await screen.findByText("Default Size Guide")).toBeVisible();
 
@@ -312,7 +323,7 @@ describe("AddClothingPage", () => {
     fireEvent.change(screen.getByLabelText("S waist"), { target: { value: "28" } });
     fireEvent.change(screen.getByLabelText("S hips"), { target: { value: "36" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "Add Clothing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save as Draft" }));
 
     await waitFor(() => expect(api.createClothing).toHaveBeenCalledTimes(1));
     const [requestBody, idempotencyKey] = api.createClothing.mock.calls[0]!;
@@ -332,7 +343,7 @@ describe("AddClothingPage", () => {
         prep_minutes: 1440,
         turnaround_minutes: 2880,
       },
-      activate: true,
+      activate: false,
     });
     expect(requestBody.sizes).toHaveLength(4);
     expect(requestBody.sizes[0]).toMatchObject({
@@ -438,6 +449,7 @@ describe("AddClothingPage", () => {
     await waitFor(() => expect(api.finalizeUpload).toHaveBeenCalledTimes(10));
     await waitFor(() => expect(api.createClothing).toHaveBeenCalledTimes(1));
     const [requestBody] = api.createClothing.mock.calls[0]!;
+    expect(requestBody.activate).toBe(true);
     expect(requestBody.image_file_ids).toEqual(
       Array.from(
         { length: 10 },

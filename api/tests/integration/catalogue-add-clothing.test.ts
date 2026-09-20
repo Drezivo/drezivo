@@ -4,8 +4,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   createClothingRequest,
+  fileObjectId,
   measurementGuideId,
   type CreateClothingRequest,
+  type FileObjectId,
   type MeasurementGuideId,
   type PermissionCode,
 } from '@drezivo/contracts';
@@ -60,9 +62,11 @@ describe('CLT-020 Add Clothing transactional service', async () => {
       name: 'Guide A',
       isDefault: true,
     });
+    const imageId = await seedAcceptedImage(seed.tenantId, 'user_clt020_atomic', 'atomic');
     const request = makeRequest(seed.categoryId, {
       code: 'EMERALD-001',
       color_label: null,
+      image_file_ids: [imageId],
       sizes: [
         {
           size_label: 'M',
@@ -628,6 +632,30 @@ describe('CLT-020 Add Clothing transactional service', async () => {
     });
   }
 
+  async function seedAcceptedImage(
+    tenantId: string,
+    principalId: string,
+    label: string,
+  ): Promise<FileObjectId> {
+    return withTenantTransaction(tenantId, principalId, async (client) => {
+      const result = await client.query<{ id: string }>(
+        `INSERT INTO file_object
+           (tenant_id, purpose, storage_key, version_id, sha256, mime_type, byte_size,
+            lifecycle_status, is_private, upload_expires_at, frozen_at)
+         VALUES ($1, 'catalogue_image', $2, $3, $4, 'image/png', 512,
+                 'accepted', true, now() + interval '10 minutes', now())
+         RETURNING id`,
+        [
+          tenantId,
+          `tenant-files/${tenantId}/${label}.png`,
+          `version-${label}`,
+          Buffer.alloc(32, 7).toString('base64'),
+        ],
+      );
+      return fileObjectId.parse(requireRow(result.rows, 'accepted catalogue image').id);
+    });
+  }
+
   function makeRequest(
     categoryId: string,
     overrides: Partial<Omit<CreateClothingRequest, 'category_id'>> = {},
@@ -648,7 +676,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
         prep_minutes: 0,
         turnaround_minutes: 1440,
       },
-      activate: true,
+      activate: false,
       ...overrides,
     });
   }
