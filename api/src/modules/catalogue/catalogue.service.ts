@@ -195,6 +195,7 @@ export async function createClothing(input: CommandContext & {
       });
       const data = createClothingResponse.parse({
         product_id: graph.productId,
+        code: graph.code,
         variant_count: graph.variantCount,
         physical_piece_count: graph.physicalPieceCount,
         status: input.request.activate ? 'active' : 'draft',

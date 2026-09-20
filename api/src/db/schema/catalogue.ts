@@ -1,5 +1,7 @@
+import { sql } from 'drizzle-orm';
 import {
   boolean,
+  index,
   integer,
   jsonb,
   pgEnum,
@@ -47,12 +49,16 @@ export const product = pgTable(
     ...idColumn,
     tenantId: uuid('tenant_id').notNull(),
     categoryId: uuid('category_id').references(() => category.id),
+    code: text('code').notNull(),
     name: text('name').notNull(),
     description: text('description'),
     status: productStatusEnum('status').notNull().default('draft'),
     ...updatableTimestamps,
   },
-  (table) => [uniqueIndex('product_tenant_status_idx').on(table.tenantId, table.status)],
+  (table) => [
+    index('product_tenant_status_idx').on(table.tenantId, table.status),
+    uniqueIndex('product_tenant_code_ci_key').on(table.tenantId, sql`lower(${table.code})`),
+  ],
 );
 
 export const measurementGuide = pgTable('measurement_guide', {

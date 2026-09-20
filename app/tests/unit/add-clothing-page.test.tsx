@@ -13,6 +13,13 @@ function renderPage() {
 }
 
 describe("AddClothingPage", () => {
+  it("shows an optional clothing code field", () => {
+    renderPage();
+
+    expect(screen.getByLabelText("Clothing Code")).toBeVisible();
+    expect(screen.getByText(/Leave blank and Drezivo will generate one for you/)).toBeVisible();
+  });
+
   it("uses selected sizes to generate one piece per size", () => {
     renderPage();
 

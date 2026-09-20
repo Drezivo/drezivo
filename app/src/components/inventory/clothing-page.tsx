@@ -274,7 +274,9 @@ function ClothingRow({ item }: { item: ClothingItem }) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem>View details</DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href={`/inventory/${item.id}`}>View details</Link>
+            </DropdownMenuItem>
             <DropdownMenuItem>Edit</DropdownMenuItem>
             <DropdownMenuItem>{item.archived ? "Restore" : "Archive"}</DropdownMenuItem>
           </DropdownMenuContent>

@@ -4,6 +4,8 @@ import type { PoolClient } from 'pg';
 
 import type { CreateClothingRequest, MeasurementMap } from '@drezivo/contracts';
 
+import { StateConflictError } from '../../shared/errors.js';
+
 export interface CategoryRow {
   id: string;
   name: string;
@@ -33,6 +35,7 @@ interface FileRow {
 
 export interface CreatedClothingGraph {
   productId: string;
+  code: string;
   variantCount: number;
   physicalPieceCount: number;
 }
@@ -166,19 +169,15 @@ export async function createClothingGraph(
   },
 ): Promise<CreatedClothingGraph> {
   const productId = randomUUID();
-  await client.query(
-    `INSERT INTO product
-       (id, tenant_id, category_id, name, description, status, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, now(), now())`,
-    [
-      productId,
-      input.tenantId,
-      input.request.category_id,
-      input.request.name,
-      input.request.description,
-      input.status,
-    ],
-  );
+  const productCode = await insertProductWithCode(client, {
+    productId,
+    tenantId: input.tenantId,
+    categoryId: input.request.category_id,
+    requestedCode: input.request.code,
+    name: input.request.name,
+    description: input.request.description,
+    status: input.status,
+  });
 
   for (const [displayOrder, fileId] of input.request.image_file_ids.entries()) {
     await client.query(
@@ -245,6 +244,7 @@ export async function createClothingGraph(
 
   return {
     productId,
+    code: productCode,
     variantCount: input.request.sizes.length,
     physicalPieceCount: input.request.sizes.length,
   };
@@ -277,6 +277,48 @@ export async function appendCatalogueAuditEvent(
       input.requestId,
     ],
   );
+}
+
+async function insertProductWithCode(
+  client: PoolClient,
+  input: {
+    productId: string;
+    tenantId: string;
+    categoryId: string;
+    requestedCode: string | undefined;
+    name: string;
+    description: string;
+    status: 'draft' | 'active';
+  },
+): Promise<string> {
+  const attempts = input.requestedCode ? 1 : 5;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const code = input.requestedCode?.trim() || generatedStyleCode();
+    const result = await client.query<{ code: string }>(
+      `INSERT INTO product
+         (id, tenant_id, category_id, code, name, description, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())
+       ON CONFLICT DO NOTHING
+       RETURNING code`,
+      [
+        input.productId,
+        input.tenantId,
+        input.categoryId,
+        code,
+        input.name,
+        input.description,
+        input.status,
+      ],
+    );
+    const inserted = result.rows[0]?.code;
+    if (inserted) return inserted;
+    if (input.requestedCode) break;
+  }
+  throw new StateConflictError('That clothing code is already in use.');
+}
+
+function generatedStyleCode(): string {
+  return `CG-${randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase()}`;
 }
 
 function generatedCode(prefix: string, productId: string, sizeLabel: string, index: number): string {

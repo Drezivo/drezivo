@@ -229,6 +229,7 @@ Table product {
   tenant_id uuid [not null]
   id uuid [not null]
   category_id uuid [not null]
+  code varchar(80) [not null]
   name varchar(200) [not null]
   description text [not null]
   status varchar(20) [not null]
@@ -236,8 +237,9 @@ Table product {
   indexes {
     (tenant_id, id) [pk]
     (tenant_id, category_id, status)
+    (tenant_id, code) [unique]
   }
-  Note: 'V1. Style-level marketing entry, not stock quantity.'
+  Note: 'V1. Style-level marketing entry, not stock quantity. Code is owner-supplied or API-generated; SQL enforces tenant-local case-insensitive uniqueness.'
 }
 
 Table measurement_guide {

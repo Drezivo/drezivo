@@ -64,6 +64,19 @@ export type SaveMeasurementGuideRequest = z.infer<typeof saveMeasurementGuideReq
 export const cataloguePricingMode = z.enum(['fixed_duration', 'daily']);
 export type CataloguePricingMode = z.infer<typeof cataloguePricingMode>;
 
+export const clothingStyleCode = z
+  .string()
+  .trim()
+  .min(1)
+  .max(80)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/, 'must use letters, numbers, dot, underscore, slash, or dash');
+export type ClothingStyleCode = z.infer<typeof clothingStyleCode>;
+
+const optionalClothingStyleCode = z.preprocess(
+  (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+  clothingStyleCode.optional(),
+);
+
 const commonPricing = z.object({
   rental_price_minor: nonNegativeMoneyString,
   security_deposit_minor: nonNegativeMoneyString,
@@ -118,6 +131,7 @@ export type ClothingSizeInput = z.infer<typeof clothingSizeInput>;
 export const createClothingRequest = z
   .object({
     name: z.string().trim().min(1).max(200),
+    code: optionalClothingStyleCode,
     description: z.string().trim().max(2_000).default(''),
     category_id: categoryId,
     color_label: z.string().trim().min(1).max(80),
@@ -145,6 +159,7 @@ export type CreateClothingRequest = z.infer<typeof createClothingRequest>;
 
 export const createClothingResponse = z.object({
   product_id: productId,
+  code: clothingStyleCode,
   variant_count: z.number().int().positive(),
   physical_piece_count: z.number().int().positive(),
   status: z.enum(['draft', 'active']),

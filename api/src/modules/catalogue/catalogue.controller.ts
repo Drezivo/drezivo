@@ -1,6 +1,11 @@
 import type { Request, Response } from 'express';
 
-import type { CreateClothingRequest, SaveMeasurementGuideRequest } from '@drezivo/contracts';
+import type {
+  CreateClothingRequest,
+  PermissionCode,
+  SaveMeasurementGuideRequest,
+  TenantStatus,
+} from '@drezivo/contracts';
 
 import { ValidationError } from '../../shared/errors.js';
 import { sendSuccess } from '../../shared/response.js';
@@ -42,7 +47,14 @@ export async function createClothingController(req: Request, res: Response): Pro
   res.status(result.status).json(result.body);
 }
 
-function requireContext(req: Request) {
+function requireContext(req: Request): {
+  tenantId: string;
+  branchId: string;
+  membershipId: string;
+  principalId: string;
+  permissionCodes: PermissionCode[];
+  effectiveTenantStatus: TenantStatus;
+} {
   const principalId = req.clerkPrincipal?.clerkUserId;
   const context = req.tenantContext;
   if (!principalId || !context) throw new ValidationError('Workspace context is required.');

@@ -192,9 +192,17 @@ export function AddClothingPage() {
               title="Clothing Information"
               description="These details describe the clothing style customers will see."
             >
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <Field label="Clothing Name" required>
                   <Input defaultValue="Emerald Evening Gown" placeholder="e.g. Emerald Evening Gown" />
+                </Field>
+                <Field label="Clothing Code">
+                  <div>
+                    <Input aria-label="Clothing Code" placeholder="e.g. GWN-023" />
+                    <p className="mt-1.5 text-xs text-dashboard-muted">
+                      Optional. Leave blank and Drezivo will generate one for you.
+                    </p>
+                  </div>
                 </Field>
                 <Field label="Category" required>
                   <DropdownMenu>

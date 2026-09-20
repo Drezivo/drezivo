@@ -45,6 +45,7 @@ describe('catalogue admin contract', () => {
   it('models the V1 aggregate create command and rejects duplicate sizes', () => {
     const base = {
       name: 'Emerald Evening Gown',
+      code: '',
       description: '',
       category_id: categoryId,
       color_label: 'Emerald Green',
@@ -70,6 +71,14 @@ describe('catalogue admin contract', () => {
         ],
       }).success,
     ).toBe(true);
+
+    expect(
+      createClothingRequest.parse({
+        ...base,
+        code: 'GWN-023',
+        sizes: [{ size_label: 'S', measurement_mode: 'default_guide', measurement_unit: 'in' }],
+      }).code,
+    ).toBe('GWN-023');
 
     expect(
       createClothingRequest.safeParse({
