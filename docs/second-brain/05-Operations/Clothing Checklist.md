@@ -1,7 +1,7 @@
 ---
 title: Clothing V1 End-to-End Checklist
 type: implementation-checklist
-status: planned
+status: phase-0-complete
 owner: Drezivo team
 updated: 2026-09-20
 tags: [drezivo, v1, clothing, catalogue, inventory, checklist]
@@ -9,7 +9,7 @@ tags: [drezivo, v1, clothing, catalogue, inventory, checklist]
 
 # Clothing V1 End-to-End Checklist
 
-**Status:** Planned; current `/inventory` UI is prototype/mock-data driven.
+**Status:** Phase 0 complete; current `/inventory` UI remains prototype/mock-data driven and Phase 1 is next.
 **Canonical specifications:** [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
 **Foundation dependency:** [Tenancy, Owner Onboarding, Clerk, Memberships, and Billing V1 Checklist](../../../api/TENANCY-ONBOARDING-V1-CHECKLIST.md).
 
@@ -44,42 +44,42 @@ Before marking a task complete:
 
 ## Phase 0: Canonical contract and schema alignment
 
-- [ ] **CLT-000 — Audit existing catalogue schema against the canonical model**
+- [x] **CLT-000 — Audit existing catalogue schema against the canonical model**
   - **Depends on:** Tenancy/actor-context foundation available.
   - **Outcome:** Existing migrations and runtime schema are mapped to product, category, variant, physical asset, measurement guide, and file references before adding new tables.
   - **Acceptance:**
-    - [ ] Identify which V1 catalogue tables already exist and which are missing.
-    - [ ] Confirm tenant-owned tables use tenant-scoped PK/FK patterns and forced RLS where required.
-    - [ ] Confirm V1 does not introduce stock quantity as the source of rentable capacity.
-    - [ ] Record any schema mismatch as a forward migration plan; do not rewrite already-applied migrations.
-    - [ ] Keep V1.1 fitting and V2 location/transfer columns out of V1 migrations unless already safely nullable and canonical.
-  - **Tests/evidence:** Schema review against Data Model §5 and entity table.
+    - [x] Identify which V1 catalogue tables already exist and which are missing.
+    - [x] Confirm tenant-owned tables use tenant-scoped PK/FK patterns and forced RLS where required.
+    - [x] Confirm V1 does not introduce stock quantity as the source of rentable capacity.
+    - [x] Record any schema mismatch as a forward migration plan; do not rewrite already-applied migrations.
+    - [x] Keep V1.1 fitting and V2 location/transfer columns out of V1 migrations unless already safely nullable and canonical.
+  - **Tests/evidence:** [[Clothing Phase 0 Schema Audit]] records the schema map and forward-only plan against Data Model §5/entity definitions.
 
-- [ ] **CLT-001 — Define catalogue contracts and stable errors**
+- [x] **CLT-001 — Define catalogue contracts and stable errors**
   - **Depends on:** CLT-000.
   - **Outcome:** `contracts/` owns request/response schemas before API routes are implemented.
   - **Acceptance:**
-    - [ ] Define product/category/variant/physical-asset summary and detail projections.
-    - [ ] Define closed schemas for product lifecycle and physical-asset readiness/lifecycle projections used by V1.
-    - [ ] Define Add Clothing request with name, description, category, selected sizes, color, rental price, deposit, measurement source, measurements/guide reference, preparation/turnaround settings, and internal notes only where canonical.
-    - [ ] Define update/archive requests with optimistic version/state inputs where needed.
-    - [ ] Define list query schemas for search, category, size, lifecycle/readiness projection, pagination cursor/limit, and sorting.
-    - [ ] Reject client-supplied tenant ID, branch authority, entitlement count, derived availability, or server-computed money fields.
-    - [ ] Add stable errors for duplicate code, asset limit reached, invalid category/guide, unresolved custody, stale version, and foreign object concealment.
-  - **Tests/evidence:** Contract tests reject unknown fields/states and authority injection.
+    - [x] Define product/category/variant/physical-asset summary and detail projections.
+    - [x] Define closed schemas for product lifecycle and physical-asset readiness/lifecycle projections used by V1.
+    - [x] Define Add Clothing request with name, description, category, selected sizes, color, rental price, deposit, measurement source, measurements/guide reference, preparation/turnaround settings, and internal notes only where canonical.
+    - [x] Define update/archive requests with optimistic version/state inputs where needed.
+    - [x] Define list query schemas for search, category, size, lifecycle/readiness projection, pagination cursor/limit, and sorting.
+    - [x] Reject client-supplied tenant ID, branch authority, entitlement count, derived availability, or server-computed money fields.
+    - [x] Add stable errors for duplicate code, asset limit reached, invalid category/guide, unresolved custody, stale version, and foreign object concealment.
+  - **Tests/evidence:** Focused catalogue contract tests pass `10/10`; `@drezivo/contracts` build passes. See [[Clothing Phase 0 Schema Audit]].
 
-- [ ] **CLT-002 — Define catalogue migration constraints and indexes**
+- [x] **CLT-002 — Define catalogue migration constraints and indexes**
   - **Depends on:** CLT-000, CLT-001.
   - **Outcome:** Catalogue persistence is safe under concurrency and efficient for tenant-scoped search/listing.
   - **Acceptance:**
-    - [ ] Product code uniqueness is tenant-local and case-insensitive.
-    - [ ] Category uniqueness is tenant-local according to accepted naming rules.
-    - [ ] Variant uniqueness prevents accidental duplicate equivalent variants where the canonical model requires it.
-    - [ ] Physical assets have stable identifiers and lifecycle/readiness fields that cannot erase historical allocation/custody facts.
-    - [ ] Add indexes for tenant/product/category/status/search paths actually used by `/inventory`.
-    - [ ] Add same-tenant FK protection for category/product/variant/asset relationships.
-    - [ ] Runtime role privileges deny unsafe cross-tenant/global writes.
-  - **Tests/evidence:** Real PostgreSQL constraint and RLS tests as `drezivo_app`.
+    - [x] Product code uniqueness is tenant-local and case-insensitive.
+    - [x] Category uniqueness is tenant-local according to accepted naming rules.
+    - [x] Variant uniqueness prevents accidental duplicate equivalent variants where the canonical model requires it.
+    - [x] Physical assets have stable identifiers and lifecycle/readiness fields that cannot erase historical allocation/custody facts.
+    - [x] Add indexes for tenant/product/category/status/search paths actually used by `/inventory`.
+    - [x] Add same-tenant FK protection for category/product/variant/asset relationships.
+    - [x] Runtime role privileges deny unsafe cross-tenant/global writes.
+  - **Tests/evidence:** `0025_catalogue_phase0_integrity.sql` is covered by `catalogue-phase0.test.ts`; the disposable local PostgreSQL suite passes `5/5` as the non-superuser `drezivo_app` role. See [[Clothing Phase 0 Schema Audit]].
 
 ## Phase 1: Catalogue read model
 

@@ -100,24 +100,54 @@ export const clothingSizeInput = z
   .object({
     size_label: z.string().trim().min(1).max(40),
     measurement_mode: measurementMode,
+    measurement_guide_id: measurementGuideId.nullable().optional(),
     measurement_unit: measurementUnit.default('cm'),
     measurements: measurementMap.default({}),
   })
   .strict()
   .superRefine((value, ctx) => {
     const hasMeasurements = Object.keys(value.measurements).length > 0;
-    if (value.measurement_mode === 'custom' && !hasMeasurements) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['measurements'],
-        message: 'Custom measurement mode requires at least one measurement.',
-      });
+    const guideId = value.measurement_guide_id ?? null;
+
+    if (value.measurement_mode === 'default_guide') {
+      if (!guideId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['measurement_guide_id'],
+          message: 'Default-guide measurement mode requires measurement_guide_id.',
+        });
+      }
+      if (hasMeasurements) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['measurements'],
+          message: 'Default-guide measurement mode cannot include structured measurements.',
+        });
+      }
     }
-    if (value.measurement_mode !== 'custom' && hasMeasurements) {
+
+    if (value.measurement_mode === 'custom') {
+      if (guideId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['measurement_guide_id'],
+          message: 'Custom measurement mode cannot reference a measurement guide.',
+        });
+      }
+      if (!hasMeasurements) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['measurements'],
+          message: 'Custom measurement mode requires at least one measurement.',
+        });
+      }
+    }
+
+    if (value.measurement_mode === 'none' && (guideId || hasMeasurements)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['measurements'],
-        message: 'Only custom measurement mode may include structured measurements.',
+        path: ['measurement_mode'],
+        message: 'None measurement mode cannot reference a guide or structured measurements.',
       });
     }
   });

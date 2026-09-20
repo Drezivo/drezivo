@@ -1,4 +1,14 @@
-import { boolean, integer, jsonb, pgEnum, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  unique,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 import { idColumn, timestamps, updatableTimestamps } from './_shared.js';
 
@@ -51,6 +61,7 @@ export const branch = pgTable(
     ...timestamps,
   },
   (table) => [
+    unique('branch_tenant_id_id_key').on(table.tenantId, table.id),
     uniqueIndex('branch_tenant_code_key').on(table.tenantId, table.code),
     // Partial "exactly one default branch per tenant" uniqueness is a migration-only
     // constraint (WHERE is_default) — see 0001_tenancy.sql; Drizzle's pgTable index builder
