@@ -20,6 +20,7 @@ const api = vi.hoisted(() => ({
 
 const navigation = vi.hoisted(() => ({
   push: vi.fn(),
+  replace: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({
@@ -27,7 +28,7 @@ vi.mock("@clerk/nextjs", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: navigation.push }),
+  useRouter: () => ({ push: navigation.push, replace: navigation.replace }),
 }));
 
 vi.mock("@/lib/drezivo-api", () => ({
@@ -297,6 +298,61 @@ describe("AddClothingPage", () => {
     ).toBeVisible();
   });
 
+  it("guards internal navigation with a Drezivo discard dialog once the form is dirty", async () => {
+    renderPage();
+    await screen.findByText("Default Size Guide");
+
+    fireEvent.change(screen.getByLabelText("Clothing Name *"), {
+      target: { value: "Unsaved Gown" },
+    });
+    fireEvent.click(screen.getByRole("link", { name: "Clothing" }));
+
+    expect(await screen.findByRole("dialog")).toBeVisible();
+    expect(screen.getByText("Discard unsaved changes?")).toBeVisible();
+    expect(
+      screen.getByText("You have changes that haven't been saved as a draft. Leaving this page will discard them.")
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Stay on page" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(navigation.replace).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("link", { name: "Clothing" }));
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    expect(navigation.replace).toHaveBeenCalledWith("/inventory");
+  });
+
+  it("uses the native beforeunload guard for reload or tab close when dirty", async () => {
+    renderPage();
+    await screen.findByText("Default Size Guide");
+
+    fireEvent.change(screen.getByLabelText("Clothing Name *"), {
+      target: { value: "Unsaved Gown" },
+    });
+
+    const beforeUnload = new Event("beforeunload", { cancelable: true });
+    expect(window.dispatchEvent(beforeUnload)).toBe(false);
+    expect(beforeUnload.defaultPrevented).toBe(true);
+  });
+
+  it("guards browser Back with the same discard dialog", async () => {
+    const historyBack = vi.spyOn(window.history, "back").mockImplementation(() => undefined);
+    renderPage();
+    await screen.findByText("Default Size Guide");
+
+    fireEvent.change(screen.getByLabelText("Clothing Name *"), {
+      target: { value: "Unsaved Gown" },
+    });
+    window.dispatchEvent(new PopStateEvent("popstate"));
+
+    expect(await screen.findByRole("dialog")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(historyBack).toHaveBeenCalledTimes(1);
+    historyBack.mockRestore();
+  });
+
   it("submits real draft variants with stable default-guide references and custom measurements", async () => {
     renderPage();
     expect(await screen.findByText("Default Size Guide")).toBeVisible();
@@ -359,8 +415,13 @@ describe("AddClothingPage", () => {
       measurement_guide_id: "00000000-0000-4000-8000-000000000099",
       measurements: {},
     });
-    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/inventory"));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("/inventory"));
+    expect(navigation.push).not.toHaveBeenCalled();
     expect(sessionStorage.getItem("drezivo:inventory-notice")).toBe("draft-saved");
+
+    const beforeUnload = new Event("beforeunload", { cancelable: true });
+    expect(window.dispatchEvent(beforeUnload)).toBe(true);
+    expect(beforeUnload.defaultPrevented).toBe(false);
   });
 
   it("accepts at most 10 photos, uploads/finalizes them, and submits their file ids in order", async () => {
@@ -455,10 +516,11 @@ describe("AddClothingPage", () => {
       )
     );
     await waitFor(() =>
-      expect(navigation.push).toHaveBeenCalledWith(
+      expect(navigation.replace).toHaveBeenCalledWith(
         "/inventory/00000000-0000-4000-8000-000000000050"
       )
     );
+    expect(navigation.push).not.toHaveBeenCalled();
     expect(sessionStorage.getItem("drezivo:inventory-notice")).toBeNull();
   });
 });
