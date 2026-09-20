@@ -10,6 +10,7 @@ import {
   getDefaultMeasurementGuideController,
   listCatalogueCategoriesController,
   listCatalogueClothingController,
+  replaceClothingImagesController,
   saveMeasurementGuideController,
   updateCatalogueCategoryStatusController,
 } from './catalogue.controller.js';
@@ -20,6 +21,7 @@ import {
   validateCatalogueClothingListQuery,
   validateCatalogueProductId,
   validateCreateClothing,
+  validateReplaceClothingImages,
   validateSaveMeasurementGuide,
 } from './catalogue.middleware.js';
 
@@ -104,6 +106,19 @@ catalogueRouter.post(
   validateSaveMeasurementGuide,
   requireCatalogueIdempotencyKey,
   saveMeasurementGuideController,
+);
+
+catalogueRouter.put(
+  '/catalogue/clothing/:productId/images',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateCatalogueProductId,
+  validateReplaceClothingImages,
+  requireCatalogueIdempotencyKey,
+  replaceClothingImagesController,
 );
 
 catalogueRouter.post(

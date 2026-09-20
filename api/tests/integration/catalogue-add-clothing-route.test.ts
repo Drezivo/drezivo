@@ -93,7 +93,7 @@ describe('CLT-021 Add Clothing HTTP route', async () => {
     const response = await request(createApp())
       .post('/api/v1/catalogue/clothing')
       .set('Content-Type', 'application/json')
-      .set('Idempotency-Key', 'clt021-permission')
+      .set('Idempotency-Key', 'testidem03')
       .send(validRequest(seed.categoryId, 'PERM-001'));
 
     expect(response.status).toBe(403);
@@ -174,7 +174,7 @@ describe('CLT-021 Add Clothing HTTP route', async () => {
     const response = await request(createApp())
       .post('/api/v1/catalogue/clothing')
       .set('Content-Type', 'application/json')
-      .set('Idempotency-Key', 'clt021-body-limit')
+      .set('Idempotency-Key', 'testidem04')
       .send({
         ...validRequest(seed.categoryId, 'BODY-001'),
         description: 'x'.repeat(70 * 1024),
@@ -269,7 +269,7 @@ describe('CLT-021 Add Clothing HTTP route', async () => {
     const limited = await request(app)
       .post('/api/v1/catalogue/clothing')
       .set('Content-Type', 'application/json')
-      .set('Idempotency-Key', 'clt021-rate-limited')
+      .set('Idempotency-Key', 'testidem05')
       .send(validRequest(seed.categoryId, 'RATE-LIMITED'));
 
     expect(limited.status).toBe(429);

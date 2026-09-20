@@ -7,6 +7,8 @@ import {
   createClothingResponse,
   measurementGuide,
   measurementGuideDefaultResponse,
+  replaceClothingImagesRequest,
+  replaceClothingImagesResponse,
   type CatalogueCategory,
   type CatalogueCategoryList,
   type ClothingDetail,
@@ -17,6 +19,8 @@ import {
   type MeasurementGuide,
   type MeasurementGuideDefaultResponse,
   type PermissionCode,
+  type ReplaceClothingImagesRequest,
+  type ReplaceClothingImagesResponse,
   type SaveMeasurementGuideRequest,
   type TenantStatus,
   type UpdateCatalogueCategoryStatusRequest,
@@ -54,18 +58,22 @@ import {
   createClothingGraph,
   listCategories,
   readCategoryForCreate,
+  readCatalogueImageFiles,
   readDefaultMeasurementGuide,
   readMeasurementGuidesForCreate,
-  updateCategoryStatus,
+  readProductForImageMutation,
   replaceDefaultMeasurementGuide,
-  validateCatalogueImageFiles,
+  replaceProductImages,
+  updateCategoryStatus,
   validateMeasurementGuideFile,
+  type CatalogueFileRow,
   type MeasurementGuideRow,
 } from './catalogue.repository.js';
 
 const SAVE_GUIDE_OPERATION = 'catalogue.measurement_guide.save';
 const CREATE_CLOTHING_OPERATION = 'catalogue.clothing.create';
 const UPDATE_CATEGORY_STATUS_OPERATION = 'catalogue.category.status.update';
+const REPLACE_CLOTHING_IMAGES_OPERATION = 'catalogue.clothing.images.replace';
 const POSTGRES_INT_MAX = 2_147_483_647;
 
 interface CatalogueContext {
@@ -85,6 +93,7 @@ interface CommandContext extends CatalogueContext {
 type GuideCommandBody = SuccessEnvelope<MeasurementGuide> | FailureEnvelope;
 type ClothingCommandBody = SuccessEnvelope<CreateClothingResponse> | FailureEnvelope;
 type CategoryCommandBody = SuccessEnvelope<CatalogueCategory> | FailureEnvelope;
+type ClothingImagesCommandBody = SuccessEnvelope<ReplaceClothingImagesResponse> | FailureEnvelope;
 
 export interface CatalogueCommandResponse<TBody> {
   status: number;
@@ -399,9 +408,7 @@ export async function createClothing(input: CommandContext & {
         throw new InvalidCategoryError('The selected clothing category is inactive.');
       }
 
-      if (!(await validateCatalogueImageFiles(client, input.tenantId, request.image_file_ids))) {
-        throw new ValidationError('One or more clothing photos are not accepted catalogue images.');
-      }
+      await assertCatalogueImageFiles(client, input.tenantId, request.image_file_ids);
 
       const measurementGuideIds = Array.from(
         new Set(
@@ -470,6 +477,110 @@ export async function createClothing(input: CommandContext & {
       return finalizeKnownFailure(client, input, CREATE_CLOTHING_OPERATION, payloadHash, error);
     }
   });
+}
+
+export async function replaceClothingImages(input: CommandContext & {
+  productId: string;
+  request: ReplaceClothingImagesRequest;
+}): Promise<CatalogueCommandResponse<ClothingImagesCommandBody>> {
+  assertCatalogueWriteContext(input);
+  const parsedRequest = replaceClothingImagesRequest.safeParse(input.request);
+  if (!parsedRequest.success) {
+    throw new ValidationError('Clothing image request is invalid.');
+  }
+  const request = parsedRequest.data;
+  const payloadHash = canonicalRequestHash({ product_id: input.productId, ...request });
+
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const product = await readProductForImageMutation(client, input.tenantId, input.productId);
+    if (!product) throw new NotFoundError('The clothing item could not be found.');
+
+    const claim = await claimTenantIdempotency(client, {
+      tenantId: input.tenantId,
+      principalKey: input.membershipId,
+      operation: REPLACE_CLOTHING_IMAGES_OPERATION,
+      intentKey: input.idempotencyKey,
+      payloadHash,
+    });
+    const replay = replayOrThrow<ClothingImagesCommandBody>(claim);
+    if (replay) return replay;
+
+    try {
+      await assertCatalogueImageFiles(client, input.tenantId, request.file_ids);
+      const rows = await replaceProductImages(client, {
+        tenantId: input.tenantId,
+        productId: input.productId,
+        fileIds: request.file_ids,
+      });
+      const data = replaceClothingImagesResponse.parse({
+        images: rows.map((row) => ({
+          file_id: row.file_id,
+          display_order: row.display_order,
+          image_url: null,
+        })),
+        cover_file_id: rows[0]?.file_id ?? null,
+      });
+      const body = successBody(input.requestId, data);
+
+      await appendCatalogueAuditEvent(client, {
+        tenantId: input.tenantId,
+        actorKey: input.principalId,
+        action: 'catalogue.clothing.images_replaced',
+        entityType: 'product',
+        entityId: input.productId,
+        redactedSummary: {
+          image_count: rows.length,
+          cover_file_id: rows[0]?.file_id ?? null,
+        },
+        requestId: input.requestId,
+      });
+      await finalizeTenantIdempotency(client, {
+        tenantId: input.tenantId,
+        principalKey: input.membershipId,
+        operation: REPLACE_CLOTHING_IMAGES_OPERATION,
+        intentKey: input.idempotencyKey,
+        payloadHash,
+        status: 'succeeded',
+        responseCode: 200,
+        safeResponse: body,
+      });
+      return { status: 200, body };
+    } catch (error) {
+      return finalizeKnownFailure(
+        client,
+        input,
+        REPLACE_CLOTHING_IMAGES_OPERATION,
+        payloadHash,
+        error,
+      );
+    }
+  });
+}
+
+async function assertCatalogueImageFiles(
+  client: Parameters<typeof readCatalogueImageFiles>[0],
+  tenantId: string,
+  fileIds: string[],
+): Promise<void> {
+  if (fileIds.length === 0) return;
+  const rows = await readCatalogueImageFiles(client, tenantId, fileIds);
+  if (rows.length !== fileIds.length) {
+    throw new NotFoundError('A selected clothing photo could not be found.');
+  }
+  if (rows.some((row) => !isAcceptedCatalogueImage(row))) {
+    throw new ValidationError('One or more clothing photos are not accepted catalogue images.');
+  }
+}
+
+function isAcceptedCatalogueImage(row: CatalogueFileRow): boolean {
+  return (
+    row.purpose === 'catalogue_image' &&
+    (row.mime_type === 'image/jpeg' || row.mime_type === 'image/png' || row.mime_type === 'image/webp') &&
+    row.byte_size > 0 &&
+    row.byte_size <= 10 * 1024 * 1024 &&
+    row.lifecycle_status === 'accepted' &&
+    Boolean(row.frozen_at && (row.version_id || row.sha256))
+  );
 }
 
 function assertCatalogueReadContext(input: CatalogueContext): void {

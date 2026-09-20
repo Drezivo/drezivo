@@ -23,14 +23,20 @@ export interface MeasurementGuideRow {
   updated_at: Date;
 }
 
-interface FileRow {
+export interface CatalogueFileRow {
   id: string;
   purpose: string;
   mime_type: string;
+  byte_size: number;
   lifecycle_status: string;
   frozen_at: Date | null;
   version_id: string | null;
   sha256: string | null;
+}
+
+export interface ProductImageRow {
+  file_id: string;
+  display_order: number;
 }
 
 export interface CreatedClothingGraph {
@@ -119,8 +125,8 @@ export async function validateMeasurementGuideFile(
   tenantId: string,
   fileId: string,
 ): Promise<boolean> {
-  const result = await client.query<FileRow>(
-    `SELECT id, purpose, mime_type, lifecycle_status, frozen_at, version_id, sha256
+  const result = await client.query<CatalogueFileRow>(
+    `SELECT id, purpose, mime_type, byte_size, lifecycle_status, frozen_at, version_id, sha256
        FROM file_object
       WHERE tenant_id = $1 AND id = $2
       LIMIT 1`,
@@ -167,26 +173,63 @@ export async function replaceDefaultMeasurementGuide(
   return row;
 }
 
-export async function validateCatalogueImageFiles(
+export async function readCatalogueImageFiles(
   client: PoolClient,
   tenantId: string,
   fileIds: string[],
-): Promise<boolean> {
-  if (fileIds.length === 0) return true;
-  const result = await client.query<FileRow>(
-    `SELECT id, purpose, mime_type, lifecycle_status, frozen_at, version_id, sha256
+): Promise<CatalogueFileRow[]> {
+  if (fileIds.length === 0) return [];
+  const result = await client.query<CatalogueFileRow>(
+    `SELECT id, purpose, mime_type, byte_size, lifecycle_status, frozen_at, version_id, sha256
        FROM file_object
-      WHERE tenant_id = $1 AND id = ANY($2::uuid[])`,
+      WHERE tenant_id = $1 AND id = ANY($2::uuid[])
+      ORDER BY id ASC
+      FOR SHARE`,
     [tenantId, fileIds],
   );
-  if (result.rows.length !== fileIds.length) return false;
-  return result.rows.every(
-    (row) =>
-      row.purpose === 'catalogue_image' &&
-      row.mime_type.startsWith('image/') &&
-      row.lifecycle_status === 'accepted' &&
-      Boolean(row.frozen_at && (row.version_id || row.sha256)),
+  return result.rows;
+}
+
+export async function readProductForImageMutation(
+  client: PoolClient,
+  tenantId: string,
+  productId: string,
+): Promise<{ id: string } | null> {
+  const result = await client.query<{ id: string }>(
+    `SELECT id
+       FROM product
+      WHERE tenant_id = $1 AND id = $2
+      LIMIT 1
+      FOR UPDATE`,
+    [tenantId, productId],
   );
+  return result.rows[0] ?? null;
+}
+
+export async function replaceProductImages(
+  client: PoolClient,
+  input: { tenantId: string; productId: string; fileIds: string[] },
+): Promise<ProductImageRow[]> {
+  await client.query(
+    `DELETE FROM product_image
+      WHERE tenant_id = $1 AND product_id = $2`,
+    [input.tenantId, input.productId],
+  );
+
+  const rows: ProductImageRow[] = [];
+  for (const [displayOrder, fileId] of input.fileIds.entries()) {
+    const result = await client.query<ProductImageRow>(
+      `INSERT INTO product_image
+         (id, tenant_id, product_id, file_id, display_order, created_at)
+       VALUES ($1, $2, $3, $4, $5, now())
+       RETURNING file_id, display_order`,
+      [randomUUID(), input.tenantId, input.productId, fileId, displayOrder],
+    );
+    const row = result.rows[0];
+    if (!row) throw new Error('Product image insert did not return a row.');
+    rows.push(row);
+  }
+  return rows;
 }
 
 export async function createClothingGraph(

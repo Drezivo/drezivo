@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import type {
   CreateClothingRequest,
   PermissionCode,
+  ReplaceClothingImagesRequest,
   SaveMeasurementGuideRequest,
   TenantStatus,
   UpdateCatalogueCategoryStatusRequest,
@@ -16,6 +17,7 @@ import {
   getCatalogueClothingDetail,
   getCatalogueClothingList,
   getDefaultMeasurementGuide,
+  replaceClothingImages,
   saveMeasurementGuide,
   updateCatalogueCategoryStatus,
 } from './catalogue.service.js';
@@ -68,6 +70,19 @@ export async function saveMeasurementGuideController(req: Request, res: Response
     requestId: req.requestId,
     idempotencyKey: requireIdempotencyKey(req),
     request: req.body as SaveMeasurementGuideRequest,
+  });
+  res.status(result.status).json(result.body);
+}
+
+export async function replaceClothingImagesController(req: Request, res: Response): Promise<void> {
+  const productId = req.catalogueProductId;
+  if (!productId) throw new ValidationError('A valid clothing product id is required.');
+  const result = await replaceClothingImages({
+    ...requireContext(req),
+    requestId: req.requestId,
+    idempotencyKey: requireIdempotencyKey(req),
+    productId,
+    request: req.body as ReplaceClothingImagesRequest,
   });
   res.status(result.status).json(result.body);
 }

@@ -138,7 +138,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
     const command = {
       ...seed.context,
       requestId: 'req-clt020-sequential',
-      idempotencyKey: 'clt020-sequential-1',
+      idempotencyKey: 'testidem01',
       request,
     };
 
@@ -233,7 +233,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
         ...seed.context,
         permissionCodes: [],
         requestId: 'req-clt020-permission',
-        idempotencyKey: 'clt020-permission',
+        idempotencyKey: 'testidem02',
         request: makeRequest(seed.categoryId, { code: 'PERMISSION-001' }),
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
