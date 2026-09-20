@@ -6,8 +6,10 @@ import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
 import {
   createClothingController,
+  getCatalogueClothingDetailController,
   getDefaultMeasurementGuideController,
   listCatalogueCategoriesController,
+  listCatalogueClothingController,
   saveMeasurementGuideController,
   updateCatalogueCategoryStatusController,
 } from './catalogue.controller.js';
@@ -15,6 +17,8 @@ import {
   requireAssetManagePermission,
   requireCatalogueIdempotencyKey,
   validateCatalogueCategoryStatusUpdate,
+  validateCatalogueClothingListQuery,
+  validateCatalogueProductId,
   validateCreateClothing,
   validateSaveMeasurementGuide,
 } from './catalogue.middleware.js';
@@ -35,6 +39,28 @@ const writeRateLimit = rateLimit({
 
 const readPolicy = requireTenantAction('context_read');
 const writePolicy = requireTenantAction('asset_write');
+
+catalogueRouter.get(
+  '/catalogue/clothing',
+  requireStaffAuth,
+  requireTenantContext,
+  readRateLimit,
+  readPolicy,
+  requireAssetManagePermission,
+  validateCatalogueClothingListQuery,
+  listCatalogueClothingController,
+);
+
+catalogueRouter.get(
+  '/catalogue/clothing/:productId',
+  requireStaffAuth,
+  requireTenantContext,
+  readRateLimit,
+  readPolicy,
+  requireAssetManagePermission,
+  validateCatalogueProductId,
+  getCatalogueClothingDetailController,
+);
 
 catalogueRouter.get(
   '/catalogue/categories',

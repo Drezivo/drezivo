@@ -2,10 +2,13 @@ import type { RequestHandler } from 'express';
 
 import {
   categoryId,
+  clothingListQuery,
   createClothingRequest,
   idempotencyKey,
+  productId,
   saveMeasurementGuideRequest,
   updateCatalogueCategoryStatusRequest,
+  type ClothingListQuery,
 } from '@drezivo/contracts';
 
 import { ForbiddenError, ValidationError } from '../../shared/errors.js';
@@ -14,6 +17,8 @@ declare module 'express-serve-static-core' {
   interface Request {
     catalogueIdempotencyKey?: string;
     catalogueCategoryId?: string;
+    catalogueClothingListQuery?: ClothingListQuery;
+    catalogueProductId?: string;
   }
 }
 
@@ -32,6 +37,26 @@ export const requireAssetManagePermission: RequestHandler = (req, _res, next): v
     next(new ForbiddenError('This branch does not grant clothing management access.'));
     return;
   }
+  next();
+};
+
+export const validateCatalogueClothingListQuery: RequestHandler = (req, _res, next): void => {
+  const parsed = clothingListQuery.safeParse(req.query);
+  if (!parsed.success) {
+    next(new ValidationError('Clothing list query is invalid.'));
+    return;
+  }
+  req.catalogueClothingListQuery = parsed.data;
+  next();
+};
+
+export const validateCatalogueProductId: RequestHandler = (req, _res, next): void => {
+  const parsed = productId.safeParse(req.params.productId);
+  if (!parsed.success) {
+    next(new ValidationError('A valid clothing product id is required.'));
+    return;
+  }
+  req.catalogueProductId = parsed.data;
   next();
 };
 
