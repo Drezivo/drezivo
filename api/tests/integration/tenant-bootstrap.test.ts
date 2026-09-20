@@ -96,7 +96,12 @@ describe('TBF-030 tenant bootstrap', async () => {
         'SELECT current_period_start, current_period_end, trial_ends_at FROM subscription',
       );
       const outbox = await client.query<{ event_type: string }>('SELECT event_type FROM outbox_event');
-      return { subscription: subscription.rows[0], outbox: outbox.rows[0] };
+      const categories = await client.query<{ name: string; status: string; display_order: number }>(
+        `SELECT name, status, display_order
+           FROM category
+          ORDER BY display_order ASC, name ASC`,
+      );
+      return { subscription: subscription.rows[0], outbox: outbox.rows[0], categories: categories.rows };
     });
     if (!tenantState.subscription) throw new Error('expected subscription');
     expect(tenantState.subscription.current_period_end.getTime() - tenantState.subscription.current_period_start.getTime()).toBe(
@@ -104,6 +109,14 @@ describe('TBF-030 tenant bootstrap', async () => {
     );
     expect(tenantState.subscription.trial_ends_at.getTime()).toBe(tenantState.subscription.current_period_end.getTime());
     expect(tenantState.outbox).toEqual({ event_type: 'tenant.bootstrapped' });
+    expect(tenantState.categories).toEqual([
+      { name: 'Gowns', status: 'active', display_order: 10 },
+      { name: 'Dresses', status: 'active', display_order: 20 },
+      { name: 'Filipiniana', status: 'active', display_order: 30 },
+      { name: 'Barong', status: 'active', display_order: 40 },
+      { name: 'Costumes', status: 'active', display_order: 50 },
+      { name: 'Formal Wear', status: 'active', display_order: 60 },
+    ]);
   });
 
   it('replays one committed graph for concurrent same-key requests', async () => {
@@ -131,13 +144,15 @@ describe('TBF-030 tenant bootstrap', async () => {
       const tenant = await client.query<{ count: number }>('SELECT count(*)::int AS count FROM tenant');
       const memberships = await client.query<{ count: number }>('SELECT count(*)::int AS count FROM membership');
       const subscriptions = await client.query<{ count: number }>('SELECT count(*)::int AS count FROM subscription');
+      const categories = await client.query<{ count: number }>('SELECT count(*)::int AS count FROM category');
       return {
         tenants: tenant.rows[0]?.count ?? -1,
         memberships: memberships.rows[0]?.count ?? -1,
         subscriptions: subscriptions.rows[0]?.count ?? -1,
+        categories: categories.rows[0]?.count ?? -1,
       };
     });
-    expect(counts).toEqual({ tenants: 1, memberships: 1, subscriptions: 1 });
+    expect(counts).toEqual({ tenants: 1, memberships: 1, subscriptions: 1, categories: 6 });
   });
 
   it('rejects a mismatched organization without creating tenant effects', async () => {

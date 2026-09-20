@@ -35,11 +35,14 @@ export const measurementGuideDefaultResponse = z.object({
 });
 export type MeasurementGuideDefaultResponse = z.infer<typeof measurementGuideDefaultResponse>;
 
+export const catalogueCategoryStatus = z.enum(['active', 'inactive']);
+export type CatalogueCategoryStatus = z.infer<typeof catalogueCategoryStatus>;
+
 export const catalogueCategory = z.object({
   id: categoryId,
   name: z.string().trim().min(1).max(120),
-  visible: z.boolean(),
-  display_order: z.number().int(),
+  status: catalogueCategoryStatus,
+  display_order: z.number().int().nonnegative(),
 });
 export type CatalogueCategory = z.infer<typeof catalogueCategory>;
 
@@ -47,6 +50,13 @@ export const catalogueCategoryList = z.object({
   items: z.array(catalogueCategory),
 });
 export type CatalogueCategoryList = z.infer<typeof catalogueCategoryList>;
+
+export const updateCatalogueCategoryStatusRequest = z
+  .object({
+    status: catalogueCategoryStatus,
+  })
+  .strict();
+export type UpdateCatalogueCategoryStatusRequest = z.infer<typeof updateCatalogueCategoryStatusRequest>;
 
 /**
  * Metadata command issued after an accepted `measurement_guide` file has been uploaded/frozen.

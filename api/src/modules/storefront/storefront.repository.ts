@@ -94,7 +94,14 @@ async function fetchPublishedProducts(client: PoolClient, tenantId: string): Pro
     name: string;
     description: string | null;
   }>(
-    `SELECT id, name, description FROM product WHERE tenant_id = $1 AND status = 'active' ORDER BY name`,
+    `SELECT p.id, p.name, p.description
+       FROM product p
+       LEFT JOIN category c
+         ON c.tenant_id = p.tenant_id AND c.id = p.category_id
+      WHERE p.tenant_id = $1
+        AND p.status = 'active'
+        AND (p.category_id IS NULL OR c.status = 'active')
+      ORDER BY p.name`,
     [tenantId],
   );
 

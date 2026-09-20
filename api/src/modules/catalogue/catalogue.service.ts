@@ -1,8 +1,10 @@
 import {
+  catalogueCategory,
   catalogueCategoryList,
   createClothingResponse,
   measurementGuide,
   measurementGuideDefaultResponse,
+  type CatalogueCategory,
   type CatalogueCategoryList,
   type CreateClothingRequest,
   type CreateClothingResponse,
@@ -11,6 +13,7 @@ import {
   type PermissionCode,
   type SaveMeasurementGuideRequest,
   type TenantStatus,
+  type UpdateCatalogueCategoryStatusRequest,
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
@@ -36,6 +39,7 @@ import {
   categoryExists,
   createClothingGraph,
   listCategories,
+  updateCategoryStatus,
   readDefaultMeasurementGuide,
   replaceDefaultMeasurementGuide,
   validateCatalogueImageFiles,
@@ -45,6 +49,7 @@ import {
 
 const SAVE_GUIDE_OPERATION = 'catalogue.measurement_guide.save';
 const CREATE_CLOTHING_OPERATION = 'catalogue.clothing.create';
+const UPDATE_CATEGORY_STATUS_OPERATION = 'catalogue.category.status.update';
 const POSTGRES_INT_MAX = 2_147_483_647;
 
 interface CatalogueContext {
@@ -63,6 +68,7 @@ interface CommandContext extends CatalogueContext {
 
 type GuideCommandBody = SuccessEnvelope<MeasurementGuide> | FailureEnvelope;
 type ClothingCommandBody = SuccessEnvelope<CreateClothingResponse> | FailureEnvelope;
+type CategoryCommandBody = SuccessEnvelope<CatalogueCategory> | FailureEnvelope;
 
 export interface CatalogueCommandResponse<TBody> {
   status: number;
@@ -76,6 +82,74 @@ export async function getCatalogueCategories(
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
     const rows = await listCategories(client, input.tenantId);
     return catalogueCategoryList.parse({ items: rows });
+  });
+}
+
+export async function updateCatalogueCategoryStatus(
+  input: CommandContext & {
+    categoryId: string;
+    request: UpdateCatalogueCategoryStatusRequest;
+  },
+): Promise<CatalogueCommandResponse<CategoryCommandBody>> {
+  assertCatalogueWriteContext(input);
+  const payloadHash = canonicalRequestHash({
+    category_id: input.categoryId,
+    status: input.request.status,
+  });
+
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const claim = await claimTenantIdempotency(client, {
+      tenantId: input.tenantId,
+      principalKey: input.membershipId,
+      operation: UPDATE_CATEGORY_STATUS_OPERATION,
+      intentKey: input.idempotencyKey,
+      payloadHash,
+    });
+    const replay = replayOrThrow<CategoryCommandBody>(claim);
+    if (replay) return replay;
+
+    try {
+      const row = await updateCategoryStatus(
+        client,
+        input.tenantId,
+        input.categoryId,
+        input.request.status,
+      );
+      if (!row) {
+        throw new NotFoundError('The selected clothing category could not be found.');
+      }
+      const data = catalogueCategory.parse(row);
+      const body = successBody(input.requestId, data);
+
+      await appendCatalogueAuditEvent(client, {
+        tenantId: input.tenantId,
+        actorKey: input.principalId,
+        action: 'catalogue.category.status_updated',
+        entityType: 'category',
+        entityId: data.id,
+        redactedSummary: { status: data.status },
+        requestId: input.requestId,
+      });
+      await finalizeTenantIdempotency(client, {
+        tenantId: input.tenantId,
+        principalKey: input.membershipId,
+        operation: UPDATE_CATEGORY_STATUS_OPERATION,
+        intentKey: input.idempotencyKey,
+        payloadHash,
+        status: 'succeeded',
+        responseCode: 200,
+        safeResponse: body,
+      });
+      return { status: 200, body };
+    } catch (error) {
+      return finalizeKnownFailure(
+        client,
+        input,
+        UPDATE_CATEGORY_STATUS_OPERATION,
+        payloadHash,
+        error,
+      );
+    }
   });
 }
 

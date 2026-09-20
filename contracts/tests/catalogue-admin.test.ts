@@ -1,16 +1,30 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  catalogueCategoryStatus,
   clothingSizeInput,
   createClothingRequest,
   filePurpose,
   measurementMode,
+  updateCatalogueCategoryStatusRequest,
 } from '../src';
 
 const categoryId = '00000000-0000-4000-8000-000000000001';
 const measurementGuideId = '00000000-0000-4000-8000-000000000002';
 
 describe('catalogue admin contract', () => {
+  it('uses an explicit active/inactive category status for storefront visibility', () => {
+    expect(catalogueCategoryStatus.parse('active')).toBe('active');
+    expect(catalogueCategoryStatus.parse('inactive')).toBe('inactive');
+    expect(catalogueCategoryStatus.safeParse('hidden').success).toBe(false);
+    expect(updateCatalogueCategoryStatusRequest.parse({ status: 'inactive' })).toEqual({
+      status: 'inactive',
+    });
+    expect(
+      updateCatalogueCategoryStatusRequest.safeParse({ status: 'active', tenant_id: categoryId }).success,
+    ).toBe(false);
+  });
+
   it('supports reusable measurement guides without structured measurements', () => {
     expect(measurementMode.parse('default_guide')).toBe('default_guide');
     expect(filePurpose.parse('measurement_guide')).toBe('measurement_guide');

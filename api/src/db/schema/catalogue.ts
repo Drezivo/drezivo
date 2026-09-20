@@ -37,27 +37,30 @@ export const assetLifecycleEnum = pgEnum('asset_lifecycle_status', ['active', 'r
 export const assetReadinessEnum = pgEnum('asset_readiness', ['ready', 'needs_cleaning', 'needs_repair', 'unready']);
 export const assetCustodyKindEnum = pgEnum('asset_custody_kind', ['at_branch', 'with_customer', 'in_transit']);
 
+export type CategoryStatus = 'active' | 'inactive';
+
 export const category = pgTable(
   'category',
   {
     ...idColumn,
     tenantId: uuid('tenant_id').notNull(),
     name: text('name').notNull(),
-    visible: boolean('visible').notNull().default(true),
+    status: text('status').$type<CategoryStatus>().notNull().default('active'),
     displayOrder: integer('display_order').notNull().default(0),
     ...timestamps,
   },
   (table) => [
     unique('category_tenant_id_id_key').on(table.tenantId, table.id),
     uniqueIndex('category_tenant_name_ci_key').on(table.tenantId, sql`lower(btrim(${table.name}))`),
-    index('category_tenant_visible_order_idx').on(
+    index('category_tenant_status_order_idx').on(
       table.tenantId,
-      table.visible,
+      table.status,
       table.displayOrder,
       table.id,
     ),
     check('category_name_not_blank', sql`length(btrim(${table.name})) BETWEEN 1 AND 120`),
     check('category_display_order_nonnegative', sql`${table.displayOrder} >= 0`),
+    check('category_status_check', sql`${table.status} IN ('active', 'inactive')`),
   ],
 );
 

@@ -9,7 +9,7 @@ import { StateConflictError } from '../../shared/errors.js';
 export interface CategoryRow {
   id: string;
   name: string;
-  visible: boolean;
+  status: 'active' | 'inactive';
   display_order: number;
 }
 
@@ -42,13 +42,29 @@ export interface CreatedClothingGraph {
 
 export async function listCategories(client: PoolClient, tenantId: string): Promise<CategoryRow[]> {
   const result = await client.query<CategoryRow>(
-    `SELECT id, name, visible, display_order
+    `SELECT id, name, status, display_order
        FROM category
       WHERE tenant_id = $1
       ORDER BY display_order ASC, name ASC, id ASC`,
     [tenantId],
   );
   return result.rows;
+}
+
+export async function updateCategoryStatus(
+  client: PoolClient,
+  tenantId: string,
+  categoryId: string,
+  status: CategoryRow['status'],
+): Promise<CategoryRow | null> {
+  const result = await client.query<CategoryRow>(
+    `UPDATE category
+        SET status = $3
+      WHERE tenant_id = $1 AND id = $2
+      RETURNING id, name, status, display_order`,
+    [tenantId, categoryId, status],
+  );
+  return result.rows[0] ?? null;
 }
 
 export async function categoryExists(
@@ -256,7 +272,7 @@ export async function appendCatalogueAuditEvent(
     tenantId: string;
     actorKey: string;
     action: string;
-    entityType: 'measurement_guide' | 'product';
+    entityType: 'category' | 'measurement_guide' | 'product';
     entityId: string;
     redactedSummary: Record<string, unknown>;
     requestId: string;

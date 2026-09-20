@@ -5,6 +5,7 @@ import type { PoolClient } from 'pg';
 
 import type { BootstrapTransactionContext } from '../../db/client.js';
 import { appendGlobalAuditEvent } from '../audit/global-audit.repository.js';
+import { seedDefaultCatalogueCategories } from '../catalogue/catalogue.bootstrap.js';
 
 export interface BootstrapAccountRow {
   id: string;
@@ -247,6 +248,7 @@ export async function createTenantBootstrapGraph(
        VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [randomUUID(), tenantId, branchId, membershipId, JSON.stringify(ownerPermissionCodes)],
     );
+    await seedDefaultCatalogueCategories(client, tenantId);
     await client.query(
       `INSERT INTO storefront
          (id, tenant_id, branch_id, slug, status, branding, contact)

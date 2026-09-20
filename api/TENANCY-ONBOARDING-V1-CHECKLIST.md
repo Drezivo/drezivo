@@ -208,7 +208,8 @@ or billing tasks as authority for this work.
 - [x] **TBF-030 — Implement idempotent tenant bootstrap**
   - **Depends on:** TBF-021, TBF-012, TBF-001.
   - **Outcome:** A trial-eligible onboarding atomically creates tenant, default branch, Owner
-    membership/grant, draft storefront, subscription, and trial event.
+    membership/grant, six active default clothing categories, draft storefront, subscription, and
+    trial event.
   - **Acceptance:**
     - [x] Database time starts the seven-day trial.
     - [x] Account trial state and current-owned-tenant link are updated in the same winning
@@ -217,11 +218,13 @@ or billing tasks as authority for this work.
     - [x] Every tenant-owned row has server-resolved tenant scope and required RLS protection.
     - [x] The strict empty-body command requires the authenticated active Clerk organization and
           account-scoped idempotency key.
-    - [x] The complete graph includes the default branch, Owner grant, draft storefront,
+    - [x] The complete graph includes the default branch, Owner grant, six active default clothing
+          categories (Gowns, Dresses, Filipiniana, Barong, Costumes, Formal Wear), draft storefront,
           trialing subscription, immutable trial event, tenant audit, and outbox event.
   - **Tests/evidence:** `tests/integration/tenant-bootstrap.test.ts` covers complete graph creation,
-    concurrent same-key replay, organization mismatch concealment, database-time trial period, and
-    single-graph assertions. Full PostgreSQL evidence requires the disposable `TEST_DATABASE_URL`.
+    the six active default categories, concurrent same-key replay without duplicate category seeds,
+    organization mismatch concealment, database-time trial period, and single-graph assertions. The
+    disposable local PostgreSQL suite passes `4/4` for this file.
 
 - [x] **TBF-031 — Update actor, tenant, and workspace resolution**
   - **Depends on:** TBF-030.
