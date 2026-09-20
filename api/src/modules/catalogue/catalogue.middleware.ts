@@ -1,9 +1,11 @@
 import type { RequestHandler } from 'express';
 
 import {
+  categoryId,
   createClothingRequest,
   idempotencyKey,
   saveMeasurementGuideRequest,
+  updateCatalogueCategoryStatusRequest,
 } from '@drezivo/contracts';
 
 import { ForbiddenError, ValidationError } from '../../shared/errors.js';
@@ -11,6 +13,7 @@ import { ForbiddenError, ValidationError } from '../../shared/errors.js';
 declare module 'express-serve-static-core' {
   interface Request {
     catalogueIdempotencyKey?: string;
+    catalogueCategoryId?: string;
   }
 }
 
@@ -49,5 +52,17 @@ export const validateCreateClothing: RequestHandler = (req, _res, next): void =>
     return;
   }
   req.body = parsed.data;
+  next();
+};
+
+export const validateCatalogueCategoryStatusUpdate: RequestHandler = (req, _res, next): void => {
+  const parsedId = categoryId.safeParse(req.params.categoryId);
+  const parsedBody = updateCatalogueCategoryStatusRequest.safeParse(req.body);
+  if (!parsedId.success || !parsedBody.success) {
+    next(new ValidationError('Category status request is invalid.'));
+    return;
+  }
+  req.catalogueCategoryId = parsedId.data;
+  req.body = parsedBody.data;
   next();
 };

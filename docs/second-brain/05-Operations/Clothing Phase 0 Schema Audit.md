@@ -38,7 +38,7 @@ Phase 0 adds no new V1.1/V2 column or table.
 
 | Identity/resource | Existing source | Phase 0 finding |
 | --- | --- | --- |
-| `category` | `0002_catalogue_assets.sql` | Exists; tenant-owned and RLS-protected. Needed tenant-local case-insensitive naming and composite tenant identity. |
+| `category` | `0002_catalogue_assets.sql`, `0026_category_status_defaults.sql` | Exists; tenant-owned and RLS-protected. Uses tenant-local case-insensitive naming and explicit `active | inactive` visibility status. Tenant bootstrap seeds the six starter categories. |
 | `product` | `0002_catalogue_assets.sql`, `0024_product_style_code.sql` | Exists with draft/active/archived lifecycle and tenant-local case-insensitive style code. Needed composite tenant/category integrity and list indexes. |
 | `product_variant` | `0002_catalogue_assets.sql`, `0023_reusable_measurement_guides.sql` | Exists with pricing, size/color, explicit measurement mode/guide reference. Needed same-tenant product enforcement, case-insensitive SKU identity, and list/filter indexes. |
 | `physical_asset` | `0002_catalogue_assets.sql` | Exists as serialized garment with lifecycle/readiness/custody/version. Needed same-tenant branch/variant enforcement and stronger identifier/version checks. |
@@ -78,11 +78,16 @@ for:
 The existing measurement-guide/file and variant/measurement-guide composite FKs from `0023` remain.
 Old simple FKs are not destructively rewritten; the new composite FKs add the missing invariant.
 
-### 2. Tenant-local category and serialized identifiers needed normalization
+### 2. Tenant-local category lifecycle and serialized identifiers needed normalization
 
 Phase 0 adds:
 
 - case-insensitive trimmed category-name uniqueness per tenant,
+- explicit category status `active | inactive` as the sole visibility authority; the prior
+  `visible` boolean is migrated and removed,
+- six active bootstrap defaults: Gowns, Dresses, Filipiniana, Barong, Costumes, Formal Wear,
+- a one-time forward backfill that inserts only missing defaults for already-provisioned tenants
+  and preserves an existing matching category's current status/order,
 - case-insensitive trimmed variant SKU uniqueness per tenant,
 - case-insensitive trimmed physical-asset-code uniqueness per tenant,
 - blank/length checks for category/product/variant/asset identifying fields,
@@ -102,7 +107,7 @@ Phase 0 adds indexes for the planned `/inventory` read model:
 
 - product contains-search by normalized name/code using `pg_trgm`,
 - tenant/category/status/created product listing,
-- tenant category visibility/display order,
+- tenant category status/display order,
 - tenant/product/size variant filtering,
 - tenant/variant/lifecycle/readiness physical-asset filtering.
 
@@ -112,6 +117,7 @@ These indexes do not make availability authoritative; date availability remains 
 
 The shared `@drezivo/contracts` package now owns:
 
+- closed category visibility enum: `active | inactive`, plus a strict status-toggle request,
 - closed product lifecycle enum: `draft | active | archived`,
 - closed asset lifecycle enum: `active | retired | lost`,
 - closed readiness enum: `ready | needs_cleaning | needs_repair | unready`,
@@ -155,7 +161,15 @@ exists.
 
 ## CLT-002 migration and runtime boundary
 
-Forward migration: `api/src/db/migrations/0025_catalogue_phase0_integrity.sql`.
+Forward migrations:
+
+- `api/src/db/migrations/0025_catalogue_phase0_integrity.sql`
+- `api/src/db/migrations/0026_category_status_defaults.sql`
+
+`0026` migrates the old boolean visibility value to `active | inactive`, removes the duplicate
+boolean source of truth, backfills only missing starter categories for existing tenants, and leaves
+an existing case-insensitive category match untouched. Future tenants receive the same six defaults
+inside the winning tenant-bootstrap transaction through the catalogue-owned bootstrap hook.
 
 Drizzle mirrors were updated in:
 
@@ -171,14 +185,18 @@ foundation migrations; neither role is given BYPASSRLS or table ownership.
 
 ### Passed
 
-- Focused contract tests: `10/10` across `catalogue-admin.test.ts` and
-  `catalogue-staff.test.ts`.
+- Focused contract tests cover the closed category status/toggle request plus the Phase 0 clothing
+  contracts across `catalogue-admin.test.ts` and `catalogue-staff.test.ts`.
 - `@drezivo/contracts` build passes and emits updated declarations.
 - `@drezivo/api` full TypeScript check passes after rebuilding contracts.
 - New integration suite compiles: `api/tests/integration/catalogue-phase0.test.ts`.
 
-The integration suite covers:
+The integration suites cover:
 
+- atomic tenant bootstrap of exactly six active starter categories,
+- concurrent/replayed bootstrap without duplicate category seeds,
+- idempotent active/inactive category status mutation with one audit/idempotency effect,
+- changed-payload idempotency-key rejection and foreign-category concealment,
 - case-insensitive tenant-local category/product identifiers,
 - same-tenant product/category and variant/product relationships,
 - case-insensitive SKU and physical-asset codes,
@@ -189,15 +207,22 @@ The integration suite covers:
 ### Real PostgreSQL evidence
 
 The repository's guarded integration harness was run against a separate local disposable
-`drezivo_test` database, never the normal development database. The suite passed `5/5` while the
-application connection used the non-superuser `drezivo_app` role, proving the new uniqueness,
-same-tenant FK, and forced-RLS behavior under the runtime privilege model.
+`drezivo_test` database, never the normal development database. `catalogue-phase0.test.ts` passes
+`8/8` and `tenant-bootstrap.test.ts` passes `4/4` when run sequentially. The catalogue suite also
+proves inactive-category products disappear from the public storefront while active-category
+products remain visible. The application connection
+uses the non-superuser `drezivo_app` role, proving bootstrap/category lifecycle, idempotency,
+uniqueness, same-tenant FK, and forced-RLS behavior under the runtime privilege model.
 
 Command-equivalent evidence:
 
 ```text
 npx vitest run tests/integration/catalogue-phase0.test.ts
+npx vitest run tests/integration/tenant-bootstrap.test.ts
 ```
+
+Run these files sequentially against the shared disposable database because each integration file
+resets that database between cases.
 
 The test database remains disposable test infrastructure only; development/production databases must
 never be substituted for this harness.

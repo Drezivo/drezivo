@@ -5,6 +5,7 @@ import type {
   PermissionCode,
   SaveMeasurementGuideRequest,
   TenantStatus,
+  UpdateCatalogueCategoryStatusRequest,
 } from '@drezivo/contracts';
 
 import { ValidationError } from '../../shared/errors.js';
@@ -14,10 +15,27 @@ import {
   getCatalogueCategories,
   getDefaultMeasurementGuide,
   saveMeasurementGuide,
+  updateCatalogueCategoryStatus,
 } from './catalogue.service.js';
 
 export async function listCatalogueCategoriesController(req: Request, res: Response): Promise<void> {
   sendSuccess(req, res, await getCatalogueCategories(requireContext(req)));
+}
+
+export async function updateCatalogueCategoryStatusController(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const categoryId = req.catalogueCategoryId;
+  if (!categoryId) throw new ValidationError('A valid category id is required.');
+  const result = await updateCatalogueCategoryStatus({
+    ...requireContext(req),
+    requestId: req.requestId,
+    idempotencyKey: requireIdempotencyKey(req),
+    categoryId,
+    request: req.body as UpdateCatalogueCategoryStatusRequest,
+  });
+  res.status(result.status).json(result.body);
 }
 
 export async function getDefaultMeasurementGuideController(

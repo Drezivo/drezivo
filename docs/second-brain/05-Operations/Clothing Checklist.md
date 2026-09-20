@@ -37,6 +37,10 @@ Before marking a task complete:
 - V1 Add Clothing may accept several selected sizes and atomically create one variant plus one initial physical asset per selected size.
 - Physical-asset quota counts active serialized garments, not products/styles.
 - Product codes are tenant-local and case-insensitively unique.
+- Every provisioned workspace starts with six active default categories: Gowns, Dresses,
+  Filipiniana, Barong, Costumes, and Formal Wear.
+- Category visibility is an explicit `active | inactive` status; inactive categories remain valid
+  historical references but are hidden from new public catalogue discovery.
 - Availability is derived from authoritative allocations plus actual custody/readiness state.
 - Archive hides clothing from new intake while preserving existing reservations, snapshots, allocations, custody events, and history.
 - A garment with unresolved custody cannot be silently archived into an apparently available state.
@@ -74,12 +78,21 @@ Before marking a task complete:
   - **Acceptance:**
     - [x] Product code uniqueness is tenant-local and case-insensitive.
     - [x] Category uniqueness is tenant-local according to accepted naming rules.
+    - [x] Category visibility uses the closed `active | inactive` status; the old `visible` boolean
+          is removed as a competing source of truth.
+    - [x] Tenant bootstrap atomically seeds Gowns, Dresses, Filipiniana, Barong, Costumes, and
+          Formal Wear as active defaults; a forward migration backfills only missing defaults for
+          already-provisioned tenants without reactivating or duplicating an existing category.
     - [x] Variant uniqueness prevents accidental duplicate equivalent variants where the canonical model requires it.
     - [x] Physical assets have stable identifiers and lifecycle/readiness fields that cannot erase historical allocation/custody facts.
     - [x] Add indexes for tenant/product/category/status/search paths actually used by `/inventory`.
     - [x] Add same-tenant FK protection for category/product/variant/asset relationships.
     - [x] Runtime role privileges deny unsafe cross-tenant/global writes.
-  - **Tests/evidence:** `0025_catalogue_phase0_integrity.sql` is covered by `catalogue-phase0.test.ts`; the disposable local PostgreSQL suite passes `5/5` as the non-superuser `drezivo_app` role. See [[Clothing Phase 0 Schema Audit]].
+  - **Tests/evidence:** `0025_catalogue_phase0_integrity.sql` and
+    `0026_category_status_defaults.sql` are covered by catalogue/bootstrap integration evidence.
+    `catalogue-phase0.test.ts` passes `8/8` and `tenant-bootstrap.test.ts` passes `4/4` sequentially
+    against disposable local PostgreSQL as the non-superuser `drezivo_app` role. See
+    [[Clothing Phase 0 Schema Audit]].
 
 ## Phase 1: Catalogue read model
 
@@ -111,7 +124,7 @@ Before marking a task complete:
   - **Outcome:** Add/Edit Clothing uses real tenant categories without hard-coded frontend category values.
   - **Acceptance:**
     - [ ] Categories are tenant scoped.
-    - [ ] Archived/disabled category behavior is explicit.
+    - [ ] `active`/`inactive` category behavior is explicit in the staff management UI and public catalogue query.
     - [ ] Existing products referencing a category remain historically valid.
   - **Tests/evidence:** Tenant isolation and stable ordering tests.
 
