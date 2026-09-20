@@ -13,6 +13,7 @@ import {
   Shirt,
   SlidersHorizontal,
   Tags,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -79,6 +80,12 @@ export function ClothingPage() {
       sessionStorage.removeItem("drezivo:inventory-notice");
     }
   }, []);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timeoutId = window.setTimeout(() => setNotice(null), 3000);
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -217,9 +224,17 @@ export function ClothingPage() {
         {notice ? (
           <div
             role="status"
-            className="rounded-lg border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm font-medium text-success-500"
+            className="flex items-center justify-between gap-3 rounded-lg border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm font-medium text-success-500"
           >
-            {notice}
+            <span>{notice}</span>
+            <button
+              type="button"
+              aria-label="Dismiss draft saved message"
+              onClick={() => setNotice(null)}
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-success-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success-500/40"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
           </div>
         ) : null}
 

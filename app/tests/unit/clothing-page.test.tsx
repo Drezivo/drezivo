@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ClothingPage } from "@/components/inventory/clothing-page";
@@ -92,13 +92,28 @@ describe("ClothingPage", () => {
     });
   });
 
-  it("shows a one-time draft-saved notice after returning from Add Clothing", async () => {
+  it("shows a one-time draft-saved notice that can be dismissed", async () => {
     sessionStorage.setItem("drezivo:inventory-notice", "draft-saved");
 
     render(<ClothingPage />);
 
     expect(await screen.findByRole("status")).toHaveTextContent("Draft saved");
     expect(sessionStorage.getItem("drezivo:inventory-notice")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss draft saved message" }));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("automatically hides the draft-saved notice after three seconds", () => {
+    vi.useFakeTimers();
+    sessionStorage.setItem("drezivo:inventory-notice", "draft-saved");
+
+    render(<ClothingPage />);
+    expect(screen.getByRole("status")).toHaveTextContent("Draft saved");
+
+    act(() => vi.advanceTimersByTime(3000));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    vi.useRealTimers();
   });
 
   it("renders clothing returned by GET catalogue/clothing instead of mock inventory data", async () => {
