@@ -65,23 +65,31 @@ export function createApp(options: AppOptions = {}): Express {
   const onboardingJson = express.json({ limit: '16kb', type: 'application/json' });
   app.use('/api/v1/onboarding', (req, res, next) => {
     onboardingJson(req, res, (error: unknown) => {
-      if (typeof error === 'object' && error !== null && 'type' in error) {
-        const errorType = error.type;
-        if (errorType === 'entity.too.large') {
-          next(new ValidationError('Request body is too large.'));
-          return;
-        }
-        if (errorType === 'entity.parse.failed') {
-          next(new ValidationError('Request body is invalid.'));
-          return;
-        }
-      }
-      next(error);
+      mapJsonBodyError(error, next);
     });
   });
+
+  const addClothingJson = express.json({ limit: '64kb', type: 'application/json' });
+  app.use('/api/v1/catalogue/clothing', (req, res, next) => {
+    if (req.method !== 'POST' || req.path !== '/') {
+      next();
+      return;
+    }
+    addClothingJson(req, res, (error: unknown) => {
+      mapJsonBodyError(error, next);
+    });
+  });
+
   app.use(clerkContext);
   app.use(clerkWebhookRouter);
-  app.use(express.json({ limit: '256kb' }));
+  const globalJson = express.json({ limit: '256kb' });
+  app.use((req, res, next) => {
+    if (req.method === 'POST' && req.path === '/api/v1/catalogue/clothing') {
+      next();
+      return;
+    }
+    globalJson(req, res, next);
+  });
 
   app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'ok' });
@@ -114,4 +122,19 @@ export function createApp(options: AppOptions = {}): Express {
   });
 
   return app;
+}
+
+function mapJsonBodyError(error: unknown, next: (error?: unknown) => void): void {
+  if (typeof error === 'object' && error !== null && 'type' in error) {
+    const errorType = error.type;
+    if (errorType === 'entity.too.large') {
+      next(new ValidationError('Request body is too large.'));
+      return;
+    }
+    if (errorType === 'entity.parse.failed') {
+      next(new ValidationError('Request body is invalid.'));
+      return;
+    }
+  }
+  next(error);
 }
