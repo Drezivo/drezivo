@@ -19,6 +19,8 @@ export interface ClothingListReadRow {
   size_labels: string[];
   price_from_minor: number;
   currency: string;
+  primary_image_storage_key: string | null;
+  primary_image_version_id: string | null;
   active_assets: number;
   ready: number;
   needs_cleaning: number;
@@ -196,6 +198,8 @@ export async function listClothingReadModel(
        COALESCE(variant_summary.size_labels, ARRAY[]::text[]) AS size_labels,
        COALESCE(variant_summary.price_from_minor, 0)::int AS price_from_minor,
        COALESCE(variant_summary.currency, 'PHP') AS currency,
+       cover_image.storage_key AS primary_image_storage_key,
+       cover_image.version_id AS primary_image_version_id,
        COALESCE(asset_summary.active_assets, 0)::int AS active_assets,
        COALESCE(asset_summary.ready, 0)::int AS ready,
        COALESCE(asset_summary.needs_cleaning, 0)::int AS needs_cleaning,
@@ -209,6 +213,22 @@ export async function listClothingReadModel(
      LEFT JOIN category c
        ON c.tenant_id = p.tenant_id
       AND c.id = p.category_id
+     LEFT JOIN LATERAL (
+       SELECT f.storage_key, f.version_id
+         FROM product_image pi
+         JOIN file_object f
+           ON f.tenant_id = pi.tenant_id
+          AND f.id = pi.file_id
+        WHERE pi.tenant_id = p.tenant_id
+          AND pi.product_id = p.id
+          AND pi.display_order = 0
+          AND f.purpose = 'catalogue_image'
+          AND f.lifecycle_status = 'accepted'
+          AND f.frozen_at IS NOT NULL
+          AND (f.version_id IS NOT NULL OR f.sha256 IS NOT NULL)
+          AND f.mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+        LIMIT 1
+     ) cover_image ON true
      LEFT JOIN LATERAL (
        SELECT
          COALESCE(

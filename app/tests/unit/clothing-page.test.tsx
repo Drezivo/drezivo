@@ -42,7 +42,7 @@ const firstItem = {
   size_labels: ["S", "M"],
   price_from_minor: "150000",
   currency: "PHP",
-  primary_image_url: null,
+  primary_image_url: "https://reads.example.test/catalogue%2Fblack-satin-gown.webp?version=cover-v1",
   readiness: {
     active_assets: 2,
     ready: 2,
@@ -105,6 +105,31 @@ describe("ClothingPage", () => {
       limit: 10,
       sort: "name_asc",
     });
+  });
+
+  it("renders the backend cover image and falls back to initials when none is available", async () => {
+    render(<ClothingPage />);
+
+    const image = await screen.findByRole("img", { name: "Real Black Satin Gown catalogue photo" });
+    expect(image).toHaveAttribute(
+      "src",
+      "https://reads.example.test/catalogue%2Fblack-satin-gown.webp?version=cover-v1",
+    );
+
+    api.getCatalogueClothing.mockResolvedValue({
+      data: {
+        items: [{ ...secondItem, primary_image_url: null }],
+        page_meta: { next_cursor: null, has_more: false },
+      },
+      requestId: "req-no-cover",
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Search clothing" }), {
+      target: { value: "DRS-002" },
+    });
+
+    expect(await screen.findByText("Real Red Dress")).toBeVisible();
+    expect(screen.queryByRole("img", { name: "Real Red Dress catalogue photo" })).not.toBeInTheDocument();
+    expect(screen.getByText("RR")).toBeVisible();
   });
 
   it("sends search text to the backend instead of filtering a local mock array", async () => {

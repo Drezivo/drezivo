@@ -28,6 +28,34 @@ process.env.S3_BUCKET_PUBLIC ??= 'public';
 process.env.S3_ACCESS_KEY_ID ??= 'test';
 process.env.S3_SECRET_ACCESS_KEY ??= 'test';
 
+class FakeReadStorage {
+  readonly authorizedReads: Array<{
+    storageKey: string;
+    versionId?: string | null;
+    expiresInSeconds: number;
+  }> = [];
+
+  authorizeUpload() {
+    return Promise.reject(new Error('Upload authorization is not used by catalogue read tests.'));
+  }
+
+  authorizeRead(input: {
+    storageKey: string;
+    versionId?: string | null;
+    expiresInSeconds: number;
+  }) {
+    this.authorizedReads.push(input);
+    return Promise.resolve({
+      readUrl: `https://reads.example.test/${encodeURIComponent(input.storageKey)}?version=${encodeURIComponent(input.versionId ?? '')}`,
+      expiresAt: new Date('2026-09-21T00:05:00.000Z'),
+    });
+  }
+
+  inspectUploadedObject() {
+    return Promise.reject(new Error('Object inspection is not used by catalogue read tests.'));
+  }
+}
+
 describe('CLT Phase 1 catalogue read model', async () => {
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
   const {
@@ -119,6 +147,66 @@ describe('CLT Phase 1 catalogue read model', async () => {
       search: 'this does not exist',
     });
     expect(empty).toEqual({ items: [], page_meta: { next_cursor: null, has_more: false } });
+  });
+
+  it('returns a signed cover image URL for display order zero and null when no cover exists', async () => {
+    const tenant = await createTestTenant({ clerkOrgId: 'org_clt010_cover_image' });
+    const seeded = await seedLargeCatalogue(tenant.id, 'user_clt010_cover_image');
+    const context = catalogueContext(tenant.id, seeded.branchId, 'user_clt010_cover_image');
+    const storage = new FakeReadStorage();
+
+    await withTenantTransaction(tenant.id, 'user_clt010_cover_image', async (client) => {
+      const product = await client.query<{ id: string }>(
+        `SELECT id FROM product WHERE tenant_id = $1 AND code = 'LOOK-001' LIMIT 1`,
+        [tenant.id],
+      );
+      const productId = requireRow(product.rows, 'cover-image product').id;
+      const files = await client.query<{ id: string; storage_key: string; version_id: string | null }>(
+        `INSERT INTO file_object
+           (tenant_id, purpose, storage_key, version_id, sha256, mime_type, byte_size,
+            lifecycle_status, is_private, upload_expires_at, frozen_at)
+         VALUES
+           ($1, 'catalogue_image', 'catalogue/look-001-secondary.webp', 'secondary-v1', 'secondary-sha',
+            'image/webp', 512, 'accepted', true, now() + interval '10 minutes', now()),
+           ($1, 'catalogue_image', 'catalogue/look-001-cover.webp', 'cover-v7', 'cover-sha',
+            'image/webp', 512, 'accepted', true, now() + interval '10 minutes', now())
+         RETURNING id, storage_key, version_id`,
+        [tenant.id],
+      );
+      const secondary = requireNamedStorageFile(files.rows, 'catalogue/look-001-secondary.webp');
+      const cover = requireNamedStorageFile(files.rows, 'catalogue/look-001-cover.webp');
+      await client.query(
+        `INSERT INTO product_image (tenant_id, product_id, file_id, display_order)
+         VALUES ($1, $2, $3, 1), ($1, $2, $4, 0)`,
+        [tenant.id, productId, secondary.id, cover.id],
+      );
+    });
+
+    const withCover = await getCatalogueClothingList(
+      context,
+      { limit: 10, sort: 'code_asc', search: 'LOOK-001' },
+      storage,
+    );
+    expect(withCover.items).toHaveLength(1);
+    expect(withCover.items[0]?.primary_image_url).toBe(
+      'https://reads.example.test/catalogue%2Flook-001-cover.webp?version=cover-v7',
+    );
+    expect(storage.authorizedReads).toEqual([
+      {
+        storageKey: 'catalogue/look-001-cover.webp',
+        versionId: 'cover-v7',
+        expiresInSeconds: 300,
+      },
+    ]);
+
+    const withoutCover = await getCatalogueClothingList(
+      context,
+      { limit: 10, sort: 'code_asc', search: 'LOOK-002' },
+      storage,
+    );
+    expect(withoutCover.items).toHaveLength(1);
+    expect(withoutCover.items[0]?.primary_image_url).toBeNull();
+    expect(storage.authorizedReads).toHaveLength(1);
   });
 
   it('rejects an invalid or sort-mismatched cursor instead of drifting pagination', async () => {
@@ -536,6 +624,12 @@ describe('CLT Phase 1 catalogue read model', async () => {
   function requireNamedRow<T extends { name: string }>(rows: T[], name: string): T {
     const row = rows.find((candidate) => candidate.name === name);
     if (!row) throw new Error(`Expected category ${name} to be returned.`);
+    return row;
+  }
+
+  function requireNamedStorageFile<T extends { storage_key: string }>(rows: T[], storageKey: string): T {
+    const row = rows.find((candidate) => candidate.storage_key === storageKey);
+    if (!row) throw new Error(`Expected storage file ${storageKey} to be returned.`);
     return row;
   }
 });

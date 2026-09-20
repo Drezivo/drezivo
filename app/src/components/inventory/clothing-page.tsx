@@ -340,8 +340,17 @@ function ClothingRow({ item }: { item: ClothingListItem }) {
   return (
     <TableRow>
       <TableCell>
-        <div className="flex h-12 w-10 items-center justify-center rounded-lg bg-dashboard-active text-xs font-semibold text-dashboard-accent">
-          {initials(item.name)}
+        <div className="flex h-12 w-10 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-xs font-semibold text-dashboard-accent">
+          {item.primary_image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- signed catalogue URLs are dynamic and are not configured as stable next/image remote patterns.
+            <img
+              src={item.primary_image_url}
+              alt={`${item.name} catalogue photo`}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            initials(item.name)
+          )}
         </div>
       </TableCell>
       <TableCell>
