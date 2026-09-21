@@ -10,10 +10,14 @@ import {
   clothingDetail,
   clothingListQuery,
   clothingListResponse,
+  archiveClothingRequest,
+  archiveClothingResponse,
   createClothingRequest,
   createClothingResponse,
   measurementGuide,
   measurementGuideDefaultResponse,
+  replaceClothingImagesRequest,
+  replaceClothingImagesResponse,
   saveMeasurementGuideRequest,
   uploadAuthorizationRequest,
   uploadAuthorizationResponse,
@@ -24,6 +28,12 @@ import {
   organizationOnboarding,
   tenantBootstrapResponse,
   updateCatalogueCategoryStatusRequest,
+  updateClothingProductRequest,
+  updateClothingProductResponse,
+  updateClothingVariantRequest,
+  updateClothingVariantResponse,
+  updatePhysicalAssetStateRequest,
+  updatePhysicalAssetStateResponse,
   workspaceList,
   type AbandonOwnerOnboardingRequest,
   type ActorContext,
@@ -34,10 +44,14 @@ import {
   type ClothingDetail,
   type ClothingListQuery,
   type ClothingListResponse,
+  type ArchiveClothingRequest,
+  type ArchiveClothingResponse,
   type CreateClothingRequest,
   type CreateClothingResponse,
   type MeasurementGuide,
   type MeasurementGuideDefaultResponse,
+  type ReplaceClothingImagesRequest,
+  type ReplaceClothingImagesResponse,
   type SaveMeasurementGuideRequest,
   type UploadAuthorizationRequest,
   type UploadAuthorizationResponse,
@@ -47,6 +61,12 @@ import {
   type OrganizationOnboarding,
   type TenantBootstrapResponse,
   type UpdateCatalogueCategoryStatusRequest,
+  type UpdateClothingProductRequest,
+  type UpdateClothingProductResponse,
+  type UpdateClothingVariantRequest,
+  type UpdateClothingVariantResponse,
+  type UpdatePhysicalAssetStateRequest,
+  type UpdatePhysicalAssetStateResponse,
   type WorkspaceList,
 } from "@drezivo/contracts";
 
@@ -204,6 +224,72 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "POST",
         path: "/api/v1/catalogue/clothing",
         responseSchema: apiEnvelope(createClothingResponse),
+      }),
+    updateClothingProduct: (
+      productId: string,
+      input: UpdateClothingProductRequest,
+      idempotencyKey: string
+    ) =>
+      request<UpdateClothingProductResponse>({
+        getToken,
+        body: updateClothingProductRequest.parse(input),
+        idempotencyKey,
+        method: "PATCH",
+        path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}`,
+        responseSchema: apiEnvelope(updateClothingProductResponse),
+      }),
+    updateClothingVariant: (
+      productId: string,
+      variantId: string,
+      input: UpdateClothingVariantRequest,
+      idempotencyKey: string
+    ) =>
+      request<UpdateClothingVariantResponse>({
+        getToken,
+        body: updateClothingVariantRequest.parse(input),
+        idempotencyKey,
+        method: "PATCH",
+        path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}`,
+        responseSchema: apiEnvelope(updateClothingVariantResponse),
+      }),
+    replaceClothingImages: (
+      productId: string,
+      input: ReplaceClothingImagesRequest,
+      idempotencyKey: string
+    ) =>
+      request<ReplaceClothingImagesResponse>({
+        getToken,
+        body: replaceClothingImagesRequest.parse(input),
+        idempotencyKey,
+        method: "PUT",
+        path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/images`,
+        responseSchema: apiEnvelope(replaceClothingImagesResponse),
+      }),
+    archiveClothing: (
+      productId: string,
+      input: ArchiveClothingRequest,
+      idempotencyKey: string
+    ) =>
+      request<ArchiveClothingResponse>({
+        getToken,
+        body: archiveClothingRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/archive`,
+        responseSchema: apiEnvelope(archiveClothingResponse),
+      }),
+    updatePhysicalAssetState: (
+      assetId: string,
+      input: UpdatePhysicalAssetStateRequest,
+      idempotencyKey: string
+    ) =>
+      request<UpdatePhysicalAssetStateResponse>({
+        getToken,
+        body: updatePhysicalAssetStateRequest.parse(input),
+        idempotencyKey,
+        method: "PATCH",
+        path: `/api/v1/catalogue/assets/${encodeURIComponent(assetId)}/state`,
+        responseSchema: apiEnvelope(updatePhysicalAssetStateResponse),
       }),
     getCatalogueClothing: (input: ClothingListQuery) => {
       const query = clothingListQuery.parse(input);

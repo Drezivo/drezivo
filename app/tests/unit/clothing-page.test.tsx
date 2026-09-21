@@ -9,6 +9,7 @@ const clerk = vi.hoisted(() => ({
 }));
 
 const api = vi.hoisted(() => ({
+  archiveClothing: vi.fn(),
   getCatalogueCategories: vi.fn(),
   getCatalogueClothing: vi.fn(),
 }));
@@ -90,6 +91,17 @@ describe("ClothingPage", () => {
       },
       requestId: "req-clothing",
     });
+    api.archiveClothing.mockResolvedValue({
+      data: {
+        product_id: firstItem.product_id,
+        status: "archived",
+        archived_variant_count: 1,
+        retired_asset_count: 2,
+        pending_asset_resolution_count: 0,
+        updated_at: "2026-09-21T00:00:00.000Z",
+      },
+      requestId: "req-archive",
+    });
   });
 
   it("shows a one-time draft-saved notice that can be dismissed", async () => {
@@ -100,7 +112,7 @@ describe("ClothingPage", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Draft saved");
     expect(sessionStorage.getItem("drezivo:inventory-notice")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss draft saved message" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss inventory message" }));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
@@ -181,6 +193,51 @@ describe("ClothingPage", () => {
       })
     );
     expect(await screen.findByText("Real Red Dress")).toBeVisible();
+  });
+
+  it("wires Edit and Archive actions to Phase 3 routes and backend archive command", async () => {
+    api.getCatalogueClothing
+      .mockResolvedValueOnce({
+        data: { items: [firstItem], page_meta: { next_cursor: null, has_more: false } },
+        requestId: "req-active",
+      })
+      .mockResolvedValue({
+        data: {
+          items: [{ ...firstItem, product_status: "archived" as const }],
+          page_meta: { next_cursor: null, has_more: false },
+        },
+        requestId: "req-archived",
+      });
+
+    render(<ClothingPage />);
+    await screen.findByText("Real Black Satin Gown");
+
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Open actions for Real Black Satin Gown" }),
+      { button: 0, ctrlKey: false }
+    );
+    expect(await screen.findByRole("menuitem", { name: "Edit" })).toHaveAttribute(
+      "href",
+      `/inventory/${firstItem.product_id}/edit`
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Archive" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Archive Clothing" }));
+
+    await waitFor(() => expect(api.archiveClothing).toHaveBeenCalledTimes(1));
+    expect(api.archiveClothing).toHaveBeenCalledWith(
+      firstItem.product_id,
+      { expected_updated_at: firstItem.updated_at },
+      expect.any(String)
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent("Clothing archived.");
+
+    await waitFor(() => expect(api.getCatalogueClothing).toHaveBeenCalledTimes(2));
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Open actions for Real Black Satin Gown" }),
+      { button: 0, ctrlKey: false }
+    );
+    expect(screen.queryByRole("menuitem", { name: "Restore" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Archive" })).not.toBeInTheDocument();
   });
 
   it("uses the backend next cursor for catalogue pagination", async () => {
