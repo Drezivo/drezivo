@@ -167,38 +167,38 @@ Before marking a task complete:
 
 ## Phase 3: Edit, archive, and lifecycle safety
 
-- [ ] **CLT-030 — Implement product/variant edit command**
+- [x] **CLT-030 — Implement product/variant edit command**
   - **Depends on:** CLT-020.
   - **Outcome:** Staff can update future catalogue presentation without rewriting accepted reservation snapshots.
   - **Acceptance:**
-    - [ ] Product name/description/category and allowed future pricing/policy inputs may change.
-    - [ ] Existing reservation line snapshots remain immutable historical truth.
-    - [ ] Variant measurement source changes are explicit and do not silently mutate frozen referenced guides.
-    - [ ] Stale concurrent edits fail with a clean conflict or conditional transition.
-    - [ ] Edit is idempotent per intent and audited.
+    - [x] Product name/description/category and allowed future pricing/policy inputs may change.
+    - [x] Existing reservation line snapshots remain immutable historical truth.
+    - [x] Variant measurement source changes are explicit and do not silently mutate frozen referenced guides.
+    - [x] Stale concurrent edits fail with a clean conflict or conditional transition.
+    - [x] Edit is idempotent per intent and audited.
   - **Tests/evidence:** Stale-version, snapshot-preservation, and double-fire tests.
 
-- [ ] **CLT-031 — Implement physical asset lifecycle/readiness updates**
+- [x] **CLT-031 — Implement physical asset lifecycle/readiness updates**
   - **Depends on:** CLT-030, Availability checklist foundations.
   - **Outcome:** Actual garment readiness/custody can be represented without pretending it controls all future availability.
   - **Acceptance:**
-    - [ ] Current readiness projection cannot override a blocking `asset_allocation`.
-    - [ ] Pickup/return custody transitions remain owned by Reservation/Custody workflows, not generic Clothing edit.
-    - [ ] Cleaning/maintenance/manual unavailability creates or updates the canonical allocation/work-order path where applicable.
-    - [ ] Actual late/unready state can create disruption rather than silently releasing future bookings.
-  - **Tests/evidence:** Blocking-allocation and custody consistency tests.
+    - [x] Current readiness projection cannot override a blocking `asset_allocation`.
+    - [x] Pickup/return custody transitions remain owned by Reservation/Custody workflows, not generic Clothing edit.
+    - [x] Cleaning/maintenance/manual unavailability creates or updates the canonical allocation/work-order path where applicable.
+    - [x] Actual late/unready state can create disruption rather than silently releasing future bookings.
+  - **Tests/evidence:** `catalogue-asset-lifecycle-route.test.ts` passes `6/6` against disposable local PostgreSQL, covering blocking-allocation preservation, custody ownership, guarded retirement, canonical maintenance/manual work-order allocation, overlap rollback, stale version, sequential/concurrent idempotency, disruption creation, permission scope, and foreign-asset concealment.
 
-- [ ] **CLT-032 — Implement archive command**
+- [x] **CLT-032 — Implement archive command**
   - **Depends on:** CLT-030, CLT-031.
   - **Outcome:** Clothing can leave new-rental intake without deleting history.
   - **Acceptance:**
-    - [ ] Archive is a lifecycle transition, not DELETE.
-    - [ ] Archived style/variants/assets remain readable from historical reservations.
-    - [ ] New storefront/staff intake excludes archived rentable inventory.
-    - [ ] Unresolved custody or required operational work blocks unsafe retirement or routes through a documented resolution workflow.
-    - [ ] Archive does not release an existing reservation allocation by itself.
-    - [ ] Mutation is idempotent and audited.
-  - **Tests/evidence:** Active-reservation/history/custody and duplicate archive tests.
+    - [x] Archive is a lifecycle transition, not DELETE.
+    - [x] Archived style/variants/assets remain readable from historical reservations.
+    - [x] New storefront/staff intake excludes archived rentable inventory.
+    - [x] Unresolved custody or required operational work blocks unsafe retirement or routes through a documented resolution workflow.
+    - [x] Archive does not release an existing reservation allocation by itself.
+    - [x] Mutation is idempotent and audited.
+  - **Tests/evidence:** `catalogue-archive-clothing-route.test.ts` covers active reservation/allocation preservation, historical snapshot/detail readability, safe-vs-pending asset retirement, storefront/staff intake exclusion, stale archive rejection, permission/authority boundaries, and concurrent duplicate archive with one audited effect. The full disposable-PostgreSQL integration run passes `121/121`.
 
 ## Phase 4: Staff app integration
 
