@@ -268,7 +268,7 @@ describe('CLT-030 product and variant edit commands', async () => {
     const forbidden = await request(app)
       .patch(`/api/v1/catalogue/clothing/${seed.productId}`)
       .set('Content-Type', 'application/json')
-      .set('Idempotency-Key', 'clt030-no-permission')
+      .set('Idempotency-Key', 'clt030-no-permission') // gitleaks:allow
       .send({ expected_updated_at: seed.productUpdatedAt, name: 'Forbidden Edit' });
     expect(forbidden.status).toBe(403);
     expectSafeError(forbidden.body, 'FORBIDDEN');
@@ -282,7 +282,7 @@ describe('CLT-030 product and variant edit commands', async () => {
     const strict = await request(createApp())
       .patch(`/api/v1/catalogue/clothing/${allowedSeed.productId}`)
       .set('Content-Type', 'application/json')
-      .set('Idempotency-Key', 'clt030-strict-body')
+      .set('Idempotency-Key', 'clt030-strict-body') // gitleaks:allow
       .send({
         expected_updated_at: allowedSeed.productUpdatedAt,
         name: 'Strict Edit',

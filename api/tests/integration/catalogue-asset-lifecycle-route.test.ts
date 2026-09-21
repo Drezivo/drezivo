@@ -140,7 +140,7 @@ describe('CLT-031 physical asset lifecycle/readiness safety', async () => {
     const browserCustodyOverride = await request(app)
       .patch(`/api/v1/catalogue/assets/${withCustomer.assetId}/state`)
       .set('Content-Type', 'application/json')
-      .set('Idempotency-Key', 'clt031-custody-body')
+      .set('Idempotency-Key', 'clt031-custody-body') // gitleaks:allow
       .send({
         expected_version: 1,
         readiness: 'ready',
@@ -160,7 +160,7 @@ describe('CLT-031 physical asset lifecycle/readiness safety', async () => {
     const retireInCustomerCustody = await request(app)
       .patch(`/api/v1/catalogue/assets/${withCustomer.assetId}/state`)
       .set('Content-Type', 'application/json')
-      .set('Idempotency-Key', 'clt031-custody-retire')
+      .set('Idempotency-Key', 'clt031-custody-retire') // gitleaks:allow
       .send({ expected_version: 1, lifecycle_status: 'retired' });
     expect(retireInCustomerCustody.status).toBe(409);
     expectSafeError(retireInCustomerCustody.body, 'UNRESOLVED_CUSTODY');
@@ -170,7 +170,7 @@ describe('CLT-031 physical asset lifecycle/readiness safety', async () => {
     const retire = await request(createApp())
       .patch(`/api/v1/catalogue/assets/${safelyRetired.assetId}/state`)
       .set('Content-Type', 'application/json')
-      .set('Idempotency-Key', 'clt031-retire-safe')
+      .set('Idempotency-Key', 'clt031-retire-safe') // gitleaks:allow
       .send({ expected_version: 1, lifecycle_status: 'retired' });
     expect(retire.status).toBe(200);
     expect(retire.body).toMatchObject({
@@ -300,12 +300,12 @@ describe('CLT-031 physical asset lifecycle/readiness safety', async () => {
       request(app)
         .post(`/api/v1/catalogue/assets/${seed.assetId}/maintenance-blocks`)
         .set('Content-Type', 'application/json')
-        .set('Idempotency-Key', 'clt031-maintenance-double-fire')
+        .set('Idempotency-Key', 'clt031-maintenance-double-fire') // gitleaks:allow
         .send(body),
       request(app)
         .post(`/api/v1/catalogue/assets/${seed.assetId}/maintenance-blocks`)
         .set('Content-Type', 'application/json')
-        .set('Idempotency-Key', 'clt031-maintenance-double-fire')
+        .set('Idempotency-Key', 'clt031-maintenance-double-fire') // gitleaks:allow
         .send(body),
     ]);
 
@@ -331,7 +331,7 @@ describe('CLT-031 physical asset lifecycle/readiness safety', async () => {
     const forbidden = await request(createApp())
       .patch(`/api/v1/catalogue/assets/${forbiddenSeed.assetId}/state`)
       .set('Content-Type', 'application/json')
-      .set('Idempotency-Key', 'clt031-no-permission')
+      .set('Idempotency-Key', 'clt031-no-permission') // gitleaks:allow
       .send({ expected_version: 1, readiness: 'unready' });
     expect(forbidden.status).toBe(403);
     expectSafeError(forbidden.body, 'FORBIDDEN');

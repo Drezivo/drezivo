@@ -223,12 +223,12 @@ describe('CLT-032 clothing archive command', async () => {
       request(app)
         .post(`/api/v1/catalogue/clothing/${seed.productId}/archive`)
         .set('Content-Type', 'application/json')
-        .set('Idempotency-Key', 'clt032-double-fire')
+        .set('Idempotency-Key', 'clt032-double-fire') // gitleaks:allow
         .send(body),
       request(app)
         .post(`/api/v1/catalogue/clothing/${seed.productId}/archive`)
         .set('Content-Type', 'application/json')
-        .set('Idempotency-Key', 'clt032-double-fire')
+        .set('Idempotency-Key', 'clt032-double-fire') // gitleaks:allow
         .send(body),
     ]);
 
@@ -253,7 +253,7 @@ describe('CLT-032 clothing archive command', async () => {
     const forbidden = await request(createApp())
       .post(`/api/v1/catalogue/clothing/${forbiddenSeed.productId}/archive`)
       .set('Content-Type', 'application/json')
-      .set('Idempotency-Key', 'clt032-no-permission')
+      .set('Idempotency-Key', 'clt032-no-permission') // gitleaks:allow
       .send({ expected_updated_at: forbiddenSeed.productUpdatedAt });
     expect(forbidden.status).toBe(403);
     expectSafeError(forbidden.body, 'FORBIDDEN');
@@ -263,7 +263,7 @@ describe('CLT-032 clothing archive command', async () => {
     const strict = await request(createApp())
       .post(`/api/v1/catalogue/clothing/${strictSeed.productId}/archive`)
       .set('Content-Type', 'application/json')
-      .set('Idempotency-Key', 'clt032-strict-body')
+      .set('Idempotency-Key', 'clt032-strict-body') // gitleaks:allow
       .send({
         expected_updated_at: strictSeed.productUpdatedAt,
         release_allocations: true,
