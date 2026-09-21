@@ -216,6 +216,16 @@ export const updateClothingProductRequest = z
   );
 export type UpdateClothingProductRequest = z.infer<typeof updateClothingProductRequest>;
 
+export const updateClothingProductResponse = z.object({
+  product_id: productId,
+  name: z.string().trim().min(1).max(200),
+  description: z.string().max(2_000),
+  category: clothingCategorySummary.nullable(),
+  status: clothingProductLifecycle,
+  updated_at: isoInstant,
+});
+export type UpdateClothingProductResponse = z.infer<typeof updateClothingProductResponse>;
+
 const variantMeasurementPatch = z
   .object({
     measurement_mode: measurementMode,
@@ -289,6 +299,28 @@ export const updateClothingVariantRequest = z
     { message: 'At least one editable variant field is required.' },
   );
 export type UpdateClothingVariantRequest = z.infer<typeof updateClothingVariantRequest>;
+
+export const updateClothingVariantResponse = z.object({
+  variant_id: productVariantId,
+  product_id: productId,
+  size_label: z.string().trim().min(1).max(40),
+  color_label: z.string().trim().min(1).max(80).nullable(),
+  measurement_mode: measurementMode,
+  measurement_guide_id: measurementGuideId.nullable(),
+  measurement_unit: measurementUnit,
+  measurements: measurementMap,
+  rental_price_minor: nonNegativeMoneyString,
+  security_deposit_minor: nonNegativeMoneyString,
+  currency: currencyCode,
+  pricing_mode: cataloguePricingMode,
+  included_duration_minutes: z.number().int().positive(),
+  extra_day_price_minor: nonNegativeMoneyString,
+  prep_minutes: z.number().int().nonnegative(),
+  turnaround_minutes: z.number().int().nonnegative(),
+  status: clothingProductLifecycle,
+  updated_at: isoInstant,
+});
+export type UpdateClothingVariantResponse = z.infer<typeof updateClothingVariantResponse>;
 
 export const archiveClothingRequest = z
   .object({

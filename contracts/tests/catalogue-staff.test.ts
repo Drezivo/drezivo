@@ -10,7 +10,9 @@ import {
   physicalAssetLifecycle,
   physicalAssetReadiness,
   updateClothingProductRequest,
+  updateClothingProductResponse,
   updateClothingVariantRequest,
+  updateClothingVariantResponse,
 } from '../src';
 
 const ids = {
@@ -147,6 +149,39 @@ describe('catalogue staff contract', () => {
         },
       }).success,
     ).toBe(false);
+
+    expect(
+      updateClothingProductResponse.safeParse({
+        product_id: ids.product,
+        name: 'Updated Emerald Gown',
+        description: 'Updated description',
+        category: { id: ids.category, name: 'Gowns' },
+        status: 'active',
+        updated_at: instant,
+      }).success,
+    ).toBe(true);
+    expect(
+      updateClothingVariantResponse.safeParse({
+        variant_id: ids.variant,
+        product_id: ids.product,
+        size_label: 'M',
+        color_label: null,
+        measurement_mode: 'custom',
+        measurement_guide_id: null,
+        measurement_unit: 'cm',
+        measurements: { bust: 91.5, waist: 72 },
+        rental_price_minor: '150000',
+        security_deposit_minor: '50000',
+        currency: 'PHP',
+        pricing_mode: 'daily',
+        included_duration_minutes: 1440,
+        extra_day_price_minor: '150000',
+        prep_minutes: 60,
+        turnaround_minutes: 1440,
+        status: 'active',
+        updated_at: instant,
+      }).success,
+    ).toBe(true);
 
     expect(archiveClothingRequest.safeParse({ expected_updated_at: instant }).success).toBe(true);
     expect(

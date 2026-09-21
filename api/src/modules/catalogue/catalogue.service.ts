@@ -9,6 +9,10 @@ import {
   measurementGuideDefaultResponse,
   replaceClothingImagesRequest,
   replaceClothingImagesResponse,
+  updateClothingProductRequest,
+  updateClothingProductResponse,
+  updateClothingVariantRequest,
+  updateClothingVariantResponse,
   type CatalogueCategory,
   type CatalogueCategoryList,
   type ClothingDetail,
@@ -22,6 +26,11 @@ import {
   type ReplaceClothingImagesRequest,
   type ReplaceClothingImagesResponse,
   type SaveMeasurementGuideRequest,
+  type ClothingPricingInput,
+  type UpdateClothingProductRequest,
+  type UpdateClothingProductResponse,
+  type UpdateClothingVariantRequest,
+  type UpdateClothingVariantResponse,
   type TenantStatus,
   type UpdateCatalogueCategoryStatusRequest,
 } from '@drezivo/contracts';
@@ -40,6 +49,7 @@ import {
   InvalidMeasurementGuideError,
   NotFoundError,
   StateConflictError,
+  StaleVersionError,
   TenantCancelledError,
   TenantRestrictedError,
   ValidationError,
@@ -64,10 +74,14 @@ import {
   readDefaultMeasurementGuide,
   readMeasurementGuideFileForView,
   readMeasurementGuidesForCreate,
+  readProductForEdit,
   readProductForImageMutation,
+  readVariantForEdit,
   replaceDefaultMeasurementGuide,
   replaceProductImages,
   updateCategoryStatus,
+  updateProductForEdit,
+  updateVariantForEdit,
   validateMeasurementGuideFile,
   type CatalogueFileRow,
   type MeasurementGuideRow,
@@ -77,6 +91,8 @@ const SAVE_GUIDE_OPERATION = 'catalogue.measurement_guide.save';
 const CREATE_CLOTHING_OPERATION = 'catalogue.clothing.create';
 const UPDATE_CATEGORY_STATUS_OPERATION = 'catalogue.category.status.update';
 const REPLACE_CLOTHING_IMAGES_OPERATION = 'catalogue.clothing.images.replace';
+const UPDATE_CLOTHING_PRODUCT_OPERATION = 'catalogue.clothing.product.update';
+const UPDATE_CLOTHING_VARIANT_OPERATION = 'catalogue.clothing.variant.update';
 const MEASUREMENT_GUIDE_VIEW_EXPIRY_SECONDS = 5 * 60;
 const CATALOGUE_IMAGE_VIEW_EXPIRY_SECONDS = 5 * 60;
 const POSTGRES_INT_MAX = 2_147_483_647;
@@ -99,6 +115,8 @@ type GuideCommandBody = SuccessEnvelope<MeasurementGuide> | FailureEnvelope;
 type ClothingCommandBody = SuccessEnvelope<CreateClothingResponse> | FailureEnvelope;
 type CategoryCommandBody = SuccessEnvelope<CatalogueCategory> | FailureEnvelope;
 type ClothingImagesCommandBody = SuccessEnvelope<ReplaceClothingImagesResponse> | FailureEnvelope;
+type ClothingProductUpdateCommandBody = SuccessEnvelope<UpdateClothingProductResponse> | FailureEnvelope;
+type ClothingVariantUpdateCommandBody = SuccessEnvelope<UpdateClothingVariantResponse> | FailureEnvelope;
 
 export interface CatalogueCommandResponse<TBody> {
   status: number;
@@ -504,6 +522,226 @@ export async function createClothing(input: CommandContext & {
   });
 }
 
+export async function updateClothingProduct(input: CommandContext & {
+  productId: string;
+  request: UpdateClothingProductRequest;
+}): Promise<CatalogueCommandResponse<ClothingProductUpdateCommandBody>> {
+  assertCatalogueWriteContext(input);
+  const parsedRequest = updateClothingProductRequest.safeParse(input.request);
+  if (!parsedRequest.success) {
+    throw new ValidationError('Clothing product update request is invalid.');
+  }
+  const request = parsedRequest.data;
+  const payloadHash = canonicalRequestHash({ product_id: input.productId, ...request });
+
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const claim = await claimTenantIdempotency(client, {
+      tenantId: input.tenantId,
+      principalKey: input.membershipId,
+      operation: UPDATE_CLOTHING_PRODUCT_OPERATION,
+      intentKey: input.idempotencyKey,
+      payloadHash,
+    });
+    const replay = replayOrThrow<ClothingProductUpdateCommandBody>(claim);
+    if (replay) return replay;
+
+    try {
+      const current = await readProductForEdit(client, input.tenantId, input.productId);
+      if (!current) throw new NotFoundError('The clothing item could not be found.');
+      assertFreshCatalogueTimestamp(
+        current.updated_at,
+        request.expected_updated_at,
+        'This clothing item was changed by another edit. Refresh and try again.',
+      );
+
+      if (request.category_id !== undefined) {
+        const category = await readCategoryForCreate(client, input.tenantId, request.category_id);
+        if (!category) {
+          throw new NotFoundError('The selected clothing category could not be found.');
+        }
+        if (category.status !== 'active') {
+          throw new InvalidCategoryError('The selected clothing category is inactive.');
+        }
+      }
+
+      const updated = await updateProductForEdit(client, {
+        tenantId: input.tenantId,
+        productId: input.productId,
+        current,
+        request,
+      });
+      const category = updated.category_id
+        ? await readCategoryForCreate(client, input.tenantId, updated.category_id)
+        : null;
+      const data = updateClothingProductResponse.parse({
+        product_id: updated.id,
+        name: updated.name,
+        description: updated.description ?? '',
+        category: category ? { id: category.id, name: category.name } : null,
+        status: updated.status,
+        updated_at: updated.updated_at.toISOString(),
+      });
+      const body = successBody(input.requestId, data);
+
+      await appendCatalogueAuditEvent(client, {
+        tenantId: input.tenantId,
+        actorKey: input.principalId,
+        action: 'catalogue.clothing.product_updated',
+        entityType: 'product',
+        entityId: updated.id,
+        redactedSummary: {
+          changed_fields: Object.keys(request).filter((key) => key !== 'expected_updated_at'),
+        },
+        requestId: input.requestId,
+      });
+      await finalizeTenantIdempotency(client, {
+        tenantId: input.tenantId,
+        principalKey: input.membershipId,
+        operation: UPDATE_CLOTHING_PRODUCT_OPERATION,
+        intentKey: input.idempotencyKey,
+        payloadHash,
+        status: 'succeeded',
+        responseCode: 200,
+        safeResponse: body,
+      });
+      return { status: 200, body };
+    } catch (error) {
+      return finalizeKnownFailure(
+        client,
+        input,
+        UPDATE_CLOTHING_PRODUCT_OPERATION,
+        payloadHash,
+        error,
+      );
+    }
+  });
+}
+
+export async function updateClothingVariant(input: CommandContext & {
+  productId: string;
+  variantId: string;
+  request: UpdateClothingVariantRequest;
+}): Promise<CatalogueCommandResponse<ClothingVariantUpdateCommandBody>> {
+  assertCatalogueWriteContext(input);
+  const parsedRequest = updateClothingVariantRequest.safeParse(input.request);
+  if (!parsedRequest.success) {
+    throw new ValidationError('Clothing variant update request is invalid.');
+  }
+  const request = parsedRequest.data;
+  const payloadHash = canonicalRequestHash({
+    product_id: input.productId,
+    variant_id: input.variantId,
+    ...request,
+  });
+
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const claim = await claimTenantIdempotency(client, {
+      tenantId: input.tenantId,
+      principalKey: input.membershipId,
+      operation: UPDATE_CLOTHING_VARIANT_OPERATION,
+      intentKey: input.idempotencyKey,
+      payloadHash,
+    });
+    const replay = replayOrThrow<ClothingVariantUpdateCommandBody>(claim);
+    if (replay) return replay;
+
+    try {
+      const current = await readVariantForEdit(
+        client,
+        input.tenantId,
+        input.productId,
+        input.variantId,
+      );
+      if (!current) throw new NotFoundError('The clothing variant could not be found.');
+      assertFreshCatalogueTimestamp(
+        current.updated_at,
+        request.expected_updated_at,
+        'This clothing variant was changed by another edit. Refresh and try again.',
+      );
+
+      if (
+        request.measurement?.measurement_mode === 'default_guide' &&
+        request.measurement.measurement_guide_id
+      ) {
+        const guides = await readMeasurementGuidesForCreate(client, input.tenantId, [
+          request.measurement.measurement_guide_id,
+        ]);
+        const guide = guides[0];
+        if (!guide) {
+          throw new NotFoundError('The selected measurement guide could not be found.');
+        }
+        if (guide.status !== 'active') {
+          throw new InvalidMeasurementGuideError('The selected measurement guide is not active.');
+        }
+      }
+
+      const pricing = request.pricing ? normalizePricingInput(request.pricing) : null;
+      const updated = await updateVariantForEdit(client, {
+        tenantId: input.tenantId,
+        variantId: input.variantId,
+        current,
+        request,
+        pricing,
+      });
+      const data = updateClothingVariantResponse.parse({
+        variant_id: updated.id,
+        product_id: updated.product_id,
+        size_label: updated.size_label,
+        color_label: updated.color_label,
+        measurement_mode: updated.measurement_mode,
+        measurement_guide_id: updated.measurement_guide_id,
+        measurement_unit: updated.measurement_unit,
+        measurements: updated.measurements,
+        rental_price_minor: updated.rental_price_minor.toString(),
+        security_deposit_minor: updated.security_deposit_minor.toString(),
+        currency: updated.currency,
+        pricing_mode: updated.pricing_mode,
+        included_duration_minutes: updated.included_duration_minutes,
+        extra_day_price_minor: updated.extra_day_price_minor.toString(),
+        prep_minutes: updated.prep_minutes,
+        turnaround_minutes: updated.turnaround_minutes,
+        status: updated.status,
+        updated_at: updated.updated_at.toISOString(),
+      });
+      const body = successBody(input.requestId, data);
+
+      await appendCatalogueAuditEvent(client, {
+        tenantId: input.tenantId,
+        actorKey: input.principalId,
+        action: 'catalogue.clothing.variant_updated',
+        entityType: 'product_variant',
+        entityId: updated.id,
+        redactedSummary: {
+          product_id: updated.product_id,
+          changed_fields: Object.keys(request).filter((key) => key !== 'expected_updated_at'),
+          measurement_mode: request.measurement?.measurement_mode ?? null,
+          pricing_mode: request.pricing?.mode ?? null,
+        },
+        requestId: input.requestId,
+      });
+      await finalizeTenantIdempotency(client, {
+        tenantId: input.tenantId,
+        principalKey: input.membershipId,
+        operation: UPDATE_CLOTHING_VARIANT_OPERATION,
+        intentKey: input.idempotencyKey,
+        payloadHash,
+        status: 'succeeded',
+        responseCode: 200,
+        safeResponse: body,
+      });
+      return { status: 200, body };
+    } catch (error) {
+      return finalizeKnownFailure(
+        client,
+        input,
+        UPDATE_CLOTHING_VARIANT_OPERATION,
+        payloadHash,
+        error,
+      );
+    }
+  });
+}
+
 export async function replaceClothingImages(input: CommandContext & {
   productId: string;
   request: ReplaceClothingImagesRequest;
@@ -635,23 +873,38 @@ function normalizePricing(request: CreateClothingRequest): {
   extraDayPriceMinor: number;
   includedDurationMinutes: number;
 } {
-  const rentalPriceMinor = boundedDbMoney(request.pricing.rental_price_minor, 'Rental price');
+  return normalizePricingInput(request.pricing);
+}
+
+function normalizePricingInput(pricing: ClothingPricingInput): {
+  rentalPriceMinor: number;
+  securityDepositMinor: number;
+  extraDayPriceMinor: number;
+  includedDurationMinutes: number;
+} {
+  const rentalPriceMinor = boundedDbMoney(pricing.rental_price_minor, 'Rental price');
   const securityDepositMinor = boundedDbMoney(
-    request.pricing.security_deposit_minor,
+    pricing.security_deposit_minor,
     'Security deposit',
   );
   const extraDayPriceMinor =
-    request.pricing.mode === 'daily'
+    pricing.mode === 'daily'
       ? rentalPriceMinor
-      : boundedDbMoney(request.pricing.extra_day_price_minor, 'Extra-day price');
+      : boundedDbMoney(pricing.extra_day_price_minor, 'Extra-day price');
   const includedDurationMinutes =
-    request.pricing.mode === 'daily' ? 24 * 60 : request.pricing.included_days * 24 * 60;
+    pricing.mode === 'daily' ? 24 * 60 : pricing.included_days * 24 * 60;
   return {
     rentalPriceMinor,
     securityDepositMinor,
     extraDayPriceMinor,
     includedDurationMinutes,
   };
+}
+
+function assertFreshCatalogueTimestamp(actual: Date, expected: string, message: string): void {
+  if (actual.getTime() !== new Date(expected).getTime()) {
+    throw new StaleVersionError(message);
+  }
 }
 
 function boundedDbMoney(value: string, label: string): number {

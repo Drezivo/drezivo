@@ -13,6 +13,8 @@ import {
   replaceClothingImagesController,
   saveMeasurementGuideController,
   updateCatalogueCategoryStatusController,
+  updateClothingProductController,
+  updateClothingVariantController,
 } from './catalogue.controller.js';
 import {
   requireAssetManagePermission,
@@ -21,6 +23,8 @@ import {
   validateCatalogueClothingListQuery,
   validateCatalogueProductId,
   validateCreateClothing,
+  validateUpdateClothingProduct,
+  validateUpdateClothingVariant,
   validateReplaceClothingImages,
   validateSaveMeasurementGuide,
 } from './catalogue.middleware.js';
@@ -62,6 +66,31 @@ catalogueRouter.get(
   requireAssetManagePermission,
   validateCatalogueProductId,
   getCatalogueClothingDetailController,
+);
+
+catalogueRouter.patch(
+  '/catalogue/clothing/:productId',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateCatalogueProductId,
+  validateUpdateClothingProduct,
+  requireCatalogueIdempotencyKey,
+  updateClothingProductController,
+);
+
+catalogueRouter.patch(
+  '/catalogue/clothing/:productId/variants/:variantId',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateUpdateClothingVariant,
+  requireCatalogueIdempotencyKey,
+  updateClothingVariantController,
 );
 
 catalogueRouter.get(

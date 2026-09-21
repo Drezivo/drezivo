@@ -6,9 +6,12 @@ import {
   createClothingRequest,
   idempotencyKey,
   productId,
+  productVariantId,
   replaceClothingImagesRequest,
   saveMeasurementGuideRequest,
   updateCatalogueCategoryStatusRequest,
+  updateClothingProductRequest,
+  updateClothingVariantRequest,
   type ClothingListQuery,
 } from '@drezivo/contracts';
 
@@ -20,6 +23,7 @@ declare module 'express-serve-static-core' {
     catalogueCategoryId?: string;
     catalogueClothingListQuery?: ClothingListQuery;
     catalogueProductId?: string;
+    catalogueVariantId?: string;
   }
 }
 
@@ -58,6 +62,30 @@ export const validateCatalogueProductId: RequestHandler = (req, _res, next): voi
     return;
   }
   req.catalogueProductId = parsed.data;
+  next();
+};
+
+export const validateUpdateClothingProduct: RequestHandler = (req, _res, next): void => {
+  const parsed = updateClothingProductRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Clothing product update request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  next();
+};
+
+export const validateUpdateClothingVariant: RequestHandler = (req, _res, next): void => {
+  const parsedProductId = productId.safeParse(req.params.productId);
+  const parsedVariantId = productVariantId.safeParse(req.params.variantId);
+  const parsedBody = updateClothingVariantRequest.safeParse(req.body);
+  if (!parsedProductId.success || !parsedVariantId.success || !parsedBody.success) {
+    next(new ValidationError('Clothing variant update request is invalid.'));
+    return;
+  }
+  req.catalogueProductId = parsedProductId.data;
+  req.catalogueVariantId = parsedVariantId.data;
+  req.body = parsedBody.data;
   next();
 };
 

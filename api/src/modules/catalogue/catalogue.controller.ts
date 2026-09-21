@@ -7,6 +7,8 @@ import type {
   SaveMeasurementGuideRequest,
   TenantStatus,
   UpdateCatalogueCategoryStatusRequest,
+  UpdateClothingProductRequest,
+  UpdateClothingVariantRequest,
 } from '@drezivo/contracts';
 
 import { ValidationError } from '../../shared/errors.js';
@@ -20,6 +22,8 @@ import {
   replaceClothingImages,
   saveMeasurementGuide,
   updateCatalogueCategoryStatus,
+  updateClothingProduct,
+  updateClothingVariant,
 } from './catalogue.service.js';
 
 export async function listCatalogueCategoriesController(req: Request, res: Response): Promise<void> {
@@ -39,6 +43,36 @@ export async function getCatalogueClothingDetailController(
   const productId = req.catalogueProductId;
   if (!productId) throw new ValidationError('A valid clothing product id is required.');
   sendSuccess(req, res, await getCatalogueClothingDetail(requireContext(req), productId));
+}
+
+export async function updateClothingProductController(req: Request, res: Response): Promise<void> {
+  const productId = req.catalogueProductId;
+  if (!productId) throw new ValidationError('A valid clothing product id is required.');
+  const result = await updateClothingProduct({
+    ...requireContext(req),
+    requestId: req.requestId,
+    idempotencyKey: requireIdempotencyKey(req),
+    productId,
+    request: req.body as UpdateClothingProductRequest,
+  });
+  res.status(result.status).json(result.body);
+}
+
+export async function updateClothingVariantController(req: Request, res: Response): Promise<void> {
+  const productId = req.catalogueProductId;
+  const variantId = req.catalogueVariantId;
+  if (!productId || !variantId) {
+    throw new ValidationError('Valid clothing product and variant ids are required.');
+  }
+  const result = await updateClothingVariant({
+    ...requireContext(req),
+    requestId: req.requestId,
+    idempotencyKey: requireIdempotencyKey(req),
+    productId,
+    variantId,
+    request: req.body as UpdateClothingVariantRequest,
+  });
+  res.status(result.status).json(result.body);
 }
 
 export async function updateCatalogueCategoryStatusController(

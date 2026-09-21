@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto';
 
 import type { PoolClient } from 'pg';
 
-import type { CreateClothingRequest, MeasurementMap } from '@drezivo/contracts';
+import type {
+  CreateClothingRequest,
+  MeasurementMap,
+  UpdateClothingProductRequest,
+  UpdateClothingVariantRequest,
+} from '@drezivo/contracts';
 
 import { DuplicateClothingCodeError, StateConflictError } from '../../shared/errors.js';
 
@@ -52,6 +57,36 @@ export interface CreatedClothingGraph {
   code: string;
   variantCount: number;
   physicalPieceCount: number;
+}
+
+export interface EditableProductRow {
+  id: string;
+  category_id: string | null;
+  name: string;
+  description: string | null;
+  status: 'draft' | 'active' | 'archived';
+  updated_at: Date;
+}
+
+export interface EditableVariantRow {
+  id: string;
+  product_id: string;
+  size_label: string;
+  color_label: string | null;
+  measurement_mode: 'default_guide' | 'custom' | 'none';
+  measurement_guide_id: string | null;
+  measurement_unit: 'cm' | 'in';
+  measurements: MeasurementMap;
+  rental_price_minor: number;
+  security_deposit_minor: number;
+  currency: string;
+  pricing_mode: 'fixed_duration' | 'daily';
+  included_duration_minutes: number;
+  extra_day_price_minor: number;
+  prep_minutes: number;
+  turnaround_minutes: number;
+  status: 'draft' | 'active' | 'archived';
+  updated_at: Date;
 }
 
 export async function listCategories(client: PoolClient, tenantId: string): Promise<CategoryRow[]> {
@@ -213,6 +248,136 @@ export async function readCatalogueImageFiles(
   return result.rows;
 }
 
+export async function readProductForEdit(
+  client: PoolClient,
+  tenantId: string,
+  productId: string,
+): Promise<EditableProductRow | null> {
+  const result = await client.query<EditableProductRow>(
+    `SELECT id, category_id, name, description, status, updated_at
+       FROM product
+      WHERE tenant_id = $1 AND id = $2
+      LIMIT 1
+      FOR UPDATE`,
+    [tenantId, productId],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function updateProductForEdit(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    productId: string;
+    current: EditableProductRow;
+    request: UpdateClothingProductRequest;
+  },
+): Promise<EditableProductRow> {
+  const result = await client.query<EditableProductRow>(
+    `UPDATE product
+        SET name = $3,
+            description = $4,
+            category_id = $5,
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1 AND id = $2
+      RETURNING id, category_id, name, description, status, updated_at`,
+    [
+      input.tenantId,
+      input.productId,
+      input.request.name ?? input.current.name,
+      input.request.description !== undefined ? input.request.description : input.current.description,
+      input.request.category_id ?? input.current.category_id,
+    ],
+  );
+  const row = result.rows[0];
+  if (!row) throw new StateConflictError('The clothing item could not be updated. Refresh and try again.');
+  return row;
+}
+
+export async function readVariantForEdit(
+  client: PoolClient,
+  tenantId: string,
+  productId: string,
+  variantId: string,
+): Promise<EditableVariantRow | null> {
+  const result = await client.query<EditableVariantRow>(
+    `SELECT id, product_id, size_label, color_label, measurement_mode, measurement_guide_id,
+            measurement_unit, measurements, rental_price_minor, security_deposit_minor, currency,
+            pricing_mode, included_duration_minutes, extra_day_price_minor, prep_minutes,
+            turnaround_minutes, status, updated_at
+       FROM product_variant
+      WHERE tenant_id = $1 AND product_id = $2 AND id = $3
+      LIMIT 1
+      FOR UPDATE`,
+    [tenantId, productId, variantId],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function updateVariantForEdit(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    variantId: string;
+    current: EditableVariantRow;
+    request: UpdateClothingVariantRequest;
+    pricing: {
+      rentalPriceMinor: number;
+      securityDepositMinor: number;
+      extraDayPriceMinor: number;
+      includedDurationMinutes: number;
+    } | null;
+  },
+): Promise<EditableVariantRow> {
+  const measurement = input.request.measurement;
+  const result = await client.query<EditableVariantRow>(
+    `UPDATE product_variant
+        SET size_label = $3,
+            color_label = $4,
+            measurement_mode = $5,
+            measurement_guide_id = $6,
+            measurement_unit = $7,
+            measurements = $8::jsonb,
+            rental_price_minor = $9,
+            security_deposit_minor = $10,
+            pricing_mode = $11,
+            included_duration_minutes = $12,
+            extra_day_price_minor = $13,
+            prep_minutes = $14,
+            turnaround_minutes = $15,
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1 AND id = $2
+      RETURNING id, product_id, size_label, color_label, measurement_mode, measurement_guide_id,
+                measurement_unit, measurements, rental_price_minor, security_deposit_minor, currency,
+                pricing_mode, included_duration_minutes, extra_day_price_minor, prep_minutes,
+                turnaround_minutes, status, updated_at`,
+    [
+      input.tenantId,
+      input.variantId,
+      input.request.size_label ?? input.current.size_label,
+      input.request.color_label !== undefined ? input.request.color_label : input.current.color_label,
+      measurement?.measurement_mode ?? input.current.measurement_mode,
+      measurement
+        ? measurement.measurement_mode === 'default_guide'
+          ? (measurement.measurement_guide_id ?? null)
+          : null
+        : input.current.measurement_guide_id,
+      measurement?.measurement_unit ?? input.current.measurement_unit,
+      JSON.stringify(measurement ? measurement.measurements : input.current.measurements),
+      input.pricing?.rentalPriceMinor ?? input.current.rental_price_minor,
+      input.pricing?.securityDepositMinor ?? input.current.security_deposit_minor,
+      input.request.pricing?.mode ?? input.current.pricing_mode,
+      input.pricing?.includedDurationMinutes ?? input.current.included_duration_minutes,
+      input.pricing?.extraDayPriceMinor ?? input.current.extra_day_price_minor,
+      input.request.pricing?.prep_minutes ?? input.current.prep_minutes,
+      input.request.pricing?.turnaround_minutes ?? input.current.turnaround_minutes,
+    ],
+  );
+  const row = result.rows[0];
+  if (!row) throw new StateConflictError('The clothing variant could not be updated. Refresh and try again.');
+  return row;
+}
+
 export async function readProductForImageMutation(
   client: PoolClient,
   tenantId: string,
@@ -356,7 +521,7 @@ export async function appendCatalogueAuditEvent(
     tenantId: string;
     actorKey: string;
     action: string;
-    entityType: 'category' | 'measurement_guide' | 'product';
+    entityType: 'category' | 'measurement_guide' | 'product' | 'product_variant';
     entityId: string;
     redactedSummary: Record<string, unknown>;
     requestId: string;
