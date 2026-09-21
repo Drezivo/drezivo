@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   archiveClothingRequest,
+  archiveClothingResponse,
   clothingDetail,
   clothingListQuery,
   clothingProductLifecycle,
@@ -243,6 +244,16 @@ describe('catalogue staff contract', () => {
         release_allocations: true,
       }).success,
     ).toBe(false);
+    expect(
+      archiveClothingResponse.safeParse({
+        product_id: ids.product,
+        status: 'archived',
+        archived_variant_count: 2,
+        retired_asset_count: 1,
+        pending_asset_resolution_count: 1,
+        updated_at: instant,
+      }).success,
+    ).toBe(true);
   });
 
   it('validates a staff detail projection without collapsing product, variant and asset identities', () => {

@@ -1,6 +1,7 @@
 import type { RequestHandler } from 'express';
 
 import {
+  archiveClothingRequest,
   categoryId,
   clothingListQuery,
   createAssetMaintenanceBlockRequest,
@@ -113,6 +114,18 @@ export const validateCreateAssetMaintenanceBlock: RequestHandler = (req, _res, n
     return;
   }
   req.catalogueAssetId = parsedAssetId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validateArchiveClothing: RequestHandler = (req, _res, next): void => {
+  const parsedProductId = productId.safeParse(req.params.productId);
+  const parsedBody = archiveClothingRequest.safeParse(req.body);
+  if (!parsedProductId.success || !parsedBody.success) {
+    next(new ValidationError('Clothing archive request is invalid.'));
+    return;
+  }
+  req.catalogueProductId = parsedProductId.data;
   req.body = parsedBody.data;
   next();
 };

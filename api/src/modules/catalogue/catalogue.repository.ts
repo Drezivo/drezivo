@@ -106,6 +106,11 @@ export interface EditablePhysicalAssetRow {
   updated_at: Date;
 }
 
+export interface ArchivePhysicalAssetRow extends EditablePhysicalAssetRow {
+  blocking_allocation_count: number;
+  open_maintenance_count: number;
+}
+
 export async function listCategories(client: PoolClient, tenantId: string): Promise<CategoryRow[]> {
   const result = await client.query<CategoryRow>(
     `SELECT id, name, status, display_order
@@ -450,6 +455,113 @@ export async function updatePhysicalAssetState(
     throw new StateConflictError('The physical asset changed before this update could be applied.');
   }
   return row;
+}
+
+export async function readPhysicalAssetsForArchive(
+  client: PoolClient,
+  tenantId: string,
+  productId: string,
+): Promise<ArchivePhysicalAssetRow[]> {
+  const result = await client.query<ArchivePhysicalAssetRow>(
+    `SELECT
+       pa.id,
+       pa.branch_id,
+       pa.variant_id,
+       pa.asset_code,
+       pa.lifecycle_status,
+       pa.readiness,
+       pa.custody_kind,
+       pa.condition_note,
+       pa.measurement_overrides,
+       pa.alteration_note,
+       pa.version,
+       pa.created_at,
+       pa.updated_at,
+       (
+         SELECT count(*)::int
+           FROM asset_allocation aa
+          WHERE aa.tenant_id = pa.tenant_id
+            AND aa.asset_id = pa.id
+            AND aa.is_blocking = true
+       ) AS blocking_allocation_count,
+       (
+         SELECT count(*)::int
+           FROM maintenance_work_order mwo
+          WHERE mwo.tenant_id = pa.tenant_id
+            AND mwo.asset_id = pa.id
+            AND mwo.status = 'open'
+       ) AS open_maintenance_count
+     FROM physical_asset pa
+     JOIN product_variant pv
+       ON pv.tenant_id = pa.tenant_id
+      AND pv.id = pa.variant_id
+    WHERE pa.tenant_id = $1
+      AND pv.product_id = $2
+    ORDER BY pa.id ASC
+    FOR UPDATE OF pa`,
+    [tenantId, productId],
+  );
+  return result.rows;
+}
+
+export async function archiveClothingGraph(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    productId: string;
+    retireAssetIds: string[];
+  },
+): Promise<{
+  product: EditableProductRow;
+  archivedVariantCount: number;
+  retiredAssetCount: number;
+}> {
+  const product = await client.query<EditableProductRow>(
+    `UPDATE product
+        SET status = 'archived',
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1
+        AND id = $2
+        AND status <> 'archived'
+      RETURNING id, category_id, name, description, status, updated_at`,
+    [input.tenantId, input.productId],
+  );
+  const productRow = product.rows[0];
+  if (!productRow) {
+    throw new StateConflictError('The clothing item could not be archived. Refresh and try again.');
+  }
+
+  const variants = await client.query(
+    `UPDATE product_variant
+        SET status = 'archived',
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1
+        AND product_id = $2
+        AND status <> 'archived'`,
+    [input.tenantId, input.productId],
+  );
+
+  let retiredAssetCount = 0;
+  if (input.retireAssetIds.length > 0) {
+    const retired = await client.query(
+      `UPDATE physical_asset
+          SET lifecycle_status = 'retired',
+              readiness = 'unready',
+              version = version + 1,
+              updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+        WHERE tenant_id = $1
+          AND id = ANY($2::uuid[])
+          AND lifecycle_status = 'active'`,
+      [input.tenantId, input.retireAssetIds],
+    );
+    retiredAssetCount = retired.rowCount ?? 0;
+  }
+
+  return {
+    product: productRow,
+    archivedVariantCount: variants.rowCount ?? 0,
+    retiredAssetCount,
+  };
 }
 
 export async function readProductForImageMutation(

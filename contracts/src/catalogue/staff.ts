@@ -368,3 +368,13 @@ export const archiveClothingRequest = z
   })
   .strict();
 export type ArchiveClothingRequest = z.infer<typeof archiveClothingRequest>;
+
+export const archiveClothingResponse = z.object({
+  product_id: productId,
+  status: z.literal('archived'),
+  archived_variant_count: z.number().int().nonnegative(),
+  retired_asset_count: z.number().int().nonnegative(),
+  pending_asset_resolution_count: z.number().int().nonnegative(),
+  updated_at: isoInstant,
+});
+export type ArchiveClothingResponse = z.infer<typeof archiveClothingResponse>;

@@ -1,4 +1,6 @@
 import {
+  archiveClothingRequest,
+  archiveClothingResponse,
   catalogueCategory,
   catalogueCategoryList,
   clothingDetail,
@@ -18,6 +20,8 @@ import {
   updateClothingVariantResponse,
   updatePhysicalAssetStateRequest,
   updatePhysicalAssetStateResponse,
+  type ArchiveClothingRequest,
+  type ArchiveClothingResponse,
   type CatalogueCategory,
   type CatalogueCategoryList,
   type ClothingDetail,
@@ -83,6 +87,7 @@ import {
 } from './catalogue.read.repository.js';
 import {
   appendCatalogueAuditEvent,
+  archiveClothingGraph,
   createClothingGraph,
   listCategories,
   readCategoryForCreate,
@@ -91,6 +96,7 @@ import {
   readMeasurementGuideFileForView,
   readMeasurementGuidesForCreate,
   readPhysicalAssetForStateMutation,
+  readPhysicalAssetsForArchive,
   readProductForEdit,
   readProductForImageMutation,
   readVariantForEdit,
@@ -114,6 +120,7 @@ const UPDATE_CLOTHING_PRODUCT_OPERATION = 'catalogue.clothing.product.update';
 const UPDATE_CLOTHING_VARIANT_OPERATION = 'catalogue.clothing.variant.update';
 const UPDATE_PHYSICAL_ASSET_STATE_OPERATION = 'catalogue.asset.state.update';
 const CREATE_ASSET_MAINTENANCE_BLOCK_OPERATION = 'catalogue.asset.maintenance_block.create';
+const ARCHIVE_CLOTHING_OPERATION = 'catalogue.clothing.archive';
 const MEASUREMENT_GUIDE_VIEW_EXPIRY_SECONDS = 5 * 60;
 const CATALOGUE_IMAGE_VIEW_EXPIRY_SECONDS = 5 * 60;
 const POSTGRES_INT_MAX = 2_147_483_647;
@@ -140,6 +147,7 @@ type ClothingProductUpdateCommandBody = SuccessEnvelope<UpdateClothingProductRes
 type ClothingVariantUpdateCommandBody = SuccessEnvelope<UpdateClothingVariantResponse> | FailureEnvelope;
 type PhysicalAssetStateCommandBody = SuccessEnvelope<UpdatePhysicalAssetStateResponse> | FailureEnvelope;
 type AssetMaintenanceBlockCommandBody = SuccessEnvelope<CreateAssetMaintenanceBlockResponse> | FailureEnvelope;
+type ArchiveClothingCommandBody = SuccessEnvelope<ArchiveClothingResponse> | FailureEnvelope;
 
 export interface CatalogueCommandResponse<TBody> {
   status: number;
@@ -1016,6 +1024,110 @@ export async function createAssetMaintenanceBlock(input: CommandContext & {
         client,
         input,
         CREATE_ASSET_MAINTENANCE_BLOCK_OPERATION,
+        payloadHash,
+        error,
+      );
+    }
+  });
+}
+
+export async function archiveClothing(input: CommandContext & {
+  productId: string;
+  request: ArchiveClothingRequest;
+}): Promise<CatalogueCommandResponse<ArchiveClothingCommandBody>> {
+  assertCatalogueWriteContext(input);
+  const parsedRequest = archiveClothingRequest.safeParse(input.request);
+  if (!parsedRequest.success) {
+    throw new ValidationError('Clothing archive request is invalid.');
+  }
+  const request = parsedRequest.data;
+  const payloadHash = canonicalRequestHash({ product_id: input.productId, ...request });
+
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const claim = await claimTenantIdempotency(client, {
+      tenantId: input.tenantId,
+      principalKey: input.membershipId,
+      operation: ARCHIVE_CLOTHING_OPERATION,
+      intentKey: input.idempotencyKey,
+      payloadHash,
+    });
+    const replay = replayOrThrow<ArchiveClothingCommandBody>(claim);
+    if (replay) return replay;
+
+    try {
+      const current = await readProductForEdit(client, input.tenantId, input.productId);
+      if (!current) throw new NotFoundError('The clothing item could not be found.');
+      assertFreshCatalogueTimestamp(
+        current.updated_at,
+        request.expected_updated_at,
+        'This clothing item changed before it could be archived. Refresh and try again.',
+      );
+      if (current.status === 'archived') {
+        throw new StateConflictError('This clothing item is already archived.');
+      }
+
+      const assets = await readPhysicalAssetsForArchive(client, input.tenantId, input.productId);
+      const retireAssetIds = assets
+        .filter(
+          (asset) =>
+            asset.lifecycle_status === 'active' &&
+            asset.readiness === 'ready' &&
+            asset.custody_kind === 'at_branch' &&
+            asset.blocking_allocation_count === 0 &&
+            asset.open_maintenance_count === 0,
+        )
+        .map((asset) => asset.id);
+      const retireAssetIdSet = new Set(retireAssetIds);
+      const pendingAssetResolutionCount = assets.filter(
+        (asset) =>
+          asset.lifecycle_status === 'active' &&
+          !retireAssetIdSet.has(asset.id),
+      ).length;
+
+      const archived = await archiveClothingGraph(client, {
+        tenantId: input.tenantId,
+        productId: input.productId,
+        retireAssetIds,
+      });
+      const data = archiveClothingResponse.parse({
+        product_id: archived.product.id,
+        status: archived.product.status,
+        archived_variant_count: archived.archivedVariantCount,
+        retired_asset_count: archived.retiredAssetCount,
+        pending_asset_resolution_count: pendingAssetResolutionCount,
+        updated_at: archived.product.updated_at.toISOString(),
+      });
+      const body = successBody(input.requestId, data);
+
+      await appendCatalogueAuditEvent(client, {
+        tenantId: input.tenantId,
+        actorKey: input.principalId,
+        action: 'catalogue.clothing.archived',
+        entityType: 'product',
+        entityId: archived.product.id,
+        redactedSummary: {
+          archived_variant_count: archived.archivedVariantCount,
+          retired_asset_count: archived.retiredAssetCount,
+          pending_asset_resolution_count: pendingAssetResolutionCount,
+        },
+        requestId: input.requestId,
+      });
+      await finalizeTenantIdempotency(client, {
+        tenantId: input.tenantId,
+        principalKey: input.membershipId,
+        operation: ARCHIVE_CLOTHING_OPERATION,
+        intentKey: input.idempotencyKey,
+        payloadHash,
+        status: 'succeeded',
+        responseCode: 200,
+        safeResponse: body,
+      });
+      return { status: 200, body };
+    } catch (error) {
+      return finalizeKnownFailure(
+        client,
+        input,
+        ARCHIVE_CLOTHING_OPERATION,
         payloadHash,
         error,
       );

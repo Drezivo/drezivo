@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 
 import type {
+  ArchiveClothingRequest,
   CreateAssetMaintenanceBlockRequest,
   CreateClothingRequest,
   PermissionCode,
@@ -16,6 +17,7 @@ import type {
 import { ValidationError } from '../../shared/errors.js';
 import { sendSuccess } from '../../shared/response.js';
 import {
+  archiveClothing,
   createAssetMaintenanceBlock,
   createClothing,
   getCatalogueCategories,
@@ -107,6 +109,19 @@ export async function createAssetMaintenanceBlockController(
     idempotencyKey: requireIdempotencyKey(req),
     assetId,
     request: req.body as CreateAssetMaintenanceBlockRequest,
+  });
+  res.status(result.status).json(result.body);
+}
+
+export async function archiveClothingController(req: Request, res: Response): Promise<void> {
+  const productId = req.catalogueProductId;
+  if (!productId) throw new ValidationError('A valid clothing product id is required.');
+  const result = await archiveClothing({
+    ...requireContext(req),
+    requestId: req.requestId,
+    idempotencyKey: requireIdempotencyKey(req),
+    productId,
+    request: req.body as ArchiveClothingRequest,
   });
   res.status(result.status).json(result.body);
 }

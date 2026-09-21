@@ -5,6 +5,7 @@ import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
 import {
+  archiveClothingController,
   createAssetMaintenanceBlockController,
   createClothingController,
   getCatalogueClothingDetailController,
@@ -23,6 +24,7 @@ import {
   requireCatalogueIdempotencyKey,
   validateCatalogueCategoryStatusUpdate,
   validateCatalogueClothingListQuery,
+  validateArchiveClothing,
   validateCatalogueProductId,
   validateCreateAssetMaintenanceBlock,
   validateCreateClothing,
@@ -95,6 +97,18 @@ catalogueRouter.patch(
   validateUpdateClothingVariant,
   requireCatalogueIdempotencyKey,
   updateClothingVariantController,
+);
+
+catalogueRouter.post(
+  '/catalogue/clothing/:productId/archive',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateArchiveClothing,
+  requireCatalogueIdempotencyKey,
+  archiveClothingController,
 );
 
 catalogueRouter.patch(
