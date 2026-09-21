@@ -2,11 +2,13 @@
 
 import { useAuth } from "@clerk/nextjs";
 import {
+  Archive,
   CalendarDays,
   ChevronRight,
   CircleAlert,
   Layers3,
   Package,
+  Pencil,
   RefreshCw,
   Ruler,
   Shirt,
@@ -17,6 +19,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { ClothingDetail, ClothingVariantDetail, PhysicalAssetSummary } from "@drezivo/contracts";
 
+import { ArchiveClothingDialog, archiveSuccessMessage } from "@/components/inventory/archive-clothing-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,6 +42,7 @@ type LoadState =
 export function ClothingDetailsPage({ productId }: { productId: string }) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
+  const [notice, setNotice] = useState<string | null>(null);
 
   const loadDetail = useCallback(async () => {
     if (!isLoaded || !isSignedIn) return;
@@ -55,6 +59,13 @@ export function ClothingDetailsPage({ productId }: { productId: string }) {
     void loadDetail();
   }, [loadDetail]);
 
+  useEffect(() => {
+    const savedNotice = sessionStorage.getItem("drezivo:clothing-detail-notice");
+    if (!savedNotice) return;
+    setNotice(savedNotice);
+    sessionStorage.removeItem("drezivo:clothing-detail-notice");
+  }, []);
+
   if (!isLoaded || !isSignedIn || state.kind === "loading") {
     return <DetailLoadingState />;
   }
@@ -63,16 +74,44 @@ export function ClothingDetailsPage({ productId }: { productId: string }) {
     return <DetailErrorState error={state.error} onRetry={loadDetail} />;
   }
 
-  return <DetailContent item={state.item} />;
+  return (
+    <DetailContent
+      item={state.item}
+      notice={notice}
+      onDismissNotice={() => setNotice(null)}
+      onArchived={(message) => {
+        setNotice(message);
+        void loadDetail();
+      }}
+    />
+  );
 }
 
-function DetailContent({ item }: { item: ClothingDetail }) {
+function DetailContent({
+  item,
+  notice,
+  onArchived,
+  onDismissNotice,
+}: {
+  item: ClothingDetail;
+  notice: string | null;
+  onArchived: (message: string) => void;
+  onDismissNotice: () => void;
+}) {
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const allAssets = useMemo(() => item.variants.flatMap((variant) => variant.assets), [item.variants]);
   const activeAssets = allAssets.filter((asset) => asset.lifecycle_status === "active");
   const readyAssets = activeAssets.filter((asset) => asset.readiness === "ready");
   const sizes = [...new Set(item.variants.map((variant) => variant.size_label))];
   const priceRange = formatPriceRange(item.variants);
   const primaryImage = item.images.find((image) => image.image_url)?.image_url ?? null;
+  const readinessCounts = {
+    ready: activeAssets.filter((asset) => asset.readiness === "ready").length,
+    cleaning: activeAssets.filter((asset) => asset.readiness === "needs_cleaning").length,
+    repair: activeAssets.filter((asset) => asset.readiness === "needs_repair").length,
+    unready: activeAssets.filter((asset) => asset.readiness === "unready").length,
+    outsideBranch: activeAssets.filter((asset) => asset.custody_kind !== "at_branch").length,
+  };
 
   return (
     <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
@@ -84,6 +123,23 @@ function DetailContent({ item }: { item: ClothingDetail }) {
           <ChevronRight className="h-3.5 w-3.5 text-dashboard-muted" aria-hidden="true" />
           <span className="font-medium text-dashboard-navy">{item.name}</span>
         </div>
+
+        {notice ? (
+          <div
+            role="status"
+            className="flex items-center justify-between gap-3 rounded-lg border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm font-medium text-success-500"
+          >
+            <span>{notice}</span>
+            <button
+              type="button"
+              aria-label="Dismiss clothing update message"
+              onClick={onDismissNotice}
+              className="text-xs font-semibold underline-offset-2 hover:underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
 
         <Card className="gap-0 py-0">
           <CardContent className="p-4 sm:p-5 lg:p-6">
@@ -103,18 +159,42 @@ function DetailContent({ item }: { item: ClothingDetail }) {
               </div>
 
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  {item.category ? (
-                    <span className="inline-flex rounded-full border border-dashboard-border bg-dashboard-active px-2.5 py-1 text-xs font-medium text-dashboard-accent">
-                      {item.category.name}
-                    </span>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {item.category ? (
+                        <span className="inline-flex rounded-full border border-dashboard-border bg-dashboard-active px-2.5 py-1 text-xs font-medium text-dashboard-accent">
+                          {item.category.name}
+                        </span>
+                      ) : null}
+                      <LifecycleBadge status={item.status} />
+                    </div>
+                    <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight text-dashboard-navy sm:text-4xl">
+                      {item.name}
+                    </h1>
+                    <p className="mt-1 text-sm text-dashboard-muted">{item.code}</p>
+                  </div>
+                  {item.status !== "archived" ? (
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <Link
+                        href={`/inventory/${item.product_id}/edit`}
+                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-dashboard-border bg-dashboard-surface px-4 text-sm font-medium text-dashboard-navy transition-colors hover:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
+                      >
+                        <Pencil className="h-4 w-4" aria-hidden="true" />
+                        Edit Clothing
+                      </Link>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setArchiveOpen(true)}
+                        className="border border-dashboard-danger/40 text-dashboard-danger hover:bg-dashboard-danger/10 hover:text-dashboard-danger"
+                      >
+                        <Archive className="h-4 w-4" aria-hidden="true" />
+                        Archive
+                      </Button>
+                    </div>
                   ) : null}
-                  <LifecycleBadge status={item.status} />
                 </div>
-                <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight text-dashboard-navy sm:text-4xl">
-                  {item.name}
-                </h1>
-                <p className="mt-1 text-sm text-dashboard-muted">{item.code}</p>
                 <p className="mt-4 text-xl font-semibold text-dashboard-navy">{priceRange}</p>
                 {item.description ? (
                   <p className="mt-5 max-w-3xl text-sm leading-6 text-dashboard-muted">{item.description}</p>
@@ -223,6 +303,25 @@ function DetailContent({ item }: { item: ClothingDetail }) {
             <Card className="gap-0 py-0">
               <CardContent className="p-5">
                 <div className="flex items-center gap-2">
+                  <Package className="h-4 w-4 text-dashboard-accent" aria-hidden="true" />
+                  <h2 className="text-sm font-semibold text-dashboard-navy">Operational Status</h2>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-dashboard-muted">
+                  Current readiness and custody. Blocking allocations still decide future availability.
+                </p>
+                <dl className="mt-4 space-y-3 text-sm">
+                  <DetailPair label="Ready" value={String(readinessCounts.ready)} />
+                  <DetailPair label="Needs cleaning" value={String(readinessCounts.cleaning)} />
+                  <DetailPair label="Needs repair" value={String(readinessCounts.repair)} />
+                  <DetailPair label="Unready" value={String(readinessCounts.unready)} />
+                  <DetailPair label="Outside branch" value={String(readinessCounts.outsideBranch)} />
+                </dl>
+              </CardContent>
+            </Card>
+
+            <Card className="gap-0 py-0">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-2">
                   <Tags className="h-4 w-4 text-dashboard-accent" aria-hidden="true" />
                   <h2 className="text-sm font-semibold text-dashboard-navy">Catalogue</h2>
                 </div>
@@ -279,6 +378,16 @@ function DetailContent({ item }: { item: ClothingDetail }) {
           </aside>
         </div>
       </div>
+      {item.status !== "archived" ? (
+        <ArchiveClothingDialog
+          open={archiveOpen}
+          onOpenChange={setArchiveOpen}
+          productId={item.product_id}
+          name={item.name}
+          updatedAt={item.updated_at}
+          onArchived={(result) => onArchived(archiveSuccessMessage(result))}
+        />
+      ) : null}
     </div>
   );
 }

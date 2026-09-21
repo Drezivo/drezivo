@@ -26,6 +26,7 @@ import {
 
 import type { CatalogueCategory, ClothingListItem } from "@drezivo/contracts";
 
+import { ArchiveClothingDialog, archiveSuccessMessage } from "@/components/inventory/archive-clothing-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -229,7 +230,7 @@ export function ClothingPage() {
             <span>{notice}</span>
             <button
               type="button"
-              aria-label="Dismiss draft saved message"
+              aria-label="Dismiss inventory message"
               onClick={() => setNotice(null)}
               className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-success-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success-500/40"
             >
@@ -327,7 +328,16 @@ export function ClothingPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  rows.map((item) => <ClothingRow key={item.product_id} item={item} />)
+                  rows.map((item) => (
+                    <ClothingRow
+                      key={item.product_id}
+                      item={item}
+                      onArchived={(result) => {
+                        setNotice(archiveSuccessMessage(result));
+                        setReloadVersion((value) => value + 1);
+                      }}
+                    />
+                  ))
                 )}
               </TableBody>
             </Table>
@@ -369,7 +379,15 @@ export function ClothingPage() {
   );
 }
 
-function ClothingRow({ item }: { item: ClothingListItem }) {
+function ClothingRow({
+  item,
+  onArchived,
+}: {
+  item: ClothingListItem;
+  onArchived: Parameters<typeof ArchiveClothingDialog>[0]["onArchived"];
+}) {
+  const [archiveOpen, setArchiveOpen] = useState(false);
+
   return (
     <TableRow>
       <TableCell>
@@ -448,10 +466,31 @@ function ClothingRow({ item }: { item: ClothingListItem }) {
             <DropdownMenuItem asChild>
               <Link href={`/inventory/${item.product_id}`}>View details</Link>
             </DropdownMenuItem>
-            <DropdownMenuItem>Edit</DropdownMenuItem>
-            <DropdownMenuItem>{item.product_status === "archived" ? "Restore" : "Archive"}</DropdownMenuItem>
+            {item.product_status !== "archived" ? (
+              <>
+                <DropdownMenuItem asChild>
+                  <Link href={`/inventory/${item.product_id}/edit`}>Edit</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="text-dashboard-danger focus:text-dashboard-danger"
+                  onSelect={() => setArchiveOpen(true)}
+                >
+                  Archive
+                </DropdownMenuItem>
+              </>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
+        {item.product_status !== "archived" ? (
+          <ArchiveClothingDialog
+            open={archiveOpen}
+            onOpenChange={setArchiveOpen}
+            productId={item.product_id}
+            name={item.name}
+            updatedAt={item.updated_at}
+            onArchived={onArchived}
+          />
+        ) : null}
       </TableCell>
     </TableRow>
   );

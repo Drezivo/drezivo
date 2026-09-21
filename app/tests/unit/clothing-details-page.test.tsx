@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ClothingDetailsPage } from "@/components/inventory/clothing-details-page";
@@ -9,6 +9,7 @@ const clerk = vi.hoisted(() => ({
 }));
 
 const api = vi.hoisted(() => ({
+  archiveClothing: vi.fn(),
   getCatalogueClothingDetail: vi.fn(),
 }));
 
@@ -105,6 +106,7 @@ const detail = {
 describe("ClothingDetailsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     clerk.getToken.mockResolvedValue("clerk-token");
     clerk.useAuth.mockReturnValue({
       getToken: clerk.getToken,
@@ -114,6 +116,17 @@ describe("ClothingDetailsPage", () => {
     api.getCatalogueClothingDetail.mockResolvedValue({
       data: detail,
       requestId: "req-detail",
+    });
+    api.archiveClothing.mockResolvedValue({
+      data: {
+        product_id: productId,
+        status: "archived",
+        archived_variant_count: 1,
+        retired_asset_count: 0,
+        pending_asset_resolution_count: 1,
+        updated_at: "2026-09-21T00:00:00.000Z",
+      },
+      requestId: "req-archive",
     });
   });
 
@@ -160,6 +173,39 @@ describe("ClothingDetailsPage", () => {
     const row = sku.closest("tr");
     if (!row) throw new Error("Expected variant to render in a table row.");
     expect(within(row).getByText("—")).toBeVisible();
+  });
+
+  it("surfaces CLT-031 readiness, custody, and blocking-allocation state", async () => {
+    render(<ClothingDetailsPage productId={productId} />);
+
+    expect(await screen.findByRole("heading", { name: "Operational Status" })).toBeVisible();
+    expect(screen.getByText("Needs Cleaning")).toBeVisible();
+    expect(screen.getByText("At Branch")).toBeVisible();
+    expect(screen.getByText("Confirmed reservation")).toBeVisible();
+  });
+
+  it("archives from detail using the backend updated_at token and then reloads authoritative detail", async () => {
+    api.getCatalogueClothingDetail
+      .mockResolvedValueOnce({ data: detail, requestId: "req-detail-active" })
+      .mockResolvedValueOnce({ data: { ...detail, status: "archived" as const }, requestId: "req-detail-archived" });
+
+    render(<ClothingDetailsPage productId={productId} />);
+
+    await screen.findByRole("heading", { name: "Emerald Evening Gown" });
+    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Archive Clothing" }));
+
+    await waitFor(() => expect(api.archiveClothing).toHaveBeenCalledTimes(1));
+    expect(api.archiveClothing).toHaveBeenCalledWith(
+      productId,
+      { expected_updated_at: detail.updated_at },
+      expect.any(String)
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Clothing archived. 1 physical piece still requires operational resolution."
+    );
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
   });
 
   it("does not render the old fabricated rental or maintenance histories", async () => {
