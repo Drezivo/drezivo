@@ -2,7 +2,13 @@ import { randomUUID } from 'node:crypto';
 
 import type { PoolClient } from 'pg';
 
-import type { CreateClothingRequest, MeasurementMap } from '@drezivo/contracts';
+import type {
+  CreateClothingRequest,
+  MeasurementMap,
+  UpdateClothingProductRequest,
+  UpdateClothingVariantRequest,
+  UpdatePhysicalAssetStateRequest,
+} from '@drezivo/contracts';
 
 import { DuplicateClothingCodeError, StateConflictError } from '../../shared/errors.js';
 
@@ -52,6 +58,57 @@ export interface CreatedClothingGraph {
   code: string;
   variantCount: number;
   physicalPieceCount: number;
+}
+
+export interface EditableProductRow {
+  id: string;
+  category_id: string | null;
+  name: string;
+  description: string | null;
+  status: 'draft' | 'active' | 'archived';
+  updated_at: Date;
+}
+
+export interface EditableVariantRow {
+  id: string;
+  product_id: string;
+  size_label: string;
+  color_label: string | null;
+  measurement_mode: 'default_guide' | 'custom' | 'none';
+  measurement_guide_id: string | null;
+  measurement_unit: 'cm' | 'in';
+  measurements: MeasurementMap;
+  rental_price_minor: number;
+  security_deposit_minor: number;
+  currency: string;
+  pricing_mode: 'fixed_duration' | 'daily';
+  included_duration_minutes: number;
+  extra_day_price_minor: number;
+  prep_minutes: number;
+  turnaround_minutes: number;
+  status: 'draft' | 'active' | 'archived';
+  updated_at: Date;
+}
+
+export interface EditablePhysicalAssetRow {
+  id: string;
+  branch_id: string;
+  variant_id: string;
+  asset_code: string;
+  lifecycle_status: 'active' | 'retired' | 'lost';
+  readiness: 'ready' | 'needs_cleaning' | 'needs_repair' | 'unready';
+  custody_kind: 'at_branch' | 'with_customer' | 'in_transit';
+  condition_note: string | null;
+  measurement_overrides: MeasurementMap | null;
+  alteration_note: string | null;
+  version: number;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface ArchivePhysicalAssetRow extends EditablePhysicalAssetRow {
+  blocking_allocation_count: number;
+  open_maintenance_count: number;
 }
 
 export async function listCategories(client: PoolClient, tenantId: string): Promise<CategoryRow[]> {
@@ -213,6 +270,300 @@ export async function readCatalogueImageFiles(
   return result.rows;
 }
 
+export async function readProductForEdit(
+  client: PoolClient,
+  tenantId: string,
+  productId: string,
+): Promise<EditableProductRow | null> {
+  const result = await client.query<EditableProductRow>(
+    `SELECT id, category_id, name, description, status, updated_at
+       FROM product
+      WHERE tenant_id = $1 AND id = $2
+      LIMIT 1
+      FOR UPDATE`,
+    [tenantId, productId],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function updateProductForEdit(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    productId: string;
+    current: EditableProductRow;
+    request: UpdateClothingProductRequest;
+  },
+): Promise<EditableProductRow> {
+  const result = await client.query<EditableProductRow>(
+    `UPDATE product
+        SET name = $3,
+            description = $4,
+            category_id = $5,
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1 AND id = $2
+      RETURNING id, category_id, name, description, status, updated_at`,
+    [
+      input.tenantId,
+      input.productId,
+      input.request.name ?? input.current.name,
+      input.request.description !== undefined ? input.request.description : input.current.description,
+      input.request.category_id ?? input.current.category_id,
+    ],
+  );
+  const row = result.rows[0];
+  if (!row) throw new StateConflictError('The clothing item could not be updated. Refresh and try again.');
+  return row;
+}
+
+export async function readVariantForEdit(
+  client: PoolClient,
+  tenantId: string,
+  productId: string,
+  variantId: string,
+): Promise<EditableVariantRow | null> {
+  const result = await client.query<EditableVariantRow>(
+    `SELECT id, product_id, size_label, color_label, measurement_mode, measurement_guide_id,
+            measurement_unit, measurements, rental_price_minor, security_deposit_minor, currency,
+            pricing_mode, included_duration_minutes, extra_day_price_minor, prep_minutes,
+            turnaround_minutes, status, updated_at
+       FROM product_variant
+      WHERE tenant_id = $1 AND product_id = $2 AND id = $3
+      LIMIT 1
+      FOR UPDATE`,
+    [tenantId, productId, variantId],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function updateVariantForEdit(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    variantId: string;
+    current: EditableVariantRow;
+    request: UpdateClothingVariantRequest;
+    pricing: {
+      rentalPriceMinor: number;
+      securityDepositMinor: number;
+      extraDayPriceMinor: number;
+      includedDurationMinutes: number;
+    } | null;
+  },
+): Promise<EditableVariantRow> {
+  const measurement = input.request.measurement;
+  const result = await client.query<EditableVariantRow>(
+    `UPDATE product_variant
+        SET size_label = $3,
+            color_label = $4,
+            measurement_mode = $5,
+            measurement_guide_id = $6,
+            measurement_unit = $7,
+            measurements = $8::jsonb,
+            rental_price_minor = $9,
+            security_deposit_minor = $10,
+            pricing_mode = $11,
+            included_duration_minutes = $12,
+            extra_day_price_minor = $13,
+            prep_minutes = $14,
+            turnaround_minutes = $15,
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1 AND id = $2
+      RETURNING id, product_id, size_label, color_label, measurement_mode, measurement_guide_id,
+                measurement_unit, measurements, rental_price_minor, security_deposit_minor, currency,
+                pricing_mode, included_duration_minutes, extra_day_price_minor, prep_minutes,
+                turnaround_minutes, status, updated_at`,
+    [
+      input.tenantId,
+      input.variantId,
+      input.request.size_label ?? input.current.size_label,
+      input.request.color_label !== undefined ? input.request.color_label : input.current.color_label,
+      measurement?.measurement_mode ?? input.current.measurement_mode,
+      measurement
+        ? measurement.measurement_mode === 'default_guide'
+          ? (measurement.measurement_guide_id ?? null)
+          : null
+        : input.current.measurement_guide_id,
+      measurement?.measurement_unit ?? input.current.measurement_unit,
+      JSON.stringify(measurement ? measurement.measurements : input.current.measurements),
+      input.pricing?.rentalPriceMinor ?? input.current.rental_price_minor,
+      input.pricing?.securityDepositMinor ?? input.current.security_deposit_minor,
+      input.request.pricing?.mode ?? input.current.pricing_mode,
+      input.pricing?.includedDurationMinutes ?? input.current.included_duration_minutes,
+      input.pricing?.extraDayPriceMinor ?? input.current.extra_day_price_minor,
+      input.request.pricing?.prep_minutes ?? input.current.prep_minutes,
+      input.request.pricing?.turnaround_minutes ?? input.current.turnaround_minutes,
+    ],
+  );
+  const row = result.rows[0];
+  if (!row) throw new StateConflictError('The clothing variant could not be updated. Refresh and try again.');
+  return row;
+}
+
+export async function readPhysicalAssetForStateMutation(
+  client: PoolClient,
+  tenantId: string,
+  branchId: string,
+  assetId: string,
+): Promise<EditablePhysicalAssetRow | null> {
+  const result = await client.query<EditablePhysicalAssetRow>(
+    `SELECT id, branch_id, variant_id, asset_code, lifecycle_status, readiness, custody_kind,
+            condition_note, measurement_overrides, alteration_note, version, created_at, updated_at
+       FROM physical_asset
+      WHERE tenant_id = $1 AND branch_id = $2 AND id = $3
+      LIMIT 1
+      FOR UPDATE`,
+    [tenantId, branchId, assetId],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function updatePhysicalAssetState(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    assetId: string;
+    expectedVersion: number;
+    current: EditablePhysicalAssetRow;
+    request: UpdatePhysicalAssetStateRequest;
+    forcedReadiness?: EditablePhysicalAssetRow['readiness'];
+  },
+): Promise<EditablePhysicalAssetRow> {
+  const result = await client.query<EditablePhysicalAssetRow>(
+    `UPDATE physical_asset
+        SET lifecycle_status = $4,
+            readiness = $5,
+            condition_note = $6,
+            version = version + 1,
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1 AND id = $2 AND version = $3
+      RETURNING id, branch_id, variant_id, asset_code, lifecycle_status, readiness, custody_kind,
+                condition_note, measurement_overrides, alteration_note, version, created_at, updated_at`,
+    [
+      input.tenantId,
+      input.assetId,
+      input.expectedVersion,
+      input.request.lifecycle_status ?? input.current.lifecycle_status,
+      input.forcedReadiness ?? input.request.readiness ?? input.current.readiness,
+      input.request.condition_note !== undefined
+        ? input.request.condition_note
+        : input.current.condition_note,
+    ],
+  );
+  const row = result.rows[0];
+  if (!row) {
+    throw new StateConflictError('The physical asset changed before this update could be applied.');
+  }
+  return row;
+}
+
+export async function readPhysicalAssetsForArchive(
+  client: PoolClient,
+  tenantId: string,
+  productId: string,
+): Promise<ArchivePhysicalAssetRow[]> {
+  const result = await client.query<ArchivePhysicalAssetRow>(
+    `SELECT
+       pa.id,
+       pa.branch_id,
+       pa.variant_id,
+       pa.asset_code,
+       pa.lifecycle_status,
+       pa.readiness,
+       pa.custody_kind,
+       pa.condition_note,
+       pa.measurement_overrides,
+       pa.alteration_note,
+       pa.version,
+       pa.created_at,
+       pa.updated_at,
+       (
+         SELECT count(*)::int
+           FROM asset_allocation aa
+          WHERE aa.tenant_id = pa.tenant_id
+            AND aa.asset_id = pa.id
+            AND aa.is_blocking = true
+       ) AS blocking_allocation_count,
+       (
+         SELECT count(*)::int
+           FROM maintenance_work_order mwo
+          WHERE mwo.tenant_id = pa.tenant_id
+            AND mwo.asset_id = pa.id
+            AND mwo.status = 'open'
+       ) AS open_maintenance_count
+     FROM physical_asset pa
+     JOIN product_variant pv
+       ON pv.tenant_id = pa.tenant_id
+      AND pv.id = pa.variant_id
+    WHERE pa.tenant_id = $1
+      AND pv.product_id = $2
+    ORDER BY pa.id ASC
+    FOR UPDATE OF pa`,
+    [tenantId, productId],
+  );
+  return result.rows;
+}
+
+export async function archiveClothingGraph(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    productId: string;
+    retireAssetIds: string[];
+  },
+): Promise<{
+  product: EditableProductRow;
+  archivedVariantCount: number;
+  retiredAssetCount: number;
+}> {
+  const product = await client.query<EditableProductRow>(
+    `UPDATE product
+        SET status = 'archived',
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1
+        AND id = $2
+        AND status <> 'archived'
+      RETURNING id, category_id, name, description, status, updated_at`,
+    [input.tenantId, input.productId],
+  );
+  const productRow = product.rows[0];
+  if (!productRow) {
+    throw new StateConflictError('The clothing item could not be archived. Refresh and try again.');
+  }
+
+  const variants = await client.query(
+    `UPDATE product_variant
+        SET status = 'archived',
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1
+        AND product_id = $2
+        AND status <> 'archived'`,
+    [input.tenantId, input.productId],
+  );
+
+  let retiredAssetCount = 0;
+  if (input.retireAssetIds.length > 0) {
+    const retired = await client.query(
+      `UPDATE physical_asset
+          SET lifecycle_status = 'retired',
+              readiness = 'unready',
+              version = version + 1,
+              updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+        WHERE tenant_id = $1
+          AND id = ANY($2::uuid[])
+          AND lifecycle_status = 'active'`,
+      [input.tenantId, input.retireAssetIds],
+    );
+    retiredAssetCount = retired.rowCount ?? 0;
+  }
+
+  return {
+    product: productRow,
+    archivedVariantCount: variants.rowCount ?? 0,
+    retiredAssetCount,
+  };
+}
+
 export async function readProductForImageMutation(
   client: PoolClient,
   tenantId: string,
@@ -356,7 +707,7 @@ export async function appendCatalogueAuditEvent(
     tenantId: string;
     actorKey: string;
     action: string;
-    entityType: 'category' | 'measurement_guide' | 'product';
+    entityType: 'category' | 'measurement_guide' | 'product' | 'product_variant' | 'physical_asset';
     entityId: string;
     redactedSummary: Record<string, unknown>;
     requestId: string;

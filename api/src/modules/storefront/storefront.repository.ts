@@ -178,8 +178,20 @@ export async function computeAvailability(
          SELECT generate_series($2::timestamptz, $3::timestamptz - interval '1 day', interval '1 day') AS day
        ),
        variant_assets AS (
-         SELECT id FROM physical_asset
-         WHERE tenant_id = $1 AND variant_id = $4 AND lifecycle_status = 'active' AND readiness = 'ready'
+         SELECT pa.id
+           FROM physical_asset pa
+           JOIN product_variant pv
+             ON pv.tenant_id = pa.tenant_id
+            AND pv.id = pa.variant_id
+           JOIN product p
+             ON p.tenant_id = pv.tenant_id
+            AND p.id = pv.product_id
+          WHERE pa.tenant_id = $1
+            AND pa.variant_id = $4
+            AND pa.lifecycle_status = 'active'
+            AND pa.readiness = 'ready'
+            AND pv.status = 'active'
+            AND p.status = 'active'
        )
        SELECT
          to_char(d.day, 'YYYY-MM-DD"T00:00:00.000Z"') AS day,

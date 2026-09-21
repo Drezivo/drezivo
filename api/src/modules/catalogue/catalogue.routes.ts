@@ -5,6 +5,8 @@ import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
 import {
+  archiveClothingController,
+  createAssetMaintenanceBlockController,
   createClothingController,
   getCatalogueClothingDetailController,
   getDefaultMeasurementGuideController,
@@ -13,14 +15,22 @@ import {
   replaceClothingImagesController,
   saveMeasurementGuideController,
   updateCatalogueCategoryStatusController,
+  updateClothingProductController,
+  updateClothingVariantController,
+  updatePhysicalAssetStateController,
 } from './catalogue.controller.js';
 import {
   requireAssetManagePermission,
   requireCatalogueIdempotencyKey,
   validateCatalogueCategoryStatusUpdate,
   validateCatalogueClothingListQuery,
+  validateArchiveClothing,
   validateCatalogueProductId,
+  validateCreateAssetMaintenanceBlock,
   validateCreateClothing,
+  validateUpdateClothingProduct,
+  validateUpdateClothingVariant,
+  validateUpdatePhysicalAssetState,
   validateReplaceClothingImages,
   validateSaveMeasurementGuide,
 } from './catalogue.middleware.js';
@@ -62,6 +72,67 @@ catalogueRouter.get(
   requireAssetManagePermission,
   validateCatalogueProductId,
   getCatalogueClothingDetailController,
+);
+
+catalogueRouter.patch(
+  '/catalogue/clothing/:productId',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateCatalogueProductId,
+  validateUpdateClothingProduct,
+  requireCatalogueIdempotencyKey,
+  updateClothingProductController,
+);
+
+catalogueRouter.patch(
+  '/catalogue/clothing/:productId/variants/:variantId',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateUpdateClothingVariant,
+  requireCatalogueIdempotencyKey,
+  updateClothingVariantController,
+);
+
+catalogueRouter.post(
+  '/catalogue/clothing/:productId/archive',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateArchiveClothing,
+  requireCatalogueIdempotencyKey,
+  archiveClothingController,
+);
+
+catalogueRouter.patch(
+  '/catalogue/assets/:assetId/state',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateUpdatePhysicalAssetState,
+  requireCatalogueIdempotencyKey,
+  updatePhysicalAssetStateController,
+);
+
+catalogueRouter.post(
+  '/catalogue/assets/:assetId/maintenance-blocks',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateCreateAssetMaintenanceBlock,
+  requireCatalogueIdempotencyKey,
+  createAssetMaintenanceBlockController,
 );
 
 catalogueRouter.get(

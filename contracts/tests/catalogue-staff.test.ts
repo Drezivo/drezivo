@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   archiveClothingRequest,
+  archiveClothingResponse,
   clothingDetail,
   clothingListQuery,
   clothingProductLifecycle,
@@ -10,7 +11,11 @@ import {
   physicalAssetLifecycle,
   physicalAssetReadiness,
   updateClothingProductRequest,
+  updateClothingProductResponse,
   updateClothingVariantRequest,
+  updateClothingVariantResponse,
+  updatePhysicalAssetStateRequest,
+  updatePhysicalAssetStateResponse,
 } from '../src';
 
 const ids = {
@@ -32,6 +37,57 @@ describe('catalogue staff contract', () => {
 
     expect(clothingProductLifecycle.safeParse('deleted').success).toBe(false);
     expect(physicalAssetReadiness.safeParse('reserved').success).toBe(false);
+  });
+
+  it('defines strict physical-asset lifecycle/readiness mutation without custody override', () => {
+    expect(
+      updatePhysicalAssetStateRequest.safeParse({
+        expected_version: 3,
+        readiness: 'needs_repair',
+        condition_note: 'Loose zipper needs inspection.',
+      }).success,
+    ).toBe(true);
+    expect(
+      updatePhysicalAssetStateRequest.safeParse({
+        expected_version: 3,
+        lifecycle_status: 'retired',
+      }).success,
+    ).toBe(true);
+    expect(
+      updatePhysicalAssetStateRequest.safeParse({
+        expected_version: 3,
+        lifecycle_status: 'lost',
+        readiness: 'ready',
+      }).success,
+    ).toBe(false);
+    expect(
+      updatePhysicalAssetStateRequest.safeParse({
+        expected_version: 3,
+        readiness: 'ready',
+        custody_kind: 'at_branch',
+      }).success,
+    ).toBe(false);
+    expect(
+      updatePhysicalAssetStateResponse.safeParse({
+        asset: {
+          id: ids.asset,
+          branch_id: ids.branch,
+          variant_id: ids.variant,
+          asset_code: 'AST-001',
+          lifecycle_status: 'active',
+          readiness: 'needs_repair',
+          custody_kind: 'at_branch',
+          condition_note: null,
+          measurement_overrides: null,
+          alteration_note: null,
+          version: 4,
+          created_at: instant,
+          updated_at: instant,
+        },
+        blocking_allocation_count: 1,
+        disruptions_created: 1,
+      }).success,
+    ).toBe(true);
   });
 
   it('rejects authority and derived availability fields from list queries', () => {
@@ -148,6 +204,39 @@ describe('catalogue staff contract', () => {
       }).success,
     ).toBe(false);
 
+    expect(
+      updateClothingProductResponse.safeParse({
+        product_id: ids.product,
+        name: 'Updated Emerald Gown',
+        description: 'Updated description',
+        category: { id: ids.category, name: 'Gowns' },
+        status: 'active',
+        updated_at: instant,
+      }).success,
+    ).toBe(true);
+    expect(
+      updateClothingVariantResponse.safeParse({
+        variant_id: ids.variant,
+        product_id: ids.product,
+        size_label: 'M',
+        color_label: null,
+        measurement_mode: 'custom',
+        measurement_guide_id: null,
+        measurement_unit: 'cm',
+        measurements: { bust: 91.5, waist: 72 },
+        rental_price_minor: '150000',
+        security_deposit_minor: '50000',
+        currency: 'PHP',
+        pricing_mode: 'daily',
+        included_duration_minutes: 1440,
+        extra_day_price_minor: '150000',
+        prep_minutes: 60,
+        turnaround_minutes: 1440,
+        status: 'active',
+        updated_at: instant,
+      }).success,
+    ).toBe(true);
+
     expect(archiveClothingRequest.safeParse({ expected_updated_at: instant }).success).toBe(true);
     expect(
       archiveClothingRequest.safeParse({
@@ -155,6 +244,16 @@ describe('catalogue staff contract', () => {
         release_allocations: true,
       }).success,
     ).toBe(false);
+    expect(
+      archiveClothingResponse.safeParse({
+        product_id: ids.product,
+        status: 'archived',
+        archived_variant_count: 2,
+        retired_asset_count: 1,
+        pending_asset_resolution_count: 1,
+        updated_at: instant,
+      }).success,
+    ).toBe(true);
   });
 
   it('validates a staff detail projection without collapsing product, variant and asset identities', () => {

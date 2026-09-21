@@ -56,6 +56,12 @@ export type ProductVariantId = z.infer<typeof productVariantId>;
 export const physicalAssetId = idSchema('PhysicalAssetId');
 export type PhysicalAssetId = z.infer<typeof physicalAssetId>;
 
+export const maintenanceWorkOrderId = idSchema('MaintenanceWorkOrderId');
+export type MaintenanceWorkOrderId = z.infer<typeof maintenanceWorkOrderId>;
+
+export const assetAllocationId = idSchema('AssetAllocationId');
+export type AssetAllocationId = z.infer<typeof assetAllocationId>;
+
 export const measurementGuideId = idSchema('MeasurementGuideId');
 export type MeasurementGuideId = z.infer<typeof measurementGuideId>;
 

@@ -118,6 +118,46 @@ export const physicalAssetSummary = z.object({
 });
 export type PhysicalAssetSummary = z.infer<typeof physicalAssetSummary>;
 
+export const updatePhysicalAssetStateRequest = z
+  .object({
+    expected_version: z.number().int().positive(),
+    lifecycle_status: physicalAssetLifecycle.optional(),
+    readiness: physicalAssetReadiness.optional(),
+    condition_note: z.string().max(2_000).nullable().optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (
+      value.lifecycle_status === undefined &&
+      value.readiness === undefined &&
+      value.condition_note === undefined
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'At least one physical-asset state field is required.',
+      });
+    }
+    if (
+      (value.lifecycle_status === 'retired' || value.lifecycle_status === 'lost') &&
+      value.readiness !== undefined &&
+      value.readiness !== 'unready'
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['readiness'],
+        message: 'Retired or lost assets must use unready readiness when readiness is supplied.',
+      });
+    }
+  });
+export type UpdatePhysicalAssetStateRequest = z.infer<typeof updatePhysicalAssetStateRequest>;
+
+export const updatePhysicalAssetStateResponse = z.object({
+  asset: physicalAssetSummary,
+  blocking_allocation_count: z.number().int().nonnegative(),
+  disruptions_created: z.number().int().nonnegative(),
+});
+export type UpdatePhysicalAssetStateResponse = z.infer<typeof updatePhysicalAssetStateResponse>;
+
 export const clothingVariantDetail = z.object({
   id: productVariantId,
   sku: z.string().trim().min(1).max(120),
@@ -216,6 +256,16 @@ export const updateClothingProductRequest = z
   );
 export type UpdateClothingProductRequest = z.infer<typeof updateClothingProductRequest>;
 
+export const updateClothingProductResponse = z.object({
+  product_id: productId,
+  name: z.string().trim().min(1).max(200),
+  description: z.string().max(2_000),
+  category: clothingCategorySummary.nullable(),
+  status: clothingProductLifecycle,
+  updated_at: isoInstant,
+});
+export type UpdateClothingProductResponse = z.infer<typeof updateClothingProductResponse>;
+
 const variantMeasurementPatch = z
   .object({
     measurement_mode: measurementMode,
@@ -290,9 +340,41 @@ export const updateClothingVariantRequest = z
   );
 export type UpdateClothingVariantRequest = z.infer<typeof updateClothingVariantRequest>;
 
+export const updateClothingVariantResponse = z.object({
+  variant_id: productVariantId,
+  product_id: productId,
+  size_label: z.string().trim().min(1).max(40),
+  color_label: z.string().trim().min(1).max(80).nullable(),
+  measurement_mode: measurementMode,
+  measurement_guide_id: measurementGuideId.nullable(),
+  measurement_unit: measurementUnit,
+  measurements: measurementMap,
+  rental_price_minor: nonNegativeMoneyString,
+  security_deposit_minor: nonNegativeMoneyString,
+  currency: currencyCode,
+  pricing_mode: cataloguePricingMode,
+  included_duration_minutes: z.number().int().positive(),
+  extra_day_price_minor: nonNegativeMoneyString,
+  prep_minutes: z.number().int().nonnegative(),
+  turnaround_minutes: z.number().int().nonnegative(),
+  status: clothingProductLifecycle,
+  updated_at: isoInstant,
+});
+export type UpdateClothingVariantResponse = z.infer<typeof updateClothingVariantResponse>;
+
 export const archiveClothingRequest = z
   .object({
     expected_updated_at: isoInstant,
   })
   .strict();
 export type ArchiveClothingRequest = z.infer<typeof archiveClothingRequest>;
+
+export const archiveClothingResponse = z.object({
+  product_id: productId,
+  status: z.literal('archived'),
+  archived_variant_count: z.number().int().nonnegative(),
+  retired_asset_count: z.number().int().nonnegative(),
+  pending_asset_resolution_count: z.number().int().nonnegative(),
+  updated_at: isoInstant,
+});
+export type ArchiveClothingResponse = z.infer<typeof archiveClothingResponse>;

@@ -1,27 +1,50 @@
 import {
+  archiveClothingRequest,
+  archiveClothingResponse,
   catalogueCategory,
   catalogueCategoryList,
   clothingDetail,
   clothingListResponse,
+  createAssetMaintenanceBlockRequest,
+  createAssetMaintenanceBlockResponse,
   createClothingRequest,
   createClothingResponse,
   measurementGuide,
   measurementGuideDefaultResponse,
+  physicalAssetSummary,
   replaceClothingImagesRequest,
   replaceClothingImagesResponse,
+  updateClothingProductRequest,
+  updateClothingProductResponse,
+  updateClothingVariantRequest,
+  updateClothingVariantResponse,
+  updatePhysicalAssetStateRequest,
+  updatePhysicalAssetStateResponse,
+  type ArchiveClothingRequest,
+  type ArchiveClothingResponse,
   type CatalogueCategory,
   type CatalogueCategoryList,
   type ClothingDetail,
   type ClothingListQuery,
   type ClothingListResponse,
+  type CreateAssetMaintenanceBlockRequest,
+  type CreateAssetMaintenanceBlockResponse,
   type CreateClothingRequest,
   type CreateClothingResponse,
   type MeasurementGuide,
   type MeasurementGuideDefaultResponse,
   type PermissionCode,
+  type PhysicalAssetSummary,
   type ReplaceClothingImagesRequest,
   type ReplaceClothingImagesResponse,
   type SaveMeasurementGuideRequest,
+  type ClothingPricingInput,
+  type UpdateClothingProductRequest,
+  type UpdateClothingProductResponse,
+  type UpdateClothingVariantRequest,
+  type UpdateClothingVariantResponse,
+  type UpdatePhysicalAssetStateRequest,
+  type UpdatePhysicalAssetStateResponse,
   type TenantStatus,
   type UpdateCatalogueCategoryStatusRequest,
 } from '@drezivo/contracts';
@@ -40,7 +63,9 @@ import {
   InvalidMeasurementGuideError,
   NotFoundError,
   StateConflictError,
+  StaleVersionError,
   TenantCancelledError,
+  UnresolvedCustodyError,
   TenantRestrictedError,
   ValidationError,
   isAppError,
@@ -52,11 +77,17 @@ import {
   finalizeTenantIdempotency,
 } from '../../shared/tenant-idempotency.js';
 import {
+  createDisruptionsForThreatenedReservations,
+  createMaintenanceBlock,
+  readAssetOperationalConstraints,
+} from '../availability/availability.repository.js';
+import {
   listClothingReadModel,
   readClothingDetailModel,
 } from './catalogue.read.repository.js';
 import {
   appendCatalogueAuditEvent,
+  archiveClothingGraph,
   createClothingGraph,
   listCategories,
   readCategoryForCreate,
@@ -64,12 +95,20 @@ import {
   readDefaultMeasurementGuide,
   readMeasurementGuideFileForView,
   readMeasurementGuidesForCreate,
+  readPhysicalAssetForStateMutation,
+  readPhysicalAssetsForArchive,
+  readProductForEdit,
   readProductForImageMutation,
+  readVariantForEdit,
   replaceDefaultMeasurementGuide,
   replaceProductImages,
   updateCategoryStatus,
+  updatePhysicalAssetState as persistPhysicalAssetState,
+  updateProductForEdit,
+  updateVariantForEdit,
   validateMeasurementGuideFile,
   type CatalogueFileRow,
+  type EditablePhysicalAssetRow,
   type MeasurementGuideRow,
 } from './catalogue.repository.js';
 
@@ -77,6 +116,11 @@ const SAVE_GUIDE_OPERATION = 'catalogue.measurement_guide.save';
 const CREATE_CLOTHING_OPERATION = 'catalogue.clothing.create';
 const UPDATE_CATEGORY_STATUS_OPERATION = 'catalogue.category.status.update';
 const REPLACE_CLOTHING_IMAGES_OPERATION = 'catalogue.clothing.images.replace';
+const UPDATE_CLOTHING_PRODUCT_OPERATION = 'catalogue.clothing.product.update';
+const UPDATE_CLOTHING_VARIANT_OPERATION = 'catalogue.clothing.variant.update';
+const UPDATE_PHYSICAL_ASSET_STATE_OPERATION = 'catalogue.asset.state.update';
+const CREATE_ASSET_MAINTENANCE_BLOCK_OPERATION = 'catalogue.asset.maintenance_block.create';
+const ARCHIVE_CLOTHING_OPERATION = 'catalogue.clothing.archive';
 const MEASUREMENT_GUIDE_VIEW_EXPIRY_SECONDS = 5 * 60;
 const CATALOGUE_IMAGE_VIEW_EXPIRY_SECONDS = 5 * 60;
 const POSTGRES_INT_MAX = 2_147_483_647;
@@ -99,6 +143,11 @@ type GuideCommandBody = SuccessEnvelope<MeasurementGuide> | FailureEnvelope;
 type ClothingCommandBody = SuccessEnvelope<CreateClothingResponse> | FailureEnvelope;
 type CategoryCommandBody = SuccessEnvelope<CatalogueCategory> | FailureEnvelope;
 type ClothingImagesCommandBody = SuccessEnvelope<ReplaceClothingImagesResponse> | FailureEnvelope;
+type ClothingProductUpdateCommandBody = SuccessEnvelope<UpdateClothingProductResponse> | FailureEnvelope;
+type ClothingVariantUpdateCommandBody = SuccessEnvelope<UpdateClothingVariantResponse> | FailureEnvelope;
+type PhysicalAssetStateCommandBody = SuccessEnvelope<UpdatePhysicalAssetStateResponse> | FailureEnvelope;
+type AssetMaintenanceBlockCommandBody = SuccessEnvelope<CreateAssetMaintenanceBlockResponse> | FailureEnvelope;
+type ArchiveClothingCommandBody = SuccessEnvelope<ArchiveClothingResponse> | FailureEnvelope;
 
 export interface CatalogueCommandResponse<TBody> {
   status: number;
@@ -504,6 +553,588 @@ export async function createClothing(input: CommandContext & {
   });
 }
 
+export async function updateClothingProduct(input: CommandContext & {
+  productId: string;
+  request: UpdateClothingProductRequest;
+}): Promise<CatalogueCommandResponse<ClothingProductUpdateCommandBody>> {
+  assertCatalogueWriteContext(input);
+  const parsedRequest = updateClothingProductRequest.safeParse(input.request);
+  if (!parsedRequest.success) {
+    throw new ValidationError('Clothing product update request is invalid.');
+  }
+  const request = parsedRequest.data;
+  const payloadHash = canonicalRequestHash({ product_id: input.productId, ...request });
+
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const claim = await claimTenantIdempotency(client, {
+      tenantId: input.tenantId,
+      principalKey: input.membershipId,
+      operation: UPDATE_CLOTHING_PRODUCT_OPERATION,
+      intentKey: input.idempotencyKey,
+      payloadHash,
+    });
+    const replay = replayOrThrow<ClothingProductUpdateCommandBody>(claim);
+    if (replay) return replay;
+
+    try {
+      const current = await readProductForEdit(client, input.tenantId, input.productId);
+      if (!current) throw new NotFoundError('The clothing item could not be found.');
+      assertFreshCatalogueTimestamp(
+        current.updated_at,
+        request.expected_updated_at,
+        'This clothing item was changed by another edit. Refresh and try again.',
+      );
+
+      if (request.category_id !== undefined) {
+        const category = await readCategoryForCreate(client, input.tenantId, request.category_id);
+        if (!category) {
+          throw new NotFoundError('The selected clothing category could not be found.');
+        }
+        if (category.status !== 'active') {
+          throw new InvalidCategoryError('The selected clothing category is inactive.');
+        }
+      }
+
+      const updated = await updateProductForEdit(client, {
+        tenantId: input.tenantId,
+        productId: input.productId,
+        current,
+        request,
+      });
+      const category = updated.category_id
+        ? await readCategoryForCreate(client, input.tenantId, updated.category_id)
+        : null;
+      const data = updateClothingProductResponse.parse({
+        product_id: updated.id,
+        name: updated.name,
+        description: updated.description ?? '',
+        category: category ? { id: category.id, name: category.name } : null,
+        status: updated.status,
+        updated_at: updated.updated_at.toISOString(),
+      });
+      const body = successBody(input.requestId, data);
+
+      await appendCatalogueAuditEvent(client, {
+        tenantId: input.tenantId,
+        actorKey: input.principalId,
+        action: 'catalogue.clothing.product_updated',
+        entityType: 'product',
+        entityId: updated.id,
+        redactedSummary: {
+          changed_fields: Object.keys(request).filter((key) => key !== 'expected_updated_at'),
+        },
+        requestId: input.requestId,
+      });
+      await finalizeTenantIdempotency(client, {
+        tenantId: input.tenantId,
+        principalKey: input.membershipId,
+        operation: UPDATE_CLOTHING_PRODUCT_OPERATION,
+        intentKey: input.idempotencyKey,
+        payloadHash,
+        status: 'succeeded',
+        responseCode: 200,
+        safeResponse: body,
+      });
+      return { status: 200, body };
+    } catch (error) {
+      return finalizeKnownFailure(
+        client,
+        input,
+        UPDATE_CLOTHING_PRODUCT_OPERATION,
+        payloadHash,
+        error,
+      );
+    }
+  });
+}
+
+export async function updateClothingVariant(input: CommandContext & {
+  productId: string;
+  variantId: string;
+  request: UpdateClothingVariantRequest;
+}): Promise<CatalogueCommandResponse<ClothingVariantUpdateCommandBody>> {
+  assertCatalogueWriteContext(input);
+  const parsedRequest = updateClothingVariantRequest.safeParse(input.request);
+  if (!parsedRequest.success) {
+    throw new ValidationError('Clothing variant update request is invalid.');
+  }
+  const request = parsedRequest.data;
+  const payloadHash = canonicalRequestHash({
+    product_id: input.productId,
+    variant_id: input.variantId,
+    ...request,
+  });
+
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const claim = await claimTenantIdempotency(client, {
+      tenantId: input.tenantId,
+      principalKey: input.membershipId,
+      operation: UPDATE_CLOTHING_VARIANT_OPERATION,
+      intentKey: input.idempotencyKey,
+      payloadHash,
+    });
+    const replay = replayOrThrow<ClothingVariantUpdateCommandBody>(claim);
+    if (replay) return replay;
+
+    try {
+      const current = await readVariantForEdit(
+        client,
+        input.tenantId,
+        input.productId,
+        input.variantId,
+      );
+      if (!current) throw new NotFoundError('The clothing variant could not be found.');
+      assertFreshCatalogueTimestamp(
+        current.updated_at,
+        request.expected_updated_at,
+        'This clothing variant was changed by another edit. Refresh and try again.',
+      );
+
+      if (
+        request.measurement?.measurement_mode === 'default_guide' &&
+        request.measurement.measurement_guide_id
+      ) {
+        const guides = await readMeasurementGuidesForCreate(client, input.tenantId, [
+          request.measurement.measurement_guide_id,
+        ]);
+        const guide = guides[0];
+        if (!guide) {
+          throw new NotFoundError('The selected measurement guide could not be found.');
+        }
+        if (guide.status !== 'active') {
+          throw new InvalidMeasurementGuideError('The selected measurement guide is not active.');
+        }
+      }
+
+      const pricing = request.pricing ? normalizePricingInput(request.pricing) : null;
+      const updated = await updateVariantForEdit(client, {
+        tenantId: input.tenantId,
+        variantId: input.variantId,
+        current,
+        request,
+        pricing,
+      });
+      const data = updateClothingVariantResponse.parse({
+        variant_id: updated.id,
+        product_id: updated.product_id,
+        size_label: updated.size_label,
+        color_label: updated.color_label,
+        measurement_mode: updated.measurement_mode,
+        measurement_guide_id: updated.measurement_guide_id,
+        measurement_unit: updated.measurement_unit,
+        measurements: updated.measurements,
+        rental_price_minor: updated.rental_price_minor.toString(),
+        security_deposit_minor: updated.security_deposit_minor.toString(),
+        currency: updated.currency,
+        pricing_mode: updated.pricing_mode,
+        included_duration_minutes: updated.included_duration_minutes,
+        extra_day_price_minor: updated.extra_day_price_minor.toString(),
+        prep_minutes: updated.prep_minutes,
+        turnaround_minutes: updated.turnaround_minutes,
+        status: updated.status,
+        updated_at: updated.updated_at.toISOString(),
+      });
+      const body = successBody(input.requestId, data);
+
+      await appendCatalogueAuditEvent(client, {
+        tenantId: input.tenantId,
+        actorKey: input.principalId,
+        action: 'catalogue.clothing.variant_updated',
+        entityType: 'product_variant',
+        entityId: updated.id,
+        redactedSummary: {
+          product_id: updated.product_id,
+          changed_fields: Object.keys(request).filter((key) => key !== 'expected_updated_at'),
+          measurement_mode: request.measurement?.measurement_mode ?? null,
+          pricing_mode: request.pricing?.mode ?? null,
+        },
+        requestId: input.requestId,
+      });
+      await finalizeTenantIdempotency(client, {
+        tenantId: input.tenantId,
+        principalKey: input.membershipId,
+        operation: UPDATE_CLOTHING_VARIANT_OPERATION,
+        intentKey: input.idempotencyKey,
+        payloadHash,
+        status: 'succeeded',
+        responseCode: 200,
+        safeResponse: body,
+      });
+      return { status: 200, body };
+    } catch (error) {
+      return finalizeKnownFailure(
+        client,
+        input,
+        UPDATE_CLOTHING_VARIANT_OPERATION,
+        payloadHash,
+        error,
+      );
+    }
+  });
+}
+
+export async function updatePhysicalAssetState(input: CommandContext & {
+  assetId: string;
+  request: UpdatePhysicalAssetStateRequest;
+}): Promise<CatalogueCommandResponse<PhysicalAssetStateCommandBody>> {
+  assertCatalogueWriteContext(input);
+  const parsedRequest = updatePhysicalAssetStateRequest.safeParse(input.request);
+  if (!parsedRequest.success) {
+    throw new ValidationError('Physical asset state request is invalid.');
+  }
+  const request = parsedRequest.data;
+  const payloadHash = canonicalRequestHash({ asset_id: input.assetId, ...request });
+
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const claim = await claimTenantIdempotency(client, {
+      tenantId: input.tenantId,
+      principalKey: input.membershipId,
+      operation: UPDATE_PHYSICAL_ASSET_STATE_OPERATION,
+      intentKey: input.idempotencyKey,
+      payloadHash,
+    });
+    const replay = replayOrThrow<PhysicalAssetStateCommandBody>(claim);
+    if (replay) return replay;
+
+    try {
+      const current = await readPhysicalAssetForStateMutation(
+        client,
+        input.tenantId,
+        input.branchId,
+        input.assetId,
+      );
+      if (!current) throw new NotFoundError('The physical asset could not be found.');
+      if (current.version !== request.expected_version) {
+        throw new StaleVersionError(
+          'This physical asset changed before your update. Refresh and try again.',
+        );
+      }
+
+      const constraints = await readAssetOperationalConstraints(client, {
+        tenantId: input.tenantId,
+        branchId: input.branchId,
+        assetId: input.assetId,
+      });
+      const requestedLifecycle = request.lifecycle_status ?? current.lifecycle_status;
+
+      if (
+        current.lifecycle_status !== 'active' &&
+        requestedLifecycle !== current.lifecycle_status
+      ) {
+        throw new StateConflictError(
+          'Retired or lost assets cannot be reactivated through a generic clothing edit.',
+        );
+      }
+      if (
+        current.lifecycle_status !== 'active' &&
+        request.readiness !== undefined &&
+        request.readiness !== current.readiness
+      ) {
+        throw new StateConflictError(
+          'Readiness cannot be changed for a retired or lost asset through a generic clothing edit.',
+        );
+      }
+      if (request.readiness === 'ready' && current.custody_kind !== 'at_branch') {
+        throw new UnresolvedCustodyError(
+          'An asset outside the branch cannot be marked ready through Clothing.',
+        );
+      }
+      if (requestedLifecycle === 'retired' && current.lifecycle_status !== 'retired') {
+        if (current.custody_kind !== 'at_branch') {
+          throw new UnresolvedCustodyError(
+            'Return or transfer custody must be resolved before this asset can be retired.',
+          );
+        }
+        if (constraints.blockingAllocationCount > 0) {
+          throw new StateConflictError(
+            'This asset has blocking reservation or maintenance work and cannot be retired yet.',
+          );
+        }
+        if (constraints.openMaintenanceCount > 0) {
+          throw new StateConflictError(
+            'Close required maintenance work before retiring this asset.',
+          );
+        }
+      }
+
+      const forcedReadiness =
+        requestedLifecycle === 'retired' || requestedLifecycle === 'lost' ? 'unready' : undefined;
+      const updated = await persistPhysicalAssetState(client, {
+        tenantId: input.tenantId,
+        assetId: input.assetId,
+        expectedVersion: request.expected_version,
+        current,
+        request,
+        ...(forcedReadiness ? { forcedReadiness } : {}),
+      });
+
+      const shouldCreateDisruption =
+        updated.lifecycle_status === 'lost' || updated.readiness !== 'ready';
+      const disruptionsCreated = shouldCreateDisruption
+        ? await createDisruptionsForThreatenedReservations(client, {
+            tenantId: input.tenantId,
+            branchId: input.branchId,
+            assetId: input.assetId,
+            reason:
+              updated.lifecycle_status === 'lost'
+                ? 'Physical asset was marked lost while a future reservation remains allocated.'
+                : `Physical asset readiness changed to ${updated.readiness} while a future reservation remains allocated.`,
+          })
+        : 0;
+      const afterConstraints = await readAssetOperationalConstraints(client, {
+        tenantId: input.tenantId,
+        branchId: input.branchId,
+        assetId: input.assetId,
+      });
+      const data = updatePhysicalAssetStateResponse.parse({
+        asset: toPhysicalAssetSummary(updated),
+        blocking_allocation_count: afterConstraints.blockingAllocationCount,
+        disruptions_created: disruptionsCreated,
+      });
+      const body = successBody(input.requestId, data);
+
+      await appendCatalogueAuditEvent(client, {
+        tenantId: input.tenantId,
+        actorKey: input.principalId,
+        action: 'catalogue.asset.state_updated',
+        entityType: 'physical_asset',
+        entityId: updated.id,
+        redactedSummary: {
+          lifecycle_status: updated.lifecycle_status,
+          readiness: updated.readiness,
+          blocking_allocation_count: afterConstraints.blockingAllocationCount,
+          disruptions_created: disruptionsCreated,
+          version: updated.version,
+        },
+        requestId: input.requestId,
+      });
+      await finalizeTenantIdempotency(client, {
+        tenantId: input.tenantId,
+        principalKey: input.membershipId,
+        operation: UPDATE_PHYSICAL_ASSET_STATE_OPERATION,
+        intentKey: input.idempotencyKey,
+        payloadHash,
+        status: 'succeeded',
+        responseCode: 200,
+        safeResponse: body,
+      });
+      return { status: 200, body };
+    } catch (error) {
+      return finalizeKnownFailure(
+        client,
+        input,
+        UPDATE_PHYSICAL_ASSET_STATE_OPERATION,
+        payloadHash,
+        error,
+      );
+    }
+  });
+}
+
+export async function createAssetMaintenanceBlock(input: CommandContext & {
+  assetId: string;
+  request: CreateAssetMaintenanceBlockRequest;
+}): Promise<CatalogueCommandResponse<AssetMaintenanceBlockCommandBody>> {
+  assertCatalogueWriteContext(input);
+  const parsedRequest = createAssetMaintenanceBlockRequest.safeParse(input.request);
+  if (!parsedRequest.success) {
+    throw new ValidationError('Asset maintenance block request is invalid.');
+  }
+  const request = parsedRequest.data;
+  if (new Date(request.period.end).getTime() <= Date.now()) {
+    throw new ValidationError('Maintenance/manual blocks must end in the future.');
+  }
+  const payloadHash = canonicalRequestHash({ asset_id: input.assetId, ...request });
+
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const claim = await claimTenantIdempotency(client, {
+      tenantId: input.tenantId,
+      principalKey: input.membershipId,
+      operation: CREATE_ASSET_MAINTENANCE_BLOCK_OPERATION,
+      intentKey: input.idempotencyKey,
+      payloadHash,
+    });
+    const replay = replayOrThrow<AssetMaintenanceBlockCommandBody>(claim);
+    if (replay) return replay;
+
+    try {
+      const asset = await readPhysicalAssetForStateMutation(
+        client,
+        input.tenantId,
+        input.branchId,
+        input.assetId,
+      );
+      if (!asset) throw new NotFoundError('The physical asset could not be found.');
+      if (asset.lifecycle_status !== 'active') {
+        throw new StateConflictError(
+          'Maintenance or manual downtime can only be scheduled for an active physical asset.',
+        );
+      }
+
+      const created = await createMaintenanceBlock(client, {
+        tenantId: input.tenantId,
+        branchId: input.branchId,
+        assetId: input.assetId,
+        request,
+      });
+      const data = createAssetMaintenanceBlockResponse.parse({
+        work_order_id: created.workOrderId,
+        allocation_id: created.allocationId,
+        asset_id: created.assetId,
+        branch_id: created.branchId,
+        kind: created.kind,
+        period: {
+          start: created.startsAt.toISOString(),
+          end: created.endsAt.toISOString(),
+        },
+        status: 'open',
+        is_blocking: true,
+        created_at: created.createdAt.toISOString(),
+      });
+      const body = successBody(input.requestId, data);
+
+      await appendCatalogueAuditEvent(client, {
+        tenantId: input.tenantId,
+        actorKey: input.principalId,
+        action: 'catalogue.asset.maintenance_block_created',
+        entityType: 'physical_asset',
+        entityId: asset.id,
+        redactedSummary: {
+          work_order_id: data.work_order_id,
+          allocation_id: data.allocation_id,
+          kind: data.kind,
+          starts_at: data.period.start,
+          ends_at: data.period.end,
+        },
+        requestId: input.requestId,
+      });
+      await finalizeTenantIdempotency(client, {
+        tenantId: input.tenantId,
+        principalKey: input.membershipId,
+        operation: CREATE_ASSET_MAINTENANCE_BLOCK_OPERATION,
+        intentKey: input.idempotencyKey,
+        payloadHash,
+        status: 'succeeded',
+        responseCode: 201,
+        safeResponse: body,
+      });
+      return { status: 201, body };
+    } catch (error) {
+      return finalizeKnownFailure(
+        client,
+        input,
+        CREATE_ASSET_MAINTENANCE_BLOCK_OPERATION,
+        payloadHash,
+        error,
+      );
+    }
+  });
+}
+
+export async function archiveClothing(input: CommandContext & {
+  productId: string;
+  request: ArchiveClothingRequest;
+}): Promise<CatalogueCommandResponse<ArchiveClothingCommandBody>> {
+  assertCatalogueWriteContext(input);
+  const parsedRequest = archiveClothingRequest.safeParse(input.request);
+  if (!parsedRequest.success) {
+    throw new ValidationError('Clothing archive request is invalid.');
+  }
+  const request = parsedRequest.data;
+  const payloadHash = canonicalRequestHash({ product_id: input.productId, ...request });
+
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const claim = await claimTenantIdempotency(client, {
+      tenantId: input.tenantId,
+      principalKey: input.membershipId,
+      operation: ARCHIVE_CLOTHING_OPERATION,
+      intentKey: input.idempotencyKey,
+      payloadHash,
+    });
+    const replay = replayOrThrow<ArchiveClothingCommandBody>(claim);
+    if (replay) return replay;
+
+    try {
+      const current = await readProductForEdit(client, input.tenantId, input.productId);
+      if (!current) throw new NotFoundError('The clothing item could not be found.');
+      assertFreshCatalogueTimestamp(
+        current.updated_at,
+        request.expected_updated_at,
+        'This clothing item changed before it could be archived. Refresh and try again.',
+      );
+      if (current.status === 'archived') {
+        throw new StateConflictError('This clothing item is already archived.');
+      }
+
+      const assets = await readPhysicalAssetsForArchive(client, input.tenantId, input.productId);
+      const retireAssetIds = assets
+        .filter(
+          (asset) =>
+            asset.lifecycle_status === 'active' &&
+            asset.readiness === 'ready' &&
+            asset.custody_kind === 'at_branch' &&
+            asset.blocking_allocation_count === 0 &&
+            asset.open_maintenance_count === 0,
+        )
+        .map((asset) => asset.id);
+      const retireAssetIdSet = new Set(retireAssetIds);
+      const pendingAssetResolutionCount = assets.filter(
+        (asset) =>
+          asset.lifecycle_status === 'active' &&
+          !retireAssetIdSet.has(asset.id),
+      ).length;
+
+      const archived = await archiveClothingGraph(client, {
+        tenantId: input.tenantId,
+        productId: input.productId,
+        retireAssetIds,
+      });
+      const data = archiveClothingResponse.parse({
+        product_id: archived.product.id,
+        status: archived.product.status,
+        archived_variant_count: archived.archivedVariantCount,
+        retired_asset_count: archived.retiredAssetCount,
+        pending_asset_resolution_count: pendingAssetResolutionCount,
+        updated_at: archived.product.updated_at.toISOString(),
+      });
+      const body = successBody(input.requestId, data);
+
+      await appendCatalogueAuditEvent(client, {
+        tenantId: input.tenantId,
+        actorKey: input.principalId,
+        action: 'catalogue.clothing.archived',
+        entityType: 'product',
+        entityId: archived.product.id,
+        redactedSummary: {
+          archived_variant_count: archived.archivedVariantCount,
+          retired_asset_count: archived.retiredAssetCount,
+          pending_asset_resolution_count: pendingAssetResolutionCount,
+        },
+        requestId: input.requestId,
+      });
+      await finalizeTenantIdempotency(client, {
+        tenantId: input.tenantId,
+        principalKey: input.membershipId,
+        operation: ARCHIVE_CLOTHING_OPERATION,
+        intentKey: input.idempotencyKey,
+        payloadHash,
+        status: 'succeeded',
+        responseCode: 200,
+        safeResponse: body,
+      });
+      return { status: 200, body };
+    } catch (error) {
+      return finalizeKnownFailure(
+        client,
+        input,
+        ARCHIVE_CLOTHING_OPERATION,
+        payloadHash,
+        error,
+      );
+    }
+  });
+}
+
 export async function replaceClothingImages(input: CommandContext & {
   productId: string;
   request: ReplaceClothingImagesRequest;
@@ -629,29 +1260,62 @@ function assertCatalogueWriteContext(input: CatalogueContext): void {
   }
 }
 
+function toPhysicalAssetSummary(row: EditablePhysicalAssetRow): PhysicalAssetSummary {
+  return physicalAssetSummary.parse({
+    id: row.id,
+    branch_id: row.branch_id,
+    variant_id: row.variant_id,
+    asset_code: row.asset_code,
+    lifecycle_status: row.lifecycle_status,
+    readiness: row.readiness,
+    custody_kind: row.custody_kind,
+    condition_note: row.condition_note,
+    measurement_overrides: row.measurement_overrides,
+    alteration_note: row.alteration_note,
+    version: row.version,
+    created_at: row.created_at.toISOString(),
+    updated_at: row.updated_at.toISOString(),
+  });
+}
+
 function normalizePricing(request: CreateClothingRequest): {
   rentalPriceMinor: number;
   securityDepositMinor: number;
   extraDayPriceMinor: number;
   includedDurationMinutes: number;
 } {
-  const rentalPriceMinor = boundedDbMoney(request.pricing.rental_price_minor, 'Rental price');
+  return normalizePricingInput(request.pricing);
+}
+
+function normalizePricingInput(pricing: ClothingPricingInput): {
+  rentalPriceMinor: number;
+  securityDepositMinor: number;
+  extraDayPriceMinor: number;
+  includedDurationMinutes: number;
+} {
+  const rentalPriceMinor = boundedDbMoney(pricing.rental_price_minor, 'Rental price');
   const securityDepositMinor = boundedDbMoney(
-    request.pricing.security_deposit_minor,
+    pricing.security_deposit_minor,
     'Security deposit',
   );
   const extraDayPriceMinor =
-    request.pricing.mode === 'daily'
+    pricing.mode === 'daily'
       ? rentalPriceMinor
-      : boundedDbMoney(request.pricing.extra_day_price_minor, 'Extra-day price');
+      : boundedDbMoney(pricing.extra_day_price_minor, 'Extra-day price');
   const includedDurationMinutes =
-    request.pricing.mode === 'daily' ? 24 * 60 : request.pricing.included_days * 24 * 60;
+    pricing.mode === 'daily' ? 24 * 60 : pricing.included_days * 24 * 60;
   return {
     rentalPriceMinor,
     securityDepositMinor,
     extraDayPriceMinor,
     includedDurationMinutes,
   };
+}
+
+function assertFreshCatalogueTimestamp(actual: Date, expected: string, message: string): void {
+  if (actual.getTime() !== new Date(expected).getTime()) {
+    throw new StaleVersionError(message);
+  }
 }
 
 function boundedDbMoney(value: string, label: string): number {

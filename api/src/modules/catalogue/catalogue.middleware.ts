@@ -1,14 +1,21 @@
 import type { RequestHandler } from 'express';
 
 import {
+  archiveClothingRequest,
   categoryId,
   clothingListQuery,
+  createAssetMaintenanceBlockRequest,
   createClothingRequest,
   idempotencyKey,
+  physicalAssetId,
   productId,
+  productVariantId,
   replaceClothingImagesRequest,
   saveMeasurementGuideRequest,
   updateCatalogueCategoryStatusRequest,
+  updateClothingProductRequest,
+  updateClothingVariantRequest,
+  updatePhysicalAssetStateRequest,
   type ClothingListQuery,
 } from '@drezivo/contracts';
 
@@ -20,6 +27,8 @@ declare module 'express-serve-static-core' {
     catalogueCategoryId?: string;
     catalogueClothingListQuery?: ClothingListQuery;
     catalogueProductId?: string;
+    catalogueVariantId?: string;
+    catalogueAssetId?: string;
   }
 }
 
@@ -58,6 +67,66 @@ export const validateCatalogueProductId: RequestHandler = (req, _res, next): voi
     return;
   }
   req.catalogueProductId = parsed.data;
+  next();
+};
+
+export const validateUpdateClothingProduct: RequestHandler = (req, _res, next): void => {
+  const parsed = updateClothingProductRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Clothing product update request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  next();
+};
+
+export const validateUpdateClothingVariant: RequestHandler = (req, _res, next): void => {
+  const parsedProductId = productId.safeParse(req.params.productId);
+  const parsedVariantId = productVariantId.safeParse(req.params.variantId);
+  const parsedBody = updateClothingVariantRequest.safeParse(req.body);
+  if (!parsedProductId.success || !parsedVariantId.success || !parsedBody.success) {
+    next(new ValidationError('Clothing variant update request is invalid.'));
+    return;
+  }
+  req.catalogueProductId = parsedProductId.data;
+  req.catalogueVariantId = parsedVariantId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validateUpdatePhysicalAssetState: RequestHandler = (req, _res, next): void => {
+  const parsedAssetId = physicalAssetId.safeParse(req.params.assetId);
+  const parsedBody = updatePhysicalAssetStateRequest.safeParse(req.body);
+  if (!parsedAssetId.success || !parsedBody.success) {
+    next(new ValidationError('Physical asset state request is invalid.'));
+    return;
+  }
+  req.catalogueAssetId = parsedAssetId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validateCreateAssetMaintenanceBlock: RequestHandler = (req, _res, next): void => {
+  const parsedAssetId = physicalAssetId.safeParse(req.params.assetId);
+  const parsedBody = createAssetMaintenanceBlockRequest.safeParse(req.body);
+  if (!parsedAssetId.success || !parsedBody.success) {
+    next(new ValidationError('Asset maintenance block request is invalid.'));
+    return;
+  }
+  req.catalogueAssetId = parsedAssetId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validateArchiveClothing: RequestHandler = (req, _res, next): void => {
+  const parsedProductId = productId.safeParse(req.params.productId);
+  const parsedBody = archiveClothingRequest.safeParse(req.body);
+  if (!parsedProductId.success || !parsedBody.success) {
+    next(new ValidationError('Clothing archive request is invalid.'));
+    return;
+  }
+  req.catalogueProductId = parsedProductId.data;
+  req.body = parsedBody.data;
   next();
 };
 
