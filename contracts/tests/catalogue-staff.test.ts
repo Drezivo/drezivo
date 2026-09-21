@@ -13,6 +13,8 @@ import {
   updateClothingProductResponse,
   updateClothingVariantRequest,
   updateClothingVariantResponse,
+  updatePhysicalAssetStateRequest,
+  updatePhysicalAssetStateResponse,
 } from '../src';
 
 const ids = {
@@ -34,6 +36,57 @@ describe('catalogue staff contract', () => {
 
     expect(clothingProductLifecycle.safeParse('deleted').success).toBe(false);
     expect(physicalAssetReadiness.safeParse('reserved').success).toBe(false);
+  });
+
+  it('defines strict physical-asset lifecycle/readiness mutation without custody override', () => {
+    expect(
+      updatePhysicalAssetStateRequest.safeParse({
+        expected_version: 3,
+        readiness: 'needs_repair',
+        condition_note: 'Loose zipper needs inspection.',
+      }).success,
+    ).toBe(true);
+    expect(
+      updatePhysicalAssetStateRequest.safeParse({
+        expected_version: 3,
+        lifecycle_status: 'retired',
+      }).success,
+    ).toBe(true);
+    expect(
+      updatePhysicalAssetStateRequest.safeParse({
+        expected_version: 3,
+        lifecycle_status: 'lost',
+        readiness: 'ready',
+      }).success,
+    ).toBe(false);
+    expect(
+      updatePhysicalAssetStateRequest.safeParse({
+        expected_version: 3,
+        readiness: 'ready',
+        custody_kind: 'at_branch',
+      }).success,
+    ).toBe(false);
+    expect(
+      updatePhysicalAssetStateResponse.safeParse({
+        asset: {
+          id: ids.asset,
+          branch_id: ids.branch,
+          variant_id: ids.variant,
+          asset_code: 'AST-001',
+          lifecycle_status: 'active',
+          readiness: 'needs_repair',
+          custody_kind: 'at_branch',
+          condition_note: null,
+          measurement_overrides: null,
+          alteration_note: null,
+          version: 4,
+          created_at: instant,
+          updated_at: instant,
+        },
+        blocking_allocation_count: 1,
+        disruptions_created: 1,
+      }).success,
+    ).toBe(true);
   });
 
   it('rejects authority and derived availability fields from list queries', () => {

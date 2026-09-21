@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 
 import type {
+  CreateAssetMaintenanceBlockRequest,
   CreateClothingRequest,
   PermissionCode,
   ReplaceClothingImagesRequest,
@@ -9,11 +10,13 @@ import type {
   UpdateCatalogueCategoryStatusRequest,
   UpdateClothingProductRequest,
   UpdateClothingVariantRequest,
+  UpdatePhysicalAssetStateRequest,
 } from '@drezivo/contracts';
 
 import { ValidationError } from '../../shared/errors.js';
 import { sendSuccess } from '../../shared/response.js';
 import {
+  createAssetMaintenanceBlock,
   createClothing,
   getCatalogueCategories,
   getCatalogueClothingDetail,
@@ -24,6 +27,7 @@ import {
   updateCatalogueCategoryStatus,
   updateClothingProduct,
   updateClothingVariant,
+  updatePhysicalAssetState,
 } from './catalogue.service.js';
 
 export async function listCatalogueCategoriesController(req: Request, res: Response): Promise<void> {
@@ -71,6 +75,38 @@ export async function updateClothingVariantController(req: Request, res: Respons
     productId,
     variantId,
     request: req.body as UpdateClothingVariantRequest,
+  });
+  res.status(result.status).json(result.body);
+}
+
+export async function updatePhysicalAssetStateController(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const assetId = req.catalogueAssetId;
+  if (!assetId) throw new ValidationError('A valid physical asset id is required.');
+  const result = await updatePhysicalAssetState({
+    ...requireContext(req),
+    requestId: req.requestId,
+    idempotencyKey: requireIdempotencyKey(req),
+    assetId,
+    request: req.body as UpdatePhysicalAssetStateRequest,
+  });
+  res.status(result.status).json(result.body);
+}
+
+export async function createAssetMaintenanceBlockController(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const assetId = req.catalogueAssetId;
+  if (!assetId) throw new ValidationError('A valid physical asset id is required.');
+  const result = await createAssetMaintenanceBlock({
+    ...requireContext(req),
+    requestId: req.requestId,
+    idempotencyKey: requireIdempotencyKey(req),
+    assetId,
+    request: req.body as CreateAssetMaintenanceBlockRequest,
   });
   res.status(result.status).json(result.body);
 }

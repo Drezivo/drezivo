@@ -3,8 +3,10 @@ import type { RequestHandler } from 'express';
 import {
   categoryId,
   clothingListQuery,
+  createAssetMaintenanceBlockRequest,
   createClothingRequest,
   idempotencyKey,
+  physicalAssetId,
   productId,
   productVariantId,
   replaceClothingImagesRequest,
@@ -12,6 +14,7 @@ import {
   updateCatalogueCategoryStatusRequest,
   updateClothingProductRequest,
   updateClothingVariantRequest,
+  updatePhysicalAssetStateRequest,
   type ClothingListQuery,
 } from '@drezivo/contracts';
 
@@ -24,6 +27,7 @@ declare module 'express-serve-static-core' {
     catalogueClothingListQuery?: ClothingListQuery;
     catalogueProductId?: string;
     catalogueVariantId?: string;
+    catalogueAssetId?: string;
   }
 }
 
@@ -85,6 +89,30 @@ export const validateUpdateClothingVariant: RequestHandler = (req, _res, next): 
   }
   req.catalogueProductId = parsedProductId.data;
   req.catalogueVariantId = parsedVariantId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validateUpdatePhysicalAssetState: RequestHandler = (req, _res, next): void => {
+  const parsedAssetId = physicalAssetId.safeParse(req.params.assetId);
+  const parsedBody = updatePhysicalAssetStateRequest.safeParse(req.body);
+  if (!parsedAssetId.success || !parsedBody.success) {
+    next(new ValidationError('Physical asset state request is invalid.'));
+    return;
+  }
+  req.catalogueAssetId = parsedAssetId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validateCreateAssetMaintenanceBlock: RequestHandler = (req, _res, next): void => {
+  const parsedAssetId = physicalAssetId.safeParse(req.params.assetId);
+  const parsedBody = createAssetMaintenanceBlockRequest.safeParse(req.body);
+  if (!parsedAssetId.success || !parsedBody.success) {
+    next(new ValidationError('Asset maintenance block request is invalid.'));
+    return;
+  }
+  req.catalogueAssetId = parsedAssetId.data;
   req.body = parsedBody.data;
   next();
 };

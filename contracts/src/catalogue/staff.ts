@@ -118,6 +118,46 @@ export const physicalAssetSummary = z.object({
 });
 export type PhysicalAssetSummary = z.infer<typeof physicalAssetSummary>;
 
+export const updatePhysicalAssetStateRequest = z
+  .object({
+    expected_version: z.number().int().positive(),
+    lifecycle_status: physicalAssetLifecycle.optional(),
+    readiness: physicalAssetReadiness.optional(),
+    condition_note: z.string().max(2_000).nullable().optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (
+      value.lifecycle_status === undefined &&
+      value.readiness === undefined &&
+      value.condition_note === undefined
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'At least one physical-asset state field is required.',
+      });
+    }
+    if (
+      (value.lifecycle_status === 'retired' || value.lifecycle_status === 'lost') &&
+      value.readiness !== undefined &&
+      value.readiness !== 'unready'
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['readiness'],
+        message: 'Retired or lost assets must use unready readiness when readiness is supplied.',
+      });
+    }
+  });
+export type UpdatePhysicalAssetStateRequest = z.infer<typeof updatePhysicalAssetStateRequest>;
+
+export const updatePhysicalAssetStateResponse = z.object({
+  asset: physicalAssetSummary,
+  blocking_allocation_count: z.number().int().nonnegative(),
+  disruptions_created: z.number().int().nonnegative(),
+});
+export type UpdatePhysicalAssetStateResponse = z.infer<typeof updatePhysicalAssetStateResponse>;
+
 export const clothingVariantDetail = z.object({
   id: productVariantId,
   sku: z.string().trim().min(1).max(120),

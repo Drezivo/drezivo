@@ -7,6 +7,7 @@ import type {
   MeasurementMap,
   UpdateClothingProductRequest,
   UpdateClothingVariantRequest,
+  UpdatePhysicalAssetStateRequest,
 } from '@drezivo/contracts';
 
 import { DuplicateClothingCodeError, StateConflictError } from '../../shared/errors.js';
@@ -86,6 +87,22 @@ export interface EditableVariantRow {
   prep_minutes: number;
   turnaround_minutes: number;
   status: 'draft' | 'active' | 'archived';
+  updated_at: Date;
+}
+
+export interface EditablePhysicalAssetRow {
+  id: string;
+  branch_id: string;
+  variant_id: string;
+  asset_code: string;
+  lifecycle_status: 'active' | 'retired' | 'lost';
+  readiness: 'ready' | 'needs_cleaning' | 'needs_repair' | 'unready';
+  custody_kind: 'at_branch' | 'with_customer' | 'in_transit';
+  condition_note: string | null;
+  measurement_overrides: MeasurementMap | null;
+  alteration_note: string | null;
+  version: number;
+  created_at: Date;
   updated_at: Date;
 }
 
@@ -378,6 +395,63 @@ export async function updateVariantForEdit(
   return row;
 }
 
+export async function readPhysicalAssetForStateMutation(
+  client: PoolClient,
+  tenantId: string,
+  branchId: string,
+  assetId: string,
+): Promise<EditablePhysicalAssetRow | null> {
+  const result = await client.query<EditablePhysicalAssetRow>(
+    `SELECT id, branch_id, variant_id, asset_code, lifecycle_status, readiness, custody_kind,
+            condition_note, measurement_overrides, alteration_note, version, created_at, updated_at
+       FROM physical_asset
+      WHERE tenant_id = $1 AND branch_id = $2 AND id = $3
+      LIMIT 1
+      FOR UPDATE`,
+    [tenantId, branchId, assetId],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function updatePhysicalAssetState(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    assetId: string;
+    expectedVersion: number;
+    current: EditablePhysicalAssetRow;
+    request: UpdatePhysicalAssetStateRequest;
+    forcedReadiness?: EditablePhysicalAssetRow['readiness'];
+  },
+): Promise<EditablePhysicalAssetRow> {
+  const result = await client.query<EditablePhysicalAssetRow>(
+    `UPDATE physical_asset
+        SET lifecycle_status = $4,
+            readiness = $5,
+            condition_note = $6,
+            version = version + 1,
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1 AND id = $2 AND version = $3
+      RETURNING id, branch_id, variant_id, asset_code, lifecycle_status, readiness, custody_kind,
+                condition_note, measurement_overrides, alteration_note, version, created_at, updated_at`,
+    [
+      input.tenantId,
+      input.assetId,
+      input.expectedVersion,
+      input.request.lifecycle_status ?? input.current.lifecycle_status,
+      input.forcedReadiness ?? input.request.readiness ?? input.current.readiness,
+      input.request.condition_note !== undefined
+        ? input.request.condition_note
+        : input.current.condition_note,
+    ],
+  );
+  const row = result.rows[0];
+  if (!row) {
+    throw new StateConflictError('The physical asset changed before this update could be applied.');
+  }
+  return row;
+}
+
 export async function readProductForImageMutation(
   client: PoolClient,
   tenantId: string,
@@ -521,7 +595,7 @@ export async function appendCatalogueAuditEvent(
     tenantId: string;
     actorKey: string;
     action: string;
-    entityType: 'category' | 'measurement_guide' | 'product' | 'product_variant';
+    entityType: 'category' | 'measurement_guide' | 'product' | 'product_variant' | 'physical_asset';
     entityId: string;
     redactedSummary: Record<string, unknown>;
     requestId: string;
