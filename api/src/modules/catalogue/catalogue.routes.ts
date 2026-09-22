@@ -7,13 +7,16 @@ import { requireTenantAction } from '../tenancy/tenancy.service.js';
 import {
   archiveClothingController,
   createAssetMaintenanceBlockController,
+  createCatalogueCategoryController,
   createClothingController,
   getCatalogueClothingDetailController,
   getDefaultMeasurementGuideController,
   listCatalogueCategoriesController,
   listCatalogueClothingController,
+  removeCatalogueCategoryController,
   replaceClothingImagesController,
   saveMeasurementGuideController,
+  updateCatalogueCategoryController,
   updateCatalogueCategoryStatusController,
   updateClothingProductController,
   updateClothingVariantController,
@@ -23,11 +26,14 @@ import {
   requireAssetArchivePermission,
   requireAssetManagePermission,
   requireCatalogueIdempotencyKey,
+  validateCatalogueCategoryId,
   validateCatalogueCategoryStatusUpdate,
+  validateCatalogueCategoryUpdate,
   validateCatalogueClothingListQuery,
   validateArchiveClothing,
   validateCatalogueProductId,
   validateCreateAssetMaintenanceBlock,
+  validateCreateCatalogueCategory,
   validateCreateClothing,
   validateUpdateClothingProduct,
   validateUpdateClothingVariant,
@@ -145,6 +151,42 @@ catalogueRouter.get(
   readPolicy,
   requireAssetManagePermission,
   listCatalogueCategoriesController,
+);
+
+catalogueRouter.post(
+  '/catalogue/categories',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateCreateCatalogueCategory,
+  requireCatalogueIdempotencyKey,
+  createCatalogueCategoryController,
+);
+
+catalogueRouter.patch(
+  '/catalogue/categories/:categoryId',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateCatalogueCategoryUpdate,
+  requireCatalogueIdempotencyKey,
+  updateCatalogueCategoryController,
+);
+
+catalogueRouter.delete(
+  '/catalogue/categories/:categoryId',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateCatalogueCategoryId,
+  requireCatalogueIdempotencyKey,
+  removeCatalogueCategoryController,
 );
 
 catalogueRouter.patch(

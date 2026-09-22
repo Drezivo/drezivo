@@ -411,6 +411,114 @@ export const updateClothingVariantResponse = z.object({
 });
 export type UpdateClothingVariantResponse = z.infer<typeof updateClothingVariantResponse>;
 
+export const publishClothingRequest = z
+  .object({
+    expected_updated_at: isoInstant,
+  })
+  .strict();
+export type PublishClothingRequest = z.infer<typeof publishClothingRequest>;
+
+export const publishClothingResponse = z.object({
+  product_id: productId,
+  status: z.literal('active'),
+  activated_variant_count: z.number().int().positive(),
+  updated_at: isoInstant,
+});
+export type PublishClothingResponse = z.infer<typeof publishClothingResponse>;
+
+export const restoreClothingRequest = z
+  .object({
+    expected_updated_at: isoInstant,
+  })
+  .strict();
+export type RestoreClothingRequest = z.infer<typeof restoreClothingRequest>;
+
+export const restoreClothingResponse = z.object({
+  product_id: productId,
+  status: z.literal('draft'),
+  restored_variant_count: z.number().int().nonnegative(),
+  updated_at: isoInstant,
+});
+export type RestoreClothingResponse = z.infer<typeof restoreClothingResponse>;
+
+export const updateClothingVariantLifecycleRequest = z
+  .object({
+    expected_updated_at: isoInstant,
+    status: z.enum(['draft', 'active', 'archived']),
+  })
+  .strict();
+export type UpdateClothingVariantLifecycleRequest = z.infer<typeof updateClothingVariantLifecycleRequest>;
+
+export const updateClothingVariantLifecycleResponse = z.object({
+  variant_id: productVariantId,
+  product_id: productId,
+  status: clothingProductLifecycle,
+  outcome: z.enum(['updated', 'deleted']),
+  updated_at: isoInstant.nullable(),
+});
+export type UpdateClothingVariantLifecycleResponse = z.infer<typeof updateClothingVariantLifecycleResponse>;
+
+export const removeClothingVariantRequest = z
+  .object({
+    expected_updated_at: isoInstant,
+  })
+  .strict();
+export type RemoveClothingVariantRequest = z.infer<typeof removeClothingVariantRequest>;
+
+export const createClothingVariantRequest = z
+  .object({
+    sku: z.string().trim().min(1).max(120).optional(),
+    size_label: z.string().trim().min(1).max(40),
+    color_label: z.string().trim().min(1).max(80).nullable().default(null),
+    measurement_mode: measurementMode,
+    measurement_guide_id: measurementGuideId.nullable().optional(),
+    measurement_unit: measurementUnit.default('cm'),
+    measurements: measurementMap.default({}),
+    pricing: clothingPricingInput,
+    status: z.enum(['draft', 'active']).default('draft'),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const hasMeasurements = Object.keys(value.measurements).length > 0;
+    const guideId = value.measurement_guide_id ?? null;
+    if (value.measurement_mode === 'default_guide' && !guideId) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['measurement_guide_id'], message: 'Default-guide measurement mode requires measurement_guide_id.' });
+    }
+    if (value.measurement_mode === 'default_guide' && hasMeasurements) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['measurements'], message: 'Default-guide measurement mode cannot include structured measurements.' });
+    }
+    if (value.measurement_mode === 'custom' && (guideId || !hasMeasurements)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['measurement_mode'], message: 'Custom measurement mode requires measurements and cannot reference a guide.' });
+    }
+    if (value.measurement_mode === 'none' && (guideId || hasMeasurements)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['measurement_mode'], message: 'None measurement mode cannot reference a guide or structured measurements.' });
+    }
+    if (value.status === 'active') {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['status'], message: 'New variants must be created as draft until a physical piece exists.' });
+    }
+  });
+export type CreateClothingVariantRequest = z.infer<typeof createClothingVariantRequest>;
+
+export const createClothingVariantResponse = z.object({
+  variant: clothingVariantDetail.omit({ assets: true }).extend({ assets: z.array(physicalAssetSummary).max(0) }),
+});
+export type CreateClothingVariantResponse = z.infer<typeof createClothingVariantResponse>;
+
+export const createPhysicalAssetRequest = z
+  .object({
+    asset_code: z.string().trim().min(1).max(120).regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/).optional(),
+    condition_note: z.string().max(2_000).nullable().default(null),
+    measurement_overrides: measurementMap.nullable().default(null),
+    alteration_note: z.string().max(2_000).nullable().default(null),
+  })
+  .strict();
+export type CreatePhysicalAssetRequest = z.infer<typeof createPhysicalAssetRequest>;
+
+export const createPhysicalAssetResponse = z.object({
+  asset: physicalAssetSummary,
+});
+export type CreatePhysicalAssetResponse = z.infer<typeof createPhysicalAssetResponse>;
+
 export const archiveClothingRequest = z
   .object({
     expected_updated_at: isoInstant,

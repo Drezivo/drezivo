@@ -276,16 +276,127 @@ Before marking a task complete:
     - [x] Pagination remains deterministic under inserts/archives.
   - **Tests/evidence:** `catalogue-scale-bounds.test.ts` passes `3/3` against disposable PostgreSQL with exactly 1,000 active serialized assets. The list contract rejects limits above 100; representative pages use keyset cursors and remain deterministic when an earlier item is inserted and a later item is archived between page requests, with no duplicate first-page IDs leaking into page two. `EXPLAIN` evidence confirms the representative sort/search/filter paths avoid full-table sequential scans, with category+status filtering using `product_tenant_category_status_created_idx`; dedicated tenant sort indexes and a tenant-aware combined trigram search index are installed for catalogue growth. Ordinary list reads remain bounded by `limit + 1`, detail reads are product/branch scoped, and upcoming allocations remain capped. Catalogue image read URLs are authorized concurrently with `Promise.all`, while `/inventory` thumbnails use `loading="lazy"` and `decoding="async"`; the Clothing UI regression passes `11/11`. Existing catalogue read-model integration remains `7/7`; API units pass `82/82`, API typecheck/lint/build and `git diff --check` pass. App strict typecheck now passes after the Phase 6 closure config fixes.
 
-- [x] **CLT-062 — Mark Clothing vertical slice complete**
-  - **Depends on:** CLT-060, CLT-061.
-  - **Outcome:** Clothing is no longer a mock UI and is ready to support Reservations/Availability end-to-end.
+- [ ] **CLT-062 — Mark Clothing vertical slice complete**
+  - **Depends on:** CLT-060, CLT-061, and the Phase 7 manual E2E completion tasks CLT-070 through CLT-078.
+  - **Outcome:** Clothing is genuinely complete from the staff user's end-to-end perspective and is ready to support Reservations/Availability without known management gaps.
   - **Acceptance:**
     - [x] Add → list → search/filter → detail → edit → archive works against real API/database state.
     - [x] Tenant isolation and entitlement limits are proven.
     - [x] Reservation snapshots remain stable after catalogue edits.
     - [x] No mock catalogue dataset remains in production code paths.
-    - [x] Relevant docs and this checklist reflect implemented behavior.
-  - **Tests/evidence:** `catalogue-vertical-slice-complete.test.ts` passes `1/1` against disposable PostgreSQL and drives one persisted tenant graph through Add Clothing → server-side search/category/size/status list → detail → product edit → refreshed detail → archive → archived list/detail. Entitlement regressions pass `9/9`; the Add Clothing command suite passes `10/10` including the serialized physical-asset plan-cap race; catalogue edit passes `4/4` and proves reservation line name/measurement/pricing/money snapshots remain unchanged after catalogue edits; archive passes `4/4` and preserves reservation snapshot/allocation history; CLT-060 RLS/authorization remains `5/5`. Production-source audit finds no catalogue mock imports, and the former `clothing-data.ts` mock dataset has been removed. Contracts pass `74/74`, focused inventory frontend tests pass `50/50`, API units pass `82/82`, API typecheck/lint/build pass, app strict typecheck passes, Next production build completes, and `git diff --check` is clean. App ESLint remains blocked by the existing dependency mismatch (`next@15.5.24` with hoisted `eslint-config-next@16.3.5`/ESLint 10); no lint rule was weakened. An authenticated `/inventory` Playwright walkthrough is not automated because the repository has no safe Clerk test-session fixture, and the existing process on port 3000 returns HTTP 500; no auth bypass was added merely for evidence.
+    - [ ] Phase 7 manual E2E gaps are complete and re-verified in the staff app.
+    - [ ] Relevant docs and this checklist reflect the final implemented behavior after Phase 7.
+  - **Status note:** Reopened after manual end-to-end review. The prior automated evidence remains valid, but it did not cover category CRUD, product-detail image rendering, draft publishing, safe restore, per-variant lifecycle/removal controls, post-create navigation, adding variants later, managing serialized physical pieces later, or propagation of catalogue lifecycle changes into storefront/reservation behavior.
+  - **Prior tests/evidence:** `catalogue-vertical-slice-complete.test.ts` passes `1/1` against disposable PostgreSQL and drives one persisted tenant graph through Add Clothing → server-side search/category/size/status list → detail → product edit → refreshed detail → archive → archived list/detail. Entitlement regressions pass `9/9`; the Add Clothing command suite passes `10/10` including the serialized physical-asset plan-cap race; catalogue edit passes `4/4` and proves reservation line name/measurement/pricing/money snapshots remain unchanged after catalogue edits; archive passes `4/4` and preserves reservation snapshot/allocation history; CLT-060 RLS/authorization remains `5/5`. Production-source audit finds no catalogue mock imports, and the former `clothing-data.ts` mock dataset has been removed. Contracts pass `74/74`, focused inventory frontend tests pass `50/50`, API units pass `82/82`, API typecheck/lint/build pass, app strict typecheck passes, Next production build completes, and `git diff --check` is clean. App ESLint remains blocked by the existing dependency mismatch (`next@15.5.24` with hoisted `eslint-config-next@16.3.5`/ESLint 10); no lint rule was weakened. An authenticated `/inventory` Playwright walkthrough is not automated because the repository has no safe Clerk test-session fixture, and the existing process on port 3000 returns HTTP 500; no auth bypass was added merely for evidence.
+
+## Phase 7: Manual E2E completion gaps
+
+- [x] **CLT-070 — Complete Manage Categories CRUD end-to-end**
+  - **Depends on:** Existing category list/status infrastructure.
+  - **Outcome:** `/inventory/categories` supports the full staff workflow instead of read-only category management.
+  - **Acceptance:**
+    - [x] Staff can add a category from a modal without leaving Manage Categories.
+    - [x] Staff can edit an existing category from a modal, including its display name and supported editable metadata.
+    - [x] Staff can remove a category from active use with confirmation. Referenced categories are deactivated/retained for history rather than destructively deleted; unused categories are hard-deleted safely.
+    - [x] Category create/edit/deactivate-or-delete mutations are tenant-scoped, permission-checked through the shared catalogue write boundary, idempotent where required, and return safe conflict/not-found behavior instead of raw database errors.
+    - [x] The category list refreshes immediately after successful mutations and exposes loading/error/empty states.
+  - **Tests/evidence:** `catalogue-category-crud.test.ts` passes `4/4` against disposable PostgreSQL, covering create/edit with idempotent replay, safe duplicate-name conflict, hard delete for an unused category, and referenced-category deactivation with the product FK preserved. `categories-page.test.tsx` passes `7/7`, covering Add/Edit/Remove modals, immediate local refresh, safe referenced-category messaging, and the existing active/inactive toggle retry guard. Contracts build succeeds; API and app strict typechecks pass; `git diff --check` is clean.
+
+- [x] **CLT-071 — Render real product images on Clothing Details**
+  - **Depends on:** Existing catalogue file/image pipeline and Clothing detail read model.
+  - **Outcome:** `/inventory/:productId` displays the product's real catalogue images instead of an empty/non-rendering image area.
+  - **Acceptance:**
+    - [x] Clothing detail API returns usable authorized image URLs for every accepted product image in display order.
+    - [x] The detail page renders the primary image and additional images/galleries correctly.
+    - [x] Expired/missing/failed image loads degrade to a deliberate fallback instead of a broken image.
+    - [x] Foreign/private file identifiers remain concealed and browser clients never receive storage credentials; only short-lived authorized read URLs leave the API.
+    - [x] Detail image rendering is lifecycle-agnostic and works for staff-visible active/draft products that already have accepted images.
+  - **Tests/evidence:** `catalogue-read-model.test.ts` now passes `8/8` against disposable PostgreSQL and proves accepted `product_image` rows are joined to private file metadata, signed in display order, and a failed read authorization degrades only that image to `null` instead of failing Clothing Detail. `clothing-details-page.test.tsx` passes `10/10`, covering signed primary-image rendering, multi-image gallery switching, failed-image fallback, and existing lifecycle/detail behavior. API and app strict typechecks pass.
+
+- [ ] **CLT-072 — Complete and publish draft products**
+  - **Depends on:** Add Clothing draft creation, image requirements, product/variant lifecycle rules.
+  - **Outcome:** A staff user can return to a draft product, finish its required data, and publish it without recreating the clothing item.
+  - **Acceptance:**
+    - [ ] Draft Clothing Detail/Edit exposes a clear `Complete Draft` / `Publish` action.
+    - [ ] Publish validates all required product data, required accepted images, and at least one publishable/rentable variant before activation.
+    - [ ] Invalid/incomplete drafts remain draft and return actionable validation errors.
+    - [ ] Successful publish updates the real catalogue state and makes the product visible in the active inventory projection.
+    - [ ] Publish is tenant-scoped, permission-checked, idempotent, and concurrency-safe.
+  - **Tests/evidence:** Draft → complete → publish PostgreSQL route test plus detail/edit UI tests.
+
+- [ ] **CLT-073 — Restore archived products safely**
+  - **Depends on:** CLT-032 archive behavior and reservation-history preservation.
+  - **Outcome:** Archived clothing can be returned to staff management instead of becoming permanently one-way.
+  - **Acceptance:**
+    - [ ] Archived rows expose an `Unarchive` / `Restore` action in the inventory table and detail page.
+    - [ ] Restore does not erase reservation snapshots, allocations, audit history, maintenance history, or custody history.
+    - [ ] Restore moves the product to `draft`, not directly to `active`, so the current images, variants, and physical-asset state can be reviewed before republishing.
+    - [ ] Restore does not silently reactivate retired/lost/unready serialized assets; restored product/variant/asset lifecycle behavior is explicit and safe.
+    - [ ] Restore is tenant-scoped, Owner/permission-policy compliant, idempotent, and concurrency-safe.
+    - [ ] After restore, the product appears in the draft inventory projection and can be completed/published according to current lifecycle rules.
+  - **Tests/evidence:** Archive → restore PostgreSQL integration suite plus archived-table/detail UI action tests.
+
+- [ ] **CLT-074 — Add per-variant lifecycle and removal controls**
+  - **Depends on:** Existing variant edit API and reservation snapshot rules.
+  - **Outcome:** Staff can control each variant independently instead of treating every variant as permanently tied to the product's draft/active state.
+  - **Acceptance:**
+    - [ ] Each variant exposes explicit Draft/Publish/Archive lifecycle controls in the edit experience.
+    - [ ] Product lifecycle invariants are explicit: a draft product is never renter-facing; an active product must have at least one active/publishable variant; an archived product contributes no new renter-facing availability.
+    - [ ] Other variants may remain draft while at least one valid variant is active.
+    - [ ] Staff can remove a variant through an explicit confirmation flow.
+    - [ ] A never-used draft variant with no serialized assets/history may be hard-deleted only if safe; referenced/used variants must use a non-destructive archive/lifecycle transition instead of breaking reservation/history foreign keys.
+    - [ ] Variant lifecycle/removal mutations are tenant-scoped, permission-checked, idempotent/conditional, audited, and preserve reservation snapshots and allocations.
+    - [ ] Product detail/list projections retain draft/archived variants for authorized staff management, while renter-facing availability/reservation handoff requires both product and variant to be active.
+  - **Tests/evidence:** Variant publish/draft/remove PostgreSQL tests plus edit-page lifecycle action tests.
+
+- [x] **CLT-075 — Return Add Clothing users to Inventory after success**
+  - **Depends on:** Existing Add Clothing form and create mutation.
+  - **Outcome:** Successful creation returns staff to `/inventory`, where they can immediately add another clothing item or continue catalogue management.
+  - **Acceptance:**
+    - [x] Successful Add Clothing creation redirects to `/inventory` instead of the new product detail page.
+    - [x] The inventory list refreshes/fetches real API state and includes the newly created item under the correct draft/active filter.
+    - [x] Failed creation remains on the form with the user's entered values and actionable errors intact.
+    - [x] The Inventory page's existing `Add Clothing` action remains immediately available after redirect.
+  - **Tests/evidence:** Active and draft creates both redirect to `/inventory`; active creation writes the one-time `clothing-added` notice while drafts retain `draft-saved`. `add-clothing-page.test.tsx` plus `clothing-page.test.tsx` pass `28/28`, including real API-list refresh on Inventory after the redirect and preservation of the existing Add Clothing entry point.
+
+- [ ] **CLT-076 — Add variants to existing clothing**
+  - **Depends on:** Existing variant edit infrastructure and CLT-074 lifecycle rules.
+  - **Outcome:** A rental business can expand an existing style later without recreating the product.
+  - **Acceptance:**
+    - [ ] Edit Clothing exposes `Add Variant` for an existing product.
+    - [ ] Staff can create a new variant with size, optional color, measurement mode/source, pricing, preparation/turnaround settings, and lifecycle state.
+    - [ ] New variant SKU uniqueness is tenant-scoped and validated safely.
+    - [ ] A variant may be created as draft and published later; adding a draft variant does not disrupt existing active variants.
+    - [ ] The create command is tenant-scoped, permission-checked, idempotent, audited, and concurrency-safe.
+    - [ ] Newly created variants appear immediately in staff detail/edit projections and participate in renter-facing availability only after satisfying the active lifecycle rules.
+  - **Tests/evidence:** Existing-product → add-variant PostgreSQL integration tests plus Edit Clothing UI/API-client tests.
+
+- [ ] **CLT-077 — Manage serialized physical pieces end-to-end**
+  - **Depends on:** Existing physical-asset lifecycle commands and entitlement limits.
+  - **Outcome:** Staff can increase or reduce real rentable capacity when the business buys, retires, loses, repairs, or otherwise changes individual garments.
+  - **Acceptance:**
+    - [ ] Variant/detail management exposes `Add Physical Piece` for an existing variant.
+    - [ ] Each added piece receives a unique tenant-local asset code and is attached to the correct branch and variant.
+    - [ ] Adding pieces enforces the current plan's physical-asset capacity atomically and safely under concurrent requests.
+    - [ ] Staff can retire a piece only through lifecycle rules that preserve reservation, allocation, maintenance, custody, and audit history.
+    - [ ] A piece with a blocking allocation, unresolved custody, or open maintenance cannot be silently deleted/retired in a way that breaks operational truth.
+    - [ ] Lost/unready/maintenance state remains separate from product/variant lifecycle and is reflected by canonical availability projections.
+    - [ ] Staff detail UI shows each serialized piece, current lifecycle/readiness/custody state, and appropriate actions.
+  - **Tests/evidence:** Add-piece/quota/concurrency and safe-retirement PostgreSQL tests plus Clothing Detail/Edit physical-piece UI tests.
+
+- [ ] **CLT-078 — Prove catalogue lifecycle propagation to storefront and reservation handoff**
+  - **Depends on:** CLT-050, CLT-051, CLT-072, CLT-073, CLT-074, CLT-076, CLT-077.
+  - **Outcome:** Staff catalogue lifecycle actions and customer-facing rental availability cannot diverge.
+  - **Acceptance:**
+    - [ ] Publishing a valid draft product makes it eligible for the public/storefront catalogue according to storefront policy.
+    - [ ] Draft or archived products are excluded from new renter-facing catalogue/availability/reservation handoff.
+    - [ ] Draft or archived variants are excluded from renter-facing availability and reservation candidate selection even when sibling variants remain active.
+    - [ ] Publishing a valid variant under an active product makes that variant eligible for renter-facing availability without altering sibling variant history.
+    - [ ] Archiving a product or variant never releases existing reservation allocations or mutates immutable reservation snapshots.
+    - [ ] Restoring an archived product to draft does not make it publicly rentable until it is explicitly republished and passes current validation.
+    - [ ] Adding a physical piece increases future candidate capacity only when the piece is active, ready, at the correct branch, and otherwise eligible under canonical allocation rules.
+    - [ ] Retiring/loss/maintenance/readiness changes immediately affect canonical staff availability and reservation candidate projections according to their existing semantics.
+  - **Tests/evidence:** Cross-module PostgreSQL integration suite covering Catalogue → Storefront/Availability → Reservation handoff, plus customer-facing catalogue UI regression where implemented.
 
 ## Deferred from Clothing V1
 

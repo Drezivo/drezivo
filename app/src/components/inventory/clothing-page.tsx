@@ -92,8 +92,8 @@ export function ClothingPage() {
 
   useEffect(() => {
     const savedNotice = sessionStorage.getItem("drezivo:inventory-notice");
-    if (savedNotice === "draft-saved") {
-      setNotice("Draft saved");
+    if (savedNotice === "draft-saved" || savedNotice === "clothing-added") {
+      setNotice(savedNotice === "draft-saved" ? "Draft saved" : "Clothing added");
       sessionStorage.removeItem("drezivo:inventory-notice");
     }
   }, []);

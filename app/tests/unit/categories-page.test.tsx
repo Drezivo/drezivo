@@ -10,8 +10,11 @@ const clerk = vi.hoisted(() => ({
 }));
 
 const api = vi.hoisted(() => ({
+  createCatalogueCategory: vi.fn(),
   getCatalogueCategories: vi.fn(),
   getCatalogueClothing: vi.fn(),
+  removeCatalogueCategory: vi.fn(),
+  updateCatalogueCategory: vi.fn(),
   updateCatalogueCategoryStatus: vi.fn(),
 }));
 
@@ -82,6 +85,80 @@ describe("CategoriesPage", () => {
     expect(screen.getByRole("button", { name: "Show Costumes on storefront" })).toHaveTextContent(
       "Set active"
     );
+  });
+
+  it("adds a category from the modal and renders it immediately", async () => {
+    api.createCatalogueCategory.mockResolvedValue({
+      data: {
+        id: "00000000-0000-4000-8000-000000000003",
+        name: "Formal Wear",
+        status: "active",
+        display_order: 15,
+      },
+      requestId: "req-category-create",
+    });
+
+    render(<CategoriesPage />);
+    await screen.findByText("Gowns");
+    fireEvent.click(screen.getByRole("button", { name: "Add Category" }));
+    fireEvent.change(screen.getByLabelText("Category name"), { target: { value: "Formal Wear" } });
+    fireEvent.change(screen.getByLabelText("Display order"), { target: { value: "15" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add Category" }));
+
+    await waitFor(() => expect(api.createCatalogueCategory).toHaveBeenCalledTimes(1));
+    expect(api.createCatalogueCategory).toHaveBeenCalledWith(
+      { name: "Formal Wear", display_order: 15 },
+      expect.any(String)
+    );
+    expect(await screen.findByText("Formal Wear")).toBeVisible();
+  });
+
+  it("edits a category from the modal", async () => {
+    api.updateCatalogueCategory.mockResolvedValue({
+      data: { ...categories[0], name: "Evening Gowns", display_order: 3 },
+      requestId: "req-category-edit",
+    });
+
+    render(<CategoriesPage />);
+    await screen.findByText("Gowns");
+    fireEvent.click(screen.getByRole("button", { name: "Edit Gowns" }));
+    const name = screen.getByLabelText("Category name");
+    fireEvent.change(name, { target: { value: "Evening Gowns" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(api.updateCatalogueCategory).toHaveBeenCalledTimes(1));
+    expect(api.updateCatalogueCategory).toHaveBeenCalledWith(
+      categories[0]?.id,
+      { name: "Evening Gowns", display_order: 10 },
+      expect.any(String)
+    );
+    expect(await screen.findByText("Evening Gowns")).toBeVisible();
+  });
+
+  it("removes an unused category and deactivates a referenced category safely", async () => {
+    api.removeCatalogueCategory
+      .mockResolvedValueOnce({
+        data: { category_id: categories[1]?.id, outcome: "deleted" },
+        requestId: "req-category-delete",
+      })
+      .mockResolvedValueOnce({
+        data: { category_id: categories[0]?.id, outcome: "deactivated" },
+        requestId: "req-category-deactivate",
+      });
+
+    render(<CategoriesPage />);
+    await screen.findByText("Gowns");
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove Costumes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove Category" }));
+    await waitFor(() => expect(api.removeCatalogueCategory).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("Costumes")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove Gowns" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove Category" }));
+    await waitFor(() => expect(api.removeCatalogueCategory).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("button", { name: "Show Gowns on storefront" })).toBeVisible();
+    expect(screen.getByText(/retained for history/i)).toBeVisible();
   });
 
   it("guards a duplicate category toggle and updates the rendered state after success", async () => {

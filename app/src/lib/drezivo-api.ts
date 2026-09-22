@@ -7,6 +7,7 @@ import {
   bootstrapTenantRequest,
   catalogueCategory,
   catalogueCategoryList,
+  createCatalogueCategoryRequest,
   clothingDetail,
   clothingListQuery,
   clothingListResponse,
@@ -14,6 +15,7 @@ import {
   archiveClothingResponse,
   createClothingRequest,
   createClothingResponse,
+  removeCatalogueCategoryResponse,
   measurementGuide,
   measurementGuideDefaultResponse,
   replaceClothingImagesRequest,
@@ -27,6 +29,7 @@ import {
   onboardingActorContext,
   organizationOnboarding,
   tenantBootstrapResponse,
+  updateCatalogueCategoryRequest,
   updateCatalogueCategoryStatusRequest,
   updateClothingProductRequest,
   updateClothingProductResponse,
@@ -41,6 +44,7 @@ import {
   type ChooseOnboardingPlanRequest,
   type CatalogueCategory,
   type CatalogueCategoryList,
+  type CreateCatalogueCategoryRequest,
   type ClothingDetail,
   type ClothingListQuery,
   type ClothingListResponse,
@@ -48,6 +52,7 @@ import {
   type ArchiveClothingResponse,
   type CreateClothingRequest,
   type CreateClothingResponse,
+  type RemoveCatalogueCategoryResponse,
   type MeasurementGuide,
   type MeasurementGuideDefaultResponse,
   type ReplaceClothingImagesRequest,
@@ -60,6 +65,7 @@ import {
   type OnboardingActorContext,
   type OrganizationOnboarding,
   type TenantBootstrapResponse,
+  type UpdateCatalogueCategoryRequest,
   type UpdateCatalogueCategoryStatusRequest,
   type UpdateClothingProductRequest,
   type UpdateClothingProductResponse,
@@ -171,6 +177,36 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "GET",
         path: "/api/v1/catalogue/categories",
         responseSchema: apiEnvelope(catalogueCategoryList),
+      }),
+    createCatalogueCategory: (input: CreateCatalogueCategoryRequest, idempotencyKey: string) =>
+      request<CatalogueCategory>({
+        getToken,
+        body: createCatalogueCategoryRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/catalogue/categories",
+        responseSchema: apiEnvelope(catalogueCategory),
+      }),
+    updateCatalogueCategory: (
+      categoryId: string,
+      input: UpdateCatalogueCategoryRequest,
+      idempotencyKey: string
+    ) =>
+      request<CatalogueCategory>({
+        getToken,
+        body: updateCatalogueCategoryRequest.parse(input),
+        idempotencyKey,
+        method: "PATCH",
+        path: `/api/v1/catalogue/categories/${encodeURIComponent(categoryId)}`,
+        responseSchema: apiEnvelope(catalogueCategory),
+      }),
+    removeCatalogueCategory: (categoryId: string, idempotencyKey: string) =>
+      request<RemoveCatalogueCategoryResponse>({
+        getToken,
+        idempotencyKey,
+        method: "DELETE",
+        path: `/api/v1/catalogue/categories/${encodeURIComponent(categoryId)}`,
+        responseSchema: apiEnvelope(removeCatalogueCategoryResponse),
       }),
     getCatalogueClothingDetail: (productId: string) =>
       request<ClothingDetail>({
@@ -340,7 +376,7 @@ async function request<T>({
   body?: unknown;
   getToken: TokenGetter;
   idempotencyKey?: string;
-  method: "GET" | "PATCH" | "POST" | "PUT";
+  method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
   path: string;
   responseSchema: ReturnType<typeof apiEnvelope>;
 }): Promise<ApiResult<T>> {

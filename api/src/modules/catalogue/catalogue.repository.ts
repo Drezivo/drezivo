@@ -4,6 +4,8 @@ import type { PoolClient } from 'pg';
 
 import type {
   CreateClothingRequest,
+  CreateClothingVariantRequest,
+  CreatePhysicalAssetRequest,
   MeasurementMap,
   UpdateClothingProductRequest,
   UpdateClothingVariantRequest,
@@ -120,6 +122,97 @@ export async function listCategories(client: PoolClient, tenantId: string): Prom
     [tenantId],
   );
   return result.rows;
+}
+
+export async function createCategory(
+  client: PoolClient,
+  input: { tenantId: string; name: string; displayOrder: number },
+): Promise<CategoryRow> {
+  const result = await client.query<CategoryRow>(
+    `INSERT INTO category (tenant_id, name, status, display_order)
+     VALUES ($1, $2, 'active', $3)
+     ON CONFLICT DO NOTHING
+     RETURNING id, name, status, display_order`,
+    [input.tenantId, input.name, input.displayOrder],
+  );
+  const row = result.rows[0];
+  if (!row) throw new StateConflictError('A clothing category with that name already exists.');
+  return row;
+}
+
+export async function updateCategory(
+  client: PoolClient,
+  input: { tenantId: string; categoryId: string; name?: string; displayOrder?: number },
+): Promise<CategoryRow | null> {
+  const current = await readCategoryForCreate(client, input.tenantId, input.categoryId);
+  if (!current) return null;
+
+  const name = input.name ?? current.name;
+  const displayOrder = input.displayOrder ?? current.display_order;
+  const duplicate = await client.query<{ id: string }>(
+    `SELECT id
+       FROM category
+      WHERE tenant_id = $1
+        AND id <> $2
+        AND lower(btrim(name)) = lower(btrim($3))
+      LIMIT 1`,
+    [input.tenantId, input.categoryId, name],
+  );
+  if (duplicate.rows[0]) {
+    throw new StateConflictError('A clothing category with that name already exists.');
+  }
+
+  try {
+    const result = await client.query<CategoryRow>(
+      `UPDATE category
+          SET name = $3,
+              display_order = $4
+        WHERE tenant_id = $1 AND id = $2
+        RETURNING id, name, status, display_order`,
+      [input.tenantId, input.categoryId, name, displayOrder],
+    );
+    return result.rows[0] ?? null;
+  } catch (error) {
+    if (isPostgresUniqueViolation(error)) {
+      throw new StateConflictError('A clothing category with that name already exists.');
+    }
+    throw error;
+  }
+}
+
+export async function removeCategory(
+  client: PoolClient,
+  tenantId: string,
+  categoryId: string,
+): Promise<{ categoryId: string; outcome: 'deleted' | 'deactivated' } | null> {
+  const current = await readCategoryForCreate(client, tenantId, categoryId);
+  if (!current) return null;
+
+  const references = await client.query<{ count: number }>(
+    `SELECT count(*)::int AS count
+       FROM product
+      WHERE tenant_id = $1 AND category_id = $2`,
+    [tenantId, categoryId],
+  );
+  const referenced = (references.rows[0]?.count ?? 0) > 0;
+  if (referenced) {
+    await client.query(
+      `UPDATE category
+          SET status = 'inactive'
+        WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, categoryId],
+    );
+    return { categoryId, outcome: 'deactivated' };
+  }
+
+  const deleted = await client.query<{ id: string }>(
+    `DELETE FROM category
+      WHERE tenant_id = $1 AND id = $2
+      RETURNING id`,
+    [tenantId, categoryId],
+  );
+  if (!deleted.rows[0]) return null;
+  return { categoryId, outcome: 'deleted' };
 }
 
 export async function updateCategoryStatus(
@@ -769,6 +862,10 @@ async function insertProductWithCode(
     throw new DuplicateClothingCodeError('That clothing code is already in use.');
   }
   throw new StateConflictError('Drezivo could not generate a unique clothing code. Try again.');
+}
+
+function isPostgresUniqueViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
 }
 
 function generatedStyleCode(): string {

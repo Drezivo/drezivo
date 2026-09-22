@@ -63,6 +63,8 @@ export interface ClothingDetailProductRow {
 export interface ClothingDetailImageRow {
   file_id: string;
   display_order: number;
+  storage_key: string;
+  version_id: string | null;
 }
 
 export interface ClothingDetailVariantRow {
@@ -472,10 +474,19 @@ export async function readClothingDetailModel(
   if (!product) return null;
 
   const imagesResult = await client.query<ClothingDetailImageRow>(
-    `SELECT pi.file_id, pi.display_order::int AS display_order
+    `SELECT pi.file_id,
+            pi.display_order::int AS display_order,
+            f.storage_key,
+            f.version_id
        FROM product_image pi
+       JOIN file_object f
+         ON f.tenant_id = pi.tenant_id
+        AND f.id = pi.file_id
       WHERE pi.tenant_id = $1
         AND pi.product_id = $2
+        AND f.purpose = 'catalogue_image'
+        AND f.lifecycle_status = 'accepted'
+        AND f.frozen_at IS NOT NULL
       ORDER BY pi.display_order ASC, pi.file_id ASC
       LIMIT 10`,
     [input.tenantId, input.productId],

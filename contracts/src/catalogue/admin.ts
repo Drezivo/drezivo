@@ -53,12 +53,37 @@ export const catalogueCategoryList = z.object({
 });
 export type CatalogueCategoryList = z.infer<typeof catalogueCategoryList>;
 
+export const createCatalogueCategoryRequest = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    display_order: z.number().int().nonnegative().max(1_000_000).default(0),
+  })
+  .strict();
+export type CreateCatalogueCategoryRequest = z.infer<typeof createCatalogueCategoryRequest>;
+
+export const updateCatalogueCategoryRequest = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    display_order: z.number().int().nonnegative().max(1_000_000).optional(),
+  })
+  .strict()
+  .refine((value) => value.name !== undefined || value.display_order !== undefined, {
+    message: 'At least one editable category field is required.',
+  });
+export type UpdateCatalogueCategoryRequest = z.infer<typeof updateCatalogueCategoryRequest>;
+
 export const updateCatalogueCategoryStatusRequest = z
   .object({
     status: catalogueCategoryStatus,
   })
   .strict();
 export type UpdateCatalogueCategoryStatusRequest = z.infer<typeof updateCatalogueCategoryStatusRequest>;
+
+export const removeCatalogueCategoryResponse = z.object({
+  category_id: categoryId,
+  outcome: z.enum(['deleted', 'deactivated']),
+});
+export type RemoveCatalogueCategoryResponse = z.infer<typeof removeCatalogueCategoryResponse>;
 
 /**
  * Metadata command issued after an accepted `measurement_guide` file has been uploaded/frozen.

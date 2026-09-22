@@ -159,6 +159,17 @@ describe("ClothingPage", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
+  it("shows a one-time clothing-added notice and refreshes real inventory state", async () => {
+    sessionStorage.setItem("drezivo:inventory-notice", "clothing-added");
+
+    render(<ClothingPage />);
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Clothing added");
+    expect(await screen.findByText("Real Black Satin Gown")).toBeVisible();
+    expect(api.getCatalogueClothing).toHaveBeenCalledWith({ limit: 10, sort: "name_asc" });
+    expect(sessionStorage.getItem("drezivo:inventory-notice")).toBeNull();
+  });
+
   it("automatically hides the draft-saved notice after three seconds", () => {
     vi.useFakeTimers();
     sessionStorage.setItem("drezivo:inventory-notice", "draft-saved");

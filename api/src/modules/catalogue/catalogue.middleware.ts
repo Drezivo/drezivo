@@ -5,6 +5,7 @@ import {
   categoryId,
   clothingListQuery,
   createAssetMaintenanceBlockRequest,
+  createCatalogueCategoryRequest,
   createClothingRequest,
   idempotencyKey,
   physicalAssetId,
@@ -12,6 +13,7 @@ import {
   productVariantId,
   replaceClothingImagesRequest,
   saveMeasurementGuideRequest,
+  updateCatalogueCategoryRequest,
   updateCatalogueCategoryStatusRequest,
   updateClothingProductRequest,
   updateClothingVariantRequest,
@@ -165,6 +167,38 @@ export const validateCreateClothing: RequestHandler = (req, _res, next): void =>
     return;
   }
   req.body = parsed.data;
+  next();
+};
+
+export const validateCreateCatalogueCategory: RequestHandler = (req, _res, next): void => {
+  const parsed = createCatalogueCategoryRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Category create request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  next();
+};
+
+export const validateCatalogueCategoryUpdate: RequestHandler = (req, _res, next): void => {
+  const parsedId = categoryId.safeParse(req.params.categoryId);
+  const parsedBody = updateCatalogueCategoryRequest.safeParse(req.body);
+  if (!parsedId.success || !parsedBody.success) {
+    next(new ValidationError('Category update request is invalid.'));
+    return;
+  }
+  req.catalogueCategoryId = parsedId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validateCatalogueCategoryId: RequestHandler = (req, _res, next): void => {
+  const parsedId = categoryId.safeParse(req.params.categoryId);
+  if (!parsedId.success) {
+    next(new ValidationError('A valid category id is required.'));
+    return;
+  }
+  req.catalogueCategoryId = parsedId.data;
   next();
 };
 

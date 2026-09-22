@@ -3,6 +3,9 @@ import {
   archiveClothingResponse,
   catalogueCategory,
   catalogueCategoryList,
+  createCatalogueCategoryRequest,
+  removeCatalogueCategoryResponse,
+  updateCatalogueCategoryRequest,
   clothingDetail,
   clothingListResponse,
   createAssetMaintenanceBlockRequest,
@@ -24,6 +27,7 @@ import {
   type ArchiveClothingResponse,
   type CatalogueCategory,
   type CatalogueCategoryList,
+  type CreateCatalogueCategoryRequest,
   type ClothingDetail,
   type ClothingListQuery,
   type ClothingListResponse,
@@ -46,6 +50,8 @@ import {
   type UpdatePhysicalAssetStateRequest,
   type UpdatePhysicalAssetStateResponse,
   type TenantStatus,
+  type RemoveCatalogueCategoryResponse,
+  type UpdateCatalogueCategoryRequest,
   type UpdateCatalogueCategoryStatusRequest,
 } from '@drezivo/contracts';
 
@@ -88,6 +94,7 @@ import {
 import {
   appendCatalogueAuditEvent,
   archiveClothingGraph,
+  createCategory,
   createClothingGraph,
   listCategories,
   readCategoryForCreate,
@@ -101,7 +108,9 @@ import {
   readProductForImageMutation,
   readVariantForEdit,
   replaceDefaultMeasurementGuide,
+  removeCategory,
   replaceProductImages,
+  updateCategory,
   updateCategoryStatus,
   updatePhysicalAssetState as persistPhysicalAssetState,
   updateProductForEdit,
@@ -114,7 +123,10 @@ import {
 
 const SAVE_GUIDE_OPERATION = 'catalogue.measurement_guide.save';
 const CREATE_CLOTHING_OPERATION = 'catalogue.clothing.create';
+const CREATE_CATEGORY_OPERATION = 'catalogue.category.create';
+const UPDATE_CATEGORY_OPERATION = 'catalogue.category.update';
 const UPDATE_CATEGORY_STATUS_OPERATION = 'catalogue.category.status.update';
+const REMOVE_CATEGORY_OPERATION = 'catalogue.category.remove';
 const REPLACE_CLOTHING_IMAGES_OPERATION = 'catalogue.clothing.images.replace';
 const UPDATE_CLOTHING_PRODUCT_OPERATION = 'catalogue.clothing.product.update';
 const UPDATE_CLOTHING_VARIANT_OPERATION = 'catalogue.clothing.variant.update';
@@ -142,6 +154,7 @@ interface CommandContext extends CatalogueContext {
 type GuideCommandBody = SuccessEnvelope<MeasurementGuide> | FailureEnvelope;
 type ClothingCommandBody = SuccessEnvelope<CreateClothingResponse> | FailureEnvelope;
 type CategoryCommandBody = SuccessEnvelope<CatalogueCategory> | FailureEnvelope;
+type RemoveCategoryCommandBody = SuccessEnvelope<RemoveCatalogueCategoryResponse> | FailureEnvelope;
 type ClothingImagesCommandBody = SuccessEnvelope<ReplaceClothingImagesResponse> | FailureEnvelope;
 type ClothingProductUpdateCommandBody = SuccessEnvelope<UpdateClothingProductResponse> | FailureEnvelope;
 type ClothingVariantUpdateCommandBody = SuccessEnvelope<UpdateClothingVariantResponse> | FailureEnvelope;
@@ -241,6 +254,7 @@ export async function getCatalogueClothingList(
 export async function getCatalogueClothingDetail(
   input: CatalogueContext,
   productId: string,
+  storage: ObjectStorage = s3ObjectStorage,
 ): Promise<ClothingDetail> {
   assertCatalogueReadContext(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
@@ -260,6 +274,29 @@ export async function getCatalogueClothingDetail(
       assetsByVariant.set(asset.variant_id, assets);
     }
 
+    const images = await Promise.all(
+      model.images.map(async (image) => {
+        try {
+          const authorization = await storage.authorizeRead({
+            storageKey: image.storage_key,
+            versionId: image.version_id,
+            expiresInSeconds: CATALOGUE_IMAGE_VIEW_EXPIRY_SECONDS,
+          });
+          return {
+            file_id: image.file_id,
+            display_order: image.display_order,
+            image_url: authorization.readUrl,
+          };
+        } catch {
+          return {
+            file_id: image.file_id,
+            display_order: image.display_order,
+            image_url: null,
+          };
+        }
+      }),
+    );
+
     return clothingDetail.parse({
       product_id: model.product.product_id,
       code: model.product.code,
@@ -270,11 +307,7 @@ export async function getCatalogueClothingDetail(
           ? { id: model.product.category_id, name: model.product.category_name }
           : null,
       status: model.product.product_status,
-      images: model.images.map((image) => ({
-        file_id: image.file_id,
-        display_order: image.display_order,
-        image_url: null,
-      })),
+      images,
       variants: model.variants.map((variant) => ({
         id: variant.id,
         sku: variant.sku,
@@ -322,6 +355,167 @@ export async function getCatalogueClothingDetail(
       created_at: model.product.created_at.toISOString(),
       updated_at: model.product.updated_at.toISOString(),
     });
+  });
+}
+
+export async function createCatalogueCategory(
+  input: CommandContext & { request: CreateCatalogueCategoryRequest },
+): Promise<CatalogueCommandResponse<CategoryCommandBody>> {
+  assertCatalogueWriteContext(input);
+  const parsedRequest = createCatalogueCategoryRequest.safeParse(input.request);
+  if (!parsedRequest.success) throw new ValidationError('Category create request is invalid.');
+  const request = parsedRequest.data;
+  const payloadHash = canonicalRequestHash(request);
+
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const claim = await claimTenantIdempotency(client, {
+      tenantId: input.tenantId,
+      principalKey: input.membershipId,
+      operation: CREATE_CATEGORY_OPERATION,
+      intentKey: input.idempotencyKey,
+      payloadHash,
+    });
+    const replay = replayOrThrow<CategoryCommandBody>(claim);
+    if (replay) return replay;
+
+    try {
+      const row = await createCategory(client, {
+        tenantId: input.tenantId,
+        name: request.name,
+        displayOrder: request.display_order,
+      });
+      const data = catalogueCategory.parse(row);
+      const body = successBody(input.requestId, data);
+      await appendCatalogueAuditEvent(client, {
+        tenantId: input.tenantId,
+        actorKey: input.principalId,
+        action: 'catalogue.category.created',
+        entityType: 'category',
+        entityId: data.id,
+        redactedSummary: { display_order: data.display_order },
+        requestId: input.requestId,
+      });
+      await finalizeTenantIdempotency(client, {
+        tenantId: input.tenantId,
+        principalKey: input.membershipId,
+        operation: CREATE_CATEGORY_OPERATION,
+        intentKey: input.idempotencyKey,
+        payloadHash,
+        status: 'succeeded',
+        responseCode: 201,
+        safeResponse: body,
+      });
+      return { status: 201, body };
+    } catch (error) {
+      return finalizeKnownFailure(client, input, CREATE_CATEGORY_OPERATION, payloadHash, error);
+    }
+  });
+}
+
+export async function updateCatalogueCategory(
+  input: CommandContext & { categoryId: string; request: UpdateCatalogueCategoryRequest },
+): Promise<CatalogueCommandResponse<CategoryCommandBody>> {
+  assertCatalogueWriteContext(input);
+  const parsedRequest = updateCatalogueCategoryRequest.safeParse(input.request);
+  if (!parsedRequest.success) throw new ValidationError('Category update request is invalid.');
+  const request = parsedRequest.data;
+  const payloadHash = canonicalRequestHash({ category_id: input.categoryId, ...request });
+
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const claim = await claimTenantIdempotency(client, {
+      tenantId: input.tenantId,
+      principalKey: input.membershipId,
+      operation: UPDATE_CATEGORY_OPERATION,
+      intentKey: input.idempotencyKey,
+      payloadHash,
+    });
+    const replay = replayOrThrow<CategoryCommandBody>(claim);
+    if (replay) return replay;
+
+    try {
+      const row = await updateCategory(client, {
+        tenantId: input.tenantId,
+        categoryId: input.categoryId,
+        ...(request.name !== undefined ? { name: request.name } : {}),
+        ...(request.display_order !== undefined ? { displayOrder: request.display_order } : {}),
+      });
+      if (!row) throw new NotFoundError('The selected clothing category could not be found.');
+      const data = catalogueCategory.parse(row);
+      const body = successBody(input.requestId, data);
+      await appendCatalogueAuditEvent(client, {
+        tenantId: input.tenantId,
+        actorKey: input.principalId,
+        action: 'catalogue.category.updated',
+        entityType: 'category',
+        entityId: data.id,
+        redactedSummary: { display_order: data.display_order },
+        requestId: input.requestId,
+      });
+      await finalizeTenantIdempotency(client, {
+        tenantId: input.tenantId,
+        principalKey: input.membershipId,
+        operation: UPDATE_CATEGORY_OPERATION,
+        intentKey: input.idempotencyKey,
+        payloadHash,
+        status: 'succeeded',
+        responseCode: 200,
+        safeResponse: body,
+      });
+      return { status: 200, body };
+    } catch (error) {
+      return finalizeKnownFailure(client, input, UPDATE_CATEGORY_OPERATION, payloadHash, error);
+    }
+  });
+}
+
+export async function removeCatalogueCategory(
+  input: CommandContext & { categoryId: string },
+): Promise<CatalogueCommandResponse<RemoveCategoryCommandBody>> {
+  assertCatalogueWriteContext(input);
+  const payloadHash = canonicalRequestHash({ category_id: input.categoryId });
+
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const claim = await claimTenantIdempotency(client, {
+      tenantId: input.tenantId,
+      principalKey: input.membershipId,
+      operation: REMOVE_CATEGORY_OPERATION,
+      intentKey: input.idempotencyKey,
+      payloadHash,
+    });
+    const replay = replayOrThrow<RemoveCategoryCommandBody>(claim);
+    if (replay) return replay;
+
+    try {
+      const removed = await removeCategory(client, input.tenantId, input.categoryId);
+      if (!removed) throw new NotFoundError('The selected clothing category could not be found.');
+      const data = removeCatalogueCategoryResponse.parse({
+        category_id: removed.categoryId,
+        outcome: removed.outcome,
+      });
+      const body = successBody(input.requestId, data);
+      await appendCatalogueAuditEvent(client, {
+        tenantId: input.tenantId,
+        actorKey: input.principalId,
+        action: `catalogue.category.${data.outcome}`,
+        entityType: 'category',
+        entityId: data.category_id,
+        redactedSummary: { outcome: data.outcome },
+        requestId: input.requestId,
+      });
+      await finalizeTenantIdempotency(client, {
+        tenantId: input.tenantId,
+        principalKey: input.membershipId,
+        operation: REMOVE_CATEGORY_OPERATION,
+        intentKey: input.idempotencyKey,
+        payloadHash,
+        status: 'succeeded',
+        responseCode: 200,
+        safeResponse: body,
+      });
+      return { status: 200, body };
+    } catch (error) {
+      return finalizeKnownFailure(client, input, REMOVE_CATEGORY_OPERATION, payloadHash, error);
+    }
   });
 }
 

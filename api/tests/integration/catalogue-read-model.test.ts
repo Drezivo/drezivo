@@ -29,6 +29,8 @@ process.env.S3_ACCESS_KEY_ID ??= 'test';
 process.env.S3_SECRET_ACCESS_KEY ??= 'test';
 
 class FakeReadStorage {
+  constructor(private readonly failingStorageKeys = new Set<string>()) {}
+
   readonly authorizedReads: Array<{
     storageKey: string;
     versionId?: string | null;
@@ -45,6 +47,9 @@ class FakeReadStorage {
     expiresInSeconds: number;
   }) {
     this.authorizedReads.push(input);
+    if (this.failingStorageKeys.has(input.storageKey)) {
+      return Promise.reject(new Error('Simulated read authorization failure.'));
+    }
     return Promise.resolve({
       readUrl: `https://reads.example.test/${encodeURIComponent(input.storageKey)}?version=${encodeURIComponent(input.versionId ?? '')}`,
       expiresAt: new Date('2026-09-21T00:05:00.000Z'),
@@ -207,6 +212,67 @@ describe('CLT Phase 1 catalogue read model', async () => {
     expect(withoutCover.items).toHaveLength(1);
     expect(withoutCover.items[0]?.primary_image_url).toBeNull();
     expect(storage.authorizedReads).toHaveLength(1);
+  });
+
+  it('returns signed Clothing Detail image URLs in display order and degrades failed authorizations to null', async () => {
+    const tenant = await createTestTenant({ clerkOrgId: 'org_clt071_detail_images' });
+    const seeded = await seedLargeCatalogue(tenant.id, 'user_clt071_detail_images');
+    const context = catalogueContext(tenant.id, seeded.branchId, 'user_clt071_detail_images');
+    const storage = new FakeReadStorage(new Set(['catalogue/look-001-secondary.webp']));
+
+    const productId = await withTenantTransaction(tenant.id, 'user_clt071_detail_images', async (client) => {
+      const product = await client.query<{ id: string }>(
+        `SELECT id FROM product WHERE tenant_id = $1 AND code = 'LOOK-001' LIMIT 1`,
+        [tenant.id],
+      );
+      const selectedProductId = requireRow(product.rows, 'detail-image product').id;
+      const files = await client.query<{ id: string; storage_key: string; version_id: string | null }>(
+        `INSERT INTO file_object
+           (tenant_id, purpose, storage_key, version_id, sha256, mime_type, byte_size,
+            lifecycle_status, is_private, upload_expires_at, frozen_at)
+         VALUES
+           ($1, 'catalogue_image', 'catalogue/look-001-cover.webp', 'cover-v1', 'cover-detail-sha',
+            'image/webp', 512, 'accepted', true, now() + interval '10 minutes', now()),
+           ($1, 'catalogue_image', 'catalogue/look-001-secondary.webp', 'secondary-v2', 'secondary-detail-sha',
+            'image/webp', 512, 'accepted', true, now() + interval '10 minutes', now())
+         RETURNING id, storage_key, version_id`,
+        [tenant.id],
+      );
+      const cover = requireNamedStorageFile(files.rows, 'catalogue/look-001-cover.webp');
+      const secondary = requireNamedStorageFile(files.rows, 'catalogue/look-001-secondary.webp');
+      await client.query(
+        `INSERT INTO product_image (tenant_id, product_id, file_id, display_order)
+         VALUES ($1, $2, $3, 0), ($1, $2, $4, 1)`,
+        [tenant.id, selectedProductId, cover.id, secondary.id],
+      );
+      return selectedProductId;
+    });
+
+    const detail = await getCatalogueClothingDetail(context, productId, storage);
+    expect(detail.images).toEqual([
+      {
+        file_id: expect.any(String),
+        display_order: 0,
+        image_url: 'https://reads.example.test/catalogue%2Flook-001-cover.webp?version=cover-v1',
+      },
+      {
+        file_id: expect.any(String),
+        display_order: 1,
+        image_url: null,
+      },
+    ]);
+    expect(storage.authorizedReads).toEqual([
+      {
+        storageKey: 'catalogue/look-001-cover.webp',
+        versionId: 'cover-v1',
+        expiresInSeconds: 300,
+      },
+      {
+        storageKey: 'catalogue/look-001-secondary.webp',
+        versionId: 'secondary-v2',
+        expiresInSeconds: 300,
+      },
+    ]);
   });
 
   it('rejects an invalid or sort-mismatched cursor instead of drifting pagination', async () => {

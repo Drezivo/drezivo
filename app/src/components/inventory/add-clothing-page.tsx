@@ -708,12 +708,11 @@ export function AddClothingPage() {
       photos.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
       setIsDirty(false);
       historyGuardArmedRef.current = false;
-      if (activate) {
-        router.replace(`/inventory/${result.data.product_id}`);
-      } else {
-        sessionStorage.setItem("drezivo:inventory-notice", "draft-saved");
-        router.replace("/inventory");
-      }
+      sessionStorage.setItem(
+        "drezivo:inventory-notice",
+        activate ? "clothing-added" : "draft-saved"
+      );
+      router.replace("/inventory");
     } catch (error) {
       if (
         error instanceof DrezivoApiError &&

@@ -143,6 +143,50 @@ describe("ClothingDetailsPage", () => {
     expect(screen.getByText("Confirmed reservation")).toBeVisible();
   });
 
+  it("renders signed product images, switches gallery photos, and falls back when an image fails", async () => {
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: {
+        ...detail,
+        images: [
+          {
+            file_id: "00000000-0000-4000-8000-000000000020",
+            display_order: 0,
+            image_url: "https://images.example.test/cover.webp",
+          },
+          {
+            file_id: "00000000-0000-4000-8000-000000000021",
+            display_order: 1,
+            image_url: "https://images.example.test/secondary.webp",
+          },
+        ],
+      },
+      requestId: "req-detail-images",
+    });
+
+    render(<ClothingDetailsPage productId={productId} />);
+
+    const primary = await screen.findByRole("img", {
+      name: "Emerald Evening Gown catalogue photo",
+    });
+    expect(primary).toHaveAttribute("src", "https://images.example.test/cover.webp");
+    expect(screen.getByLabelText("Catalogue photo gallery")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show catalogue photo 2" }));
+    expect(screen.getByRole("img", { name: "Emerald Evening Gown catalogue photo" })).toHaveAttribute(
+      "src",
+      "https://images.example.test/secondary.webp"
+    );
+
+    fireEvent.error(screen.getByRole("img", { name: "Emerald Evening Gown catalogue photo" }));
+    expect(screen.getByRole("img", { name: "Emerald Evening Gown catalogue photo" })).toHaveAttribute(
+      "src",
+      "https://images.example.test/cover.webp"
+    );
+
+    fireEvent.error(screen.getByRole("img", { name: "Emerald Evening Gown catalogue photo" }));
+    expect(await screen.findByText("No catalogue photo available")).toBeVisible();
+  });
+
   it.each([
     ["draft", "Draft"],
     ["active", "Active"],
