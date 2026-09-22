@@ -208,6 +208,20 @@ export async function getCatalogueClothingList(
             needs_repair: row.needs_repair,
             unready: row.unready,
           },
+          availability: {
+            window: {
+              start: row.availability_start.toISOString(),
+              end: row.availability_end.toISOString(),
+            },
+            active_assets: row.availability_active_assets,
+            available_assets: row.available_assets,
+            unavailable_assets: row.unavailable_assets,
+            reserved_assets: row.reserved_assets,
+            rented_assets: row.rented_assets,
+            cleaning_assets: row.cleaning_assets,
+            maintenance_assets: row.maintenance_assets,
+            manual_blocked_assets: row.manual_blocked_assets,
+          },
           created_at: row.created_at.toISOString(),
           updated_at: row.updated_at.toISOString(),
         };

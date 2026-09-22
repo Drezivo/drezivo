@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   archiveClothingRequest,
   archiveClothingResponse,
+  clothingAvailabilitySummary,
   clothingDetail,
   clothingListQuery,
   clothingProductLifecycle,
@@ -105,6 +106,54 @@ describe('catalogue staff contract', () => {
         availability: 'available',
       }).success,
     ).toBe(false);
+  });
+
+  it('allows only a bounded explicit availability projection window', () => {
+    expect(
+      clothingListQuery.safeParse({
+        availability_start: '2026-10-10T00:00:00.000Z',
+        availability_end: '2026-10-11T00:00:00.000Z',
+      }).success,
+    ).toBe(true);
+    expect(
+      clothingListQuery.safeParse({
+        availability_start: '2026-10-10T00:00:00.000Z',
+      }).success,
+    ).toBe(false);
+    expect(
+      clothingListQuery.safeParse({
+        availability_start: '2026-10-11T00:00:00.000Z',
+        availability_end: '2026-10-10T00:00:00.000Z',
+      }).success,
+    ).toBe(false);
+    expect(
+      clothingListQuery.safeParse({
+        availability_start: '2026-10-01T00:00:00.000Z',
+        availability_end: '2026-11-02T00:00:00.000Z',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('keeps availability as a windowed read projection instead of a mutable garment status', () => {
+    expect(
+      clothingAvailabilitySummary.safeParse({
+        window: {
+          start: '2026-10-10T00:00:00.000Z',
+          end: '2026-10-11T00:00:00.000Z',
+        },
+        active_assets: 4,
+        available_assets: 1,
+        unavailable_assets: 3,
+        reserved_assets: 1,
+        rented_assets: 1,
+        cleaning_assets: 1,
+        maintenance_assets: 0,
+        manual_blocked_assets: 0,
+      }).success,
+    ).toBe(true);
+    expect(physicalAssetReadiness.safeParse('available').success).toBe(false);
+    expect(physicalAssetReadiness.safeParse('reserved').success).toBe(false);
+    expect(physicalAssetReadiness.safeParse('rented').success).toBe(false);
   });
 
   it('requires the exact guide id when default-guide measurement mode is selected', () => {

@@ -302,6 +302,8 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
       if (query.product_status) searchParams.set("product_status", query.product_status);
       if (query.asset_lifecycle) searchParams.set("asset_lifecycle", query.asset_lifecycle);
       if (query.readiness) searchParams.set("readiness", query.readiness);
+      if (query.availability_start) searchParams.set("availability_start", query.availability_start);
+      if (query.availability_end) searchParams.set("availability_end", query.availability_end);
       searchParams.set("sort", query.sort);
 
       return request<ClothingListResponse>({

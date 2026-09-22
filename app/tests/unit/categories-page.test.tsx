@@ -19,6 +19,12 @@ vi.mock("@clerk/nextjs", () => ({
   useAuth: clerk.useAuth,
 }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn() }),
+  usePathname: () => "/inventory",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 vi.mock("@/lib/drezivo-api", () => ({
   DrezivoApiError: class DrezivoApiError extends Error {
     code = "INTERNAL_ERROR";

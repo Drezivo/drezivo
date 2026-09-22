@@ -12,7 +12,7 @@ import {
 } from '../common/ids';
 import { currencyCode, nonNegativeMoneyString } from '../common/money';
 import { paginatedResponse, paginationRequest } from '../common/pagination';
-import { isoInstant } from '../common/time';
+import { instantInterval, isoInstant } from '../common/time';
 import {
   cataloguePricingMode,
   clothingImageFileIds,
@@ -62,9 +62,44 @@ export const clothingListQuery = paginationRequest
     product_status: clothingProductLifecycle.optional(),
     asset_lifecycle: physicalAssetLifecycle.optional(),
     readiness: physicalAssetReadiness.optional(),
+    availability_start: isoInstant.optional(),
+    availability_end: isoInstant.optional(),
     sort: clothingListSort.default('name_asc'),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    const startValue = value.availability_start;
+    const endValue = value.availability_end;
+    const hasStart = startValue !== undefined;
+    const hasEnd = endValue !== undefined;
+    if (hasStart !== hasEnd) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [hasStart ? 'availability_end' : 'availability_start'],
+        message: 'availability_start and availability_end must be provided together.',
+      });
+      return;
+    }
+    if (startValue === undefined || endValue === undefined) return;
+
+    const start = new Date(startValue).getTime();
+    const end = new Date(endValue).getTime();
+    if (start >= end) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['availability_end'],
+        message: 'availability_end must be after availability_start.',
+      });
+      return;
+    }
+    if (end - start > 31 * 24 * 60 * 60 * 1000) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['availability_end'],
+        message: 'availability projection window cannot exceed 31 days.',
+      });
+    }
+  });
 export type ClothingListQuery = z.infer<typeof clothingListQuery>;
 
 export const clothingCategorySummary = z.object({
@@ -82,6 +117,19 @@ export const clothingReadinessSummary = z.object({
 });
 export type ClothingReadinessSummary = z.infer<typeof clothingReadinessSummary>;
 
+export const clothingAvailabilitySummary = z.object({
+  window: instantInterval,
+  active_assets: z.number().int().nonnegative(),
+  available_assets: z.number().int().nonnegative(),
+  unavailable_assets: z.number().int().nonnegative(),
+  reserved_assets: z.number().int().nonnegative(),
+  rented_assets: z.number().int().nonnegative(),
+  cleaning_assets: z.number().int().nonnegative(),
+  maintenance_assets: z.number().int().nonnegative(),
+  manual_blocked_assets: z.number().int().nonnegative(),
+});
+export type ClothingAvailabilitySummary = z.infer<typeof clothingAvailabilitySummary>;
+
 export const clothingListItem = z.object({
   product_id: productId,
   code: clothingStyleCode,
@@ -93,6 +141,7 @@ export const clothingListItem = z.object({
   currency: currencyCode,
   primary_image_url: z.string().url().nullable(),
   readiness: clothingReadinessSummary,
+  availability: clothingAvailabilitySummary,
   created_at: isoInstant,
   updated_at: isoInstant,
 });
