@@ -235,14 +235,14 @@ Before marking a task complete:
 
 ## Phase 5: Availability and reservation handoff
 
-- [ ] **CLT-050 — Publish catalogue identity for reservation allocation**
+- [x] **CLT-050 — Publish catalogue identity for reservation allocation**
   - **Depends on:** CLT-020 through CLT-032.
   - **Outcome:** Reservation services can select a rentable variant and allocate one serialized physical asset safely.
   - **Acceptance:**
-    - [ ] Reservation request never treats product quantity as available capacity.
-    - [ ] Candidate physical assets are tenant/branch scoped and filtered by lifecycle/readiness eligibility.
-    - [ ] Final conflict protection belongs to the reservation/allocation transaction, not catalogue read logic.
-  - **Tests/evidence:** Candidate selection plus concurrent allocation handoff tests.
+    - [x] Reservation request never treats product quantity as available capacity.
+    - [x] Candidate physical assets are tenant/branch scoped and filtered by lifecycle/readiness eligibility.
+    - [x] Final conflict protection belongs to the reservation/allocation transaction, not catalogue read logic.
+  - **Tests/evidence:** `catalogue-reservation-handoff.test.ts` passes `3/3` against disposable PostgreSQL: the handoff returns concrete serialized asset IDs only, filters foreign-tenant/foreign-branch/inactive/unready/overlapping-block candidates, requires active product/variant/branch state, and proves two concurrent reservation transactions may observe the same stale candidate while the authoritative `asset_allocation_no_overlap` constraint admits exactly one blocking allocation. `catalogue-allocation.test.ts` confirms the shared handoff contract exposes no stock quantity/available-units authority. Existing catalogue read/edit/lifecycle/archive regressions remain green (`7/7`, `4/4`, `6/6`, `4/4`); API units remain `82/82`, and contract focused tests remain `13/13` with typecheck/lint/build passing.
 
 - [ ] **CLT-051 — Feed Clothing status/availability summaries from canonical sources**
   - **Depends on:** Availability implementation.
