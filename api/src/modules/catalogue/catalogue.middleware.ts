@@ -7,14 +7,20 @@ import {
   createAssetMaintenanceBlockRequest,
   createCatalogueCategoryRequest,
   createClothingRequest,
+  createClothingVariantRequest,
+  createPhysicalAssetRequest,
   idempotencyKey,
   physicalAssetId,
   productId,
   productVariantId,
+  publishClothingRequest,
+  removeClothingVariantRequest,
   replaceClothingImagesRequest,
+  restoreClothingRequest,
   saveMeasurementGuideRequest,
   updateCatalogueCategoryRequest,
   updateCatalogueCategoryStatusRequest,
+  updateClothingVariantLifecycleRequest,
   updateClothingProductRequest,
   updateClothingVariantRequest,
   updatePhysicalAssetStateRequest,
@@ -87,6 +93,84 @@ export const validateUpdateClothingProduct: RequestHandler = (req, _res, next): 
     return;
   }
   req.body = parsed.data;
+  next();
+};
+
+export const validateCreateClothingVariant: RequestHandler = (req, _res, next): void => {
+  const parsedProductId = productId.safeParse(req.params.productId);
+  const parsedBody = createClothingVariantRequest.safeParse(req.body);
+  if (!parsedProductId.success || !parsedBody.success) {
+    next(new ValidationError('Clothing variant create request is invalid.'));
+    return;
+  }
+  req.catalogueProductId = parsedProductId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validateCreatePhysicalAsset: RequestHandler = (req, _res, next): void => {
+  const parsedProductId = productId.safeParse(req.params.productId);
+  const parsedVariantId = productVariantId.safeParse(req.params.variantId);
+  const parsedBody = createPhysicalAssetRequest.safeParse(req.body);
+  if (!parsedProductId.success || !parsedVariantId.success || !parsedBody.success) {
+    next(new ValidationError('Physical piece create request is invalid.'));
+    return;
+  }
+  req.catalogueProductId = parsedProductId.data;
+  req.catalogueVariantId = parsedVariantId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validatePublishClothing: RequestHandler = (req, _res, next): void => {
+  const parsedProductId = productId.safeParse(req.params.productId);
+  const parsedBody = publishClothingRequest.safeParse(req.body);
+  if (!parsedProductId.success || !parsedBody.success) {
+    next(new ValidationError('Clothing publish request is invalid.'));
+    return;
+  }
+  req.catalogueProductId = parsedProductId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validateRestoreClothing: RequestHandler = (req, _res, next): void => {
+  const parsedProductId = productId.safeParse(req.params.productId);
+  const parsedBody = restoreClothingRequest.safeParse(req.body);
+  if (!parsedProductId.success || !parsedBody.success) {
+    next(new ValidationError('Clothing restore request is invalid.'));
+    return;
+  }
+  req.catalogueProductId = parsedProductId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validateVariantLifecycleUpdate: RequestHandler = (req, _res, next): void => {
+  const parsedProductId = productId.safeParse(req.params.productId);
+  const parsedVariantId = productVariantId.safeParse(req.params.variantId);
+  const parsedBody = updateClothingVariantLifecycleRequest.safeParse(req.body);
+  if (!parsedProductId.success || !parsedVariantId.success || !parsedBody.success) {
+    next(new ValidationError('Variant lifecycle request is invalid.'));
+    return;
+  }
+  req.catalogueProductId = parsedProductId.data;
+  req.catalogueVariantId = parsedVariantId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validateRemoveClothingVariant: RequestHandler = (req, _res, next): void => {
+  const parsedProductId = productId.safeParse(req.params.productId);
+  const parsedVariantId = productVariantId.safeParse(req.params.variantId);
+  const parsedBody = removeClothingVariantRequest.safeParse(req.body);
+  if (!parsedProductId.success || !parsedVariantId.success || !parsedBody.success) {
+    next(new ValidationError('Variant removal request is invalid.'));
+    return;
+  }
+  req.catalogueProductId = parsedProductId.data;
+  req.catalogueVariantId = parsedVariantId.data;
+  req.body = parsedBody.data;
   next();
 };
 

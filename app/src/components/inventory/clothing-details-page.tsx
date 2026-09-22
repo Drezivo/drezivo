@@ -10,6 +10,7 @@ import {
   Package,
   Pencil,
   RefreshCw,
+  Rocket,
   Ruler,
   Shirt,
   Tags,
@@ -32,6 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
 
 type LoadState =
@@ -43,6 +45,8 @@ export function ClothingDetailsPage({ productId }: { productId: string }) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [notice, setNotice] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const { isSubmitting: isPublishing, resetIntent: resetPublishIntent, submit: submitPublish } = useSubmitGuard();
 
   const loadDetail = useCallback(async () => {
     if (!isLoaded || !isSignedIn) return;
@@ -74,10 +78,33 @@ export function ClothingDetailsPage({ productId }: { productId: string }) {
     return <DetailErrorState error={state.error} onRetry={loadDetail} />;
   }
 
+  async function handlePublish(item: ClothingDetail) {
+    if (isPublishing) return;
+    setPublishError(null);
+    try {
+      const result = await submitPublish((idempotencyKey) =>
+        createDrezivoApiClient(getToken).publishClothing(
+          item.product_id,
+          { expected_updated_at: item.updated_at },
+          idempotencyKey
+        )
+      );
+      if (!result) return;
+      resetPublishIntent();
+      setNotice("Clothing published");
+      await loadDetail();
+    } catch (error) {
+      setPublishError(toDrezivoApiError(error).message);
+    }
+  }
+
   return (
     <DetailContent
       item={state.item}
       notice={notice}
+      publishError={publishError}
+      isPublishing={isPublishing}
+      onPublish={() => void handlePublish(state.item)}
       onDismissNotice={() => setNotice(null)}
       onArchived={(message) => {
         setNotice(message);
@@ -90,11 +117,17 @@ export function ClothingDetailsPage({ productId }: { productId: string }) {
 function DetailContent({
   item,
   notice,
+  publishError,
+  isPublishing,
+  onPublish,
   onArchived,
   onDismissNotice,
 }: {
   item: ClothingDetail;
   notice: string | null;
+  publishError: string | null;
+  isPublishing: boolean;
+  onPublish: () => void;
   onArchived: (message: string) => void;
   onDismissNotice: () => void;
 }) {
@@ -153,6 +186,11 @@ function DetailContent({
             >
               Dismiss
             </button>
+          </div>
+        ) : null}
+        {publishError ? (
+          <div role="alert" className="rounded-lg border border-dashboard-danger/30 bg-dashboard-danger/10 px-4 py-3 text-sm text-dashboard-danger">
+            {publishError}
           </div>
         ) : null}
 
@@ -228,6 +266,12 @@ function DetailContent({
                   </div>
                   {item.status !== "archived" ? (
                     <div className="flex shrink-0 flex-wrap gap-2">
+                      {item.status === "draft" ? (
+                        <Button type="button" disabled={isPublishing} onClick={onPublish}>
+                          <Rocket className="h-4 w-4" aria-hidden="true" />
+                          {isPublishing ? "Publishing…" : "Publish Clothing"}
+                        </Button>
+                      ) : null}
                       <Link
                         href={`/inventory/${item.product_id}/edit`}
                         className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-dashboard-border bg-dashboard-surface px-4 text-sm font-medium text-dashboard-navy transition-colors hover:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"

@@ -14,6 +14,8 @@ import {
   archiveClothingRequest,
   archiveClothingResponse,
   createClothingRequest,
+  publishClothingRequest,
+  publishClothingResponse,
   createClothingResponse,
   removeCatalogueCategoryResponse,
   measurementGuide,
@@ -51,6 +53,8 @@ import {
   type ArchiveClothingRequest,
   type ArchiveClothingResponse,
   type CreateClothingRequest,
+  type PublishClothingRequest,
+  type PublishClothingResponse,
   type CreateClothingResponse,
   type RemoveCatalogueCategoryResponse,
   type MeasurementGuide,
@@ -313,6 +317,19 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "POST",
         path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/archive`,
         responseSchema: apiEnvelope(archiveClothingResponse),
+      }),
+    publishClothing: (
+      productId: string,
+      input: PublishClothingRequest,
+      idempotencyKey: string
+    ) =>
+      request<PublishClothingResponse>({
+        getToken,
+        body: publishClothingRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/publish`,
+        responseSchema: apiEnvelope(publishClothingResponse),
       }),
     updatePhysicalAssetState: (
       assetId: string,

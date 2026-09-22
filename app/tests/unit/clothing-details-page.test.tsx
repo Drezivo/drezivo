@@ -11,6 +11,7 @@ const clerk = vi.hoisted(() => ({
 const api = vi.hoisted(() => ({
   archiveClothing: vi.fn(),
   getCatalogueClothingDetail: vi.fn(),
+  publishClothing: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({
@@ -128,6 +129,15 @@ describe("ClothingDetailsPage", () => {
       },
       requestId: "req-archive",
     });
+    api.publishClothing.mockResolvedValue({
+      data: {
+        product_id: productId,
+        status: "active",
+        activated_variant_count: 1,
+        updated_at: "2026-09-21T00:01:00.000Z",
+      },
+      requestId: "req-publish",
+    });
   });
 
   it("loads and renders the real clothing detail endpoint response", async () => {
@@ -202,6 +212,53 @@ describe("ClothingDetailsPage", () => {
     const badge = await screen.findByLabelText(`Clothing lifecycle: ${label}`);
     expect(badge).toBeVisible();
     expect(badge).toHaveTextContent(label);
+  });
+
+  it("publishes a persisted draft with the current concurrency token and reloads active detail", async () => {
+    const draft = { ...detail, status: "draft" as const };
+    api.getCatalogueClothingDetail
+      .mockResolvedValueOnce({ data: draft, requestId: "req-draft" })
+      .mockResolvedValueOnce({ data: detail, requestId: "req-active" });
+
+    render(<ClothingDetailsPage productId={productId} />);
+
+    await screen.findByRole("heading", { name: "Emerald Evening Gown" });
+    fireEvent.click(screen.getByRole("button", { name: "Publish Clothing" }));
+
+    await waitFor(() => expect(api.publishClothing).toHaveBeenCalledTimes(1));
+    expect(api.publishClothing).toHaveBeenCalledWith(
+      productId,
+      { expected_updated_at: detail.updated_at },
+      expect.any(String)
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent("Clothing published");
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("button", { name: "Publish Clothing" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Clothing lifecycle: Active")).toBeVisible();
+  });
+
+  it("keeps an incomplete draft on screen and shows the publish validation error", async () => {
+    const { DrezivoApiError } = await import("@/lib/drezivo-api");
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: { ...detail, status: "draft" as const },
+      requestId: "req-draft-invalid",
+    });
+    api.publishClothing.mockRejectedValueOnce(
+      new DrezivoApiError("Add at least one accepted clothing photo before publishing.", {
+        code: "STATE_CONFLICT",
+        status: 409,
+      })
+    );
+
+    render(<ClothingDetailsPage productId={productId} />);
+    await screen.findByRole("button", { name: "Publish Clothing" });
+    fireEvent.click(screen.getByRole("button", { name: "Publish Clothing" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Add at least one accepted clothing photo before publishing."
+    );
+    expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Publish Clothing" })).toBeVisible();
   });
 
   it("renders variants without a color as optional metadata", async () => {

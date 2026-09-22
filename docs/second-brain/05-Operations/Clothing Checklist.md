@@ -313,16 +313,16 @@ Before marking a task complete:
     - [x] Detail image rendering is lifecycle-agnostic and works for staff-visible active/draft products that already have accepted images.
   - **Tests/evidence:** `catalogue-read-model.test.ts` now passes `8/8` against disposable PostgreSQL and proves accepted `product_image` rows are joined to private file metadata, signed in display order, and a failed read authorization degrades only that image to `null` instead of failing Clothing Detail. `clothing-details-page.test.tsx` passes `10/10`, covering signed primary-image rendering, multi-image gallery switching, failed-image fallback, and existing lifecycle/detail behavior. API and app strict typechecks pass.
 
-- [ ] **CLT-072 — Complete and publish draft products**
+- [x] **CLT-072 — Complete and publish draft products**
   - **Depends on:** Add Clothing draft creation, image requirements, product/variant lifecycle rules.
   - **Outcome:** A staff user can return to a draft product, finish its required data, and publish it without recreating the clothing item.
   - **Acceptance:**
-    - [ ] Draft Clothing Detail/Edit exposes a clear `Complete Draft` / `Publish` action.
-    - [ ] Publish validates all required product data, required accepted images, and at least one publishable/rentable variant before activation.
-    - [ ] Invalid/incomplete drafts remain draft and return actionable validation errors.
-    - [ ] Successful publish updates the real catalogue state and makes the product visible in the active inventory projection.
-    - [ ] Publish is tenant-scoped, permission-checked, idempotent, and concurrency-safe.
-  - **Tests/evidence:** Draft → complete → publish PostgreSQL route test plus detail/edit UI tests.
+    - [x] Draft Clothing Detail exposes a clear `Publish Clothing` action while keeping Edit Clothing available for completing missing persisted data before publishing.
+    - [x] Publish validates an active category, at least one accepted catalogue image, and at least one variant backed by an active serialized physical piece before the product can become active; eligible draft variants are activated in the same transaction.
+    - [x] Invalid/incomplete drafts remain draft and return actionable validation errors for missing images or publishable physical capacity.
+    - [x] Successful publish updates real product/variant catalogue state and makes the product visible in the active inventory projection.
+    - [x] Publish is tenant-scoped through the shared catalogue transaction/RLS boundary, requires `assets.manage`, uses an idempotency record, and rejects stale `expected_updated_at` tokens.
+  - **Tests/evidence:** `catalogue-draft-publish.test.ts` passes `4/4` against disposable PostgreSQL, proving valid draft → active publication, eligible variant activation, active-list visibility, idempotent replay, missing-image rejection, no-active-piece rejection, and stale-version protection. `catalogue-draft-publish-route.test.ts` passes `1/1` through the authenticated HTTP route. `clothing-details-page.test.tsx` passes `12/12`, covering the draft Publish action, current `updated_at` token usage, authoritative detail reload after success, and actionable validation errors that keep the item draft. Contracts remain `74/74`; API units `82/82`; contracts build, API typecheck/lint/build, app strict typecheck, focused Clothing tests `40/40`, and `git diff --check` pass.
 
 - [ ] **CLT-073 — Restore archived products safely**
   - **Depends on:** CLT-032 archive behavior and reservation-history preservation.

@@ -5,13 +5,19 @@ import type {
   CreateAssetMaintenanceBlockRequest,
   CreateCatalogueCategoryRequest,
   CreateClothingRequest,
+  CreateClothingVariantRequest,
+  CreatePhysicalAssetRequest,
   PermissionCode,
   ReplaceClothingImagesRequest,
   SaveMeasurementGuideRequest,
+  PublishClothingRequest,
+  RemoveClothingVariantRequest,
+  RestoreClothingRequest,
   TenantStatus,
   UpdateCatalogueCategoryRequest,
   UpdateCatalogueCategoryStatusRequest,
   UpdateClothingProductRequest,
+  UpdateClothingVariantLifecycleRequest,
   UpdateClothingVariantRequest,
   UpdatePhysicalAssetStateRequest,
 } from '@drezivo/contracts';
@@ -23,16 +29,22 @@ import {
   createAssetMaintenanceBlock,
   createCatalogueCategory,
   createClothing,
+  createClothingVariant,
+  createPhysicalAsset,
   getCatalogueCategories,
   getCatalogueClothingDetail,
   getCatalogueClothingList,
   getDefaultMeasurementGuide,
+  publishClothing,
   removeCatalogueCategory,
+  removeClothingVariant,
   replaceClothingImages,
+  restoreClothing,
   saveMeasurementGuide,
   updateCatalogueCategory,
   updateCatalogueCategoryStatus,
   updateClothingProduct,
+  updateClothingVariantLifecycle,
   updateClothingVariant,
   updatePhysicalAssetState,
 } from './catalogue.service.js';
@@ -54,6 +66,69 @@ export async function getCatalogueClothingDetailController(
   const productId = req.catalogueProductId;
   if (!productId) throw new ValidationError('A valid clothing product id is required.');
   sendSuccess(req, res, await getCatalogueClothingDetail(requireContext(req), productId));
+}
+
+export async function publishClothingController(req: Request, res: Response): Promise<void> {
+  const productId = req.catalogueProductId;
+  if (!productId) throw new ValidationError('A valid clothing product id is required.');
+  const result = await publishClothing({
+    ...requireContext(req), requestId: req.requestId, idempotencyKey: requireIdempotencyKey(req),
+    productId, request: req.body as PublishClothingRequest,
+  });
+  res.status(result.status).json(result.body);
+}
+
+export async function restoreClothingController(req: Request, res: Response): Promise<void> {
+  const productId = req.catalogueProductId;
+  if (!productId) throw new ValidationError('A valid clothing product id is required.');
+  const result = await restoreClothing({
+    ...requireContext(req), requestId: req.requestId, idempotencyKey: requireIdempotencyKey(req),
+    productId, request: req.body as RestoreClothingRequest,
+  });
+  res.status(result.status).json(result.body);
+}
+
+export async function createClothingVariantController(req: Request, res: Response): Promise<void> {
+  const productId = req.catalogueProductId;
+  if (!productId) throw new ValidationError('A valid clothing product id is required.');
+  const result = await createClothingVariant({
+    ...requireContext(req), requestId: req.requestId, idempotencyKey: requireIdempotencyKey(req),
+    productId, request: req.body as CreateClothingVariantRequest,
+  });
+  res.status(result.status).json(result.body);
+}
+
+export async function createPhysicalAssetController(req: Request, res: Response): Promise<void> {
+  const productId = req.catalogueProductId;
+  const variantId = req.catalogueVariantId;
+  if (!productId || !variantId) throw new ValidationError('Valid clothing product and variant ids are required.');
+  const result = await createPhysicalAsset({
+    ...requireContext(req), requestId: req.requestId, idempotencyKey: requireIdempotencyKey(req),
+    productId, variantId, request: req.body as CreatePhysicalAssetRequest,
+  });
+  res.status(result.status).json(result.body);
+}
+
+export async function updateClothingVariantLifecycleController(req: Request, res: Response): Promise<void> {
+  const productId = req.catalogueProductId;
+  const variantId = req.catalogueVariantId;
+  if (!productId || !variantId) throw new ValidationError('Valid clothing product and variant ids are required.');
+  const result = await updateClothingVariantLifecycle({
+    ...requireContext(req), requestId: req.requestId, idempotencyKey: requireIdempotencyKey(req),
+    productId, variantId, request: req.body as UpdateClothingVariantLifecycleRequest,
+  });
+  res.status(result.status).json(result.body);
+}
+
+export async function removeClothingVariantController(req: Request, res: Response): Promise<void> {
+  const productId = req.catalogueProductId;
+  const variantId = req.catalogueVariantId;
+  if (!productId || !variantId) throw new ValidationError('Valid clothing product and variant ids are required.');
+  const result = await removeClothingVariant({
+    ...requireContext(req), requestId: req.requestId, idempotencyKey: requireIdempotencyKey(req),
+    productId, variantId, request: req.body as RemoveClothingVariantRequest,
+  });
+  res.status(result.status).json(result.body);
 }
 
 export async function updateClothingProductController(req: Request, res: Response): Promise<void> {

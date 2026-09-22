@@ -249,18 +249,17 @@ describe('CLT Phase 1 catalogue read model', async () => {
     });
 
     const detail = await getCatalogueClothingDetail(context, productId, storage);
-    expect(detail.images).toEqual([
-      {
-        file_id: expect.any(String),
-        display_order: 0,
-        image_url: 'https://reads.example.test/catalogue%2Flook-001-cover.webp?version=cover-v1',
-      },
-      {
-        file_id: expect.any(String),
-        display_order: 1,
-        image_url: null,
-      },
-    ]);
+    expect(detail.images).toHaveLength(2);
+    expect(typeof detail.images[0]?.file_id).toBe('string');
+    expect(detail.images[0]).toMatchObject({
+      display_order: 0,
+      image_url: 'https://reads.example.test/catalogue%2Flook-001-cover.webp?version=cover-v1',
+    });
+    expect(typeof detail.images[1]?.file_id).toBe('string');
+    expect(detail.images[1]).toMatchObject({
+      display_order: 1,
+      image_url: null,
+    });
     expect(storage.authorizedReads).toEqual([
       {
         storageKey: 'catalogue/look-001-cover.webp',

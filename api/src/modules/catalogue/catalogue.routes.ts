@@ -9,17 +9,23 @@ import {
   createAssetMaintenanceBlockController,
   createCatalogueCategoryController,
   createClothingController,
+  createClothingVariantController,
+  createPhysicalAssetController,
   getCatalogueClothingDetailController,
   getDefaultMeasurementGuideController,
   listCatalogueCategoriesController,
   listCatalogueClothingController,
+  publishClothingController,
   removeCatalogueCategoryController,
+  removeClothingVariantController,
   replaceClothingImagesController,
+  restoreClothingController,
   saveMeasurementGuideController,
   updateCatalogueCategoryController,
   updateCatalogueCategoryStatusController,
   updateClothingProductController,
   updateClothingVariantController,
+  updateClothingVariantLifecycleController,
   updatePhysicalAssetStateController,
 } from './catalogue.controller.js';
 import {
@@ -35,8 +41,14 @@ import {
   validateCreateAssetMaintenanceBlock,
   validateCreateCatalogueCategory,
   validateCreateClothing,
+  validateCreateClothingVariant,
+  validateCreatePhysicalAsset,
+  validatePublishClothing,
+  validateRemoveClothingVariant,
+  validateRestoreClothing,
   validateUpdateClothingProduct,
   validateUpdateClothingVariant,
+  validateVariantLifecycleUpdate,
   validateUpdatePhysicalAssetState,
   validateReplaceClothingImages,
   validateSaveMeasurementGuide,
@@ -104,6 +116,79 @@ catalogueRouter.patch(
   validateUpdateClothingVariant,
   requireCatalogueIdempotencyKey,
   updateClothingVariantController,
+);
+
+catalogueRouter.post(
+  '/catalogue/clothing/:productId/publish',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validatePublishClothing,
+  requireCatalogueIdempotencyKey,
+  publishClothingController,
+);
+
+catalogueRouter.post(
+  '/catalogue/clothing/:productId/restore',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  requireAssetArchivePermission,
+  validateRestoreClothing,
+  requireCatalogueIdempotencyKey,
+  restoreClothingController,
+);
+
+catalogueRouter.post(
+  '/catalogue/clothing/:productId/variants',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateCreateClothingVariant,
+  requireCatalogueIdempotencyKey,
+  createClothingVariantController,
+);
+
+catalogueRouter.patch(
+  '/catalogue/clothing/:productId/variants/:variantId/lifecycle',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateVariantLifecycleUpdate,
+  requireCatalogueIdempotencyKey,
+  updateClothingVariantLifecycleController,
+);
+
+catalogueRouter.post(
+  '/catalogue/clothing/:productId/variants/:variantId/remove',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateRemoveClothingVariant,
+  requireCatalogueIdempotencyKey,
+  removeClothingVariantController,
+);
+
+catalogueRouter.post(
+  '/catalogue/clothing/:productId/variants/:variantId/assets',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateCreatePhysicalAsset,
+  requireCatalogueIdempotencyKey,
+  createPhysicalAssetController,
 );
 
 catalogueRouter.post(
