@@ -135,6 +135,8 @@ describe("ClothingDetailsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Emerald Evening Gown" })).toBeVisible();
     expect(api.getCatalogueClothingDetail).toHaveBeenCalledWith(productId);
+    expect(screen.getByRole("heading", { name: "Variants & Pricing" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Serialized Pieces" })).toBeVisible();
     expect(screen.getByText("GWN-001-M")).toBeVisible();
     expect(screen.getByText("AST-GWN-001-M-01")).toBeVisible();
     expect(screen.getByText("Needs Cleaning")).toBeVisible();
@@ -206,6 +208,26 @@ describe("ClothingDetailsPage", () => {
     );
     await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
+  });
+
+  it("shows a clean stale-version conflict instead of archiving outdated detail state", async () => {
+    const { DrezivoApiError } = await import("@/lib/drezivo-api");
+    api.archiveClothing.mockRejectedValueOnce(
+      new DrezivoApiError("This clothing changed since you opened it.", {
+        code: "STALE_VERSION",
+        status: 409,
+      })
+    );
+
+    render(<ClothingDetailsPage productId={productId} />);
+    await screen.findByRole("heading", { name: "Emerald Evening Gown" });
+    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Archive Clothing" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This clothing changed since you opened it. Refresh the latest version before archiving."
+    );
+    expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(1);
   });
 
   it("does not render the old fabricated rental or maintenance histories", async () => {

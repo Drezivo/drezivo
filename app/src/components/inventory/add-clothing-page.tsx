@@ -46,6 +46,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
 
 const SIZE_OPTIONS = ["XS", "S", "M", "L", "XL", "XXL"] as const;
@@ -87,8 +88,10 @@ export function AddClothingPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const guideFileInputRef = useRef<HTMLInputElement>(null);
-  const submitIntentRef = useRef<{ fingerprint: string; key: string } | null>(null);
+  const submitFingerprintRef = useRef<string | null>(null);
   const guideSetupIntentRef = useRef<GuideSetupIntent | null>(null);
+  const submitGuard = useSubmitGuard();
+  const { isSubmitting, resetIntent: resetSubmitIntent, submit } = submitGuard;
   const historyGuardArmedRef = useRef(false);
   const bypassPopStateRef = useRef(false);
   const [categories, setCategories] = useState<CatalogueCategory[]>([]);
@@ -133,9 +136,9 @@ export function AddClothingPage() {
   const [guideSetupError, setGuideSetupError] = useState<string | null>(null);
   const [guideSaveStage, setGuideSaveStage] = useState<string | null>(null);
   const [isSavingGuide, setIsSavingGuide] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStage, setSubmitStage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [capacityLimitHit, setCapacityLimitHit] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
@@ -147,7 +150,12 @@ export function AddClothingPage() {
   const selectedCategory =
     activeCategories.find((category) => category.id === categoryId) ?? null;
 
-  const markDirty = useCallback(() => setIsDirty(true), []);
+  const markDirty = useCallback(() => {
+    setIsDirty(true);
+    setCapacityLimitHit(false);
+    submitFingerprintRef.current = null;
+    resetSubmitIntent();
+  }, [resetSubmitIntent]);
 
   const armHistoryGuard = useCallback(() => {
     if (historyGuardArmedRef.current) return;
@@ -657,28 +665,46 @@ export function AddClothingPage() {
 
   const submitClothing = async (activate: boolean) => {
     if (isSubmitting) return;
-    setIsSubmitting(true);
     setFormError(null);
+    setCapacityLimitHit(false);
+
     try {
-      setSubmitStage("Validating clothing…");
       if (activate && photos.length === 0) {
         throw new Error("Add at least one photo before adding clothing. You can still save it as a draft without a photo.");
       }
-      buildCreateRequest(false, []);
-      setSubmitStage(photos.length > 0 ? "Uploading photos…" : activate ? "Adding clothing…" : "Saving draft…");
-      const imageFileIds: string[] = [];
-      for (const photo of photos) {
-        imageFileIds.push(await uploadPhoto(photo));
+
+      const previewRequest = buildCreateRequest(false, []);
+      const fingerprint = JSON.stringify({
+        activate,
+        previewRequest,
+        photos: photos.map((photo) => ({
+          id: photo.id,
+          name: photo.file.name,
+          size: photo.file.size,
+          lastModified: photo.file.lastModified,
+        })),
+      });
+      if (submitFingerprintRef.current !== fingerprint) {
+        resetSubmitIntent();
+        submitFingerprintRef.current = fingerprint;
       }
-      setSubmitStage(activate ? "Adding clothing…" : "Saving draft…");
-      const requestBody = buildCreateRequest(activate, imageFileIds);
-      const fingerprint = JSON.stringify(requestBody);
-      const intent =
-        submitIntentRef.current?.fingerprint === fingerprint
-          ? submitIntentRef.current
-          : { fingerprint, key: newIntentKey("clothing") };
-      submitIntentRef.current = intent;
-      const result = await createDrezivoApiClient(getToken).createClothing(requestBody, intent.key);
+
+      const result = await submit(async (idempotencyKey) => {
+        setSubmitStage("Validating clothing…");
+        setSubmitStage(
+          photos.length > 0 ? "Uploading photos…" : activate ? "Adding clothing…" : "Saving draft…"
+        );
+        const imageFileIds: string[] = [];
+        for (const photo of photos) {
+          imageFileIds.push(await uploadPhoto(photo));
+        }
+
+        setSubmitStage(activate ? "Adding clothing…" : "Saving draft…");
+        const requestBody = buildCreateRequest(activate, imageFileIds);
+        return createDrezivoApiClient(getToken).createClothing(requestBody, idempotencyKey);
+      });
+      if (!result) return;
+
       photos.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
       setIsDirty(false);
       historyGuardArmedRef.current = false;
@@ -689,14 +715,19 @@ export function AddClothingPage() {
         router.replace("/inventory");
       }
     } catch (error) {
-      if (error instanceof DrezivoApiError && (error.code === "ASSET_LIMIT_EXCEEDED" || error.code === "CAPACITY_CONFLICT")) {
-        setFormError("Your workspace has reached its active clothing-piece limit. Archive unused pieces or change plan before adding more.");
+      if (
+        error instanceof DrezivoApiError &&
+        (error.code === "ASSET_LIMIT_EXCEEDED" || error.code === "CAPACITY_CONFLICT")
+      ) {
+        setCapacityLimitHit(true);
+        setFormError(
+          "Your workspace has reached its active clothing-piece limit. Archive unused clothing before adding more pieces."
+        );
       } else {
         setFormError(errorMessage(error, "Could not add clothing. Check the form and try again."));
       }
     } finally {
       setSubmitStage(null);
-      setIsSubmitting(false);
     }
   };
 
@@ -1337,7 +1368,17 @@ export function AddClothingPage() {
                 {formError ? (
                   <div className="flex gap-2 rounded-lg border border-dashboard-danger/30 bg-dashboard-danger/10 px-3 py-2.5 text-xs text-dashboard-danger" role="alert">
                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span>{formError}</span>
+                    <div>
+                      <p>{formError}</p>
+                      {capacityLimitHit ? (
+                        <Link
+                          href="/inventory?status=active"
+                          className="mt-2 inline-flex font-semibold text-dashboard-navy underline underline-offset-2"
+                        >
+                          Review clothing to archive
+                        </Link>
+                      ) : null}
+                    </div>
                   </div>
                 ) : null}
                 {submitStage ? (
