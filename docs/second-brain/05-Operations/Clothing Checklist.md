@@ -235,24 +235,24 @@ Before marking a task complete:
 
 ## Phase 5: Availability and reservation handoff
 
-- [ ] **CLT-050 — Publish catalogue identity for reservation allocation**
+- [x] **CLT-050 — Publish catalogue identity for reservation allocation**
   - **Depends on:** CLT-020 through CLT-032.
   - **Outcome:** Reservation services can select a rentable variant and allocate one serialized physical asset safely.
   - **Acceptance:**
-    - [ ] Reservation request never treats product quantity as available capacity.
-    - [ ] Candidate physical assets are tenant/branch scoped and filtered by lifecycle/readiness eligibility.
-    - [ ] Final conflict protection belongs to the reservation/allocation transaction, not catalogue read logic.
-  - **Tests/evidence:** Candidate selection plus concurrent allocation handoff tests.
+    - [x] Reservation request never treats product quantity as available capacity.
+    - [x] Candidate physical assets are tenant/branch scoped and filtered by lifecycle/readiness eligibility.
+    - [x] Final conflict protection belongs to the reservation/allocation transaction, not catalogue read logic.
+  - **Tests/evidence:** `catalogue-reservation-handoff.test.ts` passes `3/3` against disposable PostgreSQL: the handoff returns concrete serialized asset IDs only, filters foreign-tenant/foreign-branch/inactive/unready/overlapping-block candidates, requires active product/variant/branch state, and proves two concurrent reservation transactions may observe the same stale candidate while the authoritative `asset_allocation_no_overlap` constraint admits exactly one blocking allocation. `catalogue-allocation.test.ts` confirms the shared handoff contract exposes no stock quantity/available-units authority. Existing catalogue read/edit/lifecycle/archive regressions remain green (`7/7`, `4/4`, `6/6`, `4/4`); API units remain `82/82`, and contract focused tests remain `13/13` with typecheck/lint/build passing.
 
-- [ ] **CLT-051 — Feed Clothing status/availability summaries from canonical sources**
+- [x] **CLT-051 — Feed Clothing status/availability summaries from canonical sources**
   - **Depends on:** Availability implementation.
   - **Outcome:** Clothing list status and availability columns are read projections of real operational truth.
   - **Acceptance:**
-    - [ ] `Reserved`/future occupied states come from allocations/reservations.
-    - [ ] `Rented`/custody comes from actual pickup/return state.
-    - [ ] Cleaning/maintenance/manual blocks come from canonical readiness/work-order/allocation state.
-    - [ ] `Available` means eligible for the specific projection/window; it is not a permanent mutable flag.
-  - **Tests/evidence:** Cross-check list projection against reservation/availability fixtures.
+    - [x] `Reserved`/future occupied states come from allocations/reservations.
+    - [x] `Rented`/custody comes from actual pickup/return state.
+    - [x] Cleaning/maintenance/manual blocks come from canonical readiness/work-order/allocation state.
+    - [x] `Available` means eligible for the specific projection/window; it is not a permanent mutable flag.
+  - **Tests/evidence:** `catalogue-availability-summary.test.ts` passes `3/3` against disposable PostgreSQL and cross-checks the list projection against real blocking reservation allocations, a released reservation allocation, current custody, current cleaning readiness, repair/cleaning work orders, and a manual-block work order. The projection returns an explicit bounded window, counts concrete active serialized assets, and computes `available_assets` only from active product + active variant + active/ready/at-branch garments with no blocking allocation in that window; archiving the style drives available capacity to zero without erasing Reserved/history signals. `catalogue-staff.test.ts` proves custom projection windows must be paired, ordered, and no longer than 31 days and confirms Available/Reserved/Rented are not physical readiness enum values. `/inventory` now renders overlapping operational signals separately from `X/Y available` capacity, with frontend/API-client regressions `50/50` and the focused Clothing/API-client slice `15/15`. Existing catalogue read (`7/7`), CLT-050 handoff (`3/3`), and archive/list (`4/4`) integrations remain green; all contract tests pass `74/74`, API units `82/82`, API lint/build pass, and `git diff --check` is clean.
 
 ## Phase 6: Security, performance, and completion evidence
 

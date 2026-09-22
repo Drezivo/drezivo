@@ -26,6 +26,7 @@ import {
 
 import type {
   CatalogueCategory,
+  ClothingAvailabilitySummary,
   ClothingListItem,
   ClothingProductLifecycle,
 } from "@drezivo/contracts";
@@ -367,8 +368,10 @@ export function ClothingPage() {
                     <TableHead className="px-2 sm:px-4">Clothing</TableHead>
                     <TableHead className="hidden md:table-cell">Category</TableHead>
                     <TableHead className="hidden md:table-cell">Sizes</TableHead>
-                    <TableHead className="hidden lg:table-cell">Rental Price</TableHead>
-                    <TableHead className="hidden lg:table-cell">Active Pieces</TableHead>
+                    <TableHead className="hidden lg:table-cell">Status</TableHead>
+                    <TableHead className="hidden lg:table-cell">Availability</TableHead>
+                    <TableHead className="hidden xl:table-cell">Rental Price</TableHead>
+                    <TableHead className="hidden xl:table-cell">Active Pieces</TableHead>
                     <TableHead className="w-12 px-2 sm:px-4" />
                   </TableRow>
                 </TableHeader>
@@ -477,8 +480,16 @@ function ClothingRow({
             </dd>
           </div>
           <div className="min-w-0">
-            <dt className="text-dashboard-muted">Active pieces</dt>
-            <dd className="mt-0.5 font-medium text-dashboard-navy">{item.readiness.active_assets}</dd>
+            <dt className="text-dashboard-muted">Availability</dt>
+            <dd className="mt-0.5 font-medium text-dashboard-navy">
+              {item.availability.available_assets}/{item.availability.active_assets} available
+            </dd>
+          </div>
+          <div className="col-span-2 min-w-0">
+            <dt className="text-dashboard-muted">Operational status</dt>
+            <dd className="mt-1">
+              <OperationalStatusSummary availability={item.availability} compact />
+            </dd>
           </div>
         </dl>
       </TableCell>
@@ -492,12 +503,23 @@ function ClothingRow({
         </p>
       </TableCell>
       <TableCell className="hidden lg:table-cell">
+        <OperationalStatusSummary availability={item.availability} />
+      </TableCell>
+      <TableCell className="hidden lg:table-cell">
+        <p className="font-semibold text-dashboard-navy">
+          {item.availability.available_assets}/{item.availability.active_assets} available
+        </p>
+        <p className="mt-1 text-xs text-dashboard-muted">
+          {availabilityWindowLabel(item.availability.window.start, item.availability.window.end)}
+        </p>
+      </TableCell>
+      <TableCell className="hidden xl:table-cell">
         <p className="font-semibold text-dashboard-navy">
           {formatMinorMoney(item.price_from_minor, item.currency)}
         </p>
         <p className="mt-1 text-xs text-dashboard-muted">from listed variants</p>
       </TableCell>
-      <TableCell className="hidden lg:table-cell">
+      <TableCell className="hidden xl:table-cell">
         <div className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-dashboard-active text-dashboard-accent">
             <Layers3 className="h-4 w-4" aria-hidden="true" />
@@ -664,6 +686,65 @@ function FilterMenu<Option extends string>({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+function OperationalStatusSummary({
+  availability,
+  compact = false,
+}: {
+  availability: ClothingAvailabilitySummary;
+  compact?: boolean;
+}) {
+  const signals = [
+    { count: availability.rented_assets, label: "Rented" },
+    { count: availability.reserved_assets, label: "Reserved" },
+    { count: availability.cleaning_assets, label: "Cleaning" },
+    { count: availability.maintenance_assets, label: "Maintenance" },
+    { count: availability.manual_blocked_assets, label: "Unavailable", title: "Manual block" },
+  ].filter((signal) => signal.count > 0);
+
+  if (signals.length === 0) {
+    const label =
+      availability.available_assets > 0
+        ? "Available"
+        : availability.unavailable_assets > 0
+          ? "Unavailable"
+          : "No active pieces";
+    return (
+      <span className="inline-flex rounded-full border border-dashboard-border bg-dashboard-active px-2 py-1 text-[0.68rem] font-medium text-dashboard-navy">
+        {label}
+      </span>
+    );
+  }
+
+  return (
+    <div className={cn("flex flex-wrap gap-1", compact && "gap-1.5")}>
+      {signals.map((signal) => (
+        <span
+          key={signal.label}
+          title={signal.title}
+          className="inline-flex rounded-full border border-dashboard-border bg-dashboard-active px-2 py-1 text-[0.68rem] font-medium text-dashboard-navy"
+        >
+          {signal.count} {signal.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function availabilityWindowLabel(start: string, end: string): string {
+  const startTime = new Date(start).getTime();
+  const endTime = new Date(end).getTime();
+  const durationHours = (endTime - startTime) / (60 * 60 * 1000);
+  if (Math.abs(durationHours - 24) < 0.01) return "Next 24 hours";
+
+  const formatter = new Intl.DateTimeFormat("en-PH", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `${formatter.format(new Date(start))} → ${formatter.format(new Date(end))}`;
 }
 
 function parseCategoryFilter(value: string | null): CatalogueCategory["id"] | null {

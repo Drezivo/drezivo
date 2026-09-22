@@ -72,6 +72,20 @@ const firstItem = {
     needs_repair: 0,
     unready: 0,
   },
+  availability: {
+    window: {
+      start: "2026-09-22T12:00:00.000Z",
+      end: "2026-09-23T12:00:00.000Z",
+    },
+    active_assets: 2,
+    available_assets: 2,
+    unavailable_assets: 0,
+    reserved_assets: 0,
+    rented_assets: 0,
+    cleaning_assets: 0,
+    maintenance_assets: 0,
+    manual_blocked_assets: 0,
+  },
   created_at: "2026-09-20T08:00:00.000Z",
   updated_at: "2026-09-20T08:00:00.000Z",
 };
@@ -88,6 +102,13 @@ const secondItem = {
     needs_cleaning: 1,
     needs_repair: 0,
     unready: 0,
+  },
+  availability: {
+    ...firstItem.availability,
+    active_assets: 1,
+    available_assets: 0,
+    unavailable_assets: 1,
+    cleaning_assets: 1,
   },
 };
 
@@ -164,6 +185,42 @@ describe("ClothingPage", () => {
       limit: 10,
       sort: "name_asc",
     });
+  });
+
+  it("renders canonical operational signals separately from windowed availability capacity", async () => {
+    api.getCatalogueClothing.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            ...firstItem,
+            availability: {
+              ...firstItem.availability,
+              active_assets: 5,
+              available_assets: 0,
+              unavailable_assets: 5,
+              reserved_assets: 1,
+              rented_assets: 1,
+              cleaning_assets: 1,
+              maintenance_assets: 1,
+              manual_blocked_assets: 1,
+            },
+          },
+        ],
+        page_meta: { next_cursor: null, has_more: false },
+      },
+      requestId: "req-canonical-availability",
+    });
+
+    render(<ClothingPage />);
+    await screen.findByText("Real Black Satin Gown");
+
+    expect(screen.getAllByText("1 Reserved").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1 Rented").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1 Cleaning").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1 Maintenance").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1 Unavailable").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("0/5 available").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Next 24 hours").length).toBeGreaterThan(0);
   });
 
   it("renders the backend cover image and falls back to initials when none is available", async () => {
@@ -358,7 +415,8 @@ describe("ClothingPage", () => {
     await screen.findByText("Real Black Satin Gown");
     expect(screen.getByRole("table", { name: "Clothing catalogue" })).toBeVisible();
     expect(screen.getByText("Category", { selector: "dt" })).toBeInTheDocument();
-    expect(screen.getByText("Active pieces", { selector: "dt" })).toBeInTheDocument();
+    expect(screen.getByText("Availability", { selector: "dt" })).toBeInTheDocument();
+    expect(screen.getByText("Operational status", { selector: "dt" })).toBeInTheDocument();
   });
 
   it("uses the backend next cursor for catalogue pagination", async () => {

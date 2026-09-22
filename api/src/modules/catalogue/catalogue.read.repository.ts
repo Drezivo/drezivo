@@ -26,6 +26,16 @@ export interface ClothingListReadRow {
   needs_cleaning: number;
   needs_repair: number;
   unready: number;
+  availability_start: Date;
+  availability_end: Date;
+  availability_active_assets: number;
+  available_assets: number;
+  unavailable_assets: number;
+  reserved_assets: number;
+  rented_assets: number;
+  cleaning_assets: number;
+  maintenance_assets: number;
+  manual_blocked_assets: number;
   created_at: Date;
   updated_at: Date;
   sort_name: string;
@@ -179,6 +189,9 @@ export async function listClothingReadModel(
     )`);
   }
 
+  const availabilityStartPlaceholder = bind(input.query.availability_start ?? null);
+  const availabilityEndPlaceholder = bind(input.query.availability_end ?? null);
+
   const cursor = decodeListCursor(input.query.cursor, input.query.sort);
   if (cursor) {
     const keyPlaceholder = bind(cursor.key);
@@ -205,6 +218,16 @@ export async function listClothingReadModel(
        COALESCE(asset_summary.needs_cleaning, 0)::int AS needs_cleaning,
        COALESCE(asset_summary.needs_repair, 0)::int AS needs_repair,
        COALESCE(asset_summary.unready, 0)::int AS unready,
+       availability_window.starts_at AS availability_start,
+       availability_window.ends_at AS availability_end,
+       COALESCE(availability_summary.active_assets, 0)::int AS availability_active_assets,
+       COALESCE(availability_summary.available_assets, 0)::int AS available_assets,
+       COALESCE(availability_summary.unavailable_assets, 0)::int AS unavailable_assets,
+       COALESCE(availability_summary.reserved_assets, 0)::int AS reserved_assets,
+       COALESCE(availability_summary.rented_assets, 0)::int AS rented_assets,
+       COALESCE(availability_summary.cleaning_assets, 0)::int AS cleaning_assets,
+       COALESCE(availability_summary.maintenance_assets, 0)::int AS maintenance_assets,
+       COALESCE(availability_summary.manual_blocked_assets, 0)::int AS manual_blocked_assets,
        p.created_at,
        p.updated_at,
        lower(p.name) AS sort_name,
@@ -263,6 +286,144 @@ export async function listClothingReadModel(
          AND pa.branch_id = $2
          AND pv_asset.product_id = p.id
      ) asset_summary ON true
+     CROSS JOIN LATERAL (
+       SELECT
+         COALESCE(${availabilityStartPlaceholder}::timestamptz, statement_timestamp()) AS starts_at,
+         COALESCE(${availabilityEndPlaceholder}::timestamptz, statement_timestamp() + interval '24 hours') AS ends_at
+     ) availability_window
+     LEFT JOIN LATERAL (
+       SELECT
+         summary.active_assets,
+         summary.available_assets,
+         (summary.active_assets - summary.available_assets)::int AS unavailable_assets,
+         summary.reserved_assets,
+         summary.rented_assets,
+         summary.cleaning_assets,
+         summary.maintenance_assets,
+         summary.manual_blocked_assets
+       FROM (
+         SELECT
+           count(*) FILTER (WHERE pa.lifecycle_status = 'active')::int AS active_assets,
+           count(*) FILTER (
+             WHERE p.status = 'active'
+               AND pv_availability.status = 'active'
+               AND pa.lifecycle_status = 'active'
+               AND pa.readiness = 'ready'
+               AND pa.custody_kind = 'at_branch'
+               AND NOT EXISTS (
+                 SELECT 1
+                   FROM asset_allocation aa_available
+                  WHERE aa_available.tenant_id = pa.tenant_id
+                    AND aa_available.branch_id = pa.branch_id
+                    AND aa_available.asset_id = pa.id
+                    AND aa_available.is_blocking = true
+                    AND aa_available.period && tstzrange(
+                      availability_window.starts_at,
+                      availability_window.ends_at,
+                      '[)'
+                    )
+               )
+           )::int AS available_assets,
+           count(*) FILTER (
+             WHERE pa.lifecycle_status = 'active'
+               AND EXISTS (
+                 SELECT 1
+                   FROM asset_allocation aa_reserved
+                  WHERE aa_reserved.tenant_id = pa.tenant_id
+                    AND aa_reserved.branch_id = pa.branch_id
+                    AND aa_reserved.asset_id = pa.id
+                    AND aa_reserved.is_blocking = true
+                    AND aa_reserved.reservation_line_id IS NOT NULL
+                    AND aa_reserved.kind IN ('reservation_hold', 'reservation_confirmed')
+                    AND aa_reserved.period && tstzrange(
+                      availability_window.starts_at,
+                      availability_window.ends_at,
+                      '[)'
+                    )
+               )
+           )::int AS reserved_assets,
+           count(*) FILTER (
+             WHERE pa.lifecycle_status = 'active'
+               AND pa.custody_kind = 'with_customer'
+           )::int AS rented_assets,
+           count(*) FILTER (
+             WHERE pa.lifecycle_status = 'active'
+               AND (
+                 pa.readiness = 'needs_cleaning'
+                 OR EXISTS (
+                   SELECT 1
+                     FROM asset_allocation aa_cleaning
+                     JOIN maintenance_work_order mwo_cleaning
+                       ON mwo_cleaning.tenant_id = aa_cleaning.tenant_id
+                      AND mwo_cleaning.id = aa_cleaning.maintenance_id
+                    WHERE aa_cleaning.tenant_id = pa.tenant_id
+                      AND aa_cleaning.branch_id = pa.branch_id
+                      AND aa_cleaning.asset_id = pa.id
+                      AND aa_cleaning.is_blocking = true
+                      AND aa_cleaning.kind = 'maintenance'
+                      AND mwo_cleaning.kind = 'cleaning'
+                      AND aa_cleaning.period && tstzrange(
+                        availability_window.starts_at,
+                        availability_window.ends_at,
+                        '[)'
+                      )
+                 )
+               )
+           )::int AS cleaning_assets,
+           count(*) FILTER (
+             WHERE pa.lifecycle_status = 'active'
+               AND (
+                 pa.readiness = 'needs_repair'
+                 OR EXISTS (
+                   SELECT 1
+                     FROM asset_allocation aa_maintenance
+                     JOIN maintenance_work_order mwo_maintenance
+                       ON mwo_maintenance.tenant_id = aa_maintenance.tenant_id
+                      AND mwo_maintenance.id = aa_maintenance.maintenance_id
+                    WHERE aa_maintenance.tenant_id = pa.tenant_id
+                      AND aa_maintenance.branch_id = pa.branch_id
+                      AND aa_maintenance.asset_id = pa.id
+                      AND aa_maintenance.is_blocking = true
+                      AND aa_maintenance.kind = 'maintenance'
+                      AND mwo_maintenance.kind = 'repair'
+                      AND aa_maintenance.period && tstzrange(
+                        availability_window.starts_at,
+                        availability_window.ends_at,
+                        '[)'
+                      )
+                 )
+               )
+           )::int AS maintenance_assets,
+           count(*) FILTER (
+             WHERE pa.lifecycle_status = 'active'
+               AND EXISTS (
+                 SELECT 1
+                   FROM asset_allocation aa_manual
+                   JOIN maintenance_work_order mwo_manual
+                     ON mwo_manual.tenant_id = aa_manual.tenant_id
+                    AND mwo_manual.id = aa_manual.maintenance_id
+                  WHERE aa_manual.tenant_id = pa.tenant_id
+                    AND aa_manual.branch_id = pa.branch_id
+                    AND aa_manual.asset_id = pa.id
+                    AND aa_manual.is_blocking = true
+                    AND aa_manual.kind = 'maintenance'
+                    AND mwo_manual.kind = 'manual_block'
+                    AND aa_manual.period && tstzrange(
+                      availability_window.starts_at,
+                      availability_window.ends_at,
+                      '[)'
+                    )
+               )
+           )::int AS manual_blocked_assets
+         FROM physical_asset pa
+         JOIN product_variant pv_availability
+           ON pv_availability.tenant_id = pa.tenant_id
+          AND pv_availability.id = pa.variant_id
+         WHERE pa.tenant_id = p.tenant_id
+           AND pa.branch_id = $2
+           AND pv_availability.product_id = p.id
+       ) summary
+     ) availability_summary ON true
      WHERE ${where.join('\n       AND ')}
      ORDER BY ${sortClause(input.query.sort)}
      LIMIT ${limitPlaceholder}`,
