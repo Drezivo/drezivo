@@ -20,6 +20,7 @@ import {
   updatePhysicalAssetStateController,
 } from './catalogue.controller.js';
 import {
+  requireAssetArchivePermission,
   requireAssetManagePermission,
   requireCatalogueIdempotencyKey,
   validateCatalogueCategoryStatusUpdate,
@@ -106,6 +107,7 @@ catalogueRouter.post(
   writeRateLimit,
   writePolicy,
   requireAssetManagePermission,
+  requireAssetArchivePermission,
   validateArchiveClothing,
   requireCatalogueIdempotencyKey,
   archiveClothingController,

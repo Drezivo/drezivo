@@ -279,7 +279,7 @@ describe('CLT-032 clothing archive command', async () => {
   async function seedArchiveCatalogue(
     clerkOrgId: string,
     principalId: string,
-    permissions: string[] = ['assets.manage'],
+    permissions: string[] = ['assets.manage', 'assets.archive'],
   ) {
     const tenant = await createTestTenant({ clerkOrgId });
     const membershipId = await createTestMembership(tenant.id, principalId, 'owner');

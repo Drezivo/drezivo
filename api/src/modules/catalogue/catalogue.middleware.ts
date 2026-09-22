@@ -50,6 +50,14 @@ export const requireAssetManagePermission: RequestHandler = (req, _res, next): v
   next();
 };
 
+export const requireAssetArchivePermission: RequestHandler = (req, _res, next): void => {
+  if (!req.tenantContext?.permissionCodes.includes('assets.archive')) {
+    next(new ForbiddenError('This branch does not grant clothing archive access.'));
+    return;
+  }
+  next();
+};
+
 export const validateCatalogueClothingListQuery: RequestHandler = (req, _res, next): void => {
   const parsed = clothingListQuery.safeParse(req.query);
   if (!parsed.success) {

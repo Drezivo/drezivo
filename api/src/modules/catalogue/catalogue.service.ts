@@ -1049,7 +1049,7 @@ export async function archiveClothing(input: CommandContext & {
   productId: string;
   request: ArchiveClothingRequest;
 }): Promise<CatalogueCommandResponse<ArchiveClothingCommandBody>> {
-  assertCatalogueWriteContext(input);
+  assertCatalogueArchiveContext(input);
   const parsedRequest = archiveClothingRequest.safeParse(input.request);
   if (!parsedRequest.success) {
     throw new ValidationError('Clothing archive request is invalid.');
@@ -1271,6 +1271,13 @@ function assertCatalogueWriteContext(input: CatalogueContext): void {
   }
   if (!input.permissionCodes.includes('assets.manage')) {
     throw new ForbiddenError('This branch does not grant clothing management access.');
+  }
+}
+
+function assertCatalogueArchiveContext(input: CatalogueContext): void {
+  assertCatalogueWriteContext(input);
+  if (!input.permissionCodes.includes('assets.archive')) {
+    throw new ForbiddenError('This branch does not grant clothing archive access.');
   }
 }
 
