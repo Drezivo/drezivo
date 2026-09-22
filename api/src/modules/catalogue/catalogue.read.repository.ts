@@ -144,7 +144,7 @@ export async function listClothingReadModel(
   if (input.query.search) {
     const pattern = `%${escapeLikePattern(input.query.search)}%`;
     const placeholder = bind(pattern);
-    where.push(`(p.name ILIKE ${placeholder} ESCAPE '\\' OR p.code ILIKE ${placeholder} ESCAPE '\\')`);
+    where.push(`lower(p.name || ' ' || p.code) LIKE lower(${placeholder}) ESCAPE '\\'`);
   }
 
   if (input.query.category_id) {

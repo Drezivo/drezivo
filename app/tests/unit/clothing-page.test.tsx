@@ -180,6 +180,14 @@ describe("ClothingPage", () => {
     expect(screen.getAllByText("₱1,500").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("S · M").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("Black Satin Gown")).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Real Black Satin Gown catalogue photo" })).toHaveAttribute(
+      "loading",
+      "lazy"
+    );
+    expect(screen.getByRole("img", { name: "Real Black Satin Gown catalogue photo" })).toHaveAttribute(
+      "decoding",
+      "async"
+    );
 
     expect(api.getCatalogueClothing).toHaveBeenCalledWith({
       limit: 10,

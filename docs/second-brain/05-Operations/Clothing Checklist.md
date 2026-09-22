@@ -256,25 +256,25 @@ Before marking a task complete:
 
 ## Phase 6: Security, performance, and completion evidence
 
-- [ ] **CLT-060 — Complete catalogue RLS and authorization suite**
+- [x] **CLT-060 — Complete catalogue RLS and authorization suite**
   - **Depends on:** All Clothing API tasks.
   - **Outcome:** No catalogue read/write can cross tenant or permission boundaries.
   - **Acceptance:**
-    - [ ] Foreign IDs return concealed not-found behavior where required.
-    - [ ] Missing tenant context fails closed.
-    - [ ] Owner/Front Desk permission matrix matches accepted product policy.
-    - [ ] Restricted/cancelled tenant action policy is enforced centrally.
-  - **Tests/evidence:** Real PostgreSQL RLS and API authorization suite.
+    - [x] Foreign IDs return concealed not-found behavior where required.
+    - [x] Missing tenant context fails closed.
+    - [x] Owner/Front Desk permission matrix matches accepted product policy.
+    - [x] Restricted/cancelled tenant action policy is enforced centrally.
+  - **Tests/evidence:** `catalogue-rls-authorization.test.ts` passes `5/5` against disposable PostgreSQL as the non-superuser `drezivo_app` role. It proves missing tenant context reads zero tenant rows and rejects writes, foreign product IDs return concealed `404 NOT_FOUND`, branch grants are resolved only from the selected branch, Owner and Front Desk may perform operational `assets.manage` edits, Front Desk cannot archive without `assets.archive`, and Owner archive succeeds when both permissions are present. Restricted/cancelled workspaces centrally clear active branch capabilities for catalogue reads (`403`) while catalogue writes are rejected by the shared lifecycle gate with `TENANT_RESTRICTED` / `TENANT_CANCELLED`. Existing forced-RLS (`8/8`), Add Clothing auth (`12/12`), edit (`4/4`), asset lifecycle (`6/6`), file security (`8/8`), and archive (`4/4`) integration regressions remain green. API units pass `82/82`; API typecheck, lint, build, and `git diff --check` pass.
 
-- [ ] **CLT-061 — Validate catalogue scale and query bounds**
+- [x] **CLT-061 — Validate catalogue scale and query bounds**
   - **Depends on:** CLT-010, CLT-040.
   - **Outcome:** Clothing remains usable at the V1 plan ceiling of 1,000 active assets.
   - **Acceptance:**
-    - [ ] No unbounded full-tenant reads in ordinary list/detail flows.
-    - [ ] Search/filter indexes are used for representative tenant data.
-    - [ ] Image loading is optimized and does not block list interaction.
-    - [ ] Pagination remains deterministic under inserts/archives.
-  - **Tests/evidence:** Representative seeded load/query-plan measurements.
+    - [x] No unbounded full-tenant reads in ordinary list/detail flows.
+    - [x] Search/filter indexes are used for representative tenant data.
+    - [x] Image loading is optimized and does not block list interaction.
+    - [x] Pagination remains deterministic under inserts/archives.
+  - **Tests/evidence:** `catalogue-scale-bounds.test.ts` passes `3/3` against disposable PostgreSQL with exactly 1,000 active serialized assets. The list contract rejects limits above 100; representative pages use keyset cursors and remain deterministic when an earlier item is inserted and a later item is archived between page requests, with no duplicate first-page IDs leaking into page two. `EXPLAIN` evidence confirms the representative sort/search/filter paths avoid full-table sequential scans, with category+status filtering using `product_tenant_category_status_created_idx`; dedicated tenant sort indexes and a tenant-aware combined trigram search index are installed for catalogue growth. Ordinary list reads remain bounded by `limit + 1`, detail reads are product/branch scoped, and upcoming allocations remain capped. Catalogue image read URLs are authorized concurrently with `Promise.all`, while `/inventory` thumbnails use `loading="lazy"` and `decoding="async"`; the Clothing UI regression passes `11/11`. Existing catalogue read-model integration remains `7/7`; API units pass `82/82`, API typecheck/lint/build and `git diff --check` pass. App typecheck still reports only the pre-existing Playwright config and `globals.css` declaration blockers, with no CLT-061 errors.
 
 - [ ] **CLT-062 — Mark Clothing vertical slice complete**
   - **Depends on:** CLT-060, CLT-061.
