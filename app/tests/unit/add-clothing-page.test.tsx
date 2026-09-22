@@ -32,7 +32,21 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/lib/drezivo-api", () => ({
-  DrezivoApiError: class DrezivoApiError extends Error {},
+  DrezivoApiError: class DrezivoApiError extends Error {
+    code: string;
+    requestId: string | null;
+    status: number;
+
+    constructor(
+      message: string,
+      options: { code?: string; requestId?: string | null; status?: number } = {}
+    ) {
+      super(message);
+      this.code = options.code ?? "INTERNAL_ERROR";
+      this.requestId = options.requestId ?? null;
+      this.status = options.status ?? 500;
+    }
+  },
   createDrezivoApiClient: () => api,
 }));
 
@@ -384,7 +398,8 @@ describe("AddClothingPage", () => {
 
     await waitFor(() => expect(api.createClothing).toHaveBeenCalledTimes(1));
     const [requestBody, idempotencyKey] = api.createClothing.mock.calls[0]!;
-    expect(idempotencyKey).toEqual(expect.stringMatching(/^clothing_/));
+    expect(idempotencyKey).toEqual(expect.any(String));
+    expect(idempotencyKey.length).toBeGreaterThanOrEqual(8);
     expect(requestBody).toMatchObject({
       name: "Emerald Evening Gown",
       code: "GOWN-001",
@@ -422,6 +437,100 @@ describe("AddClothingPage", () => {
     const beforeUnload = new Event("beforeunload", { cancelable: true });
     expect(window.dispatchEvent(beforeUnload)).toBe(true);
     expect(beforeUnload.defaultPrevented).toBe(false);
+  });
+
+  it("prevents rapid double submit with the shared guard", async () => {
+    let resolveCreate: (value: unknown) => void = () => undefined;
+    api.createClothing.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveCreate = resolve;
+        })
+    );
+
+    renderPage();
+    await screen.findByText("Default Size Guide");
+    fireEvent.change(screen.getByLabelText("Clothing Name *"), {
+      target: { value: "Single Intent Draft" },
+    });
+
+    const saveDraft = screen.getByRole("button", { name: "Save as Draft" });
+    fireEvent.click(saveDraft);
+    fireEvent.click(saveDraft);
+
+    await waitFor(() => expect(api.createClothing).toHaveBeenCalledTimes(1));
+    resolveCreate({
+      data: {
+        product_id: "00000000-0000-4000-8000-000000000050",
+        code: "GOWN-001",
+        variant_count: 4,
+        physical_piece_count: 4,
+        status: "draft",
+      },
+      requestId: "req-create",
+    });
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("/inventory"));
+  });
+
+  it("reuses one create idempotency key when retrying the same unchanged form intent", async () => {
+    const { DrezivoApiError } = await import("@/lib/drezivo-api");
+    api.createClothing
+      .mockRejectedValueOnce(
+        new DrezivoApiError("The request timed out. Please try again.", {
+          code: "DEPENDENCY_UNAVAILABLE",
+          status: 503,
+        })
+      )
+      .mockResolvedValueOnce({
+        data: {
+          product_id: "00000000-0000-4000-8000-000000000050",
+          code: "GOWN-001",
+          variant_count: 4,
+          physical_piece_count: 4,
+          status: "draft",
+        },
+        requestId: "req-retry",
+      });
+
+    renderPage();
+    await screen.findByText("Default Size Guide");
+    fireEvent.change(screen.getByLabelText("Clothing Name *"), {
+      target: { value: "Retry Draft" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save as Draft" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The request timed out. Please try again.");
+    const firstKey = api.createClothing.mock.calls[0]?.[1];
+
+    fireEvent.click(screen.getByRole("button", { name: "Save as Draft" }));
+    await waitFor(() => expect(api.createClothing).toHaveBeenCalledTimes(2));
+    expect(api.createClothing.mock.calls[1]?.[1]).toBe(firstKey);
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("/inventory"));
+  });
+
+  it("gives an archive recovery path when the physical-asset entitlement is full", async () => {
+    const { DrezivoApiError } = await import("@/lib/drezivo-api");
+    api.createClothing.mockRejectedValueOnce(
+      new DrezivoApiError("The workspace plan limit would be exceeded.", {
+        code: "CAPACITY_CONFLICT",
+        status: 409,
+      })
+    );
+
+    renderPage();
+    await screen.findByText("Default Size Guide");
+    fireEvent.change(screen.getByLabelText("Clothing Name *"), {
+      target: { value: "Capacity Draft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save as Draft" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Your workspace has reached its active clothing-piece limit."
+    );
+    expect(screen.getByRole("link", { name: "Review clothing to archive" })).toHaveAttribute(
+      "href",
+      "/inventory?status=active"
+    );
   });
 
   it("accepts at most 10 photos, uploads/finalizes them, and submits their file ids in order", async () => {

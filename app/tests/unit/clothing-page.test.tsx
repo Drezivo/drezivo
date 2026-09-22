@@ -14,15 +14,36 @@ const api = vi.hoisted(() => ({
   getCatalogueClothing: vi.fn(),
 }));
 
+const navigation = vi.hoisted(() => ({
+  replace: vi.fn(),
+  search: "",
+}));
+
 vi.mock("@clerk/nextjs", () => ({
   useAuth: clerk.useAuth,
 }));
 
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/inventory",
+  useRouter: () => ({ replace: navigation.replace }),
+  useSearchParams: () => new URLSearchParams(navigation.search),
+}));
+
 vi.mock("@/lib/drezivo-api", () => ({
   DrezivoApiError: class DrezivoApiError extends Error {
-    code = "INTERNAL_ERROR";
-    requestId: string | null = null;
-    status = 500;
+    code: string;
+    requestId: string | null;
+    status: number;
+
+    constructor(
+      message: string,
+      options: { code?: string; requestId?: string | null; status?: number } = {}
+    ) {
+      super(message);
+      this.code = options.code ?? "INTERNAL_ERROR";
+      this.requestId = options.requestId ?? null;
+      this.status = options.status ?? 500;
+    }
   },
   createDrezivoApiClient: () => api,
 }));
@@ -73,6 +94,7 @@ const secondItem = {
 describe("ClothingPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    navigation.search = "";
     sessionStorage.clear();
     clerk.getToken.mockResolvedValue("clerk-token");
     clerk.useAuth.mockReturnValue({
@@ -134,8 +156,8 @@ describe("ClothingPage", () => {
     expect(screen.getByRole("heading", { name: "Clothing" })).toBeVisible();
     expect(await screen.findByText("Real Black Satin Gown")).toBeVisible();
     expect(screen.getByText("GWN-001")).toBeVisible();
-    expect(screen.getByText("₱1,500")).toBeVisible();
-    expect(screen.getByText("S · M")).toBeVisible();
+    expect(screen.getAllByText("₱1,500").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("S · M").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("Black Satin Gown")).not.toBeInTheDocument();
 
     expect(api.getCatalogueClothing).toHaveBeenCalledWith({
@@ -238,6 +260,105 @@ describe("ClothingPage", () => {
     );
     expect(screen.queryByRole("menuitem", { name: "Restore" })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Archive" })).not.toBeInTheDocument();
+  });
+
+  it("hydrates shareable search/category/size/status URL state and sends only catalogue filters to the API", async () => {
+    navigation.search = `q=red&category=${category.id}&size=L&status=draft&tenant_id=do-not-trust`;
+
+    render(<ClothingPage />);
+
+    await waitFor(() =>
+      expect(api.getCatalogueClothing).toHaveBeenCalledWith({
+        limit: 10,
+        sort: "name_asc",
+        search: "red",
+        category_id: category.id,
+        size_label: "L",
+        product_status: "draft",
+      })
+    );
+    expect(screen.getByRole("textbox", { name: "Search clothing" })).toHaveValue("red");
+    expect(screen.getByRole("button", { name: "L" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Draft" })).toBeVisible();
+    expect(navigation.replace).toHaveBeenCalledWith(
+      `/inventory?q=red&category=${category.id}&size=L&status=draft`,
+      { scroll: false }
+    );
+  });
+
+  it("resets cursor pagination when the server-side status filter changes", async () => {
+    api.getCatalogueClothing.mockImplementation(async (input: { cursor?: string; product_status?: string }) => {
+      if (input.product_status === "draft") {
+        return {
+          data: { items: [{ ...secondItem, product_status: "draft" as const }], page_meta: { next_cursor: null, has_more: false } },
+          requestId: "req-draft",
+        };
+      }
+      if (input.cursor === "cursor-page-2") {
+        return {
+          data: { items: [secondItem], page_meta: { next_cursor: null, has_more: false } },
+          requestId: "req-page-2",
+        };
+      }
+      return {
+        data: { items: [firstItem], page_meta: { next_cursor: "cursor-page-2", has_more: true } },
+        requestId: "req-page-1",
+      };
+    });
+
+    render(<ClothingPage />);
+    await screen.findByText("Real Black Satin Gown");
+    fireEvent.click(screen.getByRole("button", { name: "Next clothing page" }));
+    await screen.findByText("Real Red Dress");
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "All Statuses" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Draft" }));
+
+    await waitFor(() =>
+      expect(api.getCatalogueClothing).toHaveBeenLastCalledWith({
+        limit: 10,
+        sort: "name_asc",
+        product_status: "draft",
+      })
+    );
+    expect(screen.getByText("Page 1 · 1 style loaded")).toBeVisible();
+  });
+
+  it("renders designed permission, empty, and mobile-detail states", async () => {
+    const { DrezivoApiError } = await import("@/lib/drezivo-api");
+    api.getCatalogueClothing.mockRejectedValueOnce(
+      new DrezivoApiError("This branch does not grant clothing management access.", {
+        code: "FORBIDDEN",
+        status: 403,
+      })
+    );
+
+    const { rerender } = render(<ClothingPage />);
+    expect(await screen.findByText("Clothing access is restricted")).toBeVisible();
+    expect(screen.getByText(/Ask a workspace owner to update your access/)).toBeVisible();
+
+    api.getCatalogueClothing.mockResolvedValue({
+      data: { items: [], page_meta: { next_cursor: null, has_more: false } },
+      requestId: "req-empty",
+    });
+    rerender(<ClothingPage />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Search clothing" }), {
+      target: { value: "nothing" },
+    });
+    expect(await screen.findByText("No clothing matches these filters")).toBeVisible();
+
+    api.getCatalogueClothing.mockResolvedValue({
+      data: { items: [firstItem], page_meta: { next_cursor: null, has_more: false } },
+      requestId: "req-mobile",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    await screen.findByText("Real Black Satin Gown");
+    expect(screen.getByRole("table", { name: "Clothing catalogue" })).toBeVisible();
+    expect(screen.getByText("Category", { selector: "dt" })).toBeInTheDocument();
+    expect(screen.getByText("Active pieces", { selector: "dt" })).toBeInTheDocument();
   });
 
   it("uses the backend next cursor for catalogue pagination", async () => {

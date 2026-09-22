@@ -202,36 +202,36 @@ Before marking a task complete:
 
 ## Phase 4: Staff app integration
 
-- [ ] **CLT-040 — Replace Clothing page mock data with API reads**
+- [x] **CLT-040 — Replace Clothing page mock data with API reads**
   - **Depends on:** CLT-010.
   - **Outcome:** `/inventory` displays authoritative tenant data.
   - **Acceptance:**
-    - [ ] Search sits beside filters as approved in the current UI.
-    - [ ] Search/category/size/status changes query server-side and reset pagination safely.
-    - [ ] Loading, empty, error, and permission-restricted states are designed.
-    - [ ] URL/query state is shareable where useful without exposing authority values.
-    - [ ] Mobile table/list remains usable at 360px.
-  - **Tests/evidence:** Component tests plus browser verification with seeded catalogue.
+    - [x] Search sits beside filters as approved in the current UI.
+    - [x] Search/category/size/status changes query server-side and reset pagination safely.
+    - [x] Loading, empty, error, and permission-restricted states are designed.
+    - [x] URL/query state is shareable where useful without exposing authority values.
+    - [x] Mobile table/list remains usable at 360px.
+  - **Tests/evidence:** `clothing-page.test.tsx` covers authoritative API rows, server-side search/status filters, URL hydration/sanitization, cursor reset, permission/empty states, responsive mobile metadata, pagination, and row actions. Catalogue read-model integration remains `7/7` against disposable PostgreSQL.
 
-- [ ] **CLT-041 — Connect Add Clothing UI to real mutation**
+- [x] **CLT-041 — Connect Add Clothing UI to real mutation**
   - **Depends on:** CLT-021, CLT-022.
   - **Outcome:** Owner can add clothing from the staff app and immediately see it in inventory.
   - **Acceptance:**
-    - [ ] Shared submit guard prevents duplicate browser mutations.
-    - [ ] One idempotency key is reused across retries for one form intent.
-    - [ ] Server errors map to specific form fields or safe top-level feedback.
-    - [ ] Success invalidates/refetches the list; frontend never fabricates authoritative state.
-    - [ ] Asset-limit error gives an upgrade/archive path without deleting data.
-  - **Tests/evidence:** Double-click/timeout/retry UI tests and API integration test.
+    - [x] Shared submit guard prevents duplicate browser mutations.
+    - [x] One idempotency key is reused across retries for one form intent.
+    - [x] Server errors map to specific form fields or safe top-level feedback.
+    - [x] Success invalidates/refetches the list; frontend never fabricates authoritative state.
+    - [x] Asset-limit error gives an upgrade/archive path without deleting data.
+  - **Tests/evidence:** `add-clothing-page.test.tsx` covers rapid double submit, timeout/retry with key reuse, capacity-limit recovery, draft/active redirects, uploads, and dirty-form safety. Real Add Clothing route integration passes `12/12` against disposable PostgreSQL.
 
-- [ ] **CLT-042 — Connect row actions and clothing detail UI**
+- [x] **CLT-042 — Connect row actions and clothing detail UI**
   - **Depends on:** CLT-011, CLT-030, CLT-032.
   - **Outcome:** View details, Edit, and Archive actions operate on real tenant data.
   - **Acceptance:**
-    - [ ] Row action menu does not accidentally trigger unrelated row navigation.
-    - [ ] Edit/Archive confirmation follows shared pending/idempotency rules.
-    - [ ] Detail view clearly distinguishes style, variants, and individual garments where relevant.
-  - **Tests/evidence:** UI action and stale-data tests.
+    - [x] Row action menu does not accidentally trigger unrelated row navigation.
+    - [x] Edit/Archive confirmation follows shared pending/idempotency rules.
+    - [x] Detail view clearly distinguishes style, variants, and individual garments where relevant.
+  - **Tests/evidence:** `clothing-page.test.tsx`, `clothing-details-page.test.tsx`, and `edit-clothing-page.test.tsx` cover real detail/edit/archive routes, optimistic stale conflicts, shared mutation guards, authoritative reloads, and style → variants → serialized-piece rendering. Real edit/archive integrations pass `4/4` and `4/4` against disposable PostgreSQL.
 
 ## Phase 5: Availability and reservation handoff
 

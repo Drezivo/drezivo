@@ -11,11 +11,11 @@ import {
   Plus,
   Search,
   Shirt,
-  SlidersHorizontal,
   Tags,
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
   useDeferredValue,
@@ -24,7 +24,11 @@ import {
   useState,
 } from "react";
 
-import type { CatalogueCategory, ClothingListItem } from "@drezivo/contracts";
+import type {
+  CatalogueCategory,
+  ClothingListItem,
+  ClothingProductLifecycle,
+} from "@drezivo/contracts";
 
 import { ArchiveClothingDialog, archiveSuccessMessage } from "@/components/inventory/archive-clothing-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -49,6 +53,9 @@ import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
 const SIZE_OPTIONS = ["All Sizes", "XS", "S", "M", "L", "XL", "XXL"] as const;
+const STATUS_OPTIONS = ["All Statuses", "Active", "Draft", "Archived"] as const;
+type SizeFilter = (typeof SIZE_OPTIONS)[number];
+type StatusFilter = (typeof STATUS_OPTIONS)[number];
 
 type PageMeta = {
   next_cursor: string | null;
@@ -57,10 +64,16 @@ type PageMeta = {
 
 export function ClothingPage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
-  const [query, setQuery] = useState("");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
   const deferredQuery = useDeferredValue(query.trim());
-  const [categoryId, setCategoryId] = useState<CatalogueCategory["id"] | null>(null);
-  const [size, setSize] = useState<(typeof SIZE_OPTIONS)[number]>("All Sizes");
+  const [categoryId, setCategoryId] = useState<CatalogueCategory["id"] | null>(() =>
+    parseCategoryFilter(searchParams.get("category"))
+  );
+  const [size, setSize] = useState<SizeFilter>(() => parseSizeFilter(searchParams.get("size")));
+  const [status, setStatus] = useState<StatusFilter>(() => parseStatusFilter(searchParams.get("status")));
   const [categories, setCategories] = useState<CatalogueCategory[]>([]);
   const [rows, setRows] = useState<ClothingListItem[]>([]);
   const [pageMeta, setPageMeta] = useState<PageMeta>({ next_cursor: null, has_more: false });
@@ -73,6 +86,8 @@ export function ClothingPage() {
 
   const selectedCategory = categories.find((category) => category.id === categoryId) ?? null;
   const currentCursor = pageCursors[pageIndex] ?? null;
+  const productStatus = status === "All Statuses" ? null : (status.toLowerCase() as ClothingProductLifecycle);
+  const permissionRestricted = error?.status === 403 || error?.code === "FORBIDDEN";
 
   useEffect(() => {
     const savedNotice = sessionStorage.getItem("drezivo:inventory-notice");
@@ -87,6 +102,18 @@ export function ClothingPage() {
     const timeoutId = window.setTimeout(() => setNotice(null), 3000);
     return () => window.clearTimeout(timeoutId);
   }, [notice]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (deferredQuery) params.set("q", deferredQuery);
+    if (categoryId) params.set("category", categoryId);
+    if (size !== "All Sizes") params.set("size", size);
+    if (status !== "All Statuses") params.set("status", status.toLowerCase());
+
+    const nextSearch = params.toString();
+    if (nextSearch === searchParams.toString()) return;
+    router.replace(nextSearch ? `${pathname}?${nextSearch}` : pathname, { scroll: false });
+  }, [categoryId, deferredQuery, pathname, router, searchParams, size, status]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -121,6 +148,7 @@ export function ClothingPage() {
         ...(deferredQuery ? { search: deferredQuery } : {}),
         ...(categoryId ? { category_id: categoryId } : {}),
         ...(size !== "All Sizes" ? { size_label: size } : {}),
+        ...(productStatus ? { product_status: productStatus } : {}),
       })
       .then((result) => {
         if (cancelled) return;
@@ -149,6 +177,7 @@ export function ClothingPage() {
     isSignedIn,
     reloadVersion,
     size,
+    productStatus,
   ]);
 
   const resetPagination = useCallback(() => {
@@ -166,9 +195,30 @@ export function ClothingPage() {
     resetPagination();
   };
 
-  const updateSize = (value: (typeof SIZE_OPTIONS)[number]) => {
+  const updateSize = (value: SizeFilter) => {
     setSize(value);
     resetPagination();
+  };
+
+  const updateStatus = (value: StatusFilter) => {
+    setStatus(value);
+    resetPagination();
+  };
+
+  const hasActiveFilters = Boolean(deferredQuery || categoryId || size !== "All Sizes" || status !== "All Statuses");
+
+  const clearFilters = () => {
+    setQuery("");
+    setCategoryId(null);
+    setSize("All Sizes");
+    setStatus("All Statuses");
+    resetPagination();
+  };
+
+  const handleArchived = (result: Parameters<typeof archiveSuccessMessage>[0]) => {
+    setNotice(archiveSuccessMessage(result));
+    resetPagination();
+    setReloadVersion((value) => value + 1);
   };
 
   const goNext = () => {
@@ -264,13 +314,11 @@ export function ClothingPage() {
               options={SIZE_OPTIONS}
               onSelect={updateSize}
             />
-            <Button
-              variant="ghost"
-              className="justify-start border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active lg:ml-auto"
-            >
-              <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-              More Filters
-            </Button>
+            <FilterMenu
+              label={status}
+              options={STATUS_OPTIONS}
+              onSelect={updateStatus}
+            />
           </CardContent>
         </Card>
 
@@ -283,95 +331,87 @@ export function ClothingPage() {
 
         <Card className="gap-0 overflow-hidden py-0">
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-dashboard-surface hover:bg-dashboard-surface">
-                  <TableHead className="w-14">Photo</TableHead>
-                  <TableHead>Clothing</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Sizes</TableHead>
-                  <TableHead>Rental Price</TableHead>
-                  <TableHead>Active Pieces</TableHead>
-                  <TableHead className="w-12" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="py-16 text-center text-dashboard-muted">
-                      Loading clothing…
-                    </TableCell>
+            {isLoading ? (
+              <CatalogueListState title="Loading clothing…" message="Fetching the latest catalogue for this workspace." />
+            ) : error ? (
+              permissionRestricted ? (
+                <CatalogueListState
+                  title="Clothing access is restricted"
+                  message="Your current branch permissions do not allow catalogue management. Ask a workspace owner to update your access."
+                />
+              ) : (
+                <CatalogueListState
+                  title="Could not load clothing"
+                  message={error.message}
+                  requestId={error.requestId}
+                  actionLabel="Try again"
+                  onAction={() => setReloadVersion((value) => value + 1)}
+                />
+              )
+            ) : rows.length === 0 ? (
+              <CatalogueListState
+                title={hasActiveFilters ? "No clothing matches these filters" : "No clothing yet"}
+                message={
+                  hasActiveFilters
+                    ? "Clear or adjust the search and filters to see other catalogue items."
+                    : "Add your first clothing style to start building this workspace catalogue."
+                }
+                actionLabel={hasActiveFilters ? "Clear filters" : undefined}
+                onAction={hasActiveFilters ? clearFilters : undefined}
+              />
+            ) : (
+              <Table aria-label="Clothing catalogue">
+                <TableHeader>
+                  <TableRow className="bg-dashboard-surface hover:bg-dashboard-surface">
+                    <TableHead className="w-14 px-2 sm:px-4">Photo</TableHead>
+                    <TableHead className="px-2 sm:px-4">Clothing</TableHead>
+                    <TableHead className="hidden md:table-cell">Category</TableHead>
+                    <TableHead className="hidden md:table-cell">Sizes</TableHead>
+                    <TableHead className="hidden lg:table-cell">Rental Price</TableHead>
+                    <TableHead className="hidden lg:table-cell">Active Pieces</TableHead>
+                    <TableHead className="w-12 px-2 sm:px-4" />
                   </TableRow>
-                ) : error ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="py-14 text-center">
-                      <div className="mx-auto flex max-w-md flex-col items-center gap-3">
-                        <div>
-                          <p className="font-medium text-dashboard-navy">Could not load clothing</p>
-                          <p className="mt-1 text-sm text-dashboard-muted">{error.message}</p>
-                          {error.requestId ? (
-                            <p className="mt-1 text-xs text-dashboard-muted">
-                              Support reference: {error.requestId}
-                            </p>
-                          ) : null}
-                        </div>
-                        <Button type="button" onClick={() => setReloadVersion((value) => value + 1)}>
-                          Try again
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : rows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="py-16 text-center text-dashboard-muted">
-                      No clothing items match your filters.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  rows.map((item) => (
-                    <ClothingRow
-                      key={item.product_id}
-                      item={item}
-                      onArchived={(result) => {
-                        setNotice(archiveSuccessMessage(result));
-                        setReloadVersion((value) => value + 1);
-                      }}
-                    />
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((item) => (
+                    <ClothingRow key={item.product_id} item={item} onArchived={handleArchived} />
+                  ))}
+                </TableBody>
+              </Table>
+            )}
 
-            <div className="flex flex-col gap-3 border-t border-dashboard-border px-4 py-3 text-xs text-dashboard-muted sm:flex-row sm:items-center sm:justify-between">
-              <p>
-                Page {pageIndex + 1} · {rows.length} {rows.length === 1 ? "style" : "styles"} loaded
-              </p>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Previous clothing page"
-                  disabled={pageIndex === 0 || isLoading}
-                  onClick={goPrevious}
-                  className="h-8 w-8"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="min-w-8 px-2 text-center font-medium text-dashboard-navy">
-                  {pageIndex + 1}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Next clothing page"
-                  disabled={!pageMeta.has_more || isLoading}
-                  onClick={goNext}
-                  className="h-8 w-8"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+            {!isLoading && !error && rows.length > 0 ? (
+              <div className="flex flex-col gap-3 border-t border-dashboard-border px-4 py-3 text-xs text-dashboard-muted sm:flex-row sm:items-center sm:justify-between">
+                <p>
+                  Page {pageIndex + 1} · {rows.length} {rows.length === 1 ? "style" : "styles"} loaded
+                </p>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Previous clothing page"
+                    disabled={pageIndex === 0}
+                    onClick={goPrevious}
+                    className="h-8 w-8"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="min-w-8 px-2 text-center font-medium text-dashboard-navy">
+                    {pageIndex + 1}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Next clothing page"
+                    disabled={!pageMeta.has_more}
+                    onClick={goNext}
+                    className="h-8 w-8"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-            </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>
@@ -386,11 +426,9 @@ function ClothingRow({
   item: ClothingListItem;
   onArchived: Parameters<typeof ArchiveClothingDialog>[0]["onArchived"];
 }) {
-  const [archiveOpen, setArchiveOpen] = useState(false);
-
   return (
     <TableRow>
-      <TableCell>
+      <TableCell className="px-2 sm:px-4">
         <div className="flex h-12 w-10 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-xs font-semibold text-dashboard-accent">
           {item.primary_image_url ? (
             // eslint-disable-next-line @next/next/no-img-element -- signed catalogue URLs are dynamic and are not configured as stable next/image remote patterns.
@@ -404,10 +442,10 @@ function ClothingRow({
           )}
         </div>
       </TableCell>
-      <TableCell>
+      <TableCell className="min-w-0 px-2 sm:px-4">
         <div className="flex items-center gap-2">
-          <div>
-            <p className="font-semibold text-dashboard-navy">{item.name}</p>
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-dashboard-navy">{item.name}</p>
             <p className="mt-1 text-xs text-dashboard-muted">{item.code}</p>
           </div>
           {item.product_status === "archived" ? (
@@ -421,9 +459,31 @@ function ClothingRow({
             </span>
           ) : null}
         </div>
+        <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs md:hidden">
+          <div className="min-w-0">
+            <dt className="text-dashboard-muted">Category</dt>
+            <dd className="mt-0.5 truncate font-medium text-dashboard-navy">{item.category?.name ?? "Uncategorized"}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-dashboard-muted">Sizes</dt>
+            <dd className="mt-0.5 truncate font-medium text-dashboard-navy">
+              {item.size_labels.length > 0 ? item.size_labels.join(" · ") : "—"}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-dashboard-muted">From</dt>
+            <dd className="mt-0.5 truncate font-medium text-dashboard-navy">
+              {formatMinorMoney(item.price_from_minor, item.currency)}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-dashboard-muted">Active pieces</dt>
+            <dd className="mt-0.5 font-medium text-dashboard-navy">{item.readiness.active_assets}</dd>
+          </div>
+        </dl>
       </TableCell>
-      <TableCell className="text-dashboard-muted">{item.category?.name ?? "Uncategorized"}</TableCell>
-      <TableCell>
+      <TableCell className="hidden text-dashboard-muted md:table-cell">{item.category?.name ?? "Uncategorized"}</TableCell>
+      <TableCell className="hidden md:table-cell">
         <p className="text-sm font-medium text-dashboard-navy">
           {item.size_labels.length > 0 ? item.size_labels.join(" · ") : "—"}
         </p>
@@ -431,13 +491,13 @@ function ClothingRow({
           {item.size_labels.length} {item.size_labels.length === 1 ? "size" : "sizes"}
         </p>
       </TableCell>
-      <TableCell>
+      <TableCell className="hidden lg:table-cell">
         <p className="font-semibold text-dashboard-navy">
           {formatMinorMoney(item.price_from_minor, item.currency)}
         </p>
         <p className="mt-1 text-xs text-dashboard-muted">from listed variants</p>
       </TableCell>
-      <TableCell>
+      <TableCell className="hidden lg:table-cell">
         <div className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-dashboard-active text-dashboard-accent">
             <Layers3 className="h-4 w-4" aria-hidden="true" />
@@ -450,49 +510,96 @@ function ClothingRow({
           </span>
         </div>
       </TableCell>
-      <TableCell>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={`Open actions for ${item.name}`}
-              className="h-8 w-8"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem asChild>
-              <Link href={`/inventory/${item.product_id}`}>View details</Link>
-            </DropdownMenuItem>
-            {item.product_status !== "archived" ? (
-              <>
-                <DropdownMenuItem asChild>
-                  <Link href={`/inventory/${item.product_id}/edit`}>Edit</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="text-dashboard-danger focus:text-dashboard-danger"
-                  onSelect={() => setArchiveOpen(true)}
-                >
-                  Archive
-                </DropdownMenuItem>
-              </>
-            ) : null}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        {item.product_status !== "archived" ? (
-          <ArchiveClothingDialog
-            open={archiveOpen}
-            onOpenChange={setArchiveOpen}
-            productId={item.product_id}
-            name={item.name}
-            updatedAt={item.updated_at}
-            onArchived={onArchived}
-          />
-        ) : null}
+      <TableCell className="px-2 sm:px-4">
+        <ClothingActions item={item} onArchived={onArchived} />
       </TableCell>
     </TableRow>
+  );
+}
+
+function CatalogueListState({
+  actionLabel,
+  message,
+  onAction,
+  requestId,
+  title,
+}: {
+  actionLabel?: string | undefined;
+  message: string;
+  onAction?: (() => void) | undefined;
+  requestId?: string | null | undefined;
+  title: string;
+}) {
+  return (
+    <div className="flex min-h-56 flex-col items-center justify-center gap-3 px-5 py-10 text-center">
+      <div>
+        <p className="font-medium text-dashboard-navy">{title}</p>
+        <p className="mt-1 max-w-md text-sm text-dashboard-muted">{message}</p>
+        {requestId ? (
+          <p className="mt-1 text-xs text-dashboard-muted">Support reference: {requestId}</p>
+        ) : null}
+      </div>
+      {actionLabel && onAction ? (
+        <Button type="button" onClick={onAction}>
+          {actionLabel}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function ClothingActions({
+  item,
+  onArchived,
+}: {
+  item: ClothingListItem;
+  onArchived: Parameters<typeof ArchiveClothingDialog>[0]["onArchived"];
+}) {
+  const [archiveOpen, setArchiveOpen] = useState(false);
+
+  return (
+    <div onClick={(event) => event.stopPropagation()}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`Open actions for ${item.name}`}
+            className="h-8 w-8"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem asChild>
+            <Link href={`/inventory/${item.product_id}`}>View details</Link>
+          </DropdownMenuItem>
+          {item.product_status !== "archived" ? (
+            <>
+              <DropdownMenuItem asChild>
+                <Link href={`/inventory/${item.product_id}/edit`}>Edit</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-dashboard-danger focus:text-dashboard-danger"
+                onSelect={() => setArchiveOpen(true)}
+              >
+                Archive
+              </DropdownMenuItem>
+            </>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {item.product_status !== "archived" ? (
+        <ArchiveClothingDialog
+          open={archiveOpen}
+          onOpenChange={setArchiveOpen}
+          productId={item.product_id}
+          name={item.name}
+          updatedAt={item.updated_at}
+          onArchived={onArchived}
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -557,6 +664,27 @@ function FilterMenu<Option extends string>({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+function parseCategoryFilter(value: string | null): CatalogueCategory["id"] | null {
+  if (!value) return null;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+    ? (value as CatalogueCategory["id"])
+    : null;
+}
+
+function parseSizeFilter(value: string | null): SizeFilter {
+  if (!value) return "All Sizes";
+  return SIZE_OPTIONS.includes(value as SizeFilter) ? (value as SizeFilter) : "All Sizes";
+}
+
+function parseStatusFilter(value: string | null): StatusFilter {
+  if (!value) return "All Statuses";
+  const normalized = value.toLowerCase();
+  if (normalized === "active") return "Active";
+  if (normalized === "draft") return "Draft";
+  if (normalized === "archived") return "Archived";
+  return "All Statuses";
 }
 
 function formatMinorMoney(value: string, currency: string) {
