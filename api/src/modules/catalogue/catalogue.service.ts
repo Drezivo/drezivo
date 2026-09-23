@@ -1190,6 +1190,7 @@ export async function createClothingVariant(input: CommandContext & {
   const request = parsed.data;
   const payloadHash = canonicalRequestHash({ product_id: input.productId, ...request });
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    await lockTenantQuotaScope(client, input.tenantId);
     const claim = await claimTenantIdempotency(client, { tenantId: input.tenantId, principalKey: input.membershipId, operation: CREATE_VARIANT_OPERATION, intentKey: input.idempotencyKey, payloadHash });
     const replay = replayOrThrow<CreateVariantCommandBody>(claim);
     if (replay) return replay;
@@ -1202,8 +1203,16 @@ export async function createClothingVariant(input: CommandContext & {
         if (!guides[0]) throw new NotFoundError('The selected measurement guide could not be found.');
         if (guides[0].status !== 'active') throw new InvalidMeasurementGuideError('The selected measurement guide is not active.');
       }
+      await assertPhysicalAssetCapacity(client, input.tenantId, 1);
       const pricing = normalizePricingInput(request.pricing);
       const row = await createVariantForProduct(client, { tenantId: input.tenantId, productId: input.productId, request, ...pricing });
+      const assetRequest = createPhysicalAssetRequest.parse({});
+      const asset = await createPhysicalAssetForVariant(client, {
+        tenantId: input.tenantId,
+        branchId: input.branchId,
+        variantId: row.id,
+        request: assetRequest,
+      });
       const data = createClothingVariantResponse.parse({ variant: {
         id: row.id, sku: row.sku, size_label: row.size_label, color_label: row.color_label,
         measurement_mode: row.measurement_mode, measurement_guide_id: row.measurement_guide_id,
@@ -1211,10 +1220,11 @@ export async function createClothingVariant(input: CommandContext & {
         rental_price_minor: row.rental_price_minor.toString(), security_deposit_minor: row.security_deposit_minor.toString(), currency: row.currency,
         pricing_mode: row.pricing_mode, included_duration_minutes: row.included_duration_minutes,
         extra_day_price_minor: row.extra_day_price_minor.toString(), prep_minutes: row.prep_minutes, turnaround_minutes: row.turnaround_minutes,
-        status: row.status, assets: [], created_at: row.created_at.toISOString(), updated_at: row.updated_at.toISOString(),
+        status: row.status, assets: [toPhysicalAssetSummary(asset)], created_at: row.created_at.toISOString(), updated_at: row.updated_at.toISOString(),
       } });
       const body = successBody(input.requestId, data);
-      await appendCatalogueAuditEvent(client, { tenantId: input.tenantId, actorKey: input.principalId, action: 'catalogue.clothing.variant_created', entityType: 'product_variant', entityId: row.id, redactedSummary: { product_id: input.productId, status: row.status }, requestId: input.requestId });
+      await appendCatalogueAuditEvent(client, { tenantId: input.tenantId, actorKey: input.principalId, action: 'catalogue.clothing.variant_created', entityType: 'product_variant', entityId: row.id, redactedSummary: { product_id: input.productId, status: row.status, physical_piece_count: 1 }, requestId: input.requestId });
+      await appendCatalogueAuditEvent(client, { tenantId: input.tenantId, actorKey: input.principalId, action: 'catalogue.asset.created', entityType: 'physical_asset', entityId: asset.id, redactedSummary: { product_id: input.productId, variant_id: row.id, source: 'v1_add_variant' }, requestId: input.requestId });
       await finalizeTenantIdempotency(client, { tenantId: input.tenantId, principalKey: input.membershipId, operation: CREATE_VARIANT_OPERATION, intentKey: input.idempotencyKey, payloadHash, status: 'succeeded', responseCode: 201, safeResponse: body });
       return { status: 201, body };
     } catch (error) {

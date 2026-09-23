@@ -127,7 +127,7 @@ export function AddClothingPage() {
   const [securityDeposit, setSecurityDeposit] = useState("500");
   const [prepDays, setPrepDays] = useState("0");
   const [recoveryDays, setRecoveryDays] = useState("1");
-  const [timingOpen, setTimingOpen] = useState(false);
+  const [timingOpen, setTimingOpen] = useState(true);
   const [measurementGuideOpen, setMeasurementGuideOpen] = useState(false);
   const [guideSetupOpen, setGuideSetupOpen] = useState(false);
   const [guideName, setGuideName] = useState("");
@@ -1342,14 +1342,14 @@ export function AddClothingPage() {
 
                 {selectedSizes.length > 0 ? (
                   <div className="mt-4">
-                    <p className="text-xs font-medium text-dashboard-muted">Generated size mapping</p>
+                    <p className="text-xs font-medium text-dashboard-muted">Selected sizes</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {selectedSizes.map((size) => (
                         <span
                           key={size}
                           className="rounded-lg border border-dashboard-border bg-dashboard-active px-2.5 py-1.5 text-xs font-semibold text-dashboard-accent"
                         >
-                          {size} → 1 piece
+                          {size}
                         </span>
                       ))}
                     </div>

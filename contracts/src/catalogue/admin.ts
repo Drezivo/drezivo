@@ -192,8 +192,10 @@ export type ClothingSizeInput = z.infer<typeof clothingSizeInput>;
 
 /**
  * Staff V1 aggregate command. The owner enters shared color/pricing once; the API expands each
- * selected size into one product_variant and one initial physical_asset. The database still allows
- * multiple physical assets per variant later; this one-piece-per-size rule is only the V1 creation UX.
+ * selected size into one product_variant and one initial physical_asset. V1 intentionally exposes
+ * exactly one serialized garment per variant/size. The schema remains capable of multiple physical
+ * assets per variant so V2 can add multi-piece inventory management without changing reservation
+ * allocation semantics.
  */
 export const clothingImageFileIds = z
   .array(fileObjectId)

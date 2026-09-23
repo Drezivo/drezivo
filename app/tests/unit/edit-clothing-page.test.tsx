@@ -14,6 +14,7 @@ const navigation = vi.hoisted(() => ({
 
 const api = vi.hoisted(() => ({
   archiveClothing: vi.fn(),
+  createClothingVariant: vi.fn(),
   authorizeUpload: vi.fn(),
   finalizeUpload: vi.fn(),
   getCatalogueCategories: vi.fn(),
@@ -139,6 +140,37 @@ describe("EditClothingPage", () => {
       requestId: "req-categories",
     });
     api.getDefaultMeasurementGuide.mockResolvedValue({ data: { guide: null }, requestId: "req-guide" });
+    api.createClothingVariant.mockResolvedValue({
+      data: {
+        variant: {
+          ...detail.variants[0]!,
+          id: "00000000-0000-4000-8000-000000000099",
+          sku: "SKU-NEW-XL",
+          size_label: "XL",
+          color_label: "Emerald Green",
+          status: "active",
+          assets: [
+            {
+              id: "00000000-0000-4000-8000-000000000199",
+              branch_id: "00000000-0000-4000-8000-000000000120",
+              asset_code: "AST-NEW-XL",
+              lifecycle_status: "active",
+              readiness: "ready",
+              custody_kind: "at_branch",
+              condition_note: null,
+              measurement_overrides: null,
+              alteration_note: null,
+              version: 1,
+              created_at: "2026-09-23T05:00:00.000Z",
+              updated_at: "2026-09-23T05:00:00.000Z",
+            },
+          ],
+          created_at: "2026-09-23T05:00:00.000Z",
+          updated_at: "2026-09-23T05:00:00.000Z",
+        },
+      },
+      requestId: "req-create-variant",
+    });
     api.archiveClothing.mockResolvedValue({
       data: {
         product_id: productId,
@@ -232,6 +264,67 @@ describe("EditClothingPage", () => {
     const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
     expect(within(breadcrumb).getByRole("link", { name: "Clothing" })).toHaveAttribute("href", "/inventory");
     expect(within(breadcrumb).getByText("Edit Emerald Evening Gown")).toHaveAttribute("aria-current", "page");
+  });
+
+  it("adds a new active variant without draft/publish controls and stays on the edit page", async () => {
+    const createdVariant = {
+      ...detail.variants[0]!,
+      id: "00000000-0000-4000-8000-000000000099",
+      sku: "SKU-NEW-XL",
+      size_label: "XL",
+      color_label: "Emerald Green",
+      status: "active" as const,
+      assets: [],
+      created_at: "2026-09-23T05:00:00.000Z",
+      updated_at: "2026-09-23T05:00:00.000Z",
+    };
+    api.getCatalogueClothingDetail
+      .mockResolvedValueOnce({ data: detail, requestId: "req-before-add-variant" })
+      .mockResolvedValue({
+        data: { ...detail, variants: [...detail.variants, createdVariant] },
+        requestId: "req-after-add-variant",
+      });
+
+    render(<EditClothingPage productId={productId} />);
+    await screen.findByRole("heading", { name: "Edit Clothing" });
+    fireEvent.click(screen.getByRole("button", { name: "Add Variant" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByText(/draft/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /publish/i })).not.toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText("New Variant Size Label"), { target: { value: "XL" } });
+    fireEvent.change(within(dialog).getByLabelText("New Variant Color"), { target: { value: "Emerald Green" } });
+    fireEvent.change(within(dialog).getByLabelText("Package Price"), { target: { value: "1800" } });
+    fireEvent.change(within(dialog).getByLabelText("Security Deposit"), { target: { value: "500" } });
+    fireEvent.change(within(dialog).getByLabelText("Extra Day Price"), { target: { value: "600" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add Variant" }));
+
+    await waitFor(() => expect(api.createClothingVariant).toHaveBeenCalledTimes(1));
+    expect(api.createClothingVariant).toHaveBeenCalledWith(
+      productId,
+      {
+        size_label: "XL",
+        color_label: "Emerald Green",
+        measurement_mode: "none",
+        measurement_guide_id: null,
+        measurement_unit: "cm",
+        measurements: {},
+        pricing: {
+          mode: "fixed_duration",
+          rental_price_minor: "180000",
+          security_deposit_minor: "50000",
+          included_days: 3,
+          extra_day_price_minor: "60000",
+          prep_minutes: 0,
+          turnaround_minutes: 1440,
+        },
+      },
+      expect.any(String)
+    );
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Variant added")).toBeVisible();
+    expect(screen.getByText("XL · SKU-NEW-XL")).toBeVisible();
+    expect(navigation.replace).not.toHaveBeenCalled();
   });
 
   it("saves changed product and variant fields with backend concurrency tokens and one intent family", async () => {

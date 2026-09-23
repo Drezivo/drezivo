@@ -475,7 +475,6 @@ export const createClothingVariantRequest = z
     measurement_unit: measurementUnit.default('cm'),
     measurements: measurementMap.default({}),
     pricing: clothingPricingInput,
-    status: z.enum(['draft', 'active']).default('draft'),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -493,14 +492,11 @@ export const createClothingVariantRequest = z
     if (value.measurement_mode === 'none' && (guideId || hasMeasurements)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['measurement_mode'], message: 'None measurement mode cannot reference a guide or structured measurements.' });
     }
-    if (value.status === 'active') {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['status'], message: 'New variants must be created as draft until a physical piece exists.' });
-    }
   });
 export type CreateClothingVariantRequest = z.infer<typeof createClothingVariantRequest>;
 
 export const createClothingVariantResponse = z.object({
-  variant: clothingVariantDetail.omit({ assets: true }).extend({ assets: z.array(physicalAssetSummary).max(0) }),
+  variant: clothingVariantDetail.omit({ assets: true }).extend({ assets: z.array(physicalAssetSummary).length(1) }),
 });
 export type CreateClothingVariantResponse = z.infer<typeof createClothingVariantResponse>;
 

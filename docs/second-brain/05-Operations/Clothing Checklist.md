@@ -277,7 +277,7 @@ Before marking a task complete:
   - **Tests/evidence:** `catalogue-scale-bounds.test.ts` passes `3/3` against disposable PostgreSQL with exactly 1,000 active serialized assets. The list contract rejects limits above 100; representative pages use keyset cursors and remain deterministic when an earlier item is inserted and a later item is archived between page requests, with no duplicate first-page IDs leaking into page two. `EXPLAIN` evidence confirms the representative sort/search/filter paths avoid full-table sequential scans, with category+status filtering using `product_tenant_category_status_created_idx`; dedicated tenant sort indexes and a tenant-aware combined trigram search index are installed for catalogue growth. Ordinary list reads remain bounded by `limit + 1`, detail reads are product/branch scoped, and upcoming allocations remain capped. Catalogue image read URLs are authorized concurrently with `Promise.all`, while `/inventory` thumbnails use `loading="lazy"` and `decoding="async"`; the Clothing UI regression passes `11/11`. Existing catalogue read-model integration remains `7/7`; API units pass `82/82`, API typecheck/lint/build and `git diff --check` pass. App strict typecheck now passes after the Phase 6 closure config fixes.
 
 - [ ] **CLT-062 — Mark Clothing vertical slice complete**
-  - **Depends on:** CLT-060, CLT-061, and the Phase 7 manual E2E completion tasks CLT-070 through CLT-078.
+  - **Depends on:** CLT-060, CLT-061, CLT-070 through CLT-076, and CLT-078. Full multi-piece-per-variant management is deferred to V2 and is not a V1 completion dependency.
   - **Outcome:** Clothing is genuinely complete from the staff user's end-to-end perspective and is ready to support Reservations/Availability without known management gaps.
   - **Acceptance:**
     - [x] Add → list → search/filter → detail → edit → archive works against real API/database state.
@@ -286,7 +286,7 @@ Before marking a task complete:
     - [x] No mock catalogue dataset remains in production code paths.
     - [ ] Phase 7 manual E2E gaps are complete and re-verified in the staff app.
     - [ ] Relevant docs and this checklist reflect the final implemented behavior after Phase 7.
-  - **Status note:** Reopened after manual end-to-end review. The prior automated evidence remains valid, but it did not cover category CRUD, product-detail image rendering, draft publishing, safe restore, per-variant lifecycle/removal controls, post-create navigation, adding variants later, managing serialized physical pieces later, or propagation of catalogue lifecycle changes into storefront/reservation behavior.
+  - **Status note:** Reopened after manual end-to-end review. The prior automated evidence remains valid, but it did not cover category CRUD, product-detail image rendering, draft publishing, safe restore, per-variant lifecycle/removal controls, post-create navigation, adding variants later under the V1 one-variant/one-garment rule, or propagation of catalogue lifecycle changes into storefront/reservation behavior.
   - **Prior tests/evidence:** `catalogue-vertical-slice-complete.test.ts` passes `1/1` against disposable PostgreSQL and drives one persisted tenant graph through Add Clothing → server-side search/category/size/status list → detail → product edit → refreshed detail → archive → archived list/detail. Entitlement regressions pass `9/9`; the Add Clothing command suite passes `10/10` including the serialized physical-asset plan-cap race; catalogue edit passes `4/4` and proves reservation line name/measurement/pricing/money snapshots remain unchanged after catalogue edits; archive passes `4/4` and preserves reservation snapshot/allocation history; CLT-060 RLS/authorization remains `5/5`. Production-source audit finds no catalogue mock imports, and the former `clothing-data.ts` mock dataset has been removed. Contracts pass `74/74`, focused inventory frontend tests pass `50/50`, API units pass `82/82`, API typecheck/lint/build pass, app strict typecheck passes, Next production build completes, and `git diff --check` is clean. App ESLint remains blocked by the existing dependency mismatch (`next@15.5.24` with hoisted `eslint-config-next@16.3.5`/ESLint 10); no lint rule was weakened. An authenticated `/inventory` Playwright walkthrough is not automated because the repository has no safe Clerk test-session fixture, and the existing process on port 3000 returns HTTP 500; no auth bypass was added merely for evidence.
 
 ## Phase 7: Manual E2E completion gaps
@@ -359,33 +359,22 @@ Before marking a task complete:
     - [x] The Inventory page's existing `Add Clothing` action remains immediately available after redirect.
   - **Tests/evidence:** Active and draft creates both redirect to `/inventory`; active creation writes the one-time `clothing-added` notice while drafts retain `draft-saved`. `add-clothing-page.test.tsx` plus `clothing-page.test.tsx` pass `28/28`, including real API-list refresh on Inventory after the redirect and preservation of the existing Add Clothing entry point.
 
-- [ ] **CLT-076 — Add variants to existing clothing**
+- [x] **CLT-076 — Add variants to existing clothing**
   - **Depends on:** Existing variant edit infrastructure and CLT-074 lifecycle rules.
-  - **Outcome:** A rental business can expand an existing style later without recreating the product.
+  - **Outcome:** A rental business can expand an existing style later without recreating the product, while preserving the V1 rule that one variant/size represents exactly one serialized garment.
   - **Acceptance:**
-    - [ ] Edit Clothing exposes `Add Variant` for an existing product.
-    - [ ] Staff can create a new variant with size, optional color, measurement mode/source, pricing, preparation/turnaround settings, and lifecycle state.
-    - [ ] New variant SKU uniqueness is tenant-scoped and validated safely.
-    - [ ] A variant may be created as draft and published later; adding a draft variant does not disrupt existing active variants.
-    - [ ] The create command is tenant-scoped, permission-checked, idempotent, audited, and concurrency-safe.
-    - [ ] Newly created variants appear immediately in staff detail/edit projections and participate in renter-facing availability only after satisfying the active lifecycle rules.
-  - **Tests/evidence:** Existing-product → add-variant PostgreSQL integration tests plus Edit Clothing UI/API-client tests.
-
-- [ ] **CLT-077 — Manage serialized physical pieces end-to-end**
-  - **Depends on:** Existing physical-asset lifecycle commands and entitlement limits.
-  - **Outcome:** Staff can increase or reduce real rentable capacity when the business buys, retires, loses, repairs, or otherwise changes individual garments.
-  - **Acceptance:**
-    - [ ] Variant/detail management exposes `Add Physical Piece` for an existing variant.
-    - [ ] Each added piece receives a unique tenant-local asset code and is attached to the correct branch and variant.
-    - [ ] Adding pieces enforces the current plan's physical-asset capacity atomically and safely under concurrent requests.
-    - [ ] Staff can retire a piece only through lifecycle rules that preserve reservation, allocation, maintenance, custody, and audit history.
-    - [ ] A piece with a blocking allocation, unresolved custody, or open maintenance cannot be silently deleted/retired in a way that breaks operational truth.
-    - [ ] Lost/unready/maintenance state remains separate from product/variant lifecycle and is reflected by canonical availability projections.
-    - [ ] Staff detail UI shows each serialized piece, current lifecycle/readiness/custody state, and appropriate actions.
-  - **Tests/evidence:** Add-piece/quota/concurrency and safe-retirement PostgreSQL tests plus Clothing Detail/Edit physical-piece UI tests.
+    - [x] Edit Clothing exposes `Add Variant` for an existing product.
+    - [x] Staff can create a new variant with size, optional color, measurement mode/source, pricing, and preparation/turnaround settings.
+    - [x] Add Variant has no draft/publish choice: the new variant is created active immediately as a staff catalogue record.
+    - [x] V1 Add Variant atomically creates exactly one initial serialized `physical_asset` for the new variant in the active branch; staff do not separately add/manage additional pieces in V1.
+    - [x] The generated initial physical asset is active, ready, at-branch, receives a unique tenant-local asset code, and is covered by the existing physical-asset plan-capacity guard.
+    - [x] New variant SKU uniqueness is tenant-scoped and validated safely; omitted SKU values are generated server-side.
+    - [x] The create command is tenant-scoped, permission-checked, idempotent, audited, and duplicate-safe.
+    - [x] Newly created variants appear immediately in staff detail/edit projections without navigating away from Edit Clothing.
+  - **Tests/evidence:** `catalogue-add-variant-route.test.ts` passes `4/4` against disposable PostgreSQL and proves Add Variant atomically creates one active/ready/at-branch serialized garment, same-key replay does not duplicate the garment, duplicate SKU is rejected safely, missing `assets.manage` is forbidden, and hitting the 75-asset Starter limit returns `CAPACITY_CONFLICT` with neither the new variant nor an extra asset persisted. `edit-clothing-page.test.tsx` plus `add-clothing-page.test.tsx` pass `27/27`; Add Variant stays on Edit Clothing with no Draft/Publish choice, while Add Clothing now shows only `Selected sizes` because the V1 one-piece-per-size mapping is automatic.
 
 - [ ] **CLT-078 — Prove catalogue lifecycle propagation to storefront and reservation handoff**
-  - **Depends on:** CLT-050, CLT-051, CLT-072, CLT-073, CLT-074, CLT-076, CLT-077.
+  - **Depends on:** CLT-050, CLT-051, CLT-072, CLT-073, CLT-074, and completed V1 CLT-076 one-variant/one-garment behavior.
   - **Outcome:** Staff catalogue lifecycle actions and customer-facing rental availability cannot diverge.
   - **Acceptance:**
     - [ ] Publishing a valid draft product makes it eligible for the public/storefront catalogue according to storefront policy.
@@ -394,14 +383,15 @@ Before marking a task complete:
     - [ ] Publishing a valid variant under an active product makes that variant eligible for renter-facing availability without altering sibling variant history.
     - [ ] Archiving a product or variant never releases existing reservation allocations or mutates immutable reservation snapshots.
     - [ ] Restoring an archived product to draft does not make it publicly rentable until it is explicitly republished and passes current validation.
-    - [ ] Adding a physical piece increases future candidate capacity only when the piece is active, ready, at the correct branch, and otherwise eligible under canonical allocation rules.
+    - [ ] Each V1 active variant's single serialized garment contributes future candidate capacity only when that garment is active, ready, at the correct branch, and otherwise eligible under canonical allocation rules.
     - [ ] Retiring/loss/maintenance/readiness changes immediately affect canonical staff availability and reservation candidate projections according to their existing semantics.
   - **Tests/evidence:** Cross-module PostgreSQL integration suite covering Catalogue → Storefront/Availability → Reservation handoff, plus customer-facing catalogue UI regression where implemented.
 
 ## Deferred from Clothing V1
 
 - Fitting-specific garment guarantees and fitting allocations — V1.1.
+- **Multi-piece-per-variant physical inventory management — V2.** V1 keeps the serialized `physical_asset` architecture internally but exposes exactly one garment per variant/size. V2 may add `Add Physical Piece`, multiple garments under one variant, per-piece capacity expansion, and staff UI for adding/retiring/restoring additional pieces.
 - Multi-location/transfer inventory — V2.
-- Bulk stock quantity semantics that bypass serialized physical assets.
+- Bulk stock quantity semantics that bypass serialized physical assets remain unsupported; even in V2, capacity stays based on serialized garments rather than a mutable quantity counter.
 - Marketplace inventory sharing across tenants.
 - AI recommendations, demand forecasting, or advanced analytics.

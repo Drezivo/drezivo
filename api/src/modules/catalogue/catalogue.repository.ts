@@ -676,7 +676,7 @@ export async function createVariantForProduct(
         measurement_mode, measurement_guide_id, rental_price_minor, security_deposit_minor, currency,
         pricing_mode, included_duration_minutes, extra_day_price_minor, prep_minutes, turnaround_minutes,
         status, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,'PHP',$13,$14,$15,$16,$17,'draft',now(),now())
+     VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,'PHP',$13,$14,$15,$16,$17,'active',now(),now())
      ON CONFLICT DO NOTHING
      RETURNING id, product_id, sku, size_label, color_label, measurement_mode, measurement_guide_id,
                measurement_unit, measurements, rental_price_minor, security_deposit_minor, currency,

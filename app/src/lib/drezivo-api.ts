@@ -8,6 +8,8 @@ import {
   catalogueCategory,
   catalogueCategoryList,
   createCatalogueCategoryRequest,
+  createClothingVariantRequest,
+  createClothingVariantResponse,
   clothingDetail,
   clothingListQuery,
   clothingListResponse,
@@ -52,6 +54,8 @@ import {
   type CatalogueCategory,
   type CatalogueCategoryList,
   type CreateCatalogueCategoryRequest,
+  type CreateClothingVariantRequest,
+  type CreateClothingVariantResponse,
   type ClothingDetail,
   type ClothingListQuery,
   type ClothingListResponse,
@@ -353,6 +357,19 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "POST",
         path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/restore`,
         responseSchema: apiEnvelope(restoreClothingResponse),
+      }),
+    createClothingVariant: (
+      productId: string,
+      input: CreateClothingVariantRequest,
+      idempotencyKey: string
+    ) =>
+      request<CreateClothingVariantResponse>({
+        getToken,
+        body: createClothingVariantRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/variants`,
+        responseSchema: apiEnvelope(createClothingVariantResponse),
       }),
     updateClothingVariantLifecycle: (
       productId: string,
