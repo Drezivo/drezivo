@@ -5,7 +5,12 @@ import { CalendarDays, ChevronLeft, ChevronRight, Search, Shirt, UserRound, X } 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 
-import type { ReservationListItem, ReservationState } from "@drezivo/contracts";
+import type {
+  PermissionCode,
+  ReservationDetail,
+  ReservationListItem,
+  ReservationState,
+} from "@drezivo/contracts";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +28,7 @@ import {
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { cn } from "@/lib/utils";
 
+import { ReservationDetailsSheet } from "./reservation-details-sheet";
 import {
   PAYMENT_EVIDENCE_LABELS,
   PAYMENT_STATUS_CLASSES,
@@ -65,6 +71,12 @@ export function ReservationsPage() {
   );
   const [isTimeZoneResolved, setIsTimeZoneResolved] = useState(false);
   const [rows, setRows] = useState<ReservationListItem[]>([]);
+  const [permissionCodes, setPermissionCodes] = useState<PermissionCode[]>([]);
+  const [selectedReservationId, setSelectedReservationId] = useState<string | null>(null);
+  const [selectedReservation, setSelectedReservation] = useState<ReservationDetail | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<DrezivoApiError | null>(null);
+  const [detailReloadVersion, setDetailReloadVersion] = useState(0);
   const [pageMeta, setPageMeta] = useState<PageMeta>({ next_cursor: null, has_more: false });
   const [pageIndex, setPageIndex] = useState(0);
   const [pageCursors, setPageCursors] = useState<Array<string | null>>([null]);
@@ -105,7 +117,11 @@ export function ReservationsPage() {
         const activeBranch = result.data.branches.find(
           (branch) => branch.id === result.data.active_branch_id
         );
+        const activeGrant = result.data.branch_grants.find(
+          (grant) => grant.branch_id === result.data.active_branch_id
+        );
         setTimeZone(activeBranch?.timezone ?? result.data.tenant.timezone);
+        setPermissionCodes(activeGrant?.permission_codes ?? []);
       })
       .catch(() => {
         // The reservation request remains authoritative. A failed context refresh only means
@@ -119,6 +135,30 @@ export function ReservationsPage() {
       cancelled = true;
     };
   }, [getToken, isLoaded, isSignedIn]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !selectedReservationId) return;
+    let cancelled = false;
+    setIsDetailLoading(true);
+    setDetailError(null);
+    setSelectedReservation(null);
+
+    void createDrezivoApiClient(getToken)
+      .getReservationDetail(selectedReservationId)
+      .then((result) => {
+        if (!cancelled) setSelectedReservation(result.data);
+      })
+      .catch((caughtError) => {
+        if (!cancelled) setDetailError(toDrezivoApiError(caughtError));
+      })
+      .finally(() => {
+        if (!cancelled) setIsDetailLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailReloadVersion, getToken, isLoaded, isSignedIn, selectedReservationId]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || dateRangeError || !dateFilterTimeZoneReady) {
@@ -284,7 +324,11 @@ export function ReservationsPage() {
                   : {})}
               />
             ) : (
-              <ReservationTable reservations={rows} timeZone={timeZone} />
+              <ReservationTable
+                reservations={rows}
+                timeZone={timeZone}
+                onSelect={setSelectedReservationId}
+              />
             )}
 
             {!isLoading && !error && !dateRangeError && rows.length > 0 ? (
@@ -299,6 +343,23 @@ export function ReservationsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <ReservationDetailsSheet
+        reservationId={selectedReservationId}
+        detail={selectedReservation}
+        error={detailError}
+        isLoading={isDetailLoading}
+        permissionCodes={permissionCodes}
+        timeZone={timeZone}
+        onRetry={() => setDetailReloadVersion((value) => value + 1)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedReservationId(null);
+            setSelectedReservation(null);
+            setDetailError(null);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -432,9 +493,11 @@ function ReservationStatusTabs({
 }
 
 function ReservationTable({
+  onSelect,
   reservations,
   timeZone,
 }: {
+  onSelect: (reservationId: string) => void;
   reservations: readonly ReservationListItem[];
   timeZone: string;
 }) {
@@ -454,7 +517,20 @@ function ReservationTable({
       </TableHeader>
       <TableBody>
         {reservations.map((reservation) => (
-          <TableRow key={reservation.id}>
+          <TableRow
+            key={reservation.id}
+            role="button"
+            tabIndex={0}
+            aria-label={`Open reservation ${reservation.reference_code}`}
+            onClick={() => onSelect(reservation.id)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSelect(reservation.id);
+              }
+            }}
+            className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/30"
+          >
             <TableCell className="pl-4 align-top">
               <p className="font-semibold text-dashboard-navy">{reservation.reference_code}</p>
               <p className="mt-1 text-xs text-dashboard-muted">

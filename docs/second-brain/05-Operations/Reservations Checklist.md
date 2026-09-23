@@ -293,14 +293,16 @@ Before marking a task complete:
   - **UX/failure behavior:** the page has explicit loading, empty, filtered-empty, invalid-date, forbidden, retryable API-error, and request-ID states. Payment and reservation status remain text-labeled (never color-only), and no frontend-only state can manufacture customer/payment/reservation facts.
   - **Tests/evidence:** `app/tests/unit/drezivo-api-reservations-list.test.ts` + `app/tests/unit/reservations-page.test.tsx` pass `6/6`, covering query serialization/response validation, authoritative row rendering/no mock metrics, customer-less holds, server-side search/status filtering, branch-timezone date windows + >31-day rejection, opaque next/previous cursor behavior, and loading/empty/retryable-error states. `npm run typecheck` passes. `next build` compiles, prerenders `/reservations`, and completes page generation; its lint phase still reports the repository's pre-existing dependency mismatch where root `eslint-config-next@16.3.5` cannot resolve `next/dist/compiled/babel/eslint-parser` from the app's `next@15.5.24`, so dependency-version repair is intentionally left outside RSV-060.
 
-- [ ] **RSV-061 — Connect Reservation Details Sheet**
+- [x] **RSV-061 — Connect Reservation Details Sheet**
   - **Depends on:** RSV-011.
   - **Outcome:** Clicking a reservation row shows authoritative detail data.
   - **Acceptance:**
-    - [ ] Sheet is hidden initially and fetches/resolves selected reservation safely.
-    - [ ] Customer, garment, period, payment/evidence, verification, notes, and actions use real data.
-    - [ ] Actions shown are derived from current permissions/state, but API rechecks them.
-  - **Tests/evidence:** Row selection/detail/error/stale-state tests.
+    - [x] Sheet is hidden initially and fetches/resolves selected reservation safely.
+    - [x] Customer, garment, period, payment/evidence, verification, custody condition notes, and actions use real data. The current authoritative reservation-detail contract has no general reservation-notes field, so the frontend does not revive the old mock notes/address/social data.
+    - [x] Actions shown are derived from current permissions/state, but API rechecks them.
+  - **Implemented:** reservation rows are mouse- and keyboard-selectable and open a Radix Sheet that independently fetches `GET /api/v1/reservations/:reservationId` through the shared API client. The Sheet renders the persisted customer snapshot (including customer-less short holds), one-or-more reservation-line name/measurement/pricing snapshots, pickup/due/event/fulfillment facts, reservation price/deposit/due-now snapshot, independent payment/evidence/verification state, lifecycle timestamps, and the immutable pickup/return custody timeline with real condition notes. It uses the reservation's frozen timezone snapshot for historical date rendering rather than current browser time.
+  - **Safety/permissions:** detail loading has explicit loading, 404, retryable failure, request-ID, close, and retry states; a detail failure does not clear or corrupt the reservations table. Switching/closing selection cancels the previous render path so a slower old response cannot replace the newer selected reservation. The active branch grant from server actor context drives visible lifecycle-action labels: `Complete Reservation`/`Cancel`, `Pick Up`, `Return`, `Inspect Return`, and `Complete Rental` appear only where the current reservation state and O/S capabilities make them potentially legal. These are informational in RSV-061; RSV-062 wires the actual mutations, and the API remains authoritative for payment/readiness/version prerequisites.
+  - **Tests/evidence:** `app/tests/unit/reservations-page.test.tsx` + `app/tests/unit/drezivo-api-reservations-list.test.ts` pass `11/11`, covering detail endpoint validation, row-click and keyboard selection, authoritative customer/garment/measurement/payment rendering, permission/state-derived actions, real pickup→return custody notes, retryable detail failure without list corruption, and stale/older detail-response suppression after close/reselection. `npm run typecheck` passes.
 
 - [ ] **RSV-062 — Connect reservation mutations to UI**
   - **Depends on:** RSV-022, RSV-023, RSV-031, RSV-032, RSV-041, and RSV-050 through RSV-052. RSV-040 reschedule is deferred to V1.1 and does not block V1 UI integration.

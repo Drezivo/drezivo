@@ -1,7 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { reservationListItem, type ReservationListItem } from "@drezivo/contracts";
+import {
+  reservationDetail,
+  reservationListItem,
+  type ReservationListItem,
+} from "@drezivo/contracts";
 
 import { ReservationsPage } from "@/components/reservations/reservations-page";
 
@@ -12,6 +16,7 @@ const clerk = vi.hoisted(() => ({
 
 const api = vi.hoisted(() => ({
   getActorContext: vi.fn(),
+  getReservationDetail: vi.fn(),
   getReservations: vi.fn(),
 }));
 
@@ -106,6 +111,104 @@ const anonymousHold = reservationListItem.parse({
   },
 });
 
+const reservationDetailRecord = reservationDetail.parse({
+  id: reservation.id,
+  reference_code: reservation.reference_code,
+  status: "confirmed",
+  branch_id: "00000000-0000-4000-8000-000000000203",
+  storefront_id: "00000000-0000-4000-8000-000000000301",
+  customer: reservation.customer,
+  lines: [
+    {
+      id: reservation.line.id,
+      variant_id: reservation.line.variant_id,
+      line_number: 1,
+      name_snapshot: reservation.line.name_snapshot,
+      measurements_snapshot: { bust_cm: 91, waist_cm: 72 },
+      pricing_snapshot: {
+        rental_minor: reservation.line.rental_minor,
+        deposit_minor: reservation.line.deposit_minor,
+        currency: reservation.line.currency,
+      },
+    },
+  ],
+  pickup_at: reservation.pickup_at,
+  due_at: reservation.due_at,
+  timezone_snapshot: "Asia/Manila",
+  event_date: "2026-10-13",
+  delivery_snapshot: { fulfillment_method: "pickup" },
+  price_snapshot: reservation.price_snapshot,
+  payment: reservation.payment,
+  hold_acquired_at: "2026-10-10T02:00:00.000Z",
+  hold_expires_at: null,
+  terms_accepted_at: "2026-10-10T02:02:00.000Z",
+  submitted_at: "2026-10-10T02:03:00.000Z",
+  confirmed_at: "2026-10-10T03:01:00.000Z",
+  completed_at: null,
+  custody_timeline: [],
+  version: reservation.version,
+  created_at: reservation.created_at,
+});
+
+const returnedReservation = reservationListItem.parse({
+  ...reservation,
+  status: "returned",
+  version: 5,
+});
+
+const secondReservation = reservationListItem.parse({
+  ...reservation,
+  id: "00000000-0000-4000-8000-000000000121",
+  reference_code: "RSV-REAL-002",
+  customer: {
+    customer_id: "00000000-0000-4000-8000-000000000122",
+    snapshot: { full_name: "Second Customer", phone: "09170000002", email: null },
+  },
+  line: {
+    ...reservation.line,
+    id: "00000000-0000-4000-8000-000000000123",
+    variant_id: "00000000-0000-4000-8000-000000000124",
+    name_snapshot: "Second Gown",
+  },
+});
+
+const secondDetailRecord = reservationDetail.parse({
+  ...reservationDetailRecord,
+  id: secondReservation.id,
+  reference_code: secondReservation.reference_code,
+  customer: secondReservation.customer,
+  lines: [
+    {
+      ...reservationDetailRecord.lines[0],
+      id: secondReservation.line.id,
+      variant_id: secondReservation.line.variant_id,
+      name_snapshot: secondReservation.line.name_snapshot,
+    },
+  ],
+});
+
+const returnedDetailRecord = reservationDetail.parse({
+  ...reservationDetailRecord,
+  status: "returned",
+  version: 5,
+  custody_timeline: [
+    {
+      event_kind: "pickup",
+      asset_id: "00000000-0000-4000-8000-000000000401",
+      reservation_line_id: reservation.line.id,
+      occurred_at: "2026-10-12T02:05:00.000Z",
+      condition_note: "Clean at handover.",
+    },
+    {
+      event_kind: "return",
+      asset_id: "00000000-0000-4000-8000-000000000401",
+      reservation_line_id: reservation.line.id,
+      occurred_at: "2026-10-14T01:55:00.000Z",
+      condition_note: "Returned with light dust on hem.",
+    },
+  ],
+});
+
 const actorContext = {
   tenant: {
     id: "00000000-0000-4000-8000-000000000201",
@@ -137,7 +240,13 @@ const actorContext = {
   branch_grants: [
     {
       branch_id: "00000000-0000-4000-8000-000000000203",
-      permission_codes: ["reservations.manage" as const],
+      permission_codes: [
+        "reservations.manage" as const,
+        "reservations.custody" as const,
+        "assets.manage" as const,
+        "payments.manage" as const,
+        "evidence.verify" as const,
+      ],
     },
   ],
   subscription: {
@@ -168,6 +277,9 @@ function page(items: ReservationListItem[] = [reservation], nextCursor: string |
 describe("ReservationsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    api.getActorContext.mockReset();
+    api.getReservationDetail.mockReset();
+    api.getReservations.mockReset();
     navigation.search = "";
     clerk.getToken.mockResolvedValue("clerk-token");
     clerk.useAuth.mockReturnValue({
@@ -176,6 +288,10 @@ describe("ReservationsPage", () => {
       isSignedIn: true,
     });
     api.getActorContext.mockResolvedValue({ data: actorContext, requestId: "req-context" });
+    api.getReservationDetail.mockResolvedValue({
+      data: reservationDetailRecord,
+      requestId: "req-reservation-detail",
+    });
     api.getReservations.mockResolvedValue(page());
   });
 
@@ -279,6 +395,103 @@ describe("ReservationsPage", () => {
         sort: "pickup_asc",
       })
     );
+  });
+
+  it("opens the authoritative details sheet from a row and renders snapshots, payment, and permission-derived actions", async () => {
+    render(<ReservationsPage />);
+    await screen.findByText("RSV-REAL-001");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open reservation RSV-REAL-001" }));
+
+    await waitFor(() => expect(api.getReservationDetail).toHaveBeenCalledWith(reservation.id));
+    expect(await screen.findByRole("heading", { name: "Reservation RSV-REAL-001" })).toBeVisible();
+    expect(screen.getAllByText("Real Customer").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Bust Cm: 91")).toBeVisible();
+    expect(screen.getByText("Waist Cm: 72")).toBeVisible();
+    expect(screen.getAllByText("Verified").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Pick Up")).toBeVisible();
+    expect(screen.getByText("Cancel")).toBeVisible();
+    expect(screen.queryByText("Maria Santos")).not.toBeInTheDocument();
+  });
+
+  it("renders the real custody timeline and returned-state actions", async () => {
+    api.getReservations.mockResolvedValue(page([returnedReservation]));
+    api.getReservationDetail.mockResolvedValue({
+      data: returnedDetailRecord,
+      requestId: "req-returned-detail",
+    });
+
+    render(<ReservationsPage />);
+    await screen.findByText("RSV-REAL-001");
+    fireEvent.keyDown(screen.getByRole("button", { name: "Open reservation RSV-REAL-001" }), {
+      key: "Enter",
+    });
+
+    expect(await screen.findByText("Clean at handover.")).toBeVisible();
+    expect(screen.getByText("Returned with light dust on hem.")).toBeVisible();
+    expect(screen.getByText("Inspect Return")).toBeVisible();
+    expect(screen.getByText("Complete Rental")).toBeVisible();
+  });
+
+  it("ignores an older detail response after O/S selects a different reservation", async () => {
+    api.getReservations.mockResolvedValue(page([reservation, secondReservation]));
+    let resolveFirst:
+      ((value: { data: typeof reservationDetailRecord; requestId: string }) => void) | undefined;
+    api.getReservationDetail
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        })
+      )
+      .mockResolvedValueOnce({ data: secondDetailRecord, requestId: "req-second-detail" });
+
+    render(<ReservationsPage />);
+    await screen.findByText("RSV-REAL-001");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open reservation RSV-REAL-001" }));
+    expect(await screen.findByRole("heading", { name: "Loading reservation…" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Open reservation RSV-REAL-002" })).toBeVisible()
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open reservation RSV-REAL-002" }));
+
+    expect(await screen.findByRole("heading", { name: "Reservation RSV-REAL-002" })).toBeVisible();
+    expect(screen.getAllByText("Second Customer").length).toBeGreaterThanOrEqual(1);
+
+    resolveFirst?.({ data: reservationDetailRecord, requestId: "req-first-detail" });
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Reservation RSV-REAL-002" })).toBeVisible()
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Reservation RSV-REAL-001" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the list intact when detail loading fails and retries only the selected reservation", async () => {
+    const ApiError = (await import("@/lib/drezivo-api")).DrezivoApiError;
+    api.getReservationDetail
+      .mockRejectedValueOnce(
+        new ApiError("Reservation detail is temporarily unavailable.", {
+          status: 503,
+          requestId: "req-detail-failed",
+        })
+      )
+      .mockResolvedValueOnce({ data: reservationDetailRecord, requestId: "req-detail-retry" });
+
+    render(<ReservationsPage />);
+    await screen.findByText("RSV-REAL-001");
+    fireEvent.click(screen.getByRole("button", { name: "Open reservation RSV-REAL-001" }));
+
+    expect(await screen.findByText("Could not load reservation")).toBeVisible();
+    expect(screen.getByText("Reservation detail is temporarily unavailable.")).toBeVisible();
+    expect(screen.getByText("Request ID: req-detail-failed")).toBeVisible();
+    expect(screen.getByText("RSV-REAL-001")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("heading", { name: "Reservation RSV-REAL-001" })).toBeVisible();
+    expect(api.getReservationDetail).toHaveBeenCalledTimes(2);
+    expect(api.getReservations).toHaveBeenCalledTimes(1);
   });
 
   it("shows bounded loading, empty, and retryable error states", async () => {

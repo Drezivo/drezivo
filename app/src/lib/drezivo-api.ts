@@ -21,6 +21,7 @@ import {
   removeClothingVariantRequest,
   restoreClothingRequest,
   restoreClothingResponse,
+  reservationDetail,
   reservationListQuery,
   reservationListResponse,
   updateClothingVariantLifecycleRequest,
@@ -69,6 +70,7 @@ import {
   type RemoveClothingVariantRequest,
   type RestoreClothingRequest,
   type RestoreClothingResponse,
+  type ReservationDetail,
   type ReservationListQuery,
   type ReservationListResponse,
   type UpdateClothingVariantLifecycleRequest,
@@ -211,6 +213,13 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         responseSchema: apiEnvelope(reservationListResponse),
       });
     },
+    getReservationDetail: (reservationId: string) =>
+      request<ReservationDetail>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/reservations/${encodeURIComponent(reservationId)}`,
+        responseSchema: apiEnvelope(reservationDetail),
+      }),
     getCatalogueCategories: () =>
       request<CatalogueCategoryList>({
         getToken,

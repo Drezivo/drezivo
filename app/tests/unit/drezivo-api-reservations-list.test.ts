@@ -104,4 +104,84 @@ describe("Drezivo reservations list API client", () => {
     });
     expect(result.data.page_meta).toEqual({ next_cursor: "next-page", has_more: true });
   });
+
+  it("fetches and validates one authoritative reservation detail", async () => {
+    const reservationId = "00000000-0000-4000-8000-000000000101";
+    fetchMock.mockResolvedValueOnce(
+      success({
+        id: reservationId,
+        reference_code: "RSV-2026-0001",
+        status: "returned",
+        branch_id: "00000000-0000-4000-8000-000000000201",
+        storefront_id: "00000000-0000-4000-8000-000000000202",
+        customer: {
+          customer_id: "00000000-0000-4000-8000-000000000102",
+          snapshot: { full_name: "Maria Santos", phone: "09171234567", email: null },
+        },
+        lines: [
+          {
+            id: "00000000-0000-4000-8000-000000000103",
+            variant_id: "00000000-0000-4000-8000-000000000104",
+            line_number: 1,
+            name_snapshot: "Emerald Gown",
+            measurements_snapshot: { bust_cm: 91 },
+            pricing_snapshot: {
+              rental_minor: "150000",
+              deposit_minor: "50000",
+              currency: "PHP",
+            },
+          },
+        ],
+        pickup_at: "2026-10-12T02:00:00.000Z",
+        due_at: "2026-10-14T02:00:00.000Z",
+        timezone_snapshot: "Asia/Manila",
+        delivery_snapshot: { fulfillment_method: "pickup" },
+        price_snapshot: {
+          rental_total_minor: "150000",
+          security_required_minor: "50000",
+          due_now_minor: "200000",
+          currency: "PHP",
+        },
+        payment: {
+          id: "00000000-0000-4000-8000-000000000105",
+          payment_method_id: "00000000-0000-4000-8000-000000000106",
+          status: "paid",
+          evidence_status: "verified",
+          amount_minor: "200000",
+          currency: "PHP",
+          verified_at: "2026-10-10T03:00:00.000Z",
+        },
+        hold_acquired_at: "2026-10-10T02:00:00.000Z",
+        hold_expires_at: null,
+        terms_accepted_at: "2026-10-10T02:02:00.000Z",
+        submitted_at: "2026-10-10T02:03:00.000Z",
+        confirmed_at: "2026-10-10T03:01:00.000Z",
+        completed_at: null,
+        custody_timeline: [
+          {
+            event_kind: "return",
+            asset_id: "00000000-0000-4000-8000-000000000401",
+            reservation_line_id: "00000000-0000-4000-8000-000000000103",
+            occurred_at: "2026-10-14T01:55:00.000Z",
+            condition_note: "Returned in good condition.",
+          },
+        ],
+        version: 5,
+        created_at: "2026-10-10T02:00:00.000Z",
+      })
+    );
+
+    const client = createDrezivoApiClient(getToken);
+    const result = await client.getReservationDetail(reservationId);
+
+    const [rawUrl, init] = fetchMock.mock.calls[0]!;
+    expect(new URL(String(rawUrl)).pathname).toBe(`/api/v1/reservations/${reservationId}`);
+    expect(init?.method).toBe("GET");
+    expect(result.data).toMatchObject({
+      id: reservationId,
+      status: "returned",
+      customer: { snapshot: { full_name: "Maria Santos" } },
+      custody_timeline: [{ event_kind: "return", condition_note: "Returned in good condition." }],
+    });
+  });
 });
