@@ -23,6 +23,10 @@ import {
 } from '../../shared/errors.js';
 import { resolveReservationQuote, type ReservationQuote } from './reservations.quote.js';
 import {
+  createStaffReservationCommand,
+  type ReservationCommandResponse,
+} from './reservations.command.service.js';
+import {
   listReservationsReadModel,
   readReservationDetailModel,
   type ReservationDetailHeaderRow,
@@ -60,6 +64,25 @@ export async function getStaffReservationQuote(
       branchId: input.branchId,
       request,
     }),
+  );
+}
+
+/** Creates one held staff/walk-in reservation and authoritative serialized-asset allocation. */
+export async function createStaffReservation(
+  input: ReservationReadContext & { requestId: string; idempotencyKey: string },
+  request: StaffReservationCreateRequest,
+): Promise<ReservationCommandResponse> {
+  assertReservationBookingContext(input);
+  return createStaffReservationCommand(
+    {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      membershipId: input.membershipId,
+      principalId: input.principalId,
+      requestId: input.requestId,
+      idempotencyKey: input.idempotencyKey,
+    },
+    request,
   );
 }
 
