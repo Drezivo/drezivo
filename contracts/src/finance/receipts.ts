@@ -14,10 +14,12 @@ import { isoInstant } from '../common/time';
 import { paymentEvidenceStatus, paymentRail, paymentStatus } from './payment-status';
 
 /** POST /guest/reservations/{id}/receipts request body. Requires `Idempotency-Key`. */
-export const paymentReceiptSubmitRequest = z.object({
-  payment_id: paymentId,
-  file_id: fileObjectId,
-});
+export const paymentReceiptSubmitRequest = z
+  .object({
+    payment_id: paymentId,
+    file_id: fileObjectId,
+  })
+  .strict();
 export type PaymentReceiptSubmitRequest = z.infer<typeof paymentReceiptSubmitRequest>;
 
 export const paymentReceiptSummary = z.object({

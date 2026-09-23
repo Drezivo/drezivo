@@ -20,8 +20,20 @@ import { idColumn, timestamps } from './_shared.js';
  * convention this module happens to follow.
  */
 
-export const paymentStatusEnum = pgEnum('payment_status', ['pending', 'verified', 'failed', 'voided']);
-export const evidenceStatusEnum = pgEnum('payment_evidence_status', ['submitted', 'accepted', 'rejected']);
+export const paymentStatusEnum = pgEnum('payment_status', [
+  'pending',
+  'partially_paid',
+  'paid',
+  'failed',
+  'refunded',
+]);
+export const evidenceStatusEnum = pgEnum('payment_evidence_status', [
+  'uploaded',
+  'under_review',
+  'verified',
+  'rejected',
+  'superseded',
+]);
 export const verificationDecisionEnum = pgEnum('payment_verification_decision', ['approved', 'rejected']);
 export const chargeKindEnum = pgEnum('charge_kind', ['rental', 'delivery', 'late_fee', 'damage_fee', 'credit']);
 export const allocationDirectionEnum = pgEnum('payment_allocation_direction', ['apply', 'reverse']);
@@ -60,7 +72,7 @@ export const paymentReceipt = pgTable('payment_receipt', {
   fileId: uuid('file_id')
     .notNull()
     .references(() => file.id),
-  evidenceStatus: evidenceStatusEnum('evidence_status').notNull().default('submitted'),
+  evidenceStatus: evidenceStatusEnum('evidence_status').notNull().default('uploaded'),
   submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

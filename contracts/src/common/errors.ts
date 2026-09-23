@@ -13,10 +13,9 @@ import { z } from 'zod';
 
 /**
  * One member per distinct failure category the API contract exposes.
- * Deliberately coarser than raw HTTP status: `CAPACITY_CONFLICT` and
- * `STATE_CONFLICT` both map to 409 but are distinguishable business
- * outcomes a UI renders differently ("someone else took that garment" vs
- * "this booking already moved on").
+ * Deliberately coarser than raw HTTP status: several reservation conflict
+ * codes map to 409 but remain distinguishable business outcomes so the UI
+ * can render the correct recovery path without parsing error messages.
  */
 export const errorCode = z.enum([
   // 401 — unauthenticated
@@ -29,6 +28,11 @@ export const errorCode = z.enum([
   'CONFLICT',
   'CAPACITY_CONFLICT',
   'STATE_CONFLICT',
+  'HOLD_EXPIRED',
+  'INVALID_RESERVATION_TRANSITION',
+  'ASSET_UNAVAILABLE',
+  'ASSET_UNREADY',
+  'PAYMENT_PREREQUISITE_FAILED',
   'IDEMPOTENCY_KEY_REUSED',
   'TRIAL_CONSUMED',
   'CURRENT_OWNED_TENANT_EXISTS',

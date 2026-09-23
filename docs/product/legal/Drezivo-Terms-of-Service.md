@@ -18,6 +18,14 @@ owner: "[INSERT LEGAL ENTITY NAME]"
 > not a guarantee against liability. A Philippine lawyer should complete the placeholders, confirm
 > the contracting entity, review consumer and tax obligations, and approve the published version.
 
+## Related documents
+
+These Terms are read with the [Privacy Policy](Drezivo-Privacy-Policy.md),
+[Acceptable Use Policy](Drezivo-Acceptable-Use-Policy.md),
+[Data Processing Addendum](Drezivo-Data-Processing-Addendum.md), and any order form. The Privacy
+Policy governs Drezivo's own processing. A rental business remains responsible for its own
+customer-facing privacy notice and rental terms.
+
 ## 1. Agreement and scope
 
 These Terms govern access to Drezivo, a hosted software service for clothing-rental businesses.
@@ -132,6 +140,12 @@ or a legal requirement. Where practical, we will give notice and a chance to fix
 After closure, the business may request an export during the stated export window. We may delete
 content after that window, subject to legal retention, backups, unresolved disputes, security
 records, and the Privacy Policy.
+
+Restriction or closure must not itself delete a business's records. Where an account is restricted
+for billing, Drezivo may block new bookings, publishing, new inventory, and invitations while
+preserving access needed to read existing rentals, complete approved returns or refunds, settle
+open obligations, and obtain an export. The exact export window, deletion schedule, support
+channel, and billing process must be published before a paid launch.
 
 ## 12. Disclaimers and liability
 

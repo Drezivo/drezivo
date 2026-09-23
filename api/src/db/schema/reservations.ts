@@ -1,4 +1,18 @@
-import { integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import {
+  date,
+  foreignKey,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 import { physicalAsset, productVariant } from './catalogue.js';
 import { paymentMethod, policySnapshot, storefront } from './storefront.js';
@@ -30,17 +44,21 @@ export const reservationStatusEnum = pgEnum('reservation_status', [
 export const custodyEventKindEnum = pgEnum('custody_event_kind', ['pickup', 'return']);
 export const disruptionStatusEnum = pgEnum('disruption_status', ['open', 'resolved']);
 
-export const customer = pgTable('customer', {
-  ...idColumn,
-  tenantId: uuid('tenant_id').notNull(),
-  fullName: text('full_name').notNull(),
-  email: text('email'),
-  phone: text('phone'),
-  notes: text('notes'),
-  privacyNoticeVersion: integer('privacy_notice_version').notNull().default(1),
-  anonymizedAt: timestamp('anonymized_at', { withTimezone: true }),
-  ...timestamps,
-});
+export const customer = pgTable(
+  'customer',
+  {
+    ...idColumn,
+    tenantId: uuid('tenant_id').notNull(),
+    fullName: text('full_name').notNull(),
+    email: text('email'),
+    phone: text('phone'),
+    notes: text('notes'),
+    privacyNoticeVersion: integer('privacy_notice_version').notNull().default(1),
+    anonymizedAt: timestamp('anonymized_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [unique('customer_tenant_id_id_key').on(table.tenantId, table.id)],
+);
 
 export const reservation = pgTable(
   'reservation',
@@ -62,7 +80,7 @@ export const reservation = pgTable(
       .references(() => paymentMethod.id),
     referenceCode: text('reference_code').notNull(),
     status: reservationStatusEnum('status').notNull().default('held'),
-    eventDate: timestamp('event_date', { withTimezone: true }),
+    eventDate: date('event_date', { mode: 'string' }),
     pickupAt: timestamp('pickup_at', { withTimezone: true }).notNull(),
     dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
     timezoneSnapshot: text('timezone_snapshot').notNull(),
@@ -83,28 +101,98 @@ export const reservation = pgTable(
     version: integer('version').notNull().default(1),
     ...timestamps,
   },
-  (table) => [uniqueIndex('reservation_tenant_reference_key').on(table.tenantId, table.referenceCode)],
+  (table) => [
+    unique('reservation_tenant_id_id_key').on(table.tenantId, table.id),
+    uniqueIndex('reservation_tenant_reference_key').on(table.tenantId, table.referenceCode),
+    index('reservation_tenant_status_pickup_idx').on(
+      table.tenantId,
+      table.status,
+      table.pickupAt,
+      table.id,
+    ),
+    index('reservation_tenant_pickup_idx').on(table.tenantId, table.pickupAt, table.id),
+    index('reservation_tenant_created_idx').on(table.tenantId, table.createdAt, table.id),
+    index('reservation_tenant_reference_sort_idx').on(
+      table.tenantId,
+      sql`lower(${table.referenceCode})`,
+      table.id,
+    ),
+    index('reservation_tenant_due_idx').on(table.tenantId, table.dueAt, table.id),
+    index('reservation_tenant_event_date_idx').on(table.tenantId, table.eventDate, table.id),
+    index('reservation_tenant_customer_created_idx').on(
+      table.tenantId,
+      table.customerId,
+      table.createdAt,
+      table.id,
+    ),
+    foreignKey({
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branch.tenantId, branch.id],
+      name: 'reservation_branch_same_tenant_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.tenantId, table.customerId],
+      foreignColumns: [customer.tenantId, customer.id],
+      name: 'reservation_customer_same_tenant_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.tenantId, table.storefrontId],
+      foreignColumns: [storefront.tenantId, storefront.id],
+      name: 'reservation_storefront_same_tenant_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.tenantId, table.policySnapshotId],
+      foreignColumns: [policySnapshot.tenantId, policySnapshot.id],
+      name: 'reservation_policy_same_tenant_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.tenantId, table.storefrontId, table.policySnapshotId],
+      foreignColumns: [policySnapshot.tenantId, policySnapshot.storefrontId, policySnapshot.id],
+      name: 'reservation_policy_storefront_same_tenant_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.tenantId, table.paymentMethodId],
+      foreignColumns: [paymentMethod.tenantId, paymentMethod.id],
+      name: 'reservation_payment_method_same_tenant_fk',
+    }).onDelete('restrict'),
+  ],
 );
 
 /** One serialized garment per line — never a quantity. Snapshots freeze offered facts at booking time. */
-export const reservationLine = pgTable('reservation_line', {
-  ...idColumn,
-  tenantId: uuid('tenant_id').notNull(),
-  reservationId: uuid('reservation_id')
-    .notNull()
-    .references(() => reservation.id),
-  variantId: uuid('variant_id')
-    .notNull()
-    .references(() => productVariant.id),
-  lineNumber: integer('line_number').notNull().default(1),
-  nameSnapshot: text('name_snapshot').notNull(),
-  measurementsSnapshot: jsonb('measurements_snapshot').$type<Record<string, number>>().notNull(),
-  pricingSnapshot: jsonb('pricing_snapshot').$type<Record<string, unknown>>().notNull(),
-  rentalMinor: integer('rental_minor').notNull(),
-  depositMinor: integer('deposit_minor').notNull().default(0),
-  currency: text('currency').notNull().default('PHP'),
-  ...timestamps,
-});
+export const reservationLine = pgTable(
+  'reservation_line',
+  {
+    ...idColumn,
+    tenantId: uuid('tenant_id').notNull(),
+    reservationId: uuid('reservation_id')
+      .notNull()
+      .references(() => reservation.id),
+    variantId: uuid('variant_id')
+      .notNull()
+      .references(() => productVariant.id),
+    lineNumber: integer('line_number').notNull().default(1),
+    nameSnapshot: text('name_snapshot').notNull(),
+    measurementsSnapshot: jsonb('measurements_snapshot').$type<Record<string, number>>().notNull(),
+    pricingSnapshot: jsonb('pricing_snapshot').$type<Record<string, unknown>>().notNull(),
+    rentalMinor: integer('rental_minor').notNull(),
+    depositMinor: integer('deposit_minor').notNull().default(0),
+    currency: text('currency').notNull().default('PHP'),
+    ...timestamps,
+  },
+  (table) => [
+    unique('reservation_line_tenant_id_id_key').on(table.tenantId, table.id),
+    foreignKey({
+      columns: [table.tenantId, table.reservationId],
+      foreignColumns: [reservation.tenantId, reservation.id],
+      name: 'reservation_line_reservation_same_tenant_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.tenantId, table.variantId],
+      foreignColumns: [productVariant.tenantId, productVariant.id],
+      name: 'reservation_line_variant_same_tenant_fk',
+    }).onDelete('restrict'),
+  ],
+);
 
 /** Append-only actual facts, outside the planned-block exclusion — a late return must always be recordable. */
 export const custodyEvent = pgTable(
