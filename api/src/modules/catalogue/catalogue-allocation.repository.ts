@@ -32,6 +32,9 @@ export async function readReservationCatalogueSelection(
      JOIN product p
        ON p.tenant_id = pv.tenant_id
       AND p.id = pv.product_id
+     LEFT JOIN category c
+       ON c.tenant_id = p.tenant_id
+      AND c.id = p.category_id
      JOIN branch b
        ON b.tenant_id = pv.tenant_id
       AND b.id = $2
@@ -62,6 +65,7 @@ export async function readReservationCatalogueSelection(
        AND pv.id = $3
        AND pv.status = 'active'
        AND p.status = 'active'
+       AND (p.category_id IS NULL OR c.status = 'active')
        AND b.status = 'active'
      LIMIT 1`,
     [input.tenantId, input.branchId, input.variantId, input.blockedStart, input.blockedEnd],
