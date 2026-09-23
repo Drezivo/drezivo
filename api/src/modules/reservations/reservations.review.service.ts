@@ -13,6 +13,7 @@ import {
   type ReservationSubmitRequest,
   type ReservationSummary,
   type ReservationSubmitResponse,
+  type StaffReservationCustomerInput,
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
@@ -37,8 +38,12 @@ import {
 import {
   appendReservationAuditEvent,
   appendReservationOutboxEvent,
+  createReservationCustomer,
+  readReservationCustomerForCreate,
+  type ReservationCustomerSnapshotRow,
 } from './reservations.command.repository.js';
 import {
+  bindReservationCustomerForSubmit,
   confirmReservationReview,
   expireReservationReview,
   lockLatestReservationReceipt,
@@ -64,11 +69,14 @@ const REJECT_OPERATION = 'reservation.reject.v1';
 const REVIEW_EFFECTS_SAVEPOINT = 'reservation_review_effects';
 const EXPIRY_EFFECTS_SAVEPOINT = 'reservation_review_expiry_effects';
 
-export interface ReservationReviewContext {
+export interface ReservationReviewReadContext {
   tenantId: string;
   branchId: string;
-  membershipId: string;
   principalId: string;
+}
+
+export interface ReservationReviewContext extends ReservationReviewReadContext {
+  membershipId: string;
   requestId: string;
   idempotencyKey: string;
 }
@@ -76,6 +84,21 @@ export interface ReservationReviewContext {
 export interface ReservationReviewCommandResponse<T> {
   status: number;
   body: SuccessEnvelope<T> | FailureEnvelope;
+}
+
+export async function readReservationReviewSummary(
+  context: ReservationReviewReadContext,
+  reservationId: string,
+): Promise<ReservationSummary> {
+  return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+    const row = await readReservationMutationSummary(client, {
+      tenantId: context.tenantId,
+      branchId: context.branchId,
+      reservationId,
+    });
+    if (!row) throw new NotFoundError('Reservation could not be found.');
+    return toReservationSummary(row);
+  });
 }
 
 export async function submitReservationForConfirmation(
@@ -119,11 +142,44 @@ export async function submitReservationForConfirmation(
         await expireLockedReview(client, context, reservation, reservationId);
         throw new HoldExpiredError('This reservation hold expired before submission completed.');
       }
-      assertCompleteCustomerSnapshot(reservation.customer_snapshot);
+
+      const customerIntent = request.customer;
+      if (reservation.customer_snapshot === null && !customerIntent) {
+        throw new StateConflictError('Customer information is required before completing this hold.');
+      }
+      if (reservation.customer_snapshot !== null) {
+        assertCompleteCustomerSnapshot(reservation.customer_snapshot);
+        if (customerIntent) {
+          throw new StateConflictError('This reservation already has a customer snapshot.');
+        }
+      }
       assertSubmissionEvidence(reservation, payment, receipt);
 
       await client.query(`SAVEPOINT ${REVIEW_EFFECTS_SAVEPOINT}`);
       savepointOpen = true;
+      if (reservation.customer_snapshot === null) {
+        if (!customerIntent) {
+          throw new StateConflictError('Customer information is required before completing this hold.');
+        }
+        const customer = await resolveSubmissionCustomer(client, context.tenantId, customerIntent);
+        const customerSnapshot = {
+          full_name: customer.full_name,
+          phone: customer.phone,
+          email: customer.email,
+        };
+        assertCompleteCustomerSnapshot(customerSnapshot);
+        const bound = await bindReservationCustomerForSubmit(client, {
+          tenantId: context.tenantId,
+          branchId: context.branchId,
+          reservationId,
+          version: request.version,
+          customerId: customer.id,
+          customerSnapshot,
+        });
+        if (!bound) {
+          throw new StateConflictError('Reservation customer changed during submission.');
+        }
+      }
       if (receipt?.evidence_status === 'uploaded') {
         await markReceiptUnderReview(client, {
           tenantId: context.tenantId,
@@ -411,6 +467,29 @@ function deadlineElapsed(reservation: LockedReservationReviewRow): boolean {
   );
 }
 
+async function resolveSubmissionCustomer(
+  client: Parameters<typeof readReservationCustomerForCreate>[0],
+  tenantId: string,
+  intent: StaffReservationCustomerInput,
+): Promise<ReservationCustomerSnapshotRow> {
+  if (intent.source === 'existing') {
+    const existing = await readReservationCustomerForCreate(client, {
+      tenantId,
+      customerId: intent.customer_id,
+    });
+    if (!existing) throw new NotFoundError('Customer could not be found.');
+    return existing;
+  }
+
+  return createReservationCustomer(client, {
+    tenantId,
+    fullName: intent.customer.full_name,
+    phone: intent.customer.phone ?? null,
+    email: intent.customer.email?.trim().toLowerCase() ?? null,
+    notes: intent.customer.notes ?? null,
+  });
+}
+
 function assertCompleteCustomerSnapshot(snapshot: Record<string, unknown> | null): void {
   const fullName = snapshot?.full_name;
   const phone = snapshot?.phone;
@@ -566,7 +645,7 @@ async function expireLockedReview(
 
 async function requireMutationSummary(
   client: Parameters<typeof readReservationMutationSummary>[0],
-  context: ReservationReviewContext,
+  context: ReservationReviewReadContext,
   reservationId: string,
 ): Promise<ReservationSummary> {
   const row = await readReservationMutationSummary(client, {
