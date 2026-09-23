@@ -5,6 +5,7 @@ import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
 import {
+  cancelReservationController,
   completeStaffReservationController,
   confirmReservationController,
   createPublicHoldController,
@@ -18,6 +19,7 @@ import {
   requireMerchantReservationReviewPermission,
   requireReservationIdempotencyKey,
   requireReservationManagePermission,
+  validateReservationCancel,
   validateReservationConfirm,
   validateReservationId,
   validateReservationListQuery,
@@ -64,6 +66,19 @@ reservationsRouter.post(
   validateStaffReservationComplete,
   requireReservationIdempotencyKey,
   completeStaffReservationController,
+);
+
+reservationsRouter.post(
+  '/reservations/:reservationId/cancel',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('settlement'),
+  requireReservationManagePermission,
+  validateReservationId,
+  validateReservationCancel,
+  requireReservationIdempotencyKey,
+  cancelReservationController,
 );
 
 reservationsRouter.post(

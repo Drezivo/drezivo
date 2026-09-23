@@ -213,28 +213,25 @@ Before marking a task complete:
 
 ## Phase 4: Reschedule and cancellation
 
-- [ ] **RSV-040 — Implement atomic reschedule**
-  - **Depends on:** RSV-031.
-  - **Outcome:** New dates are acquired safely before the old allocation is released.
-  - **Acceptance:**
-    - [ ] Lock old/new candidate assets and reservation in deterministic order.
-    - [ ] Recompute price/policy where applicable and require acceptance when changed.
-    - [ ] Acquire valid replacement allocation and update snapshot/version in one transaction.
-    - [ ] Any conflict rolls back completely and preserves original reservation/allocation.
-    - [ ] Mutation is idempotent.
-  - **Tests/evidence:** Failed reschedule preserves old allocation; concurrent reschedule tests.
+- [ ] **RSV-040 — Implement atomic reschedule — DEFERRED TO V1.1**
+  - **V1 decision:** Staff rescheduling is not required for the pilot. If dates must change, O/S cancels the existing pre-handover reservation and creates a new reservation after rechecking availability. Do not let RSV-040 block V1 pickup/return/staff UI work.
+  - **Future outcome:** When V1.1 introduces first-class reschedule, new dates must be acquired safely before the old allocation is released.
+  - **Deferred acceptance:** deterministic old/new locks, authoritative re-quote/policy acceptance, atomic replacement allocation, rollback preserving the original booking, and idempotent concurrency tests.
 
-- [ ] **RSV-041 — Implement cancellation**
+- [x] **RSV-041 — Implement simple O/S cancellation**
   - **Depends on:** RSV-031, RSV-032.
-  - **Outcome:** Cancellation respects lifecycle and financial obligations without fabricating availability, including intentional abandonment of an in-progress staff hold.
+  - **V1 scope:** Business-side Owner/Staff cancellation only. Drezivo does not expose a customer/storefront cancellation endpoint in V1. A customer who wants to cancel contacts the rental business directly (for example through Facebook/Messenger/phone), and O/S decides how to handle any refund or payment follow-up before recording the operational cancellation.
+  - **Outcome:** O/S can immediately release a pre-handover garment when a booking is abandoned/cancelled, without pretending Drezivo has automatically resolved refunds.
   - **Acceptance:**
-    - [ ] Pre-handover allowed states transition conditionally, including an O/S intentionally cancelling an active `held` walk-in when the customer changes their mind.
-    - [ ] Intentional hold cancellation releases capacity immediately; staff should not need to wait for the 15-minute expiry worker when they know the booking was abandoned.
-    - [ ] Future blocking allocation releases transactionally when policy allows.
-    - [ ] Refund/deposit obligations are recorded through finance layer rather than mutating historical payment facts.
-    - [ ] `picked_up` cannot cancel into available; route through return/settlement.
-    - [ ] Duplicate cancellation is safe.
-  - **Tests/evidence:** Lifecycle matrix and duplicate cancellation tests.
+    - [x] Authenticated O/S with `reservations.manage` can conditionally cancel `held`, `pending_confirmation`, or `confirmed` reservations.
+    - [x] Cancellation releases the current blocking `reservation_hold`/`reservation_confirmed` allocation transactionally and records `released_at`; staff does not wait for the hold-expiry worker when they intentionally abandon the booking.
+    - [x] Existing payment, receipt, and verification history is preserved unchanged. If money was partially/fully collected or verified, the cancellation audit marks `financial_followup_required = true`; no refund amount/status is accepted from the cancellation request and no automatic refund is attempted.
+    - [x] `picked_up`, `returned`, `completed`, `expired`, `rejected`, and already-`cancelled` reservations cannot be cancelled through this pre-handover command; picked-up rentals must go through return/settlement.
+    - [x] Database-time expiry wins for an overdue `held`/`pending_confirmation` reservation, releasing capacity as `expired` rather than rewriting history as a cancellation.
+    - [x] Same-key retries/concurrent double-fire produce one cancellation effect; key reuse with a different request remains a conflict.
+    - [x] `POST /api/v1/reservations/:reservationId/cancel` is staff-authenticated, tenant/branch scoped, lifecycle-gated as settlement, strictly validated, rate limited, idempotency protected, and conceals foreign reservation IDs. There is no matching public/storefront cancellation route.
+  - **Implemented:** `reservations.cancellation.service.ts` locks the reservation, canonical initial payment (when present), then current allocation/assets; accepts only pre-handover states/version; releases the blocking allocation and conditionally sets `cancelled` in one transaction; appends immutable `reservation.cancelled` audit/outbox facts; and leaves Finance rows untouched. Audit metadata records the previous reservation/payment state plus whether manual financial follow-up may be required, without storing customer-facing refund promises.
+  - **Tests/evidence:** `api/tests/integration/reservation-review.test.ts` covers cancellation from held/pending/confirmed, immediate capacity release, paid-payment preservation/manual-follow-up flag, picked-up rejection, database-time expiry, concurrent duplicate cancellation, route auth/strict-body/idempotency/tenant concealment, explicit absence of a public/storefront cancellation route, and rejection of browser-supplied refund authority. Focused reservation review/cancellation suite passes `19/19`; full API integration passes `33` files / `205/205`; API unit/service passes `20` files / `82/82`; Contracts pass `11` files / `89/89`; API/Contracts typecheck, lint, and build are green.
 
 ## Phase 5: Pickup, return, inspection, and completion
 
@@ -293,7 +290,7 @@ Before marking a task complete:
   - **Tests/evidence:** Row selection/detail/error/stale-state tests.
 
 - [ ] **RSV-062 — Connect reservation mutations to UI**
-  - **Depends on:** RSV-022, RSV-023, RSV-031, RSV-032, RSV-040 through RSV-052.
+  - **Depends on:** RSV-022, RSV-023, RSV-031, RSV-032, RSV-041, and RSV-050 through RSV-052. RSV-040 reschedule is deferred to V1.1 and does not block V1 UI integration.
   - **Outcome:** Staff can perform allowed lifecycle actions without mock state or being forced to manually operate every internal backend transition.
   - **Acceptance:**
     - [ ] Shared submit guards prevent double click/keyboard duplicate mutations.
@@ -343,13 +340,13 @@ Before marking a task complete:
   - **Tests/evidence:** Real Postgres RLS and API authorization suite.
 
 - [ ] **RSV-071 — Prove reservation concurrency invariants**
-  - **Depends on:** RSV-021 through RSV-052.
+  - **Depends on:** RSV-021 through RSV-032, RSV-041, and RSV-050 through RSV-052. RSV-040 reschedule is deferred to V1.1.
   - **Outcome:** Drezivo cannot double-book or duplicate lifecycle effects under contention.
   - **Acceptance:**
     - [ ] Concurrent same-asset booking produces one winner.
     - [ ] Adjacent half-open intervals can coexist when readiness allows.
     - [ ] Confirmation vs expiry has one valid outcome.
-    - [ ] Reschedule conflict preserves original booking.
+    - [ ] Cancellation double-fire produces one effect and never releases a picked-up rental. Reschedule contention moves to V1.1 with RSV-040.
     - [ ] Pickup/return/cancel/complete double-fire produces one effect each.
   - **Tests/evidence:** Property/concurrency integration suite.
 

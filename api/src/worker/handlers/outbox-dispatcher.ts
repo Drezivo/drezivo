@@ -26,6 +26,7 @@ export function outboxDispatcher(row: OutboxRow): Promise<void> {
     case 'reservation.held':
     case 'reservation.pending_confirmation':
     case 'reservation.confirmed':
+    case 'reservation.cancelled':
     case 'reservation.rejected':
     case 'reservation.hold_expired':
       // A real implementation resolves the recipient from an authorized record at send time

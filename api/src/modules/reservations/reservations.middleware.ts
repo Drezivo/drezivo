@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express';
 
 import {
   idempotencyKey,
+  reservationCancelRequest,
   reservationConfirmRequest,
   reservationId,
   reservationListQuery,
@@ -9,6 +10,7 @@ import {
   reservationSubmitRequest,
   staffReservationCompleteRequest,
   staffReservationCreateRequest,
+  type ReservationCancelRequest,
   type ReservationConfirmRequest,
   type ReservationListQuery,
   type ReservationRejectRequest,
@@ -25,6 +27,7 @@ declare module 'express-serve-static-core' {
     reservationId?: string;
     reservationCreateRequest?: StaffReservationCreateRequest;
     reservationCompleteRequest?: StaffReservationCompleteRequest;
+    reservationCancelRequest?: ReservationCancelRequest;
     reservationSubmitRequest?: ReservationSubmitRequest;
     reservationConfirmRequest?: ReservationConfirmRequest;
     reservationRejectRequest?: ReservationRejectRequest;
@@ -92,6 +95,17 @@ export const validateStaffReservationComplete: RequestHandler = (req, _res, next
   }
   req.body = parsed.data;
   req.reservationCompleteRequest = parsed.data;
+  next();
+};
+
+export const validateReservationCancel: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationCancelRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Reservation cancellation request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  req.reservationCancelRequest = parsed.data;
   next();
 };
 

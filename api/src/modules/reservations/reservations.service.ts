@@ -11,6 +11,8 @@ import {
   type ReservationPaymentProjection,
   type ReservationSubmitRequest,
   type ReservationSubmitResponse,
+  type ReservationCancelRequest,
+  type ReservationCancelResponse,
   type ReservationConfirmRequest,
   type ReservationConfirmResponse,
   type ReservationRejectRequest,
@@ -34,6 +36,7 @@ import {
   createStaffReservationCommand,
   type ReservationCommandResponse,
 } from './reservations.command.service.js';
+import { cancelReservationByStaff } from './reservations.cancellation.service.js';
 import { completeStaffReservationCommand } from './reservations.completion.service.js';
 import {
   confirmReservationByMerchant,
@@ -117,6 +120,26 @@ export async function completeStaffReservation(
       requestId: input.requestId,
       idempotencyKey: input.idempotencyKey,
       permissionCodes: input.permissionCodes,
+    },
+    reservationId,
+    request,
+  );
+}
+
+export async function cancelReservation(
+  input: ReservationReadContext & { requestId: string; idempotencyKey: string },
+  reservationId: string,
+  request: ReservationCancelRequest,
+): Promise<ReservationReviewCommandResponse<ReservationCancelResponse>> {
+  assertReservationReviewContext(input);
+  return cancelReservationByStaff(
+    {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      membershipId: input.membershipId,
+      principalId: input.principalId,
+      requestId: input.requestId,
+      idempotencyKey: input.idempotencyKey,
     },
     reservationId,
     request,

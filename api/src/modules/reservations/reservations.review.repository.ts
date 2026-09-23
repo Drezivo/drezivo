@@ -340,6 +340,25 @@ export async function markReservationAllocationsConfirmed(
   return result.rowCount ?? 0;
 }
 
+export async function cancelReservationPreHandover(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; reservationId: string; version: number },
+): Promise<number | null> {
+  const result = await client.query<{ version: number }>(
+    `UPDATE reservation
+        SET status = 'cancelled',
+            version = version + 1
+      WHERE tenant_id = $1
+        AND branch_id = $2
+        AND id = $3::uuid
+        AND status IN ('held', 'pending_confirmation', 'confirmed')
+        AND version = $4
+      RETURNING version`,
+    [input.tenantId, input.branchId, input.reservationId, input.version],
+  );
+  return result.rows[0]?.version ?? null;
+}
+
 export async function rejectReservationReview(
   client: PoolClient,
   input: { tenantId: string; branchId: string; reservationId: string; version: number },

@@ -71,6 +71,7 @@ describe('RSV-030/031/032 reservation review and staff completion', async () => 
   const { createApp } = await import('../../src/app.js');
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
   const {
+    cancelReservation,
     completeStaffReservation,
     confirmReservation,
     createStaffReservation,
@@ -744,6 +745,182 @@ describe('RSV-030/031/032 reservation review and staff completion', async () => 
     });
   });
 
+  it('cancels held, pending-confirmation, and confirmed staff reservations while preserving payment history', async () => {
+    const heldSeed = await seedWorkspace('org_rsv041_held', 'user_rsv041_held', 'cash');
+    const held = await createHold(heldSeed, 'cancel-held');
+    const heldResult = await cancelReservation(
+      reviewContext(heldSeed, 'req-cancel-held', 'idem-cancel-held'),
+      held.id,
+      { version: 1, reason: 'Walk-in customer changed their mind.' },
+    );
+    expect(heldResult.status).toBe(200);
+    expect(heldResult.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'cancelled', version: 2 } },
+    });
+    const heldState = await reservationReviewState(heldSeed, held.id);
+    expect(heldState.allocation.is_blocking).toBe(false);
+    expect(heldState.payment.status).toBe('pending');
+
+    const pendingSeed = await seedWorkspace('org_rsv041_pending', 'user_rsv041_pending', 'cash');
+    const pending = await createHold(pendingSeed, 'cancel-pending');
+    await submitReservation(
+      reviewContext(pendingSeed, 'req-cancel-pending-submit', 'idem-cancel-pending-submit'),
+      pending.id,
+      { version: 1, terms_accepted: true },
+    );
+    const pendingResult = await cancelReservation(
+      reviewContext(pendingSeed, 'req-cancel-pending', 'idem-cancel-pending'),
+      pending.id,
+      { version: 2 },
+    );
+    expect(pendingResult.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'cancelled', version: 3 } },
+    });
+    expect((await reservationReviewState(pendingSeed, pending.id)).allocation.is_blocking).toBe(false);
+
+    const confirmedSeed = await seedWorkspace('org_rsv041_confirmed', 'user_rsv041_confirmed', 'cash');
+    const confirmed = await createHold(confirmedSeed, 'cancel-confirmed');
+    await submitReservation(
+      reviewContext(confirmedSeed, 'req-cancel-confirmed-submit', 'idem-cancel-confirmed-submit'),
+      confirmed.id,
+      { version: 1, terms_accepted: true },
+    );
+    await verifyMerchantCollection(confirmedSeed, confirmed, false);
+    await confirmReservation(
+      reviewContext(confirmedSeed, 'req-cancel-confirmed-confirm', 'idem-cancel-confirmed-confirm'),
+      confirmed.id,
+      { version: 2 },
+    );
+    const confirmedResult = await cancelReservation(
+      reviewContext(confirmedSeed, 'req-cancel-confirmed', 'idem-cancel-confirmed'),
+      confirmed.id,
+      { version: 3, reason: 'Customer requested cancellation through the store.' },
+    );
+    expect(confirmedResult.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'cancelled', version: 4 } },
+    });
+    const confirmedState = await reservationReviewState(confirmedSeed, confirmed.id);
+    expect(confirmedState.allocation.is_blocking).toBe(false);
+    expect(confirmedState.payment.status).toBe('paid');
+    expect(await cancellationAudit(confirmedSeed, confirmed.id)).toMatchObject({
+      previous_status: 'confirmed',
+      payment_status: 'paid',
+      financial_followup_required: true,
+    });
+  });
+
+  it('keeps staff cancellation idempotent, rejects post-pickup cancellation, and lets expiry win at the deadline', async () => {
+    const duplicateSeed = await seedWorkspace('org_rsv041_duplicate', 'user_rsv041_duplicate', 'cash');
+    const duplicate = await createHold(duplicateSeed, 'cancel-duplicate');
+    const concurrent = await Promise.all([
+      cancelReservation(
+        reviewContext(duplicateSeed, 'req-cancel-dup-a', 'idem-cancel-duplicate'),
+        duplicate.id,
+        { version: 1, reason: 'Changed mind.' },
+      ),
+      cancelReservation(
+        reviewContext(duplicateSeed, 'req-cancel-dup-b', 'idem-cancel-duplicate'),
+        duplicate.id,
+        { version: 1, reason: 'Changed mind.' },
+      ),
+    ]);
+    expect(concurrent[0]).toEqual(concurrent[1]);
+    expect(concurrent[0]?.status).toBe(200);
+    expect(await actionEffectCounts(duplicateSeed, duplicate.id, 'reservation.cancelled')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
+
+    const pickupSeed = await seedWorkspace('org_rsv041_pickup', 'user_rsv041_pickup', 'cash');
+    const pickup = await createHold(pickupSeed, 'cancel-pickup');
+    await withTenantTransaction(pickupSeed.tenantId, pickupSeed.principalId, (client) =>
+      client.query(
+        `UPDATE reservation SET status = 'picked_up', version = 4
+          WHERE tenant_id = $1 AND id = $2`,
+        [pickupSeed.tenantId, pickup.id],
+      ),
+    );
+    const pickedUpResult = await cancelReservation(
+      reviewContext(pickupSeed, 'req-cancel-picked-up', 'idem-cancel-picked-up'),
+      pickup.id,
+      { version: 4 },
+    );
+    expectFailure(pickedUpResult, 'INVALID_RESERVATION_TRANSITION');
+    expect((await reservationReviewState(pickupSeed, pickup.id)).allocation.is_blocking).toBe(true);
+
+    const expirySeed = await seedWorkspace('org_rsv041_expiry', 'user_rsv041_expiry', 'cash');
+    const expiring = await createHold(expirySeed, 'cancel-expiry');
+    await withTenantTransaction(expirySeed.tenantId, expirySeed.principalId, (client) =>
+      client.query(
+        `UPDATE reservation SET hold_expires_at = statement_timestamp()
+          WHERE tenant_id = $1 AND id = $2`,
+        [expirySeed.tenantId, expiring.id],
+      ),
+    );
+    const expired = await cancelReservation(
+      reviewContext(expirySeed, 'req-cancel-expired', 'idem-cancel-expired'),
+      expiring.id,
+      { version: 1 },
+    );
+    expectFailure(expired, 'HOLD_EXPIRED');
+    const expiredState = await reservationReviewState(expirySeed, expiring.id);
+    expect(expiredState.reservation.status).toBe('expired');
+    expect(expiredState.allocation.is_blocking).toBe(false);
+  });
+
+  it('exposes staff-only cancellation with strict auth, permission, body, idempotency, and tenant concealment', async () => {
+    const seed = await seedWorkspace('org_rsv041_route', 'user_rsv041_route', 'cash');
+    const held = await createHold(seed, 'cancel-route');
+
+    const publicCancellation = await request(createApp())
+      .post(`/api/v1/public/stores/test-store/reservations/${held.id}/cancel`)
+      .send({ version: 1 });
+    expect(publicCancellation.status).toBe(404);
+
+    clerk.getAuth.mockReturnValue({ userId: null, orgId: null });
+    const unauthenticated = await request(createApp())
+      .post(`/api/v1/reservations/${held.id}/cancel`)
+      .set('Idempotency-Key', 'route-cancel-unauth')
+      .send({ version: 1 });
+    expect(unauthenticated.status).toBe(401);
+
+    useClerk(seed);
+    const missingKey = await request(createApp())
+      .post(`/api/v1/reservations/${held.id}/cancel`)
+      .send({ version: 1 });
+    expect(missingKey.status).toBe(422);
+
+    useClerk(seed);
+    const injected = await request(createApp())
+      .post(`/api/v1/reservations/${held.id}/cancel`)
+      .set('Idempotency-Key', 'route-cancel-injected')
+      .send({ version: 1, refund_amount_minor: 50000 });
+    expect(injected.status).toBe(422);
+
+    useClerk(seed);
+    const cancelled = await request(createApp())
+      .post(`/api/v1/reservations/${held.id}/cancel`)
+      .set('Idempotency-Key', 'route-cancel-success')
+      .send({ version: 1, reason: 'Customer contacted the shop to cancel.' });
+    expect(cancelled.status).toBe(200);
+    expect(cancelled.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'cancelled' } },
+    });
+
+    const foreign = await seedWorkspace('org_rsv041_foreign', 'user_rsv041_foreign', 'cash');
+    const foreignHeld = await createHold(foreign, 'cancel-foreign');
+    useClerk(seed);
+    const concealed = await request(createApp())
+      .post(`/api/v1/reservations/${foreignHeld.id}/cancel`)
+      .set('Idempotency-Key', 'route-cancel-foreign')
+      .send({ version: 1 });
+    expect(concealed.status).toBe(404);
+  });
+
   it('exposes protected submit/confirm/reject routes with strict bodies, idempotency, concealed foreign IDs, and merchant-review permissions', async () => {
     const seed = await seedWorkspace('org_rsv03_routes', 'user_rsv03_routes', 'cash');
     const held = await createHold(seed, 'routes');
@@ -1172,6 +1349,27 @@ describe('RSV-030/031/032 reservation review and staff completion', async () => 
         allocation: requireRow(allocation.rows, 'allocation state'),
         auditReason: rejectionAudit.rows[0]?.merchant_reason ?? null,
       };
+    });
+  }
+
+  async function cancellationAudit(seed: ReviewSeed, reservationId: string) {
+    return withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{
+        previous_status: string | null;
+        payment_status: string | null;
+        financial_followup_required: boolean | null;
+      }>(
+        `SELECT
+           redacted_summary ->> 'previous_status' AS previous_status,
+           redacted_summary ->> 'payment_status' AS payment_status,
+           (redacted_summary ->> 'financial_followup_required')::boolean AS financial_followup_required
+         FROM audit_event
+         WHERE tenant_id = $1 AND entity_id = $2 AND action = 'reservation.cancelled'
+         ORDER BY occurred_at DESC
+         LIMIT 1`,
+        [seed.tenantId, reservationId],
+      );
+      return requireRow(result.rows, 'cancellation audit');
     });
   }
 
