@@ -5,7 +5,6 @@ import { useAuth } from "@clerk/nextjs";
 import {
   AlertCircle,
   Archive,
-  ArrowLeft,
   Check,
   ChevronDown,
   ChevronRight,
@@ -15,9 +14,13 @@ import {
   Loader2,
   Package,
   PhilippinePeso,
+  Plus,
+  RotateCcw,
+  Rocket,
   Ruler,
   Save,
   Shirt,
+  Trash2,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -35,6 +38,7 @@ import {
 import type {
   CatalogueCategory,
   ClothingDetail,
+  CreateClothingVariantRequest,
   ClothingPricingInput,
   ClothingVariantDetail,
   MeasurementGuide,
@@ -130,8 +134,10 @@ export function EditClothingPage({ productId }: { productId: string }) {
   const [photos, setPhotos] = useState<EditablePhoto[]>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [submitStage, setSubmitStage] = useState<string | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [addVariantOpen, setAddVariantOpen] = useState(false);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
 
@@ -141,11 +147,20 @@ export function EditClothingPage({ productId }: { productId: string }) {
   );
   const selectedCategory =
     categories.find((category) => category.id === categoryId) ?? null;
+  const editableVariants = useMemo(
+    () => variants.filter((variant) => variant.status !== "archived"),
+    [variants]
+  );
+  const archivedVariants = useMemo(
+    () => variants.filter((variant) => variant.status === "archived"),
+    [variants]
+  );
 
   const load = useCallback(async () => {
     if (!isLoaded || !isSignedIn) return;
     setLoadState({ kind: "loading" });
     setFormError(null);
+    setSaveNotice(null);
 
     try {
       const client = createDrezivoApiClient(getToken);
@@ -198,6 +213,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
   const markDirty = useCallback(() => {
     setIsDirty(true);
     setFormError(null);
+    setSaveNotice(null);
     resetSaveIntent();
   }, [resetSaveIntent]);
 
@@ -469,8 +485,8 @@ export function EditClothingPage({ productId }: { productId: string }) {
       if (!saved) return;
       setIsDirty(false);
       historyGuardArmedRef.current = false;
-      sessionStorage.setItem("drezivo:clothing-detail-notice", "Changes saved");
-      router.replace(`/inventory/${productId}`);
+      await load();
+      setSaveNotice("Changes saved");
     } catch (error) {
       const apiError = toDrezivoApiError(error);
       setFormError(
@@ -500,13 +516,21 @@ export function EditClothingPage({ productId }: { productId: string }) {
     <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-screen-2xl">
         <div className="mb-5">
-          <Link
-            href={`/inventory/${productId}`}
-            className="inline-flex items-center gap-2 text-sm text-dashboard-muted transition-colors hover:text-dashboard-navy"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            Clothing / {item.name}
-          </Link>
+          <nav aria-label="Breadcrumb">
+            <ol className="flex flex-wrap items-center gap-1.5 text-sm text-dashboard-muted">
+              <li>
+                <Link href="/inventory" className="transition-colors hover:text-dashboard-navy">
+                  Clothing
+                </Link>
+              </li>
+              <li aria-hidden="true">
+                <ChevronRight className="h-3.5 w-3.5" />
+              </li>
+              <li className="font-medium text-dashboard-navy" aria-current="page">
+                Edit {item.name}
+              </li>
+            </ol>
+          </nav>
           <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight text-dashboard-navy sm:text-4xl">
             Edit Clothing
           </h1>
@@ -682,18 +706,66 @@ export function EditClothingPage({ productId }: { productId: string }) {
               icon={Ruler}
               title="Variants, Measurements & Pricing"
               description="Edit each existing variant independently so one size never overwrites another size's settings."
+              action={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={saveGuard.isSubmitting || isDirty}
+                  onClick={() => setAddVariantOpen(true)}
+                >
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  Add Variant
+                </Button>
+              }
             >
               <div className="space-y-3">
-                {variants.map((variant, index) => (
-                  <VariantEditor
-                    key={variant.id}
-                    index={index}
-                    variant={variant}
-                    defaultGuide={defaultGuide}
-                    disabled={saveGuard.isSubmitting}
-                    onChange={(patch) => updateVariant(variant.id, patch)}
-                  />
-                ))}
+                {editableVariants.length > 0 ? (
+                  editableVariants.map((variant, index) => (
+                    <VariantEditor
+                      key={variant.id}
+                      index={index}
+                      variant={variant}
+                      defaultGuide={defaultGuide}
+                      disabled={saveGuard.isSubmitting}
+                      lifecycleDisabled={saveGuard.isSubmitting || isDirty}
+                      productId={item.product_id}
+                      productStatus={item.status}
+                      getToken={getToken}
+                      onLifecycleChanged={(message) => {
+                        void load().then(() => setSaveNotice(message));
+                      }}
+                      onChange={(patch) => updateVariant(variant.id, patch)}
+                    />
+                  ))
+                ) : (
+                  <div className="rounded-xl border border-dashed border-dashboard-border bg-dashboard-active/20 px-4 py-6 text-center text-sm text-dashboard-muted">
+                    No editable variants remain. Restore an archived variant or add a new one.
+                  </div>
+                )}
+
+                {archivedVariants.length > 0 ? (
+                  <details className="rounded-xl border border-dashboard-border bg-dashboard-active/20">
+                    <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-dashboard-navy">
+                      Archived variants ({archivedVariants.length})
+                    </summary>
+                    <div className="space-y-2 border-t border-dashboard-border p-3">
+                      {archivedVariants.map((variant) => (
+                        <ArchivedVariantRow
+                          key={variant.id}
+                          variant={variant}
+                          disabled={saveGuard.isSubmitting || isDirty}
+                          getToken={getToken}
+                          productId={item.product_id}
+                          productStatus={item.status}
+                          onChanged={(message) => {
+                            void load().then(() => setSaveNotice(message));
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
               </div>
             </SectionCard>
           </div>
@@ -731,6 +803,15 @@ export function EditClothingPage({ productId }: { productId: string }) {
 
             <Card className="gap-0 py-0">
               <CardContent className="space-y-3 p-5">
+                {saveNotice ? (
+                  <div
+                    role="status"
+                    className="flex gap-2 rounded-lg border border-success-500/30 bg-success-500/10 px-3 py-2.5 text-xs text-success-500"
+                  >
+                    <Check className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span>{saveNotice}</span>
+                  </div>
+                ) : null}
                 {formError ? (
                   <div
                     role="alert"
@@ -804,6 +885,17 @@ export function EditClothingPage({ productId }: { productId: string }) {
         </div>
       </div>
 
+      <AddVariantDialog
+        open={addVariantOpen}
+        onOpenChange={setAddVariantOpen}
+        productId={item.product_id}
+        defaultGuide={defaultGuide}
+        getToken={getToken}
+        onCreated={() => {
+          void load().then(() => setSaveNotice("Variant added"));
+        }}
+      />
+
       <ArchiveClothingDialog
         open={archiveOpen}
         onOpenChange={setArchiveOpen}
@@ -834,17 +926,244 @@ export function EditClothingPage({ productId }: { productId: string }) {
   );
 }
 
+function AddVariantDialog({
+  defaultGuide,
+  getToken,
+  onCreated,
+  onOpenChange,
+  open,
+  productId,
+}: {
+  defaultGuide: MeasurementGuide | null;
+  getToken: () => Promise<string | null>;
+  onCreated: () => void;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  productId: string;
+}) {
+  const submitGuard = useSubmitGuard();
+  const [sizeLabel, setSizeLabel] = useState("");
+  const [color, setColor] = useState("");
+  const [measurementMode, setMeasurementMode] = useState<MeasurementMode>("none");
+  const [measurementUnit, setMeasurementUnit] = useState<MeasurementUnit>("cm");
+  const [measurements, setMeasurements] = useState<Record<string, string>>({ bust: "", waist: "", hips: "" });
+  const [pricingMode, setPricingMode] = useState<PricingMode>("fixed_duration");
+  const [rentalPrice, setRentalPrice] = useState("");
+  const [securityDeposit, setSecurityDeposit] = useState("0");
+  const [includedDays, setIncludedDays] = useState("3");
+  const [extraDayPrice, setExtraDayPrice] = useState("");
+  const [prepHours, setPrepHours] = useState("0");
+  const [turnaroundHours, setTurnaroundHours] = useState("24");
+  const [error, setError] = useState<string | null>(null);
+
+  const reset = () => {
+    setSizeLabel("");
+    setColor("");
+    setMeasurementMode("none");
+    setMeasurementUnit("cm");
+    setMeasurements({ bust: "", waist: "", hips: "" });
+    setPricingMode("fixed_duration");
+    setRentalPrice("");
+    setSecurityDeposit("0");
+    setIncludedDays("3");
+    setExtraDayPrice("");
+    setPrepHours("0");
+    setTurnaroundHours("24");
+    setError(null);
+    submitGuard.resetIntent();
+  };
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (submitGuard.isSubmitting) return;
+    if (!nextOpen) reset();
+    onOpenChange(nextOpen);
+  };
+
+  async function createVariant() {
+    if (submitGuard.isSubmitting) return;
+    setError(null);
+    try {
+      const draft: VariantDraft = {
+        id: "new",
+        sku: "New variant",
+        status: "active",
+        updatedAt: "",
+        sizeLabel,
+        color,
+        measurementMode,
+        measurementGuideId: measurementMode === "default_guide" ? defaultGuide?.id ?? null : null,
+        measurementUnit,
+        measurements,
+        pricingMode,
+        rentalPrice,
+        securityDeposit,
+        includedDays,
+        extraDayPrice,
+        prepHours,
+        turnaroundHours,
+      };
+      if (!sizeLabel.trim()) throw new Error("Enter a size label.");
+      const measurement = buildMeasurementPatch(draft, defaultGuide);
+      const request: CreateClothingVariantRequest = {
+        size_label: sizeLabel.trim(),
+        color_label: color.trim() || null,
+        measurement_mode: measurement.measurement_mode,
+        measurement_guide_id: measurement.measurement_guide_id,
+        measurement_unit: measurement.measurement_unit,
+        measurements: measurement.measurements,
+        pricing: buildPricingInput(draft),
+      };
+      const result = await submitGuard.submit((idempotencyKey) =>
+        createDrezivoApiClient(getToken).createClothingVariant(productId, request, idempotencyKey)
+      );
+      if (!result) return;
+      onOpenChange(false);
+      reset();
+      onCreated();
+    } catch (caughtError) {
+      setError(errorMessage(caughtError, "Could not add this variant."));
+    }
+  }
+
+  return (
+    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/55" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-dashboard-border bg-dashboard-surface p-5 shadow-xl focus:outline-none sm:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Dialog.Title className="text-lg font-semibold text-dashboard-navy">Add Variant</Dialog.Title>
+              <Dialog.Description className="mt-1 text-sm leading-6 text-dashboard-muted">
+                Add another size or color to this clothing style. In V1, each new variant automatically receives one serialized garment.
+              </Dialog.Description>
+            </div>
+            <Dialog.Close asChild>
+              <button type="button" aria-label="Close add variant dialog" className="inline-flex h-9 w-9 items-center justify-center rounded-md text-dashboard-muted hover:bg-dashboard-active">
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </Dialog.Close>
+          </div>
+
+          <div className="mt-5 space-y-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Size Label" required>
+                <Input aria-label="New Variant Size Label" value={sizeLabel} disabled={submitGuard.isSubmitting} onChange={(event) => setSizeLabel(event.target.value)} placeholder="e.g. XL" />
+              </Field>
+              <Field label="Color (optional)">
+                <Input aria-label="New Variant Color" value={color} disabled={submitGuard.isSubmitting} onChange={(event) => setColor(event.target.value)} placeholder="e.g. Emerald Green" />
+              </Field>
+            </div>
+
+            <div className="rounded-xl border border-dashboard-border p-4">
+              <div className="grid gap-4 sm:grid-cols-[14rem_1fr]">
+                <Field label="Measurement Source">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button type="button" variant="ghost" disabled={submitGuard.isSubmitting} className="w-full justify-between border border-dashboard-border">
+                        {measurementMode === "none" ? "No measurements" : measurementMode === "default_guide" ? "Reusable guide" : "Custom measurements"}
+                        <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuItem onSelect={() => setMeasurementMode("none")}>No measurements</DropdownMenuItem>
+                      {defaultGuide ? <DropdownMenuItem onSelect={() => setMeasurementMode("default_guide")}>Reusable guide</DropdownMenuItem> : null}
+                      <DropdownMenuItem onSelect={() => setMeasurementMode("custom")}>Custom measurements</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </Field>
+                {measurementMode === "default_guide" ? (
+                  <div className="rounded-lg border border-dashboard-border bg-dashboard-active/30 p-3 text-sm text-dashboard-muted">
+                    <span className="font-medium text-dashboard-navy">{defaultGuide?.name ?? "Standard Size Guide"}</span>
+                    <p className="mt-1 text-xs">This variant uses the workspace reusable guide.</p>
+                  </div>
+                ) : measurementMode === "custom" ? (
+                  <div className="space-y-3">
+                    <div className="flex justify-end">
+                      <div className="inline-flex overflow-hidden rounded-md border border-dashboard-border">
+                        {(["cm", "in"] as const).map((unit) => (
+                          <button key={unit} type="button" onClick={() => setMeasurementUnit(unit)} className={cn("px-3 py-1.5 text-xs font-medium uppercase", measurementUnit === unit ? "bg-dashboard-active text-dashboard-accent" : "text-dashboard-muted")}>{unit}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      {["bust", "waist", "hips"].map((key) => (
+                        <Field key={key} label={key[0]!.toUpperCase() + key.slice(1)}>
+                          <Input aria-label={`New Variant ${key}`} inputMode="decimal" value={measurements[key] ?? ""} onChange={(event) => setMeasurements((current) => ({ ...current, [key]: event.target.value }))} />
+                        </Field>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashboard-border bg-dashboard-active/30 p-3 text-xs text-dashboard-muted">No structured measurements will be stored for this variant.</div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-sm font-medium text-dashboard-navy">Pricing Model</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <PricingModeButton title="Fixed Package" description="One price for an included number of days" selected={pricingMode === "fixed_duration"} disabled={submitGuard.isSubmitting} onClick={() => setPricingMode("fixed_duration")} />
+                <PricingModeButton title="Per Day" description="Rental price is charged per day" selected={pricingMode === "daily"} disabled={submitGuard.isSubmitting} onClick={() => setPricingMode("daily")} />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <MoneyField label={pricingMode === "fixed_duration" ? "Package Price" : "Daily Rate"} required value={rentalPrice} disabled={submitGuard.isSubmitting} onChange={setRentalPrice} />
+              <MoneyField label="Security Deposit" value={securityDeposit} disabled={submitGuard.isSubmitting} onChange={setSecurityDeposit} />
+              {pricingMode === "fixed_duration" ? (
+                <Field label="Included Duration" required>
+                  <div className="relative">
+                    <Input aria-label="New Variant Included Duration" inputMode="numeric" value={includedDays} disabled={submitGuard.isSubmitting} onChange={(event) => setIncludedDays(event.target.value)} className="pr-14" />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">days</span>
+                  </div>
+                </Field>
+              ) : null}
+              <MoneyField label="Extra Day Price" value={extraDayPrice} disabled={submitGuard.isSubmitting || pricingMode === "daily"} onChange={setExtraDayPrice} />
+              <Field label="Preparation Time">
+                <div className="relative"><Input aria-label="New Variant Preparation Time" inputMode="decimal" value={prepHours} disabled={submitGuard.isSubmitting} onChange={(event) => setPrepHours(event.target.value)} className="pr-14" /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">hours</span></div>
+              </Field>
+              <Field label="Turnaround Time">
+                <div className="relative"><Input aria-label="New Variant Turnaround Time" inputMode="decimal" value={turnaroundHours} disabled={submitGuard.isSubmitting} onChange={(event) => setTurnaroundHours(event.target.value)} className="pr-14" /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">hours</span></div>
+              </Field>
+            </div>
+          </div>
+
+          {error ? <div role="alert" className="mt-4 rounded-lg border border-dashboard-danger/30 bg-dashboard-danger/10 px-3 py-2.5 text-sm text-dashboard-danger">{error}</div> : null}
+
+          <div className="mt-6 flex justify-end gap-2">
+            <Button type="button" variant="secondary" disabled={submitGuard.isSubmitting} onClick={() => handleOpenChange(false)}>Cancel</Button>
+            <Button type="button" disabled={submitGuard.isSubmitting} onClick={() => void createVariant()}>
+              {submitGuard.isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
+              {submitGuard.isSubmitting ? "Adding…" : "Add Variant"}
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
 function VariantEditor({
   defaultGuide,
   disabled,
+  getToken,
   index,
+  lifecycleDisabled,
   onChange,
+  onLifecycleChanged,
+  productId,
+  productStatus,
   variant,
 }: {
   defaultGuide: MeasurementGuide | null;
   disabled: boolean;
+  getToken: () => Promise<string | null>;
   index: number;
+  lifecycleDisabled: boolean;
   onChange: (patch: Partial<VariantDraft>) => void;
+  onLifecycleChanged: (message: string) => void;
+  productId: string;
+  productStatus: ClothingDetail["status"];
   variant: VariantDraft;
 }) {
   const measurementKeys = useMemo(() => {
@@ -865,9 +1184,19 @@ function VariantEditor({
           <p className="text-sm font-semibold text-dashboard-navy">Variant {index + 1} · {variant.sku}</p>
           <p className="mt-0.5 text-xs text-dashboard-muted">Existing serialized pieces stay attached to this variant.</p>
         </div>
-        <span className="rounded-full border border-dashboard-border bg-dashboard-surface px-2.5 py-1 text-xs font-medium text-dashboard-muted">
-          {labelize(variant.status)}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-dashboard-border bg-dashboard-surface px-2.5 py-1 text-xs font-medium text-dashboard-muted">
+            {labelize(variant.status)}
+          </span>
+          <VariantLifecycleControls
+            disabled={lifecycleDisabled}
+            getToken={getToken}
+            onChanged={onLifecycleChanged}
+            productId={productId}
+            productStatus={productStatus}
+            variant={variant}
+          />
+        </div>
       </div>
 
       <div className="space-y-5 p-4">
@@ -1085,6 +1414,215 @@ function VariantEditor({
           </Field>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ArchivedVariantRow({
+  disabled,
+  getToken,
+  onChanged,
+  productId,
+  productStatus,
+  variant,
+}: {
+  disabled: boolean;
+  getToken: () => Promise<string | null>;
+  onChanged: (message: string) => void;
+  productId: string;
+  productStatus: ClothingDetail["status"];
+  variant: VariantDraft;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-dashboard-border bg-dashboard-surface px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-dashboard-navy">{variant.sku}</span>
+          <span className="rounded-full border border-dashboard-border bg-dashboard-active px-2 py-0.5 text-[0.68rem] font-medium text-dashboard-muted">
+            Archived
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-dashboard-muted">
+          {variant.sizeLabel}{variant.color ? ` · ${variant.color}` : ""} · preserved for history
+        </p>
+      </div>
+      <VariantLifecycleControls
+        disabled={disabled}
+        getToken={getToken}
+        onChanged={onChanged}
+        productId={productId}
+        productStatus={productStatus}
+        variant={variant}
+        showRemove={false}
+      />
+    </div>
+  );
+}
+
+function VariantLifecycleControls({
+  disabled,
+  getToken,
+  onChanged,
+  productId,
+  productStatus,
+  showRemove = true,
+  variant,
+}: {
+  disabled: boolean;
+  getToken: () => Promise<string | null>;
+  onChanged: (message: string) => void;
+  productId: string;
+  productStatus: ClothingDetail["status"];
+  showRemove?: boolean;
+  variant: VariantDraft;
+}) {
+  const lifecycleGuard = useSubmitGuard();
+  const removeGuard = useSubmitGuard();
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const busy = lifecycleGuard.isSubmitting || removeGuard.isSubmitting;
+  const actionsDisabled = disabled || busy || productStatus === "archived";
+
+  async function changeLifecycle(status: "draft" | "active" | "archived") {
+    if (actionsDisabled || status === variant.status) return;
+    setError(null);
+    try {
+      const result = await lifecycleGuard.submit((idempotencyKey) =>
+        createDrezivoApiClient(getToken).updateClothingVariantLifecycle(
+          productId,
+          variant.id,
+          { expected_updated_at: variant.updatedAt, status },
+          idempotencyKey
+        )
+      );
+      if (!result) return;
+      lifecycleGuard.resetIntent();
+      onChanged(
+        status === "active"
+          ? "Variant published."
+          : status === "archived"
+            ? "Variant archived."
+            : "Variant restored to draft."
+      );
+    } catch (caughtError) {
+      setError(toDrezivoApiError(caughtError).message);
+    }
+  }
+
+  async function removeVariant() {
+    if (actionsDisabled || removeGuard.isSubmitting) return;
+    setError(null);
+    try {
+      const result = await removeGuard.submit((idempotencyKey) =>
+        createDrezivoApiClient(getToken).removeClothingVariant(
+          productId,
+          variant.id,
+          { expected_updated_at: variant.updatedAt },
+          idempotencyKey
+        )
+      );
+      if (!result) return;
+      removeGuard.resetIntent();
+      setRemoveOpen(false);
+      onChanged(
+        result.data.outcome === "deleted"
+          ? "Variant deleted."
+          : "Variant archived because it has physical pieces or reservation history."
+      );
+    } catch (caughtError) {
+      setError(toDrezivoApiError(caughtError).message);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex flex-wrap justify-end gap-1.5">
+        {variant.status === "draft" ? (
+          <Button
+            type="button"
+            size="sm"
+            disabled={actionsDisabled}
+            onClick={() => void changeLifecycle("active")}
+            aria-label={`Publish ${variant.sku}`}
+          >
+            <Rocket className="h-3.5 w-3.5" aria-hidden="true" />
+            Publish
+          </Button>
+        ) : null}
+        {variant.status === "archived" ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={actionsDisabled}
+            onClick={() => void changeLifecycle("draft")}
+            aria-label={`Restore ${variant.sku}`}
+            className="border border-dashboard-border"
+          >
+            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+            Restore
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={actionsDisabled}
+            onClick={() => void changeLifecycle("archived")}
+            aria-label={`Archive ${variant.sku}`}
+            className="border border-dashboard-border"
+          >
+            <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+            Archive
+          </Button>
+        )}
+        {showRemove ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={actionsDisabled}
+            onClick={() => setRemoveOpen(true)}
+            aria-label={`Remove ${variant.sku}`}
+            className="border border-dashboard-danger/40 text-dashboard-danger hover:bg-dashboard-danger/10 hover:text-dashboard-danger"
+          >
+            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Remove
+          </Button>
+        ) : null}
+      </div>
+      {disabled && !busy ? (
+        <span className="text-[0.68rem] text-dashboard-muted">Save current edits before changing lifecycle.</span>
+      ) : null}
+      {error ? <span role="alert" className="max-w-md text-right text-xs text-dashboard-danger">{error}</span> : null}
+
+      {showRemove ? (
+      <Dialog.Root open={removeOpen} onOpenChange={(open: boolean) => !removeGuard.isSubmitting && setRemoveOpen(open)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/55" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-dashboard-border bg-dashboard-surface p-5 shadow-xl focus:outline-none sm:p-6">
+            <Dialog.Title className="text-lg font-semibold text-dashboard-navy">Remove {variant.sku}?</Dialog.Title>
+            <Dialog.Description className="mt-2 text-sm leading-6 text-dashboard-muted">
+              A never-used draft variant with no physical pieces or reservation history can be deleted. Otherwise Drezivo archives it so operational and rental history remains intact.
+            </Dialog.Description>
+            <div className="mt-6 flex justify-end gap-2">
+              <Button type="button" variant="secondary" disabled={removeGuard.isSubmitting} onClick={() => setRemoveOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={removeGuard.isSubmitting}
+                onClick={() => void removeVariant()}
+                className="bg-dashboard-danger text-white hover:bg-dashboard-danger/90"
+              >
+                {removeGuard.isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Trash2 className="h-4 w-4" aria-hidden="true" />}
+                {removeGuard.isSubmitting ? "Removing…" : "Remove Variant"}
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+      ) : null}
     </div>
   );
 }

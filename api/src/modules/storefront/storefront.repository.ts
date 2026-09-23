@@ -159,7 +159,7 @@ export async function computeAvailability(
   toIso: string,
 ): Promise<AvailabilitySlotDTO[] | null> {
   const [publicRow] = await db
-    .select({ id: storefront.id, tenantId: storefront.tenantId })
+    .select({ id: storefront.id, tenantId: storefront.tenantId, branchId: storefront.branchId })
     .from(storefront)
     .where(and(eq(storefront.slug, slug), eq(storefront.status, 'published')))
     .limit(1);
@@ -186,12 +186,21 @@ export async function computeAvailability(
            JOIN product p
              ON p.tenant_id = pv.tenant_id
             AND p.id = pv.product_id
+           LEFT JOIN category c
+             ON c.tenant_id = p.tenant_id
+            AND c.id = p.category_id
+           JOIN branch b
+             ON b.tenant_id = pa.tenant_id
+            AND b.id = pa.branch_id
           WHERE pa.tenant_id = $1
+            AND pa.branch_id = $5
             AND pa.variant_id = $4
             AND pa.lifecycle_status = 'active'
             AND pa.readiness = 'ready'
             AND pv.status = 'active'
             AND p.status = 'active'
+            AND (p.category_id IS NULL OR c.status = 'active')
+            AND b.status = 'active'
        )
        SELECT
          to_char(d.day, 'YYYY-MM-DD"T00:00:00.000Z"') AS day,
@@ -207,7 +216,7 @@ export async function computeAvailability(
          ) AS available_units
        FROM days d
        ORDER BY d.day`,
-      [publicRow.tenantId, fromIso, toIso, variantId],
+      [publicRow.tenantId, fromIso, toIso, variantId, publicRow.branchId],
     );
 
     return result.rows.map((row) => ({

@@ -53,12 +53,37 @@ export const catalogueCategoryList = z.object({
 });
 export type CatalogueCategoryList = z.infer<typeof catalogueCategoryList>;
 
+export const createCatalogueCategoryRequest = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    display_order: z.number().int().nonnegative().max(1_000_000).default(0),
+  })
+  .strict();
+export type CreateCatalogueCategoryRequest = z.infer<typeof createCatalogueCategoryRequest>;
+
+export const updateCatalogueCategoryRequest = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    display_order: z.number().int().nonnegative().max(1_000_000).optional(),
+  })
+  .strict()
+  .refine((value) => value.name !== undefined || value.display_order !== undefined, {
+    message: 'At least one editable category field is required.',
+  });
+export type UpdateCatalogueCategoryRequest = z.infer<typeof updateCatalogueCategoryRequest>;
+
 export const updateCatalogueCategoryStatusRequest = z
   .object({
     status: catalogueCategoryStatus,
   })
   .strict();
 export type UpdateCatalogueCategoryStatusRequest = z.infer<typeof updateCatalogueCategoryStatusRequest>;
+
+export const removeCatalogueCategoryResponse = z.object({
+  category_id: categoryId,
+  outcome: z.enum(['deleted', 'deactivated']),
+});
+export type RemoveCatalogueCategoryResponse = z.infer<typeof removeCatalogueCategoryResponse>;
 
 /**
  * Metadata command issued after an accepted `measurement_guide` file has been uploaded/frozen.
@@ -167,8 +192,10 @@ export type ClothingSizeInput = z.infer<typeof clothingSizeInput>;
 
 /**
  * Staff V1 aggregate command. The owner enters shared color/pricing once; the API expands each
- * selected size into one product_variant and one initial physical_asset. The database still allows
- * multiple physical assets per variant later; this one-piece-per-size rule is only the V1 creation UX.
+ * selected size into one product_variant and one initial physical_asset. V1 intentionally exposes
+ * exactly one serialized garment per variant/size. The schema remains capable of multiple physical
+ * assets per variant so V2 can add multi-piece inventory management without changing reservation
+ * allocation semantics.
  */
 export const clothingImageFileIds = z
   .array(fileObjectId)

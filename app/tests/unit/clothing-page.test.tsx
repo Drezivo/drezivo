@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ClothingPage } from "@/components/inventory/clothing-page";
@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   archiveClothing: vi.fn(),
   getCatalogueCategories: vi.fn(),
   getCatalogueClothing: vi.fn(),
+  restoreClothing: vi.fn(),
 }));
 
 const navigation = vi.hoisted(() => ({
@@ -145,6 +146,15 @@ describe("ClothingPage", () => {
       },
       requestId: "req-archive",
     });
+    api.restoreClothing.mockResolvedValue({
+      data: {
+        product_id: firstItem.product_id,
+        status: "draft",
+        restored_variant_count: 1,
+        updated_at: "2026-09-22T00:00:00.000Z",
+      },
+      requestId: "req-restore",
+    });
   });
 
   it("shows a one-time draft-saved notice that can be dismissed", async () => {
@@ -157,6 +167,17 @@ describe("ClothingPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss inventory message" }));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("shows a one-time clothing-added notice and refreshes real inventory state", async () => {
+    sessionStorage.setItem("drezivo:inventory-notice", "clothing-added");
+
+    render(<ClothingPage />);
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Clothing added");
+    expect(await screen.findByText("Real Black Satin Gown")).toBeVisible();
+    expect(api.getCatalogueClothing).toHaveBeenCalledWith({ limit: 10, sort: "newest" });
+    expect(sessionStorage.getItem("drezivo:inventory-notice")).toBeNull();
   });
 
   it("automatically hides the draft-saved notice after three seconds", () => {
@@ -191,8 +212,28 @@ describe("ClothingPage", () => {
 
     expect(api.getCatalogueClothing).toHaveBeenCalledWith({
       limit: 10,
-      sort: "name_asc",
+      sort: "newest",
     });
+  });
+
+  it("defaults sorting to New and changes server-side ordering with URL-backed sort state", async () => {
+    render(<ClothingPage />);
+    await screen.findByText("Real Black Satin Gown");
+
+    expect(screen.getByRole("button", { name: "Sort clothing" })).toHaveTextContent("New");
+    expect(api.getCatalogueClothing).toHaveBeenCalledWith({ limit: 10, sort: "newest" });
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Sort clothing" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Oldest" }));
+
+    await waitFor(() =>
+      expect(api.getCatalogueClothing).toHaveBeenLastCalledWith({ limit: 10, sort: "oldest" })
+    );
+    expect(navigation.replace).toHaveBeenCalledWith("/inventory?sort=oldest", { scroll: false });
+    expect(screen.getByRole("button", { name: "Sort clothing" })).toHaveTextContent("Oldest");
   });
 
   it("renders canonical operational signals separately from windowed availability capacity", async () => {
@@ -275,7 +316,7 @@ describe("ClothingPage", () => {
     await waitFor(() =>
       expect(api.getCatalogueClothing).toHaveBeenLastCalledWith({
         limit: 10,
-        sort: "name_asc",
+        sort: "newest",
         search: "DRS-002",
       })
     );
@@ -323,19 +364,57 @@ describe("ClothingPage", () => {
       screen.getByRole("button", { name: "Open actions for Real Black Satin Gown" }),
       { button: 0, ctrlKey: false }
     );
-    expect(screen.queryByRole("menuitem", { name: "Restore" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Restore to Draft" })).toBeVisible();
     expect(screen.queryByRole("menuitem", { name: "Archive" })).not.toBeInTheDocument();
   });
 
-  it("hydrates shareable search/category/size/status URL state and sends only catalogue filters to the API", async () => {
-    navigation.search = `q=red&category=${category.id}&size=L&status=draft&tenant_id=do-not-trust`;
+  it("restores an archived row to draft with the row concurrency token and refreshes inventory", async () => {
+    const archivedItem = { ...firstItem, product_status: "archived" as const };
+    api.getCatalogueClothing
+      .mockResolvedValueOnce({
+        data: { items: [archivedItem], page_meta: { next_cursor: null, has_more: false } },
+        requestId: "req-archived-row",
+      })
+      .mockResolvedValue({
+        data: {
+          items: [{ ...firstItem, product_status: "draft" as const }],
+          page_meta: { next_cursor: null, has_more: false },
+        },
+        requestId: "req-restored-row",
+      });
+
+    render(<ClothingPage />);
+    await screen.findByText("Real Black Satin Gown");
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Open actions for Real Black Satin Gown" }),
+      { button: 0, ctrlKey: false }
+    );
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Restore to Draft" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Restore to Draft" }));
+
+    await waitFor(() => expect(api.restoreClothing).toHaveBeenCalledTimes(1));
+    expect(api.restoreClothing).toHaveBeenCalledWith(
+      firstItem.product_id,
+      { expected_updated_at: firstItem.updated_at },
+      expect.any(String)
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Clothing restored to Draft. 1 variant was restored to Draft for review."
+    );
+    await waitFor(() => expect(api.getCatalogueClothing).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("Draft")).toBeVisible();
+  });
+
+  it("hydrates shareable search/category/size/status/sort URL state and sends only catalogue filters to the API", async () => {
+    navigation.search = `q=red&category=${category.id}&size=L&status=draft&sort=name_desc&tenant_id=do-not-trust`;
 
     render(<ClothingPage />);
 
     await waitFor(() =>
       expect(api.getCatalogueClothing).toHaveBeenCalledWith({
         limit: 10,
-        sort: "name_asc",
+        sort: "name_desc",
         search: "red",
         category_id: category.id,
         size_label: "L",
@@ -345,8 +424,9 @@ describe("ClothingPage", () => {
     expect(screen.getByRole("textbox", { name: "Search clothing" })).toHaveValue("red");
     expect(screen.getByRole("button", { name: "L" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Draft" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Sort clothing" })).toHaveTextContent("Name Z–A");
     expect(navigation.replace).toHaveBeenCalledWith(
-      `/inventory?q=red&category=${category.id}&size=L&status=draft`,
+      `/inventory?q=red&category=${category.id}&size=L&status=draft&sort=name_desc`,
       { scroll: false }
     );
   });
@@ -385,7 +465,7 @@ describe("ClothingPage", () => {
     await waitFor(() =>
       expect(api.getCatalogueClothing).toHaveBeenLastCalledWith({
         limit: 10,
-        sort: "name_asc",
+        sort: "newest",
         product_status: "draft",
       })
     );
@@ -454,7 +534,7 @@ describe("ClothingPage", () => {
     expect(await screen.findByText("Real Red Dress")).toBeVisible();
     expect(api.getCatalogueClothing).toHaveBeenLastCalledWith({
       limit: 10,
-      sort: "name_asc",
+      sort: "newest",
       cursor: "cursor-page-2",
     });
     expect(screen.getByText("Page 2 · 1 style loaded")).toBeVisible();

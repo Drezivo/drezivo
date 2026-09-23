@@ -4,6 +4,8 @@ import type { PoolClient } from 'pg';
 
 import type {
   CreateClothingRequest,
+  CreateClothingVariantRequest,
+  CreatePhysicalAssetRequest,
   MeasurementMap,
   UpdateClothingProductRequest,
   UpdateClothingVariantRequest,
@@ -120,6 +122,97 @@ export async function listCategories(client: PoolClient, tenantId: string): Prom
     [tenantId],
   );
   return result.rows;
+}
+
+export async function createCategory(
+  client: PoolClient,
+  input: { tenantId: string; name: string; displayOrder: number },
+): Promise<CategoryRow> {
+  const result = await client.query<CategoryRow>(
+    `INSERT INTO category (tenant_id, name, status, display_order)
+     VALUES ($1, $2, 'active', $3)
+     ON CONFLICT DO NOTHING
+     RETURNING id, name, status, display_order`,
+    [input.tenantId, input.name, input.displayOrder],
+  );
+  const row = result.rows[0];
+  if (!row) throw new StateConflictError('A clothing category with that name already exists.');
+  return row;
+}
+
+export async function updateCategory(
+  client: PoolClient,
+  input: { tenantId: string; categoryId: string; name?: string; displayOrder?: number },
+): Promise<CategoryRow | null> {
+  const current = await readCategoryForCreate(client, input.tenantId, input.categoryId);
+  if (!current) return null;
+
+  const name = input.name ?? current.name;
+  const displayOrder = input.displayOrder ?? current.display_order;
+  const duplicate = await client.query<{ id: string }>(
+    `SELECT id
+       FROM category
+      WHERE tenant_id = $1
+        AND id <> $2
+        AND lower(btrim(name)) = lower(btrim($3))
+      LIMIT 1`,
+    [input.tenantId, input.categoryId, name],
+  );
+  if (duplicate.rows[0]) {
+    throw new StateConflictError('A clothing category with that name already exists.');
+  }
+
+  try {
+    const result = await client.query<CategoryRow>(
+      `UPDATE category
+          SET name = $3,
+              display_order = $4
+        WHERE tenant_id = $1 AND id = $2
+        RETURNING id, name, status, display_order`,
+      [input.tenantId, input.categoryId, name, displayOrder],
+    );
+    return result.rows[0] ?? null;
+  } catch (error) {
+    if (isPostgresUniqueViolation(error)) {
+      throw new StateConflictError('A clothing category with that name already exists.');
+    }
+    throw error;
+  }
+}
+
+export async function removeCategory(
+  client: PoolClient,
+  tenantId: string,
+  categoryId: string,
+): Promise<{ categoryId: string; outcome: 'deleted' | 'deactivated' } | null> {
+  const current = await readCategoryForCreate(client, tenantId, categoryId);
+  if (!current) return null;
+
+  const references = await client.query<{ count: number }>(
+    `SELECT count(*)::int AS count
+       FROM product
+      WHERE tenant_id = $1 AND category_id = $2`,
+    [tenantId, categoryId],
+  );
+  const referenced = (references.rows[0]?.count ?? 0) > 0;
+  if (referenced) {
+    await client.query(
+      `UPDATE category
+          SET status = 'inactive'
+        WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, categoryId],
+    );
+    return { categoryId, outcome: 'deactivated' };
+  }
+
+  const deleted = await client.query<{ id: string }>(
+    `DELETE FROM category
+      WHERE tenant_id = $1 AND id = $2
+      RETURNING id`,
+    [tenantId, categoryId],
+  );
+  if (!deleted.rows[0]) return null;
+  return { categoryId, outcome: 'deleted' };
 }
 
 export async function updateCategoryStatus(
@@ -397,6 +490,226 @@ export async function updateVariantForEdit(
   );
   const row = result.rows[0];
   if (!row) throw new StateConflictError('The clothing variant could not be updated. Refresh and try again.');
+  return row;
+}
+
+export async function readProductPublishability(
+  client: PoolClient,
+  tenantId: string,
+  productId: string,
+): Promise<{ category_status: 'active' | 'inactive' | null; accepted_image_count: number }> {
+  const result = await client.query<{ category_status: 'active' | 'inactive' | null; accepted_image_count: number }>(
+    `SELECT c.status AS category_status,
+            count(DISTINCT pi.file_id) FILTER (
+              WHERE f.lifecycle_status = 'accepted' AND f.frozen_at IS NOT NULL
+            )::int AS accepted_image_count
+       FROM product p
+       LEFT JOIN category c ON c.tenant_id = p.tenant_id AND c.id = p.category_id
+       LEFT JOIN product_image pi ON pi.tenant_id = p.tenant_id AND pi.product_id = p.id
+       LEFT JOIN file_object f ON f.tenant_id = pi.tenant_id AND f.id = pi.file_id AND f.purpose = 'catalogue_image'
+      WHERE p.tenant_id = $1 AND p.id = $2
+      GROUP BY c.status`,
+    [tenantId, productId],
+  );
+  return result.rows[0] ?? { category_status: null, accepted_image_count: 0 };
+}
+
+export async function publishClothingGraph(
+  client: PoolClient,
+  tenantId: string,
+  productId: string,
+): Promise<{ product: EditableProductRow; activatedVariantCount: number }> {
+  const activated = await client.query<{ id: string }>(
+    `UPDATE product_variant pv
+        SET status = 'active',
+            updated_at = GREATEST(clock_timestamp(), pv.updated_at + interval '1 millisecond')
+      WHERE pv.tenant_id = $1
+        AND pv.product_id = $2
+        AND pv.status = 'draft'
+        AND EXISTS (
+          SELECT 1 FROM physical_asset pa
+           WHERE pa.tenant_id = pv.tenant_id
+             AND pa.variant_id = pv.id
+             AND pa.lifecycle_status = 'active'
+        )
+      RETURNING pv.id`,
+    [tenantId, productId],
+  );
+  const activeCount = await client.query<{ count: number }>(
+    `SELECT count(*)::int AS count
+       FROM product_variant
+      WHERE tenant_id = $1 AND product_id = $2 AND status = 'active'`,
+    [tenantId, productId],
+  );
+  if ((activeCount.rows[0]?.count ?? 0) === 0) {
+    throw new StateConflictError('Publish at least one variant with an active physical piece first.');
+  }
+  const product = await client.query<EditableProductRow>(
+    `UPDATE product
+        SET status = 'active',
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1 AND id = $2 AND status = 'draft'
+      RETURNING id, category_id, name, description, status, updated_at`,
+    [tenantId, productId],
+  );
+  const row = product.rows[0];
+  if (!row) throw new StateConflictError('The clothing item could not be published. Refresh and try again.');
+  return { product: row, activatedVariantCount: activated.rowCount ?? 0 };
+}
+
+export async function restoreClothingGraph(
+  client: PoolClient,
+  tenantId: string,
+  productId: string,
+): Promise<{ product: EditableProductRow; restoredVariantCount: number }> {
+  const product = await client.query<EditableProductRow>(
+    `UPDATE product
+        SET status = 'draft',
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1 AND id = $2 AND status = 'archived'
+      RETURNING id, category_id, name, description, status, updated_at`,
+    [tenantId, productId],
+  );
+  const row = product.rows[0];
+  if (!row) throw new StateConflictError('The clothing item could not be restored. Refresh and try again.');
+  const variants = await client.query(
+    `UPDATE product_variant
+        SET status = 'draft',
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1 AND product_id = $2 AND status = 'archived'`,
+    [tenantId, productId],
+  );
+  return { product: row, restoredVariantCount: variants.rowCount ?? 0 };
+}
+
+export async function countActivePhysicalAssetsForVariant(
+  client: PoolClient,
+  tenantId: string,
+  variantId: string,
+): Promise<number> {
+  const result = await client.query<{ count: number }>(
+    `SELECT count(*)::int AS count FROM physical_asset
+      WHERE tenant_id = $1 AND variant_id = $2 AND lifecycle_status = 'active'`,
+    [tenantId, variantId],
+  );
+  return result.rows[0]?.count ?? 0;
+}
+
+export async function countActiveVariantsForProduct(
+  client: PoolClient,
+  tenantId: string,
+  productId: string,
+): Promise<number> {
+  const result = await client.query<{ count: number }>(
+    `SELECT count(*)::int AS count FROM product_variant
+      WHERE tenant_id = $1 AND product_id = $2 AND status = 'active'`,
+    [tenantId, productId],
+  );
+  return result.rows[0]?.count ?? 0;
+}
+
+export async function updateVariantLifecycle(
+  client: PoolClient,
+  input: { tenantId: string; variantId: string; status: EditableVariantRow['status'] },
+): Promise<EditableVariantRow> {
+  const result = await client.query<EditableVariantRow>(
+    `UPDATE product_variant
+        SET status = $3,
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1 AND id = $2
+      RETURNING id, product_id, size_label, color_label, measurement_mode, measurement_guide_id,
+                measurement_unit, measurements, rental_price_minor, security_deposit_minor, currency,
+                pricing_mode, included_duration_minutes, extra_day_price_minor, prep_minutes,
+                turnaround_minutes, status, updated_at`,
+    [input.tenantId, input.variantId, input.status],
+  );
+  const row = result.rows[0];
+  if (!row) throw new StateConflictError('The clothing variant could not be updated. Refresh and try again.');
+  return row;
+}
+
+export async function removeVariantSafely(
+  client: PoolClient,
+  tenantId: string,
+  productId: string,
+  variantId: string,
+): Promise<{ outcome: 'deleted' | 'archived'; row: EditableVariantRow | null }> {
+  const references = await client.query<{ asset_count: number; reservation_count: number }>(
+    `SELECT
+       (SELECT count(*)::int FROM physical_asset WHERE tenant_id = $1 AND variant_id = $2) AS asset_count,
+       (SELECT count(*)::int FROM reservation_line WHERE tenant_id = $1 AND variant_id = $2) AS reservation_count`,
+    [tenantId, variantId],
+  );
+  const counts = references.rows[0] ?? { asset_count: 0, reservation_count: 0 };
+  if (counts.asset_count === 0 && counts.reservation_count === 0) {
+    const deleted = await client.query<{ id: string }>(
+      `DELETE FROM product_variant
+        WHERE tenant_id = $1 AND product_id = $2 AND id = $3 AND status = 'draft'
+        RETURNING id`,
+      [tenantId, productId, variantId],
+    );
+    if (deleted.rows[0]) return { outcome: 'deleted', row: null };
+  }
+  const row = await updateVariantLifecycle(client, { tenantId, variantId, status: 'archived' });
+  return { outcome: 'archived', row };
+}
+
+export async function createVariantForProduct(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    productId: string;
+    request: CreateClothingVariantRequest;
+    rentalPriceMinor: number;
+    securityDepositMinor: number;
+    extraDayPriceMinor: number;
+    includedDurationMinutes: number;
+  },
+): Promise<EditableVariantRow & { sku: string; created_at: Date }> {
+  const variantId = randomUUID();
+  const sku = input.request.sku?.trim() || `SKU-${input.productId.replaceAll('-', '').slice(0, 8).toUpperCase()}-${randomUUID().replaceAll('-', '').slice(0, 6).toUpperCase()}`;
+  const measurementGuideId = input.request.measurement_mode === 'default_guide' ? (input.request.measurement_guide_id ?? null) : null;
+  const measurements = input.request.measurement_mode === 'custom' ? input.request.measurements : {};
+  const result = await client.query<(EditableVariantRow & { sku: string; created_at: Date })>(
+    `INSERT INTO product_variant
+       (id, tenant_id, product_id, sku, size_label, color_label, measurements, measurement_unit,
+        measurement_mode, measurement_guide_id, rental_price_minor, security_deposit_minor, currency,
+        pricing_mode, included_duration_minutes, extra_day_price_minor, prep_minutes, turnaround_minutes,
+        status, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,'PHP',$13,$14,$15,$16,$17,'active',now(),now())
+     ON CONFLICT DO NOTHING
+     RETURNING id, product_id, sku, size_label, color_label, measurement_mode, measurement_guide_id,
+               measurement_unit, measurements, rental_price_minor, security_deposit_minor, currency,
+               pricing_mode, included_duration_minutes, extra_day_price_minor, prep_minutes,
+               turnaround_minutes, status, created_at, updated_at`,
+    [variantId, input.tenantId, input.productId, sku, input.request.size_label, input.request.color_label,
+      JSON.stringify(measurements), input.request.measurement_unit, input.request.measurement_mode, measurementGuideId,
+      input.rentalPriceMinor, input.securityDepositMinor, input.request.pricing.mode, input.includedDurationMinutes,
+      input.extraDayPriceMinor, input.request.pricing.prep_minutes, input.request.pricing.turnaround_minutes],
+  );
+  const row = result.rows[0];
+  if (!row) throw new StateConflictError('That variant SKU is already in use.');
+  return row;
+}
+
+export async function createPhysicalAssetForVariant(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; variantId: string; request: CreatePhysicalAssetRequest },
+): Promise<EditablePhysicalAssetRow> {
+  const code = input.request.asset_code?.trim() || `AST-${randomUUID().replaceAll('-', '').slice(0, 10).toUpperCase()}`;
+  const result = await client.query<EditablePhysicalAssetRow>(
+    `INSERT INTO physical_asset
+       (tenant_id, branch_id, variant_id, asset_code, lifecycle_status, readiness, custody_kind,
+        condition_note, measurement_overrides, alteration_note, version, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,'active','ready','at_branch',$5,$6::jsonb,$7,1,now(),now())
+     ON CONFLICT DO NOTHING
+     RETURNING id, branch_id, variant_id, asset_code, lifecycle_status, readiness, custody_kind,
+               condition_note, measurement_overrides, alteration_note, version, created_at, updated_at`,
+    [input.tenantId, input.branchId, input.variantId, code, input.request.condition_note,
+      JSON.stringify(input.request.measurement_overrides), input.request.alteration_note],
+  );
+  const row = result.rows[0];
+  if (!row) throw new StateConflictError('That physical asset code is already in use.');
   return row;
 }
 
@@ -769,6 +1082,10 @@ async function insertProductWithCode(
     throw new DuplicateClothingCodeError('That clothing code is already in use.');
   }
   throw new StateConflictError('Drezivo could not generate a unique clothing code. Try again.');
+}
+
+function isPostgresUniqueViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
 }
 
 function generatedStyleCode(): string {

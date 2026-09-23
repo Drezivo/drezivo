@@ -14,14 +14,17 @@ const navigation = vi.hoisted(() => ({
 
 const api = vi.hoisted(() => ({
   archiveClothing: vi.fn(),
+  createClothingVariant: vi.fn(),
   authorizeUpload: vi.fn(),
   finalizeUpload: vi.fn(),
   getCatalogueCategories: vi.fn(),
   getCatalogueClothingDetail: vi.fn(),
   getDefaultMeasurementGuide: vi.fn(),
+  removeClothingVariant: vi.fn(),
   replaceClothingImages: vi.fn(),
   updateClothingProduct: vi.fn(),
   updateClothingVariant: vi.fn(),
+  updateClothingVariantLifecycle: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({
@@ -137,6 +140,37 @@ describe("EditClothingPage", () => {
       requestId: "req-categories",
     });
     api.getDefaultMeasurementGuide.mockResolvedValue({ data: { guide: null }, requestId: "req-guide" });
+    api.createClothingVariant.mockResolvedValue({
+      data: {
+        variant: {
+          ...detail.variants[0]!,
+          id: "00000000-0000-4000-8000-000000000099",
+          sku: "SKU-NEW-XL",
+          size_label: "XL",
+          color_label: "Emerald Green",
+          status: "active",
+          assets: [
+            {
+              id: "00000000-0000-4000-8000-000000000199",
+              branch_id: "00000000-0000-4000-8000-000000000120",
+              asset_code: "AST-NEW-XL",
+              lifecycle_status: "active",
+              readiness: "ready",
+              custody_kind: "at_branch",
+              condition_note: null,
+              measurement_overrides: null,
+              alteration_note: null,
+              version: 1,
+              created_at: "2026-09-23T05:00:00.000Z",
+              updated_at: "2026-09-23T05:00:00.000Z",
+            },
+          ],
+          created_at: "2026-09-23T05:00:00.000Z",
+          updated_at: "2026-09-23T05:00:00.000Z",
+        },
+      },
+      requestId: "req-create-variant",
+    });
     api.archiveClothing.mockResolvedValue({
       data: {
         product_id: productId,
@@ -158,6 +192,26 @@ describe("EditClothingPage", () => {
         updated_at: "2026-09-21T09:00:00.000Z",
       },
       requestId: "req-product-update",
+    });
+    api.updateClothingVariantLifecycle.mockResolvedValue({
+      data: {
+        variant_id: variantId,
+        product_id: productId,
+        status: "draft",
+        outcome: "updated",
+        updated_at: "2026-09-21T09:02:00.000Z",
+      },
+      requestId: "req-variant-lifecycle",
+    });
+    api.removeClothingVariant.mockResolvedValue({
+      data: {
+        variant_id: variantId,
+        product_id: productId,
+        status: "archived",
+        outcome: "updated",
+        updated_at: "2026-09-21T09:03:00.000Z",
+      },
+      requestId: "req-variant-remove",
     });
     api.updateClothingVariant.mockResolvedValue({
       data: {
@@ -207,6 +261,70 @@ describe("EditClothingPage", () => {
       detail.images[0]!.image_url
     );
     expect(screen.getByRole("button", { name: "Save Changes" })).toBeDisabled();
+    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(within(breadcrumb).getByRole("link", { name: "Clothing" })).toHaveAttribute("href", "/inventory");
+    expect(within(breadcrumb).getByText("Edit Emerald Evening Gown")).toHaveAttribute("aria-current", "page");
+  });
+
+  it("adds a new active variant without draft/publish controls and stays on the edit page", async () => {
+    const createdVariant = {
+      ...detail.variants[0]!,
+      id: "00000000-0000-4000-8000-000000000099",
+      sku: "SKU-NEW-XL",
+      size_label: "XL",
+      color_label: "Emerald Green",
+      status: "active" as const,
+      assets: [],
+      created_at: "2026-09-23T05:00:00.000Z",
+      updated_at: "2026-09-23T05:00:00.000Z",
+    };
+    api.getCatalogueClothingDetail
+      .mockResolvedValueOnce({ data: detail, requestId: "req-before-add-variant" })
+      .mockResolvedValue({
+        data: { ...detail, variants: [...detail.variants, createdVariant] },
+        requestId: "req-after-add-variant",
+      });
+
+    render(<EditClothingPage productId={productId} />);
+    await screen.findByRole("heading", { name: "Edit Clothing" });
+    fireEvent.click(screen.getByRole("button", { name: "Add Variant" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByText(/draft/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /publish/i })).not.toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText("New Variant Size Label"), { target: { value: "XL" } });
+    fireEvent.change(within(dialog).getByLabelText("New Variant Color"), { target: { value: "Emerald Green" } });
+    fireEvent.change(within(dialog).getByLabelText("Package Price"), { target: { value: "1800" } });
+    fireEvent.change(within(dialog).getByLabelText("Security Deposit"), { target: { value: "500" } });
+    fireEvent.change(within(dialog).getByLabelText("Extra Day Price"), { target: { value: "600" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add Variant" }));
+
+    await waitFor(() => expect(api.createClothingVariant).toHaveBeenCalledTimes(1));
+    expect(api.createClothingVariant).toHaveBeenCalledWith(
+      productId,
+      {
+        size_label: "XL",
+        color_label: "Emerald Green",
+        measurement_mode: "none",
+        measurement_guide_id: null,
+        measurement_unit: "cm",
+        measurements: {},
+        pricing: {
+          mode: "fixed_duration",
+          rental_price_minor: "180000",
+          security_deposit_minor: "50000",
+          included_days: 3,
+          extra_day_price_minor: "60000",
+          prep_minutes: 0,
+          turnaround_minutes: 1440,
+        },
+      },
+      expect.any(String)
+    );
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Variant added")).toBeVisible();
+    expect(screen.getByText("XL · SKU-NEW-XL")).toBeVisible();
+    expect(navigation.replace).not.toHaveBeenCalled();
   });
 
   it("saves changed product and variant fields with backend concurrency tokens and one intent family", async () => {
@@ -253,10 +371,10 @@ describe("EditClothingPage", () => {
     const variantKey = variantCall[3] as string;
     expect(productKey.replace(/-product$/, "")).toBe(variantKey.replace(/-variant-1$/, ""));
 
-    await waitFor(() =>
-      expect(navigation.replace).toHaveBeenCalledWith(`/inventory/${productId}`)
-    );
-    expect(sessionStorage.getItem("drezivo:clothing-detail-notice")).toBe("Changes saved");
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(await screen.findByRole("status")).toHaveTextContent("Changes saved");
+    expect(screen.getByRole("heading", { name: "Edit Clothing" })).toBeVisible();
   });
 
   it("guards a rapid double submit so one save intent produces one product mutation", async () => {
@@ -292,9 +410,121 @@ describe("EditClothingPage", () => {
       requestId: "req-product-update",
     });
 
-    await waitFor(() =>
-      expect(navigation.replace).toHaveBeenCalledWith(`/inventory/${productId}`)
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(await screen.findByRole("status")).toHaveTextContent("Changes saved");
+  });
+
+  it("publishes a draft variant from the edit page with its own concurrency token", async () => {
+    api.getCatalogueClothingDetail
+      .mockResolvedValueOnce({
+        data: {
+          ...detail,
+          variants: [{ ...detail.variants[0]!, status: "draft" as const }],
+        },
+        requestId: "req-draft-variant",
+      })
+      .mockResolvedValue({ data: detail, requestId: "req-after-publish" });
+    api.updateClothingVariantLifecycle.mockResolvedValueOnce({
+      data: {
+        variant_id: variantId,
+        product_id: productId,
+        status: "active",
+        outcome: "updated",
+        updated_at: "2026-09-21T09:02:00.000Z",
+      },
+      requestId: "req-publish-variant",
+    });
+
+    render(<EditClothingPage productId={productId} />);
+    await screen.findByRole("heading", { name: "Edit Clothing" });
+    fireEvent.click(screen.getByRole("button", { name: "Publish GWN-023-M" }));
+
+    await waitFor(() => expect(api.updateClothingVariantLifecycle).toHaveBeenCalledTimes(1));
+    expect(api.updateClothingVariantLifecycle).toHaveBeenCalledWith(
+      productId,
+      variantId,
+      { expected_updated_at: variantUpdatedAt, status: "active" },
+      expect.any(String)
     );
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
+  });
+
+  it("omits active-to-draft control while keeping archive and safe removal", async () => {
+    render(<EditClothingPage productId={productId} />);
+    await screen.findByRole("heading", { name: "Edit Clothing" });
+
+    expect(screen.queryByRole("button", { name: "Set GWN-023-M to draft" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Archive GWN-023-M" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Remove GWN-023-M" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/never-used draft variant/i)).toBeVisible();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Remove Variant" }));
+
+    await waitFor(() => expect(api.removeClothingVariant).toHaveBeenCalledTimes(1));
+    expect(api.removeClothingVariant).toHaveBeenCalledWith(
+      productId,
+      variantId,
+      { expected_updated_at: variantUpdatedAt },
+      expect.any(String)
+    );
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
+  });
+
+  it("moves a referenced removed variant out of the normal editor after authoritative reload", async () => {
+    const archivedVariant = { ...detail.variants[0]!, status: "archived" as const };
+    api.getCatalogueClothingDetail
+      .mockResolvedValueOnce({ data: detail, requestId: "req-before-remove" })
+      .mockResolvedValue({
+        data: { ...detail, variants: [archivedVariant] },
+        requestId: "req-after-remove",
+      });
+    api.removeClothingVariant.mockResolvedValueOnce({
+      data: {
+        variant_id: variantId,
+        product_id: productId,
+        status: "archived",
+        outcome: "updated",
+        updated_at: "2026-09-21T09:03:00.000Z",
+      },
+      requestId: "req-remove-archive-fallback",
+    });
+
+    render(<EditClothingPage productId={productId} />);
+    await screen.findByRole("heading", { name: "Edit Clothing" });
+    expect(screen.getByLabelText("GWN-023-M Size Label")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove GWN-023-M" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Remove Variant" }));
+
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
+    expect(screen.queryByLabelText("GWN-023-M Size Label")).not.toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Variant archived because it has physical pieces or reservation history."
+    );
+    expect(screen.getByText("Archived variants (1)")).toBeVisible();
+  });
+
+  it("shows archived variants as restorable and blocks lifecycle actions while edits are dirty", async () => {
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: {
+        ...detail,
+        variants: [{ ...detail.variants[0]!, status: "archived" as const }],
+      },
+      requestId: "req-archived-variant",
+    });
+
+    render(<EditClothingPage productId={productId} />);
+    await screen.findByRole("heading", { name: "Edit Clothing" });
+    fireEvent.click(screen.getByText("Archived variants (1)"));
+    expect(screen.getByRole("button", { name: "Restore GWN-023-M" })).toBeVisible();
+
+    fireEvent.change(screen.getByLabelText("Clothing Name"), {
+      target: { value: "Unsaved lifecycle blocker" },
+    });
+    expect(screen.getByRole("button", { name: "Restore GWN-023-M" })).toBeDisabled();
+    expect(screen.getByText("Save current edits before changing lifecycle.")).toBeVisible();
   });
 
   it("archives a clean edit page with the loaded product concurrency token", async () => {
