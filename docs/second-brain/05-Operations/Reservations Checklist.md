@@ -155,7 +155,7 @@ Before marking a task complete:
 
 - [x] **RSV-023 — Align staff hold creation with the walk-in fast path**
   - **Depends on:** RSV-022 and the approved staff walk-in UX.
-  - **Outcome:** O/S can claim the garment early enough to protect capacity without being forced to complete remote-checkout-style ceremony before the hold exists.
+  - **Outcome:** O/S can claim the garment before customer/contact entry is complete, while the same authoritative 15-minute hold/allocation path protects capacity.
   - **Acceptance:**
     - [x] Keep the authoritative 15-minute database-backed `held` allocation and existing concurrency/idempotency guarantees.
     - [x] Review the current staff create contract, which presently requires customer, variant/dates, fulfillment method, and payment method at hold creation, against the desired `Check availability → Reserve → Complete Reservation` sequence.
