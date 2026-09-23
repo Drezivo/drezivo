@@ -229,6 +229,41 @@ export async function lockReservationAllocationsForReview(
   return result.rows;
 }
 
+export async function bindReservationCustomerForSubmit(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    reservationId: string;
+    version: number;
+    customerId: string;
+    customerSnapshot: Record<string, unknown>;
+  },
+): Promise<boolean> {
+  const result = await client.query<{ id: string }>(
+    `UPDATE reservation
+        SET customer_id = $5::uuid,
+            customer_snapshot = $6::jsonb
+      WHERE tenant_id = $1
+        AND branch_id = $2
+        AND id = $3::uuid
+        AND status = 'held'
+        AND version = $4
+        AND customer_id IS NULL
+        AND customer_snapshot IS NULL
+      RETURNING id`,
+    [
+      input.tenantId,
+      input.branchId,
+      input.reservationId,
+      input.version,
+      input.customerId,
+      JSON.stringify(input.customerSnapshot),
+    ],
+  );
+  return result.rowCount === 1;
+}
+
 export async function markReceiptUnderReview(
   client: PoolClient,
   input: { tenantId: string; receiptId: string },

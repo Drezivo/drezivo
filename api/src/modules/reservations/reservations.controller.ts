@@ -5,6 +5,7 @@ import type { PermissionCode, TenantStatus } from '@drezivo/contracts';
 import { ValidationError } from '../../shared/errors.js';
 import { sendError, sendSuccess } from '../../shared/response.js';
 import {
+  completeStaffReservation,
   confirmReservation,
   createPublicHold,
   createStaffReservation,
@@ -33,6 +34,22 @@ export async function createStaffReservationController(req: Request, res: Respon
 
   const result = await createStaffReservation(
     { ...requireContext(req), requestId: req.requestId, idempotencyKey },
+    request,
+  );
+  res.status(result.status).json(result.body);
+}
+
+export async function completeStaffReservationController(req: Request, res: Response): Promise<void> {
+  const reservationId = req.reservationId;
+  const request = req.reservationCompleteRequest;
+  const idempotencyKey = req.reservationIdempotencyKey;
+  if (!reservationId) throw new ValidationError('A valid reservation id is required.');
+  if (!request) throw new ValidationError('Staff reservation completion request is invalid.');
+  if (!idempotencyKey) throw new ValidationError('A valid Idempotency-Key header is required.');
+
+  const result = await completeStaffReservation(
+    { ...requireContext(req), requestId: req.requestId, idempotencyKey },
+    reservationId,
     request,
   );
   res.status(result.status).json(result.body);

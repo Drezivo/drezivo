@@ -7,11 +7,13 @@ import {
   reservationListQuery,
   reservationRejectRequest,
   reservationSubmitRequest,
+  staffReservationCompleteRequest,
   staffReservationCreateRequest,
   type ReservationConfirmRequest,
   type ReservationListQuery,
   type ReservationRejectRequest,
   type ReservationSubmitRequest,
+  type StaffReservationCompleteRequest,
   type StaffReservationCreateRequest,
 } from '@drezivo/contracts';
 
@@ -22,6 +24,7 @@ declare module 'express-serve-static-core' {
     reservationListQuery?: ReservationListQuery;
     reservationId?: string;
     reservationCreateRequest?: StaffReservationCreateRequest;
+    reservationCompleteRequest?: StaffReservationCompleteRequest;
     reservationSubmitRequest?: ReservationSubmitRequest;
     reservationConfirmRequest?: ReservationConfirmRequest;
     reservationRejectRequest?: ReservationRejectRequest;
@@ -78,6 +81,17 @@ export const validateStaffReservationCreate: RequestHandler = (req, _res, next):
   }
   req.body = parsed.data;
   req.reservationCreateRequest = parsed.data;
+  next();
+};
+
+export const validateStaffReservationComplete: RequestHandler = (req, _res, next): void => {
+  const parsed = staffReservationCompleteRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Staff reservation completion request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  req.reservationCompleteRequest = parsed.data;
   next();
 };
 

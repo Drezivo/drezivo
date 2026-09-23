@@ -6,6 +6,7 @@
 import { z } from 'zod';
 
 import { instantInterval } from '../common/time';
+import { staffReservationCustomerInput } from './hold';
 import { reservationSummary } from './reservation';
 
 const versionedAction = z
@@ -17,6 +18,8 @@ const versionedAction = z
 /** held -> pending_confirmation after contact/terms/evidence prerequisites are satisfied. */
 export const reservationSubmitRequest = versionedAction.extend({
   terms_accepted: z.literal(true),
+  /** Required only when the initial staff hold was acquired before customer entry. */
+  customer: staffReservationCustomerInput.optional(),
 });
 export type ReservationSubmitRequest = z.infer<typeof reservationSubmitRequest>;
 
@@ -24,6 +27,54 @@ export const reservationSubmitResponse = z
   .object({ reservation: reservationSummary })
   .strict();
 export type ReservationSubmitResponse = z.infer<typeof reservationSubmitResponse>;
+
+/**
+ * Staff-facing "Complete Reservation" intent. The API may submit and then confirm,
+ * but it never skips the canonical held -> pending_confirmation -> confirmed states.
+ */
+export const staffReservationCompleteRequest = reservationSubmitRequest;
+export type StaffReservationCompleteRequest = z.infer<typeof staffReservationCompleteRequest>;
+
+export const staffReservationCompletionNextAction = z.enum([
+  'none',
+  'merchant_review',
+  'payment_verification',
+]);
+export type StaffReservationCompletionNextAction = z.infer<
+  typeof staffReservationCompletionNextAction
+>;
+
+export const staffReservationCompleteResponse = z
+  .object({
+    reservation: reservationSummary,
+    completion_state: z.enum(['pending_confirmation', 'confirmed']),
+    next_action: staffReservationCompletionNextAction,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.reservation.status !== value.completion_state) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['completion_state'],
+        message: 'completion_state must match reservation.status.',
+      });
+    }
+    if (value.completion_state === 'confirmed' && value.next_action !== 'none') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['next_action'],
+        message: 'A confirmed reservation cannot require another completion action.',
+      });
+    }
+    if (value.completion_state === 'pending_confirmation' && value.next_action === 'none') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['next_action'],
+        message: 'A pending reservation must identify the remaining completion action.',
+      });
+    }
+  });
+export type StaffReservationCompleteResponse = z.infer<typeof staffReservationCompleteResponse>;
 
 /** pending_confirmation -> confirmed; finance verification remains a separate authority. */
 export const reservationConfirmRequest = versionedAction;

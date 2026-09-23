@@ -13,6 +13,8 @@ import {
   reservationState,
   reservationSubmitRequest,
   reservationSummary,
+  staffReservationCompleteRequest,
+  staffReservationCompleteResponse,
   staffReservationCreateRequest,
 } from '../src';
 
@@ -103,6 +105,16 @@ describe('reservation contracts', () => {
     ).toBe(false);
   });
 
+  it('allows the walk-in hold before customer entry without accepting a fake null customer', () => {
+    expect(staffReservationCreateRequest.safeParse(baseStaffCreate).success).toBe(true);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        customer: null,
+      }).success,
+    ).toBe(false);
+  });
+
   it('accepts a new staff customer with phone or email and rejects an empty contact', () => {
     expect(
       staffReservationCreateRequest.safeParse({
@@ -163,6 +175,47 @@ describe('reservation contracts', () => {
         ...baseStaffCreate,
         customer: { source: 'existing', customer_id: ids.customer },
         requested_interval: { start: '2026-10-13T02:00:00.000Z', end: '2026-10-10T02:00:00.000Z' },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('keeps the staff completion intent narrow and returns only truthful pending/confirmed outcomes', () => {
+    const request = staffReservationCompleteRequest.safeParse({
+      version: 1,
+      terms_accepted: true,
+      customer: {
+        source: 'new',
+        customer: { full_name: 'Walk-in Customer', phone: '09171234567' },
+      },
+    });
+    expect(request.success).toBe(true);
+    expect(
+      staffReservationCompleteRequest.safeParse({
+        version: 1,
+        terms_accepted: true,
+        status: 'confirmed',
+      }).success,
+    ).toBe(false);
+
+    expect(
+      staffReservationCompleteResponse.safeParse({
+        reservation: { ...baseSummary, status: 'pending_confirmation', version: 2 },
+        completion_state: 'pending_confirmation',
+        next_action: 'merchant_review',
+      }).success,
+    ).toBe(true);
+    expect(
+      staffReservationCompleteResponse.safeParse({
+        reservation: { ...baseSummary, status: 'held' },
+        completion_state: 'held',
+        next_action: 'none',
+      }).success,
+    ).toBe(false);
+    expect(
+      staffReservationCompleteResponse.safeParse({
+        reservation: { ...baseSummary, status: 'confirmed', version: 3 },
+        completion_state: 'pending_confirmation',
+        next_action: 'merchant_review',
       }).success,
     ).toBe(false);
   });

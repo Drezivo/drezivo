@@ -67,10 +67,11 @@ interface HeldReservation {
   paymentId: string;
 }
 
-describe('RSV-030/031 pending confirmation and merchant approval', async () => {
+describe('RSV-030/031/032 reservation review and staff completion', async () => {
   const { createApp } = await import('../../src/app.js');
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
   const {
+    completeStaffReservation,
     confirmReservation,
     createStaffReservation,
     rejectReservation,
@@ -327,6 +328,256 @@ describe('RSV-030/031 pending confirmation and merchant approval', async () => {
     });
   });
 
+  it('completes a customer-less walk-in hold through submit then confirm in one owner-facing action when Finance is already verified', async () => {
+    const seed = await seedWorkspace('org_rsv032_owner_fast', 'user_rsv032_owner_fast', 'cash');
+    const held = await createWalkInHold(seed, 'owner-fast');
+    await verifyMerchantCollection(seed, held, false);
+
+    const completed = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-owner-fast', 'idem-rsv032-owner-fast'),
+      held.id,
+      {
+        version: 1,
+        terms_accepted: true,
+        customer: walkInCustomer('Owner Fast Customer'),
+      },
+    );
+
+    expect(completed.status).toBe(200);
+    expect(completed.body).toMatchObject({
+      success: true,
+      data: {
+        completion_state: 'confirmed',
+        next_action: 'none',
+        reservation: { id: held.id, status: 'confirmed', version: 3 },
+      },
+    });
+    const state = await reservationReviewState(seed, held.id);
+    expect(state.reservation.status).toBe('confirmed');
+    expect(state.allocation).toMatchObject({ kind: 'reservation_confirmed', is_blocking: true });
+    expect(await actionEffectCounts(seed, held.id, 'reservation.submitted_for_confirmation')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
+    expect(await actionEffectCounts(seed, held.id, 'reservation.confirmed')).toEqual({ audit: 1, outbox: 1 });
+    const customerState = await reservationCustomerState(seed, held.id);
+    expect(typeof customerState.customer_id).toBe('string');
+    expect(customerState.customer_snapshot).toEqual({
+      full_name: 'Owner Fast Customer',
+      phone: '09170000032',
+      email: null,
+    });
+  });
+
+  it('stops truthfully at pending confirmation for Front Desk and for an owner whose payment still needs verification', async () => {
+    const frontdesk = await seedWorkspace(
+      'org_rsv032_frontdesk',
+      'user_rsv032_frontdesk',
+      'cash',
+      ['reservations.manage', 'payments.view', 'evidence.view'],
+    );
+    const frontdeskHeld = await createWalkInHold(frontdesk, 'frontdesk');
+    const frontdeskResult = await completeStaffReservation(
+      reviewContext(frontdesk, 'req-rsv032-frontdesk', 'idem-rsv032-frontdesk'),
+      frontdeskHeld.id,
+      {
+        version: 1,
+        terms_accepted: true,
+        customer: walkInCustomer('Front Desk Customer'),
+      },
+    );
+    expect(frontdeskResult.status).toBe(200);
+    expect(frontdeskResult.body).toMatchObject({
+      success: true,
+      data: {
+        completion_state: 'pending_confirmation',
+        next_action: 'merchant_review',
+        reservation: { status: 'pending_confirmation', version: 2 },
+      },
+    });
+    expect(await actionEffectCounts(frontdesk, frontdeskHeld.id, 'reservation.confirmed')).toEqual({
+      audit: 0,
+      outbox: 0,
+    });
+
+    const frontdeskReplay = await completeStaffReservation(
+      reviewContext(frontdesk, 'req-rsv032-frontdesk-replay', 'idem-rsv032-frontdesk'),
+      frontdeskHeld.id,
+      {
+        version: 1,
+        terms_accepted: true,
+        customer: walkInCustomer('Front Desk Customer'),
+      },
+    );
+    expect(frontdeskReplay.body).toMatchObject({
+      success: true,
+      data: { completion_state: 'pending_confirmation', reservation: { version: 2 } },
+    });
+    await expect(
+      completeStaffReservation(
+        reviewContext(frontdesk, 'req-rsv032-frontdesk-reused', 'idem-rsv032-frontdesk'),
+        frontdeskHeld.id,
+        {
+          version: 1,
+          terms_accepted: true,
+          customer: walkInCustomer('Different Customer'),
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+    expect(await actionEffectCounts(frontdesk, frontdeskHeld.id, 'reservation.submitted_for_confirmation')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
+
+    const owner = await seedWorkspace('org_rsv032_payment', 'user_rsv032_payment', 'cash');
+    const ownerHeld = await createWalkInHold(owner, 'payment');
+    const ownerResult = await completeStaffReservation(
+      reviewContext(owner, 'req-rsv032-payment', 'idem-rsv032-payment'),
+      ownerHeld.id,
+      {
+        version: 1,
+        terms_accepted: true,
+        customer: walkInCustomer('Payment Pending Customer'),
+      },
+    );
+    expect(ownerResult.status).toBe(200);
+    expect(ownerResult.body).toMatchObject({
+      success: true,
+      data: {
+        completion_state: 'pending_confirmation',
+        next_action: 'payment_verification',
+        reservation: { status: 'pending_confirmation', version: 2 },
+      },
+    });
+    expect(await actionEffectCounts(owner, ownerHeld.id, 'reservation.confirmed')).toEqual({
+      audit: 0,
+      outbox: 0,
+    });
+  });
+
+  it('never auto-confirms a manual QR screenshot through the staff completion action', async () => {
+    const seed = await seedWorkspace('org_rsv032_qr', 'user_rsv032_qr', 'manual_qr');
+    const held = await createWalkInHold(seed, 'qr');
+    await attachAcceptedReceipt(seed, held, -1);
+
+    const result = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-qr', 'idem-rsv032-qr'),
+      held.id,
+      {
+        version: 1,
+        terms_accepted: true,
+        customer: walkInCustomer('QR Screenshot Customer'),
+      },
+    );
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({
+      success: true,
+      data: {
+        completion_state: 'pending_confirmation',
+        next_action: 'payment_verification',
+        reservation: { status: 'pending_confirmation', version: 2 },
+      },
+    });
+    const state = await reservationReviewState(seed, held.id);
+    expect(state.receipt?.evidence_status).toBe('under_review');
+    expect(state.reservation.status).toBe('pending_confirmation');
+    expect(await actionEffectCounts(seed, held.id, 'reservation.confirmed')).toEqual({ audit: 0, outbox: 0 });
+  });
+
+  it('resumes from authoritative pending confirmation without re-submitting after payment verification', async () => {
+    const seed = await seedWorkspace('org_rsv032_resume', 'user_rsv032_resume', 'cash');
+    const held = await createWalkInHold(seed, 'resume');
+    const first = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-resume-a', 'idem-rsv032-resume-a'),
+      held.id,
+      {
+        version: 1,
+        terms_accepted: true,
+        customer: walkInCustomer('Resume Customer'),
+      },
+    );
+    expect(first.body).toMatchObject({
+      success: true,
+      data: { completion_state: 'pending_confirmation', next_action: 'payment_verification' },
+    });
+
+    await verifyMerchantCollection(seed, held, false);
+    const resumed = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-resume-b', 'idem-rsv032-resume-b'),
+      held.id,
+      { version: 2, terms_accepted: true },
+    );
+    expect(resumed.body).toMatchObject({
+      success: true,
+      data: { completion_state: 'confirmed', next_action: 'none', reservation: { version: 3 } },
+    });
+    expect(await actionEffectCounts(seed, held.id, 'reservation.submitted_for_confirmation')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
+    expect(await actionEffectCounts(seed, held.id, 'reservation.confirmed')).toEqual({ audit: 1, outbox: 1 });
+  });
+
+  it('expires during staff completion using database time and releases the held garment', async () => {
+    const seed = await seedWorkspace('org_rsv032_expiry', 'user_rsv032_expiry', 'cash');
+    const held = await createWalkInHold(seed, 'completion-expiry');
+    await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query(
+        `UPDATE reservation SET hold_expires_at = statement_timestamp()
+          WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, held.id],
+      ),
+    );
+
+    const result = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-expiry', 'idem-rsv032-expiry'),
+      held.id,
+      {
+        version: 1,
+        terms_accepted: true,
+        customer: walkInCustomer('Expired Walk-in'),
+      },
+    );
+    expectFailure(result, 'HOLD_EXPIRED');
+    const state = await reservationReviewState(seed, held.id);
+    expect(state.reservation.status).toBe('expired');
+    expect(state.allocation.is_blocking).toBe(false);
+    expect((await reservationCustomerState(seed, held.id)).customer_id).toBeNull();
+  });
+
+  it('double-fires the owner completion intent without duplicating submit or confirm effects', async () => {
+    const seed = await seedWorkspace('org_rsv032_double', 'user_rsv032_double', 'cash');
+    const held = await createWalkInHold(seed, 'double');
+    await verifyMerchantCollection(seed, held, false);
+    const completion = {
+      version: 1,
+      terms_accepted: true as const,
+      customer: walkInCustomer('Double Fire Customer'),
+    };
+
+    const [first, second] = await Promise.all([
+      completeStaffReservation(
+        reviewContext(seed, 'req-rsv032-double-a', 'idem-rsv032-double'),
+        held.id,
+        completion,
+      ),
+      completeStaffReservation(
+        reviewContext(seed, 'req-rsv032-double-b', 'idem-rsv032-double'),
+        held.id,
+        completion,
+      ),
+    ]);
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(first.body).toMatchObject({ success: true, data: { completion_state: 'confirmed' } });
+    expect(second.body).toMatchObject({ success: true, data: { completion_state: 'confirmed' } });
+    expect(await actionEffectCounts(seed, held.id, 'reservation.submitted_for_confirmation')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
+    expect(await actionEffectCounts(seed, held.id, 'reservation.confirmed')).toEqual({ audit: 1, outbox: 1 });
+  });
+
   it('rejects a pending reservation once, releases its allocation, and keeps the auditable merchant reason', async () => {
     const seed = await seedWorkspace('org_rsv031_reject', 'user_rsv031_reject', 'cash');
     const held = await createHold(seed, 'reject');
@@ -410,6 +661,86 @@ describe('RSV-030/031 pending confirmation and merchant approval', async () => {
     expect(await actionEffectCounts(expirySeed, expiryHeld.id, 'reservation.expired')).toEqual({
       audit: 1,
       outbox: 1,
+    });
+  });
+
+  it('exposes the staff complete-booking route without requiring Front Desk to hold merchant verification permission', async () => {
+    const seed = await seedWorkspace(
+      'org_rsv032_route',
+      'user_rsv032_route',
+      'cash',
+      ['reservations.manage', 'payments.view', 'evidence.view'],
+    );
+    const held = await createWalkInHold(seed, 'route');
+
+    clerk.getAuth.mockReturnValueOnce({ userId: null, orgId: null });
+    const unauthenticated = await request(createApp())
+      .post(`/api/v1/reservations/${held.id}/complete-booking`)
+      .set('Idempotency-Key', 'route-rsv032-unauth')
+      .send({
+        version: 1,
+        terms_accepted: true,
+        customer: walkInCustomer('Route Customer'),
+      });
+    expect(unauthenticated.status).toBe(401);
+
+    const foreign = await seedWorkspace(
+      'org_rsv032_route_foreign',
+      'user_rsv032_route_foreign',
+      'cash',
+      ['reservations.manage', 'payments.view', 'evidence.view'],
+    );
+    const foreignHeld = await createWalkInHold(foreign, 'route-foreign');
+    useClerk(seed);
+    const concealed = await request(createApp())
+      .post(`/api/v1/reservations/${foreignHeld.id}/complete-booking`)
+      .set('Idempotency-Key', 'route-rsv032-foreign')
+      .send({
+        version: 1,
+        terms_accepted: true,
+        customer: walkInCustomer('Foreign Route Customer'),
+      });
+    expect(concealed.status).toBe(404);
+
+    useClerk(seed);
+    const injected = await request(createApp())
+      .post(`/api/v1/reservations/${held.id}/complete-booking`)
+      .set('Idempotency-Key', 'route-rsv032-injected')
+      .send({
+        version: 1,
+        terms_accepted: true,
+        customer: walkInCustomer('Route Customer'),
+        status: 'confirmed',
+      });
+    expect(injected.status).toBe(422);
+
+    useClerk(seed);
+    const missingKey = await request(createApp())
+      .post(`/api/v1/reservations/${held.id}/complete-booking`)
+      .send({
+        version: 1,
+        terms_accepted: true,
+        customer: walkInCustomer('Route Customer'),
+      });
+    expect(missingKey.status).toBe(422);
+
+    useClerk(seed);
+    const completed = await request(createApp())
+      .post(`/api/v1/reservations/${held.id}/complete-booking`)
+      .set('Idempotency-Key', 'route-rsv032-complete')
+      .send({
+        version: 1,
+        terms_accepted: true,
+        customer: walkInCustomer('Route Customer'),
+      });
+    expect(completed.status).toBe(200);
+    expect(completed.body).toMatchObject({
+      success: true,
+      data: {
+        completion_state: 'pending_confirmation',
+        next_action: 'merchant_review',
+        reservation: { id: held.id, status: 'pending_confirmation', version: 2 },
+      },
     });
   });
 
@@ -612,6 +943,33 @@ describe('RSV-030/031 pending confirmation and merchant approval', async () => {
     });
   }
 
+  async function createWalkInHold(seed: ReviewSeed, suffix: string): Promise<HeldReservation> {
+    const requestBody = createRequest(seed);
+    const result = await createStaffReservation(
+      reviewContext(seed, `req-create-walkin-${suffix}`, `idem-create-walkin-${suffix}`),
+      {
+        variant_id: requestBody.variant_id,
+        requested_interval: requestBody.requested_interval,
+        ...(requestBody.event_date ? { event_date: requestBody.event_date } : {}),
+        fulfillment_method: requestBody.fulfillment_method,
+        payment_method_id: requestBody.payment_method_id,
+      },
+    );
+    if (result.status !== 201 || result.body.success !== true) {
+      throw new Error(`Expected customer-less held reservation creation, got ${result.status}.`);
+    }
+    const reservation = result.body.data.reservation;
+    const paymentId = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const payment = await client.query<{ id: string }>(
+        `SELECT id FROM payment WHERE tenant_id = $1 AND reservation_id = $2
+          AND business_key = ('reservation:' || $2::text || ':initial-payment')`,
+        [seed.tenantId, reservation.id],
+      );
+      return requireRow(payment.rows, 'initial walk-in payment').id;
+    });
+    return { id: reservation.id, version: reservation.version, paymentId };
+  }
+
   async function createHold(seed: ReviewSeed, suffix: string): Promise<HeldReservation> {
     const result = await createStaffReservation(
       reviewContext(seed, `req-create-${suffix}`, `idem-create-${suffix}`),
@@ -630,6 +988,16 @@ describe('RSV-030/031 pending confirmation and merchant approval', async () => {
       return requireRow(payment.rows, 'initial payment').id;
     });
     return { id: reservation.id, version: reservation.version, paymentId };
+  }
+
+  function walkInCustomer(fullName: string) {
+    return {
+      source: 'new' as const,
+      customer: {
+        full_name: fullName,
+        phone: '09170000032',
+      },
+    };
   }
 
   function createRequest(seed: ReviewSeed): StaffReservationCreateRequest {
@@ -730,6 +1098,21 @@ describe('RSV-030/031 pending confirmation and merchant approval', async () => {
           [seed.tenantId, held.paymentId],
         );
       }
+    });
+  }
+
+  async function reservationCustomerState(seed: ReviewSeed, reservationId: string) {
+    return withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{
+        customer_id: string | null;
+        customer_snapshot: Record<string, unknown> | null;
+      }>(
+        `SELECT customer_id, customer_snapshot
+           FROM reservation
+          WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, reservationId],
+      );
+      return requireRow(result.rows, 'reservation customer state');
     });
   }
 

@@ -15,6 +15,8 @@ import {
   type ReservationConfirmResponse,
   type ReservationRejectRequest,
   type ReservationRejectResponse,
+  type StaffReservationCompleteRequest,
+  type StaffReservationCompleteResponse,
   type StaffReservationCreateRequest,
   type TenantStatus,
 } from '@drezivo/contracts';
@@ -32,6 +34,7 @@ import {
   createStaffReservationCommand,
   type ReservationCommandResponse,
 } from './reservations.command.service.js';
+import { completeStaffReservationCommand } from './reservations.completion.service.js';
 import {
   confirmReservationByMerchant,
   rejectReservationByMerchant,
@@ -95,6 +98,27 @@ export async function createStaffReservation(
       requestId: input.requestId,
       idempotencyKey: input.idempotencyKey,
     },
+    request,
+  );
+}
+
+export async function completeStaffReservation(
+  input: ReservationReadContext & { requestId: string; idempotencyKey: string },
+  reservationId: string,
+  request: StaffReservationCompleteRequest,
+): Promise<ReservationReviewCommandResponse<StaffReservationCompleteResponse>> {
+  assertReservationReviewContext(input);
+  return completeStaffReservationCommand(
+    {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      membershipId: input.membershipId,
+      principalId: input.principalId,
+      requestId: input.requestId,
+      idempotencyKey: input.idempotencyKey,
+      permissionCodes: input.permissionCodes,
+    },
+    reservationId,
     request,
   );
 }
