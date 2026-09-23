@@ -458,6 +458,169 @@ export async function markPhysicalAssetReturned(
   return result.rows[0] ?? null;
 }
 
+export interface ReservationSettlementState {
+  pending_refund_count: number;
+  outstanding_charge_minor: number;
+  deposit_holding_minor: number;
+}
+
+export async function inspectReturnedPhysicalAsset(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    assetId: string;
+    assetVersion: number;
+    readiness: LockedReservationAllocationRow['asset_readiness'];
+    conditionNote?: string;
+  },
+): Promise<{ version: number; readiness: LockedReservationAllocationRow['asset_readiness'] } | null> {
+  const result = await client.query<{
+    version: number;
+    readiness: LockedReservationAllocationRow['asset_readiness'];
+  }>(
+    `UPDATE physical_asset
+        SET readiness = $5,
+            condition_note = COALESCE($6, condition_note),
+            version = version + 1,
+            updated_at = statement_timestamp()
+      WHERE tenant_id = $1
+        AND branch_id = $2::uuid
+        AND id = $3::uuid
+        AND lifecycle_status = 'active'
+        AND custody_kind = 'at_branch'
+        AND version = $4
+      RETURNING version, readiness`,
+    [
+      input.tenantId,
+      input.branchId,
+      input.assetId,
+      input.assetVersion,
+      input.readiness,
+      input.conditionNote ?? null,
+    ],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function lockOpenAssetMaintenance(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; assetId: string },
+): Promise<string[]> {
+  const result = await client.query<{ id: string }>(
+    `SELECT id
+       FROM maintenance_work_order
+      WHERE tenant_id = $1
+        AND branch_id = $2::uuid
+        AND asset_id = $3::uuid
+        AND status = 'open'
+      ORDER BY id
+      FOR UPDATE`,
+    [input.tenantId, input.branchId, input.assetId],
+  );
+  return result.rows.map((row) => row.id);
+}
+
+export async function readReservationSettlementState(
+  client: PoolClient,
+  input: { tenantId: string; reservationId: string; paymentId: string | null },
+): Promise<ReservationSettlementState> {
+  const refundResult = input.paymentId
+    ? await client.query<{ status: string }>(
+        `SELECT status
+           FROM refund
+          WHERE tenant_id = $1 AND payment_id = $2::uuid
+          ORDER BY id
+          FOR UPDATE`,
+        [input.tenantId, input.paymentId],
+      )
+    : { rows: [] as Array<{ status: string }> };
+
+  const charges = await client.query<{ id: string; kind: string; amount_minor: number; reverses_id: string | null }>(
+    `SELECT id, kind, amount_minor, reverses_id
+       FROM charge
+      WHERE tenant_id = $1 AND reservation_id = $2::uuid
+      ORDER BY id`,
+    [input.tenantId, input.reservationId],
+  );
+  const allocations = input.paymentId
+    ? await client.query<{ direction: string; amount_minor: number }>(
+        `SELECT pa.direction, pa.amount_minor
+           FROM payment_allocation pa
+           JOIN charge c ON c.tenant_id = pa.tenant_id AND c.id = pa.charge_id
+          WHERE pa.tenant_id = $1
+            AND pa.payment_id = $2::uuid
+            AND c.reservation_id = $3::uuid
+          ORDER BY pa.id`,
+        [input.tenantId, input.paymentId, input.reservationId],
+      )
+    : { rows: [] as Array<{ direction: string; amount_minor: number }> };
+  const deposits = await client.query<{
+    id: string;
+    kind: string;
+    amount_minor: number;
+    reverses_id: string | null;
+  }>(
+    `SELECT id, kind, amount_minor, reverses_id
+       FROM deposit_entry
+      WHERE tenant_id = $1 AND reservation_id = $2::uuid
+      ORDER BY id`,
+    [input.tenantId, input.reservationId],
+  );
+
+  const chargeById = new Map(charges.rows.map((row) => [row.id, row]));
+  const netCharges = charges.rows.reduce((total, row) => {
+    if (row.reverses_id) {
+      const target = chargeById.get(row.reverses_id);
+      const targetSign = target?.kind === 'credit' ? -1 : 1;
+      return total - targetSign * row.amount_minor;
+    }
+    return total + (row.kind === 'credit' ? -row.amount_minor : row.amount_minor);
+  }, 0);
+  const netAllocations = allocations.rows.reduce(
+    (total, row) => total + (row.direction === 'apply' ? row.amount_minor : -row.amount_minor),
+    0,
+  );
+
+  const depositById = new Map(deposits.rows.map((row) => [row.id, row]));
+  const depositEffect = (kind: string, amount: number): number =>
+    kind === 'receive' ? amount : kind === 'apply' || kind === 'release' ? -amount : 0;
+  const depositHolding = deposits.rows.reduce((total, row) => {
+    if (row.kind === 'reverse' && row.reverses_id) {
+      const target = depositById.get(row.reverses_id);
+      return total - (target ? depositEffect(target.kind, row.amount_minor) : 0);
+    }
+    return total + depositEffect(row.kind, row.amount_minor);
+  }, 0);
+
+  return {
+    pending_refund_count: refundResult.rows.filter(
+      (row) => row.status === 'requested' || row.status === 'processing',
+    ).length,
+    outstanding_charge_minor: Math.max(0, netCharges - netAllocations),
+    deposit_holding_minor: Math.max(0, depositHolding),
+  };
+}
+
+export async function completeReturnedReservation(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; reservationId: string; version: number },
+): Promise<number | null> {
+  const result = await client.query<{ version: number }>(
+    `UPDATE reservation
+        SET status = 'completed',
+            version = version + 1
+      WHERE tenant_id = $1
+        AND branch_id = $2::uuid
+        AND id = $3::uuid
+        AND status = 'returned'
+        AND version = $4
+      RETURNING version`,
+    [input.tenantId, input.branchId, input.reservationId, input.version],
+  );
+  return result.rows[0]?.version ?? null;
+}
+
 export async function appendReturnCustodyEvent(
   client: PoolClient,
   input: {

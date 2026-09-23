@@ -40,6 +40,7 @@ process.env.S3_ACCESS_KEY_ID ??= 'test';
 process.env.S3_SECRET_ACCESS_KEY ??= 'test';
 
 const REVIEW_PERMISSIONS: PermissionCode[] = [
+  'assets.manage',
   'reservations.manage',
   'reservations.custody',
   'payments.manage',
@@ -80,6 +81,8 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     pickupReservation,
     rejectReservation,
     returnReservation,
+    inspectReturnedReservation,
+    completeRentalReservation,
     submitReservation,
   } = await import('../../src/modules/reservations/reservations.service.js');
   const { expireDueHoldsForAllTenants } = await import('../../src/worker/handlers/hold-expirer.js');
@@ -1394,6 +1397,282 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     });
   });
 
+  it('records post-return inspection separately and completes only after the garment is ready', async () => {
+    const seed = await seedWorkspace('org_rsv052_inspect', 'user_rsv052_inspect', 'cash');
+    const returned = await createReturnedReservation(seed, 'completion-inspect');
+
+    const cleaning = await inspectReturnedReservation(
+      reviewContext(seed, 'req-inspect-cleaning', 'idem-inspect-cleaning'),
+      returned.id,
+      { version: returned.version, readiness: 'needs_cleaning', condition_note: 'Normal cleaning required.' },
+    );
+    expect(cleaning.status).toBe(200);
+    expect(cleaning.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'returned', version: returned.version }, asset_readiness: 'needs_cleaning' },
+    });
+    expect((await pickupState(seed, returned.id)).allocation).toMatchObject({
+      is_blocking: true,
+      released_at: null,
+    });
+
+    const blocked = await completeRentalReservation(
+      reviewContext(seed, 'req-complete-unready', 'idem-complete-unready'),
+      returned.id,
+      { version: returned.version },
+    );
+    expectFailure(blocked, 'ASSET_UNREADY');
+
+    const ready = await inspectReturnedReservation(
+      reviewContext(seed, 'req-inspect-ready', 'idem-inspect-ready'),
+      returned.id,
+      { version: returned.version, readiness: 'ready', condition_note: 'Cleaning complete; garment inspected.' },
+    );
+    expect(ready.status).toBe(200);
+    expect(ready.body).toMatchObject({ success: true, data: { asset_readiness: 'ready' } });
+
+    const completed = await completeRentalReservation(
+      reviewContext(seed, 'req-complete-success', 'idem-complete-success'),
+      returned.id,
+      { version: returned.version },
+    );
+    expect(completed.status).toBe(200);
+    expect(completed.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'completed', version: returned.version + 1 } },
+    });
+    const state = await pickupState(seed, returned.id);
+    expect(state.asset).toMatchObject({ custody_kind: 'at_branch', readiness: 'ready' });
+    expect(state.allocation).toMatchObject({ is_blocking: false });
+    expect(state.allocation.released_at).not.toBeNull();
+    expect(await actionEffectCounts(seed, returned.id, 'reservation.completed')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
+  });
+
+  it('keeps canonical maintenance work authoritative and will not mark an asset ready while work remains open', async () => {
+    const seed = await seedWorkspace('org_rsv052_maintenance', 'user_rsv052_maintenance', 'cash');
+    const returned = await createReturnedReservation(seed, 'completion-maintenance');
+    const maintenanceId = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ id: string }>(
+        `INSERT INTO maintenance_work_order
+           (tenant_id, branch_id, asset_id, kind, status, reason, opened_at)
+         VALUES ($1, $2, $3, 'cleaning', 'open', 'Post-return deep cleaning', statement_timestamp())
+         RETURNING id`,
+        [seed.tenantId, seed.branchId, seed.assetId],
+      );
+      return requireRow(result.rows, 'maintenance work order').id;
+    });
+
+    const readyWhileOpen = await inspectReturnedReservation(
+      reviewContext(seed, 'req-inspect-maint-open', 'idem-inspect-maint-open'),
+      returned.id,
+      { version: returned.version, readiness: 'ready' },
+    );
+    expectFailure(readyWhileOpen, 'STATE_CONFLICT');
+
+    await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query(
+        `UPDATE maintenance_work_order
+            SET status = 'closed', closed_at = statement_timestamp()
+          WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, maintenanceId],
+      ),
+    );
+    const ready = await inspectReturnedReservation(
+      reviewContext(seed, 'req-inspect-maint-closed', 'idem-inspect-maint-closed'),
+      returned.id,
+      { version: returned.version, readiness: 'ready' },
+    );
+    expect(ready.status).toBe(200);
+  });
+
+  it('blocks completion on unresolved posted charges, deposit holding, and pending refund without rewriting finance history', async () => {
+    const seed = await seedWorkspace('org_rsv052_settlement', 'user_rsv052_settlement', 'cash');
+    const returned = await createReturnedReservation(seed, 'completion-settlement');
+    await inspectReturnedReservation(
+      reviewContext(seed, 'req-inspect-settlement-ready', 'idem-inspect-settlement-ready'),
+      returned.id,
+      { version: returned.version, readiness: 'ready' },
+    );
+
+    const finance = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const charge = await client.query<{ id: string }>(
+        `INSERT INTO charge (tenant_id, reservation_id, kind, amount_minor, currency, business_key)
+         VALUES ($1, $2, 'damage_fee', 10000, 'PHP', $3) RETURNING id`,
+        [seed.tenantId, returned.id, `charge:${returned.id}:damage`],
+      );
+      const refund = await client.query<{ id: string }>(
+        `INSERT INTO refund
+           (tenant_id, payment_id, amount_minor, currency, purpose, status, requested_by, business_key)
+         VALUES ($1, $2, 50000, 'PHP', 'security_deposit', 'requested', $3, $4)
+         RETURNING id`,
+        [seed.tenantId, returned.paymentId, seed.membershipId, `refund:${returned.id}:security`],
+      );
+      await client.query(
+        `INSERT INTO deposit_entry
+           (tenant_id, reservation_id, payment_id, kind, amount_minor, currency, business_key)
+         VALUES ($1, $2, $3, 'receive', 50000, 'PHP', $4)`,
+        [seed.tenantId, returned.id, returned.paymentId, `deposit:${returned.id}:receive`],
+      );
+      return {
+        chargeId: requireRow(charge.rows, 'damage charge').id,
+        refundId: requireRow(refund.rows, 'security refund').id,
+      };
+    });
+
+    const chargeBlocked = await completeRentalReservation(
+      reviewContext(seed, 'req-complete-charge', 'idem-complete-charge'),
+      returned.id,
+      { version: returned.version },
+    );
+    expectFailure(chargeBlocked, 'PAYMENT_PREREQUISITE_FAILED');
+
+    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      await client.query(
+        `INSERT INTO payment_allocation
+           (tenant_id, payment_id, charge_id, amount_minor, direction, business_key)
+         VALUES ($1, $2, $3, 10000, 'apply', $4)`,
+        [seed.tenantId, returned.paymentId, finance.chargeId, `allocation:${returned.id}:damage`],
+      );
+      await client.query(
+        `INSERT INTO deposit_entry
+           (tenant_id, reservation_id, payment_id, refund_id, kind, amount_minor, currency, business_key)
+         VALUES ($1, $2, $3, $4, 'release', 50000, 'PHP', $5)`,
+        [seed.tenantId, returned.id, returned.paymentId, finance.refundId, `deposit:${returned.id}:release`],
+      );
+    });
+
+    const refundBlocked = await completeRentalReservation(
+      reviewContext(seed, 'req-complete-refund-pending', 'idem-complete-refund-pending'),
+      returned.id,
+      { version: returned.version },
+    );
+    expectFailure(refundBlocked, 'PAYMENT_PREREQUISITE_FAILED');
+
+    await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query(
+        `UPDATE refund
+            SET status = 'completed', completed_at = statement_timestamp()
+          WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, finance.refundId],
+      ),
+    );
+    const completed = await completeRentalReservation(
+      reviewContext(seed, 'req-complete-settled', 'idem-complete-settled'),
+      returned.id,
+      { version: returned.version },
+    );
+    expect(completed.status).toBe(200);
+    expect(completed.body).toMatchObject({ success: true, data: { reservation: { status: 'completed' } } });
+  });
+
+  it('allows Complete Rental as an existing-rental settlement action for a cancelled workspace', async () => {
+    const seed = await seedWorkspace('org_rsv052_cancelled_settlement', 'user_rsv052_cancelled_settlement', 'cash');
+    const returned = await createReturnedReservation(seed, 'completion-cancelled-settlement');
+    await inspectReturnedReservation(
+      reviewContext(seed, 'req-inspect-cancelled-settlement', 'idem-inspect-cancelled-settlement'),
+      returned.id,
+      { version: returned.version, readiness: 'ready' },
+    );
+
+    const completed = await completeRentalReservation(
+      {
+        ...reviewContext(seed, 'req-complete-cancelled-settlement', 'idem-complete-cancelled-settlement'),
+        effectiveTenantStatus: 'cancelled',
+      },
+      returned.id,
+      { version: returned.version },
+    );
+    expect(completed.status).toBe(200);
+    expect(completed.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'completed' } },
+    });
+  });
+
+  it('serializes Complete Rental double-fire to one completion and allocation release', async () => {
+    const seed = await seedWorkspace('org_rsv052_race', 'user_rsv052_race', 'cash');
+    const returned = await createReturnedReservation(seed, 'completion-race');
+    await inspectReturnedReservation(
+      reviewContext(seed, 'req-inspect-race', 'idem-inspect-race'),
+      returned.id,
+      { version: returned.version, readiness: 'ready' },
+    );
+
+    const concurrent = await Promise.all([
+      completeRentalReservation(
+        reviewContext(seed, 'req-complete-race-a', 'idem-complete-race'),
+        returned.id,
+        { version: returned.version },
+      ),
+      completeRentalReservation(
+        reviewContext(seed, 'req-complete-race-b', 'idem-complete-race'),
+        returned.id,
+        { version: returned.version },
+      ),
+    ]);
+    expect(concurrent[0]).toEqual(concurrent[1]);
+    expect(concurrent[0]?.status).toBe(200);
+    expect(await actionEffectCounts(seed, returned.id, 'reservation.completed')).toEqual({ audit: 1, outbox: 1 });
+    expect((await pickupState(seed, returned.id)).allocation.is_blocking).toBe(false);
+  });
+
+  it('exposes protected inspection and Complete Rental routes with strict bodies and custody/asset permissions', async () => {
+    const seed = await seedWorkspace('org_rsv052_route', 'user_rsv052_route', 'cash');
+    const returned = await createReturnedReservation(seed, 'completion-route');
+
+    clerk.getAuth.mockReturnValue({ userId: null, orgId: null });
+    const unauthenticated = await request(createApp())
+      .post(`/api/v1/reservations/${returned.id}/inspection`)
+      .set('Idempotency-Key', 'route-inspection-unauth')
+      .send({ version: returned.version, readiness: 'ready' });
+    expect(unauthenticated.status).toBe(401);
+
+    useClerk(seed);
+    const injected = await request(createApp())
+      .post(`/api/v1/reservations/${returned.id}/inspection`)
+      .set('Idempotency-Key', 'route-inspection-injected')
+      .send({ version: returned.version, readiness: 'ready', asset_id: seed.assetId });
+    expect(injected.status).toBe(422);
+
+    const noAssets = await seedWorkspace('org_rsv052_no_assets', 'user_rsv052_no_assets', 'cash');
+    const noAssetsReturned = await createReturnedReservation(noAssets, 'completion-no-assets');
+    await withTenantTransaction(noAssets.tenantId, noAssets.principalId, (client) =>
+      client.query(
+        `UPDATE branch_membership SET permission_codes = $4::jsonb
+          WHERE tenant_id = $1 AND branch_id = $2 AND membership_id = $3`,
+        [
+          noAssets.tenantId,
+          noAssets.branchId,
+          noAssets.membershipId,
+          JSON.stringify(noAssets.permissions.filter((permission) => permission !== 'assets.manage')),
+        ],
+      ),
+    );
+    useClerk(noAssets);
+    const forbiddenInspection = await request(createApp())
+      .post(`/api/v1/reservations/${noAssetsReturned.id}/inspection`)
+      .set('Idempotency-Key', 'route-inspection-forbidden')
+      .send({ version: noAssetsReturned.version, readiness: 'ready' });
+    expect(forbiddenInspection.status).toBe(403);
+
+    useClerk(seed);
+    const inspected = await request(createApp())
+      .post(`/api/v1/reservations/${returned.id}/inspection`)
+      .set('Idempotency-Key', 'route-inspection-success')
+      .send({ version: returned.version, readiness: 'ready', condition_note: 'Inspection passed.' });
+    expect(inspected.status).toBe(200);
+
+    const completed = await request(createApp())
+      .post(`/api/v1/reservations/${returned.id}/complete-rental`)
+      .set('Idempotency-Key', 'route-complete-success')
+      .send({ version: returned.version });
+    expect(completed.status).toBe(200);
+    expect(completed.body).toMatchObject({ success: true, data: { reservation: { status: 'completed' } } });
+  });
+
   it('exposes protected submit/confirm/reject routes with strict bodies, idempotency, concealed foreign IDs, and merchant-review permissions', async () => {
     const seed = await seedWorkspace('org_rsv03_routes', 'user_rsv03_routes', 'cash');
     const held = await createHold(seed, 'routes');
@@ -1654,6 +1933,22 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       throw new Error('Expected reservation pickup to succeed.');
     }
     return { ...confirmed, version: pickedUp.body.data.reservation.version };
+  }
+
+  async function createReturnedReservation(
+    seed: ReviewSeed,
+    suffix: string,
+  ): Promise<HeldReservation> {
+    const pickedUp = await createPickedUpReservation(seed, suffix);
+    const returned = await returnReservation(
+      reviewContext(seed, `req-${suffix}-return`, `idem-${suffix}-return`),
+      pickedUp.id,
+      { version: pickedUp.version, condition_note: 'Returned for post-rental inspection.' },
+    );
+    if (returned.status !== 200 || returned.body.success !== true) {
+      throw new Error('Expected reservation return to succeed.');
+    }
+    return { ...pickedUp, version: returned.body.data.reservation.version };
   }
 
   async function createConfirmedReservation(

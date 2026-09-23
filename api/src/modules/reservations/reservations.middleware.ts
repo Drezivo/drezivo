@@ -9,6 +9,8 @@ import {
   reservationPickupRequest,
   reservationRejectRequest,
   reservationReturnRequest,
+  reservationInspectionRequest,
+  reservationCompleteRequest,
   reservationSubmitRequest,
   staffReservationCompleteRequest,
   staffReservationCreateRequest,
@@ -18,6 +20,8 @@ import {
   type ReservationPickupRequest,
   type ReservationRejectRequest,
   type ReservationReturnRequest,
+  type ReservationInspectionRequest,
+  type ReservationCompleteRequest,
   type ReservationSubmitRequest,
   type StaffReservationCompleteRequest,
   type StaffReservationCreateRequest,
@@ -34,6 +38,8 @@ declare module 'express-serve-static-core' {
     reservationCancelRequest?: ReservationCancelRequest;
     reservationPickupRequest?: ReservationPickupRequest;
     reservationReturnRequest?: ReservationReturnRequest;
+    reservationInspectionRequest?: ReservationInspectionRequest;
+    reservationRentalCompleteRequest?: ReservationCompleteRequest;
     reservationSubmitRequest?: ReservationSubmitRequest;
     reservationConfirmRequest?: ReservationConfirmRequest;
     reservationRejectRequest?: ReservationRejectRequest;
@@ -143,6 +149,28 @@ export const validateReservationReturn: RequestHandler = (req, _res, next): void
   }
   req.body = parsed.data;
   req.reservationReturnRequest = parsed.data;
+  next();
+};
+
+export const validateReservationInspection: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationInspectionRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Reservation inspection request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  req.reservationInspectionRequest = parsed.data;
+  next();
+};
+
+export const validateReservationRentalComplete: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationCompleteRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Reservation completion request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  req.reservationRentalCompleteRequest = parsed.data;
   next();
 };
 

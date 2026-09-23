@@ -28,6 +28,7 @@ const runner = new WorkerRunner({
   'reservation.confirmed': outboxDispatcher,
   'reservation.picked_up': outboxDispatcher,
   'reservation.returned': outboxDispatcher,
+  'reservation.completed': outboxDispatcher,
   'reservation.cancelled': outboxDispatcher,
   'reservation.hold_expired': outboxDispatcher,
   'clerk.invitation.dispatch_requested': handleMembershipInvitationDispatch,

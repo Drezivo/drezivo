@@ -11,6 +11,7 @@ import {
   reservationListQuery,
   reservationListResponse,
   reservationPickupRequest,
+  reservationInspectionRequest,
   reservationRejectRequest,
   reservationReturnRequest,
   reservationState,
@@ -358,6 +359,8 @@ describe('reservation contracts', () => {
     expect(reservationPickupRequest.safeParse({ version: 1, asset_id: ids.asset }).success).toBe(false);
     expect(reservationReturnRequest.safeParse({ version: 1, condition_note: 'Returned at counter.' }).success).toBe(true);
     expect(reservationReturnRequest.safeParse({ version: 1, readiness: 'ready' }).success).toBe(false);
+    expect(reservationInspectionRequest.safeParse({ version: 5, readiness: 'needs_cleaning', condition_note: 'Normal cleaning.' }).success).toBe(true);
+    expect(reservationInspectionRequest.safeParse({ version: 5, readiness: 'ready', asset_id: ids.asset }).success).toBe(false);
     expect(reservationCompleteRequest.safeParse({ version: 0 }).success).toBe(false);
   });
 

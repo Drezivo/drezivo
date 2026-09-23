@@ -15,6 +15,8 @@ import {
   pickupReservationController,
   rejectReservationController,
   returnReservationController,
+  inspectReturnedReservationController,
+  completeRentalReservationController,
   submitReservationController,
 } from './reservations.controller.js';
 import {
@@ -29,6 +31,8 @@ import {
   validateReservationPickup,
   validateReservationReject,
   validateReservationReturn,
+  validateReservationInspection,
+  validateReservationRentalComplete,
   validateReservationSubmit,
   validateStaffReservationComplete,
   validateStaffReservationCreate,
@@ -110,6 +114,32 @@ reservationsRouter.post(
   validateReservationReturn,
   requireReservationIdempotencyKey,
   returnReservationController,
+);
+
+reservationsRouter.post(
+  '/reservations/:reservationId/inspection',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('return'),
+  requireReservationCustodyPermission,
+  validateReservationId,
+  validateReservationInspection,
+  requireReservationIdempotencyKey,
+  inspectReturnedReservationController,
+);
+
+reservationsRouter.post(
+  '/reservations/:reservationId/complete-rental',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('settlement'),
+  requireReservationCustodyPermission,
+  validateReservationId,
+  validateReservationRentalComplete,
+  requireReservationIdempotencyKey,
+  completeRentalReservationController,
 );
 
 reservationsRouter.post(

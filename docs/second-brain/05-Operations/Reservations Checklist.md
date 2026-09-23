@@ -264,16 +264,19 @@ Before marking a task complete:
   - **Idempotency/failure behavior:** same-key retries/concurrent double-fire produce one reservation transition, one asset custody update, one return custody event, and one audit/outbox effect. Same-key/different-body remains `IDEMPOTENCY_KEY_REUSED`; stale/invalid lifecycle state, foreign reservation, missing custody permission, or mismatched custody/allocation fail without partial return effects. Reservation Details immediately projects `returned` and the pickup→return custody timeline.
   - **Tests/evidence:** `api/tests/integration/reservation-review.test.ts` passes `28/28` against real PostgreSQL, including normal return/detail timeline, branch custody restoration with non-ready inspection state, Finance-changed return acceptance, preservation of `needs_repair`, late return with a return-linked future-booking disruption, sequential replay, concurrent double-fire, strict request/idempotency/auth, missing `reservations.custody`, and foreign-ID concealment. Full API integration passes `33` files / `214/214`; API unit/service passes `20` files / `82/82`; Contracts pass `11` files / `89/89`; API/Contracts typecheck, lint, and build are green.
 
-- [ ] **RSV-052 — Implement inspection/cleaning/settlement completion gate**
+- [x] **RSV-052 — Implement inspection/cleaning/settlement completion gate**
   - **Depends on:** RSV-051, Availability/Clothing readiness workflows.
   - **Outcome:** `returned → completed` happens only after operational and settlement requirements are satisfied.
   - **Acceptance:**
-    - [ ] Inspection records required cleaning/damage/readiness outcome.
-    - [ ] Cleaning remains part of the booked turnaround block where applicable.
-    - [ ] Extra maintenance/manual block uses canonical allocation/work-order path.
-    - [ ] Deposit/refund/charge settlement state is checked without rewriting monetary history.
-    - [ ] Completion is conditional/idempotent.
-  - **Tests/evidence:** Cleaning/damage/settlement gate tests.
+    - [x] Inspection records required cleaning/damage/readiness outcome.
+    - [x] Cleaning remains part of the booked turnaround block where applicable.
+    - [x] Extra maintenance/manual block uses canonical allocation/work-order path.
+    - [x] Deposit/refund/charge settlement state is checked without rewriting monetary history.
+    - [x] Completion is conditional/idempotent.
+  - **Implemented inspection boundary:** authenticated/idempotent `POST /api/v1/reservations/:reservationId/inspection` accepts only `{ version, readiness, condition_note? }` for a `returned` reservation. The actor needs reservation custody authority plus `assets.manage`. The command locks the returned reservation and its exact allocated serialized asset, requires the garment to be physically `at_branch`, then records the post-return condition by updating the asset readiness projection to one of `ready`, `needs_cleaning`, `needs_repair`, or `unready`. The immutable reservation audit records the before/after readiness, asset versions, actor/request, and whether a condition note was supplied. Inspection does not itself complete the rental and does not fabricate another custody event.
+  - **Cleaning/maintenance behavior:** a normal `needs_cleaning`/`needs_repair` inspection leaves the existing `reservation_confirmed` allocation blocking, so the accepted turnaround remains protected while post-return work is unresolved. Inspection cannot mark the asset `ready` while an open `maintenance_work_order` still exists. Extra cleaning/repair/manual downtime is intentionally not duplicated inside Reservations: staff uses the existing canonical Availability/Clothing maintenance work-order + allocation path, and `Complete Rental` refuses to close the reservation while any such work remains open.
+  - **Settlement/completion boundary:** authenticated/idempotent `POST /api/v1/reservations/:reservationId/complete-rental` accepts only the optimistic reservation `version`. It requires `returned`, the same active confirmed allocation, branch custody, an active/`ready` garment, and zero open maintenance work. It then consumes Finance truth without rewriting it: unresolved collection state fails; append-only posted charges are netted against payment allocations/reversals; net security-deposit holding must be zero; and refund instructions must no longer be `requested`/`processing`. `charge`, `payment_allocation`, and `deposit_entry` remain append-only/read-only to Reservations, while the mutable refund workflow remains Finance-owned. A successful completion conditionally changes `returned → completed`, releases the old reservation blocking allocation exactly once (including a safe early release after readiness/settlement), and appends `reservation.completed` audit/outbox facts. Existing disruption records are not silently auto-resolved by completion.
+  - **Tests/evidence:** `api/tests/integration/reservation-review.test.ts` passes `33/33` against real PostgreSQL, covering cleaning-first inspection, readiness gating, preservation of the booked block before completion, open maintenance preventing false readiness, posted damage-charge settlement, security-deposit holding/release, pending-refund blocking, successful settled completion/allocation release, concurrent Complete Rental double-fire, strict inspection/completion routes, permissions, and idempotency. Full API integration passes `33` files / `219/219`; API unit/service passes `20` files / `82/82`; Contracts pass `11` files / `89/89`; API/Contracts typecheck, lint, and build are green.
 
 ## Phase 6: Staff app integration
 
@@ -472,13 +475,16 @@ Use this as the practical Owner/Staff acceptance checklist for the Reservations 
 - [ ] Rapid double-click/retry on Return produces one return event and one final `returned` state.
 - [ ] A user without custody permission cannot successfully Return a reservation even if they manually invoke the frontend request.
 
-### Inspection and rental completion — test after RSV-052/backend UI is implemented
+### Inspection and rental completion — backend ready; frontend wiring pending
 
-- [ ] O/S can record the post-return inspection/readiness outcome.
-- [ ] A garment that requires cleaning remains unavailable until the required cleaning/turnaround work is complete.
-- [ ] A damaged garment can remain unavailable for maintenance/repair rather than being automatically released.
-- [ ] O/S can complete the rental only after the required return, readiness, and settlement conditions are satisfied.
-- [ ] Successful completion changes the reservation from `returned` to `completed` once.
+- [ ] O/S can record the post-return inspection/readiness outcome as `ready`, `needs_cleaning`, `needs_repair`, or `unready`, with an optional condition note.
+- [ ] Recording `needs_cleaning` or another non-ready outcome keeps the reservation `returned` and keeps the existing booking/turnaround block in place.
+- [ ] A garment with open cleaning/maintenance work cannot be marked `ready` from the reservation UI.
+- [ ] A damaged garment can remain unavailable for maintenance/repair rather than being automatically released; extra downtime uses the normal Clothing/Availability maintenance workflow.
+- [ ] O/S can see `Complete Rental` succeed only when the garment is back at the branch, inspected `ready`, no maintenance work remains open, and settlement checks pass.
+- [ ] If a posted charge, security-deposit holding, or refund is still unresolved, Complete Rental is blocked and the UI explains that settlement is still required without changing financial history.
+- [ ] Successful completion changes the reservation from `returned` to `completed` once and releases the old reservation allocation so the ready garment can become eligible for later availability.
+- [ ] Rapidly double-clicking or retrying Inspection/Complete Rental does not create duplicate completion/audit/allocation-release effects.
 
 ### Reliability and operational safety
 
