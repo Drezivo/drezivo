@@ -11,6 +11,8 @@ import {
   type ReservationPaymentProjection,
   type ReservationPickupRequest,
   type ReservationPickupResponse,
+  type ReservationReturnRequest,
+  type ReservationReturnResponse,
   type ReservationSubmitRequest,
   type ReservationSubmitResponse,
   type ReservationCancelRequest,
@@ -41,6 +43,7 @@ import {
 import { cancelReservationByStaff } from './reservations.cancellation.service.js';
 import { completeStaffReservationCommand } from './reservations.completion.service.js';
 import { pickupReservationByStaff } from './reservations.pickup.service.js';
+import { returnReservationByStaff } from './reservations.return.service.js';
 import {
   confirmReservationByMerchant,
   rejectReservationByMerchant,
@@ -156,6 +159,26 @@ export async function pickupReservation(
 ): Promise<ReservationReviewCommandResponse<ReservationPickupResponse>> {
   assertReservationCustodyContext(input);
   return pickupReservationByStaff(
+    {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      membershipId: input.membershipId,
+      principalId: input.principalId,
+      requestId: input.requestId,
+      idempotencyKey: input.idempotencyKey,
+    },
+    reservationId,
+    request,
+  );
+}
+
+export async function returnReservation(
+  input: ReservationReadContext & { requestId: string; idempotencyKey: string },
+  reservationId: string,
+  request: ReservationReturnRequest,
+): Promise<ReservationReviewCommandResponse<ReservationReturnResponse>> {
+  assertReservationReturnContext(input);
+  return returnReservationByStaff(
     {
       tenantId: input.tenantId,
       branchId: input.branchId,
@@ -412,6 +435,13 @@ function assertReservationCustodyContext(input: ReservationReadContext): void {
   assertReservationReviewContext(input);
   if (!input.permissionCodes.includes('reservations.custody')) {
     throw new ForbiddenError('Reservation custody permission is required.');
+  }
+}
+
+function assertReservationReturnContext(input: ReservationReadContext): void {
+  assertReservationCustodyContext(input);
+  if (input.effectiveTenantStatus === 'cancelled') {
+    throw new TenantCancelledError('This workspace is closed.');
   }
 }
 

@@ -27,6 +27,7 @@ export function outboxDispatcher(row: OutboxRow): Promise<void> {
     case 'reservation.pending_confirmation':
     case 'reservation.confirmed':
     case 'reservation.picked_up':
+    case 'reservation.returned':
     case 'reservation.cancelled':
     case 'reservation.rejected':
     case 'reservation.hold_expired':

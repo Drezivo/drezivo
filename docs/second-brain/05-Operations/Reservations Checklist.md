@@ -249,16 +249,20 @@ Before marking a task complete:
   - **Failure behavior:** unready, inactive, wrong-branch, or not-at-branch garments fail closed with `ASSET_UNREADY`; missing/mismatched confirmed allocation fails with `ASSET_UNAVAILABLE`; degraded/missing payment verification fails with `PAYMENT_PREREQUISITE_FAILED`; stale versions and invalid lifecycle states use the existing stable conflicts. Any failure before commit leaves the reservation confirmed, physical custody unchanged, the allocation blocking, and no pickup custody event.
   - **Tests/evidence:** `api/tests/integration/reservation-review.test.ts` passes `23/23` on real PostgreSQL and covers successful pickup/custody/detail projection, unready garment denial, physically absent/in-transit denial, payment-refunded denial, sequential replay, concurrent double-fire with one custody/audit/outbox effect, strict body/idempotency/auth, missing `reservations.custody` permission, and foreign-ID concealment. Full API integration passes `33` files / `209/209`; API unit/service passes `20` files / `82/82`; Contracts pass `11` files / `89/89`; API/Contracts typecheck, lint, and build are green.
 
-- [ ] **RSV-051 — Implement return command**
+- [x] **RSV-051 — Implement return command**
   - **Depends on:** RSV-050.
   - **Outcome:** Actual return is always recordable even when late and threatening future bookings.
   - **Acceptance:**
-    - [ ] Lock current reservation/asset projection and record immutable return custody fact.
-    - [ ] Transition `picked_up → returned` once.
-    - [ ] Late actual return is not rejected because it conflicts with a future planned interval.
-    - [ ] Threatened future reservation creates/updates disruption workflow.
-    - [ ] Return does not automatically mark garment ready/available.
-  - **Tests/evidence:** Late return, future-conflict, duplicate return tests.
+    - [x] Lock current reservation/asset projection and record immutable return custody fact.
+    - [x] Transition `picked_up → returned` once.
+    - [x] Late actual return is not rejected because it conflicts with a future planned interval.
+    - [x] Threatened future reservation creates/updates disruption workflow.
+    - [x] Return does not automatically mark garment ready/available.
+  - **Implemented:** authenticated/idempotent `POST /api/v1/reservations/:reservationId/return` requires `reservations.manage` + `reservations.custody`, uses the tenant `return` lifecycle gate, and accepts only the strict shared `{ version, condition_note? }` intent. The command locks the reservation and its current confirmed allocation/physical asset, requires the reservation to still be `picked_up` at the supplied optimistic version, and requires the same allocated garment to still be recorded in `with_customer` custody. Return deliberately does **not** re-run pickup payment/readiness prerequisites: once physical handover happened, changed Finance state, a late deadline, or a newly discovered garment issue cannot prevent Drezivo from recording that the customer physically returned the garment.
+  - **Custody/readiness behavior:** the winning transaction conditionally changes `picked_up → returned`, moves physical custody `with_customer → at_branch`, and appends one immutable `return` `custody_event` with database time, actor membership, condition note/snapshot, and a stable business key. Return never marks the garment ready. A previously `ready` asset becomes generic `unready` pending inspection; a more specific existing non-ready state (`needs_cleaning`, `needs_repair`, or `unready`) is preserved. The existing `reservation_confirmed` allocation remains blocking with its original booked/turnaround period and is not released merely because the garment arrived early or on time.
+  - **Late-return/disruption behavior:** custody truth lives outside the overlap exclusion, so a late physical return is committed even when planned future capacity is already threatened. After the return fact exists, RSV-051 creates or updates an open `disruption` for another active held/pending/confirmed reservation on the same serialized garment when that future allocation window has already started by the actual return time. The disruption points back to the immutable return custody event and does not silently cancel, move, or promise fulfillment for the affected booking. Audit/outbox facts use `reservation.returned` and record whether the return was late plus how many disruption rows were affected.
+  - **Idempotency/failure behavior:** same-key retries/concurrent double-fire produce one reservation transition, one asset custody update, one return custody event, and one audit/outbox effect. Same-key/different-body remains `IDEMPOTENCY_KEY_REUSED`; stale/invalid lifecycle state, foreign reservation, missing custody permission, or mismatched custody/allocation fail without partial return effects. Reservation Details immediately projects `returned` and the pickup→return custody timeline.
+  - **Tests/evidence:** `api/tests/integration/reservation-review.test.ts` passes `28/28` against real PostgreSQL, including normal return/detail timeline, branch custody restoration with non-ready inspection state, Finance-changed return acceptance, preservation of `needs_repair`, late return with a return-linked future-booking disruption, sequential replay, concurrent double-fire, strict request/idempotency/auth, missing `reservations.custody`, and foreign-ID concealment. Full API integration passes `33` files / `214/214`; API unit/service passes `20` files / `82/82`; Contracts pass `11` files / `89/89`; API/Contracts typecheck, lint, and build are green.
 
 - [ ] **RSV-052 — Implement inspection/cleaning/settlement completion gate**
   - **Depends on:** RSV-051, Availability/Clothing readiness workflows.
@@ -455,12 +459,21 @@ Use this as the practical Owner/Staff acceptance checklist for the Reservations 
 - [ ] Pickup is blocked if required payment verification is no longer satisfied.
 - [ ] Failed pickup leaves the reservation `confirmed` and does not create a fake pickup/history event.
 
-### Return and rental completion — test when the remaining Phase 5 backend/UI is implemented
+### Return — backend ready; frontend wiring pending
 
-- [ ] O/S can record the return of a `picked_up` reservation and the status becomes `returned`.
-- [ ] The actual return can still be recorded when the customer returns late.
-- [ ] A late return that threatens another reservation produces a visible operational issue/attention state rather than preventing the physical return from being recorded.
-- [ ] Returning a garment does not immediately mark it ready for another customer before inspection/cleaning is resolved.
+- [ ] O/S can see a `Return` action for a `picked_up` reservation when they have reservation-custody permission.
+- [ ] O/S can record an optional return condition note and submit the physical return once.
+- [ ] Successful Return changes the reservation from `picked_up` to `returned` and adds one visible return event after the pickup event in Reservation Details.
+- [ ] After Return, the garment is shown back at the branch but **not ready** for another customer until inspection/readiness is resolved.
+- [ ] If the garment already had a specific issue such as `needs_repair`, Return preserves that issue instead of replacing it with Ready.
+- [ ] The actual return can still be recorded when the customer returns late or when payment/refund state changed after pickup.
+- [ ] If the late return has already intruded into another reservation's planned allocation window, the physical return still succeeds and the affected future booking is surfaced as an operational disruption/attention item.
+- [ ] Returning a garment does not automatically cancel, reschedule, or promise a substitute for the affected future reservation.
+- [ ] Rapid double-click/retry on Return produces one return event and one final `returned` state.
+- [ ] A user without custody permission cannot successfully Return a reservation even if they manually invoke the frontend request.
+
+### Inspection and rental completion — test after RSV-052/backend UI is implemented
+
 - [ ] O/S can record the post-return inspection/readiness outcome.
 - [ ] A garment that requires cleaning remains unavailable until the required cleaning/turnaround work is complete.
 - [ ] A damaged garment can remain unavailable for maintenance/repair rather than being automatically released.
@@ -469,7 +482,7 @@ Use this as the practical Owner/Staff acceptance checklist for the Reservations 
 
 ### Reliability and operational safety
 
-- [ ] Rapidly double-clicking `Reserve`, `Complete Reservation`, `Cancel`, `Pick Up`, and later `Return`/`Complete Rental` never creates duplicate business effects.
+- [ ] Rapidly double-clicking `Reserve`, `Complete Reservation`, `Cancel`, `Pick Up`, `Return`, and later `Complete Rental` never creates duplicate business effects.
 - [ ] Retrying the same action after a network timeout does not create a second reservation, second cancellation, second pickup, or duplicate lifecycle event.
 - [ ] If the same reservation is open in two tabs and one tab changes it first, the stale tab receives a clear stale/conflict message and refreshes instead of overwriting newer state.
 - [ ] After every successful action, the Reservations list and Details Sheet refresh to the authoritative backend state.

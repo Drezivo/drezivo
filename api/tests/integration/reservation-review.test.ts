@@ -79,6 +79,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     getReservationDetail,
     pickupReservation,
     rejectReservation,
+    returnReservation,
     submitReservation,
   } = await import('../../src/modules/reservations/reservations.service.js');
   const { expireDueHoldsForAllTenants } = await import('../../src/worker/handlers/hold-expirer.js');
@@ -1127,6 +1128,272 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     });
   });
 
+  it('returns a picked-up reservation once, restores branch custody, keeps the booking block, and requires inspection before readiness', async () => {
+    const seed = await seedWorkspace('org_rsv051_return', 'user_rsv051_return', 'cash');
+    const pickedUp = await createPickedUpReservation(seed, 'return-success');
+
+    const first = await returnReservation(
+      reviewContext(seed, 'req-return-first', 'idem-return-success'),
+      pickedUp.id,
+      { version: pickedUp.version, condition_note: 'Returned with a small stain near the hem.' },
+    );
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({
+      success: true,
+      data: { reservation: { id: pickedUp.id, status: 'returned', version: 5 } },
+    });
+
+    const state = await pickupState(seed, pickedUp.id);
+    expect(state.reservation_status).toBe('returned');
+    expect(state.asset).toMatchObject({
+      custody_kind: 'at_branch',
+      readiness: 'unready',
+    });
+    expect(state.allocation).toMatchObject({
+      kind: 'reservation_confirmed',
+      is_blocking: true,
+      released_at: null,
+    });
+    expect(state.custodyEvents).toEqual([
+      expect.objectContaining({ event_kind: 'pickup' }),
+      expect.objectContaining({
+        event_kind: 'return',
+        condition_note: 'Returned with a small stain near the hem.',
+        actor_membership_id: seed.membershipId,
+      }),
+    ]);
+
+    const detail = await getReservationDetail(reviewContext(seed, 'return-detail', 'return-detail'), pickedUp.id);
+    expect(detail.status).toBe('returned');
+    expect(detail.custody_timeline).toEqual([
+      expect.objectContaining({ event_kind: 'pickup', asset_id: seed.assetId }),
+      expect.objectContaining({
+        event_kind: 'return',
+        asset_id: seed.assetId,
+        condition_note: 'Returned with a small stain near the hem.',
+      }),
+    ]);
+
+    const replay = await returnReservation(
+      reviewContext(seed, 'req-return-replay', 'idem-return-success'),
+      pickedUp.id,
+      { version: pickedUp.version, condition_note: 'Returned with a small stain near the hem.' },
+    );
+    expect(replay).toEqual(first);
+    expect(await actionEffectCounts(seed, pickedUp.id, 'reservation.returned')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
+  });
+
+  it('records physical return even when finance changed after pickup and preserves a more specific non-ready garment state', async () => {
+    const seed = await seedWorkspace('org_rsv051_truth', 'user_rsv051_truth', 'cash');
+    const pickedUp = await createPickedUpReservation(seed, 'return-truth');
+    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      await client.query(
+        `UPDATE payment SET status = 'refunded'
+          WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, pickedUp.paymentId],
+      );
+      await client.query(
+        `UPDATE physical_asset
+            SET readiness = 'needs_repair', version = version + 1
+          WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, seed.assetId],
+      );
+    });
+
+    const returned = await returnReservation(
+      reviewContext(seed, 'req-return-finance-changed', 'idem-return-finance-changed'),
+      pickedUp.id,
+      { version: pickedUp.version, condition_note: 'Customer reported zipper damage.' },
+    );
+    expect(returned.status).toBe(200);
+    expect(returned.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'returned' } },
+    });
+    const state = await pickupState(seed, pickedUp.id);
+    expect(state.asset).toMatchObject({ custody_kind: 'at_branch', readiness: 'needs_repair' });
+    expect(state.custodyEvents).toHaveLength(2);
+  });
+
+  it('records a late return and links the return custody fact to an already-threatened future reservation', async () => {
+    const seed = await seedWorkspace('org_rsv051_late', 'user_rsv051_late', 'cash');
+    const pickedUp = await createPickedUpReservation(seed, 'return-late-current');
+    const future = await createHoldForInterval(
+      seed,
+      'return-late-future',
+      '2026-10-20T02:00:00.000Z',
+      '2026-10-22T04:00:00.000Z',
+    );
+
+    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      await client.query(
+        `UPDATE reservation
+            SET pickup_at = statement_timestamp() - interval '3 days',
+                due_at = statement_timestamp() - interval '2 hours'
+          WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, pickedUp.id],
+      );
+      await client.query(
+        `UPDATE asset_allocation aa
+            SET period = tstzrange(statement_timestamp() - interval '3 days',
+                                   statement_timestamp() - interval '1 hour', '[)')
+           FROM reservation_line rl
+          WHERE aa.tenant_id = $1
+            AND rl.tenant_id = aa.tenant_id
+            AND rl.id = aa.reservation_line_id
+            AND rl.reservation_id = $2`,
+        [seed.tenantId, pickedUp.id],
+      );
+      await client.query(
+        `UPDATE asset_allocation aa
+            SET period = tstzrange(statement_timestamp() - interval '30 minutes',
+                                   statement_timestamp() + interval '2 days', '[)')
+           FROM reservation_line rl
+          WHERE aa.tenant_id = $1
+            AND rl.tenant_id = aa.tenant_id
+            AND rl.id = aa.reservation_line_id
+            AND rl.reservation_id = $2`,
+        [seed.tenantId, future.id],
+      );
+    });
+
+    const returned = await returnReservation(
+      reviewContext(seed, 'req-return-late', 'idem-return-late'),
+      pickedUp.id,
+      { version: pickedUp.version, condition_note: 'Returned after the next prep window had started.' },
+    );
+    expect(returned.status).toBe(200);
+    expect(returned.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'returned' } },
+    });
+
+    const disruption = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{
+        status: string;
+        reservation_id: string;
+        cause_event_kind: string | null;
+      }>(
+        `SELECT d.status,
+                rl.reservation_id,
+                ce.event_kind AS cause_event_kind
+           FROM disruption d
+           JOIN reservation_line rl
+             ON rl.tenant_id = d.tenant_id
+            AND rl.id = d.reservation_line_id
+           LEFT JOIN custody_event ce
+             ON ce.tenant_id = d.tenant_id
+            AND ce.id = d.cause_custody_event_id
+          WHERE d.tenant_id = $1 AND d.asset_id = $2
+          ORDER BY d.created_at DESC
+          LIMIT 1`,
+        [seed.tenantId, seed.assetId],
+      );
+      return requireRow(result.rows, 'late return disruption');
+    });
+    expect(disruption).toEqual({
+      status: 'open',
+      reservation_id: future.id,
+      cause_event_kind: 'return',
+    });
+  });
+
+  it('serializes Return double-fire to one return custody event and one lifecycle effect', async () => {
+    const seed = await seedWorkspace('org_rsv051_race', 'user_rsv051_race', 'cash');
+    const pickedUp = await createPickedUpReservation(seed, 'return-race');
+
+    const concurrent = await Promise.all([
+      returnReservation(
+        reviewContext(seed, 'req-return-race-a', 'idem-return-race'),
+        pickedUp.id,
+        { version: pickedUp.version, condition_note: 'Returned at counter.' },
+      ),
+      returnReservation(
+        reviewContext(seed, 'req-return-race-b', 'idem-return-race'),
+        pickedUp.id,
+        { version: pickedUp.version, condition_note: 'Returned at counter.' },
+      ),
+    ]);
+    expect(concurrent[0]).toEqual(concurrent[1]);
+    expect(concurrent[0]?.status).toBe(200);
+    const state = await pickupState(seed, pickedUp.id);
+    expect(state.custodyEvents.filter((event) => event.event_kind === 'return')).toHaveLength(1);
+    expect(await actionEffectCounts(seed, pickedUp.id, 'reservation.returned')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
+  });
+
+  it('exposes Return only to authenticated staff with custody permission and a strict idempotent body', async () => {
+    const seed = await seedWorkspace('org_rsv051_route', 'user_rsv051_route', 'cash');
+    const pickedUp = await createPickedUpReservation(seed, 'return-route');
+
+    clerk.getAuth.mockReturnValue({ userId: null, orgId: null });
+    const unauthenticated = await request(createApp())
+      .post(`/api/v1/reservations/${pickedUp.id}/return`)
+      .set('Idempotency-Key', 'route-return-unauth')
+      .send({ version: pickedUp.version });
+    expect(unauthenticated.status).toBe(401);
+
+    useClerk(seed);
+    const missingKey = await request(createApp())
+      .post(`/api/v1/reservations/${pickedUp.id}/return`)
+      .send({ version: pickedUp.version });
+    expect(missingKey.status).toBe(422);
+
+    useClerk(seed);
+    const injected = await request(createApp())
+      .post(`/api/v1/reservations/${pickedUp.id}/return`)
+      .set('Idempotency-Key', 'route-return-injected')
+      .send({ version: pickedUp.version, readiness: 'ready' });
+    expect(injected.status).toBe(422);
+
+    const noCustody = await seedWorkspace('org_rsv051_no_custody', 'user_rsv051_no_custody', 'cash');
+    const noCustodyPickedUp = await createPickedUpReservation(noCustody, 'return-no-custody');
+    await withTenantTransaction(noCustody.tenantId, noCustody.principalId, (client) =>
+      client.query(
+        `UPDATE branch_membership
+            SET permission_codes = $4::jsonb
+          WHERE tenant_id = $1 AND branch_id = $2 AND membership_id = $3`,
+        [
+          noCustody.tenantId,
+          noCustody.branchId,
+          noCustody.membershipId,
+          JSON.stringify(noCustody.permissions.filter((permission) => permission !== 'reservations.custody')),
+        ],
+      ),
+    );
+    useClerk(noCustody);
+    const forbidden = await request(createApp())
+      .post(`/api/v1/reservations/${noCustodyPickedUp.id}/return`)
+      .set('Idempotency-Key', 'route-return-forbidden')
+      .send({ version: noCustodyPickedUp.version });
+    expect(forbidden.status).toBe(403);
+
+    const foreign = await seedWorkspace('org_rsv051_foreign', 'user_rsv051_foreign', 'cash');
+    const foreignPickedUp = await createPickedUpReservation(foreign, 'return-foreign');
+    useClerk(seed);
+    const concealed = await request(createApp())
+      .post(`/api/v1/reservations/${foreignPickedUp.id}/return`)
+      .set('Idempotency-Key', 'route-return-foreign')
+      .send({ version: foreignPickedUp.version });
+    expect(concealed.status).toBe(404);
+
+    useClerk(seed);
+    const returned = await request(createApp())
+      .post(`/api/v1/reservations/${pickedUp.id}/return`)
+      .set('Idempotency-Key', 'route-return-success')
+      .send({ version: pickedUp.version, condition_note: 'Return received by staff.' });
+    expect(returned.status).toBe(200);
+    expect(returned.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'returned', version: 5 } },
+    });
+  });
+
   it('exposes protected submit/confirm/reject routes with strict bodies, idempotency, concealed foreign IDs, and merchant-review permissions', async () => {
     const seed = await seedWorkspace('org_rsv03_routes', 'user_rsv03_routes', 'cash');
     const held = await createHold(seed, 'routes');
@@ -1373,6 +1640,22 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     return { id: reservation.id, version: reservation.version, paymentId };
   }
 
+  async function createPickedUpReservation(
+    seed: ReviewSeed,
+    suffix: string,
+  ): Promise<HeldReservation> {
+    const confirmed = await createConfirmedReservation(seed, suffix);
+    const pickedUp = await pickupReservation(
+      reviewContext(seed, `req-${suffix}-pickup`, `idem-${suffix}-pickup`),
+      confirmed.id,
+      { version: confirmed.version, condition_note: 'Condition recorded at pickup.' },
+    );
+    if (pickedUp.status !== 200 || pickedUp.body.success !== true) {
+      throw new Error('Expected reservation pickup to succeed.');
+    }
+    return { ...confirmed, version: pickedUp.body.data.reservation.version };
+  }
+
   async function createConfirmedReservation(
     seed: ReviewSeed,
     suffix: string,
@@ -1397,6 +1680,35 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       throw new Error('Expected reservation confirmation to succeed.');
     }
     return { ...held, version: confirmed.body.data.reservation.version };
+  }
+
+  async function createHoldForInterval(
+    seed: ReviewSeed,
+    suffix: string,
+    start: string,
+    end: string,
+  ): Promise<HeldReservation> {
+    const result = await createStaffReservation(
+      reviewContext(seed, `req-create-${suffix}`, `idem-create-${suffix}`),
+      {
+        ...createRequest(seed),
+        requested_interval: { start, end },
+        event_date: undefined,
+      },
+    );
+    if (result.status !== 201 || result.body.success !== true) {
+      throw new Error(`Expected held reservation creation, got ${result.status}.`);
+    }
+    const reservation = result.body.data.reservation;
+    const paymentId = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const payment = await client.query<{ id: string }>(
+        `SELECT id FROM payment WHERE tenant_id = $1 AND reservation_id = $2
+          AND business_key = ('reservation:' || $2::text || ':initial-payment')`,
+        [seed.tenantId, reservation.id],
+      );
+      return requireRow(payment.rows, 'interval payment').id;
+    });
+    return { id: reservation.id, version: reservation.version, paymentId };
   }
 
   function walkInCustomer(fullName: string) {

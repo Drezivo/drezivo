@@ -12,6 +12,7 @@ import {
   reservationListResponse,
   reservationPickupRequest,
   reservationRejectRequest,
+  reservationReturnRequest,
   reservationState,
   reservationSubmitRequest,
   reservationSummary,
@@ -355,6 +356,8 @@ describe('reservation contracts', () => {
     expect(reservationCancelRequest.safeParse({ version: 1, refund_amount_minor: '50000' }).success).toBe(false);
     expect(reservationPickupRequest.safeParse({ version: 1, condition_note: 'Ready at handover.' }).success).toBe(true);
     expect(reservationPickupRequest.safeParse({ version: 1, asset_id: ids.asset }).success).toBe(false);
+    expect(reservationReturnRequest.safeParse({ version: 1, condition_note: 'Returned at counter.' }).success).toBe(true);
+    expect(reservationReturnRequest.safeParse({ version: 1, readiness: 'ready' }).success).toBe(false);
     expect(reservationCompleteRequest.safeParse({ version: 0 }).success).toBe(false);
   });
 

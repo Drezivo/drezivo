@@ -8,6 +8,7 @@ import {
   reservationListQuery,
   reservationPickupRequest,
   reservationRejectRequest,
+  reservationReturnRequest,
   reservationSubmitRequest,
   staffReservationCompleteRequest,
   staffReservationCreateRequest,
@@ -16,6 +17,7 @@ import {
   type ReservationListQuery,
   type ReservationPickupRequest,
   type ReservationRejectRequest,
+  type ReservationReturnRequest,
   type ReservationSubmitRequest,
   type StaffReservationCompleteRequest,
   type StaffReservationCreateRequest,
@@ -31,6 +33,7 @@ declare module 'express-serve-static-core' {
     reservationCompleteRequest?: StaffReservationCompleteRequest;
     reservationCancelRequest?: ReservationCancelRequest;
     reservationPickupRequest?: ReservationPickupRequest;
+    reservationReturnRequest?: ReservationReturnRequest;
     reservationSubmitRequest?: ReservationSubmitRequest;
     reservationConfirmRequest?: ReservationConfirmRequest;
     reservationRejectRequest?: ReservationRejectRequest;
@@ -129,6 +132,17 @@ export const validateReservationPickup: RequestHandler = (req, _res, next): void
   }
   req.body = parsed.data;
   req.reservationPickupRequest = parsed.data;
+  next();
+};
+
+export const validateReservationReturn: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationReturnRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Reservation return request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  req.reservationReturnRequest = parsed.data;
   next();
 };
 

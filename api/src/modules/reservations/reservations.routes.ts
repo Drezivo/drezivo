@@ -14,6 +14,7 @@ import {
   listReservationsController,
   pickupReservationController,
   rejectReservationController,
+  returnReservationController,
   submitReservationController,
 } from './reservations.controller.js';
 import {
@@ -27,6 +28,7 @@ import {
   validateReservationListQuery,
   validateReservationPickup,
   validateReservationReject,
+  validateReservationReturn,
   validateReservationSubmit,
   validateStaffReservationComplete,
   validateStaffReservationCreate,
@@ -95,6 +97,19 @@ reservationsRouter.post(
   validateReservationPickup,
   requireReservationIdempotencyKey,
   pickupReservationController,
+);
+
+reservationsRouter.post(
+  '/reservations/:reservationId/return',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('return'),
+  requireReservationCustodyPermission,
+  validateReservationId,
+  validateReservationReturn,
+  requireReservationIdempotencyKey,
+  returnReservationController,
 );
 
 reservationsRouter.post(

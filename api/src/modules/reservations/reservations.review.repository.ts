@@ -402,6 +402,194 @@ export async function markPhysicalAssetPickedUp(
   return result.rows[0]?.version ?? null;
 }
 
+export async function returnReservationCustody(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; reservationId: string; version: number },
+): Promise<number | null> {
+  const result = await client.query<{ version: number }>(
+    `UPDATE reservation
+        SET status = 'returned',
+            version = version + 1
+      WHERE tenant_id = $1
+        AND branch_id = $2
+        AND id = $3::uuid
+        AND status = 'picked_up'
+        AND version = $4
+      RETURNING version`,
+    [input.tenantId, input.branchId, input.reservationId, input.version],
+  );
+  return result.rows[0]?.version ?? null;
+}
+
+export async function markPhysicalAssetReturned(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    assetId: string;
+    assetVersion: number;
+    conditionNote?: string;
+  },
+): Promise<{ version: number; readiness: LockedReservationAllocationRow['asset_readiness'] } | null> {
+  const result = await client.query<{
+    version: number;
+    readiness: LockedReservationAllocationRow['asset_readiness'];
+  }>(
+    `UPDATE physical_asset
+        SET custody_kind = 'at_branch',
+            readiness = CASE WHEN readiness = 'ready' THEN 'unready' ELSE readiness END,
+            condition_note = COALESCE($5, condition_note),
+            version = version + 1,
+            updated_at = statement_timestamp()
+      WHERE tenant_id = $1
+        AND branch_id = $2::uuid
+        AND id = $3::uuid
+        AND custody_kind = 'with_customer'
+        AND version = $4
+      RETURNING version, readiness`,
+    [
+      input.tenantId,
+      input.branchId,
+      input.assetId,
+      input.assetVersion,
+      input.conditionNote ?? null,
+    ],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function appendReturnCustodyEvent(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    assetId: string;
+    reservationLineId: string;
+    actorMembershipId: string;
+    businessKey: string;
+    conditionSnapshot: Record<string, unknown>;
+  },
+): Promise<{ id: string; occurred_at: Date } | null> {
+  const result = await client.query<{ id: string; occurred_at: Date }>(
+    `INSERT INTO custody_event
+       (tenant_id, branch_id, asset_id, reservation_line_id, actor_membership_id,
+        event_kind, occurred_at, condition_snapshot, business_key)
+     VALUES ($1, $2::uuid, $3::uuid, $4::uuid, $5::uuid,
+             'return', statement_timestamp(), $6::jsonb, $7)
+     ON CONFLICT (tenant_id, business_key) DO NOTHING
+     RETURNING id, occurred_at`,
+    [
+      input.tenantId,
+      input.branchId,
+      input.assetId,
+      input.reservationLineId,
+      input.actorMembershipId,
+      JSON.stringify(input.conditionSnapshot),
+      input.businessKey,
+    ],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function createOrUpdateReturnDisruptions(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    assetId: string;
+    currentReservationLineId: string;
+    custodyEventId: string;
+    occurredAt: Date;
+  },
+): Promise<number> {
+  const reason = 'Returned garment remained unavailable after the next reservation allocation window had started.';
+  const updated = await client.query<{ id: string }>(
+    `UPDATE disruption d
+        SET cause_custody_event_id = COALESCE(d.cause_custody_event_id, $5::uuid),
+            reason = $6
+       FROM asset_allocation aa
+       JOIN reservation_line rl
+         ON rl.tenant_id = aa.tenant_id
+        AND rl.id = aa.reservation_line_id
+       JOIN reservation r
+         ON r.tenant_id = rl.tenant_id
+        AND r.id = rl.reservation_id
+      WHERE d.tenant_id = $1
+        AND d.asset_id = $3::uuid
+        AND d.status = 'open'
+        AND d.reservation_line_id = aa.reservation_line_id
+        AND aa.tenant_id = $1
+        AND aa.branch_id = $2::uuid
+        AND aa.asset_id = $3::uuid
+        AND aa.reservation_line_id IS NOT NULL
+        AND aa.reservation_line_id <> $4::uuid
+        AND aa.is_blocking = true
+        AND aa.kind IN ('reservation_hold', 'reservation_confirmed')
+        AND r.status IN ('held', 'pending_confirmation', 'confirmed')
+        AND lower(aa.period) <= $7::timestamptz
+      RETURNING d.id`,
+    [
+      input.tenantId,
+      input.branchId,
+      input.assetId,
+      input.currentReservationLineId,
+      input.custodyEventId,
+      reason,
+      input.occurredAt,
+    ],
+  );
+
+  const inserted = await client.query<{ id: string }>(
+    `INSERT INTO disruption
+       (tenant_id, asset_id, reservation_line_id, cause_custody_event_id,
+        reason, status, resolved_at, created_at)
+     SELECT
+       aa.tenant_id,
+       aa.asset_id,
+       aa.reservation_line_id,
+       $5::uuid,
+       $6,
+       'open',
+       NULL,
+       statement_timestamp()
+       FROM asset_allocation aa
+       JOIN reservation_line rl
+         ON rl.tenant_id = aa.tenant_id
+        AND rl.id = aa.reservation_line_id
+       JOIN reservation r
+         ON r.tenant_id = rl.tenant_id
+        AND r.id = rl.reservation_id
+      WHERE aa.tenant_id = $1
+        AND aa.branch_id = $2::uuid
+        AND aa.asset_id = $3::uuid
+        AND aa.reservation_line_id IS NOT NULL
+        AND aa.reservation_line_id <> $4::uuid
+        AND aa.is_blocking = true
+        AND aa.kind IN ('reservation_hold', 'reservation_confirmed')
+        AND r.status IN ('held', 'pending_confirmation', 'confirmed')
+        AND lower(aa.period) <= $7::timestamptz
+        AND NOT EXISTS (
+          SELECT 1
+            FROM disruption d
+           WHERE d.tenant_id = aa.tenant_id
+             AND d.asset_id = aa.asset_id
+             AND d.reservation_line_id = aa.reservation_line_id
+             AND d.status = 'open'
+        )
+     RETURNING id`,
+    [
+      input.tenantId,
+      input.branchId,
+      input.assetId,
+      input.currentReservationLineId,
+      input.custodyEventId,
+      reason,
+      input.occurredAt,
+    ],
+  );
+  return (updated.rowCount ?? 0) + (inserted.rowCount ?? 0);
+}
+
 export async function appendPickupCustodyEvent(
   client: PoolClient,
   input: {

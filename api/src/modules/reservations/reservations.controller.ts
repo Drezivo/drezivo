@@ -14,6 +14,7 @@ import {
   getReservationList,
   pickupReservation,
   rejectReservation,
+  returnReservation,
   submitReservation,
 } from './reservations.service.js';
 
@@ -82,6 +83,22 @@ export async function pickupReservationController(req: Request, res: Response): 
   if (!idempotencyKey) throw new ValidationError('A valid Idempotency-Key header is required.');
 
   const result = await pickupReservation(
+    { ...requireContext(req), requestId: req.requestId, idempotencyKey },
+    reservationId,
+    request,
+  );
+  res.status(result.status).json(result.body);
+}
+
+export async function returnReservationController(req: Request, res: Response): Promise<void> {
+  const reservationId = req.reservationId;
+  const request = req.reservationReturnRequest;
+  const idempotencyKey = req.reservationIdempotencyKey;
+  if (!reservationId) throw new ValidationError('A valid reservation id is required.');
+  if (!request) throw new ValidationError('Reservation return request is invalid.');
+  if (!idempotencyKey) throw new ValidationError('A valid Idempotency-Key header is required.');
+
+  const result = await returnReservation(
     { ...requireContext(req), requestId: req.requestId, idempotencyKey },
     reservationId,
     request,
