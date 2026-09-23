@@ -1,4 +1,16 @@
-import { boolean, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  foreignKey,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 import { file } from './files.js';
 import { branch } from './tenancy.js';
@@ -34,7 +46,15 @@ export const storefront = pgTable(
   },
   // Global uniqueness (not tenant-scoped): storefront paths are looked up by slug alone on
   // the public route, so the slug namespace must be unique across all tenants.
-  (table) => [uniqueIndex('storefront_slug_key').on(table.slug)],
+  (table) => [
+    unique('storefront_tenant_id_id_key').on(table.tenantId, table.id),
+    uniqueIndex('storefront_slug_key').on(table.slug),
+    foreignKey({
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branch.tenantId, branch.id],
+      name: 'storefront_branch_same_tenant_fk',
+    }).onDelete('restrict'),
+  ],
 );
 
 /** Immutable once referenced by a reservation's `policy_snapshot_id` — never mutate a version in place; publish a new one. */
@@ -55,18 +75,35 @@ export const policySnapshot = pgTable(
     effectiveAt: timestamp('effective_at', { withTimezone: true }).notNull(),
     ...timestamps,
   },
-  (table) => [uniqueIndex('policy_snapshot_storefront_version_key').on(table.storefrontId, table.version)],
+  (table) => [
+    unique('policy_snapshot_tenant_id_id_key').on(table.tenantId, table.id),
+    unique('policy_snapshot_tenant_storefront_id_id_key').on(
+      table.tenantId,
+      table.storefrontId,
+      table.id,
+    ),
+    uniqueIndex('policy_snapshot_storefront_version_key').on(table.storefrontId, table.version),
+    foreignKey({
+      columns: [table.tenantId, table.storefrontId],
+      foreignColumns: [storefront.tenantId, storefront.id],
+      name: 'policy_snapshot_storefront_same_tenant_fk',
+    }).onDelete('restrict'),
+  ],
 );
 
 /** Sensitive destination metadata — owner edits only; a new version replaces already-shown instructions, never an in-place edit. */
-export const paymentMethod = pgTable('payment_method', {
-  ...idColumn,
-  tenantId: uuid('tenant_id').notNull(),
-  name: text('name').notNull(),
-  rail: paymentRailEnum('rail').notNull(),
-  destinationSnapshot: jsonb('destination_snapshot').$type<Record<string, unknown>>().notNull(),
-  qrFileId: uuid('qr_file_id').references(() => file.id),
-  active: boolean('active').notNull().default(true),
-  version: integer('version').notNull().default(1),
-  ...timestamps,
-});
+export const paymentMethod = pgTable(
+  'payment_method',
+  {
+    ...idColumn,
+    tenantId: uuid('tenant_id').notNull(),
+    name: text('name').notNull(),
+    rail: paymentRailEnum('rail').notNull(),
+    destinationSnapshot: jsonb('destination_snapshot').$type<Record<string, unknown>>().notNull(),
+    qrFileId: uuid('qr_file_id').references(() => file.id),
+    active: boolean('active').notNull().default(true),
+    version: integer('version').notNull().default(1),
+    ...timestamps,
+  },
+  (table) => [unique('payment_method_tenant_id_id_key').on(table.tenantId, table.id)],
+);

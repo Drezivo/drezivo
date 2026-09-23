@@ -3,7 +3,7 @@ title: Reservations V1 End-to-End Checklist
 type: implementation-checklist
 status: planned
 owner: Drezivo team
-updated: 2026-09-20
+updated: 2026-09-23
 tags: [drezivo, v1, reservations, booking, checklist]
 ---
 
@@ -43,39 +43,44 @@ Before marking a task complete:
 
 ## Phase 0: Contract and lifecycle preparation
 
-- [ ] **RSV-000 — Audit reservation schema and migration readiness**
+- [x] **RSV-000 — Audit reservation schema and migration readiness**
   - **Depends on:** Clothing catalogue model available.
   - **Outcome:** Existing reservation, line, allocation, customer, payment/evidence, custody, and disruption schema is mapped before adding code.
   - **Acceptance:**
-    - [ ] Identify existing tables/constraints and missing V1 pieces.
-    - [ ] Confirm one reservation line maps to one serialized garment in V1.
-    - [ ] Confirm allocation period uses finite nonempty half-open ranges.
-    - [ ] Confirm exclusion constraint/index strategy exists or has a forward migration plan.
-    - [ ] Confirm canonical status values match PRD/Data Model exactly.
-  - **Tests/evidence:** Schema review against TRD §5 and Data Model §6.
+    - [x] Identify existing tables/constraints and missing V1 pieces.
+    - [x] Confirm one reservation line maps to one serialized garment in V1.
+    - [x] Confirm allocation period uses finite nonempty half-open ranges.
+    - [x] Confirm exclusion constraint/index strategy exists or has a forward migration plan.
+    - [x] Confirm canonical status values match PRD/Data Model exactly.
+  - **Audit findings:** `0003_availability_exclusion.sql`, `0004_reservations.sql`, `0005_finance.sql`, `0008_rls_policies.sql`, and `api/src/db/schema/reservations.ts` already provide the core V1 reservation graph: customer, reservation, reservation_line, asset_allocation, custody_event, disruption, guest capability, payment/evidence, and immutable financial-history primitives. `reservation_line` has no quantity field; one line may have at most one current blocking `asset_allocation`, and the allocation identifies the exact serialized `physical_asset`. Blocking periods are finite, nonempty, half-open `[)` `tstzrange` values. PostgreSQL GiST exclusion prevents overlapping blocking allocations for the same tenant/asset, and reservation states exactly match the canonical nine-state PRD/Data-Model vocabulary. RLS is forced for reservation-owned tables and custody facts are append-only for the runtime roles.
+  - **Forward migration/reconciliation items for RSV-002 and later dependent work:** the persisted `reservation.event_date` is currently `timestamptz` even though the canonical model/wire contract treats event date as date-only; same-tenant relationship enforcement still relies on ordinary FKs + RLS/service checks rather than the stronger tenant-paired FK strategy; reservation list/schedule query indexes are incomplete beyond current status/customer/hold-expiry indexes; and the existing Finance contract status vocabulary must be reconciled with the persisted V1 finance migration before RSV-010/RSV-031 consume payment projections as production truth. No historical migration was edited in Phase 0.
+  - **Tests/evidence:** Source/schema review against TRD §5 and Data Model §§5–7. Existing migration constraints prove `asset_allocation_no_overlap`, `asset_allocation_one_blocking_per_line`, bounded `[)` periods, tenant-unique reservation references, forced tenant RLS, and append-only `custody_event` privileges. Database corrections are intentionally deferred to forward-only RSV-002 work.
 
-- [ ] **RSV-001 — Define reservation contracts and stable errors**
+- [x] **RSV-001 — Define reservation contracts and stable errors**
   - **Depends on:** RSV-000.
   - **Outcome:** Shared schemas own reservation requests/responses before API routes.
   - **Acceptance:**
-    - [ ] Define list/detail projections used by Reservations page and detail Sheet.
-    - [ ] Define create staff/walk-in request, confirm, reschedule, cancel, pickup, return, complete, and evidence commands required by V1.
-    - [ ] Define customer/contact snapshot input and event/pickup/due dates using explicit timezone-safe fields.
-    - [ ] Reject client-supplied tenant/branch authority, computed price totals, allocation IDs, server status transitions, and payment verification authority.
-    - [ ] Add stable errors for conflict, hold expiry, stale version, invalid transition, asset unavailable, payment prerequisite failure, unready asset, and foreign resource concealment.
-  - **Tests/evidence:** Closed-schema tests and unknown-state rejection.
+    - [x] Define list/detail projections used by Reservations page and detail Sheet.
+    - [x] Define create staff/walk-in request, confirm, reschedule, cancel, pickup, return, complete, and evidence commands required by V1.
+    - [x] Define customer/contact snapshot input and event/pickup/due dates using explicit timezone-safe fields.
+    - [x] Reject client-supplied tenant/branch authority, computed price totals, allocation IDs, server status transitions, and payment verification authority.
+    - [x] Add stable errors for conflict, hold expiry, stale version, invalid transition, asset unavailable, payment prerequisite failure, unready asset, and foreign resource concealment.
+  - **Implemented contract boundary:** `contracts/src/reservations/` now owns strict staff/guest intake, bounded list query/response, shared staff detail projection, immutable line/customer/money snapshot projections, and version-guarded submit/confirm/reject/reschedule/cancel/pickup/return/complete requests. Staff creation explicitly supports either an existing `customer_id` or new customer details with at least one phone/email contact, while guest checkout keeps the canonical email requirement. Browser-supplied tenant/branch/asset/allocation/total/status authority is rejected. Evidence upload continues to reuse the Finance `paymentReceiptSubmitRequest` rather than duplicating payment verification authority inside Reservations.
+  - **Stable errors:** existing `CAPACITY_CONFLICT`, `STALE_VERSION`, `IDEMPOTENCY_KEY_REUSED`, and concealed `NOT_FOUND` remain canonical; Phase 0 adds `HOLD_EXPIRED`, `INVALID_RESERVATION_TRANSITION`, `ASSET_UNAVAILABLE`, `ASSET_UNREADY`, and `PAYMENT_PREREQUISITE_FAILED`, with matching typed API errors using safe 409 responses.
+  - **Tests/evidence:** `contracts/tests/reservations.test.ts` passes `11/11`, covering the exact nine reservation states, strict staff/guest create schemas, existing-vs-new customer input, authority-field rejection, date-only event date vs instant booking interval semantics, bounded list windows, authoritative detail/custody/payment separation, positive concurrency versions, evidence-authority rejection, and stable error codes. Full contracts regression passes `85/85`; contracts lint/build pass; API units pass `82/82`; API typecheck/lint pass. The broader contracts `typecheck` command remains blocked by the repository's pre-existing `openapi/generate.ts` Zod/OpenAPI type-version incompatibility; the source-only build tsconfig compiles the reservation contracts successfully. No reservation service/route or database behavior was enabled in RSV-001.
 
-- [ ] **RSV-002 — Define reservation database constraints and indexes**
+- [x] **RSV-002 — Define reservation database constraints and indexes**
   - **Depends on:** RSV-000, RSV-001.
   - **Outcome:** Database protects core booking invariants under concurrency.
   - **Acceptance:**
-    - [ ] GiST exclusion prevents overlapping blocking allocations for the same tenant/asset.
-    - [ ] Partial unique constraint prevents more than one current blocking allocation per reservation line.
-    - [ ] Reservation reference code is tenant safe and unique as required.
-    - [ ] Same-tenant FKs protect reservation/line/customer/storefront/policy/payment method relationships.
-    - [ ] Indexes support tenant status/date/customer/reference listing and schedule projections.
-    - [ ] Runtime role cannot bypass RLS or mutate immutable history tables unsafely.
-  - **Tests/evidence:** Real PostgreSQL concurrent overlap and RLS tests.
+    - [x] GiST exclusion prevents overlapping blocking allocations for the same tenant/asset.
+    - [x] Partial unique constraint prevents more than one current blocking allocation per reservation line.
+    - [x] Reservation reference code is tenant safe and unique as required.
+    - [x] Same-tenant FKs protect reservation/line/customer/storefront/policy/payment method relationships.
+    - [x] Indexes support tenant status/date/customer/reference listing and schedule projections.
+    - [x] Runtime role cannot bypass RLS or mutate immutable history tables unsafely.
+  - **Implemented:** forward migrations `0031_reservation_phase0_integrity.sql` and `0032_reservation_parent_tenant_integrity.sql` keep historical migrations immutable while normalizing `reservation.event_date` to PostgreSQL `date`, adding tenant-paired parent keys/FKs for storefront → branch, policy snapshot → storefront, reservation → branch/customer/storefront/policy/payment method, and reservation line → reservation/variant. Reservation policy selection is additionally bound to the exact selected storefront. Staff-list/schedule indexes cover tenant+status+pickup, pickup, due, event date, and customer+created ordering; the existing tenant/reference unique key remains authoritative for reference lookup/uniqueness. Drizzle schema metadata mirrors the new date/FK/index shape.
+  - **Tests/evidence:** `api/tests/integration/reservation-phase0-integrity.test.ts` passes `8/8` against real PostgreSQL, proving date/index shape, cross-tenant parent/child rejection, policy/storefront consistency, tenant-local reference uniqueness, concurrent GiST overlap exclusion, one-current-block-per-line replacement semantics, forced RLS concealment, `NOBYPASSRLS`, and revoked custody UPDATE/DELETE privileges. Existing catalogue suites that seed reservation/allocation history pass sequentially `26/26` after the migration, proving the stronger constraints preserve Clothing lifecycle/history behavior.
 
 ## Phase 1: Reservation read model
 
@@ -248,6 +253,25 @@ Before marking a task complete:
     - [ ] Conflict/stale-state responses explain what changed and prompt refresh/retry safely.
   - **Tests/evidence:** UI mutation retry/double-fire/conflict tests.
 
+- [ ] **RSV-063 — Implement staff New Reservation workflow**
+  - **Depends on:** RSV-010, RSV-011, RSV-020 through RSV-022, and authoritative Clothing/Availability reads.
+  - **Outcome:** Owner and Front Desk can create a real reservation for a walk-in, phone, Messenger, Instagram, or other staff-received booking without sending the customer through the public storefront.
+  - **Primary entry point:** `/reservations` owns the workflow and exposes `+ New Reservation`. Dashboard and Calendar may reuse the same creation component later, but they must not implement separate booking business logic.
+  - **Acceptance:**
+    - [ ] `/reservations` exposes a prominent `+ New Reservation` action for authorized Owner/Front Desk users.
+    - [ ] The flow uses a large Sheet/drawer or equivalent multi-step staff workflow rather than redirecting staff into the public storefront.
+    - [ ] Staff can search/select an existing customer or enter the minimum customer/contact details required to create a new customer safely.
+    - [ ] Staff can search/select an active clothing product and variant using authoritative catalogue data.
+    - [ ] Date selection shows canonical availability for the selected variant and branch before submission; the browser never treats this preview as the final booking guarantee.
+    - [ ] Staff can enter rental/pickup/return dates, optional event date, fulfillment method, payment method/instructions, notes, and other V1-supported reservation inputs.
+    - [ ] The server computes authoritative blocked interval, price/deposit/delivery totals, policy snapshot, and eligible serialized asset; the browser cannot choose final totals, allocation IDs, tenant/branch authority, or reservation status.
+    - [ ] Successful creation calls the same RSV-021/022 quote/hold/allocation path used by staff booking semantics and atomically creates the reservation, line, immutable snapshots, and one blocking `asset_allocation`.
+    - [ ] Shared submit guards and one idempotency key per user intent prevent double-click/retry from creating duplicate reservations or allocations.
+    - [ ] Success keeps staff in the operations workspace, opens/shows the authoritative created reservation, and refetches affected Reservations, Availability, Schedule, Clothing, and Dashboard projections as those surfaces become available.
+    - [ ] The creation component is reusable from Calendar with a prefilled date and from Dashboard as a Quick Action without duplicating reservation domain logic.
+    - [ ] Fitting appointment creation is not included in this V1 workflow; fittings remain V1.1 until resource/capacity controls are implemented canonically.
+  - **Tests/evidence:** Staff-creation component/browser tests plus real PostgreSQL/API integration proving customer create/select, canonical availability lookup, one serialized-asset allocation, duplicate-submit safety, permission enforcement, capacity conflict handling, and cross-surface source-ID consistency.
+
 ## Phase 7: Security and completion evidence
 
 - [ ] **RSV-070 — Complete reservation authorization/RLS suite**
@@ -272,9 +296,10 @@ Before marking a task complete:
   - **Tests/evidence:** Property/concurrency integration suite.
 
 - [ ] **RSV-072 — Mark Reservations vertical slice complete**
-  - **Depends on:** RSV-070, RSV-071.
+  - **Depends on:** RSV-063, RSV-070, RSV-071.
   - **Outcome:** Reservations are authoritative and ready to drive Calendar/Dashboard.
   - **Acceptance:**
+    - [ ] Staff-created walk-in/manual booking and storefront-originated booking both converge on the same authoritative reservation/allocation lifecycle.
     - [ ] Create → review/confirm → pickup → return → complete works end-to-end.
     - [ ] Reschedule/cancel conflict paths are proven.
     - [ ] Reservations page and detail Sheet contain no production mock data.

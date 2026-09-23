@@ -72,6 +72,36 @@ export class StateConflictError extends AppError {
   readonly code: ErrorCode = 'STATE_CONFLICT';
 }
 
+/** 409 — the reservation hold deadline has passed and cannot be revived. */
+export class HoldExpiredError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'HOLD_EXPIRED';
+}
+
+/** 409 — the requested reservation state change is not legal from the current state. */
+export class InvalidReservationTransitionError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'INVALID_RESERVATION_TRANSITION';
+}
+
+/** 409 — the selected garment is not currently eligible for the requested booking operation. */
+export class AssetUnavailableError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'ASSET_UNAVAILABLE';
+}
+
+/** 409 — physical readiness prevents the requested handover/booking operation. */
+export class AssetUnreadyError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'ASSET_UNREADY';
+}
+
+/** 409 — required verified collection/evidence state has not been satisfied. */
+export class PaymentPrerequisiteFailedError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'PAYMENT_PREREQUISITE_FAILED';
+}
+
 /** 409 — same idempotency key replayed with a different canonical request hash. */
 export class IdempotencyKeyReusedError extends AppError {
   readonly status = 409;

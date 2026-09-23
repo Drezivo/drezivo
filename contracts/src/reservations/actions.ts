@@ -1,85 +1,103 @@
 /**
- * TRD §4 endpoint family table — confirm/reschedule/pickup/return/cancel.
- * TRD §5 "Reschedule, cancellation and return" — each transition is a
- * single locked transaction; the request never carries a price or a new
- * total, only the inputs the server needs to recompute one.
- *
- * Every request below carries `version` (Data-Model §2 `reservation.
- * version`) so the server can answer a stale action with `STATE_CONFLICT`
- * (409) rather than silently applying it against context the client no
- * longer has current — the concurrency guard is at the type level, not an
- * implementation detail left to `api` to remember.
+ * Reservation lifecycle mutation contracts. Requests carry only user intent
+ * plus the optimistic reservation version; actor, tenant, branch, prices,
+ * allocation IDs, and authoritative target state are server-owned.
  */
 import { z } from 'zod';
 
 import { instantInterval } from '../common/time';
 import { reservationSummary } from './reservation';
 
-const versionedAction = z.object({
-  version: z.number().int().nonnegative(),
-});
+const versionedAction = z
+  .object({
+    version: z.number().int().positive(),
+  })
+  .strict();
 
-/** POST /reservations/{id}/confirm — TRD §5 "Approval versus expiry." No body fields
- *  beyond the version guard: the verified amount/reference is recorded from the
- *  actor's authenticated review action server-side, never sent by the client. */
+/** held -> pending_confirmation after contact/terms/evidence prerequisites are satisfied. */
+export const reservationSubmitRequest = versionedAction.extend({
+  terms_accepted: z.literal(true),
+});
+export type ReservationSubmitRequest = z.infer<typeof reservationSubmitRequest>;
+
+export const reservationSubmitResponse = z
+  .object({ reservation: reservationSummary })
+  .strict();
+export type ReservationSubmitResponse = z.infer<typeof reservationSubmitResponse>;
+
+/** pending_confirmation -> confirmed; finance verification remains a separate authority. */
 export const reservationConfirmRequest = versionedAction;
 export type ReservationConfirmRequest = z.infer<typeof reservationConfirmRequest>;
 
-export const reservationConfirmResponse = z.object({ reservation: reservationSummary });
+export const reservationConfirmResponse = z
+  .object({ reservation: reservationSummary })
+  .strict();
 export type ReservationConfirmResponse = z.infer<typeof reservationConfirmResponse>;
 
-/**
- * POST /reservations/{id}/reschedule — TRD §5 "Obtain customer acceptance
- * for repricing/policy changes." `accept_price_change` defaults to `false`
- * so a reprice is rejected (422) until the client has shown the customer
- * the new price and resubmitted with explicit acceptance — never silently
- * charged a different amount than what was displayed.
- */
+/** pending_confirmation -> rejected with an auditable merchant reason. */
+export const reservationRejectRequest = versionedAction.extend({
+  reason: z.string().trim().min(1).max(500),
+});
+export type ReservationRejectRequest = z.infer<typeof reservationRejectRequest>;
+
+export const reservationRejectResponse = z
+  .object({ reservation: reservationSummary })
+  .strict();
+export type ReservationRejectResponse = z.infer<typeof reservationRejectResponse>;
+
+/** Atomic replacement of booking capacity; failure must preserve the old allocation. */
 export const reservationRescheduleRequest = versionedAction.extend({
   requested_interval: instantInterval,
   accept_price_change: z.boolean().default(false),
 });
 export type ReservationRescheduleRequest = z.infer<typeof reservationRescheduleRequest>;
 
-export const reservationRescheduleResponse = z.object({
-  reservation: reservationSummary,
-  /** True when the new interval's price differs from the prior snapshot. */
-  price_changed: z.boolean(),
-});
+export const reservationRescheduleResponse = z
+  .object({
+    reservation: reservationSummary,
+    price_changed: z.boolean(),
+  })
+  .strict();
 export type ReservationRescheduleResponse = z.infer<typeof reservationRescheduleResponse>;
 
-/** POST /reservations/{id}/cancel — TRD §5 "Cancellation atomically releases
- *  eligible future allocation and creates any financial obligation." */
+/** Pre-handover cancellation only; picked-up rentals must use return/settlement. */
 export const reservationCancelRequest = versionedAction.extend({
-  reason: z.string().min(1).max(500).optional(),
+  reason: z.string().trim().min(1).max(500).optional(),
 });
 export type ReservationCancelRequest = z.infer<typeof reservationCancelRequest>;
 
-export const reservationCancelResponse = z.object({ reservation: reservationSummary });
+export const reservationCancelResponse = z
+  .object({ reservation: reservationSummary })
+  .strict();
 export type ReservationCancelResponse = z.infer<typeof reservationCancelResponse>;
 
-/**
- * POST /reservations/{id}/pickup — Data-Model §5 "Pickup requires confirmed
- * booking, allocation, physical presence, readiness, policy/payment
- * prerequisites and permission." The acting membership is resolved from
- * the authenticated session server-side, never taken from the request body.
- */
+/** confirmed -> picked_up; actual actor is resolved from authenticated membership. */
 export const reservationPickupRequest = versionedAction.extend({
-  condition_note: z.string().max(1000).optional(),
+  condition_note: z.string().trim().max(1_000).optional(),
 });
 export type ReservationPickupRequest = z.infer<typeof reservationPickupRequest>;
 
-export const reservationPickupResponse = z.object({ reservation: reservationSummary });
+export const reservationPickupResponse = z
+  .object({ reservation: reservationSummary })
+  .strict();
 export type ReservationPickupResponse = z.infer<typeof reservationPickupResponse>;
 
-/** POST /reservations/{id}/return — Data-Model §5 "Return does not imply
- *  ready: inspection and cleaning remain separate." This endpoint records
- *  the actual return custody event only; readiness/cleaning is a separate
- *  operational workflow outside this contract's V1 surface. */
+/** picked_up -> returned; actual return remains recordable even when late. */
 export const reservationReturnRequest = versionedAction.extend({
-  condition_note: z.string().max(1000).optional(),
+  condition_note: z.string().trim().max(1_000).optional(),
 });
 export type ReservationReturnRequest = z.infer<typeof reservationReturnRequest>;
 
-export const reservationReturnResponse = z.object({ reservation: reservationSummary });
+export const reservationReturnResponse = z
+  .object({ reservation: reservationSummary })
+  .strict();
 export type ReservationReturnResponse = z.infer<typeof reservationReturnResponse>;
+
+/** returned -> completed after inspection/readiness/settlement gates pass server-side. */
+export const reservationCompleteRequest = versionedAction;
+export type ReservationCompleteRequest = z.infer<typeof reservationCompleteRequest>;
+
+export const reservationCompleteResponse = z
+  .object({ reservation: reservationSummary })
+  .strict();
+export type ReservationCompleteResponse = z.infer<typeof reservationCompleteResponse>;
