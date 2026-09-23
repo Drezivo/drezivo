@@ -103,6 +103,16 @@ describe('reservation contracts', () => {
     ).toBe(false);
   });
 
+  it('allows a staff walk-in hold before customer/contact entry without accepting a fake null customer', () => {
+    expect(staffReservationCreateRequest.safeParse(baseStaffCreate).success).toBe(true);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        customer: null,
+      }).success,
+    ).toBe(false);
+  });
+
   it('accepts a new staff customer with phone or email and rejects an empty contact', () => {
     expect(
       staffReservationCreateRequest.safeParse({

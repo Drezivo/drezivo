@@ -187,6 +187,76 @@ describe('RSV-021/022 staff reservation creation', async () => {
     expect(persisted.idempotency).toEqual({ status: 'succeeded', response_code: 201 });
   });
 
+  it('acquires an idempotent walk-in hold before customer entry without fabricating a customer row', async () => {
+    const seed = await seedWorkspace('org_rsv023_fast_hold', 'user_rsv023_fast_hold', ['reservations.manage']);
+    const requestBody = createFastHoldRequest(seed);
+
+    const first = await createStaffReservation(
+      commandContext(seed, 'req-rsv023-fast-hold-a', 'idem-rsv023-fast-hold'),
+      requestBody,
+    );
+    const replay = await createStaffReservation(
+      commandContext(seed, 'req-rsv023-fast-hold-b', 'idem-rsv023-fast-hold'),
+      requestBody,
+    );
+
+    expect(first.status).toBe(201);
+    expect(replay).toEqual(first);
+    const reservationId = successReservationId(first.body);
+
+    const state = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const reservation = await client.query<{
+        customer_id: string | null;
+        customer_snapshot: Record<string, unknown> | null;
+        status: string;
+        hold_acquired_at: Date;
+        hold_expires_at: Date;
+      }>(
+        `SELECT customer_id, customer_snapshot, status, hold_acquired_at, hold_expires_at
+           FROM reservation
+          WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, reservationId],
+      );
+      const customers = await client.query<{ count: number }>(
+        `SELECT count(*)::int AS count FROM customer WHERE tenant_id = $1`,
+        [seed.tenantId],
+      );
+      const allocations = await client.query<{ count: number }>(
+        `SELECT count(*)::int AS count
+           FROM asset_allocation aa
+           JOIN reservation_line rl
+             ON rl.tenant_id = aa.tenant_id
+            AND rl.id = aa.reservation_line_id
+          WHERE aa.tenant_id = $1
+            AND rl.reservation_id = $2
+            AND aa.kind = 'reservation_hold'
+            AND aa.is_blocking = true`,
+        [seed.tenantId, reservationId],
+      );
+      return {
+        reservation: requireRow(reservation.rows, 'walk-in hold reservation'),
+        customerCount: customers.rows[0]?.count ?? 0,
+        allocationCount: allocations.rows[0]?.count ?? 0,
+      };
+    });
+
+    expect(state.reservation).toMatchObject({
+      customer_id: null,
+      customer_snapshot: null,
+      status: 'held',
+    });
+    expect(state.reservation.hold_expires_at.getTime() - state.reservation.hold_acquired_at.getTime())
+      .toBe(15 * 60 * 1000);
+    expect(state.customerCount).toBe(0);
+    expect(state.allocationCount).toBe(1);
+    expect(await graphCounts(seed)).toMatchObject({
+      reservations: 1,
+      lines: 1,
+      allocations: 1,
+      customers: 0,
+    });
+  });
+
   it('uses an authorized existing customer without duplicating or reading live notes into the reservation snapshot', async () => {
     const seed = await seedWorkspace('org_rsv021_existing', 'user_rsv021_existing', ['reservations.manage']);
     const customerId = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
@@ -372,6 +442,36 @@ describe('RSV-021/022 staff reservation creation', async () => {
       payload: { reservationId: expiredReservationId, reservationVersion: 2 },
     });
     expect((await graphCounts(seed)).reservations).toBe(2);
+  });
+
+  it('accepts the walk-in fast-path hold shape through POST /api/v1/reservations', async () => {
+    const seed = await seedWorkspace('org_rsv023_route_hold', 'user_rsv023_route_hold', [
+      'reservations.manage',
+    ]);
+    useClerk(seed);
+
+    const response = await request(createApp())
+      .post('/api/v1/reservations')
+      .set('Idempotency-Key', 'route-rsv023-fast-hold')
+      .send(createFastHoldRequest(seed));
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      success: true,
+      data: {
+        reservation: {
+          status: 'held',
+          branch_id: seed.branchId,
+          variant_id: seed.variantId,
+        },
+      },
+    });
+    expect(await graphCounts(seed)).toMatchObject({
+      reservations: 1,
+      lines: 1,
+      allocations: 1,
+      customers: 0,
+    });
   });
 
   it('exposes POST /api/v1/reservations with auth, lifecycle, permission, strict-body, size, and idempotency guards', async () => {
@@ -580,6 +680,17 @@ describe('RSV-021/022 staff reservation creation', async () => {
       event_date: '2026-10-11',
       fulfillment_method: 'delivery',
       payment_method_id: seed.paymentMethodId as StaffReservationCreateRequest['payment_method_id'],
+    };
+  }
+
+  function createFastHoldRequest(seed: CreateSeed): StaffReservationCreateRequest {
+    const fullRequest = createRequest(seed);
+    return {
+      variant_id: fullRequest.variant_id,
+      requested_interval: fullRequest.requested_interval,
+      ...(fullRequest.event_date ? { event_date: fullRequest.event_date } : {}),
+      fulfillment_method: fullRequest.fulfillment_method,
+      payment_method_id: fullRequest.payment_method_id,
     };
   }
 
