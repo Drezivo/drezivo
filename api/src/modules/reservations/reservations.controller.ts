@@ -4,12 +4,21 @@ import type { PermissionCode, TenantStatus } from '@drezivo/contracts';
 
 import { ValidationError } from '../../shared/errors.js';
 import { sendError, sendSuccess } from '../../shared/response.js';
-import { createPublicHold, getReservationList } from './reservations.service.js';
+import {
+  createPublicHold,
+  getReservationDetail,
+  getReservationList,
+} from './reservations.service.js';
 
 export async function listReservationsController(req: Request, res: Response): Promise<void> {
   const query = req.reservationListQuery;
   if (!query) throw new ValidationError('A valid reservation list query is required.');
   sendSuccess(req, res, await getReservationList(requireContext(req), query));
+}
+
+export async function getReservationDetailController(req: Request, res: Response): Promise<void> {
+  if (!req.reservationId) throw new ValidationError('A valid reservation id is required.');
+  sendSuccess(req, res, await getReservationDetail(requireContext(req), req.reservationId));
 }
 
 export function createPublicHoldController(req: Request, res: Response): void {

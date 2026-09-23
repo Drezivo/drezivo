@@ -1,8 +1,10 @@
 import {
+  reservationDetail,
   reservationListItem,
   reservationListResponse,
   reservationPaymentProjection,
   type PermissionCode,
+  type ReservationDetail,
   type ReservationListItem,
   type ReservationListQuery,
   type ReservationListResponse,
@@ -13,10 +15,16 @@ import {
 import { withTenantTransaction } from '../../db/client.js';
 import {
   ForbiddenError,
+  NotFoundError,
   StateConflictError,
   TenantCancelledError,
 } from '../../shared/errors.js';
-import { listReservationsReadModel, type ReservationListReadRow } from './reservations.repository.js';
+import {
+  listReservationsReadModel,
+  readReservationDetailModel,
+  type ReservationDetailHeaderRow,
+  type ReservationListReadRow,
+} from './reservations.repository.js';
 
 interface ReservationReadContext {
   tenantId: string;
@@ -54,6 +62,88 @@ export async function getReservationList(
         next_cursor: page.nextCursor,
         has_more: page.hasMore,
       },
+    });
+  });
+}
+
+/** Authoritative staff detail shared by Reservations and Schedule drawers. */
+export async function getReservationDetail(
+  input: ReservationReadContext,
+  reservationId: string,
+): Promise<ReservationDetail> {
+  assertReservationReadContext(input);
+
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const model = await readReservationDetailModel(client, {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      reservationId,
+    });
+    if (!model) {
+      throw new NotFoundError('Reservation could not be found.');
+    }
+    if (model.lines.length === 0) {
+      throw new StateConflictError('Reservation data is incomplete for staff display.');
+    }
+
+    const header = model.header;
+    const customerSnapshot = header.customer_full_name
+      ? {
+          full_name: header.customer_full_name,
+          phone: header.customer_phone,
+          email: header.customer_email,
+        }
+      : null;
+
+    return reservationDetail.parse({
+      id: header.reservation_id,
+      reference_code: header.reference_code,
+      status: header.reservation_status,
+      branch_id: header.branch_id,
+      storefront_id: header.storefront_id,
+      customer: {
+        customer_id: header.customer_id,
+        snapshot: customerSnapshot,
+      },
+      lines: model.lines.map((line) => ({
+        id: line.id,
+        variant_id: line.variant_id,
+        line_number: line.line_number,
+        name_snapshot: line.name_snapshot,
+        measurements_snapshot: line.measurements_snapshot,
+        pricing_snapshot: {
+          rental_minor: String(line.rental_minor),
+          deposit_minor: String(line.deposit_minor),
+          currency: line.currency,
+        },
+      })),
+      pickup_at: header.pickup_at.toISOString(),
+      due_at: header.due_at.toISOString(),
+      timezone_snapshot: header.timezone_snapshot,
+      ...(header.event_date ? { event_date: header.event_date } : {}),
+      delivery_snapshot: requireDeliverySnapshot(header),
+      price_snapshot: {
+        rental_total_minor: String(header.rental_total_minor),
+        security_required_minor: String(header.security_required_minor),
+        due_now_minor: String(header.due_now_minor),
+        currency: header.reservation_currency,
+      },
+      payment: header.payment_id ? toPaymentProjection(header) : null,
+      hold_acquired_at: header.hold_acquired_at.toISOString(),
+      hold_expires_at: header.hold_expires_at?.toISOString() ?? null,
+      terms_accepted_at: header.terms_accepted_at?.toISOString() ?? null,
+      submitted_at: header.submitted_at?.toISOString() ?? null,
+      confirmed_at: header.confirmed_at?.toISOString() ?? null,
+      completed_at: header.completed_at?.toISOString() ?? null,
+      custody_timeline: model.custodyTimeline.map((event) => ({
+        event_kind: event.event_kind,
+        asset_id: event.asset_id,
+        reservation_line_id: event.reservation_line_id,
+        occurred_at: event.occurred_at.toISOString(),
+        condition_note: event.condition_note,
+      })),
+      version: header.version,
+      created_at: header.created_at.toISOString(),
     });
   });
 }
@@ -111,7 +201,9 @@ function toReservationListItem(row: ReservationListReadRow): ReservationListItem
   });
 }
 
-function toPaymentProjection(row: ReservationListReadRow): ReservationPaymentProjection {
+function toPaymentProjection(
+  row: ReservationListReadRow | ReservationDetailHeaderRow,
+): ReservationPaymentProjection {
   if (
     !row.payment_id ||
     !row.payment_method_id ||
@@ -132,6 +224,15 @@ function toPaymentProjection(row: ReservationListReadRow): ReservationPaymentPro
     currency: row.payment_currency,
     verified_at: row.payment_verified_at?.toISOString() ?? null,
   });
+}
+
+function requireDeliverySnapshot(
+  row: ReservationDetailHeaderRow,
+): { fulfillment_method: 'pickup' | 'delivery' } {
+  if (!row.fulfillment_method) {
+    throw new StateConflictError('Reservation delivery data is incomplete for staff display.');
+  }
+  return { fulfillment_method: row.fulfillment_method };
 }
 
 function assertReservationReadContext(input: ReservationReadContext): void {

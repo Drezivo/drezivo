@@ -6,10 +6,12 @@ import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
 import {
   createPublicHoldController,
+  getReservationDetailController,
   listReservationsController,
 } from './reservations.controller.js';
 import {
   requireReservationManagePermission,
+  validateReservationId,
   validateReservationListQuery,
 } from './reservations.middleware.js';
 
@@ -30,6 +32,17 @@ reservationsRouter.get(
   requireReservationManagePermission,
   validateReservationListQuery,
   listReservationsController,
+);
+
+reservationsRouter.get(
+  '/reservations/:reservationId',
+  requireStaffAuth,
+  requireTenantContext,
+  readRateLimit,
+  requireTenantAction('existing_rental_read'),
+  requireReservationManagePermission,
+  validateReservationId,
+  getReservationDetailController,
 );
 
 reservationsRouter.post('/public/stores/:slug/holds', createPublicHoldController);

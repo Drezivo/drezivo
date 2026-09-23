@@ -1,12 +1,17 @@
 import type { RequestHandler } from 'express';
 
-import { reservationListQuery, type ReservationListQuery } from '@drezivo/contracts';
+import {
+  reservationId,
+  reservationListQuery,
+  type ReservationListQuery,
+} from '@drezivo/contracts';
 
 import { ForbiddenError, ValidationError } from '../../shared/errors.js';
 
 declare module 'express-serve-static-core' {
   interface Request {
     reservationListQuery?: ReservationListQuery;
+    reservationId?: string;
   }
 }
 
@@ -25,5 +30,15 @@ export const validateReservationListQuery: RequestHandler = (req, _res, next): v
     return;
   }
   req.reservationListQuery = parsed.data;
+  next();
+};
+
+export const validateReservationId: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationId.safeParse(req.params.reservationId);
+  if (!parsed.success) {
+    next(new ValidationError('A valid reservation id is required.'));
+    return;
+  }
+  req.reservationId = parsed.data;
   next();
 };

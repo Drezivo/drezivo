@@ -65,6 +65,67 @@ export interface ReservationListReadPage {
   hasMore: boolean;
 }
 
+export interface ReservationDetailHeaderRow {
+  reservation_id: string;
+  reference_code: string;
+  reservation_status: ReservationListReadRow['reservation_status'];
+  branch_id: string;
+  storefront_id: string;
+  customer_id: string | null;
+  customer_full_name: string | null;
+  customer_phone: string | null;
+  customer_email: string | null;
+  pickup_at: Date;
+  due_at: Date;
+  timezone_snapshot: string;
+  event_date: string | null;
+  fulfillment_method: 'pickup' | 'delivery' | null;
+  rental_total_minor: string | number;
+  security_required_minor: string | number;
+  due_now_minor: string | number;
+  reservation_currency: string;
+  hold_acquired_at: Date;
+  hold_expires_at: Date | null;
+  terms_accepted_at: Date | null;
+  submitted_at: Date | null;
+  confirmed_at: Date | null;
+  completed_at: Date | null;
+  payment_id: string | null;
+  payment_method_id: string | null;
+  payment_status: ReservationListReadRow['payment_status'];
+  payment_evidence_status: ReservationListReadRow['payment_evidence_status'];
+  payment_amount_minor: string | number | null;
+  payment_currency: string | null;
+  payment_verified_at: Date | null;
+  version: number;
+  created_at: Date;
+}
+
+export interface ReservationDetailLineRow {
+  id: string;
+  variant_id: string;
+  line_number: number;
+  name_snapshot: string;
+  measurements_snapshot: unknown;
+  rental_minor: string | number;
+  deposit_minor: string | number;
+  currency: string;
+}
+
+export interface ReservationCustodyReadRow {
+  event_kind: 'pickup' | 'return';
+  asset_id: string;
+  reservation_line_id: string | null;
+  occurred_at: Date;
+  condition_note: string | null;
+}
+
+export interface ReservationDetailReadModel {
+  header: ReservationDetailHeaderRow;
+  lines: ReservationDetailLineRow[];
+  custodyTimeline: ReservationCustodyReadRow[];
+}
+
 interface ReservationListCursor {
   sort: ReservationListSort;
   key: string;
@@ -229,6 +290,132 @@ export async function listReservationsReadModel(
     rows,
     nextCursor: hasMore && last ? encodeListCursor(last, input.query.sort) : null,
     hasMore,
+  };
+}
+
+/**
+ * Reads one authoritative reservation detail without joining live catalogue/customer fields.
+ * Historical customer, garment, measurement, delivery, and price facts come only from accepted
+ * snapshots. Receipt files and payment-verification notes are deliberately not projected here.
+ */
+export async function readReservationDetailModel(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; reservationId: string },
+): Promise<ReservationDetailReadModel | null> {
+  const headerResult = await client.query<ReservationDetailHeaderRow>(
+    `SELECT
+       r.id AS reservation_id,
+       r.reference_code,
+       r.status AS reservation_status,
+       r.branch_id,
+       r.storefront_id,
+       r.customer_id,
+       nullif(btrim(r.customer_snapshot ->> 'full_name'), '') AS customer_full_name,
+       nullif(btrim(r.customer_snapshot ->> 'phone'), '') AS customer_phone,
+       nullif(btrim(r.customer_snapshot ->> 'email'), '') AS customer_email,
+       r.pickup_at,
+       r.due_at,
+       r.timezone_snapshot,
+       r.event_date::text AS event_date,
+       r.delivery_snapshot ->> 'fulfillment_method' AS fulfillment_method,
+       r.rental_total_minor,
+       r.security_required_minor,
+       r.due_now_minor,
+       r.currency AS reservation_currency,
+       r.hold_acquired_at,
+       r.hold_expires_at,
+       r.terms_accepted_at,
+       r.submitted_at,
+       r.confirmed_at,
+       r.completed_at,
+       payment_summary.id AS payment_id,
+       payment_summary.payment_method_id,
+       payment_summary.status AS payment_status,
+       payment_summary.evidence_status AS payment_evidence_status,
+       payment_summary.amount_minor AS payment_amount_minor,
+       payment_summary.currency AS payment_currency,
+       payment_summary.verified_at AS payment_verified_at,
+       r.version,
+       r.created_at
+     FROM reservation r
+     LEFT JOIN LATERAL (
+       SELECT
+         p.id,
+         p.payment_method_id,
+         p.status,
+         CASE
+           WHEN receipt.evidence_status IS NOT NULL THEN receipt.evidence_status
+           WHEN pm.rail = 'cash' THEN 'not_required'
+           ELSE 'awaiting_upload'
+         END AS evidence_status,
+         p.amount_minor,
+         p.currency,
+         p.verified_at
+       FROM payment p
+       JOIN payment_method pm
+         ON pm.tenant_id = p.tenant_id
+        AND pm.id = p.payment_method_id
+       LEFT JOIN LATERAL (
+         SELECT pr.evidence_status
+           FROM payment_receipt pr
+          WHERE pr.tenant_id = p.tenant_id
+            AND pr.payment_id = p.id
+          ORDER BY pr.submitted_at DESC, pr.id DESC
+          LIMIT 1
+       ) receipt ON true
+       WHERE p.tenant_id = r.tenant_id
+         AND p.reservation_id = r.id
+       ORDER BY p.created_at DESC, p.id DESC
+       LIMIT 1
+     ) payment_summary ON true
+     WHERE r.tenant_id = $1
+       AND r.branch_id = $2
+       AND r.id = $3::uuid
+     LIMIT 1`,
+    [input.tenantId, input.branchId, input.reservationId],
+  );
+  const header = headerResult.rows[0];
+  if (!header) return null;
+
+  const lineResult = await client.query<ReservationDetailLineRow>(
+    `SELECT
+       rl.id,
+       rl.variant_id,
+       rl.line_number,
+       rl.name_snapshot,
+       rl.measurements_snapshot,
+       rl.rental_minor,
+       rl.deposit_minor,
+       rl.currency
+     FROM reservation_line rl
+     WHERE rl.tenant_id = $1
+       AND rl.reservation_id = $2::uuid
+     ORDER BY rl.line_number ASC, rl.id ASC`,
+    [input.tenantId, input.reservationId],
+  );
+
+  const custodyResult = await client.query<ReservationCustodyReadRow>(
+    `SELECT
+       ce.event_kind,
+       ce.asset_id,
+       ce.reservation_line_id,
+       ce.occurred_at,
+       nullif(btrim(ce.condition_snapshot ->> 'condition_note'), '') AS condition_note
+     FROM custody_event ce
+     JOIN reservation_line rl
+       ON rl.tenant_id = ce.tenant_id
+      AND rl.id = ce.reservation_line_id
+     WHERE ce.tenant_id = $1
+       AND rl.reservation_id = $2::uuid
+       AND ce.branch_id = $3::uuid
+     ORDER BY ce.occurred_at ASC, ce.id ASC`,
+    [input.tenantId, input.reservationId, input.branchId],
+  );
+
+  return {
+    header,
+    lines: lineResult.rows,
+    custodyTimeline: custodyResult.rows,
   };
 }
 

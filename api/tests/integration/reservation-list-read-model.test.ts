@@ -80,10 +80,12 @@ interface SeedReservationInput {
   };
 }
 
-describe('RSV-010 reservation list read model', async () => {
+describe('RSV Phase 1 reservation read model', async () => {
   const { createApp } = await import('../../src/app.js');
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
-  const { getReservationList } = await import('../../src/modules/reservations/reservations.service.js');
+  const { getReservationDetail, getReservationList } = await import(
+    '../../src/modules/reservations/reservations.service.js'
+  );
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
 
   beforeAll(async () => {
@@ -327,6 +329,337 @@ describe('RSV-010 reservation list read model', async () => {
         page_meta: { next_cursor: null, has_more: false },
       },
     });
+  });
+
+  it('returns snapshot-safe detail with payment evidence status and custody facts but no private notes or evidence metadata', async () => {
+    const seed = await seedWorkspace('org_rsv011_detail', 'user_rsv011_detail', ['reservations.manage']);
+    const reservationId = await seedReservation(seed, {
+      referenceCode: 'RSV-DETAIL-1',
+      status: 'picked_up',
+      pickupAt: '2026-10-10T02:00:00.000Z',
+      dueAt: '2026-10-13T02:00:00.000Z',
+      lineName: 'Emerald Gown Snapshot',
+      customer: {
+        fullName: 'Maria Snapshot',
+        phone: '09170001111',
+        email: 'snapshot@example.test',
+      },
+      payment: { rail: 'manual_qr', status: 'paid', amountMinor: 12000 },
+    });
+
+    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const relation = await client.query<{
+        line_id: string;
+        customer_id: string;
+        payment_id: string;
+      }>(
+        `SELECT rl.id AS line_id, r.customer_id, p.id AS payment_id
+           FROM reservation r
+           JOIN reservation_line rl
+             ON rl.tenant_id = r.tenant_id
+            AND rl.reservation_id = r.id
+           JOIN payment p
+             ON p.tenant_id = r.tenant_id
+            AND p.reservation_id = r.id
+          WHERE r.tenant_id = $1
+            AND r.id = $2`,
+        [seed.tenantId, reservationId],
+      );
+      const ids = requireRow(relation.rows, 'detail relation');
+
+      await client.query(
+        `UPDATE reservation
+            SET event_date = '2026-10-11',
+                delivery_snapshot = '{"fulfillment_method":"pickup"}'::jsonb,
+                hold_acquired_at = '2026-10-09T01:45:00.000Z',
+                hold_expires_at = '2026-10-09T02:00:00.000Z',
+                terms_accepted_at = '2026-10-09T01:50:00.000Z',
+                submitted_at = '2026-10-09T01:51:00.000Z',
+                confirmed_at = '2026-10-09T02:05:00.000Z',
+                version = 4
+          WHERE tenant_id = $1
+            AND id = $2`,
+        [seed.tenantId, reservationId],
+      );
+      await client.query(
+        `UPDATE reservation_line
+            SET measurements_snapshot = '{"bust":91.5,"waist":72}'::jsonb
+          WHERE tenant_id = $1
+            AND id = $2`,
+        [seed.tenantId, ids.line_id],
+      );
+      await client.query(
+        `UPDATE customer
+            SET notes = 'PRIVATE CUSTOMER NOTE - MUST NOT LEAVE THE API',
+                full_name = 'Live Customer Name Changed'
+          WHERE tenant_id = $1
+            AND id = $2`,
+        [seed.tenantId, ids.customer_id],
+      );
+
+      const asset = await client.query<{ id: string }>(
+        `INSERT INTO physical_asset
+           (tenant_id, branch_id, variant_id, asset_code, lifecycle_status, readiness, custody_kind)
+         VALUES ($1, $2, $3, 'AST-RSV-DETAIL-1', 'active', 'ready', 'with_customer')
+         RETURNING id`,
+        [seed.tenantId, seed.branchId, seed.variantId],
+      );
+      const assetId = requireRow(asset.rows, 'detail asset').id;
+      await client.query(
+        `INSERT INTO custody_event
+           (tenant_id, branch_id, asset_id, reservation_line_id, actor_membership_id,
+            event_kind, occurred_at, condition_snapshot, business_key)
+         VALUES ($1, $2, $3, $4, $5, 'pickup', '2026-10-10T02:00:00.000Z',
+                 '{"condition_note":"Released in good condition."}'::jsonb,
+                 'rsv011-detail-pickup')`,
+        [seed.tenantId, seed.branchId, assetId, ids.line_id, seed.membershipId],
+      );
+
+      const file = await client.query<{ id: string }>(
+        `INSERT INTO file_object
+           (tenant_id, purpose, storage_key, version_id, mime_type, byte_size, lifecycle_status,
+            is_private, upload_expires_at, frozen_at)
+         VALUES ($1, 'payment_receipt', 'private/rsv011/payment-proof.png', 'proof-v1',
+                 'image/png', 512, 'accepted', true, now() + interval '5 minutes', now())
+         RETURNING id`,
+        [seed.tenantId],
+      );
+      await client.query(
+        `INSERT INTO payment_receipt (tenant_id, payment_id, file_id, evidence_status, submitted_at)
+         VALUES ($1, $2, $3, 'verified', '2026-10-09T02:03:00.000Z')`,
+        [seed.tenantId, ids.payment_id, requireRow(file.rows, 'payment evidence file').id],
+      );
+      await client.query(
+        `INSERT INTO payment_verification
+           (tenant_id, payment_id, verifier_membership_id, decision, verified_amount_minor,
+            evidence_note, decided_at, business_key)
+         VALUES ($1, $2, $3, 'approved', 12000,
+                 'PRIVATE VERIFICATION NOTE - MUST NOT LEAVE THE API',
+                 '2026-10-09T02:05:00.000Z', 'rsv011-detail-verification')`,
+        [seed.tenantId, ids.payment_id, seed.membershipId],
+      );
+    });
+
+    const detail = await getReservationDetail(reservationContext(seed), reservationId);
+    expect(detail).toMatchObject({
+      id: reservationId,
+      reference_code: 'RSV-DETAIL-1',
+      status: 'picked_up',
+      customer: {
+        snapshot: {
+          full_name: 'Maria Snapshot',
+          phone: '09170001111',
+          email: 'snapshot@example.test',
+        },
+      },
+      lines: [
+        {
+          name_snapshot: 'Emerald Gown Snapshot',
+          measurements_snapshot: { bust: 91.5, waist: 72 },
+          pricing_snapshot: { rental_minor: '10000', deposit_minor: '2000', currency: 'PHP' },
+        },
+      ],
+      event_date: '2026-10-11',
+      delivery_snapshot: { fulfillment_method: 'pickup' },
+      payment: {
+        status: 'paid',
+        evidence_status: 'verified',
+        amount_minor: '12000',
+      },
+      custody_timeline: [
+        {
+          event_kind: 'pickup',
+          occurred_at: '2026-10-10T02:00:00.000Z',
+          condition_note: 'Released in good condition.',
+        },
+      ],
+      version: 4,
+    });
+    expect(JSON.stringify(detail)).not.toContain('PRIVATE CUSTOMER NOTE');
+    expect(JSON.stringify(detail)).not.toContain('PRIVATE VERIFICATION NOTE');
+    expect(JSON.stringify(detail)).not.toContain('private/rsv011/payment-proof.png');
+  });
+
+  it('keeps accepted customer/clothing snapshots after live edits and conceals foreign tenant or branch ids', async () => {
+    const tenantA = await seedWorkspace('org_rsv011_history_a', 'user_rsv011_history_a', [
+      'reservations.manage',
+    ]);
+    const reservationA = await seedReservation(tenantA, {
+      referenceCode: 'RSV-HISTORY-A',
+      status: 'confirmed',
+      pickupAt: '2026-11-10T02:00:00.000Z',
+      dueAt: '2026-11-11T02:00:00.000Z',
+      lineName: 'Original Accepted Gown Name',
+      customer: { fullName: 'Original Customer Name', email: 'original@example.test' },
+    });
+
+    await withTenantTransaction(tenantA.tenantId, tenantA.principalId, async (client) => {
+      const relation = await client.query<{ customer_id: string; line_id: string; product_id: string }>(
+        `SELECT r.customer_id, rl.id AS line_id, pv.product_id
+           FROM reservation r
+           JOIN reservation_line rl
+             ON rl.tenant_id = r.tenant_id
+            AND rl.reservation_id = r.id
+           JOIN product_variant pv
+             ON pv.tenant_id = rl.tenant_id
+            AND pv.id = rl.variant_id
+          WHERE r.tenant_id = $1
+            AND r.id = $2`,
+        [tenantA.tenantId, reservationA],
+      );
+      const relationRow = requireRow(relation.rows, 'historical relation');
+      await client.query(
+        `UPDATE reservation_line
+            SET measurements_snapshot = '{"bust":90,"waist":70}'::jsonb
+          WHERE tenant_id = $1
+            AND id = $2`,
+        [tenantA.tenantId, relationRow.line_id],
+      );
+      await client.query(
+        `UPDATE customer
+            SET full_name = 'Edited Live Customer', email = 'edited@example.test'
+          WHERE tenant_id = $1
+            AND id = $2`,
+        [tenantA.tenantId, relationRow.customer_id],
+      );
+      await client.query(
+        `UPDATE product
+            SET name = 'Renamed Live Product', status = 'archived'
+          WHERE tenant_id = $1
+            AND id = $2`,
+        [tenantA.tenantId, relationRow.product_id],
+      );
+      await client.query(
+        `UPDATE product_variant
+            SET measurements = '{"bust":120,"waist":110}'::jsonb,
+                measurement_mode = 'custom',
+                status = 'archived'
+          WHERE tenant_id = $1
+            AND id = $2`,
+        [tenantA.tenantId, tenantA.variantId],
+      );
+    });
+
+    const historical = await getReservationDetail(reservationContext(tenantA), reservationA);
+    expect(historical.customer.snapshot).toEqual({
+      full_name: 'Original Customer Name',
+      phone: null,
+      email: 'original@example.test',
+    });
+    expect(historical.lines[0]).toMatchObject({
+      name_snapshot: 'Original Accepted Gown Name',
+      measurements_snapshot: { bust: 90, waist: 70 },
+    });
+
+    const tenantB = await seedWorkspace('org_rsv011_history_b', 'user_rsv011_history_b', [
+      'reservations.manage',
+    ]);
+    const foreignReservation = await seedReservation(tenantB, {
+      referenceCode: 'RSV-FOREIGN-B',
+      status: 'confirmed',
+      pickupAt: '2026-11-12T02:00:00.000Z',
+      dueAt: '2026-11-13T02:00:00.000Z',
+      lineName: 'Foreign Tenant Dress',
+      customer: { fullName: 'Foreign Customer', email: 'foreign@example.test' },
+    });
+    await expect(
+      getReservationDetail(reservationContext(tenantA), foreignReservation),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    const secondBranchId = await withTenantTransaction(
+      tenantA.tenantId,
+      tenantA.principalId,
+      async (client) => {
+        const branch = await client.query<{ id: string }>(
+          `INSERT INTO branch (tenant_id, name, code, is_default, timezone, status)
+           VALUES ($1, 'Second Branch', 'SECOND-RSV011', false, 'Asia/Manila', 'active')
+           RETURNING id`,
+          [tenantA.tenantId],
+        );
+        return requireRow(branch.rows, 'RSV-011 second branch').id;
+      },
+    );
+    const otherBranchReservation = await seedReservation(
+      { ...tenantA, branchId: secondBranchId },
+      {
+        referenceCode: 'RSV-OTHER-BRANCH',
+        status: 'confirmed',
+        pickupAt: '2026-11-14T02:00:00.000Z',
+        dueAt: '2026-11-15T02:00:00.000Z',
+        lineName: 'Other Branch Dress',
+        customer: { fullName: 'Other Branch Customer', email: 'other-branch@example.test' },
+      },
+    );
+    await expect(
+      getReservationDetail(reservationContext(tenantA), otherBranchReservation),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('protects the HTTP detail route and conceals a valid foreign reservation id as not found', async () => {
+    clerk.getAuth.mockReturnValueOnce({ userId: null, orgId: null });
+    const unauthenticated = await request(createApp()).get(
+      '/api/v1/reservations/00000000-0000-4000-8000-000000000001',
+    );
+    expect(unauthenticated.status).toBe(401);
+    expectSafeError(unauthenticated.body, 'UNAUTHENTICATED');
+
+    const denied = await seedWorkspace('org_rsv011_route_denied', 'user_rsv011_route_denied', []);
+    const deniedReservation = await seedReservation(denied, {
+      referenceCode: 'RSV-DENIED',
+      status: 'confirmed',
+      pickupAt: '2026-12-10T02:00:00.000Z',
+      dueAt: '2026-12-11T02:00:00.000Z',
+      lineName: 'Denied Detail Dress',
+      customer: { fullName: 'Denied Customer', email: 'denied@example.test' },
+    });
+    useClerk(denied);
+    const forbidden = await request(createApp()).get(`/api/v1/reservations/${deniedReservation}`);
+    expect(forbidden.status).toBe(403);
+    expectSafeError(forbidden.body, 'FORBIDDEN');
+
+    const allowed = await seedWorkspace('org_rsv011_route_allowed', 'user_rsv011_route_allowed', [
+      'reservations.manage',
+    ]);
+    const allowedReservation = await seedReservation(allowed, {
+      referenceCode: 'RSV-DETAIL-ROUTE',
+      status: 'confirmed',
+      pickupAt: '2026-12-12T02:00:00.000Z',
+      dueAt: '2026-12-13T02:00:00.000Z',
+      lineName: 'Detail Route Dress',
+      customer: { fullName: 'Allowed Customer', email: 'allowed@example.test' },
+    });
+    useClerk(allowed);
+    const success = await request(createApp()).get(`/api/v1/reservations/${allowedReservation}`);
+    expect(success.status).toBe(200);
+    expect(success.body).toMatchObject({
+      success: true,
+      data: {
+        id: allowedReservation,
+        reference_code: 'RSV-DETAIL-ROUTE',
+        lines: [{ name_snapshot: 'Detail Route Dress' }],
+      },
+    });
+
+    useClerk(allowed);
+    const invalidId = await request(createApp()).get('/api/v1/reservations/not-a-reservation-id');
+    expect(invalidId.status).toBe(422);
+    expectSafeError(invalidId.body, 'VALIDATION_FAILED');
+
+    const foreign = await seedWorkspace('org_rsv011_route_foreign', 'user_rsv011_route_foreign', [
+      'reservations.manage',
+    ]);
+    const foreignReservation = await seedReservation(foreign, {
+      referenceCode: 'RSV-ROUTE-FOREIGN',
+      status: 'confirmed',
+      pickupAt: '2026-12-14T02:00:00.000Z',
+      dueAt: '2026-12-15T02:00:00.000Z',
+      lineName: 'Foreign Detail Dress',
+      customer: { fullName: 'Foreign Route Customer', email: 'foreign-route@example.test' },
+    });
+    useClerk(allowed);
+    const concealed = await request(createApp()).get(`/api/v1/reservations/${foreignReservation}`);
+    expect(concealed.status).toBe(404);
+    expectSafeError(concealed.body, 'NOT_FOUND');
   });
 
   async function seedWorkspace(
