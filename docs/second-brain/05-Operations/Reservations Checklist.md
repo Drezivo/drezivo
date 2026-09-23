@@ -111,16 +111,18 @@ Before marking a task complete:
 
 ## Phase 2: Staff reservation creation and hold allocation
 
-- [ ] **RSV-020 — Implement quote and candidate asset resolution**
+- [x] **RSV-020 — Implement quote and candidate asset resolution**
   - **Depends on:** Clothing CLT-050, Availability foundations.
   - **Outcome:** Server computes eligible garment candidates, blocked interval, price, and policy snapshot.
   - **Acceptance:**
-    - [ ] Resolve variant/product and candidate physical assets within tenant/default branch.
-    - [ ] Resolve pickup/due deadlines in booking timezone snapshot.
-    - [ ] Compute `[blocked_start, blocked_end)` including preparation/turnaround.
-    - [ ] Compute rental/deposit/delivery totals in PHP minor units on server.
-    - [ ] Do not promise availability from a stale read response.
-  - **Tests/evidence:** DST/adjacent-range/price snapshot tests.
+    - [x] Resolve variant/product and candidate physical assets within tenant/default branch.
+    - [x] Resolve pickup/due deadlines in booking timezone snapshot.
+    - [x] Compute `[blocked_start, blocked_end)` including preparation/turnaround.
+    - [x] Compute rental/deposit/delivery totals in PHP minor units on server.
+    - [x] Do not promise availability from a stale read response.
+  - **Implemented:** `reservations.quote.ts` is the shared server-side quote/candidate layer that RSV-021 will consume before any write. It resolves the server-selected V1 default branch, branch IANA timezone, storefront, latest already-effective immutable policy snapshot, active same-tenant payment method, active product/variant pricing/measurements, and concrete eligible serialized asset IDs. Catalogue derives the candidate query's buffered half-open interval directly from the variant's current `prep_minutes` and `turnaround_minutes`, filters overlapping blocking allocations, and orders/limits candidate IDs deterministically. The quote preserves the requested pickup/due instants plus the branch timezone snapshot and returns `capacity.guaranteed = false`; it does not select an authoritative asset, create a reservation/allocation, or expose an `available` promise. RSV-021 must lock and revalidate candidates before the exclusion-protected allocation insert.
+  - **Money/policy behavior:** rental pricing is recomputed from the persisted variant tariff, never client totals. The configured base rental covers `included_duration_minutes`; elapsed time beyond that is charged in started 24-hour extra-day blocks at `extra_day_price_minor`. Security deposit and delivery are separate minor-unit lines and `due_now = rental + deposit + delivery`. V1 fails closed unless tenant/variant currency is PHP and current amounts fit the persisted PostgreSQL integer range. The PRD requires configurable delivery text/fees but did not previously define a machine key inside `policy_snapshot.delivery_rules`; RSV-020 establishes the internal convention `delivery_rules.fee_minor` for a nonnegative PHP minor-unit fee, treats an omitted fee as free delivery, and rejects delivery when `delivery_rules.enabled` is explicitly `false`. Pickup always has zero delivery fee. The selected policy row ID/version/effective time and payment-method destination/version are carried only in the internal quote for later snapshot persistence; no new public route exposes those private settings in RSV-020.
+  - **Tests/evidence:** `api/tests/integration/reservation-quote.test.ts` passes `5/5` against the restricted runtime role on real PostgreSQL, covering fixed-duration rental + deposit + delivery totals, zero-write quote behavior, prep/turnaround block derivation, exact `[)` adjacency versus one-minute overlap, an `America/New_York` DST transition while preserving UTC pickup/due instants and the booking timezone snapshot, stale candidate invalidation with `guaranteed: false`, restricted/default-branch guards, and foreign payment-method concealment. The existing CLT-050 handoff remains `3/3`, Reservation Phase 1 remains `7/7`, and Phase 0 integrity remains `8/8`. API typecheck/lint/build pass with unit regression `82/82`; Contracts build/lint pass, the allocation contract test is `3/3`, and the full Contracts suite is `87/87`.
 
 - [ ] **RSV-021 — Implement idempotent staff/walk-in reservation creation**
   - **Depends on:** RSV-020, RSV-002.

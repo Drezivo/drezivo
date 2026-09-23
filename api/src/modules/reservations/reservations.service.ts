@@ -9,6 +9,7 @@ import {
   type ReservationListQuery,
   type ReservationListResponse,
   type ReservationPaymentProjection,
+  type StaffReservationCreateRequest,
   type TenantStatus,
 } from '@drezivo/contracts';
 
@@ -18,7 +19,9 @@ import {
   NotFoundError,
   StateConflictError,
   TenantCancelledError,
+  TenantRestrictedError,
 } from '../../shared/errors.js';
+import { resolveReservationQuote, type ReservationQuote } from './reservations.quote.js';
 import {
   listReservationsReadModel,
   readReservationDetailModel,
@@ -40,6 +43,24 @@ export type ReservationHoldResult = { kind: 'not_implemented' };
 /** Reservation holds remain disabled until the transactional hold service is approved. */
 export function createPublicHold(): ReservationHoldResult {
   return { kind: 'not_implemented' };
+}
+
+/**
+ * Server-side staff quote used by RSV-021 before the allocation transaction claims capacity.
+ * The quote never returns an authoritative availability boolean or selected asset.
+ */
+export async function getStaffReservationQuote(
+  input: ReservationReadContext,
+  request: StaffReservationCreateRequest,
+): Promise<ReservationQuote> {
+  assertReservationBookingContext(input);
+  return withTenantTransaction(input.tenantId, input.principalId, (client) =>
+    resolveReservationQuote(client, {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      request,
+    }),
+  );
 }
 
 /** Staff reservation list read used by the Reservations operations page. */
@@ -233,6 +254,18 @@ function requireDeliverySnapshot(
     throw new StateConflictError('Reservation delivery data is incomplete for staff display.');
   }
   return { fulfillment_method: row.fulfillment_method };
+}
+
+function assertReservationBookingContext(input: ReservationReadContext): void {
+  if (input.effectiveTenantStatus === 'restricted') {
+    throw new TenantRestrictedError('This workspace is temporarily restricted.');
+  }
+  if (input.effectiveTenantStatus === 'cancelled') {
+    throw new TenantCancelledError('This workspace is closed.');
+  }
+  if (!input.permissionCodes.includes('reservations.manage')) {
+    throw new ForbiddenError('This branch does not grant reservation management access.');
+  }
 }
 
 function assertReservationReadContext(input: ReservationReadContext): void {

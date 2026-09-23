@@ -126,6 +126,28 @@ export interface ReservationDetailReadModel {
   custodyTimeline: ReservationCustodyReadRow[];
 }
 
+export interface ReservationQuoteFoundationRow {
+  tenant_currency: string;
+  branch_timezone: string;
+  storefront_id: string;
+  policy_snapshot_id: string;
+  policy_version: number;
+  rental_rules: Record<string, unknown>;
+  deposit_rules: Record<string, unknown>;
+  cancellation_rules: Record<string, unknown>;
+  delivery_rules: Record<string, unknown>;
+  privacy_notice: string;
+  policy_effective_at: Date;
+}
+
+export interface ReservationQuotePaymentMethodRow {
+  payment_method_id: string;
+  name: string;
+  rail: 'cash' | 'manual_qr' | 'manual_transfer';
+  destination_snapshot: Record<string, unknown>;
+  version: number;
+}
+
 interface ReservationListCursor {
   sort: ReservationListSort;
   key: string;
@@ -417,6 +439,91 @@ export async function readReservationDetailModel(
     lines: lineResult.rows,
     custodyTimeline: custodyResult.rows,
   };
+}
+
+/**
+ * Resolves the V1 default-branch storefront and the latest policy already effective at database
+ * time. The policy row is immutable once referenced by a reservation; quote callers carry its id
+ * forward rather than copying mutable settings from elsewhere.
+ */
+export async function readReservationQuoteFoundation(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string },
+): Promise<ReservationQuoteFoundationRow | null> {
+  const result = await client.query<ReservationQuoteFoundationRow>(
+    `SELECT
+       t.currency AS tenant_currency,
+       b.timezone AS branch_timezone,
+       s.id AS storefront_id,
+       policy.id AS policy_snapshot_id,
+       policy.version AS policy_version,
+       policy.rental_rules,
+       policy.deposit_rules,
+       policy.cancellation_rules,
+       policy.delivery_rules,
+       policy.privacy_notice,
+       policy.effective_at AS policy_effective_at
+     FROM tenant t
+     JOIN branch b
+       ON b.tenant_id = t.id
+      AND b.id = $2::uuid
+      AND b.is_default = true
+      AND b.status = 'active'
+     JOIN LATERAL (
+       SELECT sf.id, sf.status, sf.created_at
+         FROM storefront sf
+        WHERE sf.tenant_id = t.id
+          AND sf.branch_id = b.id
+          AND sf.status IN ('draft', 'published')
+        ORDER BY (sf.status = 'published') DESC, sf.created_at DESC, sf.id DESC
+        LIMIT 1
+     ) s ON true
+     JOIN LATERAL (
+       SELECT
+         ps.id,
+         ps.version,
+         ps.rental_rules,
+         ps.deposit_rules,
+         ps.cancellation_rules,
+         ps.delivery_rules,
+         ps.privacy_notice,
+         ps.effective_at
+       FROM policy_snapshot ps
+       WHERE ps.tenant_id = t.id
+         AND ps.storefront_id = s.id
+         AND ps.effective_at <= statement_timestamp()
+       ORDER BY ps.effective_at DESC, ps.version DESC, ps.id DESC
+       LIMIT 1
+     ) policy ON true
+     WHERE t.id = $1::uuid
+     LIMIT 1`,
+    [input.tenantId, input.branchId],
+  );
+
+  return result.rows[0] ?? null;
+}
+
+/** Active tenant-scoped payment method selected for this booking intent. */
+export async function readReservationQuotePaymentMethod(
+  client: PoolClient,
+  input: { tenantId: string; paymentMethodId: string },
+): Promise<ReservationQuotePaymentMethodRow | null> {
+  const result = await client.query<ReservationQuotePaymentMethodRow>(
+    `SELECT
+       pm.id AS payment_method_id,
+       pm.name,
+       pm.rail,
+       pm.destination_snapshot,
+       pm.version
+     FROM payment_method pm
+     WHERE pm.tenant_id = $1::uuid
+       AND pm.id = $2::uuid
+       AND pm.active = true
+     LIMIT 1`,
+    [input.tenantId, input.paymentMethodId],
+  );
+
+  return result.rows[0] ?? null;
 }
 
 function orderByClause(sort: ReservationListSort): string {
