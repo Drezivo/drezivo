@@ -235,16 +235,19 @@ Before marking a task complete:
 
 ## Phase 5: Pickup, return, inspection, and completion
 
-- [ ] **RSV-050 — Implement pickup/handover command**
+- [x] **RSV-050 — Implement pickup/handover command**
   - **Depends on:** RSV-031, Clothing readiness projection.
   - **Outcome:** Confirmed reservation becomes physically handed over only when garment/payment/policy prerequisites pass.
   - **Acceptance:**
-    - [ ] Lock reservation and current asset projection.
-    - [ ] Require confirmed state, matching active allocation, physical presence/readiness, and permission.
-    - [ ] Record append-only custody event with actor/time/condition snapshot/business key.
-    - [ ] Conditionally transition `confirmed → picked_up` once.
-    - [ ] Duplicate handover creates one custody fact/effect.
-  - **Tests/evidence:** Unready/payment-blocked/duplicate pickup tests.
+    - [x] Lock reservation and current asset projection.
+    - [x] Require confirmed state, matching active allocation, physical presence/readiness, and permission.
+    - [x] Record append-only custody event with actor/time/condition snapshot/business key.
+    - [x] Conditionally transition `confirmed → picked_up` once.
+    - [x] Duplicate handover creates one custody fact/effect.
+  - **Implemented:** authenticated/idempotent `POST /api/v1/reservations/:reservationId/pickup` requires `reservations.manage` + `reservations.custody`, validates the strict shared `{ version, condition_note? }` contract, and locks reservation → canonical payment → latest receipt → latest immutable payment verification → confirmed allocation/physical asset in the existing deterministic order. Pickup requires the reservation to still be `confirmed` at the supplied optimistic version; its accepted customer/terms/confirmation facts must still exist; the reservation must still own exactly one blocking `reservation_confirmed` allocation; and the allocated serialized garment must be `active`, `ready`, assigned to the active branch, and physically `at_branch`. When money is due, pickup rechecks the same Finance-owned paid/verified amount and immutable verification truth used for confirmation; manual QR/transfer additionally requires verified immutable receipt evidence, while genuine zero-due reservations require no fabricated payment.
+  - **Custody/allocation behavior:** the winning transaction conditionally changes `confirmed → picked_up`, changes the locked physical asset custody projection `at_branch → with_customer` with an asset-version guard, and appends one immutable `pickup` `custody_event` containing the actor membership, database time, bounded condition note/snapshot, and stable business key. The existing `reservation_confirmed` allocation remains blocking with the same period and is not released/recreated. Audit/outbox facts use `reservation.picked_up`; Reservation Details immediately projects the new lifecycle state and pickup timeline. Sequential/same-intent concurrent retries replay one result and cannot create another custody fact.
+  - **Failure behavior:** unready, inactive, wrong-branch, or not-at-branch garments fail closed with `ASSET_UNREADY`; missing/mismatched confirmed allocation fails with `ASSET_UNAVAILABLE`; degraded/missing payment verification fails with `PAYMENT_PREREQUISITE_FAILED`; stale versions and invalid lifecycle states use the existing stable conflicts. Any failure before commit leaves the reservation confirmed, physical custody unchanged, the allocation blocking, and no pickup custody event.
+  - **Tests/evidence:** `api/tests/integration/reservation-review.test.ts` passes `23/23` on real PostgreSQL and covers successful pickup/custody/detail projection, unready garment denial, physically absent/in-transit denial, payment-refunded denial, sequential replay, concurrent double-fire with one custody/audit/outbox effect, strict body/idempotency/auth, missing `reservations.custody` permission, and foreign-ID concealment. Full API integration passes `33` files / `209/209`; API unit/service passes `20` files / `82/82`; Contracts pass `11` files / `89/89`; API/Contracts typecheck, lint, and build are green.
 
 - [ ] **RSV-051 — Implement return command**
   - **Depends on:** RSV-050.
@@ -368,3 +371,117 @@ Before marking a task complete:
 - Fitting appointments/resources/capacity — V1.1.
 - Native payment gateway/card collection or automated recurring payments.
 - Marketplace booking across multiple tenants.
+
+## Manual frontend end-to-end validation plan
+
+Use this as the practical Owner/Staff acceptance checklist for the Reservations UI. It intentionally describes only what O/S should be able to do or observe from the frontend. Backend RSV implementation details remain in the phases above.
+
+### Reservations page and visibility
+
+- [ ] O/S can open the Reservations page and see real reservations from the backend, with no production mock rows.
+- [ ] O/S can see the important reservation summary at a glance: reference, customer when available, garment, rental dates, reservation status, and separate payment/evidence status.
+- [ ] O/S can search reservations by reference, customer, contact information where permitted, and clothing identity.
+- [ ] O/S can filter reservations by reservation status and pickup/rental date range.
+- [ ] O/S can sort/page through a larger reservation list without duplicate or missing rows.
+- [ ] O/S can refresh the page and see the same authoritative server state instead of temporary frontend-only state.
+- [ ] A customer-less short hold can appear in the list without the UI inventing a fake customer.
+
+### Reservation details
+
+- [ ] O/S can click a reservation and open its Reservation Details Sheet/drawer.
+- [ ] O/S can see the reservation status, customer snapshot, garment snapshot, rental dates, event date when present, pickup/delivery method, price/deposit totals, and payment/evidence state.
+- [ ] O/S can see the reservation lifecycle/custody history as real events occur, such as pickup and later return.
+- [ ] Historical reservation information remains readable even if the live customer or clothing record is edited later.
+- [ ] O/S only sees actions that make sense for the reservation's current state, such as Complete Reservation, Cancel, Pick Up, Return, or Complete Rental.
+
+### Creating a new reservation
+
+- [ ] O/S can start a new reservation from the Reservations page using a clear `+ New Reservation` action.
+- [ ] O/S can search/select a garment and choose the requested rental dates.
+- [ ] O/S can check whether the selected garment is available for those dates before attempting to reserve it.
+- [ ] If the garment is unavailable, the UI clearly stops the reservation flow and does not create a booking.
+- [ ] O/S can see the server-calculated rental price, deposit, delivery fee when applicable, and relevant pickup/return dates before completing the reservation.
+- [ ] O/S can choose Pickup or Delivery when the business configuration allows it.
+- [ ] O/S can choose an available payment method such as Cash, GCash/manual QR, Maya, or configured bank transfer options.
+
+### Walk-in reserve and timed hold
+
+- [ ] O/S can click `Reserve` before entering all customer information so the garment is protected while the walk-in transaction is being completed.
+- [ ] After Reserve succeeds, the reservation becomes `held` and the garment is immediately blocked from overlapping reservations.
+- [ ] The UI shows a simple remaining-hold indicator for the 15-minute hold without turning the staff flow into a customer checkout countdown screen.
+- [ ] O/S can continue entering customer/contact information without losing the existing hold.
+- [ ] If the hold expires before completion, the UI clearly explains that the hold expired, prevents stale completion, refreshes availability, and allows O/S to reserve again if the garment is still free.
+- [ ] Two O/S/browser tabs trying to reserve the final available garment for overlapping dates result in only one successful reservation; the losing UI shows a clear availability/conflict message.
+
+### Customer information and reservation completion
+
+- [ ] O/S can attach an existing customer or enter a new customer's required information during the held reservation.
+- [ ] Required customer/contact fields are validated before the reservation can advance.
+- [ ] O/S can provide optional event information and other supported V1 reservation details without restarting the hold.
+- [ ] The normal staff flow uses one primary `Complete Reservation` action rather than forcing O/S through separate technical Submit and Confirm screens.
+- [ ] If all required payment/merchant checks are already satisfied for the Owner, `Complete Reservation` can finish at `confirmed`.
+- [ ] If payment or merchant verification is still required, `Complete Reservation` truthfully stops at `pending_confirmation` and clearly tells O/S what is still needed.
+- [ ] The UI never displays a reservation as confirmed merely because customer information was submitted successfully.
+
+### Payment and evidence behavior
+
+- [ ] Cash reservations can proceed without requiring a receipt image when the configured cash verification requirements are satisfied.
+- [ ] Manual QR/transfer reservations require the appropriate payment evidence before they can progress where evidence is required.
+- [ ] Uploading a screenshot/receipt does **not** immediately display the payment as Paid or the reservation as Confirmed.
+- [ ] O/S can clearly distinguish payment states such as pending/review/paid from reservation states such as held/pending confirmation/confirmed.
+- [ ] After the authorized merchant/Owner verifies payment, an eligible pending reservation can be confirmed without creating a second reservation.
+- [ ] O/S can reject a pending reservation when the merchant review fails, and the garment becomes available again when appropriate.
+
+### Cancellation — business side only
+
+- [ ] O/S can cancel a `held` reservation before pickup, and the garment becomes available immediately.
+- [ ] O/S can cancel a `pending_confirmation` reservation before pickup, and the garment becomes available immediately.
+- [ ] O/S can cancel a `confirmed` reservation before pickup, and the garment becomes available immediately.
+- [ ] Cancelling a reservation does not automatically mark an existing payment as refunded.
+- [ ] If money was already collected, the UI communicates that refund/financial follow-up must be handled manually by the business.
+- [ ] An expired reservation remains `expired`; cancelling it later must not rewrite it as `cancelled`.
+- [ ] Once a reservation has been picked up, the simple Cancel action is no longer available; the rental must continue through Return/settlement.
+- [ ] The public/customer storefront has no self-service cancellation feature in V1; customers contact the business directly to cancel.
+- [ ] There is no first-class Reschedule action required for V1. O/S handles a date change by cancelling the old pre-pickup reservation, checking the new dates, and creating a new reservation.
+
+### Pickup / handover
+
+- [ ] O/S can see a `Pick Up` action only when the reservation is eligible for handover.
+- [ ] O/S can pick up a `confirmed` reservation when the assigned garment is active, ready, physically at the branch, and the required payment conditions are satisfied.
+- [ ] Successful pickup changes the reservation from `confirmed` to `picked_up`.
+- [ ] Successful pickup records the handover in the reservation's custody/history timeline, including the optional condition note.
+- [ ] After pickup, the garment is shown operationally as being with the customer and remains blocked from another overlapping reservation.
+- [ ] Pickup is blocked if the garment needs cleaning, needs repair, is otherwise unready, or is not physically at the branch.
+- [ ] Pickup is blocked if required payment verification is no longer satisfied.
+- [ ] Failed pickup leaves the reservation `confirmed` and does not create a fake pickup/history event.
+
+### Return and rental completion — test when the remaining Phase 5 backend/UI is implemented
+
+- [ ] O/S can record the return of a `picked_up` reservation and the status becomes `returned`.
+- [ ] The actual return can still be recorded when the customer returns late.
+- [ ] A late return that threatens another reservation produces a visible operational issue/attention state rather than preventing the physical return from being recorded.
+- [ ] Returning a garment does not immediately mark it ready for another customer before inspection/cleaning is resolved.
+- [ ] O/S can record the post-return inspection/readiness outcome.
+- [ ] A garment that requires cleaning remains unavailable until the required cleaning/turnaround work is complete.
+- [ ] A damaged garment can remain unavailable for maintenance/repair rather than being automatically released.
+- [ ] O/S can complete the rental only after the required return, readiness, and settlement conditions are satisfied.
+- [ ] Successful completion changes the reservation from `returned` to `completed` once.
+
+### Reliability and operational safety
+
+- [ ] Rapidly double-clicking `Reserve`, `Complete Reservation`, `Cancel`, `Pick Up`, and later `Return`/`Complete Rental` never creates duplicate business effects.
+- [ ] Retrying the same action after a network timeout does not create a second reservation, second cancellation, second pickup, or duplicate lifecycle event.
+- [ ] If the same reservation is open in two tabs and one tab changes it first, the stale tab receives a clear stale/conflict message and refreshes instead of overwriting newer state.
+- [ ] After every successful action, the Reservations list and Details Sheet refresh to the authoritative backend state.
+- [ ] Availability/Clothing views agree with reservation state after Reserve, Cancel, Pick Up, Return, and completion.
+- [ ] O/S never sees another tenant/workspace's reservations, customers, payments, or custody history.
+- [ ] A user without the required reservation/custody/payment authority cannot successfully perform the protected action even if they manually expose or call the frontend control.
+
+### Owner V1 end-to-end smoke flow
+
+- [ ] **Normal walk-in:** Check availability → Reserve → enter customer/payment details → Complete Reservation → `confirmed`.
+- [ ] **Payment-review walk-in:** Check availability → Reserve → enter details/evidence → Complete Reservation → `pending_confirmation` → merchant verification → `confirmed`.
+- [ ] **Walk-in changes mind:** Reserve → Cancel → `cancelled` → garment available again.
+- [ ] **Expired walk-in:** Reserve → hold expires → stale completion is blocked → garment can be reserved again if still available.
+- [ ] **Physical handover:** `confirmed` → Pick Up → `picked_up` with one visible custody/history event.
+- [ ] **Full rental lifecycle once Phase 5 is complete:** `confirmed` → Pick Up → `picked_up` → Return → `returned` → Complete Rental → `completed`.

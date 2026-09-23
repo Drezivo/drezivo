@@ -14,6 +14,8 @@ export interface LockedReservationReviewRow {
     | 'rejected';
   version: number;
   customer_snapshot: Record<string, unknown> | null;
+  terms_accepted_at: Date | null;
+  confirmed_at: Date | null;
   hold_acquired_at: Date;
   hold_expires_at: Date | null;
   pickup_at: Date;
@@ -57,7 +59,13 @@ export interface ReservationVerificationRow {
 
 export interface LockedReservationAllocationRow {
   allocation_id: string;
+  reservation_line_id: string;
   asset_id: string;
+  asset_branch_id: string;
+  asset_lifecycle_status: 'active' | 'retired' | 'lost';
+  asset_readiness: 'ready' | 'needs_cleaning' | 'needs_repair' | 'unready';
+  asset_custody_kind: 'at_branch' | 'with_customer' | 'in_transit';
+  asset_version: number;
   kind: 'reservation_hold' | 'reservation_confirmed';
   is_blocking: boolean;
   blocked_start: Date;
@@ -97,6 +105,8 @@ export async function lockReservationForReview(
        r.status,
        r.version,
        r.customer_snapshot,
+       r.terms_accepted_at,
+       r.confirmed_at,
        r.hold_acquired_at,
        r.hold_expires_at,
        r.pickup_at,
@@ -206,7 +216,13 @@ export async function lockReservationAllocationsForReview(
   const result = await client.query<LockedReservationAllocationRow>(
     `SELECT
        aa.id AS allocation_id,
+       aa.reservation_line_id,
        aa.asset_id,
+       pa.branch_id AS asset_branch_id,
+       pa.lifecycle_status AS asset_lifecycle_status,
+       pa.readiness AS asset_readiness,
+       pa.custody_kind AS asset_custody_kind,
+       pa.version AS asset_version,
        aa.kind,
        aa.is_blocking,
        lower(aa.period) AS blocked_start,
@@ -338,6 +354,85 @@ export async function markReservationAllocationsConfirmed(
     [input.tenantId, input.reservationId],
   );
   return result.rowCount ?? 0;
+}
+
+export async function pickupReservationHandover(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; reservationId: string; version: number },
+): Promise<number | null> {
+  const result = await client.query<{ version: number }>(
+    `UPDATE reservation
+        SET status = 'picked_up',
+            version = version + 1
+      WHERE tenant_id = $1
+        AND branch_id = $2
+        AND id = $3::uuid
+        AND status = 'confirmed'
+        AND version = $4
+      RETURNING version`,
+    [input.tenantId, input.branchId, input.reservationId, input.version],
+  );
+  return result.rows[0]?.version ?? null;
+}
+
+export async function markPhysicalAssetPickedUp(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    assetId: string;
+    assetVersion: number;
+  },
+): Promise<number | null> {
+  const result = await client.query<{ version: number }>(
+    `UPDATE physical_asset
+        SET custody_kind = 'with_customer',
+            version = version + 1,
+            updated_at = statement_timestamp()
+      WHERE tenant_id = $1
+        AND branch_id = $2::uuid
+        AND id = $3::uuid
+        AND lifecycle_status = 'active'
+        AND readiness = 'ready'
+        AND custody_kind = 'at_branch'
+        AND version = $4
+      RETURNING version`,
+    [input.tenantId, input.branchId, input.assetId, input.assetVersion],
+  );
+  return result.rows[0]?.version ?? null;
+}
+
+export async function appendPickupCustodyEvent(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    assetId: string;
+    reservationLineId: string;
+    actorMembershipId: string;
+    businessKey: string;
+    conditionSnapshot: Record<string, unknown>;
+  },
+): Promise<string | null> {
+  const result = await client.query<{ id: string }>(
+    `INSERT INTO custody_event
+       (tenant_id, branch_id, asset_id, reservation_line_id, actor_membership_id,
+        event_kind, occurred_at, condition_snapshot, business_key)
+     VALUES ($1, $2::uuid, $3::uuid, $4::uuid, $5::uuid,
+             'pickup', statement_timestamp(), $6::jsonb, $7)
+     ON CONFLICT (tenant_id, business_key) DO NOTHING
+     RETURNING id`,
+    [
+      input.tenantId,
+      input.branchId,
+      input.assetId,
+      input.reservationLineId,
+      input.actorMembershipId,
+      JSON.stringify(input.conditionSnapshot),
+      input.businessKey,
+    ],
+  );
+  return result.rows[0]?.id ?? null;
 }
 
 export async function cancelReservationPreHandover(

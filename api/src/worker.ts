@@ -26,6 +26,7 @@ const runner = new WorkerRunner({
   'tenant.bootstrapped': handleTenantBootstrapped,
   'reservation.held': outboxDispatcher,
   'reservation.confirmed': outboxDispatcher,
+  'reservation.picked_up': outboxDispatcher,
   'reservation.cancelled': outboxDispatcher,
   'reservation.hold_expired': outboxDispatcher,
   'clerk.invitation.dispatch_requested': handleMembershipInvitationDispatch,

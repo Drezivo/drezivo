@@ -41,6 +41,7 @@ process.env.S3_SECRET_ACCESS_KEY ??= 'test';
 
 const REVIEW_PERMISSIONS: PermissionCode[] = [
   'reservations.manage',
+  'reservations.custody',
   'payments.manage',
   'payments.view',
   'evidence.verify',
@@ -67,7 +68,7 @@ interface HeldReservation {
   paymentId: string;
 }
 
-describe('RSV-030/031/032 reservation review and staff completion', async () => {
+describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
   const { createApp } = await import('../../src/app.js');
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
   const {
@@ -75,6 +76,8 @@ describe('RSV-030/031/032 reservation review and staff completion', async () => 
     completeStaffReservation,
     confirmReservation,
     createStaffReservation,
+    getReservationDetail,
+    pickupReservation,
     rejectReservation,
     submitReservation,
   } = await import('../../src/modules/reservations/reservations.service.js');
@@ -921,6 +924,209 @@ describe('RSV-030/031/032 reservation review and staff completion', async () => 
     expect(concealed.status).toBe(404);
   });
 
+  it('picks up a confirmed reservation once, moves physical custody to the customer, and preserves the confirmed allocation', async () => {
+    const seed = await seedWorkspace('org_rsv050_pickup', 'user_rsv050_pickup', 'cash');
+    const confirmed = await createConfirmedReservation(seed, 'pickup-success');
+
+    const first = await pickupReservation(
+      reviewContext(seed, 'req-pickup-first', 'idem-pickup-success'),
+      confirmed.id,
+      { version: confirmed.version, condition_note: 'Clean and complete at handover.' },
+    );
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({
+      success: true,
+      data: { reservation: { id: confirmed.id, status: 'picked_up', version: 4 } },
+    });
+
+    const state = await pickupState(seed, confirmed.id);
+    expect(state.reservation_status).toBe('picked_up');
+    expect(state.asset).toMatchObject({
+      lifecycle_status: 'active',
+      readiness: 'ready',
+      custody_kind: 'with_customer',
+    });
+    expect(state.allocation).toMatchObject({
+      kind: 'reservation_confirmed',
+      is_blocking: true,
+      released_at: null,
+    });
+    expect(state.custodyEvents).toHaveLength(1);
+    expect(state.custodyEvents[0]).toMatchObject({
+      event_kind: 'pickup',
+      condition_note: 'Clean and complete at handover.',
+      actor_membership_id: seed.membershipId,
+    });
+    const detail = await getReservationDetail(reviewContext(seed, 'unused-detail', 'unused-detail'), confirmed.id);
+    expect(detail.status).toBe('picked_up');
+    expect(detail.custody_timeline).toEqual([
+      expect.objectContaining({
+        event_kind: 'pickup',
+        asset_id: seed.assetId,
+        condition_note: 'Clean and complete at handover.',
+      }),
+    ]);
+
+    const replay = await pickupReservation(
+      reviewContext(seed, 'req-pickup-replay', 'idem-pickup-success'),
+      confirmed.id,
+      { version: confirmed.version, condition_note: 'Clean and complete at handover.' },
+    );
+    expect(replay).toEqual(first);
+    expect(await actionEffectCounts(seed, confirmed.id, 'reservation.picked_up')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
+  });
+
+  it('blocks pickup when the garment is unready or payment truth no longer satisfies handover prerequisites', async () => {
+    const unreadySeed = await seedWorkspace('org_rsv050_unready', 'user_rsv050_unready', 'cash');
+    const unready = await createConfirmedReservation(unreadySeed, 'pickup-unready');
+    await withTenantTransaction(unreadySeed.tenantId, unreadySeed.principalId, (client) =>
+      client.query(
+        `UPDATE physical_asset
+            SET readiness = 'needs_cleaning', version = version + 1
+          WHERE tenant_id = $1 AND id = $2`,
+        [unreadySeed.tenantId, unreadySeed.assetId],
+      ),
+    );
+    const unreadyResult = await pickupReservation(
+      reviewContext(unreadySeed, 'req-pickup-unready', 'idem-pickup-unready'),
+      unready.id,
+      { version: unready.version },
+    );
+    expectFailure(unreadyResult, 'ASSET_UNREADY');
+    const unreadyState = await pickupState(unreadySeed, unready.id);
+    expect(unreadyState.reservation_status).toBe('confirmed');
+    expect(unreadyState.asset.custody_kind).toBe('at_branch');
+    expect(unreadyState.custodyEvents).toHaveLength(0);
+
+    const absentSeed = await seedWorkspace('org_rsv050_absent', 'user_rsv050_absent', 'cash');
+    const absent = await createConfirmedReservation(absentSeed, 'pickup-absent');
+    await withTenantTransaction(absentSeed.tenantId, absentSeed.principalId, (client) =>
+      client.query(
+        `UPDATE physical_asset
+            SET custody_kind = 'in_transit', version = version + 1
+          WHERE tenant_id = $1 AND id = $2`,
+        [absentSeed.tenantId, absentSeed.assetId],
+      ),
+    );
+    const absentResult = await pickupReservation(
+      reviewContext(absentSeed, 'req-pickup-absent', 'idem-pickup-absent'),
+      absent.id,
+      { version: absent.version },
+    );
+    expectFailure(absentResult, 'ASSET_UNREADY');
+    const absentState = await pickupState(absentSeed, absent.id);
+    expect(absentState.reservation_status).toBe('confirmed');
+    expect(absentState.asset.custody_kind).toBe('in_transit');
+    expect(absentState.custodyEvents).toHaveLength(0);
+
+    const paymentSeed = await seedWorkspace('org_rsv050_payment', 'user_rsv050_payment', 'cash');
+    const payment = await createConfirmedReservation(paymentSeed, 'pickup-payment');
+    await withTenantTransaction(paymentSeed.tenantId, paymentSeed.principalId, (client) =>
+      client.query(
+        `UPDATE payment SET status = 'refunded'
+          WHERE tenant_id = $1 AND id = $2`,
+        [paymentSeed.tenantId, payment.paymentId],
+      ),
+    );
+    const paymentResult = await pickupReservation(
+      reviewContext(paymentSeed, 'req-pickup-payment', 'idem-pickup-payment'),
+      payment.id,
+      { version: payment.version },
+    );
+    expectFailure(paymentResult, 'PAYMENT_PREREQUISITE_FAILED');
+    const paymentState = await pickupState(paymentSeed, payment.id);
+    expect(paymentState.reservation_status).toBe('confirmed');
+    expect(paymentState.asset.custody_kind).toBe('at_branch');
+    expect(paymentState.custodyEvents).toHaveLength(0);
+  });
+
+  it('serializes pickup double-fire to one custody event and one lifecycle effect', async () => {
+    const seed = await seedWorkspace('org_rsv050_race', 'user_rsv050_race', 'cash');
+    const confirmed = await createConfirmedReservation(seed, 'pickup-race');
+
+    const concurrent = await Promise.all([
+      pickupReservation(
+        reviewContext(seed, 'req-pickup-race-a', 'idem-pickup-race'),
+        confirmed.id,
+        { version: confirmed.version, condition_note: 'Handover condition recorded.' },
+      ),
+      pickupReservation(
+        reviewContext(seed, 'req-pickup-race-b', 'idem-pickup-race'),
+        confirmed.id,
+        { version: confirmed.version, condition_note: 'Handover condition recorded.' },
+      ),
+    ]);
+    expect(concurrent[0]).toEqual(concurrent[1]);
+    expect(concurrent[0]?.status).toBe(200);
+    expect((await pickupState(seed, confirmed.id)).custodyEvents).toHaveLength(1);
+    expect(await actionEffectCounts(seed, confirmed.id, 'reservation.picked_up')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
+  });
+
+  it('exposes pickup only to authenticated staff with reservation custody permission and a strict idempotent body', async () => {
+    const seed = await seedWorkspace('org_rsv050_route', 'user_rsv050_route', 'cash');
+    const confirmed = await createConfirmedReservation(seed, 'pickup-route');
+
+    clerk.getAuth.mockReturnValue({ userId: null, orgId: null });
+    const unauthenticated = await request(createApp())
+      .post(`/api/v1/reservations/${confirmed.id}/pickup`)
+      .set('Idempotency-Key', 'route-pickup-unauth')
+      .send({ version: confirmed.version });
+    expect(unauthenticated.status).toBe(401);
+
+    useClerk(seed);
+    const missingKey = await request(createApp())
+      .post(`/api/v1/reservations/${confirmed.id}/pickup`)
+      .send({ version: confirmed.version });
+    expect(missingKey.status).toBe(422);
+
+    useClerk(seed);
+    const injected = await request(createApp())
+      .post(`/api/v1/reservations/${confirmed.id}/pickup`)
+      .set('Idempotency-Key', 'route-pickup-injected')
+      .send({ version: confirmed.version, asset_id: seed.assetId });
+    expect(injected.status).toBe(422);
+
+    const noCustody = await seedWorkspace(
+      'org_rsv050_no_custody',
+      'user_rsv050_no_custody',
+      'cash',
+      ['reservations.manage', 'payments.manage', 'payments.view', 'evidence.verify', 'evidence.view'],
+    );
+    const noCustodyConfirmed = await createConfirmedReservation(noCustody, 'pickup-no-custody');
+    useClerk(noCustody);
+    const forbidden = await request(createApp())
+      .post(`/api/v1/reservations/${noCustodyConfirmed.id}/pickup`)
+      .set('Idempotency-Key', 'route-pickup-forbidden')
+      .send({ version: noCustodyConfirmed.version });
+    expect(forbidden.status).toBe(403);
+
+    const foreign = await seedWorkspace('org_rsv050_foreign', 'user_rsv050_foreign', 'cash');
+    const foreignConfirmed = await createConfirmedReservation(foreign, 'pickup-foreign');
+    useClerk(seed);
+    const concealed = await request(createApp())
+      .post(`/api/v1/reservations/${foreignConfirmed.id}/pickup`)
+      .set('Idempotency-Key', 'route-pickup-foreign')
+      .send({ version: foreignConfirmed.version });
+    expect(concealed.status).toBe(404);
+
+    useClerk(seed);
+    const pickedUp = await request(createApp())
+      .post(`/api/v1/reservations/${confirmed.id}/pickup`)
+      .set('Idempotency-Key', 'route-pickup-success')
+      .send({ version: confirmed.version, condition_note: 'Released to customer.' });
+    expect(pickedUp.status).toBe(200);
+    expect(pickedUp.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'picked_up', version: 4 } },
+    });
+  });
+
   it('exposes protected submit/confirm/reject routes with strict bodies, idempotency, concealed foreign IDs, and merchant-review permissions', async () => {
     const seed = await seedWorkspace('org_rsv03_routes', 'user_rsv03_routes', 'cash');
     const held = await createHold(seed, 'routes');
@@ -1167,6 +1373,32 @@ describe('RSV-030/031/032 reservation review and staff completion', async () => 
     return { id: reservation.id, version: reservation.version, paymentId };
   }
 
+  async function createConfirmedReservation(
+    seed: ReviewSeed,
+    suffix: string,
+  ): Promise<HeldReservation> {
+    const held = await createHold(seed, suffix);
+    if (seed.rail !== 'cash') {
+      await attachAcceptedReceipt(seed, held, -1);
+    }
+    const submitted = await submitReservation(
+      reviewContext(seed, `req-${suffix}-submit`, `idem-${suffix}-submit`),
+      held.id,
+      { version: 1, terms_accepted: true },
+    );
+    if (submitted.status !== 200) throw new Error('Expected reservation submission to succeed.');
+    await verifyMerchantCollection(seed, held, seed.rail !== 'cash');
+    const confirmed = await confirmReservation(
+      reviewContext(seed, `req-${suffix}-confirm`, `idem-${suffix}-confirm`),
+      held.id,
+      { version: 2 },
+    );
+    if (confirmed.status !== 200 || confirmed.body.success !== true) {
+      throw new Error('Expected reservation confirmation to succeed.');
+    }
+    return { ...held, version: confirmed.body.data.reservation.version };
+  }
+
   function walkInCustomer(fullName: string) {
     return {
       source: 'new' as const,
@@ -1348,6 +1580,61 @@ describe('RSV-030/031/032 reservation review and staff completion', async () => 
         receipt: receipt.rows[0] ?? null,
         allocation: requireRow(allocation.rows, 'allocation state'),
         auditReason: rejectionAudit.rows[0]?.merchant_reason ?? null,
+      };
+    });
+  }
+
+  async function pickupState(seed: ReviewSeed, reservationId: string) {
+    return withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const reservation = await client.query<{ status: string }>(
+        `SELECT status FROM reservation WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, reservationId],
+      );
+      const asset = await client.query<{
+        lifecycle_status: string;
+        readiness: string;
+        custody_kind: string;
+        version: number;
+      }>(
+        `SELECT lifecycle_status, readiness, custody_kind, version
+           FROM physical_asset
+          WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, seed.assetId],
+      );
+      const allocation = await client.query<{
+        kind: string;
+        is_blocking: boolean;
+        released_at: Date | null;
+      }>(
+        `SELECT aa.kind, aa.is_blocking, aa.released_at
+           FROM asset_allocation aa
+           JOIN reservation_line rl
+             ON rl.tenant_id = aa.tenant_id
+            AND rl.id = aa.reservation_line_id
+          WHERE aa.tenant_id = $1 AND rl.reservation_id = $2
+          ORDER BY aa.created_at, aa.id
+          LIMIT 1`,
+        [seed.tenantId, reservationId],
+      );
+      const custodyEvents = await client.query<{
+        event_kind: string;
+        actor_membership_id: string;
+        condition_note: string | null;
+      }>(
+        `SELECT event_kind, actor_membership_id,
+                nullif(btrim(condition_snapshot ->> 'condition_note'), '') AS condition_note
+           FROM custody_event
+          WHERE tenant_id = $1 AND reservation_line_id IN (
+            SELECT id FROM reservation_line WHERE tenant_id = $1 AND reservation_id = $2
+          )
+          ORDER BY occurred_at, id`,
+        [seed.tenantId, reservationId],
+      );
+      return {
+        reservation_status: requireRow(reservation.rows, 'pickup reservation state').status,
+        asset: requireRow(asset.rows, 'pickup asset state'),
+        allocation: requireRow(allocation.rows, 'pickup allocation state'),
+        custodyEvents: custodyEvents.rows,
       };
     });
   }

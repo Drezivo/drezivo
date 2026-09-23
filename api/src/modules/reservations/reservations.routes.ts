@@ -12,17 +12,20 @@ import {
   createStaffReservationController,
   getReservationDetailController,
   listReservationsController,
+  pickupReservationController,
   rejectReservationController,
   submitReservationController,
 } from './reservations.controller.js';
 import {
   requireMerchantReservationReviewPermission,
+  requireReservationCustodyPermission,
   requireReservationIdempotencyKey,
   requireReservationManagePermission,
   validateReservationCancel,
   validateReservationConfirm,
   validateReservationId,
   validateReservationListQuery,
+  validateReservationPickup,
   validateReservationReject,
   validateReservationSubmit,
   validateStaffReservationComplete,
@@ -79,6 +82,19 @@ reservationsRouter.post(
   validateReservationCancel,
   requireReservationIdempotencyKey,
   cancelReservationController,
+);
+
+reservationsRouter.post(
+  '/reservations/:reservationId/pickup',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('settlement'),
+  requireReservationCustodyPermission,
+  validateReservationId,
+  validateReservationPickup,
+  requireReservationIdempotencyKey,
+  pickupReservationController,
 );
 
 reservationsRouter.post(

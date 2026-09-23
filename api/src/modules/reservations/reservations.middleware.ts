@@ -6,6 +6,7 @@ import {
   reservationConfirmRequest,
   reservationId,
   reservationListQuery,
+  reservationPickupRequest,
   reservationRejectRequest,
   reservationSubmitRequest,
   staffReservationCompleteRequest,
@@ -13,6 +14,7 @@ import {
   type ReservationCancelRequest,
   type ReservationConfirmRequest,
   type ReservationListQuery,
+  type ReservationPickupRequest,
   type ReservationRejectRequest,
   type ReservationSubmitRequest,
   type StaffReservationCompleteRequest,
@@ -28,6 +30,7 @@ declare module 'express-serve-static-core' {
     reservationCreateRequest?: StaffReservationCreateRequest;
     reservationCompleteRequest?: StaffReservationCompleteRequest;
     reservationCancelRequest?: ReservationCancelRequest;
+    reservationPickupRequest?: ReservationPickupRequest;
     reservationSubmitRequest?: ReservationSubmitRequest;
     reservationConfirmRequest?: ReservationConfirmRequest;
     reservationRejectRequest?: ReservationRejectRequest;
@@ -38,6 +41,15 @@ declare module 'express-serve-static-core' {
 export const requireReservationManagePermission: RequestHandler = (req, _res, next): void => {
   if (!req.tenantContext?.permissionCodes.includes('reservations.manage')) {
     next(new ForbiddenError('This branch does not grant reservation management access.'));
+    return;
+  }
+  next();
+};
+
+export const requireReservationCustodyPermission: RequestHandler = (req, _res, next): void => {
+  const permissions = req.tenantContext?.permissionCodes ?? [];
+  if (!permissions.includes('reservations.manage') || !permissions.includes('reservations.custody')) {
+    next(new ForbiddenError('Reservation custody permission is required.'));
     return;
   }
   next();
@@ -106,6 +118,17 @@ export const validateReservationCancel: RequestHandler = (req, _res, next): void
   }
   req.body = parsed.data;
   req.reservationCancelRequest = parsed.data;
+  next();
+};
+
+export const validateReservationPickup: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationPickupRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Reservation pickup request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  req.reservationPickupRequest = parsed.data;
   next();
 };
 
