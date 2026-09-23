@@ -125,6 +125,12 @@ describe('RSV-021/022 staff reservation creation', async () => {
           WHERE aa.tenant_id = $1 AND rl.reservation_id = $2`,
         [seed.tenantId, reservationId],
       );
+      const payment = await client.query<{ status: string; amount_minor: number }>(
+        `SELECT status, amount_minor FROM payment
+          WHERE tenant_id = $1 AND reservation_id = $2
+            AND business_key = ('reservation:' || $2::text || ':initial-payment')`,
+        [seed.tenantId, reservationId],
+      );
       const audit = await client.query<{ count: number }>(
         `SELECT count(*)::int AS count FROM audit_event
           WHERE tenant_id = $1 AND entity_id = $2 AND action = 'reservation.created'`,
@@ -145,6 +151,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
         reservation: requireRow(reservation.rows, 'reservation'),
         lineCount: lines.rows[0]?.count ?? 0,
         allocation: requireRow(allocation.rows, 'allocation'),
+        payment: requireRow(payment.rows, 'payment intent'),
         auditCount: audit.rows[0]?.count ?? 0,
         outbox: requireRow(outbox.rows, 'reservation outbox'),
         idempotency: requireRow(idempotency.rows, 'idempotency'),
@@ -173,6 +180,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
     expect(persisted.allocation).toMatchObject({ asset_id: seed.assetId, is_blocking: true });
     expect(persisted.allocation.starts_at.toISOString()).toBe('2026-10-10T01:00:00.000Z');
     expect(persisted.allocation.ends_at.toISOString()).toBe('2026-10-13T04:00:00.000Z');
+    expect(persisted.payment).toEqual({ status: 'pending', amount_minor: 225000 });
     expect(persisted.auditCount).toBe(1);
     expect(persisted.outbox).toEqual({
       event_type: 'reservation.held',

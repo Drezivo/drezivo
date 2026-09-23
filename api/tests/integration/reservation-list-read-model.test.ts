@@ -433,7 +433,7 @@ describe('RSV Phase 1 reservation read model', async () => {
         `INSERT INTO payment_verification
            (tenant_id, payment_id, verifier_membership_id, decision, verified_amount_minor,
             evidence_note, decided_at, business_key)
-         VALUES ($1, $2, $3, 'approved', 12000,
+         VALUES ($1, $2, $3, 'verified', 12000,
                  'PRIVATE VERIFICATION NOTE - MUST NOT LEAVE THE API',
                  '2026-10-09T02:05:00.000Z', 'rsv011-detail-verification')`,
         [seed.tenantId, ids.payment_id, seed.membershipId],

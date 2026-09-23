@@ -9,6 +9,12 @@ import {
   type ReservationListQuery,
   type ReservationListResponse,
   type ReservationPaymentProjection,
+  type ReservationSubmitRequest,
+  type ReservationSubmitResponse,
+  type ReservationConfirmRequest,
+  type ReservationConfirmResponse,
+  type ReservationRejectRequest,
+  type ReservationRejectResponse,
   type StaffReservationCreateRequest,
   type TenantStatus,
 } from '@drezivo/contracts';
@@ -26,6 +32,13 @@ import {
   createStaffReservationCommand,
   type ReservationCommandResponse,
 } from './reservations.command.service.js';
+import {
+  confirmReservationByMerchant,
+  rejectReservationByMerchant,
+  submitReservationForConfirmation,
+  type ReservationReviewCommandResponse,
+  type ReservationReviewContext,
+} from './reservations.review.service.js';
 import {
   listReservationsReadModel,
   readReservationDetailModel,
@@ -84,6 +97,33 @@ export async function createStaffReservation(
     },
     request,
   );
+}
+
+export async function submitReservation(
+  input: ReservationReadContext & { requestId: string; idempotencyKey: string },
+  reservationId: string,
+  request: ReservationSubmitRequest,
+): Promise<ReservationReviewCommandResponse<ReservationSubmitResponse>> {
+  assertReservationReviewContext(input);
+  return submitReservationForConfirmation(toReviewContext(input), reservationId, request);
+}
+
+export async function confirmReservation(
+  input: ReservationReadContext & { requestId: string; idempotencyKey: string },
+  reservationId: string,
+  request: ReservationConfirmRequest,
+): Promise<ReservationReviewCommandResponse<ReservationConfirmResponse>> {
+  assertMerchantReviewContext(input);
+  return confirmReservationByMerchant(toReviewContext(input), reservationId, request);
+}
+
+export async function rejectReservation(
+  input: ReservationReadContext & { requestId: string; idempotencyKey: string },
+  reservationId: string,
+  request: ReservationRejectRequest,
+): Promise<ReservationReviewCommandResponse<ReservationRejectResponse>> {
+  assertMerchantReviewContext(input);
+  return rejectReservationByMerchant(toReviewContext(input), reservationId, request);
 }
 
 /** Staff reservation list read used by the Reservations operations page. */
@@ -277,6 +317,35 @@ function requireDeliverySnapshot(
     throw new StateConflictError('Reservation delivery data is incomplete for staff display.');
   }
   return { fulfillment_method: row.fulfillment_method };
+}
+
+function toReviewContext(
+  input: ReservationReadContext & { requestId: string; idempotencyKey: string },
+): ReservationReviewContext {
+  return {
+    tenantId: input.tenantId,
+    branchId: input.branchId,
+    membershipId: input.membershipId,
+    principalId: input.principalId,
+    requestId: input.requestId,
+    idempotencyKey: input.idempotencyKey,
+  };
+}
+
+function assertReservationReviewContext(input: ReservationReadContext): void {
+  if (!input.permissionCodes.includes('reservations.manage')) {
+    throw new ForbiddenError('This branch does not grant reservation management access.');
+  }
+}
+
+function assertMerchantReviewContext(input: ReservationReadContext): void {
+  assertReservationReviewContext(input);
+  if (
+    !input.permissionCodes.includes('payments.manage') ||
+    !input.permissionCodes.includes('evidence.verify')
+  ) {
+    throw new ForbiddenError('Merchant payment verification permission is required.');
+  }
 }
 
 function assertReservationBookingContext(input: ReservationReadContext): void {

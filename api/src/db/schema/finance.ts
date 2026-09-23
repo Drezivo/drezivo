@@ -34,7 +34,11 @@ export const evidenceStatusEnum = pgEnum('payment_evidence_status', [
   'rejected',
   'superseded',
 ]);
-export const verificationDecisionEnum = pgEnum('payment_verification_decision', ['approved', 'rejected']);
+export const verificationDecisionEnum = pgEnum('payment_verification_decision', [
+  'verified',
+  'rejected',
+  'ask_info',
+]);
 export const chargeKindEnum = pgEnum('charge_kind', ['rental', 'delivery', 'late_fee', 'damage_fee', 'credit']);
 export const allocationDirectionEnum = pgEnum('payment_allocation_direction', ['apply', 'reverse']);
 export const refundStatusEnum = pgEnum('refund_status', [

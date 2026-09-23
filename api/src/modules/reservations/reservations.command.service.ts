@@ -141,6 +141,7 @@ export async function createStaffReservationCommand(
       const reservationId = randomUUID();
       const reservationLineId = randomUUID();
       const allocationId = randomUUID();
+      const paymentId = randomUUID();
       const referenceCode = `RSV-${reservationId.toUpperCase()}`;
       const rentalTotalMinor = Number(quote.price_snapshot.rental_total_minor);
       const securityRequiredMinor = Number(quote.price_snapshot.security_required_minor);
@@ -150,6 +151,7 @@ export async function createStaffReservationCommand(
         reservationId,
         reservationLineId,
         allocationId,
+        paymentId,
         tenantId: context.tenantId,
         branchId: context.branchId,
         customerId: customer.id,

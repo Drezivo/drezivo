@@ -2,10 +2,16 @@ import type { RequestHandler } from 'express';
 
 import {
   idempotencyKey,
+  reservationConfirmRequest,
   reservationId,
   reservationListQuery,
+  reservationRejectRequest,
+  reservationSubmitRequest,
   staffReservationCreateRequest,
+  type ReservationConfirmRequest,
   type ReservationListQuery,
+  type ReservationRejectRequest,
+  type ReservationSubmitRequest,
   type StaffReservationCreateRequest,
 } from '@drezivo/contracts';
 
@@ -16,6 +22,9 @@ declare module 'express-serve-static-core' {
     reservationListQuery?: ReservationListQuery;
     reservationId?: string;
     reservationCreateRequest?: StaffReservationCreateRequest;
+    reservationSubmitRequest?: ReservationSubmitRequest;
+    reservationConfirmRequest?: ReservationConfirmRequest;
+    reservationRejectRequest?: ReservationRejectRequest;
     reservationIdempotencyKey?: string;
   }
 }
@@ -23,6 +32,19 @@ declare module 'express-serve-static-core' {
 export const requireReservationManagePermission: RequestHandler = (req, _res, next): void => {
   if (!req.tenantContext?.permissionCodes.includes('reservations.manage')) {
     next(new ForbiddenError('This branch does not grant reservation management access.'));
+    return;
+  }
+  next();
+};
+
+export const requireMerchantReservationReviewPermission: RequestHandler = (req, _res, next): void => {
+  const permissions = req.tenantContext?.permissionCodes ?? [];
+  if (
+    !permissions.includes('reservations.manage') ||
+    !permissions.includes('payments.manage') ||
+    !permissions.includes('evidence.verify')
+  ) {
+    next(new ForbiddenError('Merchant payment verification permission is required.'));
     return;
   }
   next();
@@ -56,6 +78,39 @@ export const validateStaffReservationCreate: RequestHandler = (req, _res, next):
   }
   req.body = parsed.data;
   req.reservationCreateRequest = parsed.data;
+  next();
+};
+
+export const validateReservationSubmit: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationSubmitRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Reservation submission request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  req.reservationSubmitRequest = parsed.data;
+  next();
+};
+
+export const validateReservationConfirm: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationConfirmRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Reservation confirmation request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  req.reservationConfirmRequest = parsed.data;
+  next();
+};
+
+export const validateReservationReject: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationRejectRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Reservation rejection request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  req.reservationRejectRequest = parsed.data;
   next();
 };
 
