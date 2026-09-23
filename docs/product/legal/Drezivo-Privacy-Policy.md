@@ -20,6 +20,10 @@ owner: "[INSERT LEGAL ENTITY NAME]"
 > the actual data flows, processors, retention schedule, cross-border transfers, registration
 > duties, and final contact details before publication.
 
+See also the [Data Processing Addendum](Drezivo-Data-Processing-Addendum.md),
+[Cookie Notice](Drezivo-Cookie-Notice.md), [Security Overview](Drezivo-Security-Overview.md),
+and [Data Retention and Deletion Standard](Drezivo-Data-Retention-and-Deletion-Standard.md).
+
 ## 1. What this notice covers
 
 This notice describes how Drezivo processes personal information through its website, staff
@@ -88,6 +92,10 @@ The final published notice must list the actual analytics, advertising, cookie, 
 enabled in production. A tool must not be named here until it has been approved in the processing
 inventory.
 
+The [Cookie Notice](Drezivo-Cookie-Notice.md) explains how Drezivo will disclose the cookies and
+similar technologies actually used in production. It must be updated before a non-essential
+analytics, advertising, or preference technology is enabled.
+
 ## 6. Disclosure and processors
 
 We may disclose information to the business that controls a reservation, staff members authorized
@@ -99,6 +107,10 @@ personal information.
 We select processors, document instructions and safeguards, restrict access, and require
 confidentiality. A business controller remains responsible for deciding which customer data it
 submits and for answering requests that concern its own customer relationship.
+
+When Drezivo processes personal information for a business as its processor, the parties' roles,
+instructions, security commitments, subprocessor process, and deletion/return obligations are
+described in the [Data Processing Addendum](Drezivo-Data-Processing-Addendum.md).
 
 ## 7. International processing
 
@@ -114,6 +126,8 @@ obligations, dispute resolution, security records, or the establishment or defen
 The final retention schedule must specify periods for account records, reservations, financial and
 tax records, payment evidence, support tickets, security logs, backups, and marketing preferences.
 When retention ends, information is securely deleted, anonymized, or irreversibly de-identified.
+The internal [Data Retention and Deletion Standard](Drezivo-Data-Retention-and-Deletion-Standard.md)
+requires an approved, documented schedule before production processing begins.
 
 ## 9. Security
 

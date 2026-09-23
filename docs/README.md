@@ -18,6 +18,11 @@ The Philippines-first [Terms of Service](product/legal/Drezivo-Terms-of-Service.
 canonical copy for the public web pages, but placeholders must be completed and a Philippine lawyer
 and appointed Data Protection Officer must approve publication.
 
+The companion [legal and trust documentation index](product/legal/README.md) includes the
+acceptable-use, processor, retention, cookie, security-overview, and vulnerability-reporting
+drafts. These documents describe proposed controls and approval gates; they do not certify a
+production deployment.
+
 ## Development
 
 Use Node 22 or 24. Run `npm ci`, `npm run lint:md`, and `npm run lint:links`.
