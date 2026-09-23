@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ClothingDetail, ClothingVariantDetail, PhysicalAssetSummary } from "@drezivo/contracts";
 
 import { ArchiveClothingDialog, archiveSuccessMessage } from "@/components/inventory/archive-clothing-dialog";
+import { RestoreClothingDialog, restoreSuccessMessage } from "@/components/inventory/restore-clothing-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -110,6 +111,10 @@ export function ClothingDetailsPage({ productId }: { productId: string }) {
         setNotice(message);
         void loadDetail();
       }}
+      onRestored={(message) => {
+        setNotice(message);
+        void loadDetail();
+      }}
     />
   );
 }
@@ -121,6 +126,7 @@ function DetailContent({
   isPublishing,
   onPublish,
   onArchived,
+  onRestored,
   onDismissNotice,
 }: {
   item: ClothingDetail;
@@ -129,9 +135,11 @@ function DetailContent({
   isPublishing: boolean;
   onPublish: () => void;
   onArchived: (message: string) => void;
+  onRestored: (message: string) => void;
   onDismissNotice: () => void;
 }) {
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(false);
   const imageUrls = useMemo(
     () => item.images.flatMap((image) => (image.image_url ? [image.image_url] : [])),
     [item.images]
@@ -289,7 +297,11 @@ function DetailContent({
                         Archive
                       </Button>
                     </div>
-                  ) : null}
+                  ) : (
+                    <Button type="button" onClick={() => setRestoreOpen(true)}>
+                      Restore to Draft
+                    </Button>
+                  )}
                 </div>
                 <p className="mt-4 text-xl font-semibold text-dashboard-navy">{priceRange}</p>
                 {item.description ? (
@@ -483,7 +495,16 @@ function DetailContent({
           updatedAt={item.updated_at}
           onArchived={(result) => onArchived(archiveSuccessMessage(result))}
         />
-      ) : null}
+      ) : (
+        <RestoreClothingDialog
+          open={restoreOpen}
+          onOpenChange={setRestoreOpen}
+          productId={item.product_id}
+          name={item.name}
+          updatedAt={item.updated_at}
+          onRestored={(result) => onRestored(restoreSuccessMessage(result))}
+        />
+      )}
     </div>
   );
 }

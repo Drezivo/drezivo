@@ -154,6 +154,57 @@ describe('CLT Phase 1 catalogue read model', async () => {
     expect(empty).toEqual({ items: [], page_meta: { next_cursor: null, has_more: false } });
   });
 
+  it('excludes archived variants and their physical pieces from the normal inventory list projection', async () => {
+    const tenant = await createTestTenant({ clerkOrgId: 'org_clt074_list_projection' });
+    const seeded = await seedSimpleCatalogue(tenant.id, 'user_clt074_list_projection', {
+      productName: 'Projection Gown',
+      code: 'PROJ-001',
+      categoryName: 'Gowns',
+    });
+    const context = catalogueContext(tenant.id, seeded.branchId, 'user_clt074_list_projection');
+
+    await withTenantTransaction(tenant.id, 'user_clt074_list_projection', async (client) => {
+      const archivedVariant = await client.query<{ id: string }>(
+        `INSERT INTO product_variant
+           (tenant_id, product_id, sku, size_label, color_label, measurements,
+            measurement_unit, measurement_mode, rental_price_minor, security_deposit_minor,
+            currency, pricing_mode, included_duration_minutes, status)
+         VALUES ($1, $2, 'SKU-PROJ-001-XL', 'XL', 'Black', '{}'::jsonb, 'cm', 'none',
+                 5000, 5000, 'PHP', 'daily', 1440, 'archived')
+         RETURNING id`,
+        [tenant.id, seeded.productId],
+      );
+      const archivedVariantId = requireRow(archivedVariant.rows, 'archived projection variant').id;
+      await client.query(
+        `INSERT INTO physical_asset
+           (tenant_id, branch_id, variant_id, asset_code, lifecycle_status, readiness, custody_kind)
+         VALUES ($1, $2, $3, 'AST-PROJ-001-XL', 'active', 'ready', 'at_branch')`,
+        [tenant.id, seeded.branchId, archivedVariantId],
+      );
+    });
+
+    const list = await getCatalogueClothingList(context, {
+      limit: 20,
+      sort: 'code_asc',
+      search: 'PROJ-001',
+    });
+    expect(list.items).toHaveLength(1);
+    expect(list.items[0]).toMatchObject({
+      code: 'PROJ-001',
+      size_labels: ['M'],
+      price_from_minor: '10000',
+      readiness: { active_assets: 1, ready: 1 },
+      availability: { active_assets: 1, available_assets: 1 },
+    });
+
+    const archivedSizeFilter = await getCatalogueClothingList(context, {
+      limit: 20,
+      sort: 'code_asc',
+      size_label: 'XL',
+    });
+    expect(archivedSizeFilter.items).toEqual([]);
+  });
+
   it('returns a signed cover image URL for display order zero and null when no cover exists', async () => {
     const tenant = await createTestTenant({ clerkOrgId: 'org_clt010_cover_image' });
     const seeded = await seedLargeCatalogue(tenant.id, 'user_clt010_cover_image');

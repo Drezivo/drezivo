@@ -28,10 +28,12 @@ import type {
   CatalogueCategory,
   ClothingAvailabilitySummary,
   ClothingListItem,
+  ClothingListSort,
   ClothingProductLifecycle,
 } from "@drezivo/contracts";
 
 import { ArchiveClothingDialog, archiveSuccessMessage } from "@/components/inventory/archive-clothing-dialog";
+import { RestoreClothingDialog, restoreSuccessMessage } from "@/components/inventory/restore-clothing-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -55,6 +57,13 @@ import { cn } from "@/lib/utils";
 const PAGE_SIZE = 10;
 const SIZE_OPTIONS = ["All Sizes", "XS", "S", "M", "L", "XL", "XXL"] as const;
 const STATUS_OPTIONS = ["All Statuses", "Active", "Draft", "Archived"] as const;
+const SORT_OPTIONS: ReadonlyArray<{ label: string; value: ClothingListSort }> = [
+  { label: "New", value: "newest" },
+  { label: "Oldest", value: "oldest" },
+  { label: "Name A–Z", value: "name_asc" },
+  { label: "Name Z–A", value: "name_desc" },
+  { label: "Code A–Z", value: "code_asc" },
+];
 type SizeFilter = (typeof SIZE_OPTIONS)[number];
 type StatusFilter = (typeof STATUS_OPTIONS)[number];
 
@@ -75,6 +84,7 @@ export function ClothingPage() {
   );
   const [size, setSize] = useState<SizeFilter>(() => parseSizeFilter(searchParams.get("size")));
   const [status, setStatus] = useState<StatusFilter>(() => parseStatusFilter(searchParams.get("status")));
+  const [sort, setSort] = useState<ClothingListSort>(() => parseSort(searchParams.get("sort")));
   const [categories, setCategories] = useState<CatalogueCategory[]>([]);
   const [rows, setRows] = useState<ClothingListItem[]>([]);
   const [pageMeta, setPageMeta] = useState<PageMeta>({ next_cursor: null, has_more: false });
@@ -110,11 +120,12 @@ export function ClothingPage() {
     if (categoryId) params.set("category", categoryId);
     if (size !== "All Sizes") params.set("size", size);
     if (status !== "All Statuses") params.set("status", status.toLowerCase());
+    if (sort !== "newest") params.set("sort", sort);
 
     const nextSearch = params.toString();
     if (nextSearch === searchParams.toString()) return;
     router.replace(nextSearch ? `${pathname}?${nextSearch}` : pathname, { scroll: false });
-  }, [categoryId, deferredQuery, pathname, router, searchParams, size, status]);
+  }, [categoryId, deferredQuery, pathname, router, searchParams, size, sort, status]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -144,7 +155,7 @@ export function ClothingPage() {
     void api
       .getCatalogueClothing({
         limit: PAGE_SIZE,
-        sort: "name_asc",
+        sort,
         ...(currentCursor ? { cursor: currentCursor } : {}),
         ...(deferredQuery ? { search: deferredQuery } : {}),
         ...(categoryId ? { category_id: categoryId } : {}),
@@ -178,6 +189,7 @@ export function ClothingPage() {
     isSignedIn,
     reloadVersion,
     size,
+    sort,
     productStatus,
   ]);
 
@@ -206,6 +218,11 @@ export function ClothingPage() {
     resetPagination();
   };
 
+  const updateSort = (value: ClothingListSort) => {
+    setSort(value);
+    resetPagination();
+  };
+
   const hasActiveFilters = Boolean(deferredQuery || categoryId || size !== "All Sizes" || status !== "All Statuses");
 
   const clearFilters = () => {
@@ -218,6 +235,12 @@ export function ClothingPage() {
 
   const handleArchived = (result: Parameters<typeof archiveSuccessMessage>[0]) => {
     setNotice(archiveSuccessMessage(result));
+    resetPagination();
+    setReloadVersion((value) => value + 1);
+  };
+
+  const handleRestored = (result: Parameters<typeof restoreSuccessMessage>[0]) => {
+    setNotice(restoreSuccessMessage(result));
     resetPagination();
     setReloadVersion((value) => value + 1);
   };
@@ -320,6 +343,7 @@ export function ClothingPage() {
               options={STATUS_OPTIONS}
               onSelect={updateStatus}
             />
+            <SortMenu value={sort} onSelect={updateSort} />
           </CardContent>
         </Card>
 
@@ -377,7 +401,12 @@ export function ClothingPage() {
                 </TableHeader>
                 <TableBody>
                   {rows.map((item) => (
-                    <ClothingRow key={item.product_id} item={item} onArchived={handleArchived} />
+                    <ClothingRow
+                      key={item.product_id}
+                      item={item}
+                      onArchived={handleArchived}
+                      onRestored={handleRestored}
+                    />
                   ))}
                 </TableBody>
               </Table>
@@ -425,9 +454,11 @@ export function ClothingPage() {
 function ClothingRow({
   item,
   onArchived,
+  onRestored,
 }: {
   item: ClothingListItem;
   onArchived: Parameters<typeof ArchiveClothingDialog>[0]["onArchived"];
+  onRestored: Parameters<typeof RestoreClothingDialog>[0]["onRestored"];
 }) {
   return (
     <TableRow>
@@ -535,7 +566,7 @@ function ClothingRow({
         </div>
       </TableCell>
       <TableCell className="px-2 sm:px-4">
-        <ClothingActions item={item} onArchived={onArchived} />
+        <ClothingActions item={item} onArchived={onArchived} onRestored={onRestored} />
       </TableCell>
     </TableRow>
   );
@@ -575,11 +606,14 @@ function CatalogueListState({
 function ClothingActions({
   item,
   onArchived,
+  onRestored,
 }: {
   item: ClothingListItem;
   onArchived: Parameters<typeof ArchiveClothingDialog>[0]["onArchived"];
+  onRestored: Parameters<typeof RestoreClothingDialog>[0]["onRestored"];
 }) {
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(false);
 
   return (
     <div onClick={(event) => event.stopPropagation()}>
@@ -610,7 +644,11 @@ function ClothingActions({
                 Archive
               </DropdownMenuItem>
             </>
-          ) : null}
+          ) : (
+            <DropdownMenuItem onSelect={() => setRestoreOpen(true)}>
+              Restore to Draft
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {item.product_status !== "archived" ? (
@@ -622,7 +660,16 @@ function ClothingActions({
           updatedAt={item.updated_at}
           onArchived={onArchived}
         />
-      ) : null}
+      ) : (
+        <RestoreClothingDialog
+          open={restoreOpen}
+          onOpenChange={setRestoreOpen}
+          productId={item.product_id}
+          name={item.name}
+          updatedAt={item.updated_at}
+          onRestored={onRestored}
+        />
+      )}
     </div>
   );
 }
@@ -683,6 +730,37 @@ function FilterMenu<Option extends string>({
         {options.map((option) => (
           <DropdownMenuItem key={option} onSelect={() => onSelect(option)}>
             {option}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function SortMenu({
+  onSelect,
+  value,
+}: {
+  onSelect: (value: ClothingListSort) => void;
+  value: ClothingListSort;
+}) {
+  const selected = SORT_OPTIONS.find((option) => option.value === value) ?? SORT_OPTIONS[0]!;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          aria-label="Sort clothing"
+          className="min-w-32 justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+        >
+          {selected.label}
+          <ChevronRight className="h-3.5 w-3.5 rotate-90 text-dashboard-muted" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {SORT_OPTIONS.map((option) => (
+          <DropdownMenuItem key={option.value} onSelect={() => onSelect(option.value)}>
+            {option.label}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -768,6 +846,11 @@ function parseStatusFilter(value: string | null): StatusFilter {
   if (normalized === "draft") return "Draft";
   if (normalized === "archived") return "Archived";
   return "All Statuses";
+}
+
+function parseSort(value: string | null): ClothingListSort {
+  if (!value) return "newest";
+  return SORT_OPTIONS.some((option) => option.value === value) ? (value as ClothingListSort) : "newest";
 }
 
 function formatMinorMoney(value: string, currency: string) {

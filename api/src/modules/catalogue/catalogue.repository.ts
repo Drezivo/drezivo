@@ -636,9 +636,9 @@ export async function removeVariantSafely(
 ): Promise<{ outcome: 'deleted' | 'archived'; row: EditableVariantRow | null }> {
   const references = await client.query<{ asset_count: number; reservation_count: number }>(
     `SELECT
-       (SELECT count(*)::int FROM physical_asset WHERE tenant_id = $1 AND variant_id = $3) AS asset_count,
-       (SELECT count(*)::int FROM reservation_line WHERE tenant_id = $1 AND variant_id = $3) AS reservation_count`,
-    [tenantId, productId, variantId],
+       (SELECT count(*)::int FROM physical_asset WHERE tenant_id = $1 AND variant_id = $2) AS asset_count,
+       (SELECT count(*)::int FROM reservation_line WHERE tenant_id = $1 AND variant_id = $2) AS reservation_count`,
+    [tenantId, variantId],
   );
   const counts = references.rows[0] ?? { asset_count: 0, reservation_count: 0 };
   if (counts.asset_count === 0 && counts.reservation_count === 0) {

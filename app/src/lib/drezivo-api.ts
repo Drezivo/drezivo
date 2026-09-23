@@ -16,6 +16,11 @@ import {
   createClothingRequest,
   publishClothingRequest,
   publishClothingResponse,
+  removeClothingVariantRequest,
+  restoreClothingRequest,
+  restoreClothingResponse,
+  updateClothingVariantLifecycleRequest,
+  updateClothingVariantLifecycleResponse,
   createClothingResponse,
   removeCatalogueCategoryResponse,
   measurementGuide,
@@ -55,6 +60,11 @@ import {
   type CreateClothingRequest,
   type PublishClothingRequest,
   type PublishClothingResponse,
+  type RemoveClothingVariantRequest,
+  type RestoreClothingRequest,
+  type RestoreClothingResponse,
+  type UpdateClothingVariantLifecycleRequest,
+  type UpdateClothingVariantLifecycleResponse,
   type CreateClothingResponse,
   type RemoveCatalogueCategoryResponse,
   type MeasurementGuide,
@@ -330,6 +340,47 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "POST",
         path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/publish`,
         responseSchema: apiEnvelope(publishClothingResponse),
+      }),
+    restoreClothing: (
+      productId: string,
+      input: RestoreClothingRequest,
+      idempotencyKey: string
+    ) =>
+      request<RestoreClothingResponse>({
+        getToken,
+        body: restoreClothingRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/restore`,
+        responseSchema: apiEnvelope(restoreClothingResponse),
+      }),
+    updateClothingVariantLifecycle: (
+      productId: string,
+      variantId: string,
+      input: UpdateClothingVariantLifecycleRequest,
+      idempotencyKey: string
+    ) =>
+      request<UpdateClothingVariantLifecycleResponse>({
+        getToken,
+        body: updateClothingVariantLifecycleRequest.parse(input),
+        idempotencyKey,
+        method: "PATCH",
+        path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}/lifecycle`,
+        responseSchema: apiEnvelope(updateClothingVariantLifecycleResponse),
+      }),
+    removeClothingVariant: (
+      productId: string,
+      variantId: string,
+      input: RemoveClothingVariantRequest,
+      idempotencyKey: string
+    ) =>
+      request<UpdateClothingVariantLifecycleResponse>({
+        getToken,
+        body: removeClothingVariantRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}/remove`,
+        responseSchema: apiEnvelope(updateClothingVariantLifecycleResponse),
       }),
     updatePhysicalAssetState: (
       assetId: string,

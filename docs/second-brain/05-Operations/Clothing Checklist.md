@@ -324,30 +324,30 @@ Before marking a task complete:
     - [x] Publish is tenant-scoped through the shared catalogue transaction/RLS boundary, requires `assets.manage`, uses an idempotency record, and rejects stale `expected_updated_at` tokens.
   - **Tests/evidence:** `catalogue-draft-publish.test.ts` passes `4/4` against disposable PostgreSQL, proving valid draft → active publication, eligible variant activation, active-list visibility, idempotent replay, missing-image rejection, no-active-piece rejection, and stale-version protection. `catalogue-draft-publish-route.test.ts` passes `1/1` through the authenticated HTTP route. `clothing-details-page.test.tsx` passes `12/12`, covering the draft Publish action, current `updated_at` token usage, authoritative detail reload after success, and actionable validation errors that keep the item draft. Contracts remain `74/74`; API units `82/82`; contracts build, API typecheck/lint/build, app strict typecheck, focused Clothing tests `40/40`, and `git diff --check` pass.
 
-- [ ] **CLT-073 — Restore archived products safely**
+- [x] **CLT-073 — Restore archived products safely**
   - **Depends on:** CLT-032 archive behavior and reservation-history preservation.
   - **Outcome:** Archived clothing can be returned to staff management instead of becoming permanently one-way.
   - **Acceptance:**
-    - [ ] Archived rows expose an `Unarchive` / `Restore` action in the inventory table and detail page.
-    - [ ] Restore does not erase reservation snapshots, allocations, audit history, maintenance history, or custody history.
-    - [ ] Restore moves the product to `draft`, not directly to `active`, so the current images, variants, and physical-asset state can be reviewed before republishing.
-    - [ ] Restore does not silently reactivate retired/lost/unready serialized assets; restored product/variant/asset lifecycle behavior is explicit and safe.
-    - [ ] Restore is tenant-scoped, Owner/permission-policy compliant, idempotent, and concurrency-safe.
-    - [ ] After restore, the product appears in the draft inventory projection and can be completed/published according to current lifecycle rules.
-  - **Tests/evidence:** Archive → restore PostgreSQL integration suite plus archived-table/detail UI action tests.
+    - [x] Archived rows expose `Restore to Draft` in the inventory row actions and Clothing Detail.
+    - [x] Restore preserves reservation snapshots, blocking reservation allocations, maintenance allocations, audit history, maintenance history, and custody truth.
+    - [x] Restore moves the product to `draft`, never directly to `active`; archived variants return only to `draft` for review.
+    - [x] Restore does not reactivate retired/lost/unread y serialized assets. Physical lifecycle/readiness/custody state is unchanged by the restore command.
+    - [x] Restore is tenant-scoped, requires the shared catalogue write boundary plus `assets.archive`, replays the same idempotency intent safely, and rejects stale `expected_updated_at` tokens.
+    - [x] After restore, the product is visible as Draft in staff inventory and can use the existing CLT-072 publish flow after review.
+  - **Tests/evidence:** `catalogue-archive-clothing-route.test.ts` passes `8/8` against disposable PostgreSQL. Its CLT-073 cases archive a product with confirmed reservation history, blocking reservation allocation, maintenance allocation, custody exceptions, and a safely retired piece, then restore it to Draft while proving all physical/history state remains unchanged; same-key restore replay returns the same response, stale restore returns `STALE_VERSION`, and missing `assets.archive` returns `FORBIDDEN`. `clothing-details-page.test.tsx`, `clothing-page.test.tsx`, and `edit-clothing-page.test.tsx` pass `35/35`, covering restore from both archived row actions and Clothing Detail plus authoritative reload to Draft.
 
-- [ ] **CLT-074 — Add per-variant lifecycle and removal controls**
+- [x] **CLT-074 — Add per-variant lifecycle and removal controls**
   - **Depends on:** Existing variant edit API and reservation snapshot rules.
   - **Outcome:** Staff can control each variant independently instead of treating every variant as permanently tied to the product's draft/active state.
   - **Acceptance:**
-    - [ ] Each variant exposes explicit Draft/Publish/Archive lifecycle controls in the edit experience.
-    - [ ] Product lifecycle invariants are explicit: a draft product is never renter-facing; an active product must have at least one active/publishable variant; an archived product contributes no new renter-facing availability.
-    - [ ] Other variants may remain draft while at least one valid variant is active.
-    - [ ] Staff can remove a variant through an explicit confirmation flow.
-    - [ ] A never-used draft variant with no serialized assets/history may be hard-deleted only if safe; referenced/used variants must use a non-destructive archive/lifecycle transition instead of breaking reservation/history foreign keys.
-    - [ ] Variant lifecycle/removal mutations are tenant-scoped, permission-checked, idempotent/conditional, audited, and preserve reservation snapshots and allocations.
-    - [ ] Product detail/list projections retain draft/archived variants for authorized staff management, while renter-facing availability/reservation handoff requires both product and variant to be active.
-  - **Tests/evidence:** Variant publish/draft/remove PostgreSQL tests plus edit-page lifecycle action tests.
+    - [x] Each variant exposes explicit Publish, Set Draft, Archive, Restore Draft, and Remove controls in Edit Clothing.
+    - [x] Product lifecycle invariants are enforced: draft/archived products are not renter-facing; an active product cannot demote/archive/remove its final active variant.
+    - [x] Other variants may remain draft or archived while at least one valid variant remains active.
+    - [x] Staff remove variants through an explicit confirmation dialog that explains destructive vs non-destructive behavior.
+    - [x] A never-used draft variant with no serialized assets/reservation history is hard-deleted; variants with assets or reservation history are archived instead so foreign keys/history remain intact.
+    - [x] Variant lifecycle/removal mutations are tenant-scoped, require `assets.manage`, use idempotency and `expected_updated_at` concurrency tokens, emit audit events, and preserve reservation snapshots plus allocations.
+    - [x] Staff read models continue to retain draft/archived variants, while the existing reservation-handoff boundary requires both product and variant to be active.
+  - **Tests/evidence:** `catalogue-archive-clothing-route.test.ts` passes `8/8` and proves lifecycle replay, stale-version rejection, `assets.manage` permission enforcement, final-active-variant protection, referenced variant archive fallback, safe hard-delete of an unused draft variant, unchanged reservation snapshot/allocation state, and lifecycle/archive/delete audit events. `catalogue-reservation-handoff.test.ts` passes `3/3` and continues to exclude non-active products/variants from allocation candidates. Focused Clothing frontend tests pass `35/35`, covering Publish/Set Draft/Archive/Restore Draft controls, safe Remove confirmation, and disabling lifecycle actions while unsaved edits exist.
 
 - [x] **CLT-075 — Return Add Clothing users to Inventory after success**
   - **Depends on:** Existing Add Clothing form and create mutation.

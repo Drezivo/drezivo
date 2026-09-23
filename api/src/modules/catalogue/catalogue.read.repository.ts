@@ -161,6 +161,7 @@ export async function listClothingReadModel(
        WHERE pv_size.tenant_id = p.tenant_id
          AND pv_size.product_id = p.id
          AND lower(pv_size.size_label) = lower(${placeholder})
+         AND (p.status = 'archived' OR pv_size.status <> 'archived')
     )`);
   }
 
@@ -174,6 +175,7 @@ export async function listClothingReadModel(
       'pa_filter.branch_id = $2',
       'pv_filter.tenant_id = p.tenant_id',
       'pv_filter.product_id = p.id',
+      "(p.status = 'archived' OR pv_filter.status <> 'archived')",
     ];
     if (input.query.asset_lifecycle) {
       assetPredicates.push(`pa_filter.lifecycle_status = ${bind(input.query.asset_lifecycle)}`);
@@ -258,15 +260,18 @@ export async function listClothingReadModel(
        SELECT
          COALESCE(
            array_agg(DISTINCT pv.size_label ORDER BY pv.size_label)
-             FILTER (WHERE pv.size_label IS NOT NULL),
+             FILTER (
+               WHERE pv.size_label IS NOT NULL
+                 AND (p.status = 'archived' OR pv.status <> 'archived')
+             ),
            ARRAY[]::text[]
          ) AS size_labels,
          COALESCE(
-           min(pv.rental_price_minor) FILTER (WHERE pv.status <> 'archived'),
+           min(pv.rental_price_minor) FILTER (WHERE p.status = 'archived' OR pv.status <> 'archived'),
            min(pv.rental_price_minor)
          ) AS price_from_minor,
          COALESCE(
-           min(pv.currency) FILTER (WHERE pv.status <> 'archived'),
+           min(pv.currency) FILTER (WHERE p.status = 'archived' OR pv.status <> 'archived'),
            min(pv.currency)
          ) AS currency
        FROM product_variant pv
@@ -287,6 +292,7 @@ export async function listClothingReadModel(
        WHERE pa.tenant_id = p.tenant_id
          AND pa.branch_id = $2
          AND pv_asset.product_id = p.id
+         AND (p.status = 'archived' OR pv_asset.status <> 'archived')
      ) asset_summary ON true
      CROSS JOIN LATERAL (
        SELECT
@@ -424,6 +430,7 @@ export async function listClothingReadModel(
          WHERE pa.tenant_id = p.tenant_id
            AND pa.branch_id = $2
            AND pv_availability.product_id = p.id
+           AND (p.status = 'archived' OR pv_availability.status <> 'archived')
        ) summary
      ) availability_summary ON true
      WHERE ${where.join('\n       AND ')}

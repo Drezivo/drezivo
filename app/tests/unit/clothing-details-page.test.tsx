@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   archiveClothing: vi.fn(),
   getCatalogueClothingDetail: vi.fn(),
   publishClothing: vi.fn(),
+  restoreClothing: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({
@@ -137,6 +138,15 @@ describe("ClothingDetailsPage", () => {
         updated_at: "2026-09-21T00:01:00.000Z",
       },
       requestId: "req-publish",
+    });
+    api.restoreClothing.mockResolvedValue({
+      data: {
+        product_id: productId,
+        status: "draft",
+        restored_variant_count: 1,
+        updated_at: "2026-09-22T00:00:00.000Z",
+      },
+      requestId: "req-restore",
     });
   });
 
@@ -309,6 +319,34 @@ describe("ClothingDetailsPage", () => {
     );
     await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
+  });
+
+  it("restores archived clothing to draft from detail and reloads authoritative state", async () => {
+    const archived = { ...detail, status: "archived" as const };
+    const restored = { ...detail, status: "draft" as const };
+    api.getCatalogueClothingDetail
+      .mockResolvedValueOnce({ data: archived, requestId: "req-detail-archived" })
+      .mockResolvedValueOnce({ data: restored, requestId: "req-detail-restored" });
+
+    render(<ClothingDetailsPage productId={productId} />);
+
+    await screen.findByRole("heading", { name: "Emerald Evening Gown" });
+    fireEvent.click(screen.getByRole("button", { name: "Restore to Draft" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Restore to Draft" }));
+
+    await waitFor(() => expect(api.restoreClothing).toHaveBeenCalledTimes(1));
+    expect(api.restoreClothing).toHaveBeenCalledWith(
+      productId,
+      { expected_updated_at: detail.updated_at },
+      expect.any(String)
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Clothing restored to Draft. 1 variant was restored to Draft for review."
+    );
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
+    expect(screen.getByLabelText("Clothing lifecycle: Draft")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Publish Clothing" })).toBeVisible();
   });
 
   it("shows a clean stale-version conflict instead of archiving outdated detail state", async () => {
