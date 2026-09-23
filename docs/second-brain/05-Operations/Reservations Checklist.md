@@ -280,15 +280,18 @@ Before marking a task complete:
 
 ## Phase 6: Staff app integration
 
-- [ ] **RSV-060 — Replace Reservations page mock data**
+- [x] **RSV-060 — Replace Reservations page mock data**
   - **Depends on:** RSV-010.
   - **Outcome:** Reservation table/search/status/date filters/pagination use real API data.
   - **Acceptance:**
-    - [ ] Search/status/date controls query server-side.
-    - [ ] Loading/empty/error states are present.
-    - [ ] Pagination is bounded and stable.
-    - [ ] Dark/light UI does not alter domain state semantics.
-  - **Tests/evidence:** Component/browser tests with seeded reservations.
+    - [x] Search/status/date controls query server-side.
+    - [x] Loading/empty/error states are present.
+    - [x] Pagination is bounded and stable.
+    - [x] Dark/light UI does not alter domain state semantics.
+  - **Implemented:** the staff `/reservations` page now consumes the shared `GET /api/v1/reservations` contract through `createDrezivoApiClient().getReservations(...)`; the previous in-memory reservation rows, fake dashboard metrics/counts, fake total pagination, fake export/filter actions, and mock Details Sheet were removed rather than mixed with authoritative rows. The list renders the server reservation reference, customer snapshot (including truthful customer-less short holds), garment snapshot, pickup/due dates, fulfillment method, independent payment/evidence state, and canonical reservation state. RSV-061 will reconnect row selection/Details Sheet through the real detail endpoint instead of reviving mock detail data.
+  - **Filtering/pagination behavior:** free-text search and canonical reservation status are sent to the API, not filtered in browser memory. Inclusive pickup-date inputs are converted to the API's half-open instant window using the active branch timezone from actor context, validate both endpoints and the 31-day server limit before querying, and avoid issuing a transient browser-timezone request while branch context is still resolving. Filter state is reflected in the URL. Cursor pagination keeps the API cursor opaque, remembers prior page cursors client-side, and resets to page 1 whenever search/status/date filters change; no fake total count is displayed because the API intentionally exposes only keyset page metadata.
+  - **UX/failure behavior:** the page has explicit loading, empty, filtered-empty, invalid-date, forbidden, retryable API-error, and request-ID states. Payment and reservation status remain text-labeled (never color-only), and no frontend-only state can manufacture customer/payment/reservation facts.
+  - **Tests/evidence:** `app/tests/unit/drezivo-api-reservations-list.test.ts` + `app/tests/unit/reservations-page.test.tsx` pass `6/6`, covering query serialization/response validation, authoritative row rendering/no mock metrics, customer-less holds, server-side search/status filtering, branch-timezone date windows + >31-day rejection, opaque next/previous cursor behavior, and loading/empty/retryable-error states. `npm run typecheck` passes. `next build` compiles, prerenders `/reservations`, and completes page generation; its lint phase still reports the repository's pre-existing dependency mismatch where root `eslint-config-next@16.3.5` cannot resolve `next/dist/compiled/babel/eslint-parser` from the app's `next@15.5.24`, so dependency-version repair is intentionally left outside RSV-060.
 
 - [ ] **RSV-061 — Connect Reservation Details Sheet**
   - **Depends on:** RSV-011.

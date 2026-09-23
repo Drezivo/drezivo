@@ -21,6 +21,8 @@ import {
   removeClothingVariantRequest,
   restoreClothingRequest,
   restoreClothingResponse,
+  reservationListQuery,
+  reservationListResponse,
   updateClothingVariantLifecycleRequest,
   updateClothingVariantLifecycleResponse,
   createClothingResponse,
@@ -67,6 +69,8 @@ import {
   type RemoveClothingVariantRequest,
   type RestoreClothingRequest,
   type RestoreClothingResponse,
+  type ReservationListQuery,
+  type ReservationListResponse,
   type UpdateClothingVariantLifecycleRequest,
   type UpdateClothingVariantLifecycleResponse,
   type CreateClothingResponse,
@@ -189,6 +193,24 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         path: "/api/v1/actor-context",
         responseSchema: apiEnvelope(actorContext),
       }),
+    getReservations: (input: ReservationListQuery) => {
+      const query = reservationListQuery.parse(input);
+      const searchParams = new URLSearchParams();
+      if (query.cursor) searchParams.set("cursor", query.cursor);
+      searchParams.set("limit", String(query.limit));
+      if (query.search) searchParams.set("search", query.search);
+      if (query.status) searchParams.set("status", query.status);
+      if (query.pickup_start) searchParams.set("pickup_start", query.pickup_start);
+      if (query.pickup_end) searchParams.set("pickup_end", query.pickup_end);
+      searchParams.set("sort", query.sort);
+
+      return request<ReservationListResponse>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/reservations?${searchParams.toString()}`,
+        responseSchema: apiEnvelope(reservationListResponse),
+      });
+    },
     getCatalogueCategories: () =>
       request<CatalogueCategoryList>({
         getToken,
