@@ -223,7 +223,7 @@ export async function createReservationGraph(
     paymentId: string;
     tenantId: string;
     branchId: string;
-    customerId: string;
+    customerId: string | null;
     storefrontId: string;
     policySnapshotId: string;
     paymentMethodId: string;
@@ -232,7 +232,7 @@ export async function createReservationGraph(
     pickupAt: string;
     dueAt: string;
     timezoneSnapshot: string;
-    customerSnapshot: Record<string, unknown>;
+    customerSnapshot: Record<string, unknown> | null;
     deliverySnapshot: Record<string, unknown>;
     priceSnapshot: Record<string, unknown>;
     rentalTotalMinor: number;
@@ -277,7 +277,7 @@ export async function createReservationGraph(
       input.pickupAt,
       input.dueAt,
       input.timezoneSnapshot,
-      JSON.stringify(input.customerSnapshot),
+      input.customerSnapshot === null ? null : JSON.stringify(input.customerSnapshot),
       JSON.stringify(input.deliverySnapshot),
       JSON.stringify(input.priceSnapshot),
       input.rentalTotalMinor,

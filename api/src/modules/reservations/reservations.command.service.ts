@@ -154,7 +154,7 @@ export async function createStaffReservationCommand(
         paymentId,
         tenantId: context.tenantId,
         branchId: context.branchId,
-        customerId: customer.id,
+        customerId: customer?.id ?? null,
         storefrontId: quote.storefront_id,
         policySnapshotId: quote.policy_snapshot_id,
         paymentMethodId: quote.payment_method_id,
@@ -163,11 +163,13 @@ export async function createStaffReservationCommand(
         pickupAt: quote.pickup_at,
         dueAt: quote.due_at,
         timezoneSnapshot: quote.timezone_snapshot,
-        customerSnapshot: {
-          full_name: customer.full_name,
-          phone: customer.phone,
-          email: customer.email,
-        },
+        customerSnapshot: customer
+          ? {
+              full_name: customer.full_name,
+              phone: customer.phone,
+              email: customer.email,
+            }
+          : null,
         deliverySnapshot: quote.delivery_snapshot,
         priceSnapshot: quote.price_snapshot,
         rentalTotalMinor,
@@ -286,7 +288,9 @@ async function resolveCustomer(
   client: Parameters<typeof readReservationCustomerForCreate>[0],
   tenantId: string,
   request: StaffReservationCreateRequest,
-): Promise<ReservationCustomerSnapshotRow> {
+): Promise<ReservationCustomerSnapshotRow | null> {
+  if (!request.customer) return null;
+
   if (request.customer.source === 'existing') {
     const existing = await readReservationCustomerForCreate(client, {
       tenantId,
