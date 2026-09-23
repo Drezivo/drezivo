@@ -6,6 +6,7 @@ import { ValidationError } from '../../shared/errors.js';
 import { sendError, sendSuccess } from '../../shared/response.js';
 import {
   createPublicHold,
+  createStaffReservation,
   getReservationDetail,
   getReservationList,
 } from './reservations.service.js';
@@ -19,6 +20,19 @@ export async function listReservationsController(req: Request, res: Response): P
 export async function getReservationDetailController(req: Request, res: Response): Promise<void> {
   if (!req.reservationId) throw new ValidationError('A valid reservation id is required.');
   sendSuccess(req, res, await getReservationDetail(requireContext(req), req.reservationId));
+}
+
+export async function createStaffReservationController(req: Request, res: Response): Promise<void> {
+  const request = req.reservationCreateRequest;
+  const idempotencyKey = req.reservationIdempotencyKey;
+  if (!request) throw new ValidationError('Staff reservation request is invalid.');
+  if (!idempotencyKey) throw new ValidationError('A valid Idempotency-Key header is required.');
+
+  const result = await createStaffReservation(
+    { ...requireContext(req), requestId: req.requestId, idempotencyKey },
+    request,
+  );
+  res.status(result.status).json(result.body);
 }
 
 export function createPublicHoldController(req: Request, res: Response): void {

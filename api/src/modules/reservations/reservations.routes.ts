@@ -6,13 +6,16 @@ import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
 import {
   createPublicHoldController,
+  createStaffReservationController,
   getReservationDetailController,
   listReservationsController,
 } from './reservations.controller.js';
 import {
+  requireReservationIdempotencyKey,
   requireReservationManagePermission,
   validateReservationId,
   validateReservationListQuery,
+  validateStaffReservationCreate,
 } from './reservations.middleware.js';
 
 export const reservationsRouter = Router();
@@ -22,6 +25,24 @@ const readRateLimit = rateLimit({
   max: 60,
   keyOf: (req) => req.tenantContext?.tenantId ?? req.clerkPrincipal?.clerkUserId ?? req.ip ?? 'unknown',
 });
+
+const writeRateLimit = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  keyOf: (req) => req.tenantContext?.tenantId ?? req.clerkPrincipal?.clerkUserId ?? req.ip ?? 'unknown',
+});
+
+reservationsRouter.post(
+  '/reservations',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('new_booking'),
+  requireReservationManagePermission,
+  validateStaffReservationCreate,
+  requireReservationIdempotencyKey,
+  createStaffReservationController,
+);
 
 reservationsRouter.get(
   '/reservations',

@@ -81,11 +81,25 @@ export function createApp(options: AppOptions = {}): Express {
     });
   });
 
+  const reservationCreateJson = express.json({ limit: '16kb', type: 'application/json' });
+  app.use('/api/v1/reservations', (req, res, next) => {
+    if (req.method !== 'POST' || req.path !== '/') {
+      next();
+      return;
+    }
+    reservationCreateJson(req, res, (error: unknown) => {
+      mapJsonBodyError(error, next);
+    });
+  });
+
   app.use(clerkContext);
   app.use(clerkWebhookRouter);
   const globalJson = express.json({ limit: '256kb' });
   app.use((req, res, next) => {
-    if (req.method === 'POST' && req.path === '/api/v1/catalogue/clothing') {
+    if (
+      req.method === 'POST' &&
+      (req.path === '/api/v1/catalogue/clothing' || req.path === '/api/v1/reservations')
+    ) {
       next();
       return;
     }
