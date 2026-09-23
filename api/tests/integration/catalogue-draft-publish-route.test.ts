@@ -133,7 +133,7 @@ describe('CLT-072 draft publish HTTP route', async () => {
     const response = await request(createApp())
       .post(`/api/v1/catalogue/clothing/${seeded.productId}/publish`)
       .set('Content-Type', 'application/json')
-      .set('Idempotency-Key', 'clt072-route-publish')
+      .set('Idempotency-Key', 'testtest55')
       .send({ expected_updated_at: seeded.updatedAt });
 
     expect(response.status).toBe(200);

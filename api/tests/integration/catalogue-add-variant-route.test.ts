@@ -203,7 +203,7 @@ describe('CLT-076 add variant HTTP route', async () => {
     const duplicate = await request(app)
       .post(`/api/v1/catalogue/clothing/${seeded.productId}/variants`)
       .set('Content-Type', 'application/json')
-      .set('Idempotency-Key', 'clt076-duplicate-sku')
+      .set('Idempotency-Key', 'testtest22')
       .send({ ...variantBody, size_label: 'XXL' });
     expect(duplicate.status).toBe(409);
     expect(duplicate.body).toMatchObject({ success: false, error: { code: 'STATE_CONFLICT' } });
@@ -274,7 +274,7 @@ describe('CLT-076 add variant HTTP route', async () => {
     const response = await request(createApp())
       .post(`/api/v1/catalogue/clothing/${seeded.productId}/variants`)
       .set('Content-Type', 'application/json')
-      .set('Idempotency-Key', 'clt076-forbidden')
+      .set('Idempotency-Key', 'testtest33')
       .send(variantBody);
     expect(response.status).toBe(403);
     expect(response.body).toMatchObject({ success: false, error: { code: 'FORBIDDEN' } });

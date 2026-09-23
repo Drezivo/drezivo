@@ -109,7 +109,7 @@ describe('CLT-070 catalogue category CRUD', async () => {
     const first = await createCatalogueCategory({
       ...context,
       requestId: 'req-clt070-duplicate-a',
-      idempotencyKey: 'clt070-duplicate-a',
+      idempotencyKey: 'testtest88',
       request: { name: 'Gowns', display_order: 10 },
     });
     expect(first.status).toBe(201);
@@ -117,7 +117,7 @@ describe('CLT-070 catalogue category CRUD', async () => {
     const duplicate = await createCatalogueCategory({
       ...context,
       requestId: 'req-clt070-duplicate-b',
-      idempotencyKey: 'clt070-duplicate-b',
+      idempotencyKey: 'testtest99',
       request: { name: '  gowns  ', display_order: 20 },
     });
 

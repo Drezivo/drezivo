@@ -313,7 +313,7 @@ describe('CLT-032 clothing archive command', async () => {
     const removedReferenced = await request(app)
       .post(`/api/v1/catalogue/clothing/${seed.productId}/variants/${seed.primaryVariantId}/remove`)
       .set('Content-Type', 'application/json')
-      .set('Idempotency-Key', 'clt074-primary-remove')
+      .set('Idempotency-Key', 'testtest44')
       .send({ expected_updated_at: readString(draftedData.updated_at) });
     expect(removedReferenced.status).toBe(200);
     expect(removedReferenced.body).toMatchObject({

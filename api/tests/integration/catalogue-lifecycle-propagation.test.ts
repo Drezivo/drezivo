@@ -78,7 +78,7 @@ describe('CLT-078 catalogue lifecycle propagation', async () => {
     const published = await publishClothing({
       ...context,
       requestId: 'req-clt078-publish',
-      idempotencyKey: 'clt078-publish',
+      idempotencyKey: 'testtest00',
       productId: seed.productId,
       request: { expected_updated_at: seed.productUpdatedAt },
     });

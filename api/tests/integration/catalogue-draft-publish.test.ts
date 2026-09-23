@@ -56,14 +56,14 @@ describe('CLT-072 draft clothing publish', async () => {
     const first = await publishClothing({
       ...context,
       requestId: 'req-clt072-publish',
-      idempotencyKey: 'clt072-publish',
+      idempotencyKey: 'testtest66',
       productId: seeded.productId,
       request: { expected_updated_at: seeded.updatedAt },
     });
     const replay = await publishClothing({
       ...context,
       requestId: 'req-clt072-publish-replay',
-      idempotencyKey: 'clt072-publish',
+      idempotencyKey: 'testtest66',
       productId: seeded.productId,
       request: { expected_updated_at: seeded.updatedAt },
     });
@@ -134,7 +134,7 @@ describe('CLT-072 draft clothing publish', async () => {
     const result = await publishClothing({
       ...context,
       requestId: 'req-clt072-no-piece',
-      idempotencyKey: 'clt072-no-piece',
+      idempotencyKey: 'testtest77',
       productId: seeded.productId,
       request: { expected_updated_at: seeded.updatedAt },
     });
