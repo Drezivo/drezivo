@@ -81,7 +81,8 @@ export type ReservationListQuery = z.infer<typeof reservationListQuery>;
 export const reservationStaffCustomerProjection = z
   .object({
     customer_id: customerId.nullable(),
-    snapshot: reservationCustomerSnapshot,
+    /** Anonymous short holds may not have verified contact facts yet. */
+    snapshot: reservationCustomerSnapshot.nullable(),
   })
   .strict();
 export type ReservationStaffCustomerProjection = z.infer<typeof reservationStaffCustomerProjection>;

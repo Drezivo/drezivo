@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   date,
   foreignKey,
@@ -110,6 +111,12 @@ export const reservation = pgTable(
       table.id,
     ),
     index('reservation_tenant_pickup_idx').on(table.tenantId, table.pickupAt, table.id),
+    index('reservation_tenant_created_idx').on(table.tenantId, table.createdAt, table.id),
+    index('reservation_tenant_reference_sort_idx').on(
+      table.tenantId,
+      sql`lower(${table.referenceCode})`,
+      table.id,
+    ),
     index('reservation_tenant_due_idx').on(table.tenantId, table.dueAt, table.id),
     index('reservation_tenant_event_date_idx').on(table.tenantId, table.eventDate, table.id),
     index('reservation_tenant_customer_created_idx').on(

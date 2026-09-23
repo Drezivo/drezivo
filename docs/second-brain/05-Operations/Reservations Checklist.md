@@ -84,16 +84,18 @@ Before marking a task complete:
 
 ## Phase 1: Reservation read model
 
-- [ ] **RSV-010 — Implement reservation list query**
+- [x] **RSV-010 — Implement reservation list query**
   - **Depends on:** RSV-001, RSV-002.
   - **Outcome:** `/reservations` renders authoritative tenant reservations with bounded pagination.
   - **Acceptance:**
-    - [ ] Search supports reference, customer-safe fields, clothing identity, and allowed phone/contact projection where authorized.
-    - [ ] Filters support canonical reservation status and bounded date windows.
-    - [ ] Pagination/sorting are deterministic and server-side.
-    - [ ] List projection includes only safe summary fields required by UI.
-    - [ ] Payment projection is separate from reservation status.
-  - **Tests/evidence:** Search/filter/pagination/isolation tests.
+    - [x] Search supports reference, customer-safe fields, clothing identity, and allowed phone/contact projection where authorized.
+    - [x] Filters support canonical reservation status and bounded date windows.
+    - [x] Pagination/sorting are deterministic and server-side.
+    - [x] List projection includes only safe summary fields required by UI.
+    - [x] Payment projection is separate from reservation status.
+  - **Implemented:** authenticated `GET /api/v1/reservations` now resolves the active tenant/branch on the server, requires the existing-rental lifecycle policy plus `reservations.manage`, validates the shared bounded query contract, and executes one tenant-and-branch-scoped PostgreSQL read inside `withTenantTransaction`. Search covers reservation reference, snapshotted customer name/phone/email, the accepted clothing line name, and catalogue identity fields used operationally (style code/name, variant SKU, and allocated asset code) without returning those extra search-only fields. Canonical status and paired pickup-window filters execute server-side. Sorting uses opaque keyset cursors with reservation ID tie-breakers for `pickup_asc`, `pickup_desc`, `created_desc`, and `reference_asc`; malformed or sort-mismatched cursors fail closed. The response exposes only the shared summary DTO: snapshot-safe customer/contact, first V1 reservation line, fulfillment, dates, snapshotted money, version, and a separate nullable payment/evidence projection. Anonymous short holds remain representable with a null customer snapshot rather than fabricated contact data.
+  - **Payment reconciliation prerequisite:** forward migration `0033_reservation_payment_projection_alignment.sql` reconciles the persisted payment lifecycle to `pending/partially_paid/paid/failed/refunded` and receipt rows to the canonical post-upload evidence states (`uploaded/under_review/verified/rejected/superseded`) before this list exposes those values. Historical `verified` maps to `paid`; historical `voided` maps conservatively to `failed`, not `refunded`, because it does not prove money left the merchant. The remaining shared evidence states are derived only when no receipt exists: `not_required` for cash and `awaiting_upload` for manual QR/transfer. `0034_reservation_list_read_indexes.sql` adds keyset-sort and tenant-aware search indexes without changing historical migrations.
+  - **Tests/evidence:** `api/tests/integration/reservation-list-read-model.test.ts` passes `4/4` against a freshly recreated disposable PostgreSQL database and the restricted runtime role, covering reference/customer/clothing search, phone projection, status/date filtering, independent payment/evidence state, anonymous holds, deterministic multi-page cursors, cursor/sort mismatch rejection, cross-tenant concealment, active-branch isolation, unauthenticated/permission denial, bounded-window validation, and the real HTTP response envelope. `reservation-phase0-integrity.test.ts` remains green `8/8`; API typecheck/lint/build pass and API unit regression is `82/82`; Contracts lint/build pass with `86/86` tests. `npm run openapi:generate` remains blocked by the pre-existing `@asteasolutions/zod-to-openapi`/Zod runtime incompatibility already recorded under RSV-001; no generated OpenAPI file was hand-edited.
 
 - [ ] **RSV-011 — Implement reservation detail query**
   - **Depends on:** RSV-010.

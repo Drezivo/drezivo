@@ -8,6 +8,7 @@ import {
   reservationConfirmRequest,
   reservationDetail,
   reservationListQuery,
+  reservationListResponse,
   reservationRejectRequest,
   reservationState,
   reservationSubmitRequest,
@@ -189,6 +190,37 @@ describe('reservation contracts', () => {
         branch_id: ids.branch,
       }).success,
     ).toBe(false);
+  });
+
+  it('allows an anonymous short hold in the staff list without inventing customer contact facts', () => {
+    const result = reservationListResponse.safeParse({
+      items: [
+        {
+          id: ids.reservation,
+          reference_code: 'RSV-HOLD-1',
+          status: 'held',
+          customer: { customer_id: null, snapshot: null },
+          line: {
+            id: ids.line,
+            variant_id: ids.variant,
+            name_snapshot: 'Emerald Gown',
+            rental_minor: '150000',
+            deposit_minor: '50000',
+            currency: 'PHP',
+          },
+          fulfillment_method: 'pickup',
+          pickup_at: interval.start,
+          due_at: interval.end,
+          price_snapshot: baseSummary.price_snapshot,
+          payment: null,
+          version: 1,
+          created_at: '2026-10-09T02:00:00.000Z',
+        },
+      ],
+      page_meta: { next_cursor: null, has_more: false },
+    });
+
+    expect(result.success).toBe(true);
   });
 
   it('defines an authoritative detail projection with line snapshots, payment separation, and custody timeline', () => {
