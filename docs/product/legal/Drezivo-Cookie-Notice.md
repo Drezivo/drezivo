@@ -9,7 +9,7 @@ owner: "[INSERT LEGAL ENTITY NAME]"
 
 # Drezivo Cookie Notice
 
-**Last updated:** [INSERT DATE]  
+**Last updated:** [INSERT DATE]
 **Privacy contact:** [INSERT PRIVACY EMAIL]
 
 > [!warning] Do not publish this as complete yet

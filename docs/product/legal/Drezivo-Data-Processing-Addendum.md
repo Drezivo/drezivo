@@ -9,8 +9,8 @@ owner: "[INSERT LEGAL ENTITY NAME]"
 
 # Drezivo Data Processing Addendum
 
-**Last updated:** [INSERT DATE]  
-**Processor:** [INSERT LEGAL ENTITY NAME]  
+**Last updated:** [INSERT DATE]
+**Processor:** [INSERT LEGAL ENTITY NAME]
 **Privacy contact:** [INSERT PRIVACY EMAIL]
 
 > [!warning] Draft for Philippine legal review

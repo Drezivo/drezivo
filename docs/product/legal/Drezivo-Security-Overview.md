@@ -9,7 +9,7 @@ owner: "[INSERT LEGAL ENTITY NAME]"
 
 # Drezivo Security Overview
 
-**Last updated:** [INSERT DATE]  
+**Last updated:** [INSERT DATE]
 **Security contact:** [INSERT SECURITY CONTACT EMAIL]
 
 > [!warning] Publish only after verification

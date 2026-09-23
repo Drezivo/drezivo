@@ -9,7 +9,7 @@ owner: "[INSERT LEGAL ENTITY NAME]"
 
 # Drezivo Acceptable Use Policy
 
-**Last updated:** [INSERT DATE]  
+**Last updated:** [INSERT DATE]
 **Contact:** [INSERT LEGAL CONTACT EMAIL]
 
 > [!warning] Draft for Philippine legal review
