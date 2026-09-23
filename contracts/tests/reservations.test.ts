@@ -4,6 +4,7 @@ import {
   errorCode,
   holdIntentRequest,
   paymentReceiptSubmitRequest,
+  reservationCancelRequest,
   reservationCompleteRequest,
   reservationConfirmRequest,
   reservationDetail,
@@ -349,6 +350,8 @@ describe('reservation contracts', () => {
     expect(reservationSubmitRequest.safeParse({ version: 1, terms_accepted: false }).success).toBe(false);
     expect(reservationConfirmRequest.safeParse({ version: 1, status: 'confirmed' }).success).toBe(false);
     expect(reservationRejectRequest.safeParse({ version: 1, reason: 'Unable to verify payment.' }).success).toBe(true);
+    expect(reservationCancelRequest.safeParse({ version: 1, reason: 'Customer contacted the store.' }).success).toBe(true);
+    expect(reservationCancelRequest.safeParse({ version: 1, refund_amount_minor: '50000' }).success).toBe(false);
     expect(reservationCompleteRequest.safeParse({ version: 0 }).success).toBe(false);
   });
 
