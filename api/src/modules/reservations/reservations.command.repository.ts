@@ -16,6 +16,7 @@ export interface CreatedReservationGraphRow {
   reservation_id: string;
   reservation_line_id: string;
   allocation_id: string;
+  payment_id: string | null;
   hold_expires_at: Date;
   version: number;
   created_at: Date;
@@ -219,6 +220,7 @@ export async function createReservationGraph(
     reservationId: string;
     reservationLineId: string;
     allocationId: string;
+    paymentId: string;
     tenantId: string;
     branchId: string;
     customerId: string | null;
@@ -284,6 +286,23 @@ export async function createReservationGraph(
     ],
   );
 
+  if (input.dueNowMinor > 0) {
+    await client.query(
+      `INSERT INTO payment
+         (id, tenant_id, reservation_id, payment_method_id, amount_minor, currency,
+          status, business_key)
+       VALUES ($1, $2, $3, $4, $5, 'PHP', 'pending', $6)`,
+      [
+        input.paymentId,
+        input.tenantId,
+        input.reservationId,
+        input.paymentMethodId,
+        input.dueNowMinor,
+        `reservation:${input.reservationId}:initial-payment`,
+      ],
+    );
+  }
+
   await client.query(
     `INSERT INTO reservation_line
        (id, tenant_id, reservation_id, variant_id, line_number, name_snapshot,
@@ -324,6 +343,7 @@ export async function createReservationGraph(
     reservation_id: row.id,
     reservation_line_id: input.reservationLineId,
     allocation_id: input.allocationId,
+    payment_id: input.dueNowMinor > 0 ? input.paymentId : null,
     hold_expires_at: row.hold_expires_at,
     version: row.version,
     created_at: row.created_at,

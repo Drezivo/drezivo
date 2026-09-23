@@ -5,16 +5,23 @@ import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
 import {
+  confirmReservationController,
   createPublicHoldController,
   createStaffReservationController,
   getReservationDetailController,
   listReservationsController,
+  rejectReservationController,
+  submitReservationController,
 } from './reservations.controller.js';
 import {
+  requireMerchantReservationReviewPermission,
   requireReservationIdempotencyKey,
   requireReservationManagePermission,
+  validateReservationConfirm,
   validateReservationId,
   validateReservationListQuery,
+  validateReservationReject,
+  validateReservationSubmit,
   validateStaffReservationCreate,
 } from './reservations.middleware.js';
 
@@ -42,6 +49,45 @@ reservationsRouter.post(
   validateStaffReservationCreate,
   requireReservationIdempotencyKey,
   createStaffReservationController,
+);
+
+reservationsRouter.post(
+  '/reservations/:reservationId/submit',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('settlement'),
+  requireReservationManagePermission,
+  validateReservationId,
+  validateReservationSubmit,
+  requireReservationIdempotencyKey,
+  submitReservationController,
+);
+
+reservationsRouter.post(
+  '/reservations/:reservationId/confirm',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('settlement'),
+  requireMerchantReservationReviewPermission,
+  validateReservationId,
+  validateReservationConfirm,
+  requireReservationIdempotencyKey,
+  confirmReservationController,
+);
+
+reservationsRouter.post(
+  '/reservations/:reservationId/reject',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('settlement'),
+  requireMerchantReservationReviewPermission,
+  validateReservationId,
+  validateReservationReject,
+  requireReservationIdempotencyKey,
+  rejectReservationController,
 );
 
 reservationsRouter.get(

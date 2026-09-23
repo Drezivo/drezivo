@@ -24,7 +24,9 @@ export function outboxDispatcher(row: OutboxRow): Promise<void> {
 
   switch (row.event_type) {
     case 'reservation.held':
+    case 'reservation.pending_confirmation':
     case 'reservation.confirmed':
+    case 'reservation.rejected':
     case 'reservation.hold_expired':
       // A real implementation resolves the recipient from an authorized record at send time
       // (TRD §8), renders the templated message, and calls the provider adapter — recording

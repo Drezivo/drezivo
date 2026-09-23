@@ -39,6 +39,9 @@ Before marking a task complete:
 - Cancellation before handover releases future blocking allocation according to policy; after handover use return/settlement flow.
 - Pickup and return are conditional state transitions backed by immutable custody facts.
 - Payment/evidence review is not inferred from uploaded screenshots alone.
+- Staff/walk-in UX must stay simpler than the internal lifecycle: O/S should experience `Check availability → Reserve → Complete Reservation`, while the backend may still use `held → pending_confirmation → confirmed` and the 15-minute hold deadline.
+- The initial timed hold remains valuable for staff-created bookings because it prevents an abandoned/incomplete walk-in flow from blocking a garment indefinitely; the UI should expose the remaining hold time without forcing O/S to understand every internal state transition.
+- Public storefront checkout may expose more of the hold/submission/review lifecycle later, but staff and guest flows must converge on the same authoritative pricing/allocation rules rather than duplicating booking logic.
 - Fitting appointments are V1.1 and do not become real V1 reservations merely because the UI prototype contains fitting labels.
 
 ## Phase 0: Contract and lifecycle preparation
@@ -166,27 +169,45 @@ Before marking a task complete:
 
 ## Phase 3: Pending confirmation and merchant approval
 
-- [ ] **RSV-030 — Implement submission/pending-confirmation transition**
+- [x] **RSV-030 — Implement submission/pending-confirmation transition**
   - **Depends on:** RSV-021.
   - **Outcome:** Complete customer/contact/terms/evidence moves a valid hold into review without changing allocation ownership.
   - **Acceptance:**
-    - [ ] Required customer/contact snapshot exists before `pending_confirmation`.
-    - [ ] Terms/evidence deadlines are validated against original hold boundary.
-    - [ ] Upload/evidence reference is tenant/reservation scoped.
-    - [ ] Duplicate submission is idempotent.
-  - **Tests/evidence:** Expiry boundary and duplicate submission tests.
+    - [x] Required customer/contact snapshot exists before `pending_confirmation`.
+    - [x] Terms/evidence deadlines are validated against original hold boundary.
+    - [x] Upload/evidence reference is tenant/reservation scoped.
+    - [x] Duplicate submission is idempotent.
+  - **Implemented:** authenticated/idempotent `POST /api/v1/reservations/:reservationId/submit` consumes the strict shared `{ version, terms_accepted: true }` contract, resolves the reservation only inside the active tenant/branch, and locks reservation → initial payment → latest receipt/file evidence → current asset/allocation before transition. Phase 3 tightens the RSV-021 graph by creating one pending initial payment intent atomically with a held reservation when `due_now_minor > 0` (`reservation:{id}:initial-payment`), which gives Finance/evidence uploads a stable tenant-scoped payment identity without marking money collected. A zero-due reservation deliberately omits the payment row rather than fabricating a positive collection solely to satisfy the Finance table constraint. Submission requires a complete snapshotted customer name plus at least one contact method. Cash needs no receipt; manual QR/transfer requires the latest receipt for that exact reservation payment to reference a same-tenant private `payment_receipt` file that is accepted, frozen, and pinned by object version/checksum. Uploaded evidence becomes `under_review`, never paid/verified.
+  - **Deadline/allocation behavior:** database time is authoritative. Evidence must have been submitted strictly before the original 15-minute hold deadline, and the request itself must still beat that deadline. A successful submission sets `terms_accepted_at`/`submitted_at`, transitions `held → pending_confirmation`, and replaces `hold_expires_at` with the bounded review deadline `LEAST(hold_acquired_at + 24 hours, pickup_at)` while preserving the same blocking `reservation_hold` allocation. Request-time expiry atomically marks the reservation expired, releases the block, and records audit/outbox; the cleanup worker now also sweeps overdue `pending_confirmation` rows under an explicit system actor and emits the same `reservation.expired` audit plus deduplicated `reservation.hold_expired` outbox facts. Forward index `0036_reservation_review_expiry_index.sql` keeps the held/pending due-work scan bounded. Same operation/key/payload replays the original response; key reuse with another payload fails through the shared idempotency contract.
+  - **Tests/evidence:** `api/tests/integration/reservation-review.test.ts` passes `9/9` on real PostgreSQL/the restricted runtime role, including immutable QR evidence submission, unrelated-payment evidence rejection, original-deadline enforcement, exact database-time expiry/release, duplicate submission replay, zero-due/no-fabricated-payment handling, strict route validation/idempotency, and foreign-ID concealment. Phase 2 create remains `7/7`, quote `5/5`, Phase 1 reads `7/7`, Phase 0 integrity `8/8`, and CLT-050 handoff `3/3`.
 
-- [ ] **RSV-031 — Implement merchant confirmation/rejection**
+- [x] **RSV-031 — Implement merchant confirmation/rejection**
   - **Depends on:** RSV-030 and payment/evidence verification boundary.
   - **Outcome:** Authorized staff confirms only an eligible reservation and preserves allocation truth.
   - **Acceptance:**
-    - [ ] Lock reservation/payment/evidence/assets in documented deterministic order.
-    - [ ] Compare review deadline using database time.
-    - [ ] Verify actual merchant-account/cash evidence state; screenshot alone is insufficient.
-    - [ ] `pending_confirmation → confirmed` keeps same allocation blocking interval.
-    - [ ] Rejection releases block according to policy and records immutable decision/audit.
-    - [ ] Repeated approval/rejection returns prior result or clean conflict.
-  - **Tests/evidence:** Confirmation-vs-expiry race and double-fire tests.
+    - [x] Lock reservation/payment/evidence/assets in documented deterministic order.
+    - [x] Compare review deadline using database time.
+    - [x] Verify actual merchant-account/cash evidence state; screenshot alone is insufficient.
+    - [x] `pending_confirmation → confirmed` keeps same allocation blocking interval.
+    - [x] Rejection releases block according to policy and records immutable decision/audit.
+    - [x] Repeated approval/rejection returns prior result or clean conflict.
+  - **Implemented:** `POST /api/v1/reservations/:reservationId/confirm` and `/reject` use the same write-rate/idempotency boundary, require `reservations.manage` plus merchant financial authority (`payments.manage` and `evidence.verify`), and recheck state/version server-side. The command lock order is reservation → canonical initial payment → latest receipt → latest immutable verification decision → physical asset/allocation ordered by asset UUID. All deadline comparisons use PostgreSQL time. Forward migration `0035_payment_verification_decision_alignment.sql` reconciles the persisted Finance decision vocabulary to the canonical `verified/rejected/ask_info` contract (`approved → verified`) before Reservations consumes it.
+  - **Finance authority boundary:** RSV-031 does **not** manufacture payment verification from a screenshot or mutate an uploaded receipt into proof of money. When money is due, confirmation consumes Finance-owned authoritative state: payment must be `paid` with `verified_at`, correct currency, and enough verified amount; the latest immutable `payment_verification` must be `verified` for at least the amount due now. A genuinely zero-due reservation has no collection prerequisite and no synthetic payment/verification row. Manual QR/transfer additionally requires the frozen receipt evidence itself to be `verified`; an `uploaded`/`under_review` screenshot fails `PAYMENT_PREREQUISITE_FAILED`. Cash does not require a receipt but still requires the paid payment plus the immutable merchant verification decision. The separate Finance receipt/verification workflow remains the authority that creates those facts.
+  - **Allocation/rejection behavior:** confirmation changes only the existing allocation kind from `reservation_hold` to `reservation_confirmed`; its exact `[blocked_start, blocked_end)` interval stays unchanged and remains blocking. Rejection conditionally transitions `pending_confirmation → rejected`, releases that block in the same transaction, and stores the bounded merchant reason in append-only audit metadata plus a deduplicated outbox event. Mutation effects use savepoints so later failures do not leave partial state, while deadline expiry itself commits atomically with its allocation release. Repeated same-intent approval/rejection replays the saved result; stale/different intent returns the canonical conflict path.
+  - **Tests/evidence:** the same RSV-030/031 PostgreSQL suite passes `9/9`, proving screenshot-only confirmation denial, verified QR confirmation, verified cash confirmation, zero-due confirmation without fabricated finance facts, exact allocation-period preservation, audited rejection/release, same-key confirmation/rejection replay, concurrent confirmation double-fire, and confirmation-vs-expiry with one final expired outcome. Route coverage also proves missing idempotency 422, strict-body rejection, successful submit/confirm/reject, confirm replay/key-reuse behavior, missing merchant verification permission 403, unauthenticated 401, and foreign reservation concealment 404. API typecheck/lint/build pass with unit regression `82/82`; Contracts remain `87/87` with lint/build green.
+
+- [ ] **RSV-032 — Align held-to-confirmed behavior with the staff walk-in completion action**
+  - **Depends on:** RSV-030, RSV-031, RSV-023.
+  - **Outcome:** The backend keeps its safe hold/review/confirmation model, while one O/S-facing `Complete Reservation` action can progress as far as the current actor and Finance state legitimately allow.
+  - **Acceptance:**
+    - [ ] Keep `held → pending_confirmation → confirmed` as authoritative server transitions; the UI simplification must not add a client-controlled direct status jump.
+    - [ ] Define the walk-in completion orchestration explicitly: submitting a complete held reservation is the first effect; if the authenticated O/S also has merchant verification authority and Finance prerequisites are already satisfied, the workflow may continue to confirmation without a second visible staff step.
+    - [ ] If payment/evidence still requires merchant review, `Complete Reservation` ends truthfully in `pending_confirmation` and the UI explains the remaining action rather than pretending the reservation is confirmed.
+    - [ ] Screenshot upload alone never auto-confirms; payment verification authority remains Finance-owned.
+    - [ ] Each underlying mutation retains its own idempotency intent. If submit succeeds but confirm cannot proceed, retry resumes from the authoritative `pending_confirmation` state rather than creating/re-submitting another reservation.
+    - [ ] Hold/review expiry continues to use database time and the existing worker/request-time enforcement.
+    - [ ] Owner/Front Desk permission differences are reflected in available actions without moving authorization decisions into the UI.
+  - **Tests/evidence:** API/orchestration tests for owner fast-complete, Front Desk pending-confirmation fallback, payment-prerequisite failure, retry after partial progression, expiry during completion, and no duplicate lifecycle effects.
 
 ## Phase 4: Reschedule and cancellation
 
@@ -202,10 +223,11 @@ Before marking a task complete:
   - **Tests/evidence:** Failed reschedule preserves old allocation; concurrent reschedule tests.
 
 - [ ] **RSV-041 — Implement cancellation**
-  - **Depends on:** RSV-031.
-  - **Outcome:** Cancellation respects lifecycle and financial obligations without fabricating availability.
+  - **Depends on:** RSV-031, RSV-032.
+  - **Outcome:** Cancellation respects lifecycle and financial obligations without fabricating availability, including intentional abandonment of an in-progress staff hold.
   - **Acceptance:**
-    - [ ] Pre-handover allowed states transition conditionally.
+    - [ ] Pre-handover allowed states transition conditionally, including an O/S intentionally cancelling an active `held` walk-in when the customer changes their mind.
+    - [ ] Intentional hold cancellation releases capacity immediately; staff should not need to wait for the 15-minute expiry worker when they know the booking was abandoned.
     - [ ] Future blocking allocation releases transactionally when policy allows.
     - [ ] Refund/deposit obligations are recorded through finance layer rather than mutating historical payment facts.
     - [ ] `picked_up` cannot cancel into available; route through return/settlement.
@@ -269,33 +291,42 @@ Before marking a task complete:
   - **Tests/evidence:** Row selection/detail/error/stale-state tests.
 
 - [ ] **RSV-062 — Connect reservation mutations to UI**
-  - **Depends on:** RSV-022, RSV-031, RSV-040 through RSV-052.
-  - **Outcome:** Staff can perform allowed lifecycle actions without mock state.
+  - **Depends on:** RSV-022, RSV-023, RSV-031, RSV-032, RSV-040 through RSV-052.
+  - **Outcome:** Staff can perform allowed lifecycle actions without mock state or being forced to manually operate every internal backend transition.
   - **Acceptance:**
     - [ ] Shared submit guards prevent double click/keyboard duplicate mutations.
-    - [ ] One idempotency key per intent is reused across retry.
+    - [ ] One idempotency key per underlying intent is reused across retry; a visible `Complete Reservation` action may orchestrate more than one safe server transition but must never reuse one idempotency key for semantically different commands.
+    - [ ] UI actions are phrased in operational language (`Reserve`, `Complete Reservation`, `Cancel`, `Pick Up`, `Return`) instead of exposing internal state-machine ceremony unless the state itself is useful to staff.
+    - [ ] When completion legitimately stops at `pending_confirmation`, the UI shows the payment/merchant-review requirement clearly and does not report success as `confirmed`.
     - [ ] Success refetches authoritative reservation/calendar/dashboard projections.
-    - [ ] Conflict/stale-state responses explain what changed and prompt refresh/retry safely.
-  - **Tests/evidence:** UI mutation retry/double-fire/conflict tests.
+    - [ ] Conflict/stale-state/expired-hold responses explain what changed and prompt refresh/retry safely.
+  - **Tests/evidence:** UI mutation retry/double-fire/conflict tests, plus held→pending→confirmed orchestration tests that prove the visible action never hides an unsuccessful internal transition.
 
-- [ ] **RSV-063 — Implement staff New Reservation workflow**
-  - **Depends on:** RSV-010, RSV-011, RSV-020 through RSV-022, and authoritative Clothing/Availability reads.
-  - **Outcome:** Owner and Front Desk can create a real reservation for a walk-in, phone, Messenger, Instagram, or other staff-received booking without sending the customer through the public storefront.
+- [ ] **RSV-063 — Implement staff New Reservation / walk-in fast-path workflow**
+  - **Depends on:** RSV-010, RSV-011, RSV-020 through RSV-023, RSV-032, RSV-041, and authoritative Clothing/Availability reads.
+  - **Outcome:** Owner and Front Desk can handle a walk-in, phone, Messenger, Instagram, or other staff-received booking through a simple operational flow while Drezivo retains the safe timed-hold and confirmation lifecycle underneath.
   - **Primary entry point:** `/reservations` owns the workflow and exposes `+ New Reservation`. Dashboard and Calendar may reuse the same creation component later, but they must not implement separate booking business logic.
+  - **Required O/S mental model:** `Check availability → Reserve → Complete Reservation`. `held → pending_confirmation → confirmed` remains an internal/server lifecycle and should not become three separate mandatory screens or buttons for a normal walk-in.
   - **Acceptance:**
     - [ ] `/reservations` exposes a prominent `+ New Reservation` action for authorized Owner/Front Desk users.
-    - [ ] The flow uses a large Sheet/drawer or equivalent multi-step staff workflow rather than redirecting staff into the public storefront.
-    - [ ] Staff can search/select an existing customer or enter the minimum customer/contact details required to create a new customer safely.
-    - [ ] Staff can search/select an active clothing product and variant using authoritative catalogue data.
-    - [ ] Date selection shows canonical availability for the selected variant and branch before submission; the browser never treats this preview as the final booking guarantee.
-    - [ ] Staff can enter rental/pickup/return dates, optional event date, fulfillment method, payment method/instructions, notes, and other V1-supported reservation inputs.
-    - [ ] The server computes authoritative blocked interval, price/deposit/delivery totals, policy snapshot, and eligible serialized asset; the browser cannot choose final totals, allocation IDs, tenant/branch authority, or reservation status.
-    - [ ] Successful creation calls the same RSV-021/022 quote/hold/allocation path used by staff booking semantics and atomically creates the reservation, line, immutable snapshots, and one blocking `asset_allocation`.
-    - [ ] Shared submit guards and one idempotency key per user intent prevent double-click/retry from creating duplicate reservations or allocations.
-    - [ ] Success keeps staff in the operations workspace, opens/shows the authoritative created reservation, and refetches affected Reservations, Availability, Schedule, Clothing, and Dashboard projections as those surfaces become available.
-    - [ ] The creation component is reusable from Calendar with a prefilled date and from Dashboard as a Quick Action without duplicating reservation domain logic.
+    - [ ] The flow uses a large Sheet/drawer or equivalent focused workflow rather than redirecting staff into the public storefront.
+    - [ ] **Check availability:** O/S searches/selects an active clothing product/variant and rental dates using authoritative catalogue/availability data. If unavailable, the flow stops clearly without creating a reservation.
+    - [ ] Availability shown before reserve is advisory until the server allocation transaction succeeds; the UI never promises the garment merely from a read response.
+    - [ ] **Reserve:** once the minimum staff-hold inputs required by RSV-023 are present, O/S can claim the garment. Successful reserve creates the authoritative `held` reservation and blocking physical-asset allocation and starts the 15-minute database-backed hold.
+    - [ ] The active hold remains in the same Sheet/workflow; show a small, clear remaining-hold indicator such as `Garment reserved for 12:41` rather than a disruptive checkout-style countdown screen.
+    - [ ] O/S can complete/confirm the remaining customer details, fulfillment, payment method/instructions, optional event date/notes, and other V1-supported information without losing the already-acquired hold, subject to server validation and expiry.
+    - [ ] The server computes authoritative blocked interval, price/deposit/delivery totals, policy snapshot, and serialized asset; the browser cannot choose final totals, allocation IDs, tenant/branch authority, payment verification, or reservation status.
+    - [ ] **Complete Reservation:** present one primary completion action to O/S. It follows RSV-032: submit the valid held reservation and, only when the actor has authority and Finance prerequisites are already satisfied, progress to `confirmed` without requiring a second visible confirmation step.
+    - [ ] If merchant/payment review remains necessary, the same completion action truthfully ends at `pending_confirmation` and the UI changes to an actionable `Awaiting payment verification`/review state instead of pretending the booking is confirmed.
+    - [ ] Uploaded payment screenshots never visually imply `Paid` or `Confirmed` before authoritative verification.
+    - [ ] If the 15-minute hold expires while the Sheet is open, the UI disables stale completion, explains that the garment hold expired, refetches current availability, and lets O/S safely reserve again if capacity still exists.
+    - [ ] O/S may explicitly cancel/release an in-progress hold before expiry when the customer changes their mind; do not rely on the worker when the user intentionally abandons the booking.
+    - [ ] Shared submit guards and idempotency prevent double-click/retry from creating duplicate reservations, allocations, submissions, or confirmations.
+    - [ ] Success keeps O/S in the operations workspace, opens/shows the authoritative reservation, and refetches affected Reservations, Availability, Schedule, Clothing, and Dashboard projections as those surfaces become available.
+    - [ ] The component is reusable from Calendar with a prefilled date and from Dashboard as a Quick Action without duplicating reservation domain logic.
+    - [ ] Public storefront checkout may later use a more explicit customer-facing hold/payment/submission UX, but both flows must converge on the same allocator, pricing, snapshots, and lifecycle authority.
     - [ ] Fitting appointment creation is not included in this V1 workflow; fittings remain V1.1 until resource/capacity controls are implemented canonically.
-  - **Tests/evidence:** Staff-creation component/browser tests plus real PostgreSQL/API integration proving customer create/select, canonical availability lookup, one serialized-asset allocation, duplicate-submit safety, permission enforcement, capacity conflict handling, and cross-surface source-ID consistency.
+  - **Tests/evidence:** Browser/component walkthrough proving `Check availability → Reserve → Complete Reservation`, unobtrusive hold countdown, unavailable stop state, held→confirmed owner fast path, held→pending-confirmation fallback, explicit abandon/release, hold expiry/recovery, duplicate-submit safety, permission handling, capacity conflict handling, and cross-surface source-ID consistency; backed by the real PostgreSQL/API reservation suites.
 
 ## Phase 7: Security and completion evidence
 
@@ -322,10 +353,10 @@ Before marking a task complete:
 
 - [ ] **RSV-072 — Mark Reservations vertical slice complete**
   - **Depends on:** RSV-063, RSV-070, RSV-071.
-  - **Outcome:** Reservations are authoritative and ready to drive Calendar/Dashboard.
+  - **Outcome:** Reservations are authoritative and ready to drive Calendar/Dashboard without exposing unnecessary lifecycle complexity to O/S.
   - **Acceptance:**
-    - [ ] Staff-created walk-in/manual booking and storefront-originated booking both converge on the same authoritative reservation/allocation lifecycle.
-    - [ ] Create → review/confirm → pickup → return → complete works end-to-end.
+    - [ ] Staff-created walk-in/manual booking uses the approved `Check availability → Reserve → Complete Reservation` UX while storefront-originated booking can use a more explicit checkout flow; both converge on the same authoritative reservation/allocation lifecycle.
+    - [ ] Staff fast path plus the canonical held/review/confirm → pickup → return → complete lifecycle works end-to-end, including truthful `pending_confirmation` fallback when payment/merchant review is still required.
     - [ ] Reschedule/cancel conflict paths are proven.
     - [ ] Reservations page and detail Sheet contain no production mock data.
     - [ ] Allocation, snapshots, custody, and payment status remain internally consistent.

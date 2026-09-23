@@ -5,10 +5,13 @@ import type { PermissionCode, TenantStatus } from '@drezivo/contracts';
 import { ValidationError } from '../../shared/errors.js';
 import { sendError, sendSuccess } from '../../shared/response.js';
 import {
+  confirmReservation,
   createPublicHold,
   createStaffReservation,
   getReservationDetail,
   getReservationList,
+  rejectReservation,
+  submitReservation,
 } from './reservations.service.js';
 
 export async function listReservationsController(req: Request, res: Response): Promise<void> {
@@ -30,6 +33,54 @@ export async function createStaffReservationController(req: Request, res: Respon
 
   const result = await createStaffReservation(
     { ...requireContext(req), requestId: req.requestId, idempotencyKey },
+    request,
+  );
+  res.status(result.status).json(result.body);
+}
+
+export async function submitReservationController(req: Request, res: Response): Promise<void> {
+  const reservationId = req.reservationId;
+  const request = req.reservationSubmitRequest;
+  const idempotencyKey = req.reservationIdempotencyKey;
+  if (!reservationId) throw new ValidationError('A valid reservation id is required.');
+  if (!request) throw new ValidationError('Reservation submission request is invalid.');
+  if (!idempotencyKey) throw new ValidationError('A valid Idempotency-Key header is required.');
+
+  const result = await submitReservation(
+    { ...requireContext(req), requestId: req.requestId, idempotencyKey },
+    reservationId,
+    request,
+  );
+  res.status(result.status).json(result.body);
+}
+
+export async function confirmReservationController(req: Request, res: Response): Promise<void> {
+  const reservationId = req.reservationId;
+  const request = req.reservationConfirmRequest;
+  const idempotencyKey = req.reservationIdempotencyKey;
+  if (!reservationId) throw new ValidationError('A valid reservation id is required.');
+  if (!request) throw new ValidationError('Reservation confirmation request is invalid.');
+  if (!idempotencyKey) throw new ValidationError('A valid Idempotency-Key header is required.');
+
+  const result = await confirmReservation(
+    { ...requireContext(req), requestId: req.requestId, idempotencyKey },
+    reservationId,
+    request,
+  );
+  res.status(result.status).json(result.body);
+}
+
+export async function rejectReservationController(req: Request, res: Response): Promise<void> {
+  const reservationId = req.reservationId;
+  const request = req.reservationRejectRequest;
+  const idempotencyKey = req.reservationIdempotencyKey;
+  if (!reservationId) throw new ValidationError('A valid reservation id is required.');
+  if (!request) throw new ValidationError('Reservation rejection request is invalid.');
+  if (!idempotencyKey) throw new ValidationError('A valid Idempotency-Key header is required.');
+
+  const result = await rejectReservation(
+    { ...requireContext(req), requestId: req.requestId, idempotencyKey },
+    reservationId,
     request,
   );
   res.status(result.status).json(result.body);

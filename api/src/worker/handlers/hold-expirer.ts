@@ -1,5 +1,9 @@
-import { db, withTenantTransaction } from '../../db/client.js';
+import { db, withSystemTenantTransaction } from '../../db/client.js';
 import { tenant } from '../../db/schema/index.js';
+import {
+  appendReservationAuditEvent,
+  appendReservationOutboxEvent,
+} from '../../modules/reservations/reservations.command.repository.js';
 import { logger } from '../../shared/logger.js';
 
 /**
@@ -36,21 +40,23 @@ export async function expireDueHoldsForAllTenants(batchSizePerTenant = 100): Pro
 }
 
 async function expireDueHoldsForTenant(tenantId: string, batchSize: number): Promise<number> {
-  return withTenantTransaction(tenantId, 'worker:hold-expirer', async (client) => {
-    // Conditional transition, not a blind UPDATE: only rows still `held` past their deadline
-    // move to `expired`, guarded by `version` so this sweep can never race a concurrent
-    // merchant confirmation that beat it to the same reservation (TRD §5 adversarial test 2).
-    const { rows: expired } = await client.query<{ id: string }>(
+  return withSystemTenantTransaction(tenantId, 'worker:hold-expirer', async (client) => {
+    // Conditional transition, not a blind UPDATE: initial `held` reservations and submitted
+    // `pending_confirmation` reviews both move to `expired` only after their current persisted
+    // deadline. Submission replaces the initial 15-minute deadline with the bounded review
+    // deadline, so the same sweep handles both phases without a second source of expiry truth.
+    const { rows: expired } = await client.query<{ id: string; version: number }>(
       `UPDATE reservation
        SET status = 'expired', version = version + 1
        WHERE id IN (
          SELECT id FROM reservation
-         WHERE tenant_id = $1 AND status = 'held' AND hold_expires_at IS NOT NULL AND hold_expires_at < now()
+         WHERE tenant_id = $1 AND status IN ('held', 'pending_confirmation')
+           AND hold_expires_at IS NOT NULL AND hold_expires_at < now()
          ORDER BY hold_expires_at
          LIMIT $2
          FOR UPDATE SKIP LOCKED
        )
-       RETURNING id`,
+       RETURNING id, version`,
       [tenantId, batchSize],
     );
 
@@ -65,6 +71,25 @@ async function expireDueHoldsForTenant(tenantId: string, batchSize: number): Pro
            )`,
         [tenantId, reservationIds],
       );
+      for (const row of expired) {
+        const requestId = `worker:hold-expirer:${row.id}:${row.version}`;
+        await appendReservationAuditEvent(client, {
+          tenantId,
+          actorKind: 'system',
+          actorKey: 'system:reservation-expiry',
+          action: 'reservation.expired',
+          entityType: 'reservation',
+          entityId: row.id,
+          redactedSummary: { reason: 'deadline_elapsed', version: row.version },
+          requestId,
+        });
+        await appendReservationOutboxEvent(client, {
+          tenantId,
+          dedupeKey: `reservation-expired:${row.id}:${row.version}`,
+          eventType: 'reservation.hold_expired',
+          payload: { reservationId: row.id, reservationVersion: row.version },
+        });
+      }
       logger.info({ tenantId, count: expired.length }, 'released expired holds');
     }
 
