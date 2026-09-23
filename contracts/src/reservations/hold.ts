@@ -73,12 +73,14 @@ export const staffReservationCustomerInput = z.discriminatedUnion('source', [
 export type StaffReservationCustomerInput = z.infer<typeof staffReservationCustomerInput>;
 
 /**
- * POST /reservations request body. Tenant, branch, final totals, chosen asset,
+ * POST /reservations request body. A staff walk-in may claim the garment before
+ * customer/contact entry is complete, so `customer` is optional while the
+ * reservation remains `held`. Tenant, branch, final totals, chosen asset,
  * allocation IDs, snapshots, and server lifecycle state are deliberately absent.
  */
 export const staffReservationCreateRequest = z
   .object({
-    customer: staffReservationCustomerInput,
+    customer: staffReservationCustomerInput.optional(),
     variant_id: productVariantId,
     requested_interval: instantInterval,
     event_date: isoDate.optional(),
