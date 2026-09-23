@@ -5,14 +5,22 @@ import {
   categoryId,
   clothingListQuery,
   createAssetMaintenanceBlockRequest,
+  createCatalogueCategoryRequest,
   createClothingRequest,
+  createClothingVariantRequest,
+  createPhysicalAssetRequest,
   idempotencyKey,
   physicalAssetId,
   productId,
   productVariantId,
+  publishClothingRequest,
+  removeClothingVariantRequest,
   replaceClothingImagesRequest,
+  restoreClothingRequest,
   saveMeasurementGuideRequest,
+  updateCatalogueCategoryRequest,
   updateCatalogueCategoryStatusRequest,
+  updateClothingVariantLifecycleRequest,
   updateClothingProductRequest,
   updateClothingVariantRequest,
   updatePhysicalAssetStateRequest,
@@ -50,6 +58,14 @@ export const requireAssetManagePermission: RequestHandler = (req, _res, next): v
   next();
 };
 
+export const requireAssetArchivePermission: RequestHandler = (req, _res, next): void => {
+  if (!req.tenantContext?.permissionCodes.includes('assets.archive')) {
+    next(new ForbiddenError('This branch does not grant clothing archive access.'));
+    return;
+  }
+  next();
+};
+
 export const validateCatalogueClothingListQuery: RequestHandler = (req, _res, next): void => {
   const parsed = clothingListQuery.safeParse(req.query);
   if (!parsed.success) {
@@ -77,6 +93,84 @@ export const validateUpdateClothingProduct: RequestHandler = (req, _res, next): 
     return;
   }
   req.body = parsed.data;
+  next();
+};
+
+export const validateCreateClothingVariant: RequestHandler = (req, _res, next): void => {
+  const parsedProductId = productId.safeParse(req.params.productId);
+  const parsedBody = createClothingVariantRequest.safeParse(req.body);
+  if (!parsedProductId.success || !parsedBody.success) {
+    next(new ValidationError('Clothing variant create request is invalid.'));
+    return;
+  }
+  req.catalogueProductId = parsedProductId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validateCreatePhysicalAsset: RequestHandler = (req, _res, next): void => {
+  const parsedProductId = productId.safeParse(req.params.productId);
+  const parsedVariantId = productVariantId.safeParse(req.params.variantId);
+  const parsedBody = createPhysicalAssetRequest.safeParse(req.body);
+  if (!parsedProductId.success || !parsedVariantId.success || !parsedBody.success) {
+    next(new ValidationError('Physical piece create request is invalid.'));
+    return;
+  }
+  req.catalogueProductId = parsedProductId.data;
+  req.catalogueVariantId = parsedVariantId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validatePublishClothing: RequestHandler = (req, _res, next): void => {
+  const parsedProductId = productId.safeParse(req.params.productId);
+  const parsedBody = publishClothingRequest.safeParse(req.body);
+  if (!parsedProductId.success || !parsedBody.success) {
+    next(new ValidationError('Clothing publish request is invalid.'));
+    return;
+  }
+  req.catalogueProductId = parsedProductId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validateRestoreClothing: RequestHandler = (req, _res, next): void => {
+  const parsedProductId = productId.safeParse(req.params.productId);
+  const parsedBody = restoreClothingRequest.safeParse(req.body);
+  if (!parsedProductId.success || !parsedBody.success) {
+    next(new ValidationError('Clothing restore request is invalid.'));
+    return;
+  }
+  req.catalogueProductId = parsedProductId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validateVariantLifecycleUpdate: RequestHandler = (req, _res, next): void => {
+  const parsedProductId = productId.safeParse(req.params.productId);
+  const parsedVariantId = productVariantId.safeParse(req.params.variantId);
+  const parsedBody = updateClothingVariantLifecycleRequest.safeParse(req.body);
+  if (!parsedProductId.success || !parsedVariantId.success || !parsedBody.success) {
+    next(new ValidationError('Variant lifecycle request is invalid.'));
+    return;
+  }
+  req.catalogueProductId = parsedProductId.data;
+  req.catalogueVariantId = parsedVariantId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validateRemoveClothingVariant: RequestHandler = (req, _res, next): void => {
+  const parsedProductId = productId.safeParse(req.params.productId);
+  const parsedVariantId = productVariantId.safeParse(req.params.variantId);
+  const parsedBody = removeClothingVariantRequest.safeParse(req.body);
+  if (!parsedProductId.success || !parsedVariantId.success || !parsedBody.success) {
+    next(new ValidationError('Variant removal request is invalid.'));
+    return;
+  }
+  req.catalogueProductId = parsedProductId.data;
+  req.catalogueVariantId = parsedVariantId.data;
+  req.body = parsedBody.data;
   next();
 };
 
@@ -157,6 +251,38 @@ export const validateCreateClothing: RequestHandler = (req, _res, next): void =>
     return;
   }
   req.body = parsed.data;
+  next();
+};
+
+export const validateCreateCatalogueCategory: RequestHandler = (req, _res, next): void => {
+  const parsed = createCatalogueCategoryRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Category create request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  next();
+};
+
+export const validateCatalogueCategoryUpdate: RequestHandler = (req, _res, next): void => {
+  const parsedId = categoryId.safeParse(req.params.categoryId);
+  const parsedBody = updateCatalogueCategoryRequest.safeParse(req.body);
+  if (!parsedId.success || !parsedBody.success) {
+    next(new ValidationError('Category update request is invalid.'));
+    return;
+  }
+  req.catalogueCategoryId = parsedId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validateCatalogueCategoryId: RequestHandler = (req, _res, next): void => {
+  const parsedId = categoryId.safeParse(req.params.categoryId);
+  if (!parsedId.success) {
+    next(new ValidationError('A valid category id is required.'));
+    return;
+  }
+  req.catalogueCategoryId = parsedId.data;
   next();
 };
 

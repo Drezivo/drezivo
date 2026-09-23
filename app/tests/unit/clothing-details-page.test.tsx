@@ -11,6 +11,8 @@ const clerk = vi.hoisted(() => ({
 const api = vi.hoisted(() => ({
   archiveClothing: vi.fn(),
   getCatalogueClothingDetail: vi.fn(),
+  publishClothing: vi.fn(),
+  restoreClothing: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({
@@ -128,6 +130,24 @@ describe("ClothingDetailsPage", () => {
       },
       requestId: "req-archive",
     });
+    api.publishClothing.mockResolvedValue({
+      data: {
+        product_id: productId,
+        status: "active",
+        activated_variant_count: 1,
+        updated_at: "2026-09-21T00:01:00.000Z",
+      },
+      requestId: "req-publish",
+    });
+    api.restoreClothing.mockResolvedValue({
+      data: {
+        product_id: productId,
+        status: "draft",
+        restored_variant_count: 1,
+        updated_at: "2026-09-22T00:00:00.000Z",
+      },
+      requestId: "req-restore",
+    });
   });
 
   it("loads and renders the real clothing detail endpoint response", async () => {
@@ -141,6 +161,50 @@ describe("ClothingDetailsPage", () => {
     expect(screen.getByText("AST-GWN-001-M-01")).toBeVisible();
     expect(screen.getByText("Needs Cleaning")).toBeVisible();
     expect(screen.getByText("Confirmed reservation")).toBeVisible();
+  });
+
+  it("renders signed product images, switches gallery photos, and falls back when an image fails", async () => {
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: {
+        ...detail,
+        images: [
+          {
+            file_id: "00000000-0000-4000-8000-000000000020",
+            display_order: 0,
+            image_url: "https://images.example.test/cover.webp",
+          },
+          {
+            file_id: "00000000-0000-4000-8000-000000000021",
+            display_order: 1,
+            image_url: "https://images.example.test/secondary.webp",
+          },
+        ],
+      },
+      requestId: "req-detail-images",
+    });
+
+    render(<ClothingDetailsPage productId={productId} />);
+
+    const primary = await screen.findByRole("img", {
+      name: "Emerald Evening Gown catalogue photo",
+    });
+    expect(primary).toHaveAttribute("src", "https://images.example.test/cover.webp");
+    expect(screen.getByLabelText("Catalogue photo gallery")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show catalogue photo 2" }));
+    expect(screen.getByRole("img", { name: "Emerald Evening Gown catalogue photo" })).toHaveAttribute(
+      "src",
+      "https://images.example.test/secondary.webp"
+    );
+
+    fireEvent.error(screen.getByRole("img", { name: "Emerald Evening Gown catalogue photo" }));
+    expect(screen.getByRole("img", { name: "Emerald Evening Gown catalogue photo" })).toHaveAttribute(
+      "src",
+      "https://images.example.test/cover.webp"
+    );
+
+    fireEvent.error(screen.getByRole("img", { name: "Emerald Evening Gown catalogue photo" }));
+    expect(await screen.findByText("No catalogue photo available")).toBeVisible();
   });
 
   it.each([
@@ -158,6 +222,53 @@ describe("ClothingDetailsPage", () => {
     const badge = await screen.findByLabelText(`Clothing lifecycle: ${label}`);
     expect(badge).toBeVisible();
     expect(badge).toHaveTextContent(label);
+  });
+
+  it("publishes a persisted draft with the current concurrency token and reloads active detail", async () => {
+    const draft = { ...detail, status: "draft" as const };
+    api.getCatalogueClothingDetail
+      .mockResolvedValueOnce({ data: draft, requestId: "req-draft" })
+      .mockResolvedValueOnce({ data: detail, requestId: "req-active" });
+
+    render(<ClothingDetailsPage productId={productId} />);
+
+    await screen.findByRole("heading", { name: "Emerald Evening Gown" });
+    fireEvent.click(screen.getByRole("button", { name: "Publish Clothing" }));
+
+    await waitFor(() => expect(api.publishClothing).toHaveBeenCalledTimes(1));
+    expect(api.publishClothing).toHaveBeenCalledWith(
+      productId,
+      { expected_updated_at: detail.updated_at },
+      expect.any(String)
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent("Clothing published");
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("button", { name: "Publish Clothing" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Clothing lifecycle: Active")).toBeVisible();
+  });
+
+  it("keeps an incomplete draft on screen and shows the publish validation error", async () => {
+    const { DrezivoApiError } = await import("@/lib/drezivo-api");
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: { ...detail, status: "draft" as const },
+      requestId: "req-draft-invalid",
+    });
+    api.publishClothing.mockRejectedValueOnce(
+      new DrezivoApiError("Add at least one accepted clothing photo before publishing.", {
+        code: "STATE_CONFLICT",
+        status: 409,
+      })
+    );
+
+    render(<ClothingDetailsPage productId={productId} />);
+    await screen.findByRole("button", { name: "Publish Clothing" });
+    fireEvent.click(screen.getByRole("button", { name: "Publish Clothing" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Add at least one accepted clothing photo before publishing."
+    );
+    expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Publish Clothing" })).toBeVisible();
   });
 
   it("renders variants without a color as optional metadata", async () => {
@@ -208,6 +319,34 @@ describe("ClothingDetailsPage", () => {
     );
     await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
+  });
+
+  it("restores archived clothing to draft from detail and reloads authoritative state", async () => {
+    const archived = { ...detail, status: "archived" as const };
+    const restored = { ...detail, status: "draft" as const };
+    api.getCatalogueClothingDetail
+      .mockResolvedValueOnce({ data: archived, requestId: "req-detail-archived" })
+      .mockResolvedValueOnce({ data: restored, requestId: "req-detail-restored" });
+
+    render(<ClothingDetailsPage productId={productId} />);
+
+    await screen.findByRole("heading", { name: "Emerald Evening Gown" });
+    fireEvent.click(screen.getByRole("button", { name: "Restore to Draft" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Restore to Draft" }));
+
+    await waitFor(() => expect(api.restoreClothing).toHaveBeenCalledTimes(1));
+    expect(api.restoreClothing).toHaveBeenCalledWith(
+      productId,
+      { expected_updated_at: detail.updated_at },
+      expect.any(String)
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Clothing restored to Draft. 1 variant was restored to Draft for review."
+    );
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
+    expect(screen.getByLabelText("Clothing lifecycle: Draft")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Publish Clothing" })).toBeVisible();
   });
 
   it("shows a clean stale-version conflict instead of archiving outdated detail state", async () => {

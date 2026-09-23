@@ -10,6 +10,7 @@ import {
   Package,
   Pencil,
   RefreshCw,
+  Rocket,
   Ruler,
   Shirt,
   Tags,
@@ -20,6 +21,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ClothingDetail, ClothingVariantDetail, PhysicalAssetSummary } from "@drezivo/contracts";
 
 import { ArchiveClothingDialog, archiveSuccessMessage } from "@/components/inventory/archive-clothing-dialog";
+import { RestoreClothingDialog, restoreSuccessMessage } from "@/components/inventory/restore-clothing-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,6 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
 
 type LoadState =
@@ -43,6 +46,8 @@ export function ClothingDetailsPage({ productId }: { productId: string }) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [notice, setNotice] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const { isSubmitting: isPublishing, resetIntent: resetPublishIntent, submit: submitPublish } = useSubmitGuard();
 
   const loadDetail = useCallback(async () => {
     if (!isLoaded || !isSignedIn) return;
@@ -74,12 +79,39 @@ export function ClothingDetailsPage({ productId }: { productId: string }) {
     return <DetailErrorState error={state.error} onRetry={loadDetail} />;
   }
 
+  async function handlePublish(item: ClothingDetail) {
+    if (isPublishing) return;
+    setPublishError(null);
+    try {
+      const result = await submitPublish((idempotencyKey) =>
+        createDrezivoApiClient(getToken).publishClothing(
+          item.product_id,
+          { expected_updated_at: item.updated_at },
+          idempotencyKey
+        )
+      );
+      if (!result) return;
+      resetPublishIntent();
+      setNotice("Clothing published");
+      await loadDetail();
+    } catch (error) {
+      setPublishError(toDrezivoApiError(error).message);
+    }
+  }
+
   return (
     <DetailContent
       item={state.item}
       notice={notice}
+      publishError={publishError}
+      isPublishing={isPublishing}
+      onPublish={() => void handlePublish(state.item)}
       onDismissNotice={() => setNotice(null)}
       onArchived={(message) => {
+        setNotice(message);
+        void loadDetail();
+      }}
+      onRestored={(message) => {
         setNotice(message);
         void loadDetail();
       }}
@@ -90,21 +122,45 @@ export function ClothingDetailsPage({ productId }: { productId: string }) {
 function DetailContent({
   item,
   notice,
+  publishError,
+  isPublishing,
+  onPublish,
   onArchived,
+  onRestored,
   onDismissNotice,
 }: {
   item: ClothingDetail;
   notice: string | null;
+  publishError: string | null;
+  isPublishing: boolean;
+  onPublish: () => void;
   onArchived: (message: string) => void;
+  onRestored: (message: string) => void;
   onDismissNotice: () => void;
 }) {
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const imageUrls = useMemo(
+    () => item.images.flatMap((image) => (image.image_url ? [image.image_url] : [])),
+    [item.images]
+  );
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(imageUrls[0] ?? null);
+  const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(() => new Set());
   const allAssets = useMemo(() => item.variants.flatMap((variant) => variant.assets), [item.variants]);
   const activeAssets = allAssets.filter((asset) => asset.lifecycle_status === "active");
   const readyAssets = activeAssets.filter((asset) => asset.readiness === "ready");
   const sizes = [...new Set(item.variants.map((variant) => variant.size_label))];
   const priceRange = formatPriceRange(item.variants);
-  const primaryImage = item.images.find((image) => image.image_url)?.image_url ?? null;
+  const usableImageUrls = imageUrls.filter((url) => !failedImageUrls.has(url));
+  const primaryImage =
+    selectedImageUrl && usableImageUrls.includes(selectedImageUrl)
+      ? selectedImageUrl
+      : (usableImageUrls[0] ?? null);
+
+  useEffect(() => {
+    setFailedImageUrls(new Set());
+    setSelectedImageUrl(imageUrls[0] ?? null);
+  }, [imageUrls, item.product_id]);
   const readinessCounts = {
     ready: activeAssets.filter((asset) => asset.readiness === "ready").length,
     cleaning: activeAssets.filter((asset) => asset.readiness === "needs_cleaning").length,
@@ -140,22 +196,64 @@ function DetailContent({
             </button>
           </div>
         ) : null}
+        {publishError ? (
+          <div role="alert" className="rounded-lg border border-dashboard-danger/30 bg-dashboard-danger/10 px-4 py-3 text-sm text-dashboard-danger">
+            {publishError}
+          </div>
+        ) : null}
 
         <Card className="gap-0 py-0">
           <CardContent className="p-4 sm:p-5 lg:p-6">
             <div className="grid gap-5 lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start">
-              <div className="flex min-h-60 items-center justify-center overflow-hidden rounded-2xl border border-dashboard-border bg-dashboard-active">
-                {primaryImage ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- API-provided catalogue URLs are not yet configured for next/image remote patterns.
-                  <img src={primaryImage} alt={item.name} className="h-full min-h-60 w-full object-cover" />
-                ) : (
-                  <div className="text-center">
-                    <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-dashboard-surface text-2xl font-semibold text-dashboard-accent shadow-sm">
-                      {initialsFor(item.name)}
-                    </span>
-                    <p className="mt-3 text-xs text-dashboard-muted">No catalogue photo available</p>
+              <div className="space-y-2">
+                <div className="flex min-h-60 items-center justify-center overflow-hidden rounded-2xl border border-dashboard-border bg-dashboard-active">
+                  {primaryImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- API-provided catalogue URLs are short-lived signed URLs.
+                    <img
+                      src={primaryImage}
+                      alt={`${item.name} catalogue photo`}
+                      className="h-full min-h-60 w-full object-cover"
+                      onError={() => {
+                        setFailedImageUrls((current) => new Set(current).add(primaryImage));
+                        setSelectedImageUrl(null);
+                      }}
+                    />
+                  ) : (
+                    <div className="text-center">
+                      <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-dashboard-surface text-2xl font-semibold text-dashboard-accent shadow-sm">
+                        {initialsFor(item.name)}
+                      </span>
+                      <p className="mt-3 text-xs text-dashboard-muted">No catalogue photo available</p>
+                    </div>
+                  )}
+                </div>
+                {usableImageUrls.length > 1 ? (
+                  <div className="grid grid-cols-4 gap-2" aria-label="Catalogue photo gallery">
+                    {usableImageUrls.map((url, index) => (
+                      <button
+                        key={url}
+                        type="button"
+                        aria-label={`Show catalogue photo ${index + 1}`}
+                        aria-pressed={primaryImage === url}
+                        onClick={() => setSelectedImageUrl(url)}
+                        className={cn(
+                          "overflow-hidden rounded-lg border bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30",
+                          primaryImage === url ? "border-dashboard-accent" : "border-dashboard-border"
+                        )}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element -- API-provided catalogue URLs are short-lived signed URLs. */}
+                        <img
+                          src={url}
+                          alt={`${item.name} catalogue thumbnail ${index + 1}`}
+                          className="aspect-square w-full object-cover"
+                          loading="lazy"
+                          decoding="async"
+                          onError={() => setFailedImageUrls((current) => new Set(current).add(url))}
+                        />
+                      </button>
+                    ))}
                   </div>
-                )}
+                ) : null}
               </div>
 
               <div className="min-w-0">
@@ -176,6 +274,12 @@ function DetailContent({
                   </div>
                   {item.status !== "archived" ? (
                     <div className="flex shrink-0 flex-wrap gap-2">
+                      {item.status === "draft" ? (
+                        <Button type="button" disabled={isPublishing} onClick={onPublish}>
+                          <Rocket className="h-4 w-4" aria-hidden="true" />
+                          {isPublishing ? "Publishing…" : "Publish Clothing"}
+                        </Button>
+                      ) : null}
                       <Link
                         href={`/inventory/${item.product_id}/edit`}
                         className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-dashboard-border bg-dashboard-surface px-4 text-sm font-medium text-dashboard-navy transition-colors hover:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
@@ -193,7 +297,11 @@ function DetailContent({
                         Archive
                       </Button>
                     </div>
-                  ) : null}
+                  ) : (
+                    <Button type="button" onClick={() => setRestoreOpen(true)}>
+                      Restore to Draft
+                    </Button>
+                  )}
                 </div>
                 <p className="mt-4 text-xl font-semibold text-dashboard-navy">{priceRange}</p>
                 {item.description ? (
@@ -387,7 +495,16 @@ function DetailContent({
           updatedAt={item.updated_at}
           onArchived={(result) => onArchived(archiveSuccessMessage(result))}
         />
-      ) : null}
+      ) : (
+        <RestoreClothingDialog
+          open={restoreOpen}
+          onOpenChange={setRestoreOpen}
+          productId={item.product_id}
+          name={item.name}
+          updatedAt={item.updated_at}
+          onRestored={(result) => onRestored(restoreSuccessMessage(result))}
+        />
+      )}
     </div>
   );
 }

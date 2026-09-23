@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AddClothingPage } from "@/components/inventory/add-clothing-page";
@@ -131,13 +131,15 @@ describe("AddClothingPage", () => {
     renderPage();
 
     expect(screen.getByText(/4 selected · 4 Total Pieces/)).toBeVisible();
-    expect(screen.getByText("S → 1 piece")).toBeVisible();
-    expect(screen.getByText("XL → 1 piece")).toBeVisible();
+    const selectedSizes = screen.getByText("Selected sizes").parentElement;
+    if (!selectedSizes) throw new Error("Expected selected-size summary.");
+    expect(within(selectedSizes).getByText("S")).toBeVisible();
+    expect(within(selectedSizes).getByText("XL")).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "XL" }));
 
     expect(screen.getByText(/3 selected · 3 Total Pieces/)).toBeVisible();
-    expect(screen.queryByText("XL → 1 piece")).not.toBeInTheDocument();
+    expect(within(selectedSizes).queryByText("XL")).not.toBeInTheDocument();
   });
 
   it("uses the default guide until a size opts into custom measurements", async () => {
@@ -282,8 +284,7 @@ describe("AddClothingPage", () => {
     await screen.findByText("Default Size Guide");
 
     expect(screen.getByText("0 days before · 1 day after")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: /Rental Timing/ }));
-
+    expect(screen.getByRole("button", { name: /Rental Timing/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByLabelText("Prep Days Before Rental")).toHaveValue("0");
     expect(screen.getByLabelText("Recovery Days After Return")).toHaveValue("1");
   });
@@ -377,7 +378,7 @@ describe("AddClothingPage", () => {
     fireEvent.change(screen.getByLabelText("Clothing Code"), {
       target: { value: "GOWN-001" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Rental Timing/ }));
+    expect(screen.getByRole("button", { name: /Rental Timing/ })).toHaveAttribute("aria-expanded", "true");
     fireEvent.change(screen.getByLabelText("Prep Days Before Rental"), {
       target: { value: "1" },
     });
@@ -624,13 +625,9 @@ describe("AddClothingPage", () => {
         (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`
       )
     );
-    await waitFor(() =>
-      expect(navigation.replace).toHaveBeenCalledWith(
-        "/inventory/00000000-0000-4000-8000-000000000050"
-      )
-    );
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("/inventory"));
     expect(navigation.push).not.toHaveBeenCalled();
-    expect(sessionStorage.getItem("drezivo:inventory-notice")).toBeNull();
+    expect(sessionStorage.getItem("drezivo:inventory-notice")).toBe("clothing-added");
 
     const beforeUnload = new Event("beforeunload", { cancelable: true });
     expect(window.dispatchEvent(beforeUnload)).toBe(true);

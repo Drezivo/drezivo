@@ -182,6 +182,304 @@ describe('CLT-032 clothing archive command', async () => {
     expect(state.auditActions).toEqual(['catalogue.clothing.archived']);
   });
 
+  it('restores archived clothing to draft without reactivating physical pieces or rewriting reservation/allocation history', async () => {
+    const seed = await seedArchiveCatalogue('org_clt073_restore', 'user_clt073_restore');
+    useClerk(seed);
+    const app = createApp();
+
+    const archived = await request(app)
+      .post(`/api/v1/catalogue/clothing/${seed.productId}/archive`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt073-archive-first')
+      .send({ expected_updated_at: seed.productUpdatedAt });
+    expect(archived.status).toBe(200);
+    const archivedData = readData(archived.body);
+    const archivedUpdatedAt = readString(archivedData.updated_at);
+
+    const restored = await request(app)
+      .post(`/api/v1/catalogue/clothing/${seed.productId}/restore`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt073-restore')
+      .send({ expected_updated_at: archivedUpdatedAt });
+
+    expect(restored.status).toBe(200);
+    const replay = await request(app)
+      .post(`/api/v1/catalogue/clothing/${seed.productId}/restore`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt073-restore')
+      .send({ expected_updated_at: archivedUpdatedAt });
+    expect(replay.status).toBe(200);
+    expect(replay.body).toEqual(restored.body);
+    expect(restored.body).toMatchObject({
+      success: true,
+      data: {
+        product_id: seed.productId,
+        status: 'draft',
+        restored_variant_count: 2,
+      },
+    });
+
+    const state = await readArchiveState(seed);
+    expect(state.product.status).toBe('draft');
+    expect(state.variantStatuses).toEqual(['draft', 'draft']);
+    expect(state.assets).toEqual([
+      {
+        asset_code: 'ARC-BOOKED',
+        lifecycle_status: 'active',
+        readiness: 'ready',
+        custody_kind: 'at_branch',
+        version: 1,
+      },
+      {
+        asset_code: 'ARC-CUSTODY',
+        lifecycle_status: 'active',
+        readiness: 'unready',
+        custody_kind: 'with_customer',
+        version: 1,
+      },
+      {
+        asset_code: 'ARC-MAINT',
+        lifecycle_status: 'active',
+        readiness: 'needs_repair',
+        custody_kind: 'at_branch',
+        version: 1,
+      },
+      {
+        asset_code: 'ARC-SAFE',
+        lifecycle_status: 'retired',
+        readiness: 'unready',
+        custody_kind: 'at_branch',
+        version: 2,
+      },
+    ]);
+    expect(state.reservationSnapshot).toEqual(seed.reservationSnapshot);
+    expect(state.reservationAllocation).toEqual({
+      asset_id: seed.bookedAssetId,
+      reservation_line_id: seed.reservationLineId,
+      is_blocking: true,
+      released_at: null,
+      kind: 'reservation_confirmed',
+    });
+    expect(state.maintenanceAllocation).toEqual({
+      asset_id: seed.maintenanceAssetId,
+      is_blocking: true,
+      released_at: null,
+      kind: 'maintenance',
+    });
+    expect(state.auditActions).toEqual([
+      'catalogue.clothing.archived',
+      'catalogue.clothing.restored_to_draft',
+    ]);
+  });
+
+  it('controls variant lifecycle safely, preserves referenced history, and only hard-deletes an unused draft variant', async () => {
+    const seed = await seedArchiveCatalogue('org_clt074_variant_lifecycle', 'user_clt074_variant_lifecycle');
+    useClerk(seed);
+    const app = createApp();
+
+    const initialDetail = await request(app).get(`/api/v1/catalogue/clothing/${seed.productId}`);
+    expect(initialDetail.status).toBe(200);
+    const variants = readArray(readData(initialDetail.body).variants);
+    const primary = variants.find((variant) => readString(variant.id) === seed.primaryVariantId);
+    const secondary = variants.find((variant) => readString(variant.id) === seed.secondaryVariantId);
+    if (!primary || !secondary) throw new Error('Expected both seeded variants in detail.');
+
+    const drafted = await request(app)
+      .patch(`/api/v1/catalogue/clothing/${seed.productId}/variants/${seed.primaryVariantId}/lifecycle`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt074-primary-draft')
+      .send({ expected_updated_at: readString(primary.updated_at), status: 'draft' });
+    expect(drafted.status).toBe(200);
+    const draftedReplay = await request(app)
+      .patch(`/api/v1/catalogue/clothing/${seed.productId}/variants/${seed.primaryVariantId}/lifecycle`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt074-primary-draft')
+      .send({ expected_updated_at: readString(primary.updated_at), status: 'draft' });
+    expect(draftedReplay.status).toBe(200);
+    expect(draftedReplay.body).toEqual(drafted.body);
+    expect(drafted.body).toMatchObject({ success: true, data: { status: 'draft', outcome: 'updated' } });
+
+    const afterDraft = await readArchiveState(seed);
+    expect(afterDraft.reservationSnapshot).toEqual(seed.reservationSnapshot);
+    expect(afterDraft.reservationAllocation).toEqual({
+      asset_id: seed.bookedAssetId,
+      reservation_line_id: seed.reservationLineId,
+      is_blocking: true,
+      released_at: null,
+      kind: 'reservation_confirmed',
+    });
+
+    const draftedData = readData(drafted.body);
+    const removedReferenced = await request(app)
+      .post(`/api/v1/catalogue/clothing/${seed.productId}/variants/${seed.primaryVariantId}/remove`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'testtest44')
+      .send({ expected_updated_at: readString(draftedData.updated_at) });
+    expect(removedReferenced.status).toBe(200);
+    expect(removedReferenced.body).toMatchObject({
+      success: true,
+      data: { variant_id: seed.primaryVariantId, status: 'archived', outcome: 'updated' },
+    });
+
+    const preserved = await readArchiveState(seed);
+    expect(preserved.reservationSnapshot).toEqual(seed.reservationSnapshot);
+    expect(preserved.reservationAllocation.released_at).toBeNull();
+    expect(preserved.reservationAllocation.is_blocking).toBe(true);
+
+    const lastActiveBlocked = await request(app)
+      .patch(`/api/v1/catalogue/clothing/${seed.productId}/variants/${seed.secondaryVariantId}/lifecycle`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt074-last-active')
+      .send({ expected_updated_at: readString(secondary.updated_at), status: 'archived' });
+    expect(lastActiveBlocked.status).toBe(409);
+    expectSafeError(lastActiveBlocked.body, 'STATE_CONFLICT');
+
+    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      await client.query(
+        `UPDATE product_variant
+            SET updated_at = updated_at + interval '1 second'
+          WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, seed.secondaryVariantId],
+      );
+    });
+    const staleLifecycle = await request(app)
+      .patch(`/api/v1/catalogue/clothing/${seed.productId}/variants/${seed.secondaryVariantId}/lifecycle`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt074-stale-lifecycle')
+      .send({ expected_updated_at: readString(secondary.updated_at), status: 'draft' });
+    expect(staleLifecycle.status).toBe(409);
+    expectSafeError(staleLifecycle.body, 'STALE_VERSION');
+
+    const unused = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ id: string; updated_at: Date }>(
+        `INSERT INTO product_variant
+           (tenant_id, product_id, sku, size_label, color_label, measurements, measurement_unit,
+            measurement_mode, rental_price_minor, security_deposit_minor, currency, pricing_mode,
+            included_duration_minutes, extra_day_price_minor, prep_minutes, turnaround_minutes, status)
+         VALUES ($1, $2, 'ARC-UNUSED-DRAFT', 'XL', null, '{}'::jsonb, 'cm', 'none',
+                 10000, 5000, 'PHP', 'daily', 1440, 0, 0, 0, 'draft')
+         RETURNING id, updated_at`,
+        [seed.tenantId, seed.productId],
+      );
+      return requireRow(result.rows, 'unused draft variant');
+    });
+
+    const removedUnused = await request(app)
+      .post(`/api/v1/catalogue/clothing/${seed.productId}/variants/${unused.id}/remove`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt074-unused-remove')
+      .send({ expected_updated_at: unused.updated_at.toISOString() });
+    expect(removedUnused.status).toBe(200);
+    expect(removedUnused.body).toMatchObject({
+      success: true,
+      data: { variant_id: unused.id, outcome: 'deleted', updated_at: null },
+    });
+
+    const finalEvidence = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const deleted = await client.query<{ count: number }>(
+        `SELECT count(*)::int AS count FROM product_variant WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, unused.id],
+      );
+      const audit = await client.query<{ action: string; entity_id: string }>(
+        `SELECT action, entity_id
+           FROM audit_event
+          WHERE tenant_id = $1
+            AND entity_id = ANY($2::uuid[])
+            AND action IN (
+              'catalogue.clothing.variant_lifecycle_updated',
+              'catalogue.clothing.variant_archived',
+              'catalogue.clothing.variant_deleted'
+            )
+          ORDER BY occurred_at ASC`,
+        [seed.tenantId, [seed.primaryVariantId, unused.id]],
+      );
+      return {
+        deletedCount: deleted.rows[0]?.count ?? -1,
+        audit: audit.rows,
+      };
+    });
+    expect(finalEvidence.deletedCount).toBe(0);
+    expect(finalEvidence.audit).toEqual([
+      { action: 'catalogue.clothing.variant_lifecycle_updated', entity_id: seed.primaryVariantId },
+      { action: 'catalogue.clothing.variant_archived', entity_id: seed.primaryVariantId },
+      { action: 'catalogue.clothing.variant_deleted', entity_id: unused.id },
+    ]);
+  });
+
+  it('requires assets.manage for variant lifecycle mutations', async () => {
+    const seed = await seedArchiveCatalogue(
+      'org_clt074_variant_permission',
+      'user_clt074_variant_permission',
+      ['assets.archive'],
+    );
+    useClerk(seed);
+    const updatedAt = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ updated_at: Date }>(
+        `SELECT updated_at FROM product_variant WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, seed.primaryVariantId],
+      );
+      return requireRow(result.rows, 'variant permission timestamp').updated_at.toISOString();
+    });
+
+    const forbidden = await request(createApp())
+      .patch(`/api/v1/catalogue/clothing/${seed.productId}/variants/${seed.primaryVariantId}/lifecycle`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt074-no-manage-permission')
+      .send({ expected_updated_at: updatedAt, status: 'draft' });
+    expect(forbidden.status).toBe(403);
+    expectSafeError(forbidden.body, 'FORBIDDEN');
+  });
+
+  it('rejects stale restore intent and requires archive authority', async () => {
+    const staleSeed = await seedArchiveCatalogue('org_clt073_stale_restore', 'user_clt073_stale_restore');
+    useClerk(staleSeed);
+    const app = createApp();
+    const archived = await request(app)
+      .post(`/api/v1/catalogue/clothing/${staleSeed.productId}/archive`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt073-stale-archive')
+      .send({ expected_updated_at: staleSeed.productUpdatedAt });
+    expect(archived.status).toBe(200);
+    const archivedUpdatedAt = readString(readData(archived.body).updated_at);
+
+    await withTenantTransaction(staleSeed.tenantId, staleSeed.principalId, async (client) => {
+      await client.query(
+        `UPDATE product SET updated_at = updated_at + interval '1 second' WHERE tenant_id = $1 AND id = $2`,
+        [staleSeed.tenantId, staleSeed.productId],
+      );
+    });
+    const stale = await request(app)
+      .post(`/api/v1/catalogue/clothing/${staleSeed.productId}/restore`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt073-stale-restore')
+      .send({ expected_updated_at: archivedUpdatedAt });
+    expect(stale.status).toBe(409);
+    expectSafeError(stale.body, 'STALE_VERSION');
+
+    const permissionSeed = await seedArchiveCatalogue('org_clt073_restore_permission', 'user_clt073_restore_permission');
+    useClerk(permissionSeed);
+    const permissionArchive = await request(app)
+      .post(`/api/v1/catalogue/clothing/${permissionSeed.productId}/archive`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt073-permission-archive')
+      .send({ expected_updated_at: permissionSeed.productUpdatedAt });
+    expect(permissionArchive.status).toBe(200);
+    const permissionArchivedAt = readString(readData(permissionArchive.body).updated_at);
+    await withTenantTransaction(permissionSeed.tenantId, permissionSeed.principalId, async (client) => {
+      await client.query(
+        `UPDATE branch_membership SET permission_codes = '["assets.manage"]'::jsonb WHERE tenant_id = $1`,
+        [permissionSeed.tenantId],
+      );
+    });
+    const forbidden = await request(app)
+      .post(`/api/v1/catalogue/clothing/${permissionSeed.productId}/restore`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt073-no-archive-permission')
+      .send({ expected_updated_at: permissionArchivedAt });
+    expect(forbidden.status).toBe(403);
+    expectSafeError(forbidden.body, 'FORBIDDEN');
+  });
+
   it('rejects stale archive intent without changing product, variants, assets, or allocations', async () => {
     const seed = await seedArchiveCatalogue('org_clt032_stale', 'user_clt032_stale');
     useClerk(seed);
@@ -279,7 +577,7 @@ describe('CLT-032 clothing archive command', async () => {
   async function seedArchiveCatalogue(
     clerkOrgId: string,
     principalId: string,
-    permissions: string[] = ['assets.manage'],
+    permissions: string[] = ['assets.manage', 'assets.archive'],
   ) {
     const tenant = await createTestTenant({ clerkOrgId });
     const membershipId = await createTestMembership(tenant.id, principalId, 'owner');
@@ -558,7 +856,7 @@ describe('CLT-032 clothing archive command', async () => {
            FROM audit_event
           WHERE tenant_id = $1
             AND entity_id = $2
-            AND action = 'catalogue.clothing.archived'
+            AND action IN ('catalogue.clothing.archived', 'catalogue.clothing.restored_to_draft')
           ORDER BY occurred_at ASC`,
         [seed.tenantId, seed.productId],
       );
