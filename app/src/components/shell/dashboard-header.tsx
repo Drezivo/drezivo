@@ -4,7 +4,7 @@ import { useClerk } from "@clerk/nextjs";
 import { Bell, ChevronDown, LogOut, Moon, Settings, Sun, UserRound } from "lucide-react";
 import { usePathname } from "next/navigation";
 
-import type { DashboardTheme } from "@/components/shell/dashboard-shell";
+import type { DashboardIdentity, DashboardTheme } from "@/components/shell/dashboard-shell";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -27,6 +27,15 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
+function initials(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "U";
+}
+
 function dashboardPageLabel(pathname: string) {
   if (pathname.startsWith("/reservations")) return "Reservations";
   if (pathname.startsWith("/calendar")) return "Calendar";
@@ -40,9 +49,11 @@ function dashboardPageLabel(pathname: string) {
 }
 
 export function DashboardHeader({
+  identity,
   onToggleTheme,
   theme,
 }: {
+  identity: DashboardIdentity;
   onToggleTheme: () => void;
   theme: DashboardTheme;
 }) {
@@ -109,14 +120,14 @@ export function DashboardHeader({
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-auto gap-3 px-0 hover:bg-transparent">
               <Avatar className="h-10 w-10 border border-dashboard-border">
-                <AvatarImage src="/auth-side.png" alt="" />
-                <AvatarFallback>LG</AvatarFallback>
+                {identity.userImageUrl && <AvatarImage src={identity.userImageUrl} alt="" />}
+                <AvatarFallback>{initials(identity.userName)}</AvatarFallback>
               </Avatar>
               <span className="hidden text-left sm:block">
-                <span className="block text-sm font-semibold text-dashboard-navy">
-                  Luna&apos;s Gown Rentals
+                <span className="block max-w-48 truncate text-sm font-semibold text-dashboard-navy">
+                  {identity.userName}
                 </span>
-                <span className="block text-xs text-dashboard-muted">Business Owner</span>
+                <span className="block text-xs text-dashboard-muted">{identity.roleLabel}</span>
               </span>
               <ChevronDown className="h-4 w-4 text-dashboard-navy" />
             </Button>
