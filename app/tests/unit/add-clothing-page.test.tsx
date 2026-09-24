@@ -169,6 +169,13 @@ describe("AddClothingPage", () => {
       "src",
       "https://images.example.test/default-size-guide.png"
     );
+    fireEvent.click(screen.getByRole("button", { name: "Open Default Size Guide image preview" }));
+    expect(screen.getByRole("dialog", { name: "Image preview" })).toBeVisible();
+    expect(screen.getByRole("img", { name: "Default Size Guide full-size preview" })).toHaveAttribute(
+      "src",
+      "https://images.example.test/default-size-guide.png"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Close image preview" }));
     expect(screen.queryByText("Default measurement image preview")).not.toBeInTheDocument();
   });
 

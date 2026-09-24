@@ -43,6 +43,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
@@ -1569,6 +1570,8 @@ function MeasurementGuideSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -1586,8 +1589,22 @@ function MeasurementGuideSheet({
           <div className="overflow-hidden rounded-2xl border border-dashboard-border bg-dashboard-surface shadow-sm">
             <div className="flex min-h-40 items-center justify-center bg-dashboard-active/40 p-6 text-center">
               {guide.previewUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- short-lived governed file URL returned by the API.
-                <img src={guide.previewUrl} alt={`${guide.name} preview`} className="max-h-96 w-full object-contain" />
+                <button
+                  type="button"
+                  onClick={() => setLightboxOpen(true)}
+                  aria-label={`Open ${guide.name} image preview`}
+                  className="group relative w-full cursor-zoom-in overflow-hidden rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/40"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- short-lived governed file URL returned by the API. */}
+                  <img
+                    src={guide.previewUrl}
+                    alt={`${guide.name} preview`}
+                    className="max-h-96 w-full object-contain transition duration-200 group-hover:scale-[1.01]"
+                  />
+                  <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/45 to-transparent px-3 pb-2.5 pt-10 text-right text-[11px] font-medium text-white/90 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                    Click to enlarge
+                  </span>
+                </button>
               ) : (
                 <div>
                   <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl dashboard-tone-blue">
@@ -1614,6 +1631,13 @@ function MeasurementGuideSheet({
           </Link>
         </div>
       </SheetContent>
+      <ImageLightbox
+        images={guide.previewUrl ? [{ src: guide.previewUrl, alt: `${guide.name} full-size preview` }] : []}
+        open={lightboxOpen}
+        onOpenChange={setLightboxOpen}
+        activeIndex={0}
+        onActiveIndexChange={() => undefined}
+      />
     </Sheet>
   );
 }
