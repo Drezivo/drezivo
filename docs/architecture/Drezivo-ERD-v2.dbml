@@ -293,6 +293,7 @@ Table physical_asset {
   variant_id uuid [not null]
   asset_code varchar(80) [not null]
   lifecycle_status varchar(30) [not null]
+  retired_by_product_archive boolean [not null, default: false]
   readiness varchar(30) [not null]
   custody_kind varchar(30) [not null]
   condition_note text
@@ -306,7 +307,7 @@ Table physical_asset {
     (tenant_id, asset_code) [unique]
     (tenant_id, branch_id, variant_id, readiness)
   }
-  Note: 'V1. branch_id is administrative home/holding branch; actual custody can be customer/transit. Location optional until V2.'
+  Note: 'V1. branch_id is administrative home/holding branch; actual custody can be customer/transit. retired_by_product_archive distinguishes temporary product-archive retirement from staff retirement so restore can safely reactivate only archive-retired pieces. Location optional until V2.'
 }
 
 Table file_object {

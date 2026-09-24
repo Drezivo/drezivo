@@ -182,8 +182,32 @@ describe('CLT-032 clothing archive command', async () => {
     expect(state.auditActions).toEqual(['catalogue.clothing.archived']);
   });
 
-  it('restores archived clothing to draft without reactivating physical pieces or rewriting reservation/allocation history', async () => {
+  it('restores only pieces auto-retired by product archive and can publish the clothing again', async () => {
     const seed = await seedArchiveCatalogue('org_clt073_restore', 'user_clt073_restore');
+    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      await client.query(
+        `INSERT INTO physical_asset
+           (tenant_id, branch_id, variant_id, asset_code, lifecycle_status, readiness,
+            custody_kind, version, created_at, updated_at)
+         VALUES ($1, $2, $3, 'ARC-MANUAL', 'retired', 'unready', 'at_branch', 2, now(), now())`,
+        [seed.tenantId, seed.branchId, seed.primaryVariantId],
+      );
+      const image = await client.query<{ id: string }>(
+        `INSERT INTO file_object
+           (tenant_id, purpose, storage_key, version_id, mime_type, byte_size, lifecycle_status,
+            is_private, upload_expires_at, frozen_at)
+         VALUES ($1, 'catalogue_image', $2, 'version-archive-restore', 'image/png', 512,
+                 'accepted', true, now() + interval '10 minutes', now())
+         RETURNING id`,
+        [seed.tenantId, `tenant-files/${seed.tenantId}/archive-restore-cover/source`],
+      );
+      const imageId = requireRow(image.rows, 'archive restore image').id;
+      await client.query(
+        `INSERT INTO product_image (tenant_id, product_id, file_id, display_order)
+         VALUES ($1, $2, $3, 0)`,
+        [seed.tenantId, seed.productId, imageId],
+      );
+    });
     useClerk(seed);
     const app = createApp();
 
@@ -245,11 +269,18 @@ describe('CLT-032 clothing archive command', async () => {
         version: 1,
       },
       {
-        asset_code: 'ARC-SAFE',
+        asset_code: 'ARC-MANUAL',
         lifecycle_status: 'retired',
         readiness: 'unready',
         custody_kind: 'at_branch',
         version: 2,
+      },
+      {
+        asset_code: 'ARC-SAFE',
+        lifecycle_status: 'active',
+        readiness: 'ready',
+        custody_kind: 'at_branch',
+        version: 3,
       },
     ]);
     expect(state.reservationSnapshot).toEqual(seed.reservationSnapshot);
@@ -270,6 +301,18 @@ describe('CLT-032 clothing archive command', async () => {
       'catalogue.clothing.archived',
       'catalogue.clothing.restored_to_draft',
     ]);
+
+    useClerk(seed);
+    const published = await request(app)
+      .post(`/api/v1/catalogue/clothing/${seed.productId}/publish`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt073-publish-after-restore')
+      .send({ expected_updated_at: readString(readData(restored.body).updated_at) });
+    expect(published.status, JSON.stringify(published.body)).toBe(200);
+    expect(published.body).toMatchObject({
+      success: true,
+      data: { product_id: seed.productId, status: 'active' },
+    });
   });
 
   it('controls variant lifecycle safely, preserves referenced history, and only hard-deletes an unused draft variant', async () => {

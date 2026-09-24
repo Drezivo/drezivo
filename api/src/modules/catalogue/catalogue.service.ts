@@ -1093,7 +1093,18 @@ export async function restoreClothing(input: CommandContext & {
       const graph = await restoreClothingGraph(client, input.tenantId, input.productId);
       const data = restoreClothingResponse.parse({ product_id: graph.product.id, status: graph.product.status, restored_variant_count: graph.restoredVariantCount, updated_at: graph.product.updated_at.toISOString() });
       const body = successBody(input.requestId, data);
-      await appendCatalogueAuditEvent(client, { tenantId: input.tenantId, actorKey: input.principalId, action: 'catalogue.clothing.restored_to_draft', entityType: 'product', entityId: data.product_id, redactedSummary: { restored_variant_count: data.restored_variant_count }, requestId: input.requestId });
+      await appendCatalogueAuditEvent(client, {
+        tenantId: input.tenantId,
+        actorKey: input.principalId,
+        action: 'catalogue.clothing.restored_to_draft',
+        entityType: 'product',
+        entityId: data.product_id,
+        redactedSummary: {
+          restored_variant_count: data.restored_variant_count,
+          restored_asset_count: graph.restoredAssetCount,
+        },
+        requestId: input.requestId,
+      });
       await finalizeTenantIdempotency(client, { tenantId: input.tenantId, principalKey: input.membershipId, operation: RESTORE_CLOTHING_OPERATION, intentKey: input.idempotencyKey, payloadHash, status: 'succeeded', responseCode: 200, safeResponse: body });
       return { status: 200, body };
     } catch (error) {

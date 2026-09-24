@@ -561,7 +561,7 @@ export async function restoreClothingGraph(
   client: PoolClient,
   tenantId: string,
   productId: string,
-): Promise<{ product: EditableProductRow; restoredVariantCount: number }> {
+): Promise<{ product: EditableProductRow; restoredVariantCount: number; restoredAssetCount: number }> {
   const product = await client.query<EditableProductRow>(
     `UPDATE product
         SET status = 'draft',
@@ -579,7 +579,27 @@ export async function restoreClothingGraph(
       WHERE tenant_id = $1 AND product_id = $2 AND status = 'archived'`,
     [tenantId, productId],
   );
-  return { product: row, restoredVariantCount: variants.rowCount ?? 0 };
+  const assets = await client.query(
+    `UPDATE physical_asset pa
+        SET lifecycle_status = 'active',
+            readiness = 'ready',
+            retired_by_product_archive = false,
+            version = version + 1,
+            updated_at = GREATEST(clock_timestamp(), pa.updated_at + interval '1 millisecond')
+       FROM product_variant pv
+      WHERE pa.tenant_id = $1
+        AND pv.tenant_id = pa.tenant_id
+        AND pv.id = pa.variant_id
+        AND pv.product_id = $2
+        AND pa.lifecycle_status = 'retired'
+        AND pa.retired_by_product_archive = true`,
+    [tenantId, productId],
+  );
+  return {
+    product: row,
+    restoredVariantCount: variants.rowCount ?? 0,
+    restoredAssetCount: assets.rowCount ?? 0,
+  };
 }
 
 export async function countActivePhysicalAssetsForVariant(
@@ -860,6 +880,7 @@ export async function archiveClothingGraph(
       `UPDATE physical_asset
           SET lifecycle_status = 'retired',
               readiness = 'unready',
+              retired_by_product_archive = true,
               version = version + 1,
               updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
         WHERE tenant_id = $1
