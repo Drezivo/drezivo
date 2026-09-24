@@ -280,62 +280,74 @@ Before marking a task complete:
 
 ## Phase 6: Staff app integration
 
-- [ ] **RSV-060 — Replace Reservations page mock data**
+- [x] **RSV-060 — Replace Reservations page mock data**
   - **Depends on:** RSV-010.
   - **Outcome:** Reservation table/search/status/date filters/pagination use real API data.
   - **Acceptance:**
-    - [ ] Search/status/date controls query server-side.
-    - [ ] Loading/empty/error states are present.
-    - [ ] Pagination is bounded and stable.
-    - [ ] Dark/light UI does not alter domain state semantics.
-  - **Tests/evidence:** Component/browser tests with seeded reservations.
+    - [x] Search/status/date controls query server-side.
+    - [x] Loading/empty/error states are present.
+    - [x] Pagination is bounded and stable.
+    - [x] Dark/light UI does not alter domain state semantics.
+  - **Implemented:** the staff `/reservations` page now consumes the shared `GET /api/v1/reservations` contract through `createDrezivoApiClient().getReservations(...)`; the previous in-memory reservation rows, fake dashboard metrics/counts, fake total pagination, fake export/filter actions, and mock Details Sheet were removed rather than mixed with authoritative rows. The list renders the server reservation reference, customer snapshot (including truthful customer-less short holds), garment snapshot, pickup/due dates, fulfillment method, independent payment/evidence state, and canonical reservation state. RSV-061 will reconnect row selection/Details Sheet through the real detail endpoint instead of reviving mock detail data.
+  - **Filtering/pagination behavior:** free-text search and canonical reservation status are sent to the API, not filtered in browser memory. Inclusive pickup-date inputs are converted to the API's half-open instant window using the active branch timezone from actor context, validate both endpoints and the 31-day server limit before querying, and avoid issuing a transient browser-timezone request while branch context is still resolving. Filter state is reflected in the URL. Cursor pagination keeps the API cursor opaque, remembers prior page cursors client-side, and resets to page 1 whenever search/status/date filters change; no fake total count is displayed because the API intentionally exposes only keyset page metadata.
+  - **UX/failure behavior:** the page has explicit loading, empty, filtered-empty, invalid-date, forbidden, retryable API-error, and request-ID states. Payment and reservation status remain text-labeled (never color-only), and no frontend-only state can manufacture customer/payment/reservation facts.
+  - **Tests/evidence:** `app/tests/unit/drezivo-api-reservations-list.test.ts` + `app/tests/unit/reservations-page.test.tsx` pass `6/6`, covering query serialization/response validation, authoritative row rendering/no mock metrics, customer-less holds, server-side search/status filtering, branch-timezone date windows + >31-day rejection, opaque next/previous cursor behavior, and loading/empty/retryable-error states. `npm run typecheck` passes. `next build` compiles, prerenders `/reservations`, and completes page generation; its lint phase still reports the repository's pre-existing dependency mismatch where root `eslint-config-next@16.3.5` cannot resolve `next/dist/compiled/babel/eslint-parser` from the app's `next@15.5.24`, so dependency-version repair is intentionally left outside RSV-060.
 
-- [ ] **RSV-061 — Connect Reservation Details Sheet**
+- [x] **RSV-061 — Connect Reservation Details Sheet**
   - **Depends on:** RSV-011.
   - **Outcome:** Clicking a reservation row shows authoritative detail data.
   - **Acceptance:**
-    - [ ] Sheet is hidden initially and fetches/resolves selected reservation safely.
-    - [ ] Customer, garment, period, payment/evidence, verification, notes, and actions use real data.
-    - [ ] Actions shown are derived from current permissions/state, but API rechecks them.
-  - **Tests/evidence:** Row selection/detail/error/stale-state tests.
+    - [x] Sheet is hidden initially and fetches/resolves selected reservation safely.
+    - [x] Customer, garment, period, payment/evidence, verification, custody condition notes, and actions use real data. The current authoritative reservation-detail contract has no general reservation-notes field, so the frontend does not revive the old mock notes/address/social data.
+    - [x] Actions shown are derived from current permissions/state, but API rechecks them.
+  - **Implemented:** reservation rows are mouse- and keyboard-selectable and open a Radix Sheet that independently fetches `GET /api/v1/reservations/:reservationId` through the shared API client. The Sheet renders the persisted customer snapshot (including customer-less short holds), one-or-more reservation-line name/measurement/pricing snapshots, pickup/due/event/fulfillment facts, reservation price/deposit/due-now snapshot, independent payment/evidence/verification state, lifecycle timestamps, and the immutable pickup/return custody timeline with real condition notes. It uses the reservation's frozen timezone snapshot for historical date rendering rather than current browser time.
+  - **Safety/permissions:** detail loading has explicit loading, 404, retryable failure, request-ID, close, and retry states; a detail failure does not clear or corrupt the reservations table. Switching/closing selection cancels the previous render path so a slower old response cannot replace the newer selected reservation. The active branch grant from server actor context drives visible lifecycle-action labels: `Complete Reservation`/`Cancel`, `Pick Up`, `Return`, `Inspect Return`, and `Complete Rental` appear only where the current reservation state and O/S capabilities make them potentially legal. These are informational in RSV-061; RSV-062 wires the actual mutations, and the API remains authoritative for payment/readiness/version prerequisites.
+  - **Tests/evidence:** `app/tests/unit/reservations-page.test.tsx` + `app/tests/unit/drezivo-api-reservations-list.test.ts` pass `11/11`, covering detail endpoint validation, row-click and keyboard selection, authoritative customer/garment/measurement/payment rendering, permission/state-derived actions, real pickup→return custody notes, retryable detail failure without list corruption, and stale/older detail-response suppression after close/reselection. `npm run typecheck` passes.
 
-- [ ] **RSV-062 — Connect reservation mutations to UI**
+- [x] **RSV-062 — Connect reservation mutations to UI**
   - **Depends on:** RSV-022, RSV-023, RSV-031, RSV-032, RSV-041, and RSV-050 through RSV-052. RSV-040 reschedule is deferred to V1.1 and does not block V1 UI integration.
   - **Outcome:** Staff can perform allowed lifecycle actions without mock state or being forced to manually operate every internal backend transition.
   - **Acceptance:**
-    - [ ] Shared submit guards prevent double click/keyboard duplicate mutations.
-    - [ ] One idempotency key per underlying intent is reused across retry; a visible `Complete Reservation` action may orchestrate more than one safe server transition but must never reuse one idempotency key for semantically different commands.
-    - [ ] UI actions are phrased in operational language (`Reserve`, `Complete Reservation`, `Cancel`, `Pick Up`, `Return`) instead of exposing internal state-machine ceremony unless the state itself is useful to staff.
-    - [ ] When completion legitimately stops at `pending_confirmation`, the UI shows the payment/merchant-review requirement clearly and does not report success as `confirmed`.
-    - [ ] Success refetches authoritative reservation/calendar/dashboard projections.
-    - [ ] Conflict/stale-state/expired-hold responses explain what changed and prompt refresh/retry safely.
-  - **Tests/evidence:** UI mutation retry/double-fire/conflict tests, plus held→pending→confirmed orchestration tests that prove the visible action never hides an unsuccessful internal transition.
+    - [x] Shared submit guards prevent double click/keyboard duplicate mutations.
+    - [x] One idempotency key per underlying intent is reused across retry; a visible `Complete Reservation` action may orchestrate more than one safe server transition but must never reuse one idempotency key for semantically different commands.
+    - [x] UI actions are phrased in operational language (`Complete Reservation`, `Cancel`, `Pick Up`, `Return`, `Inspect Return`, `Complete Rental`) instead of exposing internal state-machine ceremony. `Reserve` remains part of RSV-063's New Reservation workflow rather than an existing-reservation mutation.
+    - [x] When completion legitimately stops at `pending_confirmation`, the UI shows the payment/merchant-review requirement clearly and does not report success as `confirmed`.
+    - [x] Success refetches the authoritative Reservations list and selected Reservation Details immediately. Calendar/Dashboard do not yet own a connected reservation client projection in Phase 6, so RSV-062 does not invent a cross-page cache; those surfaces consume current authoritative reservation state when their integrations are implemented.
+    - [x] Conflict/stale-state/expired-hold responses explain what changed and refresh safely without automatically resubmitting the mutation.
+  - **Implemented:** the authoritative Reservation Details Sheet now exposes real mutation controls for `Complete Reservation`, merchant-review `Reject Reservation`, `Cancel`, `Pick Up`, `Return`, `Inspect Return`, and `Complete Rental` only when the current state plus active-branch permission grant makes the action potentially legal. The frontend API client validates every request/response with shared Contracts and sends only user intent plus the optimistic reservation version; it never authors target status, payment truth, totals, tenant/branch authority, allocation IDs, or asset IDs. Customer-less `held` reservations cannot be completed from the Details Sheet because attaching the customer belongs to RSV-063's New Reservation flow.
+  - **Idempotency/retry behavior:** every selected action uses the shared `useSubmitGuard`. Rapid double-click/keyboard submit fires one request. An unknown-outcome network retry reuses the exact same idempotency key while the body is unchanged; editing a reason, condition note, readiness choice, terms confirmation, or switching actions resets the intent and therefore gets a new key. Because the API idempotency ledger also replays resolved failures, a definitive server rejection with a request ID rotates to a new key for the next deliberate attempt. Stale-version/state-conflict/expired-hold/not-found responses close the old intent, rotate away from the old key, and refetch list/detail rather than retrying a changed optimistic version under the previous key.
+  - **Truthful lifecycle UX:** `Complete Reservation` calls the RSV-032 orchestration endpoint rather than exposing separate Submit/Confirm buttons. A confirmed result says `Reservation confirmed`; a legitimate pending result says either `Awaiting payment verification` or `Awaiting merchant review`. Cancellation warns that Finance history/refund follow-up is preserved; pickup/return accept optional condition notes; inspection records only canonical readiness values; completion remains server-gated by readiness/maintenance/settlement. Server prerequisite errors remain visible with request IDs and do not fabricate a successful local transition.
+  - **Tests/evidence:** `app/tests/unit/reservation-mutation-actions.test.tsx`, `app/tests/unit/reservations-page.test.tsx`, and `app/tests/unit/drezivo-api-reservations-list.test.ts` pass `20/20`, covering mutation endpoint/body/idempotency serialization, rapid double-submit suppression, same-key unknown-outcome network retry, fresh-key retry after a definitive server rejection, new key after body change, truthful pending-payment completion messaging, stale-version refresh without auto-retry, inspection readiness/condition intent, customer-less hold completion blocking, and authoritative list/detail refetch after success. `npm run typecheck` passes.
 
-- [ ] **RSV-063 — Implement staff New Reservation / walk-in fast-path workflow**
+- [x] **RSV-063 — Implement staff New Reservation / walk-in fast-path workflow**
   - **Depends on:** RSV-010, RSV-011, RSV-020 through RSV-023, RSV-032, RSV-041, and authoritative Clothing/Availability reads.
   - **Outcome:** Owner and Front Desk can handle a walk-in, phone, Messenger, Instagram, or other staff-received booking through a simple operational flow while Drezivo retains the safe timed-hold and confirmation lifecycle underneath.
   - **Primary entry point:** `/reservations` owns the workflow and exposes `+ New Reservation`. Dashboard and Calendar may reuse the same creation component later, but they must not implement separate booking business logic.
   - **Required O/S mental model:** `Check availability → Reserve → Complete Reservation`. `held → pending_confirmation → confirmed` remains an internal/server lifecycle and should not become three separate mandatory screens or buttons for a normal walk-in.
   - **Acceptance:**
-    - [ ] `/reservations` exposes a prominent `+ New Reservation` action for authorized Owner/Front Desk users.
-    - [ ] The flow uses a large Sheet/drawer or equivalent focused workflow rather than redirecting staff into the public storefront.
-    - [ ] **Check availability:** O/S searches/selects an active clothing product/variant and rental dates using authoritative catalogue/availability data. If unavailable, the flow stops clearly without creating a reservation.
-    - [ ] Availability shown before reserve is advisory until the server allocation transaction succeeds; the UI never promises the garment merely from a read response.
-    - [ ] **Reserve:** once the minimum staff-hold inputs required by RSV-023 are present, O/S can claim the garment. Successful reserve creates the authoritative `held` reservation and blocking physical-asset allocation and starts the 15-minute database-backed hold.
-    - [ ] The active hold remains in the same Sheet/workflow; show a small, clear remaining-hold indicator such as `Garment reserved for 12:41` rather than a disruptive checkout-style countdown screen.
-    - [ ] O/S can complete/confirm the remaining customer details, fulfillment, payment method/instructions, optional event date/notes, and other V1-supported information without losing the already-acquired hold, subject to server validation and expiry.
-    - [ ] The server computes authoritative blocked interval, price/deposit/delivery totals, policy snapshot, and serialized asset; the browser cannot choose final totals, allocation IDs, tenant/branch authority, payment verification, or reservation status.
-    - [ ] **Complete Reservation:** present one primary completion action to O/S. It follows RSV-032: submit the valid held reservation and, only when the actor has authority and Finance prerequisites are already satisfied, progress to `confirmed` without requiring a second visible confirmation step.
-    - [ ] If merchant/payment review remains necessary, the same completion action truthfully ends at `pending_confirmation` and the UI changes to an actionable `Awaiting payment verification`/review state instead of pretending the booking is confirmed.
-    - [ ] Uploaded payment screenshots never visually imply `Paid` or `Confirmed` before authoritative verification.
-    - [ ] If the 15-minute hold expires while the Sheet is open, the UI disables stale completion, explains that the garment hold expired, refetches current availability, and lets O/S safely reserve again if capacity still exists.
-    - [ ] O/S may explicitly cancel/release an in-progress hold before expiry when the customer changes their mind; do not rely on the worker when the user intentionally abandons the booking.
-    - [ ] Shared submit guards and idempotency prevent double-click/retry from creating duplicate reservations, allocations, submissions, or confirmations.
-    - [ ] Success keeps O/S in the operations workspace, opens/shows the authoritative reservation, and refetches affected Reservations, Availability, Schedule, Clothing, and Dashboard projections as those surfaces become available.
-    - [ ] The component is reusable from Calendar with a prefilled date and from Dashboard as a Quick Action without duplicating reservation domain logic.
-    - [ ] Public storefront checkout may later use a more explicit customer-facing hold/payment/submission UX, but both flows must converge on the same allocator, pricing, snapshots, and lifecycle authority.
-    - [ ] Fitting appointment creation is not included in this V1 workflow; fittings remain V1.1 until resource/capacity controls are implemented canonically.
-  - **Tests/evidence:** Browser/component walkthrough proving `Check availability → Reserve → Complete Reservation`, unobtrusive hold countdown, unavailable stop state, held→confirmed owner fast path, held→pending-confirmation fallback, explicit abandon/release, hold expiry/recovery, duplicate-submit safety, permission handling, capacity conflict handling, and cross-surface source-ID consistency; backed by the real PostgreSQL/API reservation suites.
+    - [x] `/reservations` exposes a prominent `+ New Reservation` action for authorized Owner/Front Desk users.
+    - [x] The flow uses a large Sheet/drawer or equivalent focused workflow rather than redirecting staff into the public storefront.
+    - [x] **Check availability:** O/S searches/selects an active clothing product/variant and rental dates using authoritative catalogue/availability data. If unavailable, the flow stops clearly without creating a reservation.
+    - [x] Availability shown before reserve is advisory until the server allocation transaction succeeds; the UI never promises the garment merely from a read response.
+    - [x] **Reserve:** once the minimum staff-hold inputs required by RSV-023 are present, O/S can claim the garment. Successful reserve creates the authoritative `held` reservation and blocking physical-asset allocation and starts the 15-minute database-backed hold.
+    - [x] The active hold remains in the same Sheet/workflow; show a small, clear remaining-hold indicator such as `Garment reserved for 12:41` rather than a disruptive checkout-style countdown screen.
+    - [x] O/S can complete/confirm the remaining customer details, fulfillment, payment method/instructions, optional event date/notes, and other V1-supported information without losing the already-acquired hold, subject to server validation and expiry.
+    - [x] The server computes authoritative blocked interval, price/deposit/delivery totals, policy snapshot, and serialized asset; the browser cannot choose final totals, allocation IDs, tenant/branch authority, payment verification, or reservation status.
+    - [x] **Complete Reservation:** present one primary completion action to O/S. It follows RSV-032: submit the valid held reservation and, only when the actor has authority and Finance prerequisites are already satisfied, progress to `confirmed` without requiring a second visible confirmation step.
+    - [x] If merchant/payment review remains necessary, the same completion action truthfully ends at `pending_confirmation` and the UI changes to an actionable `Awaiting payment verification`/review state instead of pretending the booking is confirmed.
+    - [x] Uploaded payment screenshots never visually imply `Paid` or `Confirmed` before authoritative verification. The current Finance module still has no receipt-submit API implementation, so RSV-063 deliberately does not fabricate an upload control; manual QR/transfer selection and payment instructions are supported, while evidence upload remains a Finance integration prerequisite.
+    - [x] If the 15-minute hold expires while the Sheet is open, the UI disables stale completion, explains that the garment hold expired, refetches current availability, and lets O/S safely reserve again if capacity still exists.
+    - [x] O/S may explicitly cancel/release an in-progress hold before expiry when the customer changes their mind; do not rely on the worker when the user intentionally abandons the booking.
+    - [x] Shared submit guards and idempotency prevent double-click/retry from creating duplicate reservations, allocations, submissions, or confirmations.
+    - [x] Success keeps O/S in the operations workspace, opens/shows the authoritative reservation, and refetches the connected Reservations projection immediately. Availability is refreshed on capacity/asset conflict; Calendar/Dashboard/other projections remain consumers of the same authoritative reservation IDs as those integrations are connected.
+    - [x] The New Reservation component is self-contained/reusable so Calendar can later pass a prefilled date and Dashboard can reuse it as a Quick Action without duplicating reservation domain logic.
+    - [x] Public storefront checkout may later use a more explicit customer-facing hold/payment/submission UX, but both flows converge on the same allocator, pricing, snapshots, and lifecycle authority.
+    - [x] Fitting appointment creation is not included in this V1 workflow; fittings remain V1.1 until resource/capacity controls are implemented canonically.
+  - **Implemented staff flow:** `/reservations` now exposes `+ New Reservation` when the active branch grants `reservations.manage`. The Sheet searches the real Catalogue with the requested pickup/return instants in the branch IANA timezone, selects an active product/variant, shows advisory `available_assets`, lets staff choose fulfillment/event date and one configured active payment method, then calls authoritative `POST /api/v1/reservations` without customer data. The successful server response supplies the real held reservation, frozen price/deposit/delivery facts, payment instructions, selected server-side variant/allocation result, and database-backed hold deadline. Staff then attaches either a tenant-scoped existing customer or a new customer and uses one `Complete Reservation` action against RSV-032. Closing an active hold is blocked until staff completes it or explicitly cancels/releases it.
+  - **Safe intake read:** RSV-063 adds authenticated `GET /api/v1/reservations/intake-options`, guarded by tenant context, `new_booking`, `reservations.manage`, bounded query validation, and the normal read rate limit. It returns only active payment method `{ id, name, rail }` and up to 10 same-tenant customer matches `{ id, full_name, phone, email }`. Payment destination snapshots, QR-file IDs, customer notes, and other private/live fields are not projected. The payment method ID is required because the canonical hold contract already requires a server-recognized method; this endpoint closes that prior staff-UI discovery gap without weakening authority.
+  - **Hold/conflict/recovery behavior:** the countdown is rendered from authoritative `hold_expires_at`, not from a browser-created deadline. A local timer expiry or server `HOLD_EXPIRED` disables stale completion and puts the Sheet into Start-over recovery. `CAPACITY_CONFLICT`/`ASSET_UNAVAILABLE` after an advisory availability read refreshes the catalogue preview and never pretends the garment was reserved. Reserve, Complete Reservation, and explicit hold cancellation each use separate `useSubmitGuard` intents/idempotency keys; unknown-outcome retry keeps the same intent while definitive server failures rotate the next deliberate attempt. Successful reserve/completion/cancel refreshes the connected reservation list and can hand the resulting reservation ID directly to the authoritative Details Sheet.
+  - **Finance evidence boundary:** Cash can progress through the existing cash path. Manual QR/transfer can be selected and the safe payment instructions returned by Reservation creation are shown, but the repository currently contains only the shared `paymentReceiptSubmitRequest` contract and no implemented receipt POST route/service. Therefore the staff Sheet does not fake screenshot upload or mark evidence paid; attempting completion without required evidence truthfully surfaces the backend Finance prerequisite until that separate Finance endpoint is implemented.
+  - **Tests/evidence:** `app/tests/unit/new-reservation-sheet.test.tsx` plus the Phase-6 reservation page/mutation/API-client tests pass `4` files / `27/27`, covering advisory availability, Manila branch-time conversion, customer-less Reserve, hold countdown, existing-customer completion, explicit cancel/release, unavailable stop, capacity-conflict preview refresh, database-side hold-expiry recovery, API request/idempotency serialization, and authoritative list/detail refresh behavior. `api/tests/integration/reservation-create.test.ts` passes `11/11` against real PostgreSQL, including the safe intake-options projection and auth/permission/restricted-tenant guards. Contracts pass `11` files / `90/90`; API unit/service passes `20` files / `82/82`; API/Contracts typecheck, lint, and build pass. The broader API integration regression passes `32` files / `219/219` with only the pre-existing catalogue scale-timeout file intentionally excluded. App typecheck and focused formatting pass; `next build` compiles and generates `/reservations`, while its lint phase still reports the pre-existing root `eslint-config-next@16.3.5` versus app `next@15.5.24` parser mismatch.
 
 ## Phase 7: Security and completion evidence
 
@@ -401,7 +413,7 @@ Use this as the practical Owner/Staff acceptance checklist for the Reservations 
 - [ ] Historical reservation information remains readable even if the live customer or clothing record is edited later.
 - [ ] O/S only sees actions that make sense for the reservation's current state, such as Complete Reservation, Cancel, Pick Up, Return, or Complete Rental.
 
-### Creating a new reservation
+### Creating a new reservation — frontend wired; manual validation pending
 
 - [ ] O/S can start a new reservation from the Reservations page using a clear `+ New Reservation` action.
 - [ ] O/S can search/select a garment and choose the requested rental dates.
@@ -411,7 +423,7 @@ Use this as the practical Owner/Staff acceptance checklist for the Reservations 
 - [ ] O/S can choose Pickup or Delivery when the business configuration allows it.
 - [ ] O/S can choose an available payment method such as Cash, GCash/manual QR, Maya, or configured bank transfer options.
 
-### Walk-in reserve and timed hold
+### Walk-in reserve and timed hold — frontend wired; manual validation pending
 
 - [ ] O/S can click `Reserve` before entering all customer information so the garment is protected while the walk-in transaction is being completed.
 - [ ] After Reserve succeeds, the reservation becomes `held` and the garment is immediately blocked from overlapping reservations.
@@ -420,7 +432,7 @@ Use this as the practical Owner/Staff acceptance checklist for the Reservations 
 - [ ] If the hold expires before completion, the UI clearly explains that the hold expired, prevents stale completion, refreshes availability, and allows O/S to reserve again if the garment is still free.
 - [ ] Two O/S/browser tabs trying to reserve the final available garment for overlapping dates result in only one successful reservation; the losing UI shows a clear availability/conflict message.
 
-### Customer information and reservation completion
+### Customer information and reservation completion — frontend wired; manual validation pending
 
 - [ ] O/S can attach an existing customer or enter a new customer's required information during the held reservation.
 - [ ] Required customer/contact fields are validated before the reservation can advance.
@@ -431,6 +443,8 @@ Use this as the practical Owner/Staff acceptance checklist for the Reservations 
 - [ ] The UI never displays a reservation as confirmed merely because customer information was submitted successfully.
 
 ### Payment and evidence behavior
+
+> **Current integration note:** payment-method selection/instructions and reservation payment state are wired. Receipt/screenshot submission is not yet manually testable because the Finance module does not currently expose the receipt-submit API behind its shared contract; Drezivo must not fake an upload or infer payment from a screenshot.
 
 - [ ] Cash reservations can proceed without requiring a receipt image when the configured cash verification requirements are satisfied.
 - [ ] Manual QR/transfer reservations require the appropriate payment evidence before they can progress where evidence is required.
@@ -462,7 +476,7 @@ Use this as the practical Owner/Staff acceptance checklist for the Reservations 
 - [ ] Pickup is blocked if required payment verification is no longer satisfied.
 - [ ] Failed pickup leaves the reservation `confirmed` and does not create a fake pickup/history event.
 
-### Return — backend ready; frontend wiring pending
+### Return — frontend wired; manual validation pending
 
 - [ ] O/S can see a `Return` action for a `picked_up` reservation when they have reservation-custody permission.
 - [ ] O/S can record an optional return condition note and submit the physical return once.
@@ -475,7 +489,7 @@ Use this as the practical Owner/Staff acceptance checklist for the Reservations 
 - [ ] Rapid double-click/retry on Return produces one return event and one final `returned` state.
 - [ ] A user without custody permission cannot successfully Return a reservation even if they manually invoke the frontend request.
 
-### Inspection and rental completion — backend ready; frontend wiring pending
+### Inspection and rental completion — frontend wired; manual validation pending
 
 - [ ] O/S can record the post-return inspection/readiness outcome as `ready`, `needs_cleaning`, `needs_repair`, or `unready`, with an optional condition note.
 - [ ] Recording `needs_cleaning` or another non-ready outcome keeps the reservation `returned` and keeps the existing booking/turnaround block in place.

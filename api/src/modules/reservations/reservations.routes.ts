@@ -11,6 +11,7 @@ import {
   createPublicHoldController,
   createStaffReservationController,
   getReservationDetailController,
+  getStaffReservationIntakeOptionsController,
   listReservationsController,
   pickupReservationController,
   rejectReservationController,
@@ -36,6 +37,7 @@ import {
   validateReservationSubmit,
   validateStaffReservationComplete,
   validateStaffReservationCreate,
+  validateStaffReservationIntakeQuery,
 } from './reservations.middleware.js';
 
 export const reservationsRouter = Router();
@@ -51,6 +53,17 @@ const writeRateLimit = rateLimit({
   max: 30,
   keyOf: (req) => req.tenantContext?.tenantId ?? req.clerkPrincipal?.clerkUserId ?? req.ip ?? 'unknown',
 });
+
+reservationsRouter.get(
+  '/reservations/intake-options',
+  requireStaffAuth,
+  requireTenantContext,
+  readRateLimit,
+  requireTenantAction('new_booking'),
+  requireReservationManagePermission,
+  validateStaffReservationIntakeQuery,
+  getStaffReservationIntakeOptionsController,
+);
 
 reservationsRouter.post(
   '/reservations',

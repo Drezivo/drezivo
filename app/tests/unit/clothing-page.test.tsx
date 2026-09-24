@@ -400,7 +400,7 @@ describe("ClothingPage", () => {
       expect.any(String)
     );
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "Clothing restored to Draft. 1 variant was restored to Draft for review."
+      "Clothing restored to Draft. Review the clothing and publish it when ready."
     );
     await waitFor(() => expect(api.getCatalogueClothing).toHaveBeenCalledTimes(2));
     expect(screen.getByText("Draft")).toBeVisible();

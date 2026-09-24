@@ -15,8 +15,6 @@ import {
   Package,
   PhilippinePeso,
   Plus,
-  RotateCcw,
-  Rocket,
   Ruler,
   Save,
   Shirt,
@@ -149,10 +147,6 @@ export function EditClothingPage({ productId }: { productId: string }) {
     categories.find((category) => category.id === categoryId) ?? null;
   const editableVariants = useMemo(
     () => variants.filter((variant) => variant.status !== "archived"),
-    [variants]
-  );
-  const archivedVariants = useMemo(
-    () => variants.filter((variant) => variant.status === "archived"),
     [variants]
   );
 
@@ -510,7 +504,10 @@ export function EditClothingPage({ productId }: { productId: string }) {
   }
 
   const item = loadState.item;
-  const activePieces = item.variants.flatMap((variant) => variant.assets).filter((asset) => asset.lifecycle_status === "active").length;
+  const activePieces = item.variants
+    .filter((variant) => variant.status !== "archived")
+    .flatMap((variant) => variant.assets)
+    .filter((asset) => asset.lifecycle_status === "active").length;
 
   return (
     <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
@@ -728,11 +725,10 @@ export function EditClothingPage({ productId }: { productId: string }) {
                       variant={variant}
                       defaultGuide={defaultGuide}
                       disabled={saveGuard.isSubmitting}
-                      lifecycleDisabled={saveGuard.isSubmitting || isDirty}
+                      removeDisabled={saveGuard.isSubmitting || isDirty}
                       productId={item.product_id}
-                      productStatus={item.status}
                       getToken={getToken}
-                      onLifecycleChanged={(message) => {
+                      onRemoved={(message) => {
                         void load().then(() => setSaveNotice(message));
                       }}
                       onChange={(patch) => updateVariant(variant.id, patch)}
@@ -740,32 +736,9 @@ export function EditClothingPage({ productId }: { productId: string }) {
                   ))
                 ) : (
                   <div className="rounded-xl border border-dashed border-dashboard-border bg-dashboard-active/20 px-4 py-6 text-center text-sm text-dashboard-muted">
-                    No editable variants remain. Restore an archived variant or add a new one.
+                    No variants remain. Add a variant to continue setting up this clothing.
                   </div>
                 )}
-
-                {archivedVariants.length > 0 ? (
-                  <details className="rounded-xl border border-dashboard-border bg-dashboard-active/20">
-                    <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-dashboard-navy">
-                      Archived variants ({archivedVariants.length})
-                    </summary>
-                    <div className="space-y-2 border-t border-dashboard-border p-3">
-                      {archivedVariants.map((variant) => (
-                        <ArchivedVariantRow
-                          key={variant.id}
-                          variant={variant}
-                          disabled={saveGuard.isSubmitting || isDirty}
-                          getToken={getToken}
-                          productId={item.product_id}
-                          productStatus={item.status}
-                          onChanged={(message) => {
-                            void load().then(() => setSaveNotice(message));
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </details>
-                ) : null}
               </div>
             </SectionCard>
           </div>
@@ -784,12 +757,12 @@ export function EditClothingPage({ productId }: { productId: string }) {
                 </div>
                 <div className="mt-5 divide-y divide-dashboard-border rounded-xl border border-dashboard-border">
                   <SummaryRow label="Clothing Style" value="1" />
-                  <SummaryRow label="Variants" value={String(variants.length)} />
+                  <SummaryRow label="Variants" value={String(editableVariants.length)} />
                   <SummaryRow label="Active Pieces" value={String(activePieces)} />
                   <SummaryRow label="Status" value={labelize(item.status)} />
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {variants.map((variant) => (
+                  {editableVariants.map((variant) => (
                     <span
                       key={variant.id}
                       className="rounded-lg border border-dashboard-border bg-dashboard-active px-2.5 py-1.5 text-xs font-semibold text-dashboard-accent"
@@ -1148,22 +1121,20 @@ function VariantEditor({
   disabled,
   getToken,
   index,
-  lifecycleDisabled,
   onChange,
-  onLifecycleChanged,
+  onRemoved,
   productId,
-  productStatus,
+  removeDisabled,
   variant,
 }: {
   defaultGuide: MeasurementGuide | null;
   disabled: boolean;
   getToken: () => Promise<string | null>;
   index: number;
-  lifecycleDisabled: boolean;
   onChange: (patch: Partial<VariantDraft>) => void;
-  onLifecycleChanged: (message: string) => void;
+  onRemoved: (message: string) => void;
   productId: string;
-  productStatus: ClothingDetail["status"];
+  removeDisabled: boolean;
   variant: VariantDraft;
 }) {
   const measurementKeys = useMemo(() => {
@@ -1184,19 +1155,13 @@ function VariantEditor({
           <p className="text-sm font-semibold text-dashboard-navy">Variant {index + 1} · {variant.sku}</p>
           <p className="mt-0.5 text-xs text-dashboard-muted">Existing serialized pieces stay attached to this variant.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-dashboard-border bg-dashboard-surface px-2.5 py-1 text-xs font-medium text-dashboard-muted">
-            {labelize(variant.status)}
-          </span>
-          <VariantLifecycleControls
-            disabled={lifecycleDisabled}
-            getToken={getToken}
-            onChanged={onLifecycleChanged}
-            productId={productId}
-            productStatus={productStatus}
-            variant={variant}
-          />
-        </div>
+        <VariantRemoveControl
+          disabled={removeDisabled}
+          getToken={getToken}
+          onRemoved={onRemoved}
+          productId={productId}
+          variant={variant}
+        />
       </div>
 
       <div className="space-y-5 p-4">
@@ -1418,99 +1383,26 @@ function VariantEditor({
   );
 }
 
-function ArchivedVariantRow({
+function VariantRemoveControl({
   disabled,
   getToken,
-  onChanged,
+  onRemoved,
   productId,
-  productStatus,
   variant,
 }: {
   disabled: boolean;
   getToken: () => Promise<string | null>;
-  onChanged: (message: string) => void;
+  onRemoved: (message: string) => void;
   productId: string;
-  productStatus: ClothingDetail["status"];
   variant: VariantDraft;
 }) {
-  return (
-    <div className="flex flex-col gap-3 rounded-lg border border-dashboard-border bg-dashboard-surface px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold text-dashboard-navy">{variant.sku}</span>
-          <span className="rounded-full border border-dashboard-border bg-dashboard-active px-2 py-0.5 text-[0.68rem] font-medium text-dashboard-muted">
-            Archived
-          </span>
-        </div>
-        <p className="mt-1 text-xs text-dashboard-muted">
-          {variant.sizeLabel}{variant.color ? ` · ${variant.color}` : ""} · preserved for history
-        </p>
-      </div>
-      <VariantLifecycleControls
-        disabled={disabled}
-        getToken={getToken}
-        onChanged={onChanged}
-        productId={productId}
-        productStatus={productStatus}
-        variant={variant}
-        showRemove={false}
-      />
-    </div>
-  );
-}
-
-function VariantLifecycleControls({
-  disabled,
-  getToken,
-  onChanged,
-  productId,
-  productStatus,
-  showRemove = true,
-  variant,
-}: {
-  disabled: boolean;
-  getToken: () => Promise<string | null>;
-  onChanged: (message: string) => void;
-  productId: string;
-  productStatus: ClothingDetail["status"];
-  showRemove?: boolean;
-  variant: VariantDraft;
-}) {
-  const lifecycleGuard = useSubmitGuard();
   const removeGuard = useSubmitGuard();
   const [removeOpen, setRemoveOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const busy = lifecycleGuard.isSubmitting || removeGuard.isSubmitting;
-  const actionsDisabled = disabled || busy || productStatus === "archived";
-
-  async function changeLifecycle(status: "draft" | "active" | "archived") {
-    if (actionsDisabled || status === variant.status) return;
-    setError(null);
-    try {
-      const result = await lifecycleGuard.submit((idempotencyKey) =>
-        createDrezivoApiClient(getToken).updateClothingVariantLifecycle(
-          productId,
-          variant.id,
-          { expected_updated_at: variant.updatedAt, status },
-          idempotencyKey
-        )
-      );
-      if (!result) return;
-      lifecycleGuard.resetIntent();
-      onChanged(
-        status === "active"
-          ? "Variant published."
-          : status === "archived"
-            ? "Variant archived."
-            : "Variant restored to draft."
-      );
-    } catch (caughtError) {
-      setError(toDrezivoApiError(caughtError).message);
-    }
-  }
+  const actionsDisabled = disabled || removeGuard.isSubmitting;
 
   async function removeVariant() {
-    if (actionsDisabled || removeGuard.isSubmitting) return;
+    if (actionsDisabled) return;
     setError(null);
     try {
       const result = await removeGuard.submit((idempotencyKey) =>
@@ -1524,10 +1416,10 @@ function VariantLifecycleControls({
       if (!result) return;
       removeGuard.resetIntent();
       setRemoveOpen(false);
-      onChanged(
+      onRemoved(
         result.data.outcome === "deleted"
-          ? "Variant deleted."
-          : "Variant archived because it has physical pieces or reservation history."
+          ? "Variant removed."
+          : "Variant removed. Existing physical-piece and rental history was preserved."
       );
     } catch (caughtError) {
       setError(toDrezivoApiError(caughtError).message);
@@ -1536,77 +1428,41 @@ function VariantLifecycleControls({
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <div className="flex flex-wrap justify-end gap-1.5">
-        {variant.status === "draft" ? (
-          <Button
-            type="button"
-            size="sm"
-            disabled={actionsDisabled}
-            onClick={() => void changeLifecycle("active")}
-            aria-label={`Publish ${variant.sku}`}
-          >
-            <Rocket className="h-3.5 w-3.5" aria-hidden="true" />
-            Publish
-          </Button>
-        ) : null}
-        {variant.status === "archived" ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={actionsDisabled}
-            onClick={() => void changeLifecycle("draft")}
-            aria-label={`Restore ${variant.sku}`}
-            className="border border-dashboard-border"
-          >
-            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-            Restore
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={actionsDisabled}
-            onClick={() => void changeLifecycle("archived")}
-            aria-label={`Archive ${variant.sku}`}
-            className="border border-dashboard-border"
-          >
-            <Archive className="h-3.5 w-3.5" aria-hidden="true" />
-            Archive
-          </Button>
-        )}
-        {showRemove ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={actionsDisabled}
-            onClick={() => setRemoveOpen(true)}
-            aria-label={`Remove ${variant.sku}`}
-            className="border border-dashboard-danger/40 text-dashboard-danger hover:bg-dashboard-danger/10 hover:text-dashboard-danger"
-          >
-            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-            Remove
-          </Button>
-        ) : null}
-      </div>
-      {disabled && !busy ? (
-        <span className="text-[0.68rem] text-dashboard-muted">Save current edits before changing lifecycle.</span>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        disabled={actionsDisabled}
+        onClick={() => setRemoveOpen(true)}
+        aria-label={`Remove ${variant.sku}`}
+        className="border border-dashboard-danger/40 text-dashboard-danger hover:bg-dashboard-danger/10 hover:text-dashboard-danger"
+      >
+        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+        Remove
+      </Button>
+      {disabled && !removeGuard.isSubmitting ? (
+        <span className="text-[0.68rem] text-dashboard-muted">Save current edits before removing this variant.</span>
       ) : null}
       {error ? <span role="alert" className="max-w-md text-right text-xs text-dashboard-danger">{error}</span> : null}
 
-      {showRemove ? (
-      <Dialog.Root open={removeOpen} onOpenChange={(open: boolean) => !removeGuard.isSubmitting && setRemoveOpen(open)}>
+      <Dialog.Root
+        open={removeOpen}
+        onOpenChange={(open: boolean) => !removeGuard.isSubmitting && setRemoveOpen(open)}
+      >
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-black/55" />
           <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-dashboard-border bg-dashboard-surface p-5 shadow-xl focus:outline-none sm:p-6">
             <Dialog.Title className="text-lg font-semibold text-dashboard-navy">Remove {variant.sku}?</Dialog.Title>
             <Dialog.Description className="mt-2 text-sm leading-6 text-dashboard-muted">
-              A never-used draft variant with no physical pieces or reservation history can be deleted. Otherwise Drezivo archives it so operational and rental history remains intact.
+              This removes the variant from normal clothing management. If it already has physical pieces or rental history, Drezivo keeps that historical data intact.
             </Dialog.Description>
             <div className="mt-6 flex justify-end gap-2">
-              <Button type="button" variant="secondary" disabled={removeGuard.isSubmitting} onClick={() => setRemoveOpen(false)}>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={removeGuard.isSubmitting}
+                onClick={() => setRemoveOpen(false)}
+              >
                 Cancel
               </Button>
               <Button
@@ -1615,14 +1471,17 @@ function VariantLifecycleControls({
                 onClick={() => void removeVariant()}
                 className="bg-dashboard-danger text-white hover:bg-dashboard-danger/90"
               >
-                {removeGuard.isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Trash2 className="h-4 w-4" aria-hidden="true" />}
+                {removeGuard.isSubmitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                )}
                 {removeGuard.isSubmitting ? "Removing…" : "Remove Variant"}
               </Button>
             </div>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-      ) : null}
     </div>
   );
 }

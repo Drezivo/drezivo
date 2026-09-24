@@ -12,6 +12,7 @@ import {
   createStaffReservation,
   getReservationDetail,
   getReservationList,
+  getStaffReservationIntakeOptions,
   pickupReservation,
   rejectReservation,
   returnReservation,
@@ -29,6 +30,15 @@ export async function listReservationsController(req: Request, res: Response): P
 export async function getReservationDetailController(req: Request, res: Response): Promise<void> {
   if (!req.reservationId) throw new ValidationError('A valid reservation id is required.');
   sendSuccess(req, res, await getReservationDetail(requireContext(req), req.reservationId));
+}
+
+export async function getStaffReservationIntakeOptionsController(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const query = req.reservationIntakeQuery;
+  if (!query) throw new ValidationError('A valid reservation intake query is required.');
+  sendSuccess(req, res, await getStaffReservationIntakeOptions(requireContext(req), query));
 }
 
 export async function createStaffReservationController(req: Request, res: Response): Promise<void> {

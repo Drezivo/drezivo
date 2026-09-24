@@ -70,8 +70,8 @@ export function RestoreClothingDialog({
                   Restore {name}?
                 </Dialog.Title>
                 <Dialog.Description className="mt-1 text-sm leading-6 text-dashboard-muted">
-                  The clothing returns to Draft for review. It will not become rentable until it is
-                  published again. Retired, lost, or unready physical pieces are not reactivated.
+                  The clothing returns to Draft for product-level review. Its variants stay attached,
+                  and retired, lost, or unready physical pieces are not reactivated automatically.
                 </Dialog.Description>
               </div>
             </div>
@@ -111,11 +111,8 @@ export function RestoreClothingDialog({
   );
 }
 
-export function restoreSuccessMessage(result: RestoreClothingResponse): string {
-  const count = result.restored_variant_count;
-  return count > 0
-    ? `Clothing restored to Draft. ${count} ${count === 1 ? "variant was" : "variants were"} restored to Draft for review.`
-    : "Clothing restored to Draft.";
+export function restoreSuccessMessage(_result: RestoreClothingResponse): string {
+  return "Clothing restored to Draft. Review the clothing and publish it when ready.";
 }
 
 function restoreErrorMessage(error: DrezivoApiError): string {

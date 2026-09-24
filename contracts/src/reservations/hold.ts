@@ -6,6 +6,7 @@
 import { z } from 'zod';
 
 import { customerId, paymentMethodId, productVariantId } from '../common/ids';
+import { paymentRail } from '../finance/payment-status';
 import { instantInterval, isoDate, isoInstant } from '../common/time';
 import {
   customerDetails,
@@ -71,6 +72,41 @@ export const staffReservationCustomerInput = z.discriminatedUnion('source', [
     .strict(),
 ]);
 export type StaffReservationCustomerInput = z.infer<typeof staffReservationCustomerInput>;
+
+/** Safe staff-only supporting data for the New Reservation flow. */
+export const staffReservationIntakeQuery = z
+  .object({
+    customer_search: z.string().trim().min(2).max(120).optional(),
+  })
+  .strict();
+export type StaffReservationIntakeQuery = z.infer<typeof staffReservationIntakeQuery>;
+
+export const staffReservationCustomerOption = z
+  .object({
+    id: customerId,
+    full_name: z.string().trim().min(1).max(300),
+    phone: z.string().trim().min(1).max(80).nullable(),
+    email: z.string().trim().email().max(320).nullable(),
+  })
+  .strict();
+export type StaffReservationCustomerOption = z.infer<typeof staffReservationCustomerOption>;
+
+export const staffReservationPaymentMethodOption = z
+  .object({
+    id: paymentMethodId,
+    name: z.string().trim().min(1).max(200),
+    rail: paymentRail,
+  })
+  .strict();
+export type StaffReservationPaymentMethodOption = z.infer<typeof staffReservationPaymentMethodOption>;
+
+export const staffReservationIntakeResponse = z
+  .object({
+    payment_methods: z.array(staffReservationPaymentMethodOption).max(20),
+    customers: z.array(staffReservationCustomerOption).max(10),
+  })
+  .strict();
+export type StaffReservationIntakeResponse = z.infer<typeof staffReservationIntakeResponse>;
 
 /**
  * POST /reservations request body. A staff walk-in may claim the garment before

@@ -1,0 +1,1065 @@
+"use client";
+
+import { useAuth } from "@clerk/nextjs";
+import { CalendarDays, Check, Search, Shirt, TimerReset, UserRound } from "lucide-react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
+
+import type {
+  ClothingDetail,
+  ClothingListItem,
+  CustomerId,
+  PaymentInstructions,
+  PaymentMethodId,
+  PermissionCode,
+  ReservationSummary,
+  StaffReservationCustomerInput,
+  StaffReservationCustomerOption,
+  StaffReservationPaymentMethodOption,
+} from "@drezivo/contracts";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { useSubmitGuard } from "@/lib/use-submit-guard";
+import { cn } from "@/lib/utils";
+
+const PRODUCT_LIMIT = 12;
+
+type Step = "select" | "held" | "done";
+type CustomerMode = "new" | "existing";
+
+type HeldState = {
+  reservation: ReservationSummary;
+  paymentInstructions: PaymentInstructions;
+};
+
+export function NewReservationSheet({
+  open,
+  onOpenChange,
+  onReservationChanged,
+  onViewReservation,
+  permissionCodes,
+  timeZone,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onReservationChanged: (reservationId: string) => void;
+  onViewReservation: (reservationId: string) => void;
+  permissionCodes: readonly PermissionCode[];
+  timeZone: string;
+}) {
+  const { getToken } = useAuth();
+  const reserveGuard = useSubmitGuard();
+  const completeGuard = useSubmitGuard();
+  const cancelGuard = useSubmitGuard();
+
+  const [step, setStep] = useState<Step>("select");
+  const [notice, setNotice] = useState<{
+    tone: "info" | "success" | "attention";
+    text: string;
+  } | null>(null);
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search.trim());
+  const [pickupLocal, setPickupLocal] = useState("");
+  const [dueLocal, setDueLocal] = useState("");
+  const [eventDate, setEventDate] = useState("");
+  const [fulfillmentMethod, setFulfillmentMethod] = useState<"pickup" | "delivery">("pickup");
+  const [paymentMethods, setPaymentMethods] = useState<StaffReservationPaymentMethodOption[]>([]);
+  const [paymentMethodId, setPaymentMethodId] = useState<PaymentMethodId | "">("");
+  const [products, setProducts] = useState<ClothingListItem[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [availabilityReloadVersion, setAvailabilityReloadVersion] = useState(0);
+  const [selectedProduct, setSelectedProduct] = useState<ClothingListItem | null>(null);
+  const [productDetail, setProductDetail] = useState<ClothingDetail | null>(null);
+  const [selectedVariantId, setSelectedVariantId] = useState("");
+  const [held, setHeld] = useState<HeldState | null>(null);
+  const [serverExpired, setServerExpired] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  const [customerMode, setCustomerMode] = useState<CustomerMode>("new");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const deferredCustomerSearch = useDeferredValue(customerSearch.trim());
+  const [customerOptions, setCustomerOptions] = useState<StaffReservationCustomerOption[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<CustomerId | "">("");
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [notes, setNotes] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
+
+  const canCreate = permissionCodes.includes("reservations.manage");
+  const requestedInterval = useMemo(
+    () => toRequestedInterval(pickupLocal, dueLocal, timeZone),
+    [dueLocal, pickupLocal, timeZone]
+  );
+  const selectedVariant =
+    productDetail?.variants.find((variant) => variant.id === selectedVariantId) ?? null;
+  const holdRemainingMs = held?.reservation.hold_expires_at
+    ? new Date(held.reservation.hold_expires_at).getTime() - now
+    : null;
+  const holdExpired = serverExpired || (holdRemainingMs !== null && holdRemainingMs <= 0);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void createDrezivoApiClient(getToken)
+      .getStaffReservationIntakeOptions({})
+      .then((result) => {
+        if (cancelled) return;
+        setPaymentMethods(result.data.payment_methods);
+        setPaymentMethodId((current) => current || result.data.payment_methods[0]?.id || "");
+      })
+      .catch((error) => {
+        if (!cancelled) setNotice({ tone: "attention", text: toMessage(error) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, open]);
+
+  useEffect(() => {
+    if (!open || step !== "select") return;
+    let cancelled = false;
+    setProductsLoading(true);
+
+    const query = {
+      limit: PRODUCT_LIMIT,
+      sort: "name_asc" as const,
+      product_status: "active" as const,
+      ...(deferredSearch ? { search: deferredSearch } : {}),
+      ...(requestedInterval
+        ? {
+            availability_start: requestedInterval.start,
+            availability_end: requestedInterval.end,
+          }
+        : {}),
+    };
+
+    void createDrezivoApiClient(getToken)
+      .getCatalogueClothing(query)
+      .then((result) => {
+        if (!cancelled) setProducts(result.data.items);
+      })
+      .catch((error) => {
+        if (!cancelled) setNotice({ tone: "attention", text: toMessage(error) });
+      })
+      .finally(() => {
+        if (!cancelled) setProductsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [availabilityReloadVersion, deferredSearch, getToken, open, requestedInterval, step]);
+
+  useEffect(() => {
+    if (!selectedProduct) {
+      setProductDetail(null);
+      setSelectedVariantId("");
+      return;
+    }
+    let cancelled = false;
+    void createDrezivoApiClient(getToken)
+      .getCatalogueClothingDetail(selectedProduct.product_id)
+      .then((result) => {
+        if (cancelled) return;
+        setProductDetail(result.data);
+        const firstActive = result.data.variants.find((variant) => variant.status === "active");
+        setSelectedVariantId(firstActive?.id ?? "");
+      })
+      .catch((error) => {
+        if (!cancelled) setNotice({ tone: "attention", text: toMessage(error) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, selectedProduct]);
+
+  useEffect(() => {
+    if (
+      !open ||
+      step !== "held" ||
+      customerMode !== "existing" ||
+      deferredCustomerSearch.length < 2
+    ) {
+      setCustomerOptions([]);
+      return;
+    }
+    let cancelled = false;
+    void createDrezivoApiClient(getToken)
+      .getStaffReservationIntakeOptions({ customer_search: deferredCustomerSearch })
+      .then((result) => {
+        if (!cancelled) setCustomerOptions(result.data.customers);
+      })
+      .catch((error) => {
+        if (!cancelled) setNotice({ tone: "attention", text: toMessage(error) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerMode, deferredCustomerSearch, getToken, open, step]);
+
+  useEffect(() => {
+    if (!held?.reservation.hold_expires_at || step !== "held") return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [held?.reservation.hold_expires_at, step]);
+
+  useEffect(() => {
+    if (holdExpired && step === "held") {
+      setNotice({
+        tone: "attention",
+        text: "This garment hold has expired. Start over to check current availability before reserving again.",
+      });
+    }
+  }, [holdExpired, step]);
+
+  const reset = () => {
+    reserveGuard.resetIntent();
+    completeGuard.resetIntent();
+    cancelGuard.resetIntent();
+    setStep("select");
+    setNotice(null);
+    setSearch("");
+    setPickupLocal("");
+    setDueLocal("");
+    setEventDate("");
+    setFulfillmentMethod("pickup");
+    setSelectedProduct(null);
+    setProductDetail(null);
+    setSelectedVariantId("");
+    setHeld(null);
+    setServerExpired(false);
+    setCustomerMode("new");
+    setCustomerSearch("");
+    setCustomerOptions([]);
+    setSelectedCustomerId("");
+    setFullName("");
+    setPhone("");
+    setEmail("");
+    setNotes("");
+    setTermsAccepted(false);
+  };
+
+  const requestClose = (nextOpen: boolean) => {
+    if (!nextOpen && step === "held" && held && !holdExpired) {
+      setNotice({
+        tone: "attention",
+        text: "This garment is still reserved. Complete the reservation or cancel the hold before closing.",
+      });
+      return;
+    }
+    if (!nextOpen) reset();
+    onOpenChange(nextOpen);
+  };
+
+  const reserve = async () => {
+    setNotice(null);
+    if (!canCreate) {
+      setNotice({ tone: "attention", text: "Reservation management permission is required." });
+      return;
+    }
+    if (!selectedVariant || !requestedInterval || !paymentMethodId) {
+      setNotice({
+        tone: "attention",
+        text: "Choose a garment, active variant, pickup/return time, and payment method before reserving.",
+      });
+      return;
+    }
+    if (selectedProduct && selectedProduct.availability.available_assets === 0) {
+      setNotice({
+        tone: "attention",
+        text: "The availability preview shows no free garment for this window. Choose other dates before reserving.",
+      });
+      return;
+    }
+
+    const result = await reserveGuard.submit((idempotencyKey) =>
+      createDrezivoApiClient(getToken).createStaffReservation(
+        {
+          variant_id: selectedVariant.id,
+          requested_interval: requestedInterval,
+          ...(eventDate ? { event_date: eventDate } : {}),
+          fulfillment_method: fulfillmentMethod,
+          payment_method_id: paymentMethodId,
+        },
+        idempotencyKey
+      )
+    );
+    if (!result) return;
+
+    setHeld({
+      reservation: result.data.reservation,
+      paymentInstructions: result.data.payment_instructions,
+    });
+    setServerExpired(false);
+    setStep("held");
+    setNow(Date.now());
+    setNotice({
+      tone: "success",
+      text: "Garment reserved. Finish the customer information before the hold expires.",
+    });
+    reserveGuard.resetIntent();
+    onReservationChanged(result.data.reservation.id);
+  };
+
+  const complete = async () => {
+    if (!held || holdExpired) return;
+    const customer = buildCustomerInput({
+      customerMode,
+      selectedCustomerId,
+      fullName,
+      phone,
+      email,
+      notes,
+    });
+    if (!customer) {
+      setNotice({
+        tone: "attention",
+        text:
+          customerMode === "existing"
+            ? "Choose an existing customer before completing the reservation."
+            : "Enter the customer name and at least one contact method.",
+      });
+      return;
+    }
+    if (!termsAccepted) {
+      setNotice({
+        tone: "attention",
+        text: "Confirm that the customer accepted the rental terms.",
+      });
+      return;
+    }
+
+    setNotice(null);
+    const result = await completeGuard.submit((idempotencyKey) =>
+      createDrezivoApiClient(getToken).completeStaffReservation(
+        held.reservation.id,
+        {
+          version: held.reservation.version,
+          terms_accepted: true,
+          customer,
+        },
+        idempotencyKey
+      )
+    );
+    if (!result) return;
+
+    setHeld((current) =>
+      current ? { ...current, reservation: result.data.reservation } : current
+    );
+    completeGuard.resetIntent();
+    onReservationChanged(result.data.reservation.id);
+    setStep("done");
+    setNotice({
+      tone: result.data.completion_state === "confirmed" ? "success" : "info",
+      text:
+        result.data.completion_state === "confirmed"
+          ? "Reservation confirmed."
+          : result.data.next_action === "payment_verification"
+            ? "Reservation saved. Awaiting payment verification."
+            : "Reservation saved. Awaiting merchant review.",
+    });
+  };
+
+  const cancelHold = async () => {
+    if (!held || holdExpired) return;
+    setNotice(null);
+    const result = await cancelGuard.submit((idempotencyKey) =>
+      createDrezivoApiClient(getToken).cancelReservation(
+        held.reservation.id,
+        { version: held.reservation.version, reason: "Staff abandoned new reservation flow" },
+        idempotencyKey
+      )
+    );
+    if (!result) return;
+    cancelGuard.resetIntent();
+    onReservationChanged(result.data.reservation.id);
+    setHeld((current) =>
+      current ? { ...current, reservation: result.data.reservation } : current
+    );
+    setStep("done");
+    setNotice({ tone: "info", text: "Reservation cancelled and the garment hold was released." });
+  };
+
+  const handleFailure = (
+    error: unknown,
+    guard: ReturnType<typeof useSubmitGuard>,
+    options: { refreshAvailability?: boolean } = {}
+  ) => {
+    const apiError = toApiError(error);
+    if (apiError.code === "HOLD_EXPIRED") {
+      setServerExpired(true);
+      if (held) onReservationChanged(held.reservation.id);
+      setNotice({
+        tone: "attention",
+        text: "The garment hold expired before completion. Start over to check current availability.",
+      });
+    } else {
+      setNotice({ tone: "attention", text: apiError.message });
+    }
+    if (
+      options.refreshAvailability ||
+      apiError.code === "CAPACITY_CONFLICT" ||
+      apiError.code === "ASSET_UNAVAILABLE"
+    ) {
+      setAvailabilityReloadVersion((value) => value + 1);
+    }
+    if (apiError.status < 500 || apiError.requestId) guard.resetIntent();
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={requestClose}>
+      <SheetContent
+        side="right"
+        className="w-full gap-0 overflow-y-auto border-dashboard-border bg-dashboard-surface p-0 sm:max-w-2xl lg:max-w-3xl"
+      >
+        <header className="border-b border-dashboard-border px-5 py-5 pr-14">
+          <SheetTitle className="text-lg">New Reservation</SheetTitle>
+          <SheetDescription className="mt-1">
+            Check availability, reserve the garment, then finish the customer details.
+          </SheetDescription>
+          <div className="mt-4 flex items-center gap-2 text-xs">
+            <StepBadge
+              active={step === "select"}
+              done={step !== "select"}
+              label="1. Check availability"
+            />
+            <span className="text-dashboard-muted">→</span>
+            <StepBadge active={step === "held"} done={step === "done"} label="2. Reserve" />
+            <span className="text-dashboard-muted">→</span>
+            <StepBadge active={step === "done"} done={false} label="3. Complete" />
+          </div>
+          {notice ? <Notice tone={notice.tone} text={notice.text} /> : null}
+        </header>
+
+        {step === "select" ? (
+          <div className="space-y-5 p-5">
+            <section>
+              <SectionTitle icon={CalendarDays} title="Rental dates" />
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <Field label="Pickup date and time">
+                  <Input
+                    type="datetime-local"
+                    value={pickupLocal}
+                    onChange={(event) => {
+                      setPickupLocal(event.target.value);
+                      reserveGuard.resetIntent();
+                    }}
+                  />
+                </Field>
+                <Field label="Return date and time">
+                  <Input
+                    type="datetime-local"
+                    value={dueLocal}
+                    onChange={(event) => {
+                      setDueLocal(event.target.value);
+                      reserveGuard.resetIntent();
+                    }}
+                  />
+                </Field>
+                <Field label="Event date (optional)">
+                  <Input
+                    type="date"
+                    value={eventDate}
+                    onChange={(event) => {
+                      setEventDate(event.target.value);
+                      reserveGuard.resetIntent();
+                    }}
+                  />
+                </Field>
+                <Field label="Fulfillment">
+                  <select
+                    aria-label="Fulfillment"
+                    value={fulfillmentMethod}
+                    onChange={(event) => {
+                      setFulfillmentMethod(event.target.value as "pickup" | "delivery");
+                      reserveGuard.resetIntent();
+                    }}
+                    className="h-9 w-full rounded-md border border-dashboard-border bg-dashboard-surface px-3 text-sm text-dashboard-navy"
+                  >
+                    <option value="pickup">Pickup</option>
+                    <option value="delivery">Delivery</option>
+                  </select>
+                </Field>
+              </div>
+              {!requestedInterval && (pickupLocal || dueLocal) ? (
+                <p className="mt-2 text-xs text-amber-700">
+                  Return must be after pickup. The selected branch timezone is used.
+                </p>
+              ) : null}
+            </section>
+
+            <Separator />
+
+            <section>
+              <SectionTitle icon={Search} title="Choose clothing" />
+              <Input
+                className="mt-3"
+                aria-label="Search clothing for reservation"
+                placeholder="Search clothing name or code..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+              <div className="mt-3 grid gap-2">
+                {productsLoading ? (
+                  <p className="text-sm text-dashboard-muted">Checking catalogue availability…</p>
+                ) : products.length === 0 ? (
+                  <p className="text-sm text-dashboard-muted">
+                    No active clothing matches this search.
+                  </p>
+                ) : (
+                  products.map((product) => (
+                    <button
+                      key={product.product_id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedProduct(product);
+                        reserveGuard.resetIntent();
+                      }}
+                      className={cn(
+                        "flex items-center justify-between gap-3 rounded-lg border p-3 text-left",
+                        selectedProduct?.product_id === product.product_id
+                          ? "border-dashboard-accent bg-dashboard-active"
+                          : "border-dashboard-border hover:bg-dashboard-active/50"
+                      )}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-dashboard-navy">{product.name}</p>
+                        <p className="mt-1 text-xs text-dashboard-muted">
+                          {product.code} · from{" "}
+                          {formatMinorMoney(product.price_from_minor, product.currency)}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="shrink-0">
+                        {requestedInterval
+                          ? `${product.availability.available_assets} preview available`
+                          : `${product.readiness.ready} ready`}
+                      </Badge>
+                    </button>
+                  ))
+                )}
+              </div>
+              {requestedInterval ? (
+                <p className="mt-2 text-xs text-dashboard-muted">
+                  Availability is a preview. Reserve is the authoritative allocation attempt and may
+                  still conflict with another staff action.
+                </p>
+              ) : null}
+            </section>
+
+            {productDetail ? (
+              <section>
+                <SectionTitle icon={Shirt} title="Choose size / variant" />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {productDetail.variants
+                    .filter((variant) => variant.status === "active")
+                    .map((variant) => (
+                      <Button
+                        key={variant.id}
+                        type="button"
+                        size="sm"
+                        variant={selectedVariantId === variant.id ? "default" : "secondary"}
+                        onClick={() => {
+                          setSelectedVariantId(variant.id);
+                          reserveGuard.resetIntent();
+                        }}
+                      >
+                        {variant.size_label}
+                        {variant.color_label ? ` · ${variant.color_label}` : ""}
+                      </Button>
+                    ))}
+                </div>
+                {selectedVariant ? (
+                  <div className="mt-3 rounded-lg bg-dashboard-active/50 p-3 text-sm">
+                    <p className="font-medium text-dashboard-navy">{selectedVariant.size_label}</p>
+                    <p className="mt-1 text-dashboard-muted">
+                      Base rental{" "}
+                      {formatMinorMoney(
+                        selectedVariant.rental_price_minor,
+                        selectedVariant.currency
+                      )}{" "}
+                      · Deposit{" "}
+                      {formatMinorMoney(
+                        selectedVariant.security_deposit_minor,
+                        selectedVariant.currency
+                      )}
+                    </p>
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
+
+            <Separator />
+
+            <section>
+              <SectionTitle icon={Check} title="Payment method" />
+              {paymentMethods.length === 0 ? (
+                <p className="mt-3 text-sm text-dashboard-muted">
+                  No active payment method is configured. Configure one before creating
+                  reservations.
+                </p>
+              ) : (
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {paymentMethods.map((method) => (
+                    <button
+                      key={method.id}
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethodId(method.id);
+                        reserveGuard.resetIntent();
+                      }}
+                      className={cn(
+                        "rounded-lg border p-3 text-left",
+                        paymentMethodId === method.id
+                          ? "border-dashboard-accent bg-dashboard-active"
+                          : "border-dashboard-border"
+                      )}
+                    >
+                      <p className="font-medium text-dashboard-navy">{method.name}</p>
+                      <p className="mt-1 text-xs capitalize text-dashboard-muted">
+                        {method.rail.replace(/_/g, " ")}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <div className="flex justify-end border-t border-dashboard-border pt-4">
+              <Button
+                type="button"
+                disabled={
+                  reserveGuard.isSubmitting ||
+                  !selectedVariant ||
+                  !requestedInterval ||
+                  !paymentMethodId
+                }
+                onClick={() =>
+                  void reserve().catch((error) =>
+                    handleFailure(error, reserveGuard, { refreshAvailability: true })
+                  )
+                }
+              >
+                {reserveGuard.isSubmitting ? "Reserving…" : "Reserve"}
+              </Button>
+            </div>
+          </div>
+        ) : held ? (
+          <div className="space-y-5 p-5">
+            <div className="rounded-lg border border-dashboard-border bg-dashboard-active/50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs text-dashboard-muted">Reservation</p>
+                  <p className="font-semibold text-dashboard-navy">
+                    {held.reservation.reference_code}
+                  </p>
+                </div>
+                {step === "held" && held.reservation.hold_expires_at ? (
+                  <Badge
+                    variant="outline"
+                    className={cn(holdExpired && "border-red-300 text-red-700")}
+                  >
+                    <TimerReset className="mr-1 h-3.5 w-3.5" />
+                    {holdExpired
+                      ? "Hold expired"
+                      : `Garment reserved for ${formatCountdown(holdRemainingMs ?? 0)}`}
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="capitalize">
+                    {held.reservation.status.replace(/_/g, " ")}
+                  </Badge>
+                )}
+              </div>
+              <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
+                <SummaryValue
+                  label="Rental"
+                  value={formatMinorMoney(
+                    held.reservation.price_snapshot.rental_total_minor,
+                    held.reservation.price_snapshot.currency
+                  )}
+                />
+                <SummaryValue
+                  label="Deposit"
+                  value={formatMinorMoney(
+                    held.reservation.price_snapshot.security_required_minor,
+                    held.reservation.price_snapshot.currency
+                  )}
+                />
+                <SummaryValue
+                  label="Due now"
+                  value={formatMinorMoney(
+                    held.reservation.price_snapshot.due_now_minor,
+                    held.reservation.price_snapshot.currency
+                  )}
+                />
+              </div>
+              <div className="mt-3 rounded-md bg-dashboard-surface p-3 text-xs text-dashboard-muted">
+                <span className="font-medium text-dashboard-navy">
+                  {held.paymentInstructions.method_name}
+                </span>
+                {held.paymentInstructions.destination_note
+                  ? ` · ${held.paymentInstructions.destination_note}`
+                  : ""}
+                {held.paymentInstructions.rail !== "cash" ? (
+                  <p className="mt-1">
+                    Manual QR/transfer evidence cannot be uploaded from this screen yet; completion
+                    will remain blocked until the Finance evidence workflow records accepted proof.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            {step === "held" && !holdExpired ? (
+              <>
+                <section>
+                  <SectionTitle icon={UserRound} title="Customer" />
+                  <div className="mt-3 flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={customerMode === "new" ? "default" : "secondary"}
+                      onClick={() => {
+                        setCustomerMode("new");
+                        completeGuard.resetIntent();
+                      }}
+                    >
+                      New customer
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={customerMode === "existing" ? "default" : "secondary"}
+                      onClick={() => {
+                        setCustomerMode("existing");
+                        completeGuard.resetIntent();
+                      }}
+                    >
+                      Existing customer
+                    </Button>
+                  </div>
+
+                  {customerMode === "new" ? (
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <Field label="Full name">
+                        <Input
+                          value={fullName}
+                          onChange={(event) => {
+                            setFullName(event.target.value);
+                            completeGuard.resetIntent();
+                          }}
+                        />
+                      </Field>
+                      <Field label="Phone">
+                        <Input
+                          value={phone}
+                          onChange={(event) => {
+                            setPhone(event.target.value);
+                            completeGuard.resetIntent();
+                          }}
+                        />
+                      </Field>
+                      <Field label="Email">
+                        <Input
+                          type="email"
+                          value={email}
+                          onChange={(event) => {
+                            setEmail(event.target.value);
+                            completeGuard.resetIntent();
+                          }}
+                        />
+                      </Field>
+                      <Field label="Customer notes (optional)">
+                        <Input
+                          value={notes}
+                          onChange={(event) => {
+                            setNotes(event.target.value);
+                            completeGuard.resetIntent();
+                          }}
+                        />
+                      </Field>
+                    </div>
+                  ) : (
+                    <div className="mt-3">
+                      <Input
+                        aria-label="Search existing customer"
+                        placeholder="Search name, phone, or email..."
+                        value={customerSearch}
+                        onChange={(event) => {
+                          setCustomerSearch(event.target.value);
+                          setSelectedCustomerId("");
+                          completeGuard.resetIntent();
+                        }}
+                      />
+                      <div className="mt-2 grid gap-2">
+                        {customerOptions.map((customer) => (
+                          <button
+                            key={customer.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCustomerId(customer.id);
+                              completeGuard.resetIntent();
+                            }}
+                            className={cn(
+                              "rounded-lg border p-3 text-left",
+                              selectedCustomerId === customer.id
+                                ? "border-dashboard-accent bg-dashboard-active"
+                                : "border-dashboard-border"
+                            )}
+                          >
+                            <p className="font-medium text-dashboard-navy">{customer.full_name}</p>
+                            <p className="mt-1 text-xs text-dashboard-muted">
+                              {customer.phone ?? customer.email ?? "No contact shown"}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </section>
+
+                <label className="flex items-start gap-3 rounded-lg border border-dashboard-border p-3 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={termsAccepted}
+                    onChange={(event) => {
+                      setTermsAccepted(event.target.checked);
+                      completeGuard.resetIntent();
+                    }}
+                  />
+                  <span className="text-dashboard-navy">
+                    Customer has reviewed and accepted the business rental terms.
+                  </span>
+                </label>
+
+                <div className="flex flex-wrap justify-between gap-2 border-t border-dashboard-border pt-4">
+                  <Button
+                    type="button"
+                    variant="danger"
+                    disabled={cancelGuard.isSubmitting || completeGuard.isSubmitting}
+                    onClick={() =>
+                      void cancelHold().catch((error) => handleFailure(error, cancelGuard))
+                    }
+                  >
+                    {cancelGuard.isSubmitting ? "Cancelling…" : "Cancel Hold"}
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={
+                      completeGuard.isSubmitting || cancelGuard.isSubmitting || !termsAccepted
+                    }
+                    onClick={() =>
+                      void complete().catch((error) => handleFailure(error, completeGuard))
+                    }
+                  >
+                    {completeGuard.isSubmitting ? "Completing…" : "Complete Reservation"}
+                  </Button>
+                </div>
+              </>
+            ) : step === "held" ? (
+              <div className="flex justify-end">
+                <Button type="button" onClick={reset}>
+                  Start over
+                </Button>
+              </div>
+            ) : (
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={reset}>
+                  Create another
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const id = held.reservation.id;
+                    reset();
+                    onOpenChange(false);
+                    onViewReservation(id);
+                  }}
+                >
+                  View Reservation
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function buildCustomerInput(input: {
+  customerMode: CustomerMode;
+  selectedCustomerId: CustomerId | "";
+  fullName: string;
+  phone: string;
+  email: string;
+  notes: string;
+}): StaffReservationCustomerInput | null {
+  if (input.customerMode === "existing") {
+    return input.selectedCustomerId
+      ? { source: "existing", customer_id: input.selectedCustomerId }
+      : null;
+  }
+
+  const fullName = input.fullName.trim();
+  const phone = input.phone.trim();
+  const email = input.email.trim();
+  const notes = input.notes.trim();
+  if (!fullName || (!phone && !email)) return null;
+  return {
+    source: "new",
+    customer: {
+      full_name: fullName,
+      ...(phone ? { phone } : {}),
+      ...(email ? { email } : {}),
+      ...(notes ? { notes } : {}),
+    },
+  };
+}
+
+function toRequestedInterval(
+  pickupLocal: string,
+  dueLocal: string,
+  timeZone: string
+): { start: string; end: string } | null {
+  if (!pickupLocal || !dueLocal) return null;
+  const start = zonedLocalDateTimeToInstant(pickupLocal, timeZone);
+  const end = zonedLocalDateTimeToInstant(dueLocal, timeZone);
+  if (!start || !end || start.getTime() >= end.getTime()) return null;
+  if (end.getTime() - start.getTime() > 31 * 24 * 60 * 60 * 1000) return null;
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+function zonedLocalDateTimeToInstant(value: string, timeZone: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  const wallTime = Date.UTC(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4]),
+    Number(match[5]),
+    0
+  );
+  let instant = new Date(wallTime);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    instant = new Date(wallTime - timeZoneOffsetMs(instant, timeZone));
+  }
+  return Number.isFinite(instant.getTime()) ? instant : null;
+}
+
+function timeZoneOffsetMs(instant: Date, timeZone: string): number {
+  const values = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      day: "2-digit",
+      hour: "2-digit",
+      hourCycle: "h23",
+      minute: "2-digit",
+      month: "2-digit",
+      second: "2-digit",
+      timeZone,
+      year: "numeric",
+    })
+      .formatToParts(instant)
+      .map((part) => [part.type, part.value])
+  );
+  return (
+    Date.UTC(
+      Number(values["year"]),
+      Number(values["month"]) - 1,
+      Number(values["day"]),
+      Number(values["hour"]),
+      Number(values["minute"]),
+      Number(values["second"])
+    ) - instant.getTime()
+  );
+}
+
+function SectionTitle({ icon: Icon, title }: { icon: typeof CalendarDays; title: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Icon className="h-4 w-4 text-dashboard-accent" aria-hidden="true" />
+      <h3 className="text-sm font-semibold text-dashboard-navy">{title}</h3>
+    </div>
+  );
+}
+
+function Field({ children, label }: { children: React.ReactNode; label: string }) {
+  return (
+    <label>
+      <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function SummaryValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs text-dashboard-muted">{label}</p>
+      <p className="mt-1 font-medium text-dashboard-navy">{value}</p>
+    </div>
+  );
+}
+
+function StepBadge({ active, done, label }: { active: boolean; done: boolean; label: string }) {
+  return (
+    <span
+      className={cn(
+        "rounded-full border px-2.5 py-1",
+        active || done
+          ? "border-dashboard-accent bg-dashboard-active text-dashboard-accent"
+          : "border-dashboard-border text-dashboard-muted"
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function Notice({ tone, text }: { tone: "info" | "success" | "attention"; text: string }) {
+  return (
+    <div
+      role={tone === "attention" ? "alert" : "status"}
+      className={cn(
+        "mt-4 rounded-lg border px-3 py-2 text-sm",
+        tone === "success" && "border-emerald-200 bg-emerald-50 text-emerald-800",
+        tone === "info" && "border-blue-200 bg-blue-50 text-blue-800",
+        tone === "attention" && "border-amber-200 bg-amber-50 text-amber-800"
+      )}
+    >
+      {text}
+    </div>
+  );
+}
+
+function formatMinorMoney(value: string, currency: string): string {
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(Number(value) / 100);
+}
+
+function formatCountdown(valueMs: number): string {
+  const seconds = Math.max(0, Math.ceil(valueMs / 1_000));
+  const minutes = Math.floor(seconds / 60);
+  return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function toApiError(error: unknown): DrezivoApiError {
+  return error instanceof DrezivoApiError
+    ? error
+    : new DrezivoApiError("Could not complete this reservation action. Please try again.", {
+        status: 503,
+      });
+}
+
+function toMessage(error: unknown): string {
+  return toApiError(error).message;
+}

@@ -452,6 +452,82 @@ describe('RSV-021/022 staff reservation creation', async () => {
     expect((await graphCounts(seed)).reservations).toBe(2);
   });
 
+  it('exposes bounded staff intake options without payment destination secrets', async () => {
+    const seed = await seedWorkspace('org_rsv063_intake', 'user_rsv063_intake', [
+      'reservations.manage',
+    ]);
+    await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query(
+        `INSERT INTO customer (tenant_id, full_name, phone, email, notes)
+         VALUES ($1, 'Maria Intake', '09171234567', 'maria@example.test', 'private note')`,
+        [seed.tenantId],
+      ),
+    );
+    useClerk(seed);
+
+    const response = await request(createApp())
+      .get('/api/v1/reservations/intake-options')
+      .query({ customer_search: 'Maria' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      success: true,
+      data: {
+        payment_methods: [
+          { id: seed.paymentMethodId, name: 'Cash', rail: 'cash' },
+        ],
+        customers: [
+          {
+            full_name: 'Maria Intake',
+            phone: '09171234567',
+            email: 'maria@example.test',
+          },
+        ],
+      },
+    });
+    const intakeBody = response.body as {
+      data: {
+        payment_methods: Array<Record<string, unknown>>;
+        customers: Array<Record<string, unknown>>;
+      };
+    };
+    expect(intakeBody.data.payment_methods[0]).not.toHaveProperty('destination_snapshot');
+    expect(intakeBody.data.customers[0]).not.toHaveProperty('notes');
+
+    useClerk(seed);
+    const tooShort = await request(createApp())
+      .get('/api/v1/reservations/intake-options')
+      .query({ customer_search: 'M' });
+    expect(tooShort.status).toBe(422);
+    expectSafeError(tooShort.body, 'VALIDATION_FAILED');
+  });
+
+  it('guards staff intake options with auth, branch permission, and new-booking lifecycle policy', async () => {
+    clerk.getAuth.mockReturnValueOnce({ userId: null, orgId: null });
+    const unauthenticated = await request(createApp()).get('/api/v1/reservations/intake-options');
+    expect(unauthenticated.status).toBe(401);
+    expectSafeError(unauthenticated.body, 'UNAUTHENTICATED');
+
+    const denied = await seedWorkspace('org_rsv063_intake_denied', 'user_rsv063_intake_denied', []);
+    useClerk(denied);
+    const forbidden = await request(createApp()).get('/api/v1/reservations/intake-options');
+    expect(forbidden.status).toBe(403);
+    expectSafeError(forbidden.body, 'FORBIDDEN');
+
+    const restricted = await seedWorkspace(
+      'org_rsv063_intake_restricted',
+      'user_rsv063_intake_restricted',
+      ['reservations.manage'],
+    );
+    await withTenantTransaction(restricted.tenantId, restricted.principalId, (client) =>
+      client.query(`UPDATE tenant SET status = 'restricted' WHERE id = $1`, [restricted.tenantId]),
+    );
+    useClerk(restricted);
+    const restrictedResponse = await request(createApp()).get('/api/v1/reservations/intake-options');
+    expect(restrictedResponse.status).toBe(409);
+    expectSafeError(restrictedResponse.body, 'TENANT_RESTRICTED');
+  });
+
   it('accepts the walk-in fast-path hold shape through POST /api/v1/reservations', async () => {
     const seed = await seedWorkspace('org_rsv023_route_hold', 'user_rsv023_route_hold', [
       'reservations.manage',
