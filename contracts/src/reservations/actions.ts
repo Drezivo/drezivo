@@ -6,6 +6,7 @@
 import { z } from 'zod';
 
 import { instantInterval } from '../common/time';
+import { physicalAssetReadiness } from '../catalogue/staff';
 import { staffReservationCustomerInput } from './hold';
 import { reservationSummary } from './reservation';
 
@@ -143,6 +144,21 @@ export const reservationReturnResponse = z
   .object({ reservation: reservationSummary })
   .strict();
 export type ReservationReturnResponse = z.infer<typeof reservationReturnResponse>;
+
+/** Post-return inspection updates the physical readiness projection but does not complete the rental. */
+export const reservationInspectionRequest = versionedAction.extend({
+  readiness: physicalAssetReadiness,
+  condition_note: z.string().trim().max(1_000).optional(),
+});
+export type ReservationInspectionRequest = z.infer<typeof reservationInspectionRequest>;
+
+export const reservationInspectionResponse = z
+  .object({
+    reservation: reservationSummary,
+    asset_readiness: physicalAssetReadiness,
+  })
+  .strict();
+export type ReservationInspectionResponse = z.infer<typeof reservationInspectionResponse>;
 
 /** returned -> completed after inspection/readiness/settlement gates pass server-side. */
 export const reservationCompleteRequest = versionedAction;

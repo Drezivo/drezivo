@@ -12,18 +12,27 @@ import {
   createStaffReservationController,
   getReservationDetailController,
   listReservationsController,
+  pickupReservationController,
   rejectReservationController,
+  returnReservationController,
+  inspectReturnedReservationController,
+  completeRentalReservationController,
   submitReservationController,
 } from './reservations.controller.js';
 import {
   requireMerchantReservationReviewPermission,
+  requireReservationCustodyPermission,
   requireReservationIdempotencyKey,
   requireReservationManagePermission,
   validateReservationCancel,
   validateReservationConfirm,
   validateReservationId,
   validateReservationListQuery,
+  validateReservationPickup,
   validateReservationReject,
+  validateReservationReturn,
+  validateReservationInspection,
+  validateReservationRentalComplete,
   validateReservationSubmit,
   validateStaffReservationComplete,
   validateStaffReservationCreate,
@@ -79,6 +88,58 @@ reservationsRouter.post(
   validateReservationCancel,
   requireReservationIdempotencyKey,
   cancelReservationController,
+);
+
+reservationsRouter.post(
+  '/reservations/:reservationId/pickup',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('settlement'),
+  requireReservationCustodyPermission,
+  validateReservationId,
+  validateReservationPickup,
+  requireReservationIdempotencyKey,
+  pickupReservationController,
+);
+
+reservationsRouter.post(
+  '/reservations/:reservationId/return',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('return'),
+  requireReservationCustodyPermission,
+  validateReservationId,
+  validateReservationReturn,
+  requireReservationIdempotencyKey,
+  returnReservationController,
+);
+
+reservationsRouter.post(
+  '/reservations/:reservationId/inspection',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('return'),
+  requireReservationCustodyPermission,
+  validateReservationId,
+  validateReservationInspection,
+  requireReservationIdempotencyKey,
+  inspectReturnedReservationController,
+);
+
+reservationsRouter.post(
+  '/reservations/:reservationId/complete-rental',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('settlement'),
+  requireReservationCustodyPermission,
+  validateReservationId,
+  validateReservationRentalComplete,
+  requireReservationIdempotencyKey,
+  completeRentalReservationController,
 );
 
 reservationsRouter.post(

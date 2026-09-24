@@ -9,6 +9,14 @@ import {
   type ReservationListQuery,
   type ReservationListResponse,
   type ReservationPaymentProjection,
+  type ReservationPickupRequest,
+  type ReservationPickupResponse,
+  type ReservationReturnRequest,
+  type ReservationReturnResponse,
+  type ReservationInspectionRequest,
+  type ReservationInspectionResponse,
+  type ReservationCompleteRequest,
+  type ReservationCompleteResponse,
   type ReservationSubmitRequest,
   type ReservationSubmitResponse,
   type ReservationCancelRequest,
@@ -38,6 +46,12 @@ import {
 } from './reservations.command.service.js';
 import { cancelReservationByStaff } from './reservations.cancellation.service.js';
 import { completeStaffReservationCommand } from './reservations.completion.service.js';
+import {
+  completeReturnedReservationByStaff,
+  inspectReturnedReservationByStaff,
+} from './reservations.completion-gate.service.js';
+import { pickupReservationByStaff } from './reservations.pickup.service.js';
+import { returnReservationByStaff } from './reservations.return.service.js';
 import {
   confirmReservationByMerchant,
   rejectReservationByMerchant,
@@ -133,6 +147,91 @@ export async function cancelReservation(
 ): Promise<ReservationReviewCommandResponse<ReservationCancelResponse>> {
   assertReservationReviewContext(input);
   return cancelReservationByStaff(
+    {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      membershipId: input.membershipId,
+      principalId: input.principalId,
+      requestId: input.requestId,
+      idempotencyKey: input.idempotencyKey,
+    },
+    reservationId,
+    request,
+  );
+}
+
+export async function pickupReservation(
+  input: ReservationReadContext & { requestId: string; idempotencyKey: string },
+  reservationId: string,
+  request: ReservationPickupRequest,
+): Promise<ReservationReviewCommandResponse<ReservationPickupResponse>> {
+  assertReservationCustodyContext(input);
+  return pickupReservationByStaff(
+    {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      membershipId: input.membershipId,
+      principalId: input.principalId,
+      requestId: input.requestId,
+      idempotencyKey: input.idempotencyKey,
+    },
+    reservationId,
+    request,
+  );
+}
+
+export async function returnReservation(
+  input: ReservationReadContext & { requestId: string; idempotencyKey: string },
+  reservationId: string,
+  request: ReservationReturnRequest,
+): Promise<ReservationReviewCommandResponse<ReservationReturnResponse>> {
+  assertReservationReturnContext(input);
+  return returnReservationByStaff(
+    {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      membershipId: input.membershipId,
+      principalId: input.principalId,
+      requestId: input.requestId,
+      idempotencyKey: input.idempotencyKey,
+    },
+    reservationId,
+    request,
+  );
+}
+
+export async function inspectReturnedReservation(
+  input: ReservationReadContext & { requestId: string; idempotencyKey: string },
+  reservationId: string,
+  request: ReservationInspectionRequest,
+): Promise<ReservationReviewCommandResponse<ReservationInspectionResponse>> {
+  assertReservationReturnContext(input);
+  if (!input.permissionCodes.includes('assets.manage')) {
+    throw new ForbiddenError('Asset condition management permission is required.');
+  }
+  return inspectReturnedReservationByStaff(
+    {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      membershipId: input.membershipId,
+      principalId: input.principalId,
+      requestId: input.requestId,
+      idempotencyKey: input.idempotencyKey,
+    },
+    reservationId,
+    request,
+  );
+}
+
+export async function completeRentalReservation(
+  input: ReservationReadContext & { requestId: string; idempotencyKey: string },
+  reservationId: string,
+  request: ReservationCompleteRequest,
+): Promise<ReservationReviewCommandResponse<ReservationCompleteResponse>> {
+  // Completion is an existing-rental settlement action. The shared tenant policy allows
+  // settlement for active, restricted, and cancelled workspaces; only permissions apply here.
+  assertReservationCustodyContext(input);
+  return completeReturnedReservationByStaff(
     {
       tenantId: input.tenantId,
       branchId: input.branchId,
@@ -382,6 +481,20 @@ function toReviewContext(
 function assertReservationReviewContext(input: ReservationReadContext): void {
   if (!input.permissionCodes.includes('reservations.manage')) {
     throw new ForbiddenError('This branch does not grant reservation management access.');
+  }
+}
+
+function assertReservationCustodyContext(input: ReservationReadContext): void {
+  assertReservationReviewContext(input);
+  if (!input.permissionCodes.includes('reservations.custody')) {
+    throw new ForbiddenError('Reservation custody permission is required.');
+  }
+}
+
+function assertReservationReturnContext(input: ReservationReadContext): void {
+  assertReservationCustodyContext(input);
+  if (input.effectiveTenantStatus === 'cancelled') {
+    throw new TenantCancelledError('This workspace is closed.');
   }
 }
 

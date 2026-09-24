@@ -10,7 +10,10 @@ import {
   reservationDetail,
   reservationListQuery,
   reservationListResponse,
+  reservationPickupRequest,
+  reservationInspectionRequest,
   reservationRejectRequest,
+  reservationReturnRequest,
   reservationState,
   reservationSubmitRequest,
   reservationSummary,
@@ -352,6 +355,12 @@ describe('reservation contracts', () => {
     expect(reservationRejectRequest.safeParse({ version: 1, reason: 'Unable to verify payment.' }).success).toBe(true);
     expect(reservationCancelRequest.safeParse({ version: 1, reason: 'Customer contacted the store.' }).success).toBe(true);
     expect(reservationCancelRequest.safeParse({ version: 1, refund_amount_minor: '50000' }).success).toBe(false);
+    expect(reservationPickupRequest.safeParse({ version: 1, condition_note: 'Ready at handover.' }).success).toBe(true);
+    expect(reservationPickupRequest.safeParse({ version: 1, asset_id: ids.asset }).success).toBe(false);
+    expect(reservationReturnRequest.safeParse({ version: 1, condition_note: 'Returned at counter.' }).success).toBe(true);
+    expect(reservationReturnRequest.safeParse({ version: 1, readiness: 'ready' }).success).toBe(false);
+    expect(reservationInspectionRequest.safeParse({ version: 5, readiness: 'needs_cleaning', condition_note: 'Normal cleaning.' }).success).toBe(true);
+    expect(reservationInspectionRequest.safeParse({ version: 5, readiness: 'ready', asset_id: ids.asset }).success).toBe(false);
     expect(reservationCompleteRequest.safeParse({ version: 0 }).success).toBe(false);
   });
 

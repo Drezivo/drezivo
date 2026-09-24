@@ -6,14 +6,22 @@ import {
   reservationConfirmRequest,
   reservationId,
   reservationListQuery,
+  reservationPickupRequest,
   reservationRejectRequest,
+  reservationReturnRequest,
+  reservationInspectionRequest,
+  reservationCompleteRequest,
   reservationSubmitRequest,
   staffReservationCompleteRequest,
   staffReservationCreateRequest,
   type ReservationCancelRequest,
   type ReservationConfirmRequest,
   type ReservationListQuery,
+  type ReservationPickupRequest,
   type ReservationRejectRequest,
+  type ReservationReturnRequest,
+  type ReservationInspectionRequest,
+  type ReservationCompleteRequest,
   type ReservationSubmitRequest,
   type StaffReservationCompleteRequest,
   type StaffReservationCreateRequest,
@@ -28,6 +36,10 @@ declare module 'express-serve-static-core' {
     reservationCreateRequest?: StaffReservationCreateRequest;
     reservationCompleteRequest?: StaffReservationCompleteRequest;
     reservationCancelRequest?: ReservationCancelRequest;
+    reservationPickupRequest?: ReservationPickupRequest;
+    reservationReturnRequest?: ReservationReturnRequest;
+    reservationInspectionRequest?: ReservationInspectionRequest;
+    reservationRentalCompleteRequest?: ReservationCompleteRequest;
     reservationSubmitRequest?: ReservationSubmitRequest;
     reservationConfirmRequest?: ReservationConfirmRequest;
     reservationRejectRequest?: ReservationRejectRequest;
@@ -38,6 +50,15 @@ declare module 'express-serve-static-core' {
 export const requireReservationManagePermission: RequestHandler = (req, _res, next): void => {
   if (!req.tenantContext?.permissionCodes.includes('reservations.manage')) {
     next(new ForbiddenError('This branch does not grant reservation management access.'));
+    return;
+  }
+  next();
+};
+
+export const requireReservationCustodyPermission: RequestHandler = (req, _res, next): void => {
+  const permissions = req.tenantContext?.permissionCodes ?? [];
+  if (!permissions.includes('reservations.manage') || !permissions.includes('reservations.custody')) {
+    next(new ForbiddenError('Reservation custody permission is required.'));
     return;
   }
   next();
@@ -106,6 +127,50 @@ export const validateReservationCancel: RequestHandler = (req, _res, next): void
   }
   req.body = parsed.data;
   req.reservationCancelRequest = parsed.data;
+  next();
+};
+
+export const validateReservationPickup: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationPickupRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Reservation pickup request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  req.reservationPickupRequest = parsed.data;
+  next();
+};
+
+export const validateReservationReturn: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationReturnRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Reservation return request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  req.reservationReturnRequest = parsed.data;
+  next();
+};
+
+export const validateReservationInspection: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationInspectionRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Reservation inspection request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  req.reservationInspectionRequest = parsed.data;
+  next();
+};
+
+export const validateReservationRentalComplete: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationCompleteRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Reservation completion request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  req.reservationRentalCompleteRequest = parsed.data;
   next();
 };
 
