@@ -25,6 +25,7 @@ import { RestoreClothingDialog, restoreSuccessMessage } from "@/components/inven
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
 import {
   Table,
   TableBody,
@@ -146,6 +147,8 @@ function DetailContent({
   );
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(imageUrls[0] ?? null);
   const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(() => new Set());
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const allAssets = useMemo(() => item.variants.flatMap((variant) => variant.assets), [item.variants]);
   const activeAssets = allAssets.filter((asset) => asset.lifecycle_status === "active");
   const readyAssets = activeAssets.filter((asset) => asset.readiness === "ready");
@@ -156,6 +159,18 @@ function DetailContent({
     selectedImageUrl && usableImageUrls.includes(selectedImageUrl)
       ? selectedImageUrl
       : (usableImageUrls[0] ?? null);
+  const lightboxImages = usableImageUrls.map((url, index) => ({
+    src: url,
+    alt: `${item.name} catalogue photo ${index + 1}`,
+  }));
+
+  const openLightbox = (url: string) => {
+    const index = usableImageUrls.indexOf(url);
+    if (index < 0) return;
+    setSelectedImageUrl(url);
+    setLightboxIndex(index);
+    setLightboxOpen(true);
+  };
 
   useEffect(() => {
     setFailedImageUrls(new Set());
@@ -208,16 +223,26 @@ function DetailContent({
               <div className="space-y-2">
                 <div className="flex min-h-60 items-center justify-center overflow-hidden rounded-2xl border border-dashboard-border bg-dashboard-active">
                   {primaryImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- API-provided catalogue URLs are short-lived signed URLs.
-                    <img
-                      src={primaryImage}
-                      alt={`${item.name} catalogue photo`}
-                      className="h-full min-h-60 w-full object-cover"
-                      onError={() => {
-                        setFailedImageUrls((current) => new Set(current).add(primaryImage));
-                        setSelectedImageUrl(null);
-                      }}
-                    />
+                    <button
+                      type="button"
+                      onClick={() => openLightbox(primaryImage)}
+                      aria-label={`Open ${item.name} image preview`}
+                      className="group relative h-full min-h-60 w-full cursor-zoom-in overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/50"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element -- API-provided catalogue URLs are short-lived signed URLs. */}
+                      <img
+                        src={primaryImage}
+                        alt={`${item.name} catalogue photo`}
+                        className="h-full min-h-60 w-full object-cover transition duration-200 group-hover:scale-[1.01]"
+                        onError={() => {
+                          setFailedImageUrls((current) => new Set(current).add(primaryImage));
+                          setSelectedImageUrl(null);
+                        }}
+                      />
+                      <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/45 to-transparent px-3 pb-2.5 pt-8 text-right text-[11px] font-medium text-white/90 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                        Click to enlarge
+                      </span>
+                    </button>
                   ) : (
                     <div className="text-center">
                       <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-dashboard-surface text-2xl font-semibold text-dashboard-accent shadow-sm">
@@ -505,6 +530,16 @@ function DetailContent({
           onRestored={(result) => onRestored(restoreSuccessMessage(result))}
         />
       )}
+      <ImageLightbox
+        images={lightboxImages}
+        open={lightboxOpen}
+        onOpenChange={setLightboxOpen}
+        activeIndex={lightboxIndex}
+        onActiveIndexChange={(index) => {
+          setLightboxIndex(index);
+          setSelectedImageUrl(usableImageUrls[index] ?? null);
+        }}
+      />
     </div>
   );
 }
