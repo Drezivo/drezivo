@@ -542,7 +542,7 @@ export async function publishClothingGraph(
     [tenantId, productId],
   );
   if ((activeCount.rows[0]?.count ?? 0) === 0) {
-    throw new StateConflictError('Publish at least one variant with an active physical piece first.');
+    throw new StateConflictError('Add an active physical piece to at least one variant before publishing this clothing.');
   }
   const product = await client.query<EditableProductRow>(
     `UPDATE product

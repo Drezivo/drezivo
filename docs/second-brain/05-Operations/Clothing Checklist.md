@@ -330,24 +330,24 @@ Before marking a task complete:
   - **Acceptance:**
     - [x] Archived rows expose `Restore to Draft` in the inventory row actions and Clothing Detail.
     - [x] Restore preserves reservation snapshots, blocking reservation allocations, maintenance allocations, audit history, maintenance history, and custody truth.
-    - [x] Restore moves the product to `draft`, never directly to `active`; archived variants return only to `draft` for review.
+    - [x] Restore moves the **product** to `draft`, never directly to `active`. Any internal variant-state normalization remains backend implementation detail; O/S does not publish/restore variants individually.
     - [x] Restore does not reactivate retired/lost/unread y serialized assets. Physical lifecycle/readiness/custody state is unchanged by the restore command.
     - [x] Restore is tenant-scoped, requires the shared catalogue write boundary plus `assets.archive`, replays the same idempotency intent safely, and rejects stale `expected_updated_at` tokens.
     - [x] After restore, the product is visible as Draft in staff inventory and can use the existing CLT-072 publish flow after review.
   - **Tests/evidence:** `catalogue-archive-clothing-route.test.ts` passes `8/8` against disposable PostgreSQL. Its CLT-073 cases archive a product with confirmed reservation history, blocking reservation allocation, maintenance allocation, custody exceptions, and a safely retired piece, then restore it to Draft while proving all physical/history state remains unchanged; same-key restore replay returns the same response, stale restore returns `STALE_VERSION`, and missing `assets.archive` returns `FORBIDDEN`. `clothing-details-page.test.tsx`, `clothing-page.test.tsx`, and `edit-clothing-page.test.tsx` pass `35/35`, covering restore from both archived row actions and Clothing Detail plus authoritative reload to Draft.
 
-- [x] **CLT-074 — Add per-variant lifecycle and removal controls**
+- [x] **CLT-074 — Simplify variant management to Add / Edit / Remove**
   - **Depends on:** Existing variant edit API and reservation snapshot rules.
-  - **Outcome:** Staff can control each variant independently instead of treating every variant as permanently tied to the product's draft/active state.
+  - **Outcome:** Variant lifecycle is no longer an O/S concept in V1. Product-level Draft/Publish/Archive controls whether the clothing is merchandised; staff manage variants only by adding, editing, or removing them.
   - **Acceptance:**
-    - [x] Edit Clothing exposes Publish for draft variants, Archive/Remove for active variants, and Restore for archived variants in a separate archived-variants section; the intentionally removed `Set Draft` button is not part of the V1 UI.
-    - [x] Product lifecycle invariants are enforced: draft/archived products are not renter-facing; an active product cannot demote/archive/remove its final active variant.
-    - [x] Other variants may remain draft or archived while at least one valid variant remains active.
-    - [x] Staff remove variants through an explicit confirmation dialog that explains destructive vs non-destructive behavior.
-    - [x] A never-used draft variant with no serialized assets/reservation history is hard-deleted; variants with assets or reservation history are archived instead so foreign keys/history remain intact.
-    - [x] Variant lifecycle/removal mutations are tenant-scoped, require `assets.manage`, use idempotency and `expected_updated_at` concurrency tokens, emit audit events, and preserve reservation snapshots plus allocations.
-    - [x] Staff read models continue to retain draft/archived variants, while the existing reservation-handoff boundary requires both product and variant to be active.
-  - **Tests/evidence:** `catalogue-archive-clothing-route.test.ts` passes `8/8` and proves lifecycle replay, stale-version rejection, `assets.manage` permission enforcement, final-active-variant protection, referenced variant archive fallback, safe hard-delete of an unused draft variant, unchanged reservation snapshot/allocation state, and lifecycle/archive/delete audit events. `catalogue-reservation-handoff.test.ts` passes `3/3` and continues to exclude non-active products/variants from allocation candidates. The current Edit Clothing regression covers Publish/Archive/Remove/Restore behavior, archived-variant separation, safe Remove confirmation, and disabling lifecycle actions while unsaved edits exist.
+    - [x] Edit Clothing does not show variant `Draft`, `Active`, or `Archived` badges and exposes no per-variant Publish, Archive, Restore, or Set Draft controls.
+    - [x] `Add Variant` creates the usable staff catalogue variant through the existing authoritative command; O/S does not perform a second publish step for the variant.
+    - [x] `Remove Variant` is the only variant-level destructive action and uses one confirmation dialog with plain language about preserving existing physical-piece/rental history.
+    - [x] Variants removed from normal management no longer appear in a separate O/S `Archived variants` section or expose a Restore action. Staff add a replacement/new variant instead.
+    - [x] Internal variant lifecycle state may remain for historical integrity and reservation/storefront gating, but it is implementation detail rather than a staff workflow.
+    - [x] Product-level publish remains authoritative and may activate eligible internal draft variants as part of the product publication transaction; the browser does not call a variant-lifecycle mutation.
+    - [x] Existing safe-removal behavior remains: variants without protected references may be deleted, while variants with physical pieces or reservation history are retained internally so foreign keys, snapshots, and allocations remain valid.
+  - **Tests/evidence:** `edit-clothing-page.test.tsx` verifies that both active and internally-draft variants expose Edit/Remove but no lifecycle controls/status badge, referenced removal disappears from normal management with history-preserving copy, and internally archived variants stay hidden from O/S management. `catalogue-archive-clothing-route.test.ts` and `catalogue-reservation-handoff.test.ts` continue to protect internal lifecycle/history and candidate-selection invariants.
 
 - [x] **CLT-075 — Return Add Clothing users to Inventory after success**
   - **Depends on:** Existing Add Clothing form and create mutation.
