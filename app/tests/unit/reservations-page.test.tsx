@@ -15,9 +15,16 @@ const clerk = vi.hoisted(() => ({
 }));
 
 const api = vi.hoisted(() => ({
+  cancelReservation: vi.fn(),
+  completeRentalReservation: vi.fn(),
+  completeStaffReservation: vi.fn(),
   getActorContext: vi.fn(),
   getReservationDetail: vi.fn(),
   getReservations: vi.fn(),
+  inspectReservationReturn: vi.fn(),
+  pickupReservation: vi.fn(),
+  rejectReservation: vi.fn(),
+  returnReservation: vi.fn(),
 }));
 
 const navigation = vi.hoisted(() => ({
@@ -277,9 +284,16 @@ function page(items: ReservationListItem[] = [reservation], nextCursor: string |
 describe("ReservationsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    api.cancelReservation.mockReset();
+    api.completeRentalReservation.mockReset();
+    api.completeStaffReservation.mockReset();
     api.getActorContext.mockReset();
     api.getReservationDetail.mockReset();
     api.getReservations.mockReset();
+    api.inspectReservationReturn.mockReset();
+    api.pickupReservation.mockReset();
+    api.rejectReservation.mockReset();
+    api.returnReservation.mockReset();
     navigation.search = "";
     clerk.getToken.mockResolvedValue("clerk-token");
     clerk.useAuth.mockReturnValue({
@@ -412,6 +426,25 @@ describe("ReservationsPage", () => {
     expect(screen.getByText("Pick Up")).toBeVisible();
     expect(screen.getByText("Cancel")).toBeVisible();
     expect(screen.queryByText("Maria Santos")).not.toBeInTheDocument();
+  });
+
+  it("refetches the authoritative list and detail after a successful lifecycle mutation", async () => {
+    api.pickupReservation.mockResolvedValueOnce({
+      data: { reservation: { status: "picked_up" } },
+      requestId: "req-pickup",
+    });
+
+    render(<ReservationsPage />);
+    await screen.findByText("RSV-REAL-001");
+    fireEvent.click(screen.getByRole("button", { name: "Open reservation RSV-REAL-001" }));
+    await screen.findByRole("heading", { name: "Reservation RSV-REAL-001" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Pick Up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Pick Up" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Pickup recorded.");
+    await waitFor(() => expect(api.getReservationDetail).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.getReservations).toHaveBeenCalledTimes(2));
   });
 
   it("renders the real custody timeline and returned-state actions", async () => {

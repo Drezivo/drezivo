@@ -20,6 +20,8 @@ import {
   staffReservationCompleteRequest,
   staffReservationCompleteResponse,
   staffReservationCreateRequest,
+  staffReservationIntakeQuery,
+  staffReservationIntakeResponse,
 } from '../src';
 
 const ids = {
@@ -86,6 +88,37 @@ describe('reservation contracts', () => {
       'rejected',
     ]);
     expect(reservationState.safeParse('paid').success).toBe(false);
+  });
+
+  it('keeps staff reservation intake options bounded and free of payment destination secrets', () => {
+    expect(staffReservationIntakeQuery.safeParse({}).success).toBe(true);
+    expect(staffReservationIntakeQuery.safeParse({ customer_search: 'Ma' }).success).toBe(true);
+    expect(staffReservationIntakeQuery.safeParse({ customer_search: 'M' }).success).toBe(false);
+    expect(staffReservationIntakeQuery.safeParse({ customer_search: 'Maria', tenant_id: ids.branch }).success).toBe(false);
+
+    expect(
+      staffReservationIntakeResponse.safeParse({
+        payment_methods: [
+          { id: ids.paymentMethod, name: 'Cash', rail: 'cash' },
+        ],
+        customers: [
+          { id: ids.customer, full_name: 'Maria Santos', phone: '09171234567', email: null },
+        ],
+      }).success,
+    ).toBe(true);
+    expect(
+      staffReservationIntakeResponse.safeParse({
+        payment_methods: [
+          {
+            id: ids.paymentMethod,
+            name: 'GCash',
+            rail: 'manual_qr',
+            destination_snapshot: { account: 'secret' },
+          },
+        ],
+        customers: [],
+      }).success,
+    ).toBe(false);
   });
 
   it('accepts staff creation for an existing customer without accepting browser authority', () => {

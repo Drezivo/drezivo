@@ -10,6 +10,7 @@ import {
   Truck,
   UserRound,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import type { PermissionCode, ReservationDetail } from "@drezivo/contracts";
 
@@ -23,6 +24,11 @@ import type { DrezivoApiError } from "@/lib/drezivo-api";
 import { cn } from "@/lib/utils";
 
 import {
+  ReservationMutationActions,
+  ReservationMutationNoticeBanner,
+  type ReservationMutationNotice,
+} from "./reservation-mutation-actions";
+import {
   PAYMENT_EVIDENCE_LABELS,
   PAYMENT_STATUS_CLASSES,
   PAYMENT_STATUS_LABELS,
@@ -35,6 +41,8 @@ export function ReservationDetailsSheet({
   error,
   isLoading,
   onOpenChange,
+  onMutationSuccess,
+  onRefreshRequired,
   onRetry,
   permissionCodes,
   reservationId,
@@ -44,12 +52,19 @@ export function ReservationDetailsSheet({
   error: DrezivoApiError | null;
   isLoading: boolean;
   onOpenChange: (open: boolean) => void;
+  onMutationSuccess: () => void;
+  onRefreshRequired: () => void;
   onRetry: () => void;
   permissionCodes: readonly PermissionCode[];
   reservationId: string | null;
   timeZone: string;
 }) {
   const open = reservationId !== null;
+  const [notice, setNotice] = useState<ReservationMutationNotice | null>(null);
+
+  useEffect(() => {
+    setNotice(null);
+  }, [reservationId]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -76,6 +91,10 @@ export function ReservationDetailsSheet({
         ) : detail ? (
           <ReservationDetails
             detail={detail}
+            notice={notice}
+            onMutationSuccess={onMutationSuccess}
+            onNotice={setNotice}
+            onRefreshRequired={onRefreshRequired}
             permissionCodes={permissionCodes}
             timeZone={timeZone}
           />
@@ -87,15 +106,22 @@ export function ReservationDetailsSheet({
 
 function ReservationDetails({
   detail,
+  notice,
+  onMutationSuccess,
+  onNotice,
+  onRefreshRequired,
   permissionCodes,
   timeZone,
 }: {
   detail: ReservationDetail;
+  notice: ReservationMutationNotice | null;
+  onMutationSuccess: () => void;
+  onNotice: (notice: ReservationMutationNotice | null) => void;
+  onRefreshRequired: () => void;
   permissionCodes: readonly PermissionCode[];
   timeZone: string;
 }) {
   const customer = detail.customer.snapshot;
-  const actions = getVisibleLifecycleActions(detail.status, permissionCodes);
   const effectiveTimeZone = detail.timezone_snapshot || timeZone;
 
   return (
@@ -117,22 +143,19 @@ function ReservationDetails({
           Created {formatDateTime(detail.created_at, effectiveTimeZone)} · Version {detail.version}
         </SheetDescription>
 
-        {actions.length > 0 ? (
+        {notice ? (
           <div className="mt-4">
-            <p className="text-xs font-medium text-dashboard-muted">Available lifecycle actions</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {actions.map((action) => (
-                <Badge
-                  key={action}
-                  variant="outline"
-                  className="border-dashboard-border bg-dashboard-active px-2.5 py-1.5 text-xs text-dashboard-navy"
-                >
-                  {action}
-                </Badge>
-              ))}
-            </div>
+            <ReservationMutationNoticeBanner notice={notice} />
           </div>
         ) : null}
+
+        <ReservationMutationActions
+          detail={detail}
+          permissionCodes={permissionCodes}
+          onNotice={onNotice}
+          onMutationSuccess={onMutationSuccess}
+          onRefreshRequired={onRefreshRequired}
+        />
       </header>
 
       <div className="flex flex-1 flex-col gap-3 p-4">
@@ -436,32 +459,6 @@ function DetailState({
       </div>
     </div>
   );
-}
-
-function getVisibleLifecycleActions(
-  status: ReservationDetail["status"],
-  permissionCodes: readonly PermissionCode[]
-): string[] {
-  const canManage = permissionCodes.includes("reservations.manage");
-  const canHandleCustody = canManage && permissionCodes.includes("reservations.custody");
-  const canInspectAssets = canHandleCustody && permissionCodes.includes("assets.manage");
-
-  switch (status) {
-    case "held":
-    case "pending_confirmation":
-      return canManage ? ["Complete Reservation", "Cancel"] : [];
-    case "confirmed":
-      return [...(canHandleCustody ? ["Pick Up"] : []), ...(canManage ? ["Cancel"] : [])];
-    case "picked_up":
-      return canHandleCustody ? ["Return"] : [];
-    case "returned":
-      return [
-        ...(canInspectAssets ? ["Inspect Return"] : []),
-        ...(canHandleCustody ? ["Complete Rental"] : []),
-      ];
-    default:
-      return [];
-  }
 }
 
 function formatOptionalDate(value: string | null, timeZone: string): string {

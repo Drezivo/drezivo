@@ -148,6 +148,19 @@ export interface ReservationQuotePaymentMethodRow {
   version: number;
 }
 
+export interface StaffReservationPaymentMethodOptionRow {
+  id: string;
+  name: string;
+  rail: 'cash' | 'manual_qr' | 'manual_transfer';
+}
+
+export interface StaffReservationCustomerOptionRow {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+}
+
 interface ReservationListCursor {
   sort: ReservationListSort;
   key: string;
@@ -501,6 +514,46 @@ export async function readReservationQuoteFoundation(
   );
 
   return result.rows[0] ?? null;
+}
+
+/** Active tenant-scoped payment method selected for this booking intent. */
+export async function listStaffReservationPaymentMethodOptions(
+  client: PoolClient,
+  tenantId: string,
+): Promise<StaffReservationPaymentMethodOptionRow[]> {
+  const result = await client.query<StaffReservationPaymentMethodOptionRow>(
+    `SELECT pm.id, pm.name, pm.rail
+     FROM payment_method pm
+     WHERE pm.tenant_id = $1::uuid
+       AND pm.active = true
+     ORDER BY lower(pm.name), pm.id
+     LIMIT 20`,
+    [tenantId],
+  );
+  return result.rows;
+}
+
+export async function searchStaffReservationCustomerOptions(
+  client: PoolClient,
+  input: { tenantId: string; search?: string },
+): Promise<StaffReservationCustomerOptionRow[]> {
+  if (!input.search) return [];
+  const pattern = `%${input.search}%`;
+  const result = await client.query<StaffReservationCustomerOptionRow>(
+    `SELECT c.id, c.full_name, c.phone, c.email
+     FROM customer c
+     WHERE c.tenant_id = $1::uuid
+       AND c.anonymized_at IS NULL
+       AND (
+         c.full_name ILIKE $2
+         OR c.phone ILIKE $2
+         OR c.email ILIKE $2
+       )
+     ORDER BY lower(c.full_name), c.id
+     LIMIT 10`,
+    [input.tenantId, pattern],
+  );
+  return result.rows;
 }
 
 /** Active tenant-scoped payment method selected for this booking intent. */

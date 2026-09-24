@@ -21,9 +21,27 @@ import {
   removeClothingVariantRequest,
   restoreClothingRequest,
   restoreClothingResponse,
+  reservationCancelRequest,
+  reservationCancelResponse,
+  reservationCompleteRequest,
+  reservationCompleteResponse,
   reservationDetail,
+  reservationInspectionRequest,
+  reservationInspectionResponse,
   reservationListQuery,
   reservationListResponse,
+  reservationPickupRequest,
+  reservationPickupResponse,
+  reservationRejectRequest,
+  reservationRejectResponse,
+  reservationReturnRequest,
+  reservationReturnResponse,
+  staffReservationCompleteRequest,
+  staffReservationCompleteResponse,
+  staffReservationCreateRequest,
+  staffReservationCreateResponse,
+  staffReservationIntakeQuery,
+  staffReservationIntakeResponse,
   updateClothingVariantLifecycleRequest,
   updateClothingVariantLifecycleResponse,
   createClothingResponse,
@@ -70,9 +88,27 @@ import {
   type RemoveClothingVariantRequest,
   type RestoreClothingRequest,
   type RestoreClothingResponse,
+  type ReservationCancelRequest,
+  type ReservationCancelResponse,
+  type ReservationCompleteRequest,
+  type ReservationCompleteResponse,
   type ReservationDetail,
+  type ReservationInspectionRequest,
+  type ReservationInspectionResponse,
   type ReservationListQuery,
   type ReservationListResponse,
+  type ReservationPickupRequest,
+  type ReservationPickupResponse,
+  type ReservationRejectRequest,
+  type ReservationRejectResponse,
+  type ReservationReturnRequest,
+  type ReservationReturnResponse,
+  type StaffReservationCompleteRequest,
+  type StaffReservationCompleteResponse,
+  type StaffReservationCreateRequest,
+  type StaffReservationCreateResponse,
+  type StaffReservationIntakeQuery,
+  type StaffReservationIntakeResponse,
   type UpdateClothingVariantLifecycleRequest,
   type UpdateClothingVariantLifecycleResponse,
   type CreateClothingResponse,
@@ -220,6 +256,121 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         path: `/api/v1/reservations/${encodeURIComponent(reservationId)}`,
         responseSchema: apiEnvelope(reservationDetail),
       }),
+    getStaffReservationIntakeOptions: (input: StaffReservationIntakeQuery) => {
+      const query = staffReservationIntakeQuery.parse(input);
+      const searchParams = new URLSearchParams();
+      if (query.customer_search) searchParams.set("customer_search", query.customer_search);
+      const suffix = searchParams.toString();
+      return request<StaffReservationIntakeResponse>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/reservations/intake-options${suffix ? `?${suffix}` : ""}`,
+        responseSchema: apiEnvelope(staffReservationIntakeResponse),
+      });
+    },
+    createStaffReservation: (
+      input: StaffReservationCreateRequest,
+      idempotencyKey: string
+    ) =>
+      request<StaffReservationCreateResponse>({
+        getToken,
+        body: staffReservationCreateRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/reservations",
+        responseSchema: apiEnvelope(staffReservationCreateResponse),
+      }),
+    completeStaffReservation: (
+      reservationId: string,
+      input: StaffReservationCompleteRequest,
+      idempotencyKey: string
+    ) =>
+      request<StaffReservationCompleteResponse>({
+        getToken,
+        body: staffReservationCompleteRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/complete-booking`,
+        responseSchema: apiEnvelope(staffReservationCompleteResponse),
+      }),
+    cancelReservation: (
+      reservationId: string,
+      input: ReservationCancelRequest,
+      idempotencyKey: string
+    ) =>
+      request<ReservationCancelResponse>({
+        getToken,
+        body: reservationCancelRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/cancel`,
+        responseSchema: apiEnvelope(reservationCancelResponse),
+      }),
+    pickupReservation: (
+      reservationId: string,
+      input: ReservationPickupRequest,
+      idempotencyKey: string
+    ) =>
+      request<ReservationPickupResponse>({
+        getToken,
+        body: reservationPickupRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/pickup`,
+        responseSchema: apiEnvelope(reservationPickupResponse),
+      }),
+    returnReservation: (
+      reservationId: string,
+      input: ReservationReturnRequest,
+      idempotencyKey: string
+    ) =>
+      request<ReservationReturnResponse>({
+        getToken,
+        body: reservationReturnRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/return`,
+        responseSchema: apiEnvelope(reservationReturnResponse),
+      }),
+    inspectReservationReturn: (
+      reservationId: string,
+      input: ReservationInspectionRequest,
+      idempotencyKey: string
+    ) =>
+      request<ReservationInspectionResponse>({
+        getToken,
+        body: reservationInspectionRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/inspection`,
+        responseSchema: apiEnvelope(reservationInspectionResponse),
+      }),
+    completeRentalReservation: (
+      reservationId: string,
+      input: ReservationCompleteRequest,
+      idempotencyKey: string
+    ) =>
+      request<ReservationCompleteResponse>({
+        getToken,
+        body: reservationCompleteRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/complete-rental`,
+        responseSchema: apiEnvelope(reservationCompleteResponse),
+      }),
+    rejectReservation: (
+      reservationId: string,
+      input: ReservationRejectRequest,
+      idempotencyKey: string
+    ) =>
+      request<ReservationRejectResponse>({
+        getToken,
+        body: reservationRejectRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/reject`,
+        responseSchema: apiEnvelope(reservationRejectResponse),
+      }),
     getCatalogueCategories: () =>
       request<CatalogueCategoryList>({
         getToken,
@@ -271,10 +422,7 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         path: "/api/v1/catalogue/measurement-guide/default",
         responseSchema: apiEnvelope(measurementGuideDefaultResponse),
       }),
-    saveMeasurementGuide: (
-      input: SaveMeasurementGuideRequest,
-      idempotencyKey: string
-    ) =>
+    saveMeasurementGuide: (input: SaveMeasurementGuideRequest, idempotencyKey: string) =>
       request<MeasurementGuide>({
         getToken,
         body: saveMeasurementGuideRequest.parse(input),
@@ -350,11 +498,7 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/images`,
         responseSchema: apiEnvelope(replaceClothingImagesResponse),
       }),
-    archiveClothing: (
-      productId: string,
-      input: ArchiveClothingRequest,
-      idempotencyKey: string
-    ) =>
+    archiveClothing: (productId: string, input: ArchiveClothingRequest, idempotencyKey: string) =>
       request<ArchiveClothingResponse>({
         getToken,
         body: archiveClothingRequest.parse(input),
@@ -363,11 +507,7 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/archive`,
         responseSchema: apiEnvelope(archiveClothingResponse),
       }),
-    publishClothing: (
-      productId: string,
-      input: PublishClothingRequest,
-      idempotencyKey: string
-    ) =>
+    publishClothing: (productId: string, input: PublishClothingRequest, idempotencyKey: string) =>
       request<PublishClothingResponse>({
         getToken,
         body: publishClothingRequest.parse(input),
@@ -376,11 +516,7 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/publish`,
         responseSchema: apiEnvelope(publishClothingResponse),
       }),
-    restoreClothing: (
-      productId: string,
-      input: RestoreClothingRequest,
-      idempotencyKey: string
-    ) =>
+    restoreClothing: (productId: string, input: RestoreClothingRequest, idempotencyKey: string) =>
       request<RestoreClothingResponse>({
         getToken,
         body: restoreClothingRequest.parse(input),
@@ -454,7 +590,8 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
       if (query.product_status) searchParams.set("product_status", query.product_status);
       if (query.asset_lifecycle) searchParams.set("asset_lifecycle", query.asset_lifecycle);
       if (query.readiness) searchParams.set("readiness", query.readiness);
-      if (query.availability_start) searchParams.set("availability_start", query.availability_start);
+      if (query.availability_start)
+        searchParams.set("availability_start", query.availability_start);
       if (query.availability_end) searchParams.set("availability_end", query.availability_end);
       searchParams.set("sort", query.sort);
 

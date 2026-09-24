@@ -27,7 +27,10 @@ import {
   type ReservationRejectResponse,
   type StaffReservationCompleteRequest,
   type StaffReservationCompleteResponse,
+  staffReservationIntakeResponse,
   type StaffReservationCreateRequest,
+  type StaffReservationIntakeQuery,
+  type StaffReservationIntakeResponse,
   type TenantStatus,
 } from '@drezivo/contracts';
 
@@ -61,7 +64,9 @@ import {
 } from './reservations.review.service.js';
 import {
   listReservationsReadModel,
+  listStaffReservationPaymentMethodOptions,
   readReservationDetailModel,
+  searchStaffReservationCustomerOptions,
   type ReservationDetailHeaderRow,
   type ReservationListReadRow,
 } from './reservations.repository.js';
@@ -80,6 +85,22 @@ export type ReservationHoldResult = { kind: 'not_implemented' };
 /** Reservation holds remain disabled until the transactional hold service is approved. */
 export function createPublicHold(): ReservationHoldResult {
   return { kind: 'not_implemented' };
+}
+
+export async function getStaffReservationIntakeOptions(
+  input: ReservationReadContext,
+  query: StaffReservationIntakeQuery,
+): Promise<StaffReservationIntakeResponse> {
+  assertReservationBookingContext(input);
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) =>
+    staffReservationIntakeResponse.parse({
+      payment_methods: await listStaffReservationPaymentMethodOptions(client, input.tenantId),
+      customers: await searchStaffReservationCustomerOptions(client, {
+        tenantId: input.tenantId,
+        ...(query.customer_search ? { search: query.customer_search } : {}),
+      }),
+    }),
+  );
 }
 
 /**

@@ -1,7 +1,16 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { CalendarDays, ChevronLeft, ChevronRight, Search, Shirt, UserRound, X } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Search,
+  Shirt,
+  UserRound,
+  X,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 
@@ -28,6 +37,7 @@ import {
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { cn } from "@/lib/utils";
 
+import { NewReservationSheet } from "./new-reservation-sheet";
 import { ReservationDetailsSheet } from "./reservation-details-sheet";
 import {
   PAYMENT_EVIDENCE_LABELS,
@@ -72,6 +82,7 @@ export function ReservationsPage() {
   const [isTimeZoneResolved, setIsTimeZoneResolved] = useState(false);
   const [rows, setRows] = useState<ReservationListItem[]>([]);
   const [permissionCodes, setPermissionCodes] = useState<PermissionCode[]>([]);
+  const [isNewReservationOpen, setIsNewReservationOpen] = useState(false);
   const [selectedReservationId, setSelectedReservationId] = useState<string | null>(null);
   const [selectedReservation, setSelectedReservation] = useState<ReservationDetail | null>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
@@ -264,7 +275,10 @@ export function ReservationsPage() {
   return (
     <div className="min-h-[calc(100svh-4.5rem)] bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-5">
-        <PageHeading />
+        <PageHeading
+          canCreate={permissionCodes.includes("reservations.manage")}
+          onNewReservation={() => setIsNewReservationOpen(true)}
+        />
 
         <Card className="gap-0 py-0">
           <CardContent className="p-0">
@@ -344,6 +358,19 @@ export function ReservationsPage() {
         </Card>
       </div>
 
+      <NewReservationSheet
+        open={isNewReservationOpen}
+        permissionCodes={permissionCodes}
+        timeZone={timeZone}
+        onOpenChange={setIsNewReservationOpen}
+        onReservationChanged={() => setReloadVersion((value) => value + 1)}
+        onViewReservation={(reservationId) => {
+          setReloadVersion((value) => value + 1);
+          setSelectedReservationId(reservationId);
+          setDetailReloadVersion((value) => value + 1);
+        }}
+      />
+
       <ReservationDetailsSheet
         reservationId={selectedReservationId}
         detail={selectedReservation}
@@ -352,6 +379,14 @@ export function ReservationsPage() {
         permissionCodes={permissionCodes}
         timeZone={timeZone}
         onRetry={() => setDetailReloadVersion((value) => value + 1)}
+        onMutationSuccess={() => {
+          setReloadVersion((value) => value + 1);
+          setDetailReloadVersion((value) => value + 1);
+        }}
+        onRefreshRequired={() => {
+          setReloadVersion((value) => value + 1);
+          setDetailReloadVersion((value) => value + 1);
+        }}
         onOpenChange={(open) => {
           if (!open) {
             setSelectedReservationId(null);
@@ -364,18 +399,35 @@ export function ReservationsPage() {
   );
 }
 
-function PageHeading() {
+function PageHeading({
+  canCreate,
+  onNewReservation,
+}: {
+  canCreate: boolean;
+  onNewReservation: () => void;
+}) {
   return (
-    <section aria-labelledby="reservations-heading">
-      <h1
-        id="reservations-heading"
-        className="text-2xl font-bold tracking-tight text-dashboard-navy"
-      >
-        Reservations
-      </h1>
-      <p className="mt-1 text-sm text-dashboard-muted">
-        Manage customer bookings and follow each rental through its operational lifecycle.
-      </p>
+    <section
+      aria-labelledby="reservations-heading"
+      className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div>
+        <h1
+          id="reservations-heading"
+          className="text-2xl font-bold tracking-tight text-dashboard-navy"
+        >
+          Reservations
+        </h1>
+        <p className="mt-1 text-sm text-dashboard-muted">
+          Manage customer bookings and follow each rental through its operational lifecycle.
+        </p>
+      </div>
+      {canCreate ? (
+        <Button type="button" onClick={onNewReservation} className="shrink-0">
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          New Reservation
+        </Button>
+      ) : null}
     </section>
   );
 }

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { PaymentMethodId, ProductVariantId } from "@drezivo/contracts";
+
 import { createDrezivoApiClient } from "@/lib/drezivo-api";
 
 const start = "2026-10-10T00:00:00.000Z";
@@ -183,5 +185,200 @@ describe("Drezivo reservations list API client", () => {
       customer: { snapshot: { full_name: "Maria Santos" } },
       custody_timeline: [{ event_kind: "return", condition_note: "Returned in good condition." }],
     });
+  });
+
+  it("loads safe New Reservation intake options and creates a customer-less staff hold", async () => {
+    const paymentMethodId = "00000000-0000-4000-8000-000000000106" as PaymentMethodId;
+    const customerId = "00000000-0000-4000-8000-000000000107";
+    const variantId = "00000000-0000-4000-8000-000000000104" as ProductVariantId;
+
+    fetchMock.mockResolvedValueOnce(
+      success({
+        payment_methods: [{ id: paymentMethodId, name: "Cash", rail: "cash" }],
+        customers: [
+          {
+            id: customerId,
+            full_name: "Maria Santos",
+            phone: "09171234567",
+            email: null,
+          },
+        ],
+      })
+    );
+
+    const client = createDrezivoApiClient(getToken);
+    const options = await client.getStaffReservationIntakeOptions({ customer_search: "Maria" });
+    const [optionsUrl, optionsInit] = fetchMock.mock.calls[0]!;
+    expect(new URL(String(optionsUrl)).pathname).toBe("/api/v1/reservations/intake-options");
+    expect(new URL(String(optionsUrl)).searchParams.get("customer_search")).toBe("Maria");
+    expect(optionsInit?.method).toBe("GET");
+    expect(options.data.payment_methods[0]).toEqual({
+      id: paymentMethodId,
+      name: "Cash",
+      rail: "cash",
+    });
+
+    fetchMock.mockResolvedValueOnce(
+      success({
+        reservation: {
+          id: "00000000-0000-4000-8000-000000000101",
+          reference_code: "RSV-WALKIN-001",
+          status: "held",
+          branch_id: "00000000-0000-4000-8000-000000000201",
+          storefront_id: "00000000-0000-4000-8000-000000000202",
+          variant_id: variantId,
+          payment_method_id: paymentMethodId,
+          fulfillment_method: "pickup",
+          pickup_at: "2026-10-12T02:00:00.000Z",
+          due_at: "2026-10-14T02:00:00.000Z",
+          timezone_snapshot: "Asia/Manila",
+          price_snapshot: {
+            rental_total_minor: "150000",
+            security_required_minor: "50000",
+            due_now_minor: "200000",
+            currency: "PHP",
+          },
+          hold_expires_at: "2026-10-10T02:15:00.000Z",
+          version: 1,
+          created_at: "2026-10-10T02:00:00.000Z",
+        },
+        payment_instructions: {
+          method_name: "Cash",
+          rail: "cash",
+          destination_note: "Pay at the counter.",
+        },
+      })
+    );
+
+    await client.createStaffReservation(
+      {
+        variant_id: variantId,
+        requested_interval: {
+          start: "2026-10-12T02:00:00.000Z",
+          end: "2026-10-14T02:00:00.000Z",
+        },
+        fulfillment_method: "pickup",
+        payment_method_id: paymentMethodId,
+      },
+      "walkin-hold-key"
+    );
+
+    const [createUrl, createInit] = fetchMock.mock.calls[1]!;
+    expect(new URL(String(createUrl)).pathname).toBe("/api/v1/reservations");
+    expect(createInit?.method).toBe("POST");
+    expect(new Headers(createInit?.headers).get("Idempotency-Key")).toBe("walkin-hold-key");
+    expect(JSON.parse(String(createInit?.body))).toEqual({
+      variant_id: variantId,
+      requested_interval: {
+        start: "2026-10-12T02:00:00.000Z",
+        end: "2026-10-14T02:00:00.000Z",
+      },
+      fulfillment_method: "pickup",
+      payment_method_id: paymentMethodId,
+    });
+  });
+
+  it("sends strict versioned reservation mutation bodies with the supplied idempotency key", async () => {
+    const reservationId = "00000000-0000-4000-8000-000000000101";
+    const summary = {
+      id: reservationId,
+      reference_code: "RSV-2026-0001",
+      status: "confirmed",
+      branch_id: "00000000-0000-4000-8000-000000000201",
+      storefront_id: "00000000-0000-4000-8000-000000000202",
+      variant_id: "00000000-0000-4000-8000-000000000104",
+      payment_method_id: "00000000-0000-4000-8000-000000000106",
+      fulfillment_method: "pickup",
+      pickup_at: "2026-10-12T02:00:00.000Z",
+      due_at: "2026-10-14T02:00:00.000Z",
+      timezone_snapshot: "Asia/Manila",
+      price_snapshot: {
+        rental_total_minor: "150000",
+        security_required_minor: "50000",
+        due_now_minor: "200000",
+        currency: "PHP",
+      },
+      hold_expires_at: null,
+      version: 4,
+      created_at: "2026-10-10T02:00:00.000Z",
+    };
+    const key = "reservation-intent-key";
+    const client = createDrezivoApiClient(getToken);
+
+    const cases = [
+      {
+        call: () =>
+          client.completeStaffReservation(reservationId, { version: 3, terms_accepted: true }, key),
+        path: `/api/v1/reservations/${reservationId}/complete-booking`,
+        body: { version: 3, terms_accepted: true },
+        response: {
+          reservation: { ...summary, status: "confirmed" },
+          completion_state: "confirmed",
+          next_action: "none",
+        },
+      },
+      {
+        call: () =>
+          client.cancelReservation(reservationId, { version: 3, reason: "Customer request" }, key),
+        path: `/api/v1/reservations/${reservationId}/cancel`,
+        body: { version: 3, reason: "Customer request" },
+        response: { reservation: { ...summary, status: "cancelled" } },
+      },
+      {
+        call: () =>
+          client.pickupReservation(reservationId, { version: 3, condition_note: "Clean" }, key),
+        path: `/api/v1/reservations/${reservationId}/pickup`,
+        body: { version: 3, condition_note: "Clean" },
+        response: { reservation: { ...summary, status: "picked_up" } },
+      },
+      {
+        call: () =>
+          client.returnReservation(reservationId, { version: 4, condition_note: "Returned" }, key),
+        path: `/api/v1/reservations/${reservationId}/return`,
+        body: { version: 4, condition_note: "Returned" },
+        response: { reservation: { ...summary, status: "returned", version: 5 } },
+      },
+      {
+        call: () =>
+          client.inspectReservationReturn(
+            reservationId,
+            { version: 5, readiness: "needs_cleaning", condition_note: "Clean before reuse" },
+            key
+          ),
+        path: `/api/v1/reservations/${reservationId}/inspection`,
+        body: { version: 5, readiness: "needs_cleaning", condition_note: "Clean before reuse" },
+        response: {
+          reservation: { ...summary, status: "returned", version: 5 },
+          asset_readiness: "needs_cleaning",
+        },
+      },
+      {
+        call: () => client.completeRentalReservation(reservationId, { version: 5 }, key),
+        path: `/api/v1/reservations/${reservationId}/complete-rental`,
+        body: { version: 5 },
+        response: { reservation: { ...summary, status: "completed", version: 6 } },
+      },
+      {
+        call: () =>
+          client.rejectReservation(
+            reservationId,
+            { version: 2, reason: "Payment review failed" },
+            key
+          ),
+        path: `/api/v1/reservations/${reservationId}/reject`,
+        body: { version: 2, reason: "Payment review failed" },
+        response: { reservation: { ...summary, status: "rejected", version: 3 } },
+      },
+    ];
+
+    for (const testCase of cases) {
+      fetchMock.mockResolvedValueOnce(success(testCase.response));
+      await testCase.call();
+      const [rawUrl, init] = fetchMock.mock.calls.at(-1)!;
+      expect(new URL(String(rawUrl)).pathname).toBe(testCase.path);
+      expect(init?.method).toBe("POST");
+      expect(new Headers(init?.headers).get("Idempotency-Key")).toBe(key);
+      expect(JSON.parse(String(init?.body))).toEqual(testCase.body);
+    }
   });
 });

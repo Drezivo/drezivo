@@ -14,6 +14,7 @@ import {
   reservationSubmitRequest,
   staffReservationCompleteRequest,
   staffReservationCreateRequest,
+  staffReservationIntakeQuery,
   type ReservationCancelRequest,
   type ReservationConfirmRequest,
   type ReservationListQuery,
@@ -25,6 +26,7 @@ import {
   type ReservationSubmitRequest,
   type StaffReservationCompleteRequest,
   type StaffReservationCreateRequest,
+  type StaffReservationIntakeQuery,
 } from '@drezivo/contracts';
 
 import { ForbiddenError, ValidationError } from '../../shared/errors.js';
@@ -32,6 +34,7 @@ import { ForbiddenError, ValidationError } from '../../shared/errors.js';
 declare module 'express-serve-static-core' {
   interface Request {
     reservationListQuery?: ReservationListQuery;
+    reservationIntakeQuery?: StaffReservationIntakeQuery;
     reservationId?: string;
     reservationCreateRequest?: StaffReservationCreateRequest;
     reservationCompleteRequest?: StaffReservationCompleteRequest;
@@ -84,6 +87,16 @@ export const validateReservationListQuery: RequestHandler = (req, _res, next): v
     return;
   }
   req.reservationListQuery = parsed.data;
+  next();
+};
+
+export const validateStaffReservationIntakeQuery: RequestHandler = (req, _res, next): void => {
+  const parsed = staffReservationIntakeQuery.safeParse(req.query);
+  if (!parsed.success) {
+    next(new ValidationError('Reservation intake query is invalid.'));
+    return;
+  }
+  req.reservationIntakeQuery = parsed.data;
   next();
 };
 
