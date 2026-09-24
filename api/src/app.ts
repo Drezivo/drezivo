@@ -13,6 +13,7 @@ import { tenancyRouter } from './modules/tenancy/tenancy.routes.js';
 import { billingRouter } from './modules/billing/billing.routes.js';
 import { catalogueRouter } from './modules/catalogue/catalogue.routes.js';
 import { membershipInvitationsRouter } from './modules/membership-invitations/membership-invitations.routes.js';
+import { paymentMethodsRouter } from './modules/payment-methods/payment-methods.routes.js';
 import { filesRouter } from './modules/files/files.routes.js';
 import { createInternalOperatorRouter, type InternalOperatorRouteOptions } from './modules/internal-operator/index.js';
 import { logger } from './shared/logger.js';
@@ -128,6 +129,7 @@ export function createApp(options: AppOptions = {}): Express {
   v1.use(billingRouter);
   v1.use(catalogueRouter);
   v1.use(filesRouter);
+  v1.use(paymentMethodsRouter);
   v1.use(membershipInvitationsRouter);
   app.use('/api/v1', v1);
 

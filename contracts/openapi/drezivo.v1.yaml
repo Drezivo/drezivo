@@ -768,6 +768,126 @@ components:
       required:
         - plan_code
       additionalProperties: false
+    PaymentMethodSettingsItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        rail:
+          type: string
+          enum:
+            - cash
+            - manual_qr
+            - manual_transfer
+        active:
+          type: boolean
+        storefront_enabled:
+          type: boolean
+        storefront_ready:
+          type: boolean
+        version:
+          type: integer
+          minimum: 1
+        destination:
+          type: object
+          properties:
+            account_name:
+              type:
+                - string
+                - "null"
+              maxLength: 160
+            account_number:
+              type:
+                - string
+                - "null"
+              maxLength: 120
+            instructions:
+              type:
+                - string
+                - "null"
+              maxLength: 500
+          required:
+            - account_name
+            - account_number
+            - instructions
+          additionalProperties: false
+        qr_file_id:
+          type:
+            - string
+            - "null"
+          format: uuid
+      required:
+        - id
+        - name
+        - rail
+        - active
+        - storefront_enabled
+        - storefront_ready
+        - version
+        - destination
+        - qr_file_id
+      additionalProperties: false
+    PaymentMethodSettingsList:
+      type: object
+      properties:
+        items:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/PaymentMethodSettingsItem'
+      required:
+        - items
+      additionalProperties: false
+    UpdatePaymentMethodSettingsRequest:
+      type: object
+      properties:
+        version:
+          type: integer
+          minimum: 1
+        active:
+          type: boolean
+        storefront_enabled:
+          type: boolean
+        destination:
+          type: object
+          properties:
+            account_name:
+              type:
+                - string
+                - "null"
+              maxLength: 160
+            account_number:
+              type:
+                - string
+                - "null"
+              maxLength: 120
+            instructions:
+              type:
+                - string
+                - "null"
+              maxLength: 500
+          required:
+            - account_name
+            - account_number
+            - instructions
+          additionalProperties: false
+        qr_file_id:
+          type:
+            - string
+            - "null"
+          format: uuid
+      required:
+        - version
+        - active
+        - storefront_enabled
+        - destination
+        - qr_file_id
+      additionalProperties: false
     VerifyOnboardingPaymentRequest:
       type: object
       properties:
@@ -1945,6 +2065,107 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         "429":
           description: Subscription plan change rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /payment-methods:
+    get:
+      tags:
+        - payments
+      summary: List tenant-owned payment methods and storefront readiness.
+      responses:
+        "200":
+          description: Payment methods available to the payment-management settings UI.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: '#/components/schemas/PaymentMethodSettingsList'
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Payment management permission is required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /payment-methods/{paymentMethodId}:
+    patch:
+      tags:
+        - payments
+      summary: Update staff availability and storefront intent for one payment method.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: paymentMethodId
+          in: path
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePaymentMethodSettingsRequest'
+      responses:
+        "200":
+          description: Payment method settings updated or replayed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: '#/components/schemas/PaymentMethodSettingsItem'
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Payment management permission is required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "404":
+          description: The payment method could not be found for this workspace.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "409":
+          description: The payment method changed or an identical request is in progress.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "422":
+          description: The payment method settings are invalid.
           content:
             application/json:
               schema:

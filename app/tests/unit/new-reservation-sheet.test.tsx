@@ -52,6 +52,7 @@ const ids = {
   variant: "00000000-0000-4000-8000-000000000102",
   asset: "00000000-0000-4000-8000-000000000103",
   paymentMethod: "00000000-0000-4000-8000-000000000104",
+  gcashPaymentMethod: "00000000-0000-4000-8000-000000000110",
   reservation: "00000000-0000-4000-8000-000000000105",
   branch: "00000000-0000-4000-8000-000000000106",
   storefront: "00000000-0000-4000-8000-000000000107",
@@ -300,6 +301,31 @@ describe("NewReservationSheet", () => {
       await screen.findByText("Reservation saved. Awaiting payment verification.")
     ).toBeVisible();
     expect(props.onReservationChanged).toHaveBeenCalledWith(ids.reservation);
+  });
+
+  it("lets staff choose any active tenant payment method returned by intake options", async () => {
+    api.getStaffReservationIntakeOptions.mockResolvedValue({
+      data: {
+        payment_methods: [
+          { id: ids.paymentMethod, name: "Cash", rail: "cash" },
+          { id: ids.gcashPaymentMethod, name: "GCash", rail: "manual_qr" },
+        ],
+        customers: [],
+      },
+      requestId: "req-intake",
+    });
+    renderSheet();
+    await fillDatesAndSelectProduct();
+
+    fireEvent.click(screen.getByRole("button", { name: /GCash/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
+
+    await waitFor(() =>
+      expect(api.createStaffReservation).toHaveBeenCalledWith(
+        expect.objectContaining({ payment_method_id: ids.gcashPaymentMethod }),
+        expect.any(String)
+      )
+    );
   });
 
   it("stops before creating a reservation when the availability preview has no free garment", async () => {

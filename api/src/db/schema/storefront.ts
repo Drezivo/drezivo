@@ -102,6 +102,7 @@ export const paymentMethod = pgTable(
     destinationSnapshot: jsonb('destination_snapshot').$type<Record<string, unknown>>().notNull(),
     qrFileId: uuid('qr_file_id').references(() => file.id),
     active: boolean('active').notNull().default(true),
+    storefrontEnabled: boolean('storefront_enabled').notNull().default(false),
     version: integer('version').notNull().default(1),
     ...timestamps,
   },

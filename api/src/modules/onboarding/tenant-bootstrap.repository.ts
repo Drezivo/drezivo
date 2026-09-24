@@ -191,6 +191,8 @@ export async function createTenantBootstrapGraph(
   const membershipId = randomUUID();
   const subscriptionId = randomUUID();
   const storefrontId = randomUUID();
+  const cashPaymentMethodId = randomUUID();
+  const gcashPaymentMethodId = randomUUID();
   const subscriptionEventId = randomUUID();
   const outboxId = randomUUID();
   const auditId = randomUUID();
@@ -248,6 +250,14 @@ export async function createTenantBootstrapGraph(
       [randomUUID(), tenantId, branchId, membershipId, JSON.stringify(ownerPermissionCodes)],
     );
     await seedDefaultCatalogueCategories(client, tenantId);
+    await client.query(
+      `INSERT INTO payment_method
+         (id, tenant_id, name, rail, destination_snapshot, qr_file_id, active, storefront_enabled, version)
+       VALUES
+         ($1, $3, 'Cash', 'cash', '{}'::jsonb, NULL, true, false, 1),
+         ($2, $3, 'GCash', 'manual_qr', '{}'::jsonb, NULL, true, false, 1)`,
+      [cashPaymentMethodId, gcashPaymentMethodId, tenantId],
+    );
     await client.query(
       `INSERT INTO storefront
          (id, tenant_id, branch_id, slug, status, branding, contact)

@@ -392,12 +392,13 @@ Table payment_method {
   destination_snapshot jsonb [not null]
   qr_file_id uuid
   active boolean [not null]
+  storefront_enabled boolean [not null]
   version integer [not null]
   created_at timestamptz [not null]
   indexes {
     (tenant_id, id) [pk]
   }
-  Note: 'V1. Sensitive destination metadata; owner edits only. New version rather than changing already shown instructions; rail cash/manual_qr/manual_transfer.'
+  Note: 'V1. Tenant-owned payment method. active controls staff availability; storefront_enabled is owner intent for public checkout. Cash is staff-only; online methods are public only when enabled and configuration-ready. New version rather than changing already shown instructions; rail cash/manual_qr/manual_transfer.'
 }
 
 Table reservation {

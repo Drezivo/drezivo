@@ -371,10 +371,30 @@ describe('CLT-002 catalogue integrity', async () => {
                  'Test privacy notice', now())`,
         [tenant.id, storefrontId],
       );
+      const qrFile = await client.query<{ id: string }>(
+        `INSERT INTO file_object
+           (tenant_id, purpose, storage_key, version_id, mime_type, byte_size, lifecycle_status,
+            is_private, upload_expires_at, frozen_at)
+         VALUES ($1, 'storefront_asset', $2, 'version-payment-qr', 'image/png', 512, 'accepted', true,
+                 now() + interval '10 minutes', now())
+         RETURNING id`,
+        [tenant.id, `tenant-files/${tenant.id}/payment-qr/source`],
+      );
+      const qrFileId = requireRow(qrFile.rows, 'payment QR file').id;
+      await client.query(
+        `INSERT INTO payment_method
+           (tenant_id, name, rail, destination_snapshot, qr_file_id, active, storefront_enabled, version)
+         VALUES
+           ($1, 'Cash', 'cash', '{}'::jsonb, NULL, true, false, 1),
+           ($1, 'Unconfigured QR', 'manual_qr', '{}'::jsonb, NULL, true, true, 1),
+           ($1, 'GCash', 'manual_qr', '{}'::jsonb, $2, true, true, 1)`,
+        [tenant.id, qrFileId],
+      );
     });
 
     const publicStorefront = await findPublishedStorefrontBySlug(slug);
     expect(publicStorefront?.products.map((product) => product.name)).toEqual(['Public Gown']);
+    expect(publicStorefront?.paymentMethods).toEqual([{ name: 'GCash', rail: 'manual_qr' }]);
   });
 
   it('keeps catalogue reads and writes isolated by forced RLS for drezivo_app', async () => {

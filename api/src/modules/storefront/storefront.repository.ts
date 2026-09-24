@@ -73,7 +73,25 @@ export async function findPublishedStorefrontBySlug(slug: string): Promise<Store
     }
 
     const paymentMethods = await client.query<PaymentMethodRowSource>(
-      `SELECT name, rail FROM payment_method WHERE tenant_id = $1 AND active = true ORDER BY name`,
+      `SELECT pm.name, pm.rail
+       FROM payment_method pm
+       LEFT JOIN file_object qr
+         ON qr.tenant_id = pm.tenant_id
+        AND qr.id = pm.qr_file_id
+       WHERE pm.tenant_id = $1
+         AND pm.active = true
+         AND pm.storefront_enabled = true
+         AND pm.rail <> 'cash'
+         AND (
+           (pm.rail = 'manual_qr'
+             AND qr.id IS NOT NULL
+             AND qr.lifecycle_status = 'accepted'
+             AND qr.purpose = 'storefront_asset')
+           OR
+           (pm.rail = 'manual_transfer'
+             AND NULLIF(btrim(pm.destination_snapshot ->> 'account_number'), '') IS NOT NULL)
+         )
+       ORDER BY lower(pm.name), pm.id`,
       [publicRow.tenantId],
     );
 
