@@ -52,6 +52,9 @@ import {
   paginationRequest,
   paymentReceiptSubmitRequest,
   paymentReceiptSubmitResponse,
+  paymentMethodSettingsItem,
+  paymentMethodSettingsList,
+  updatePaymentMethodSettingsRequest,
   publicStorefront,
   refundCreateRequest,
   refundCreateResponse,
@@ -118,6 +121,9 @@ registry.register('ResendMembershipInvitationRequest', resendMembershipInvitatio
 registry.register('CancelMembershipInvitationRequest', cancelMembershipInvitationRequest);
 registry.register('ClaimMembershipInvitationRequest', claimMembershipInvitationRequest);
 registry.register('ChangeSubscriptionPlanRequest', changeSubscriptionPlanRequest);
+registry.register('PaymentMethodSettingsItem', paymentMethodSettingsItem);
+registry.register('PaymentMethodSettingsList', paymentMethodSettingsList);
+registry.register('UpdatePaymentMethodSettingsRequest', updatePaymentMethodSettingsRequest);
 registry.register('VerifyOnboardingPaymentRequest', verifyOnboardingPaymentRequest);
 registry.register('CloseTenantRequest', closeTenantRequest);
 registry.register('TransferOwnershipRequest', transferOwnershipRequest);
@@ -378,6 +384,43 @@ registry.registerPath({
     403: jsonError('Only the active tenant owner can change the trial plan.'),
     409: jsonError('The trial state, idempotency key, or requested plan is not valid.'),
     429: jsonError('Subscription plan change rate limit exceeded.'),
+  },
+});
+
+// ---- payment method settings --------------------------------------------
+registry.registerPath({
+  method: 'get',
+  path: '/payment-methods',
+  tags: ['payments'],
+  summary: 'List tenant-owned payment methods and storefront readiness.',
+  responses: {
+    200: {
+      description: 'Payment methods available to the payment-management settings UI.',
+      content: { 'application/json': { schema: successEnvelope(paymentMethodSettingsList) } },
+    },
+    403: jsonError('Payment management permission is required.'),
+  },
+});
+
+registry.registerPath({
+  method: 'patch',
+  path: '/payment-methods/{paymentMethodId}',
+  tags: ['payments'],
+  summary: 'Update staff availability and storefront intent for one payment method.',
+  request: {
+    params: z.object({ paymentMethodId: z.string().uuid() }),
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: updatePaymentMethodSettingsRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Payment method settings updated or replayed.',
+      content: { 'application/json': { schema: successEnvelope(paymentMethodSettingsItem) } },
+    },
+    403: jsonError('Payment management permission is required.'),
+    404: jsonError('The payment method could not be found for this workspace.'),
+    409: jsonError('The payment method changed or an identical request is in progress.'),
+    422: jsonError('The payment method settings are invalid.'),
   },
 });
 

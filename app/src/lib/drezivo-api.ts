@@ -57,7 +57,10 @@ import {
   createOwnerOnboardingRequest,
   onboardingActorContext,
   organizationOnboarding,
+  paymentMethodSettingsItem,
+  paymentMethodSettingsList,
   tenantBootstrapResponse,
+  updatePaymentMethodSettingsRequest,
   updateCatalogueCategoryRequest,
   updateCatalogueCategoryStatusRequest,
   updateClothingProductRequest,
@@ -122,7 +125,10 @@ import {
   type CreateOwnerOnboardingRequest,
   type OnboardingActorContext,
   type OrganizationOnboarding,
+  type PaymentMethodSettingsItem,
+  type PaymentMethodSettingsList,
   type TenantBootstrapResponse,
+  type UpdatePaymentMethodSettingsRequest,
   type UpdateCatalogueCategoryRequest,
   type UpdateCatalogueCategoryStatusRequest,
   type UpdateClothingProductRequest,
@@ -228,6 +234,26 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "GET",
         path: "/api/v1/actor-context",
         responseSchema: apiEnvelope(actorContext),
+      }),
+    getPaymentMethodSettings: () =>
+      request<PaymentMethodSettingsList>({
+        getToken,
+        method: "GET",
+        path: "/api/v1/payment-methods",
+        responseSchema: apiEnvelope(paymentMethodSettingsList),
+      }),
+    updatePaymentMethodSettings: (
+      paymentMethodId: string,
+      input: UpdatePaymentMethodSettingsRequest,
+      idempotencyKey: string
+    ) =>
+      request<PaymentMethodSettingsItem>({
+        getToken,
+        body: updatePaymentMethodSettingsRequest.parse(input),
+        idempotencyKey,
+        method: "PATCH",
+        path: `/api/v1/payment-methods/${encodeURIComponent(paymentMethodId)}`,
+        responseSchema: apiEnvelope(paymentMethodSettingsItem),
       }),
     getReservations: (input: ReservationListQuery) => {
       const query = reservationListQuery.parse(input);
