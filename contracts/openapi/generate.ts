@@ -150,7 +150,7 @@ registry.registerPath({
       description: 'Existing unfinished onboarding resumed.',
       content: { 'application/json': { schema: successEnvelope(organizationOnboarding) } },
     },
-    409: jsonError('An owned tenant, unfinished onboarding, or unavailable slug prevents creation.'),
+    409: jsonError('An owned tenant or unfinished onboarding prevents creation.'),
     429: jsonError('Owner onboarding create rate limit exceeded.'),
   },
 });
@@ -192,7 +192,7 @@ registry.registerPath({
       content: { 'application/json': { schema: successEnvelope(tenantBootstrapResponse) } },
     },
     404: jsonError('The onboarding was not found for this account.'),
-    409: jsonError('The onboarding is not eligible for bootstrap or the slug is unavailable.'),
+    409: jsonError('The onboarding is not eligible for bootstrap or a unique storefront URL could not be created.'),
     429: jsonError('Owner tenant bootstrap rate limit exceeded.'),
   },
 });

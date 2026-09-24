@@ -102,7 +102,6 @@ export interface BootstrapGraphInput {
   onboardingId: string;
   clerkOrgId: string;
   organizationName: string;
-  requestedSlug: string | null;
   planCode: 'starter' | 'professional' | 'business';
   requestId: string;
 }
@@ -167,7 +166,7 @@ export async function createTenantBootstrapGraph(
   plan: PlanRow,
 ): Promise<BootstrapGraphResult> {
   const { client } = context;
-  const slug = await chooseBootstrapSlug(client, input.organizationName, input.requestedSlug, input.onboardingId);
+  const slug = await chooseBootstrapSlug(client, input.organizationName, input.onboardingId);
   if (!slug) return { kind: 'slug_conflict' };
 
   // Serialize the provider-organization uniqueness check across accounts as well as within one
@@ -410,13 +409,14 @@ async function readBootstrapProjection(
 async function chooseBootstrapSlug(
   client: PoolClient,
   organizationName: string,
-  requestedSlug: string | null,
   onboardingId: string,
 ): Promise<string | null> {
-  const base = requestedSlug ?? slugify(organizationName);
-  const candidates = requestedSlug
-    ? [requestedSlug]
-    : [base, withStableSuffix(base, hashSuffix(onboardingId, 12)), withStableSuffix(base, hashSuffix(onboardingId, 32))];
+  const base = slugify(organizationName);
+  const candidates = [
+    base,
+    withStableSuffix(base, hashSuffix(onboardingId, 12)),
+    withStableSuffix(base, hashSuffix(onboardingId, 32)),
+  ];
 
   for (const candidate of candidates) {
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [candidate]);
@@ -425,7 +425,6 @@ async function chooseBootstrapSlug(
       [candidate],
     );
     if (conflict.rows[0]?.available) return candidate;
-    if (requestedSlug) return null;
   }
   return null;
 }

@@ -116,7 +116,7 @@ describe('Clerk server adapter', () => {
     });
   });
 
-  it('maps a provider slug conflict to a safe state conflict', async () => {
+  it('maps a provider conflict to a safe state conflict', async () => {
     const { provider, organizations } = createProvider();
     organizations.createOrganization.mockRejectedValue({ status: 409 });
     const adapter = createClerkServerAdapter(provider);
@@ -125,9 +125,29 @@ describe('Clerk server adapter', () => {
       adapter.createOrganization({
         name: 'Drezivo Studio',
         createdByUserId: 'user_123',
-        slug: 'drezivo-studio',
       }),
     ).rejects.toBeInstanceOf(StateConflictError);
+  });
+
+  it('does not misclassify a disabled provider slug feature as a duplicate slug', async () => {
+    const { provider, organizations } = createProvider();
+    organizations.createOrganization.mockRejectedValue({
+      status: 403,
+      errors: [
+        {
+          code: 'organization_slugs_disabled',
+          message: 'This instance does not have slugs enabled for organizations.',
+        },
+      ],
+    });
+    const adapter = createClerkServerAdapter(provider);
+
+    await expect(
+      adapter.createOrganization({
+        name: 'Drezivo Studio',
+        createdByUserId: 'user_123',
+      }),
+    ).rejects.toBeInstanceOf(DependencyUnavailableError);
   });
 
   it('sends the typed private onboarding marker without exposing it as a public field', async () => {

@@ -41,6 +41,12 @@ describe('tenancy onboarding contracts', () => {
       }).success,
     ).toBe(false);
     expect(
+      createOwnerOnboardingRequest.safeParse({
+        organization_name: 'Drezivo Formalwear',
+        slug: 'drezivo-formalwear',
+      }).success,
+    ).toBe(false);
+    expect(
       createMembershipInvitationRequest.safeParse({
         email: 'frontdesk@example.test',
         role: 'owner',
@@ -66,7 +72,6 @@ describe('tenancy onboarding contracts', () => {
         id: '9fbd891f-cab6-48a9-a965-e84deea05df6',
         clerk_org_id: 'org_123',
         organization_name: 'Drezivo Formalwear',
-        requested_slug: null,
         status: 'incomplete',
         selected_plan_code: null,
         is_trial_eligible: true,

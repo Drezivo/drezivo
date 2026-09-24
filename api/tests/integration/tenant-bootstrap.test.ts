@@ -178,14 +178,14 @@ describe('TBF-030 tenant bootstrap', async () => {
     expect(count).toBe(0);
   });
 
-  it('preserves requested slugs and deterministically suffixes an omitted slug collision', async () => {
+  it('generates a storefront slug and deterministically suffixes a same-name collision', async () => {
     const firstPrincipal = 'user_tbf030_slug_first';
     const firstAccount = await ensureAccount(firstPrincipal);
     const firstOnboarding = await createOrResumeOnboarding(
       firstAccount.id,
       'org_tbf030_slug_first',
       firstPrincipal,
-      { organizationName: 'Shared Studio', requestedSlug: 'shared-studio' },
+      { organizationName: 'Shared Studio' },
     );
     if (firstOnboarding.kind !== 'created') throw new Error('expected first onboarding creation');
     await chooseOnboardingPlan(firstOnboarding.onboarding.id, 'starter', firstPrincipal);

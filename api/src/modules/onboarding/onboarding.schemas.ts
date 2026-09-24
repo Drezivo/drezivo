@@ -14,12 +14,9 @@ export {
   chooseOnboardingPlanRequest,
   createOwnerOnboardingRequest,
 };
-type ContractCreateOwnerOnboardingInput = z.infer<typeof createOwnerOnboardingRequest>;
 type ContractAbandonOwnerOnboardingInput = z.infer<typeof abandonOwnerOnboardingRequest>;
 
-// The checked-in contracts source includes these fields. The local package declaration can lag
-// until the contracts build is published, so keep the boundary type compatible with both forms.
-export type CreateOwnerOnboardingInput = ContractCreateOwnerOnboardingInput & { slug?: string };
+export type CreateOwnerOnboardingInput = z.infer<typeof createOwnerOnboardingRequest>;
 export type AbandonOwnerOnboardingInput = Omit<ContractAbandonOwnerOnboardingInput, 'reason'> & {
   reason_code: 'not_now' | 'wrong_details' | 'payment_concern' | 'other';
 };

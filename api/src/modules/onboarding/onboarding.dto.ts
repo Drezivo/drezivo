@@ -5,7 +5,6 @@ export interface PublicOnboarding {
   id: string;
   clerk_org_id: string;
   organization_name: string;
-  requested_slug: string | null;
   status: OwnerOnboardingRecord['status'];
   selected_plan_code: OwnerOnboardingRecord['selectedPlanCode'];
   is_trial_eligible: boolean;
@@ -18,7 +17,6 @@ export function toPublicOnboarding(record: OwnerOnboardingRecord): PublicOnboard
     id: record.id,
     clerk_org_id: record.clerkOrgId,
     organization_name: record.organizationName,
-    requested_slug: record.requestedSlug,
     status: record.status,
     selected_plan_code: record.selectedPlanCode,
     is_trial_eligible: record.isTrialEligible,

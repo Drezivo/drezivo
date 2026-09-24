@@ -58,7 +58,6 @@ describe('onboarding plan-selection HTTP boundary', () => {
           id: onboardingId,
           clerk_org_id: 'org_plan',
           organization_name: 'Luna Rentals',
-          requested_slug: 'luna-rentals',
           status: 'incomplete',
           selected_plan_code: 'professional',
           is_trial_eligible: true,
