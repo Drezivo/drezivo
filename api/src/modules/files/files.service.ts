@@ -262,19 +262,27 @@ function assertFileWriteContext(input: FileContext): void {
 }
 
 function assertSupportedCatalogueUpload(request: UploadAuthorizationRequest): void {
-  if (request.purpose !== 'catalogue_image' && request.purpose !== 'measurement_guide') {
-    throw new ValidationError('This upload purpose is not available through the clothing file flow.');
+  if (
+    request.purpose !== 'catalogue_image' &&
+    request.purpose !== 'measurement_guide' &&
+    request.purpose !== 'storefront_asset'
+  ) {
+    throw new ValidationError('This upload purpose is not available through the image upload flow.');
   }
   if (!CATALOGUE_IMAGE_MIME_TYPES.has(request.content_type)) {
-    throw new ValidationError('Clothing files must be JPEG, PNG, or WebP images.');
+    throw new ValidationError('Images must be JPEG, PNG, or WebP.');
   }
   if (request.byte_size > CATALOGUE_IMAGE_MAX_BYTES) {
-    throw new ValidationError('Clothing images must be 10 MB or smaller.');
+    throw new ValidationError('Images must be 10 MB or smaller.');
   }
 }
 
 function assertCatalogueFilePurpose(row: FileObjectRow): void {
-  if (row.purpose !== 'catalogue_image' && row.purpose !== 'measurement_guide') {
+  if (
+    row.purpose !== 'catalogue_image' &&
+    row.purpose !== 'measurement_guide' &&
+    row.purpose !== 'storefront_asset'
+  ) {
     throw new NotFoundError('The uploaded file could not be found.');
   }
 }

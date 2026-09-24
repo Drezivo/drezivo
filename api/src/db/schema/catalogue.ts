@@ -194,6 +194,7 @@ export const physicalAsset = pgTable(
       .references(() => productVariant.id),
     assetCode: text('asset_code').notNull(),
     lifecycleStatus: assetLifecycleEnum('lifecycle_status').notNull().default('active'),
+    retiredByProductArchive: boolean('retired_by_product_archive').notNull().default(false),
     readiness: assetReadinessEnum('readiness').notNull().default('ready'),
     custodyKind: assetCustodyKindEnum('custody_kind').notNull().default('at_branch'),
     conditionNote: text('condition_note'),

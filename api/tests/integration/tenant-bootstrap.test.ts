@@ -145,14 +145,16 @@ describe('TBF-030 tenant bootstrap', async () => {
       const memberships = await client.query<{ count: number }>('SELECT count(*)::int AS count FROM membership');
       const subscriptions = await client.query<{ count: number }>('SELECT count(*)::int AS count FROM subscription');
       const categories = await client.query<{ count: number }>('SELECT count(*)::int AS count FROM category');
+      const paymentMethods = await client.query<{ count: number }>('SELECT count(*)::int AS count FROM payment_method');
       return {
         tenants: tenant.rows[0]?.count ?? -1,
         memberships: memberships.rows[0]?.count ?? -1,
         subscriptions: subscriptions.rows[0]?.count ?? -1,
         categories: categories.rows[0]?.count ?? -1,
+        paymentMethods: paymentMethods.rows[0]?.count ?? -1,
       };
     });
-    expect(counts).toEqual({ tenants: 1, memberships: 1, subscriptions: 1, categories: 6 });
+    expect(counts).toEqual({ tenants: 1, memberships: 1, subscriptions: 1, categories: 6, paymentMethods: 2 });
   });
 
   it('rejects a mismatched organization without creating tenant effects', async () => {

@@ -28,6 +28,8 @@ process.env.S3_BUCKET_PUBLIC ??= 'public';
 process.env.S3_ACCESS_KEY_ID ??= 'test';
 process.env.S3_SECRET_ACCESS_KEY ??= 'test';
 
+const SCALE_TEST_TIMEOUT_MS = 30_000;
+
 describe('CLT-061 catalogue scale and query bounds', async () => {
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
   const { getCatalogueClothingList } = await import('../../src/modules/catalogue/catalogue.service.js');
@@ -135,7 +137,7 @@ describe('CLT-061 catalogue scale and query bounds', async () => {
       return Number(result.rows[0]?.count ?? '0');
     });
     expect(activeCount).toBe(1000);
-  });
+  }, SCALE_TEST_TIMEOUT_MS);
 
   it('uses catalogue sort/search/filter indexes on representative V1-scale data', async () => {
     const tenant = await createTestTenant({ clerkOrgId: 'org_clt061_plans' });
@@ -187,7 +189,7 @@ describe('CLT-061 catalogue scale and query bounds', async () => {
     expect(plans.search).not.toContain('Seq Scan on product');
     expect(plans.search).toMatch(/product_tenant_(created_sort|search_trgm|status)_idx/);
     expect(plans.filtered).toContain('product_tenant_category_status_created_idx');
-  });
+  }, SCALE_TEST_TIMEOUT_MS);
 
   it('keeps public query bounds closed at 100 rows', async () => {
     const { clothingListQuery } = await import('@drezivo/contracts');

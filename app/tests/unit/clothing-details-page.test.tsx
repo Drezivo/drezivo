@@ -197,6 +197,20 @@ describe("ClothingDetailsPage", () => {
       "https://images.example.test/secondary.webp"
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Open Emerald Evening Gown image preview" }));
+    expect(screen.getByRole("dialog", { name: "Image preview" })).toBeVisible();
+    expect(screen.getByRole("img", { name: "Emerald Evening Gown catalogue photo 2" })).toHaveAttribute(
+      "src",
+      "https://images.example.test/secondary.webp"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Previous image" }));
+    expect(screen.getByRole("img", { name: "Emerald Evening Gown catalogue photo 1" })).toHaveAttribute(
+      "src",
+      "https://images.example.test/cover.webp"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Close image preview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show catalogue photo 2" }));
+
     fireEvent.error(screen.getByRole("img", { name: "Emerald Evening Gown catalogue photo" }));
     expect(screen.getByRole("img", { name: "Emerald Evening Gown catalogue photo" })).toHaveAttribute(
       "src",

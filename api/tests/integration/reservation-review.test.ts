@@ -702,7 +702,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     useClerk(seed);
     const concealed = await request(createApp())
       .post(`/api/v1/reservations/${foreignHeld.id}/complete-booking`)
-      .set('Idempotency-Key', 'test-test-test-01')
+      .set('Idempotency-Key', 'route-rsv032-foreign') // gitleaks:allow
       .send({
         version: 1,
         terms_accepted: true,
@@ -713,7 +713,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     useClerk(seed);
     const injected = await request(createApp())
       .post(`/api/v1/reservations/${held.id}/complete-booking`)
-      .set('Idempotency-Key', 'test-test-test-02')
+      .set('Idempotency-Key', 'route-rsv032-injected') // gitleaks:allow
       .send({
         version: 1,
         terms_accepted: true,
