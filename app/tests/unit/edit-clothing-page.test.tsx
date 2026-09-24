@@ -24,7 +24,6 @@ const api = vi.hoisted(() => ({
   replaceClothingImages: vi.fn(),
   updateClothingProduct: vi.fn(),
   updateClothingVariant: vi.fn(),
-  updateClothingVariantLifecycle: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({
@@ -192,16 +191,6 @@ describe("EditClothingPage", () => {
         updated_at: "2026-09-21T09:00:00.000Z",
       },
       requestId: "req-product-update",
-    });
-    api.updateClothingVariantLifecycle.mockResolvedValue({
-      data: {
-        variant_id: variantId,
-        product_id: productId,
-        status: "draft",
-        outcome: "updated",
-        updated_at: "2026-09-21T09:02:00.000Z",
-      },
-      requestId: "req-variant-lifecycle",
     });
     api.removeClothingVariant.mockResolvedValue({
       data: {
@@ -415,51 +404,36 @@ describe("EditClothingPage", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Changes saved");
   });
 
-  it("publishes a draft variant from the edit page with its own concurrency token", async () => {
-    api.getCatalogueClothingDetail
-      .mockResolvedValueOnce({
-        data: {
-          ...detail,
-          variants: [{ ...detail.variants[0]!, status: "draft" as const }],
-        },
-        requestId: "req-draft-variant",
-      })
-      .mockResolvedValue({ data: detail, requestId: "req-after-publish" });
-    api.updateClothingVariantLifecycle.mockResolvedValueOnce({
+  it("does not expose draft/publish/archive lifecycle controls for variants", async () => {
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
       data: {
-        variant_id: variantId,
-        product_id: productId,
-        status: "active",
-        outcome: "updated",
-        updated_at: "2026-09-21T09:02:00.000Z",
+        ...detail,
+        variants: [{ ...detail.variants[0]!, status: "draft" as const }],
       },
-      requestId: "req-publish-variant",
+      requestId: "req-draft-variant",
     });
 
     render(<EditClothingPage productId={productId} />);
     await screen.findByRole("heading", { name: "Edit Clothing" });
-    fireEvent.click(screen.getByRole("button", { name: "Publish GWN-023-M" }));
 
-    await waitFor(() => expect(api.updateClothingVariantLifecycle).toHaveBeenCalledTimes(1));
-    expect(api.updateClothingVariantLifecycle).toHaveBeenCalledWith(
-      productId,
-      variantId,
-      { expected_updated_at: variantUpdatedAt, status: "active" },
-      expect.any(String)
-    );
-    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
+    expect(screen.getByLabelText("GWN-023-M Size Label")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Remove GWN-023-M" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Publish GWN-023-M" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Archive GWN-023-M" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Restore GWN-023-M" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Draft")).not.toBeInTheDocument();
   });
 
-  it("omits active-to-draft control while keeping archive and safe removal", async () => {
+  it("keeps safe removal as the only variant-level destructive action", async () => {
     render(<EditClothingPage productId={productId} />);
     await screen.findByRole("heading", { name: "Edit Clothing" });
 
-    expect(screen.queryByRole("button", { name: "Set GWN-023-M to draft" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Archive GWN-023-M" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Archive GWN-023-M" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Remove GWN-023-M" }));
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/never-used draft variant/i)).toBeVisible();
+    expect(within(dialog).getByText(/removes the variant from normal clothing management/i)).toBeVisible();
+    expect(within(dialog).getByText(/keeps that historical data intact/i)).toBeVisible();
     fireEvent.click(within(dialog).getByRole("button", { name: "Remove Variant" }));
 
     await waitFor(() => expect(api.removeClothingVariant).toHaveBeenCalledTimes(1));
@@ -501,12 +475,12 @@ describe("EditClothingPage", () => {
     await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
     expect(screen.queryByLabelText("GWN-023-M Size Label")).not.toBeInTheDocument();
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "Variant archived because it has physical pieces or reservation history."
+      "Variant removed. Existing physical-piece and rental history was preserved."
     );
-    expect(screen.getByText("Archived variants (1)")).toBeVisible();
+    expect(screen.queryByText(/Archived variants/i)).not.toBeInTheDocument();
   });
 
-  it("shows archived variants as restorable and blocks lifecycle actions while edits are dirty", async () => {
+  it("keeps internally archived variants out of normal O/S variant management", async () => {
     api.getCatalogueClothingDetail.mockResolvedValueOnce({
       data: {
         ...detail,
@@ -517,14 +491,11 @@ describe("EditClothingPage", () => {
 
     render(<EditClothingPage productId={productId} />);
     await screen.findByRole("heading", { name: "Edit Clothing" });
-    fireEvent.click(screen.getByText("Archived variants (1)"));
-    expect(screen.getByRole("button", { name: "Restore GWN-023-M" })).toBeVisible();
 
-    fireEvent.change(screen.getByLabelText("Clothing Name"), {
-      target: { value: "Unsaved lifecycle blocker" },
-    });
-    expect(screen.getByRole("button", { name: "Restore GWN-023-M" })).toBeDisabled();
-    expect(screen.getByText("Save current edits before changing lifecycle.")).toBeVisible();
+    expect(screen.queryByLabelText("GWN-023-M Size Label")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Restore GWN-023-M" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Archived variants/i)).not.toBeInTheDocument();
+    expect(screen.getByText("No variants remain. Add a variant to continue setting up this clothing.")).toBeVisible();
   });
 
   it("archives a clean edit page with the loaded product concurrency token", async () => {

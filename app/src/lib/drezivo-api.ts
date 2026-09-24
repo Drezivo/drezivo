@@ -42,7 +42,6 @@ import {
   staffReservationCreateResponse,
   staffReservationIntakeQuery,
   staffReservationIntakeResponse,
-  updateClothingVariantLifecycleRequest,
   updateClothingVariantLifecycleResponse,
   createClothingResponse,
   removeCatalogueCategoryResponse,
@@ -109,7 +108,6 @@ import {
   type StaffReservationCreateResponse,
   type StaffReservationIntakeQuery,
   type StaffReservationIntakeResponse,
-  type UpdateClothingVariantLifecycleRequest,
   type UpdateClothingVariantLifecycleResponse,
   type CreateClothingResponse,
   type RemoveCatalogueCategoryResponse,
@@ -537,20 +535,6 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "POST",
         path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/variants`,
         responseSchema: apiEnvelope(createClothingVariantResponse),
-      }),
-    updateClothingVariantLifecycle: (
-      productId: string,
-      variantId: string,
-      input: UpdateClothingVariantLifecycleRequest,
-      idempotencyKey: string
-    ) =>
-      request<UpdateClothingVariantLifecycleResponse>({
-        getToken,
-        body: updateClothingVariantLifecycleRequest.parse(input),
-        idempotencyKey,
-        method: "PATCH",
-        path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}/lifecycle`,
-        responseSchema: apiEnvelope(updateClothingVariantLifecycleResponse),
       }),
     removeClothingVariant: (
       productId: string,

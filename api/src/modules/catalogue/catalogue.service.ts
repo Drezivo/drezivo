@@ -1125,7 +1125,7 @@ export async function updateClothingVariantLifecycle(input: CommandContext & {
       assertFreshCatalogueTimestamp(current.updated_at, request.expected_updated_at, 'This clothing variant changed before the lifecycle update. Refresh and try again.');
       if (request.status === 'active') {
         const assets = await countActivePhysicalAssetsForVariant(client, input.tenantId, input.variantId);
-        if (assets < 1) throw new StateConflictError('Add an active physical piece before publishing this variant.');
+        if (assets < 1) throw new StateConflictError('This variant needs an active physical piece before it can be used.');
       }
       if (current.status === 'active' && request.status !== 'active' && product.status === 'active') {
         const activeVariants = await countActiveVariantsForProduct(client, input.tenantId, input.productId);
