@@ -89,7 +89,7 @@ export async function startOwnerOnboarding(
       intentKey: input.idempotencyKey,
       payloadHash,
       organizationName: input.request.organization_name,
-      requestedSlug: input.request.slug ?? null,
+      requestedSlug: null,
     }),
   );
 
@@ -200,8 +200,7 @@ export async function startOwnerOnboarding(
     organization = await createClerkServerAdapter().createOrganization({
       name: input.request.organization_name,
       createdByUserId: input.principalId,
-      slug: input.request.slug,
-        onboardingMarker: { accountId: account.id, attemptId },
+      onboardingMarker: { accountId: account.id, attemptId },
     });
   } catch (error) {
     const appError = isAppError(error)
@@ -228,7 +227,7 @@ export async function startOwnerOnboarding(
       clerkOrgId: organization.id,
       principalId: input.principalId,
       organizationName: input.request.organization_name,
-      requestedSlug: input.request.slug ?? null,
+      requestedSlug: null,
     });
     if (result.kind === 'created' || result.kind === 'existing') {
       await transaction.markAttemptLocalPersisted(attemptId);

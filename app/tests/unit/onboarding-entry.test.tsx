@@ -66,7 +66,7 @@ describe("OnboardingEntry", () => {
 
     expect(await screen.findByRole("heading", { name: "Set up your business" })).toBeVisible();
     expect(screen.getByLabelText("Business name")).toBeVisible();
-    expect(screen.getByLabelText(/Slug/)).toBeVisible();
+    expect(screen.queryByLabelText(/Slug/)).not.toBeInTheDocument();
   });
 
   it("creates an organization with only the allowed fields and activates the returned organization", async () => {
@@ -75,7 +75,6 @@ describe("OnboardingEntry", () => {
         id: "onboarding_123",
         clerk_org_id: "org_123",
         organization_name: "Luna Rentals",
-        requested_slug: "luna-rentals",
         status: "incomplete",
         selected_plan_code: null,
         is_trial_eligible: true,
@@ -90,14 +89,11 @@ describe("OnboardingEntry", () => {
     fireEvent.change(screen.getByLabelText("Business name"), {
       target: { value: " Luna Rentals " },
     });
-    fireEvent.change(screen.getByLabelText(/Slug/), {
-      target: { value: "luna-rentals" },
-    });
     fireEvent.submit(screen.getByRole("button", { name: "Continue" }).closest("form")!);
 
     await waitFor(() => expect(api.createOnboarding).toHaveBeenCalledTimes(1));
     expect(api.createOnboarding).toHaveBeenCalledWith(
-      { organization_name: "Luna Rentals", slug: "luna-rentals" },
+      { organization_name: "Luna Rentals" },
       expect.any(String)
     );
     expect(clerk.setActive).toHaveBeenCalledWith({ organization: "org_123" });
@@ -157,7 +153,6 @@ describe("OnboardingEntry", () => {
           id: "onboarding_123",
           clerk_org_id: "org_123",
           organization_name: "Luna Rentals",
-          requested_slug: null,
           status: "incomplete",
           selected_plan_code: null,
           is_trial_eligible: true,
@@ -187,7 +182,6 @@ describe("OnboardingEntry", () => {
         id: "onboarding_123",
         clerk_org_id: "org_123",
         organization_name: "Luna Rentals",
-        requested_slug: null,
         status: "incomplete",
         selected_plan_code: null,
         is_trial_eligible: true,
@@ -243,7 +237,6 @@ describe("OnboardingEntry", () => {
       id: "onboarding_exit",
       clerk_org_id: "org_exit",
       organization_name: "Exit Rentals",
-      requested_slug: null,
       status: "incomplete",
       selected_plan_code: null,
       is_trial_eligible: true,

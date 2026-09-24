@@ -4,11 +4,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardShell } from "@/components/shell/dashboard-shell";
 
 const clerk = vi.hoisted(() => ({
+  getToken: vi.fn(),
+  useAuth: vi.fn(),
   useClerk: vi.fn(),
+  useUser: vi.fn(),
+}));
+
+const api = vi.hoisted(() => ({
+  getActorContext: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({
+  useAuth: clerk.useAuth,
   useClerk: clerk.useClerk,
+  useUser: clerk.useUser,
+}));
+
+vi.mock("@/lib/drezivo-api", () => ({
+  createDrezivoApiClient: () => api,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -23,7 +36,25 @@ describe("DashboardShell", () => {
   }
 
   beforeEach(() => {
+    clerk.getToken.mockResolvedValue("clerk-token");
+    clerk.useAuth.mockReturnValue({ getToken: clerk.getToken });
     clerk.useClerk.mockReturnValue({ signOut: vi.fn() });
+    clerk.useUser.mockReturnValue({
+      user: {
+        firstName: "Ryanny",
+        fullName: "Ryanny Romero",
+        imageUrl: "https://img.example.test/user.png",
+        lastName: "Romero",
+        primaryEmailAddress: { emailAddress: "ryanny@example.test" },
+      },
+    });
+    api.getActorContext.mockResolvedValue({
+      data: {
+        tenant: { name: "Romero Formalwear" },
+        membership: { role: "owner" },
+      },
+      requestId: "req-actor",
+    });
     window.localStorage.clear();
     delete document.documentElement.dataset["dashboardTheme"];
   });
@@ -38,7 +69,7 @@ describe("DashboardShell", () => {
     const navigation = screen.getByRole("navigation", { name: "Primary" });
     expect(navigation).toHaveTextContent("Dashboard");
     expect(navigation).toHaveTextContent("Reservations");
-    expect(navigation).toHaveTextContent("Clothing / Inventory");
+    expect(navigation).toHaveTextContent("Clothing");
     expect(navigation).toHaveTextContent("Storefront");
     expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
   });
@@ -85,8 +116,20 @@ describe("DashboardShell", () => {
     expect(await screen.findByText("New reservation request")).toBeVisible();
 
     fireEvent.keyDown(document.body, { key: "Escape" });
-    openMenu(screen.getByRole("button", { name: /Luna's Gown Rentals/ }));
+    openMenu(screen.getByRole("button", { name: /Ryanny Romero/ }));
     expect(await screen.findByText("My account")).toBeVisible();
+  });
+
+  it("shows the active business, signed-in user, and resolved role", async () => {
+    render(
+      <DashboardShell>
+        <div>Shell content</div>
+      </DashboardShell>
+    );
+
+    expect(await screen.findByText("Romero Formalwear")).toBeVisible();
+    expect(screen.getByText("Ryanny Romero")).toBeVisible();
+    expect(screen.getAllByText("Business Owner")).toHaveLength(2);
   });
 
   it("opens the navigation as a Sheet on mobile", async () => {

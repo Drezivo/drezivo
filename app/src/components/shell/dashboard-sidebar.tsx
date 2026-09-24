@@ -18,7 +18,8 @@ import {
   UsersRound,
 } from "lucide-react";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import type { DashboardIdentity } from "@/components/shell/dashboard-shell";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,7 +53,16 @@ function DrezivoMark() {
   );
 }
 
-export function DashboardSidebar() {
+function initials(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "W";
+}
+
+export function DashboardSidebar({ identity }: { identity: DashboardIdentity }) {
   const pathname = usePathname();
   const { state, isMobile } = useSidebar();
   const collapsed = state === "collapsed" && !isMobile;
@@ -79,15 +89,14 @@ export function DashboardSidebar() {
                 className="flex w-full items-center gap-3 rounded-lg py-2 text-left outline-none transition-colors hover:bg-dashboard-active focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
               >
                 <Avatar className="h-10 w-10 border border-dashboard-border">
-                  <AvatarImage src="/auth-side.png" alt="" />
-                  <AvatarFallback>LG</AvatarFallback>
+                  <AvatarFallback>{initials(identity.businessName)}</AvatarFallback>
                 </Avatar>
                 {!collapsed && (
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold text-dashboard-navy">
-                      Luna&apos;s Gown Rentals
+                      {identity.businessName}
                     </span>
-                    <span className="block text-xs text-dashboard-muted">Business Owner</span>
+                    <span className="block text-xs text-dashboard-muted">{identity.roleLabel}</span>
                   </span>
                 )}
                 {!collapsed && <ChevronDown className="h-4 w-4 shrink-0 text-dashboard-navy" />}

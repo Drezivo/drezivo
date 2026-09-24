@@ -123,11 +123,11 @@ export function OnboardingEntry() {
               />
             </div>
           }
-          description={`${onboarding.requested_slug ? `Requested slug: ${onboarding.requested_slug}. ` : ""}${
+          description={
             onboarding.selected_plan_code
               ? "Your organization is saved and ready for the next setup step."
               : "Your organization is saved. Plan selection will be the next step."
-          }`}
+          }
           title={`Continue setting up ${onboarding.organization_name}`}
         />
       </OnboardingFrame>
@@ -185,7 +185,6 @@ function OrganizationSetup({
   const api = createDrezivoApiClient(getToken);
   const { isSubmitting, resetIntent, submit } = useSubmitGuard();
   const [organizationName, setOrganizationName] = useState("");
-  const [slug, setSlug] = useState("");
   const [error, setError] = useState<DrezivoApiError | null>(null);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -194,7 +193,6 @@ function OrganizationSetup({
 
     const input = {
       organization_name: organizationName.trim(),
-      ...(slug.trim() ? { slug: slug.trim() } : {}),
     };
     const parsed = createOwnerOnboardingRequest.safeParse(input);
     if (!parsed.success) {
@@ -272,28 +270,6 @@ function OrganizationSetup({
             className={inputClass}
             placeholder="Luna's Gown Rentals"
           />
-        </div>
-        <div>
-          <label htmlFor="organization-slug" className="text-sm font-semibold text-auth-text">
-            Slug <span className="font-normal text-auth-dark-muted">(optional)</span>
-          </label>
-          <input
-            id="organization-slug"
-            name="slug"
-            value={slug}
-            onChange={(event) => {
-              resetIntent();
-              setSlug(event.target.value);
-            }}
-            autoComplete="off"
-            maxLength={100}
-            pattern="[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
-            className={inputClass}
-            placeholder="lunas-gown-rentals"
-          />
-          <p className="mt-2 text-xs text-auth-dark-muted">
-            Lowercase letters, numbers, and hyphens only.
-          </p>
         </div>
         <button type="submit" disabled={isSubmitting} className={primaryButtonClass}>
           {isSubmitting ? "Creating workspace…" : "Continue"}

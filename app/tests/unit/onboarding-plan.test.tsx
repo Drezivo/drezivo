@@ -48,7 +48,6 @@ const onboarding: OrganizationOnboarding = organizationOnboarding.parse({
   id: "9fbd891f-cab6-48a9-a965-e84deea05df6",
   clerk_org_id: "org_123",
   organization_name: "Luna Rentals",
-  requested_slug: "luna-rentals",
   status: "incomplete",
   selected_plan_code: null,
   is_trial_eligible: true,

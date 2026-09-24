@@ -125,7 +125,6 @@ const onboardingMarker = z.object({
 const organizationInput = z.object({
   name: organizationName,
   createdByUserId: providerId,
-  slug: z.string().trim().min(1).max(200).optional(),
   onboardingMarker: onboardingMarker.optional(),
 });
 const invitationInput = z.object({
@@ -342,11 +341,8 @@ function isProviderConflict(error: unknown): boolean {
     Array.isArray(record.errors) &&
     record.errors.some((entry) => {
       if (!entry || typeof entry !== 'object') return false;
-      const item = entry as { code?: unknown; message?: unknown };
-      return (
-        item.code === 'form_param_taken' ||
-        (typeof item.message === 'string' && /slug/i.test(item.message))
-      );
+      const item = entry as { code?: unknown };
+      return item.code === 'form_param_taken';
     })
   );
 }
@@ -379,9 +375,6 @@ export function createClerkServerAdapter(
           name: parsed.name,
           createdBy: parsed.createdByUserId,
         };
-        if (parsed.slug !== undefined) {
-          params.slug = parsed.slug;
-        }
         if (parsed.onboardingMarker !== undefined) {
           params.privateMetadata = {
             drezivo_onboarding: {
@@ -392,7 +385,7 @@ export function createClerkServerAdapter(
           };
         }
         return mapOrganization(await client.organizations.createOrganization(params));
-      }, 'That organization slug is unavailable. Choose another.');
+      }, 'This organization could not be created because the identity provider reported a conflict.');
     },
 
     async getOrganization(organizationId) {

@@ -86,12 +86,11 @@ export async function runTenantBootstrap(input: RunBootstrapInput): Promise<Boot
       onboardingId: input.onboardingId,
       clerkOrgId: input.clerkOrgId,
       organizationName: onboarding.organization_name,
-      requestedSlug: onboarding.requested_slug,
       planCode: plan.code,
       requestId: input.requestId,
     }, plan);
     if (graph.kind === 'slug_conflict') {
-      return rejectAndFinalize(context, account.id, input, claim.recordId, 409, 'STATE_CONFLICT', 'The requested organization slug is unavailable.', 'slug_conflict');
+      return rejectAndFinalize(context, account.id, input, claim.recordId, 409, 'STATE_CONFLICT', 'We could not create a unique storefront URL. Please try again.', 'slug_conflict');
     }
     if (graph.kind === 'state_conflict') {
       return rejectAndFinalize(context, account.id, input, claim.recordId, 409, 'STATE_CONFLICT', 'Onboarding is no longer eligible for bootstrap.', 'state_conflict');

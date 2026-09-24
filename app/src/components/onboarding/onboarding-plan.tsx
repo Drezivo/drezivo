@@ -423,9 +423,7 @@ function LaunchReview({
             <div className="min-w-0 flex-1">
               <p className="font-display text-xl text-auth-text">{onboarding.organization_name}</p>
               <p className="mt-1 truncate text-sm text-auth-dark-muted">
-                {onboarding.requested_slug
-                  ? `drezivo.com/s/${onboarding.requested_slug}`
-                  : "A storefront slug will be assigned at launch."}
+                A storefront URL will be created automatically at launch.
               </p>
             </div>
             <RestartOnboardingDialog
