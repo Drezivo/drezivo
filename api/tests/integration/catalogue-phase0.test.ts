@@ -373,9 +373,9 @@ describe('CLT-002 catalogue integrity', async () => {
       );
       const qrFile = await client.query<{ id: string }>(
         `INSERT INTO file_object
-           (tenant_id, purpose, storage_key, mime_type, byte_size, lifecycle_status,
+           (tenant_id, purpose, storage_key, version_id, mime_type, byte_size, lifecycle_status,
             is_private, upload_expires_at, frozen_at)
-         VALUES ($1, 'storefront_asset', $2, 'image/png', 512, 'accepted', true,
+         VALUES ($1, 'storefront_asset', $2, 'version-payment-qr', 'image/png', 512, 'accepted', true,
                  now() + interval '10 minutes', now())
          RETURNING id`,
         [tenant.id, `tenant-files/${tenant.id}/payment-qr/source`],
