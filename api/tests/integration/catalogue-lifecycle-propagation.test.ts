@@ -219,8 +219,12 @@ describe('CLT-078 catalogue lifecycle propagation', async () => {
     });
     expect(republishedProduct.status).toBe(200);
 
-    expect(await publicVariantIds(seed.storefrontSlug, seed.productId)).toEqual([seed.largeVariantId]);
-    expect(await reservationSelection(seed, seed.mediumVariantId)).toBeNull();
+    expect(await publicVariantIds(seed.storefrontSlug, seed.productId)).toEqual(
+      [seed.largeVariantId, seed.mediumVariantId].sort(),
+    );
+    expect((await reservationSelection(seed, seed.mediumVariantId))?.candidate_asset_ids).toEqual([
+      seed.mediumAssetId,
+    ]);
     expect((await reservationSelection(seed, seed.largeVariantId))?.candidate_asset_ids).toEqual([
       seed.largeAssetId,
     ]);
