@@ -529,6 +529,7 @@ export async function getReservationDetail(
           size_label: line.variant_size_label,
           color_label: line.variant_color_label,
         },
+        current_asset_readiness: line.current_asset_readiness,
         line_number: line.line_number,
         name_snapshot: line.name_snapshot,
         measurements_snapshot: line.measurements_snapshot,

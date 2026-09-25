@@ -369,6 +369,7 @@ describe('reservation contracts', () => {
           id: ids.line,
           variant_id: ids.variant,
           variant: { sku: 'EMERALD-M', size_label: 'M', color_label: 'Emerald' },
+          current_asset_readiness: 'ready',
           line_number: 1,
           name_snapshot: 'Emerald Gown',
           measurements_snapshot: { bust: 91.5, waist: 72 },

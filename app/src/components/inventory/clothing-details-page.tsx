@@ -18,9 +18,18 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { ClothingDetail, ClothingVariantDetail, PhysicalAssetSummary } from "@drezivo/contracts";
+import type {
+  ClothingDetail,
+  ClothingVariantDetail,
+  PhysicalAssetSummary,
+  UpdatePhysicalAssetStateResponse,
+} from "@drezivo/contracts";
 
 import { ArchiveClothingDialog, archiveSuccessMessage } from "@/components/inventory/archive-clothing-dialog";
+import {
+  ManagePhysicalAssetDialog,
+  physicalAssetUpdateSuccessMessage,
+} from "@/components/inventory/manage-physical-asset-dialog";
 import { RestoreClothingDialog, restoreSuccessMessage } from "@/components/inventory/restore-clothing-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -116,6 +125,10 @@ export function ClothingDetailsPage({ productId }: { productId: string }) {
         setNotice(message);
         void loadDetail();
       }}
+      onAssetUpdated={(result) => {
+        setNotice(physicalAssetUpdateSuccessMessage(result));
+        void loadDetail();
+      }}
     />
   );
 }
@@ -128,6 +141,7 @@ function DetailContent({
   onPublish,
   onArchived,
   onRestored,
+  onAssetUpdated,
   onDismissNotice,
 }: {
   item: ClothingDetail;
@@ -137,10 +151,13 @@ function DetailContent({
   onPublish: () => void;
   onArchived: (message: string) => void;
   onRestored: (message: string) => void;
+  onAssetUpdated: (result: UpdatePhysicalAssetStateResponse) => void;
   onDismissNotice: () => void;
 }) {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [restoreOpen, setRestoreOpen] = useState(false);
+  const [managedAsset, setManagedAsset] = useState<PhysicalAssetSummary | null>(null);
+  const [managedAssetSize, setManagedAssetSize] = useState<string | null>(null);
   const imageUrls = useMemo(
     () => item.images.flatMap((image) => (image.image_url ? [image.image_url] : [])),
     [item.images]
@@ -418,6 +435,7 @@ function DetailContent({
                       <TableHead>Readiness</TableHead>
                       <TableHead>Custody</TableHead>
                       <TableHead>Notes</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -431,6 +449,20 @@ function DetailContent({
                           <TableCell className="text-dashboard-muted">{labelize(asset.custody_kind)}</TableCell>
                           <TableCell className="max-w-64 text-dashboard-muted">
                             {asset.condition_note ?? asset.alteration_note ?? "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              aria-label={`Manage ${asset.asset_code}`}
+                              onClick={() => {
+                                setManagedAsset(asset);
+                                setManagedAssetSize(variant.size_label);
+                              }}
+                            >
+                              Manage
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))
@@ -520,6 +552,22 @@ function DetailContent({
           </aside>
         </div>
       </div>
+      <ManagePhysicalAssetDialog
+        open={managedAsset !== null}
+        asset={managedAsset}
+        sizeLabel={managedAssetSize}
+        onOpenChange={(open) => {
+          if (!open) {
+            setManagedAsset(null);
+            setManagedAssetSize(null);
+          }
+        }}
+        onUpdated={(result) => {
+          setManagedAsset(null);
+          setManagedAssetSize(null);
+          onAssetUpdated(result);
+        }}
+      />
       {item.status !== "archived" ? (
         <ArchiveClothingDialog
           open={archiveOpen}

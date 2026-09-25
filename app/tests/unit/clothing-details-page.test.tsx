@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   getCatalogueClothingDetail: vi.fn(),
   publishClothing: vi.fn(),
   restoreClothing: vi.fn(),
+  updatePhysicalAssetState: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({
@@ -147,6 +148,20 @@ describe("ClothingDetailsPage", () => {
         updated_at: "2026-09-22T00:00:00.000Z",
       },
       requestId: "req-restore",
+    });
+    api.updatePhysicalAssetState.mockResolvedValue({
+      data: {
+        asset: {
+          ...detail.variants[0]!.assets[0]!,
+          readiness: "ready",
+          condition_note: "Cleaned, steamed, and ready for pickup.",
+          version: 3,
+          updated_at: "2026-09-25T03:00:00.000Z",
+        },
+        blocking_allocation_count: 1,
+        disruptions_created: 0,
+      },
+      requestId: "req-asset-state",
     });
   });
 
@@ -309,6 +324,65 @@ describe("ClothingDetailsPage", () => {
     expect(screen.getByText("Needs Cleaning")).toBeVisible();
     expect(screen.getByText("At Branch")).toBeVisible();
     expect(screen.getByText("Confirmed reservation")).toBeVisible();
+  });
+
+  it("lets staff update the readiness of a serialized physical piece and reloads authoritative detail", async () => {
+    const updatedAsset = {
+      ...detail.variants[0]!.assets[0]!,
+      readiness: "ready" as const,
+      condition_note: "Cleaned, steamed, and ready for pickup.",
+      version: 3,
+      updated_at: "2026-09-25T03:00:00.000Z",
+    };
+    api.getCatalogueClothingDetail
+      .mockResolvedValueOnce({ data: detail, requestId: "req-detail-before-readiness" })
+      .mockResolvedValueOnce({
+        data: {
+          ...detail,
+          variants: [
+            {
+              ...detail.variants[0]!,
+              assets: [updatedAsset],
+            },
+          ],
+        },
+        requestId: "req-detail-after-readiness",
+      });
+    api.updatePhysicalAssetState.mockResolvedValueOnce({
+      data: {
+        asset: updatedAsset,
+        blocking_allocation_count: 1,
+        disruptions_created: 0,
+      },
+      requestId: "req-update-readiness",
+    });
+
+    render(<ClothingDetailsPage productId={productId} />);
+    await screen.findByText("AST-GWN-001-M-01");
+
+    fireEvent.click(screen.getByRole("button", { name: "Manage AST-GWN-001-M-01" }));
+    const dialog = await screen.findByRole("dialog", { name: "Manage physical piece" });
+    fireEvent.change(within(dialog).getByRole("combobox", { name: "Readiness" }), {
+      target: { value: "ready" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Condition note"), {
+      target: { value: "Cleaned, steamed, and ready for pickup." },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(api.updatePhysicalAssetState).toHaveBeenCalledTimes(1));
+    expect(api.updatePhysicalAssetState).toHaveBeenCalledWith(
+      detail.variants[0]!.assets[0]!.id,
+      {
+        expected_version: 2,
+        readiness: "ready",
+        condition_note: "Cleaned, steamed, and ready for pickup.",
+      },
+      expect.any(String)
+    );
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("status")).toHaveTextContent("AST-GWN-001-M-01 is now Ready.");
+    expect(screen.getByText("Ready")).toBeVisible();
   });
 
   it("archives from detail using the backend updated_at token and then reloads authoritative detail", async () => {

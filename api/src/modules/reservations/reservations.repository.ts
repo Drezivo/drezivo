@@ -115,6 +115,7 @@ export interface ReservationDetailLineRow {
   variant_sku: string;
   variant_size_label: string;
   variant_color_label: string | null;
+  current_asset_readiness: 'ready' | 'needs_cleaning' | 'needs_repair' | 'unready' | null;
   line_number: number;
   name_snapshot: string;
   measurements_snapshot: unknown;
@@ -360,7 +361,8 @@ export async function listReservationsReadModel(
 /**
  * Reads one authoritative reservation detail without joining live catalogue/customer fields.
  * Historical customer, garment, measurement, delivery, and price facts come only from accepted
- * snapshots. Receipt files and payment-verification notes are deliberately not projected here.
+ * snapshots. Current allocated-asset readiness is projected separately for operational return
+ * gating. Receipt files and payment-verification notes are deliberately not projected here.
  */
 export async function readReservationDetailModel(
   client: PoolClient,
@@ -466,6 +468,7 @@ export async function readReservationDetailModel(
        pv.sku AS variant_sku,
        pv.size_label AS variant_size_label,
        pv.color_label AS variant_color_label,
+       asset_state.readiness AS current_asset_readiness,
        rl.line_number,
        rl.name_snapshot,
        rl.measurements_snapshot,
@@ -476,6 +479,32 @@ export async function readReservationDetailModel(
      JOIN product_variant pv
        ON pv.tenant_id = rl.tenant_id
       AND pv.id = rl.variant_id
+     LEFT JOIN LATERAL (
+       SELECT pa.readiness
+         FROM physical_asset pa
+        WHERE pa.tenant_id = rl.tenant_id
+          AND pa.id = COALESCE(
+            (
+              SELECT aa.asset_id
+                FROM asset_allocation aa
+               WHERE aa.tenant_id = rl.tenant_id
+                 AND aa.reservation_line_id = rl.id
+               ORDER BY (aa.is_blocking AND aa.released_at IS NULL) DESC,
+                        aa.created_at DESC,
+                        aa.id DESC
+               LIMIT 1
+            ),
+            (
+              SELECT ce.asset_id
+                FROM custody_event ce
+               WHERE ce.tenant_id = rl.tenant_id
+                 AND ce.reservation_line_id = rl.id
+               ORDER BY ce.occurred_at DESC, ce.id DESC
+               LIMIT 1
+            )
+          )
+        LIMIT 1
+     ) asset_state ON true
      WHERE rl.tenant_id = $1
        AND rl.reservation_id = $2::uuid
      ORDER BY rl.line_number ASC, rl.id ASC`,
