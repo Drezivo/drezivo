@@ -136,6 +136,36 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     expect(effects).toEqual({ audit: 1, outbox: 1 });
   });
 
+  it('never shortens the original 15-minute garment hold when pickup is sooner than the review window', async () => {
+    const seed = await seedWorkspace('org_rsv030_short_pickup', 'user_rsv030_short_pickup', 'cash');
+    const held = await createHold(seed, 'short-pickup');
+
+    await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query(
+        `UPDATE reservation
+            SET pickup_at = hold_acquired_at + interval '5 minutes'
+          WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, held.id],
+      ),
+    );
+
+    const submitted = await submitReservation(
+      reviewContext(seed, 'req-short-pickup', 'idem-short-pickup'),
+      held.id,
+      { version: held.version, terms_accepted: true },
+    );
+    expect(submitted.status).toBe(200);
+    expect(submitted.body).toMatchObject({
+      success: true,
+      data: { reservation: { id: held.id, status: 'pending_confirmation' } },
+    });
+
+    const state = await reservationReviewState(seed, held.id);
+    expect(
+      state.reservation.hold_expires_at.getTime() - state.reservation.hold_acquired_at.getTime(),
+    ).toBe(15 * 60 * 1000);
+  });
+
   it('fails closed when receipt evidence belongs to another payment and when evidence misses the original hold deadline', async () => {
     const seed = await seedWorkspace('org_rsv030_scope', 'user_rsv030_scope', 'manual_qr');
     const held = await createHold(seed, 'scope');
@@ -1228,7 +1258,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       seed,
       'return-late-future',
       '2026-10-20T02:00:00.000Z',
-      '2026-10-22T04:00:00.000Z',
+      '2026-10-23T02:00:00.000Z',
     );
 
     await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
@@ -2029,7 +2059,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       variant_id: seed.variantId as ProductVariantId,
       requested_interval: {
         start: '2026-10-10T02:00:00.000Z',
-        end: '2026-10-12T04:00:00.000Z',
+        end: '2026-10-13T02:00:00.000Z',
       },
       event_date: '2026-10-11',
       fulfillment_method: 'delivery',

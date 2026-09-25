@@ -90,6 +90,20 @@ export interface ReservationQuote {
  * capacity. The returned candidate set is intentionally advisory: only RSV-021 may turn one of
  * those ids into a promise by locking/revalidating it and inserting the exclusion-protected block.
  */
+export async function assertRequestedPickupNotInPast(
+  client: PoolClient,
+  pickupAt: string,
+): Promise<void> {
+  const nowResult = await client.query<{ current_minute: Date }>(
+    `SELECT date_trunc('minute', statement_timestamp()) AS current_minute`,
+  );
+  const currentMinute = nowResult.rows[0]?.current_minute;
+  if (!currentMinute) throw new StateConflictError('Could not resolve the current reservation time.');
+  if (new Date(pickupAt).getTime() < currentMinute.getTime()) {
+    throw new ValidationError('Pickup time cannot be in the past. Choose the current minute or a future time.');
+  }
+}
+
 export async function resolveReservationQuote(
   client: PoolClient,
   input: {
@@ -105,6 +119,8 @@ export async function resolveReservationQuote(
     >;
   },
 ): Promise<ReservationQuote> {
+  await assertRequestedPickupNotInPast(client, input.request.requested_interval.start);
+
   const foundation = await readReservationQuoteFoundation(client, {
     tenantId: input.tenantId,
     branchId: input.branchId,

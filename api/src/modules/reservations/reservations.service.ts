@@ -52,7 +52,12 @@ import {
   TenantRestrictedError,
 } from '../../shared/errors.js';
 import { resolveReservationCatalogueQuoteSelection } from '../catalogue/catalogue-allocation.service.js';
-import { resolveReservationQuote, computeRentalTotal, type ReservationQuote } from './reservations.quote.js';
+import {
+  assertRequestedPickupNotInPast,
+  resolveReservationQuote,
+  computeRentalTotal,
+  type ReservationQuote,
+} from './reservations.quote.js';
 import {
   createStaffReservationCommand,
   type ReservationCommandResponse,
@@ -170,6 +175,7 @@ export async function getStaffReservationAvailabilityCheck(
 ): Promise<StaffReservationAvailabilityCheckResponse> {
   assertReservationBookingContext(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    await assertRequestedPickupNotInPast(client, query.pickup_at);
     const requestedInterval = { start: query.pickup_at, end: query.due_at };
     const catalogue = await resolveReservationCatalogueQuoteSelection(client, {
       tenantId: tenantId.parse(input.tenantId),

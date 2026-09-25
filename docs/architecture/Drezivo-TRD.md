@@ -244,7 +244,7 @@ PostgreSQL supports range overlap exclusion, and Neon documents `btree_gist`, wh
 
 ### Receipt and confirmation
 
-Receipt submission must finish before expiry, attach an accepted immutable object, and convert the same allocation to `pending_confirmation` with a deadline no later than 24 hours from initial acquisition. Never extend repeatedly without bound. Warn the merchant before expiry. If the shop is closed, show that fact and the fixed deadline before the renter sends money.
+Receipt submission must finish before the original 15-minute hold expires, attach an accepted immutable object, and convert the same allocation to `pending_confirmation`. The review deadline may extend toward pickup but must never shorten the original 15-minute hold and must remain no later than 24 hours from initial acquisition. Never extend repeatedly without bound. Warn the merchant before expiry. If the shop is closed, show that fact and the fixed deadline before the renter sends money.
 
 Merchant approval locks reservation, payment intent and assets, verifies the review deadline and current eligibility, records the actual merchant-account verification, posts verified money, and transitions the same allocation to confirmed. A screenshot alone is insufficient. Repeated approval returns the original outcome. Cash collection records amount, actor, time and purpose through the same posting layer; permission to record cash is explicit.
 

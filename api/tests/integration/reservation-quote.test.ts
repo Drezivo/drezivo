@@ -188,6 +188,39 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
     });
   });
 
+  it('rejects a staff reservation whose pickup time is already in the past', async () => {
+    const seed = await seedQuoteWorkspace({
+      clerkOrgId: 'org_rsv020_past_pickup',
+      principalId: 'user_rsv020_past_pickup',
+      timezone: 'Asia/Manila',
+      assetCount: 1,
+      pricingMode: 'daily',
+      rentalPriceMinor: 50000,
+      securityDepositMinor: 20000,
+      includedDurationMinutes: 24 * 60,
+      extraDayPriceMinor: 50000,
+      prepMinutes: 0,
+      turnaroundMinutes: 0,
+      deliveryRules: {},
+    });
+
+    await expect(
+      getStaffReservationQuote(
+        reservationContext(seed),
+        staffRequest(seed, {
+          fulfillment_method: 'pickup',
+          requested_interval: {
+            start: '2020-01-01T02:00:00.000Z',
+            end: '2020-01-02T02:00:00.000Z',
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Pickup time cannot be in the past. Choose the current minute or a future time.',
+    });
+  });
+
   it('requires an event date to stay inside the branch-local pickup and return dates', async () => {
     const seed = await seedQuoteWorkspace({
       clerkOrgId: 'org_rsv020_event_date',
@@ -291,24 +324,24 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
       deliveryRules: {},
     });
 
-    // 01:30 EST on Mar 8 -> 01:30 EDT on Mar 9 is 23 elapsed hours because DST springs forward.
+    // 01:30 EST on Mar 14 -> 01:30 EDT on Mar 15 is 23 elapsed hours because DST springs forward.
     const quote = await getStaffReservationQuote(
       reservationContext(seed),
       staffRequest(seed, {
         fulfillment_method: 'pickup',
         requested_interval: {
-          start: '2026-03-08T06:30:00.000Z',
-          end: '2026-03-09T05:30:00.000Z',
+          start: '2027-03-14T06:30:00.000Z',
+          end: '2027-03-15T05:30:00.000Z',
         },
       }),
     );
 
     expect(quote.timezone_snapshot).toBe('America/New_York');
-    expect(quote.pickup_at).toBe('2026-03-08T06:30:00.000Z');
-    expect(quote.due_at).toBe('2026-03-09T05:30:00.000Z');
+    expect(quote.pickup_at).toBe('2027-03-14T06:30:00.000Z');
+    expect(quote.due_at).toBe('2027-03-15T05:30:00.000Z');
     expect(quote.blocked_interval).toEqual({
-      start: '2026-03-08T06:30:00.000Z',
-      end: '2026-03-09T06:30:00.000Z',
+      start: '2027-03-14T06:30:00.000Z',
+      end: '2027-03-15T06:30:00.000Z',
     });
     expect(quote.price_snapshot).toMatchObject({
       rental_total_minor: '30000',

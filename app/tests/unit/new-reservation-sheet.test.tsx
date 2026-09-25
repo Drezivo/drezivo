@@ -456,6 +456,20 @@ describe("NewReservationSheet", () => {
     expect(props.onReservationChanged).toHaveBeenCalledWith(ids.reservation);
   });
 
+  it("keeps new-customer phone input numeric and capped at exactly 11 digits", async () => {
+    renderSheet();
+    await fillDatesAndSelectProduct();
+    fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
+    await screen.findByText("RSV-WALKIN-001");
+
+    const phoneInput = screen.getByLabelText("Phone");
+    expect(phoneInput).toHaveAttribute("maxlength", "11");
+    expect(phoneInput).toHaveAttribute("inputmode", "numeric");
+
+    fireEvent.change(phoneInput, { target: { value: "09ab321-234567890" } });
+    expect(phoneInput).toHaveValue("09321234567");
+  });
+
   it("lets staff choose any active tenant payment method returned by intake options", async () => {
     api.getStaffReservationIntakeOptions.mockResolvedValue({
       data: {

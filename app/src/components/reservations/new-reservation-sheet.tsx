@@ -440,6 +440,13 @@ export function NewReservationSheet({
 
   const complete = async () => {
     if (!held || holdExpired) return;
+    if (customerMode === "new" && phone.trim() && !/^\d{11}$/.test(phone.trim())) {
+      setNotice({
+        tone: "attention",
+        text: "Phone number must contain exactly 11 digits.",
+      });
+      return;
+    }
     const customer = buildCustomerInput({
       customerMode,
       selectedCustomerId,
@@ -526,9 +533,12 @@ export function NewReservationSheet({
     if (apiError.code === "HOLD_EXPIRED") {
       setServerExpired(true);
       if (held) onReservationChanged(held.reservation.id);
+      const reviewDeadlineExpired = apiError.message.toLowerCase().includes("merchant review deadline");
       setNotice({
         tone: "attention",
-        text: "The garment hold expired before completion. Start over to check current availability.",
+        text: reviewDeadlineExpired
+          ? "The reservation review deadline expired. Start over to check current availability before reserving again."
+          : "The garment hold expired before completion. Start over to check current availability.",
       });
     } else {
       setNotice({ tone: "attention", text: apiError.message });
@@ -978,9 +988,14 @@ export function NewReservationSheet({
                       </Field>
                       <Field label="Phone">
                         <Input
+                          inputMode="numeric"
+                          autoComplete="tel"
+                          maxLength={11}
+                          pattern="[0-9]{11}"
+                          placeholder="09XXXXXXXXX"
                           value={phone}
                           onChange={(event) => {
-                            setPhone(event.target.value);
+                            setPhone(event.target.value.replace(/\D/g, "").slice(0, 11));
                             completeGuard.resetIntent();
                           }}
                         />

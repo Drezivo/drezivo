@@ -33,7 +33,7 @@ export type CustomerDetails = z.infer<typeof customerDetails>;
 export const staffCustomerDetails = z
   .object({
     full_name: z.string().trim().min(1).max(200),
-    phone: z.string().trim().min(1).max(32).optional(),
+    phone: z.string().trim().regex(/^\d{11}$/, 'Phone number must contain exactly 11 digits.').optional(),
     email: z.string().trim().email().optional(),
     notes: z.string().trim().max(2_000).optional(),
   })
