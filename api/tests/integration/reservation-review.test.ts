@@ -2,6 +2,7 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
+  FileObjectId,
   PaymentMethodId,
   PermissionCode,
   ProductVariantId,
@@ -73,6 +74,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
   const { createApp } = await import('../../src/app.js');
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
   const {
+    attachReservationReceipt,
     cancelReservation,
     completeStaffReservation,
     confirmReservation,
@@ -84,6 +86,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     inspectReturnedReservation,
     completeRentalReservation,
     submitReservation,
+    verifyReservationPayment,
   } = await import('../../src/modules/reservations/reservations.service.js');
   const { expireDueHoldsForAllTenants } = await import('../../src/worker/handlers/hold-expirer.js');
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
@@ -520,6 +523,128 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     expect(state.receipt?.evidence_status).toBe('under_review');
     expect(state.reservation.status).toBe('pending_confirmation');
     expect(await actionEffectCounts(seed, held.id, 'reservation.confirmed')).toEqual({ audit: 0, outbox: 0 });
+  });
+
+  it('records cash collection and confirms a walk-in reservation in one staff completion action', async () => {
+    const seed = await seedWorkspace('org_rsv032_cash_direct', 'user_rsv032_cash_direct', 'cash');
+    const held = await createWalkInHold(seed, 'cash-direct');
+    const amountMinor = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const payment = await client.query<{ amount_minor: number }>(
+        `SELECT amount_minor FROM payment WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, held.paymentId],
+      );
+      return String(requireRow(payment.rows, 'cash direct payment').amount_minor);
+    });
+
+    const result = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-cash-direct', 'idem-rsv032-cash-direct'),
+      held.id,
+      {
+        version: 1,
+        terms_accepted: true,
+        customer: walkInCustomer('Cash Walk-in Customer'),
+        cash_collection: { amount_received_minor: amountMinor },
+      },
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({
+      success: true,
+      data: {
+        completion_state: 'confirmed',
+        next_action: 'none',
+        reservation: { status: 'confirmed', version: 3 },
+      },
+    });
+    const financial = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const payment = await client.query<{ status: string; verified_at: Date | null }>(
+        `SELECT status, verified_at FROM payment WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, held.paymentId],
+      );
+      const verification = await client.query<{ decision: string; verified_amount_minor: number | null }>(
+        `SELECT decision, verified_amount_minor
+           FROM payment_verification
+          WHERE tenant_id = $1 AND payment_id = $2
+          ORDER BY decided_at DESC, id DESC LIMIT 1`,
+        [seed.tenantId, held.paymentId],
+      );
+      return {
+        payment: requireRow(payment.rows, 'cash verified payment'),
+        verification: requireRow(verification.rows, 'cash payment verification'),
+      };
+    });
+    expect(financial.payment.status).toBe('paid');
+    expect(financial.payment.verified_at).not.toBeNull();
+    expect(financial.verification).toMatchObject({
+      decision: 'verified',
+      verified_amount_minor: Number(amountMinor),
+    });
+  });
+
+  it('attaches and verifies manual QR evidence before confirming the reservation', async () => {
+    const seed = await seedWorkspace('org_rsv032_qr_verify', 'user_rsv032_qr_verify', 'manual_qr');
+    const held = await createWalkInHold(seed, 'qr-verify');
+    const fileId = await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      insertAcceptedReceiptFile(client, seed.tenantId, `manual-${held.id}`),
+    );
+    const attached = await attachReservationReceipt(
+      reviewContext(seed, 'req-rsv032-qr-attach', 'idem-rsv032-qr-attach'),
+      held.id,
+      { file_id: fileId as FileObjectId },
+    );
+    expect(attached.body).toMatchObject({
+      success: true,
+      data: { payment_id: held.paymentId, evidence_status: 'uploaded' },
+    });
+
+    const submitted = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-qr-submit', 'idem-rsv032-qr-submit'),
+      held.id,
+      {
+        version: 1,
+        terms_accepted: true,
+        customer: walkInCustomer('Verified QR Customer'),
+      },
+    );
+    expect(submitted.body).toMatchObject({
+      success: true,
+      data: { completion_state: 'pending_confirmation', next_action: 'payment_verification' },
+    });
+
+    const amountMinor = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const payment = await client.query<{ amount_minor: number }>(
+        `SELECT amount_minor FROM payment WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, held.paymentId],
+      );
+      return String(requireRow(payment.rows, 'manual QR payment').amount_minor);
+    });
+    const verified = await verifyReservationPayment(
+      reviewContext(seed, 'req-rsv032-qr-verify', 'idem-rsv032-qr-verify'),
+      held.id,
+      {
+        version: 2,
+        verified_amount_minor: amountMinor,
+        merchant_reference: 'GCASH-TEST-REF',
+      },
+    );
+    expect(verified.body).toMatchObject({
+      success: true,
+      data: { payment_status: 'paid', verified_amount_minor: amountMinor },
+    });
+
+    const confirmed = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-qr-confirm', 'idem-rsv032-qr-confirm'),
+      held.id,
+      { version: 2, terms_accepted: true },
+    );
+    expect(confirmed.body).toMatchObject({
+      success: true,
+      data: { completion_state: 'confirmed', next_action: 'none' },
+    });
+    const state = await reservationReviewState(seed, held.id);
+    expect(state.reservation.status).toBe('confirmed');
+    expect(state.payment.status).toBe('paid');
+    expect(state.receipt?.evidence_status).toBe('verified');
   });
 
   it('resumes from authoritative pending confirmation without re-submitting after payment verification', async () => {

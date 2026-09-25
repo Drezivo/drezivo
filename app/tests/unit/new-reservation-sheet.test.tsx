@@ -20,6 +20,9 @@ const clerk = vi.hoisted(() => ({
 const api = vi.hoisted(() => ({
   cancelReservation: vi.fn(),
   completeStaffReservation: vi.fn(),
+  attachReservationPaymentReceipt: vi.fn(),
+  authorizeUpload: vi.fn(),
+  finalizeUpload: vi.fn(),
   createStaffReservation: vi.fn(),
   getCatalogueClothing: vi.fn(),
   getCatalogueClothingDetail: vi.fn(),
@@ -218,14 +221,14 @@ const heldResponse = staffReservationCreateResponse.parse({
   },
 });
 
-const pendingResponse = staffReservationCompleteResponse.parse({
+const confirmedResponse = staffReservationCompleteResponse.parse({
   reservation: {
     ...heldResponse.reservation,
-    status: "pending_confirmation",
-    version: 2,
+    status: "confirmed",
+    version: 3,
   },
-  completion_state: "pending_confirmation",
-  next_action: "payment_verification",
+  completion_state: "confirmed",
+  next_action: "none",
 });
 
 const calendarResponse = staffReservationAvailabilityCalendarResponse.parse({
@@ -347,7 +350,7 @@ describe("NewReservationSheet", () => {
     });
     api.createStaffReservation.mockResolvedValue({ data: heldResponse, requestId: "req-hold" });
     api.completeStaffReservation.mockResolvedValue({
-      data: pendingResponse,
+      data: confirmedResponse,
       requestId: "req-complete",
     });
     api.cancelReservation.mockResolvedValue({
@@ -409,7 +412,7 @@ describe("NewReservationSheet", () => {
     );
   });
 
-  it("runs the staff fast path from advisory availability through hold and truthful pending completion", async () => {
+  it("runs the staff fast path from advisory availability through cash collection and confirmation", async () => {
     const { props } = renderSheet();
     await fillDatesAndSelectProduct();
 
@@ -442,6 +445,7 @@ describe("NewReservationSheet", () => {
         name: /Customer has reviewed and accepted the business rental terms/i,
       })
     );
+    fireEvent.click(screen.getByRole("checkbox", { name: "Cash received" }));
     fireEvent.click(screen.getByRole("button", { name: "Complete Reservation" }));
 
     await waitFor(() =>
@@ -454,12 +458,13 @@ describe("NewReservationSheet", () => {
             source: "new",
             customer: { full_name: "Walk-in Customer", phone: "09171234567" },
           },
+          cash_collection: { amount_received_minor: "200000" },
         },
         expect.any(String)
       )
     );
     expect(
-      await screen.findByText("Reservation saved. Awaiting payment verification.")
+      await screen.findByText("Reservation confirmed. Cash payment of ₱2,000 was recorded.")
     ).toBeVisible();
     expect(props.onReservationChanged).toHaveBeenCalledWith(ids.reservation);
   });
@@ -556,6 +561,7 @@ describe("NewReservationSheet", () => {
         name: /Customer has reviewed and accepted the business rental terms/i,
       })
     );
+    fireEvent.click(screen.getByRole("checkbox", { name: "Cash received" }));
     fireEvent.click(screen.getByRole("button", { name: "Complete Reservation" }));
 
     await waitFor(() =>
@@ -565,6 +571,7 @@ describe("NewReservationSheet", () => {
           version: 1,
           terms_accepted: true,
           customer: { source: "existing", customer_id: ids.customer },
+          cash_collection: { amount_received_minor: "200000" },
         },
         expect.any(String)
       )
@@ -617,6 +624,7 @@ describe("NewReservationSheet", () => {
         name: /Customer has reviewed and accepted the business rental terms/i,
       })
     );
+    fireEvent.click(screen.getByRole("checkbox", { name: "Cash received" }));
     fireEvent.click(screen.getByRole("button", { name: "Complete Reservation" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/hold (has )?expired/i);

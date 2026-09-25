@@ -26,6 +26,10 @@ import {
   type ReservationCancelResponse,
   type ReservationConfirmRequest,
   type ReservationConfirmResponse,
+  type ReservationPaymentReceiptAttachRequest,
+  type ReservationPaymentReceiptAttachResponse,
+  type ReservationPaymentVerifyRequest,
+  type ReservationPaymentVerifyResponse,
   type ReservationRejectRequest,
   type ReservationRejectResponse,
   type StaffReservationCompleteRequest,
@@ -71,9 +75,11 @@ import {
 import { pickupReservationByStaff } from './reservations.pickup.service.js';
 import { returnReservationByStaff } from './reservations.return.service.js';
 import {
+  attachReservationPaymentReceipt,
   confirmReservationByMerchant,
   rejectReservationByMerchant,
   submitReservationForConfirmation,
+  verifyReservationPaymentByStaff,
   type ReservationReviewCommandResponse,
   type ReservationReviewContext,
 } from './reservations.review.service.js';
@@ -403,6 +409,33 @@ export async function submitReservation(
   return submitReservationForConfirmation(toReviewContext(input), reservationId, request);
 }
 
+export async function attachReservationReceipt(
+  input: ReservationReadContext & { requestId: string; idempotencyKey: string },
+  reservationId: string,
+  request: ReservationPaymentReceiptAttachRequest,
+): Promise<ReservationReviewCommandResponse<ReservationPaymentReceiptAttachResponse>> {
+  assertReservationReviewContext(input);
+  if (!input.permissionCodes.includes('payments.manage')) {
+    throw new ForbiddenError('Payment management permission is required.');
+  }
+  return attachReservationPaymentReceipt(toReviewContext(input), reservationId, request);
+}
+
+export async function verifyReservationPayment(
+  input: ReservationReadContext & { requestId: string; idempotencyKey: string },
+  reservationId: string,
+  request: ReservationPaymentVerifyRequest,
+): Promise<ReservationReviewCommandResponse<ReservationPaymentVerifyResponse>> {
+  assertReservationReviewContext(input);
+  if (
+    !input.permissionCodes.includes('payments.manage') ||
+    !input.permissionCodes.includes('evidence.verify')
+  ) {
+    throw new ForbiddenError('Payment evidence verification permission is required.');
+  }
+  return verifyReservationPaymentByStaff(toReviewContext(input), reservationId, request);
+}
+
 export async function confirmReservation(
   input: ReservationReadContext & { requestId: string; idempotencyKey: string },
   reservationId: string,
@@ -586,6 +619,8 @@ function toPaymentProjection(
   if (
     !row.payment_id ||
     !row.payment_method_id ||
+    !row.payment_method_name ||
+    !row.payment_rail ||
     !row.payment_status ||
     !row.payment_evidence_status ||
     row.payment_amount_minor === null ||
@@ -597,6 +632,8 @@ function toPaymentProjection(
   return reservationPaymentProjection.parse({
     id: row.payment_id,
     payment_method_id: row.payment_method_id,
+    method_name: row.payment_method_name,
+    rail: row.payment_rail,
     status: row.payment_status,
     evidence_status: row.payment_evidence_status,
     amount_minor: String(row.payment_amount_minor),

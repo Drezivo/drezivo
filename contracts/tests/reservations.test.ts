@@ -372,6 +372,8 @@ describe('reservation contracts', () => {
       payment: {
         id: ids.payment,
         payment_method_id: ids.paymentMethod,
+        method_name: 'Cash',
+        rail: 'cash',
         status: 'paid',
         evidence_status: 'verified',
         amount_minor: '200000',

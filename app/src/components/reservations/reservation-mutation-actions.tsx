@@ -19,6 +19,9 @@ export type ReservationMutationNotice = {
 
 type ReservationAction =
   | "complete_reservation"
+  | "record_cash"
+  | "verify_payment"
+  | "confirm_reservation"
   | "cancel"
   | "reject"
   | "pickup"
@@ -61,6 +64,11 @@ export function ReservationMutationActions({
   const [conditionNote, setConditionNote] = useState("");
   const [readiness, setReadiness] = useState<InspectionReadiness>("ready");
   const [termsAccepted, setTermsAccepted] = useState(detail.terms_accepted_at !== null);
+  const [amountReceived, setAmountReceived] = useState(() =>
+    detail.payment ? minorUnitsToMajorInput(detail.payment.amount_minor) : ""
+  );
+  const [cashReceived, setCashReceived] = useState(false);
+  const [merchantReference, setMerchantReference] = useState("");
   const [mutationError, setMutationError] = useState<DrezivoApiError | null>(null);
 
   const actions = useMemo(
@@ -74,6 +82,9 @@ export function ReservationMutationActions({
     setConditionNote("");
     setReadiness("ready");
     setTermsAccepted(detail.terms_accepted_at !== null);
+    setAmountReceived(detail.payment ? minorUnitsToMajorInput(detail.payment.amount_minor) : "");
+    setCashReceived(false);
+    setMerchantReference("");
     setMutationError(null);
     submitGuard.resetIntent();
   }, [detail.id, detail.status, detail.version, detail.terms_accepted_at, submitGuard.resetIntent]);
@@ -88,6 +99,9 @@ export function ReservationMutationActions({
     setConditionNote("");
     setReadiness("ready");
     setTermsAccepted(detail.terms_accepted_at !== null);
+    setAmountReceived(detail.payment ? minorUnitsToMajorInput(detail.payment.amount_minor) : "");
+    setCashReceived(false);
+    setMerchantReference("");
     setMutationError(null);
     onNotice(null);
   };
@@ -112,10 +126,50 @@ export function ReservationMutationActions({
     onNotice(null);
 
     try {
-      const result = await submitGuard.submit((idempotencyKey) => {
+      const result = await submitGuard.submit(async (idempotencyKey) => {
         const api = createDrezivoApiClient(getToken);
         switch (selectedAction) {
           case "complete_reservation":
+            return api.completeStaffReservation(
+              detail.id,
+              { version: detail.version, terms_accepted: true },
+              idempotencyKey
+            );
+          case "record_cash": {
+            const amountMinor = majorInputToMinorUnits(amountReceived);
+            if (!detail.payment || !amountMinor) {
+              throw new Error("A valid cash amount is required.");
+            }
+            return api.completeStaffReservation(
+              detail.id,
+              {
+                version: detail.version,
+                terms_accepted: true,
+                cash_collection: { amount_received_minor: amountMinor },
+              },
+              idempotencyKey
+            );
+          }
+          case "verify_payment": {
+            if (!detail.payment) throw new Error("Reservation payment is missing.");
+            await api.verifyReservationPayment(
+              detail.id,
+              {
+                version: detail.version,
+                verified_amount_minor: detail.payment.amount_minor,
+                ...(merchantReference.trim()
+                  ? { merchant_reference: merchantReference.trim() }
+                  : {}),
+              },
+              idempotencyKey
+            );
+            return api.completeStaffReservation(
+              detail.id,
+              { version: detail.version, terms_accepted: true },
+              idempotencyKey
+            );
+          }
+          case "confirm_reservation":
             return api.completeStaffReservation(
               detail.id,
               { version: detail.version, terms_accepted: true },
@@ -211,11 +265,21 @@ export function ReservationMutationActions({
     detail.terms_accepted_at === null &&
     !termsAccepted;
   const rejectNeedsReason = selectedAction === "reject" && reason.trim().length === 0;
+  const cashAmountMinor = majorInputToMinorUnits(amountReceived);
+  const recordCashInvalid =
+    selectedAction === "record_cash" &&
+    (!detail.payment ||
+      !cashReceived ||
+      cashAmountMinor === null ||
+      cashAmountMinor !== detail.payment.amount_minor);
+  const verifyPaymentInvalid = selectedAction === "verify_payment" && !detail.payment;
   const submitDisabled =
     submitGuard.isSubmitting ||
     completionNeedsCustomer ||
     completionNeedsTerms ||
-    rejectNeedsReason;
+    rejectNeedsReason ||
+    recordCashInvalid ||
+    verifyPaymentInvalid;
 
   return (
     <div className="mt-4 space-y-3">
@@ -268,6 +332,76 @@ export function ReservationMutationActions({
               <ActionMessage>
                 Add the customer details before completing this short hold. Customer entry is part
                 of the New Reservation flow in RSV-063.
+              </ActionMessage>
+            ) : null}
+
+            {selectedAction === "record_cash" && detail.payment ? (
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
+                    Amount received
+                  </span>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-dashboard-muted">
+                      ₱
+                    </span>
+                    <Input
+                      aria-label="Cash amount received"
+                      inputMode="decimal"
+                      value={amountReceived}
+                      disabled={submitGuard.isSubmitting}
+                      onChange={(event) =>
+                        updateIntentField(() =>
+                          setAmountReceived(event.target.value.replace(/[^0-9.]/g, ""))
+                        )
+                      }
+                      className="pl-7"
+                    />
+                  </div>
+                  <span className="mt-1 block text-xs text-dashboard-muted">
+                    Amount due: {formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)}
+                  </span>
+                </label>
+                <label className="flex h-10 items-center gap-2 rounded-md border border-dashboard-border px-3 text-sm text-dashboard-navy">
+                  <input
+                    type="checkbox"
+                    checked={cashReceived}
+                    disabled={submitGuard.isSubmitting}
+                    onChange={(event) =>
+                      updateIntentField(() => setCashReceived(event.target.checked))
+                    }
+                  />
+                  Cash received
+                </label>
+              </div>
+            ) : null}
+
+            {selectedAction === "verify_payment" && detail.payment ? (
+              <>
+                <ActionMessage>
+                  Verify {formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)} received via {detail.payment.method_name}. This records the merchant verification and confirms the reservation when all checks pass.
+                </ActionMessage>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
+                    Merchant/reference number (optional)
+                  </span>
+                  <Input
+                    aria-label="Merchant reference"
+                    value={merchantReference}
+                    disabled={submitGuard.isSubmitting}
+                    maxLength={200}
+                    onChange={(event) =>
+                      updateIntentField(() => setMerchantReference(event.target.value))
+                    }
+                    placeholder="e.g. GCash reference number"
+                  />
+                </label>
+              </>
+            ) : null}
+
+            {selectedAction === "confirm_reservation" ? (
+              <ActionMessage>
+                Payment is already verified. Confirm the reservation and convert the garment hold to a confirmed allocation.
               </ActionMessage>
             ) : null}
 
@@ -434,10 +568,8 @@ function getVisibleMutationActions(
   const canManage = permissionCodes.includes("reservations.manage");
   const canHandleCustody = canManage && permissionCodes.includes("reservations.custody");
   const canInspectAssets = canHandleCustody && permissionCodes.includes("assets.manage");
-  const canMerchantReview =
-    canManage &&
-    permissionCodes.includes("payments.manage") &&
-    permissionCodes.includes("evidence.verify");
+  const canManagePayments = canManage && permissionCodes.includes("payments.manage");
+  const canVerifyEvidence = canManagePayments && permissionCodes.includes("evidence.verify");
 
   switch (detail.status) {
     case "held":
@@ -447,22 +579,38 @@ function getVisibleMutationActions(
             { action: "cancel", label: "Cancel", tone: "danger" },
           ]
         : [];
-    case "pending_confirmation":
-      return canManage
-        ? [
-            { action: "complete_reservation", label: "Complete Reservation" },
-            ...(canMerchantReview
-              ? [
-                  {
-                    action: "reject" as const,
-                    label: "Reject Reservation",
-                    tone: "danger" as const,
-                  },
-                ]
-              : []),
-            { action: "cancel", label: "Cancel", tone: "danger" },
-          ]
-        : [];
+    case "pending_confirmation": {
+      if (!canManage) return [];
+      const paymentAction: ActionOption[] = [];
+      if (!detail.payment || BigInt(detail.price_snapshot.due_now_minor) === 0n) {
+        if (canManagePayments) {
+          paymentAction.push({ action: "confirm_reservation", label: "Confirm Reservation" });
+        }
+      } else if (detail.payment.status === "paid" && detail.payment.verified_at) {
+        if (canManagePayments) {
+          paymentAction.push({ action: "confirm_reservation", label: "Confirm Reservation" });
+        }
+      } else if (detail.payment.rail === "cash") {
+        if (canManagePayments) {
+          paymentAction.push({ action: "record_cash", label: "Record Cash & Confirm" });
+        }
+      } else if (canVerifyEvidence) {
+        paymentAction.push({ action: "verify_payment", label: "Verify Payment" });
+      }
+      return [
+        ...paymentAction,
+        ...(canVerifyEvidence
+          ? [
+              {
+                action: "reject" as const,
+                label: "Reject Reservation",
+                tone: "danger" as const,
+              },
+            ]
+          : []),
+        { action: "cancel", label: "Cancel", tone: "danger" },
+      ];
+    }
     case "confirmed":
       return [
         ...(canHandleCustody ? [{ action: "pickup" as const, label: "Pick Up" }] : []),
@@ -488,6 +636,12 @@ function actionTitle(action: ReservationAction): string {
   switch (action) {
     case "complete_reservation":
       return "Complete Reservation";
+    case "record_cash":
+      return "Record Cash & Confirm";
+    case "verify_payment":
+      return "Verify Payment";
+    case "confirm_reservation":
+      return "Confirm Reservation";
     case "cancel":
       return "Cancel Reservation";
     case "reject":
@@ -507,6 +661,12 @@ function confirmLabel(action: ReservationAction): string {
   switch (action) {
     case "complete_reservation":
       return "Complete Reservation";
+    case "record_cash":
+      return "Record Cash & Confirm";
+    case "verify_payment":
+      return "Verify & Confirm";
+    case "confirm_reservation":
+      return "Confirm Reservation";
     case "cancel":
       return "Confirm Cancellation";
     case "reject":
@@ -525,7 +685,13 @@ function confirmLabel(action: ReservationAction): string {
 function actionDescription(action: ReservationAction): string {
   switch (action) {
     case "complete_reservation":
-      return "Submit the booking and confirm it only when the server says all merchant and payment requirements are satisfied.";
+      return "Submit the booking and continue only when the required customer, terms, and payment prerequisites are satisfied.";
+    case "record_cash":
+      return "Record the cash physically received from the customer, verify that collection, and confirm the reservation in one staff action.";
+    case "verify_payment":
+      return "Verify the uploaded manual-payment evidence against the merchant account, then confirm the reservation if all checks pass.";
+    case "confirm_reservation":
+      return "Payment is already verified. Confirm the reservation and keep its garment allocation.";
     case "cancel":
       return "Release this pre-pickup reservation. Existing payment history is preserved for manual financial follow-up.";
     case "reject":
@@ -545,7 +711,31 @@ function mutationSuccessNotice(
   action: ReservationAction,
   data: unknown
 ): ReservationMutationNotice {
-  if (action === "complete_reservation" && isStaffCompletionResult(data)) {
+  if (
+    (action === "complete_reservation" ||
+      action === "record_cash" ||
+      action === "verify_payment" ||
+      action === "confirm_reservation") &&
+    isConfirmedReservationResult(data)
+  ) {
+    return {
+      tone: "success",
+      message:
+        action === "record_cash"
+          ? "Cash payment recorded and reservation confirmed."
+          : action === "verify_payment"
+            ? "Payment verified and reservation confirmed."
+            : "Reservation confirmed.",
+    };
+  }
+
+  if (
+    (action === "complete_reservation" ||
+      action === "record_cash" ||
+      action === "verify_payment" ||
+      action === "confirm_reservation") &&
+    isStaffCompletionResult(data)
+  ) {
     if (data.completion_state === "confirmed") {
       return { tone: "success", message: "Reservation confirmed." };
     }
@@ -578,8 +768,23 @@ function mutationSuccessNotice(
     case "complete_rental":
       return { tone: "success", message: "Rental completed." };
     case "complete_reservation":
+    case "record_cash":
+    case "verify_payment":
+    case "confirm_reservation":
       return { tone: "attention", message: "Reservation completion requires another review." };
   }
+}
+
+function isConfirmedReservationResult(value: unknown): value is {
+  reservation: { status: "confirmed" };
+} {
+  if (!value || typeof value !== "object") return false;
+  const reservation = (value as { reservation?: unknown }).reservation;
+  return (
+    Boolean(reservation) &&
+    typeof reservation === "object" &&
+    (reservation as { status?: unknown }).status === "confirmed"
+  );
 }
 
 function isStaffCompletionResult(value: unknown): value is {
@@ -595,6 +800,31 @@ function isStaffCompletionResult(value: unknown): value is {
       record["next_action"] === "merchant_review" ||
       record["next_action"] === "payment_verification")
   );
+}
+
+function minorUnitsToMajorInput(value: string): string {
+  const minor = BigInt(value);
+  const whole = minor / 100n;
+  const cents = minor % 100n;
+  return cents === 0n ? whole.toString() : `${whole}.${cents.toString().padStart(2, "0")}`;
+}
+
+function majorInputToMinorUnits(value: string): string | null {
+  const match = /^(0|[1-9]\d*)(?:\.(\d{1,2}))?$/.exec(value.trim());
+  if (!match) return null;
+  const whole = BigInt(match[1] ?? "0");
+  const centsText = (match[2] ?? "").padEnd(2, "0");
+  const cents = BigInt(centsText || "0");
+  return (whole * 100n + cents).toString();
+}
+
+function formatMinorMoney(value: string, currency: string): string {
+  const amount = Number(BigInt(value)) / 100;
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: amount % 1 === 0 ? 0 : 2,
+  }).format(amount);
 }
 
 function isRefreshRequiredError(error: DrezivoApiError): boolean {

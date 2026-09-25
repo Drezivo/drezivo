@@ -12,7 +12,7 @@ import {
 import { currencyCode, moneyString } from '../common/money';
 import { paginatedResponse, paginationRequest } from '../common/pagination';
 import { isoInstant } from '../common/time';
-import { paymentEvidenceStatus, paymentStatus } from '../finance/payment-status';
+import { paymentEvidenceStatus, paymentRail, paymentStatus } from '../finance/payment-status';
 import {
   fulfillmentMethod,
   reservationCustomerSnapshot,
@@ -104,6 +104,8 @@ export const reservationPaymentProjection = z
   .object({
     id: paymentId,
     payment_method_id: paymentMethodId,
+    method_name: z.string().trim().min(1).max(200),
+    rail: paymentRail,
     status: paymentStatus,
     evidence_status: paymentEvidenceStatus,
     amount_minor: moneyString,

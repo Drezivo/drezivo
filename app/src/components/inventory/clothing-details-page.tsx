@@ -328,7 +328,10 @@ function DetailContent({
                     </Button>
                   )}
                 </div>
-                <p className="mt-4 text-xl font-semibold text-dashboard-navy">{priceRange}</p>
+                <div className="mt-4">
+                  <p className="text-xl font-semibold text-dashboard-navy">{priceRange}</p>
+                  <p className="mt-1 text-sm text-dashboard-muted">{formatHeroPricingSummary(item.variants)}</p>
+                </div>
                 {item.description ? (
                   <p className="mt-5 max-w-3xl text-sm leading-6 text-dashboard-muted">{item.description}</p>
                 ) : (
@@ -362,7 +365,9 @@ function DetailContent({
                     <TableHead>Color</TableHead>
                     <TableHead>SKU</TableHead>
                     <TableHead>Rental Price</TableHead>
+                    <TableHead>Extra Day</TableHead>
                     <TableHead>Deposit</TableHead>
+                    <TableHead>Recovery</TableHead>
                     <TableHead>Measurements</TableHead>
                     <TableHead>Pieces</TableHead>
                   </TableRow>
@@ -373,13 +378,17 @@ function DetailContent({
                       <TableCell className="font-semibold text-dashboard-navy">{variant.size_label}</TableCell>
                       <TableCell className="text-dashboard-muted">{variant.color_label ?? "—"}</TableCell>
                       <TableCell className="text-dashboard-muted">{variant.sku}</TableCell>
-                      <TableCell className="font-medium text-dashboard-navy">
-                        {formatMoney(variant.rental_price_minor, variant.currency)}
-                        {variant.pricing_mode === "daily" ? " / day" : ""}
+                      <TableCell>
+                        <div className="font-medium text-dashboard-navy">{formatVariantRentalPrice(variant)}</div>
+                        <div className="mt-0.5 text-xs text-dashboard-muted">{formatPricingModeLabel(variant)}</div>
+                      </TableCell>
+                      <TableCell className="text-dashboard-muted">
+                        {formatExtraDayPrice(variant)}
                       </TableCell>
                       <TableCell className="text-dashboard-muted">
                         {formatMoney(variant.security_deposit_minor, variant.currency)}
                       </TableCell>
+                      <TableCell className="text-dashboard-muted">{formatRecoveryDuration(variant.turnaround_minutes)}</TableCell>
                       <TableCell className="text-dashboard-muted">{measurementLabel(variant)}</TableCell>
                       <TableCell className="text-dashboard-muted">{variant.assets.length}</TableCell>
                     </TableRow>
@@ -693,6 +702,45 @@ function formatPriceRange(variants: ClothingVariantDetail[]): string {
   return minimum === maximum
     ? minimumLabel
     : `${minimumLabel}–${formatMoney(maximum.toString(), currency)}`;
+}
+
+function formatHeroPricingSummary(variants: ClothingVariantDetail[]): string {
+  if (variants.length === 0) return "No rental pricing configured.";
+  const summaries = new Set(variants.map((variant) => formatVariantRentalPrice(variant)));
+  if (summaries.size === 1) return `Rental rate: ${[...summaries][0]}`;
+  return "Rental pricing varies by size/variant. See the pricing table below.";
+}
+
+function formatVariantRentalPrice(variant: ClothingVariantDetail): string {
+  const price = formatMoney(variant.rental_price_minor, variant.currency);
+  if (variant.pricing_mode === "daily") return `${price} / day`;
+  return `${price} / ${formatDurationDays(variant.included_duration_minutes)}`;
+}
+
+function formatPricingModeLabel(variant: ClothingVariantDetail): string {
+  return variant.pricing_mode === "daily" ? "Daily rental" : "Fixed-duration rental";
+}
+
+function formatExtraDayPrice(variant: ClothingVariantDetail): string {
+  if (variant.pricing_mode === "daily") return "Included in daily rate";
+  return `${formatMoney(variant.extra_day_price_minor, variant.currency)} / extra day`;
+}
+
+function formatRecoveryDuration(minutes: number): string {
+  if (minutes <= 0) return "None";
+  const days = minutes / (24 * 60);
+  if (Number.isInteger(days)) return `${days} ${days === 1 ? "day" : "days"}`;
+  const hours = minutes / 60;
+  if (Number.isInteger(hours)) return `${hours} ${hours === 1 ? "hour" : "hours"}`;
+  return `${minutes} min`;
+}
+
+function formatDurationDays(minutes: number): string {
+  const days = minutes / (24 * 60);
+  if (Number.isInteger(days)) return `${days} ${days === 1 ? "day" : "days"}`;
+  const hours = minutes / 60;
+  if (Number.isInteger(hours)) return `${hours} ${hours === 1 ? "hour" : "hours"}`;
+  return `${minutes} min`;
 }
 
 function formatMoney(minor: string, currency: string): string {

@@ -5,7 +5,9 @@
  */
 import { z } from 'zod';
 
-import { instantInterval } from '../common/time';
+import { fileObjectId, paymentId, paymentReceiptId } from '../common/ids';
+import { moneyString } from '../common/money';
+import { instantInterval, isoInstant } from '../common/time';
 import { physicalAssetReadiness } from '../catalogue/staff';
 import { staffReservationCustomerInput } from './hold';
 import { reservationSummary } from './reservation';
@@ -33,7 +35,15 @@ export type ReservationSubmitResponse = z.infer<typeof reservationSubmitResponse
  * Staff-facing "Complete Reservation" intent. The API may submit and then confirm,
  * but it never skips the canonical held -> pending_confirmation -> confirmed states.
  */
-export const staffReservationCompleteRequest = reservationSubmitRequest;
+export const staffReservationCompleteRequest = reservationSubmitRequest.extend({
+  /** Staff may record the exact cash received during the same walk-in completion intent. */
+  cash_collection: z
+    .object({
+      amount_received_minor: moneyString,
+    })
+    .strict()
+    .optional(),
+});
 export type StaffReservationCompleteRequest = z.infer<typeof staffReservationCompleteRequest>;
 
 export const staffReservationCompletionNextAction = z.enum([
@@ -85,6 +95,46 @@ export const reservationConfirmResponse = z
   .object({ reservation: reservationSummary })
   .strict();
 export type ReservationConfirmResponse = z.infer<typeof reservationConfirmResponse>;
+
+/** Attach one already-finalized immutable receipt to the reservation's server-owned payment. */
+export const reservationPaymentReceiptAttachRequest = z
+  .object({ file_id: fileObjectId })
+  .strict();
+export type ReservationPaymentReceiptAttachRequest = z.infer<
+  typeof reservationPaymentReceiptAttachRequest
+>;
+
+export const reservationPaymentReceiptAttachResponse = z
+  .object({
+    receipt_id: paymentReceiptId,
+    payment_id: paymentId,
+    evidence_status: z.literal('uploaded'),
+  })
+  .strict();
+export type ReservationPaymentReceiptAttachResponse = z.infer<
+  typeof reservationPaymentReceiptAttachResponse
+>;
+
+/**
+ * Staff merchant collection verification. Cash does not require evidence; manual rails require
+ * an accepted receipt already attached to the reservation payment.
+ */
+export const reservationPaymentVerifyRequest = versionedAction.extend({
+  verified_amount_minor: moneyString,
+  merchant_reference: z.string().trim().min(1).max(200).optional(),
+});
+export type ReservationPaymentVerifyRequest = z.infer<typeof reservationPaymentVerifyRequest>;
+
+export const reservationPaymentVerifyResponse = z
+  .object({
+    reservation: reservationSummary,
+    payment_id: paymentId,
+    payment_status: z.literal('paid'),
+    verified_amount_minor: moneyString,
+    verified_at: isoInstant,
+  })
+  .strict();
+export type ReservationPaymentVerifyResponse = z.infer<typeof reservationPaymentVerifyResponse>;
 
 /** pending_confirmation -> rejected with an auditable merchant reason. */
 export const reservationRejectRequest = versionedAction.extend({

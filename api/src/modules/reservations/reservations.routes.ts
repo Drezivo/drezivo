@@ -5,6 +5,7 @@ import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
 import {
+  attachReservationPaymentReceiptController,
   cancelReservationController,
   completeStaffReservationController,
   confirmReservationController,
@@ -17,6 +18,7 @@ import {
   listReservationsController,
   pickupReservationController,
   rejectReservationController,
+  verifyReservationPaymentController,
   returnReservationController,
   inspectReturnedReservationController,
   completeRentalReservationController,
@@ -30,6 +32,8 @@ import {
   validateReservationCancel,
   validateReservationConfirm,
   validateReservationId,
+  validateReservationPaymentReceiptAttach,
+  validateReservationPaymentVerify,
   validateReservationListQuery,
   validateReservationPickup,
   validateReservationReject,
@@ -192,6 +196,32 @@ reservationsRouter.post(
   validateReservationSubmit,
   requireReservationIdempotencyKey,
   submitReservationController,
+);
+
+reservationsRouter.post(
+  '/reservations/:reservationId/payment-receipt',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('settlement'),
+  requireReservationManagePermission,
+  validateReservationId,
+  validateReservationPaymentReceiptAttach,
+  requireReservationIdempotencyKey,
+  attachReservationPaymentReceiptController,
+);
+
+reservationsRouter.post(
+  '/reservations/:reservationId/verify-payment',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('settlement'),
+  requireMerchantReservationReviewPermission,
+  validateReservationId,
+  validateReservationPaymentVerify,
+  requireReservationIdempotencyKey,
+  verifyReservationPaymentController,
 );
 
 reservationsRouter.post(

@@ -288,6 +288,16 @@ function ReservationDetails({
 
           {detail.payment ? (
             <div className="grid gap-3 sm:grid-cols-2">
+              <DetailValue
+                label="Payment method"
+                value={`${detail.payment.method_name}${
+                  detail.payment.rail === "cash"
+                    ? " · Cash"
+                    : detail.payment.rail === "manual_qr"
+                      ? " · Manual QR"
+                      : " · Manual transfer"
+                }`}
+              />
               <div>
                 <p className="text-xs text-dashboard-muted">Payment status</p>
                 <Badge

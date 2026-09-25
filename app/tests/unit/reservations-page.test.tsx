@@ -93,6 +93,8 @@ const reservation = reservationListItem.parse({
   payment: {
     id: "00000000-0000-4000-8000-000000000105",
     payment_method_id: "00000000-0000-4000-8000-000000000106",
+    method_name: "Cash",
+    rail: "cash" as const,
     status: "paid" as const,
     evidence_status: "verified" as const,
     amount_minor: "200000",

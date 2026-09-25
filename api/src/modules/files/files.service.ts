@@ -42,8 +42,14 @@ import {
 const AUTHORIZE_UPLOAD_OPERATION = 'files.upload.authorize';
 const FINALIZE_UPLOAD_OPERATION = 'files.upload.finalize';
 const UPLOAD_EXPIRY_SECONDS = 10 * 60;
-const CATALOGUE_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const FILE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 const CATALOGUE_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const PAYMENT_RECEIPT_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+]);
 
 type FileCommandBody<T> = SuccessEnvelope<T> | FailureEnvelope;
 
@@ -69,11 +75,11 @@ export async function authorizeUpload(
   input: FileCommandContext & { request: UploadAuthorizationRequest },
   storage: ObjectStorage = s3ObjectStorage,
 ): Promise<FileCommandResponse<UploadAuthorizationResponse>> {
-  assertFileWriteContext(input);
   const parsed = uploadAuthorizationRequest.safeParse(input.request);
   if (!parsed.success) throw new ValidationError('Upload authorization request is invalid.');
   const request = parsed.data;
-  assertSupportedCatalogueUpload(request);
+  assertFileWriteContext(input, request.purpose);
+  assertSupportedUpload(request);
   const payloadHash = canonicalRequestHash(request);
 
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
@@ -154,14 +160,14 @@ export async function finalizeUpload(
   input: FileCommandContext & { fileId: string },
   storage: ObjectStorage = s3ObjectStorage,
 ): Promise<FileCommandResponse<UploadFinalizeResponse>> {
-  assertFileWriteContext(input);
   const payloadHash = canonicalRequestHash({ file_id: input.fileId });
 
   const before = await withTenantTransaction(input.tenantId, input.principalId, (client) =>
     readFileObject(client, input.tenantId, input.fileId),
   );
   if (!before) throw new NotFoundError('The uploaded file could not be found.');
-  assertCatalogueFilePurpose(before);
+  assertSupportedFilePurpose(before);
+  assertFileWriteContext(input, before.purpose);
 
   if (before.lifecycle_status === 'accepted') {
     return finalizeAcceptedReplay(input, before, payloadHash);
@@ -179,7 +185,8 @@ export async function finalizeUpload(
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
     const locked = await readFileObject(client, input.tenantId, input.fileId, { forUpdate: true });
     if (!locked) throw new NotFoundError('The uploaded file could not be found.');
-    assertCatalogueFilePurpose(locked);
+    assertSupportedFilePurpose(locked);
+    assertFileWriteContext(input, locked.purpose);
 
     const claim = await claimTenantIdempotency(client, {
       tenantId: input.tenantId,
@@ -249,39 +256,54 @@ export async function finalizeUpload(
   });
 }
 
-function assertFileWriteContext(input: FileContext): void {
+function assertFileWriteContext(input: FileContext, purpose: FileObjectRow['purpose']): void {
   if (input.effectiveTenantStatus === 'restricted') {
     throw new TenantRestrictedError('This workspace is temporarily restricted.');
   }
   if (input.effectiveTenantStatus === 'cancelled') {
     throw new TenantCancelledError('This workspace is closed.');
   }
+  if (purpose === 'payment_receipt') {
+    if (
+      !input.permissionCodes.includes('reservations.manage') ||
+      !input.permissionCodes.includes('payments.manage')
+    ) {
+      throw new ForbiddenError('Reservation payment management permission is required.');
+    }
+    return;
+  }
   if (!input.permissionCodes.includes('assets.manage')) {
     throw new ForbiddenError('This branch does not grant clothing file management access.');
   }
 }
 
-function assertSupportedCatalogueUpload(request: UploadAuthorizationRequest): void {
-  if (
-    request.purpose !== 'catalogue_image' &&
-    request.purpose !== 'measurement_guide' &&
-    request.purpose !== 'storefront_asset'
-  ) {
-    throw new ValidationError('This upload purpose is not available through the image upload flow.');
+function assertSupportedUpload(request: UploadAuthorizationRequest): void {
+  const isCataloguePurpose =
+    request.purpose === 'catalogue_image' ||
+    request.purpose === 'measurement_guide' ||
+    request.purpose === 'storefront_asset';
+  if (isCataloguePurpose) {
+    if (!CATALOGUE_IMAGE_MIME_TYPES.has(request.content_type)) {
+      throw new ValidationError('Images must be JPEG, PNG, or WebP.');
+    }
+  } else if (request.purpose === 'payment_receipt') {
+    if (!PAYMENT_RECEIPT_MIME_TYPES.has(request.content_type)) {
+      throw new ValidationError('Payment receipts must be JPEG, PNG, WebP, or PDF.');
+    }
+  } else {
+    throw new ValidationError('This upload purpose is not available through the staff upload flow.');
   }
-  if (!CATALOGUE_IMAGE_MIME_TYPES.has(request.content_type)) {
-    throw new ValidationError('Images must be JPEG, PNG, or WebP.');
-  }
-  if (request.byte_size > CATALOGUE_IMAGE_MAX_BYTES) {
-    throw new ValidationError('Images must be 10 MB or smaller.');
+  if (request.byte_size > FILE_UPLOAD_MAX_BYTES) {
+    throw new ValidationError('Uploads must be 10 MB or smaller.');
   }
 }
 
-function assertCatalogueFilePurpose(row: FileObjectRow): void {
+function assertSupportedFilePurpose(row: FileObjectRow): void {
   if (
     row.purpose !== 'catalogue_image' &&
     row.purpose !== 'measurement_guide' &&
-    row.purpose !== 'storefront_asset'
+    row.purpose !== 'storefront_asset' &&
+    row.purpose !== 'payment_receipt'
   ) {
     throw new NotFoundError('The uploaded file could not be found.');
   }
@@ -293,13 +315,13 @@ function validateUploadedObject(row: FileObjectRow, uploaded: UploadedObjectMeta
   if (!uploaded.sha256 || uploaded.sha256 !== row.sha256) {
     return 'Uploaded file checksum does not match the authorized content.';
   }
-  if (!matchesImageSignature(uploaded.prefix, row.mime_type)) {
-    return 'Uploaded file contents do not match the declared image type.';
+  if (!matchesFileSignature(uploaded.prefix, row.mime_type)) {
+    return 'Uploaded file contents do not match the declared file type.';
   }
   return null;
 }
 
-function matchesImageSignature(prefix: Uint8Array, mimeType: string): boolean {
+function matchesFileSignature(prefix: Uint8Array, mimeType: string): boolean {
   if (mimeType === 'image/jpeg') {
     return prefix.length >= 3 && prefix[0] === 0xff && prefix[1] === 0xd8 && prefix[2] === 0xff;
   }
@@ -313,6 +335,9 @@ function matchesImageSignature(prefix: Uint8Array, mimeType: string): boolean {
       ascii(prefix, 0, 4) === 'RIFF' &&
       ascii(prefix, 8, 12) === 'WEBP'
     );
+  }
+  if (mimeType === 'application/pdf') {
+    return prefix.length >= 5 && ascii(prefix, 0, 5) === '%PDF-';
   }
   return false;
 }

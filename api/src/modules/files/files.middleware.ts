@@ -26,9 +26,13 @@ export const requireFileIdempotencyKey: RequestHandler = (req, _res, next): void
   next();
 };
 
-export const requireClothingFilePermission: RequestHandler = (req, _res, next): void => {
-  if (!req.tenantContext?.permissionCodes.includes('assets.manage')) {
-    next(new ForbiddenError('This branch does not grant clothing file management access.'));
+export const requireFileUploadPermission: RequestHandler = (req, _res, next): void => {
+  const permissions = req.tenantContext?.permissionCodes ?? [];
+  const canManageAssets = permissions.includes('assets.manage');
+  const canManageReservationPayments =
+    permissions.includes('reservations.manage') && permissions.includes('payments.manage');
+  if (!canManageAssets && !canManageReservationPayments) {
+    next(new ForbiddenError('This branch does not grant file upload access.'));
     return;
   }
   next();
