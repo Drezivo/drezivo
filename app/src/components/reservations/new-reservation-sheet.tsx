@@ -1049,17 +1049,32 @@ export function NewReservationSheet({
                 />
               </div>
               <div className="mt-3 rounded-md bg-dashboard-surface p-3">
-                <div className="text-xs text-dashboard-muted">
-                  <span className="font-medium text-dashboard-navy">
-                    {held.paymentInstructions.method_name}
-                  </span>
-                  {held.paymentInstructions.destination_note
-                    ? ` · ${held.paymentInstructions.destination_note}`
-                    : ""}
+                <div className="flex items-center justify-between gap-3 text-xs text-dashboard-muted">
+                  <div>
+                    <span className="font-medium text-dashboard-navy">
+                      {held.paymentInstructions.method_name}
+                    </span>
+                    {held.paymentInstructions.destination_note
+                      ? ` · ${held.paymentInstructions.destination_note}`
+                      : ""}
+                  </div>
+                  {held.paymentInstructions.rail === "cash" ? (
+                    <label className="hidden items-center gap-2 rounded-md border border-dashboard-border px-3 py-2 text-sm text-dashboard-navy sm:flex">
+                      <input
+                        type="checkbox"
+                        checked={cashReceived}
+                        onChange={(event) => {
+                          setCashReceived(event.target.checked);
+                          completeGuard.resetIntent();
+                        }}
+                      />
+                      Cash received
+                    </label>
+                  ) : null}
                 </div>
 
                 {held.paymentInstructions.rail === "cash" ? (
-                  <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                  <div className="mt-3 grid gap-3">
                     <Field label="Cash tendered">
                       <div className="relative">
                         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-dashboard-muted">
@@ -1085,7 +1100,7 @@ export function NewReservationSheet({
                         </p>
                       ) : null}
                     </Field>
-                    <label className="flex h-10 items-center gap-2 rounded-md border border-dashboard-border px-3 text-sm text-dashboard-navy">
+                    <label className="flex h-10 items-center gap-2 rounded-md border border-dashboard-border px-3 text-sm text-dashboard-navy sm:hidden">
                       <input
                         type="checkbox"
                         checked={cashReceived}
