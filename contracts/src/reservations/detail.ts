@@ -1,6 +1,7 @@
 /** Authoritative staff reservation detail shared by Reservations and Schedule. */
 import { z } from 'zod';
 
+import { physicalAssetReadiness } from '../catalogue/staff';
 import {
   branchId,
   physicalAssetId,
@@ -38,6 +39,8 @@ export const reservationLineDetail = z
         color_label: z.string().trim().min(1).max(80).nullable(),
       })
       .strict(),
+    /** Live operational readiness of the physical garment allocated to this line, when one exists. */
+    current_asset_readiness: physicalAssetReadiness.nullable(),
     line_number: z.number().int().positive(),
     name_snapshot: z.string().trim().min(1).max(300),
     measurements_snapshot: z.record(z.string(), z.number().finite().nonnegative()),

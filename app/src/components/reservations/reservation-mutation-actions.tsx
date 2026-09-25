@@ -39,6 +39,8 @@ type ActionOption = {
   action: ReservationAction;
   label: string;
   tone?: "danger";
+  disabled?: boolean;
+  disabledReason?: string;
 };
 
 const READINESS_OPTIONS = [
@@ -91,6 +93,9 @@ export function ReservationMutationActions({
     () => getVisibleMutationActions(detail, permissionCodes),
     [detail, permissionCodes]
   );
+  const disabledActionReasons = actions
+    .filter((option) => option.disabled && option.disabledReason)
+    .map((option) => option.disabledReason as string);
 
   useEffect(() => {
     setSelectedAction(null);
@@ -374,13 +379,17 @@ export function ReservationMutationActions({
               type="button"
               variant={option.tone === "danger" ? "danger" : "secondary"}
               size="sm"
-              disabled={submitGuard.isSubmitting}
+              disabled={submitGuard.isSubmitting || option.disabled}
+              title={option.disabledReason}
               onClick={() => chooseAction(option.action)}
             >
               {option.label}
             </Button>
           ))}
         </div>
+        {disabledActionReasons.length > 0 ? (
+          <p className="mt-2 text-xs text-dashboard-muted">{disabledActionReasons[0]}</p>
+        ) : null}
       </div>
 
       {selectedAction ? (
@@ -884,13 +893,26 @@ function getVisibleMutationActions(
       ];
     case "picked_up":
       return canHandleCustody ? [{ action: "return", label: "Return" }] : [];
-    case "returned":
+    case "returned": {
+      const allReturnedAssetsReady = detail.lines.every(
+        (line) => line.current_asset_readiness === "ready"
+      );
       return [
         ...(canInspectAssets ? [{ action: "inspect" as const, label: "Inspect Return" }] : []),
         ...(canHandleCustody
-          ? [{ action: "complete_rental" as const, label: "Complete Rental" }]
+          ? [
+              {
+                action: "complete_rental" as const,
+                label: "Complete Rental",
+                disabled: !allReturnedAssetsReady,
+                disabledReason: !allReturnedAssetsReady
+                  ? "Inspect the returned garment and mark it Ready before completing the rental."
+                  : undefined,
+              },
+            ]
           : []),
       ];
+    }
     default:
       return [];
   }

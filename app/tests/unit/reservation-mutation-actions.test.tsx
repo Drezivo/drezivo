@@ -68,6 +68,7 @@ const confirmedDetail = reservationDetail.parse({
       id: "00000000-0000-4000-8000-000000000103",
       variant_id: "00000000-0000-4000-8000-000000000104",
       variant: { sku: "ACTION-M-EMERALD", size_label: "Medium", color_label: "Emerald" },
+      current_asset_readiness: "ready",
       line_number: 1,
       name_snapshot: "Action Gown",
       measurements_snapshot: {},
@@ -298,6 +299,10 @@ describe("ReservationMutationActions", () => {
       status: "returned",
       version: 5,
       confirmed_at: confirmedDetail.confirmed_at,
+      lines: confirmedDetail.lines.map((line) => ({
+        ...line,
+        current_asset_readiness: "unready" as const,
+      })),
     });
     api.inspectReservationReturn.mockResolvedValueOnce({
       data: {
@@ -307,6 +312,13 @@ describe("ReservationMutationActions", () => {
       requestId: "req-inspection",
     });
     renderActions(returnedDetail);
+
+    expect(screen.getByRole("button", { name: "Complete Rental" })).toBeDisabled();
+    expect(
+      screen.getByText(
+        "Inspect the returned garment and mark it Ready before completing the rental."
+      )
+    ).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Inspect Return" }));
     fireEvent.change(screen.getByLabelText("Garment readiness"), {

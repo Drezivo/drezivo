@@ -132,6 +132,7 @@ const reservationDetailRecord = reservationDetail.parse({
       id: reservation.line.id,
       variant_id: reservation.line.variant_id,
       variant: { sku: "EMERALD-M", size_label: "Medium", color_label: "Emerald" },
+      current_asset_readiness: "ready",
       line_number: 1,
       name_snapshot: reservation.line.name_snapshot,
       measurements_snapshot: { bust_cm: 91, waist_cm: 72 },
@@ -201,6 +202,10 @@ const returnedDetailRecord = reservationDetail.parse({
   ...reservationDetailRecord,
   status: "returned",
   version: 5,
+  lines: reservationDetailRecord.lines.map((line) => ({
+    ...line,
+    current_asset_readiness: "unready" as const,
+  })),
   custody_timeline: [
     {
       event_kind: "pickup",
@@ -476,7 +481,12 @@ describe("ReservationsPage", () => {
     expect(await screen.findByText("Clean at handover.")).toBeVisible();
     expect(screen.getByText("Returned with light dust on hem.")).toBeVisible();
     expect(screen.getByText("Inspect Return")).toBeVisible();
-    expect(screen.getByText("Complete Rental")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Complete Rental" })).toBeDisabled();
+    expect(
+      screen.getByText(
+        "Inspect the returned garment and mark it Ready before completing the rental."
+      )
+    ).toBeVisible();
   });
 
   it("ignores an older detail response after O/S selects a different reservation", async () => {
