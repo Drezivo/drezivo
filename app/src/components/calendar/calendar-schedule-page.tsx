@@ -52,7 +52,6 @@ const activityTone: Record<CalendarActivityType, string> = {
   Pickup: "dashboard-event-pickup",
   Return: "dashboard-event-return",
   Fitting: "dashboard-event-fitting",
-  Reservation: "dashboard-event-reservation",
 };
 
 const metricIcons = [CalendarDays, RotateCcw, Ruler, CircleAlert] as const;
@@ -241,7 +240,7 @@ function CalendarControls({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
-              {(["All Activity", "Pickup", "Return", "Fitting", "Reservation"] as const).map((item) => (
+              {(["All Activity", "Pickup", "Return", "Fitting"] as const).map((item) => (
                 <DropdownMenuItem key={item} onSelect={() => onActivityFilterChange(item)}>
                   {item}
                 </DropdownMenuItem>
@@ -451,7 +450,6 @@ function ActivityCard({
         {activity.type === "Pickup" ? <Truck className="h-3 w-3 shrink-0" aria-hidden="true" /> : null}
         {activity.type === "Return" ? <RotateCcw className="h-3 w-3 shrink-0" aria-hidden="true" /> : null}
         {activity.type === "Fitting" ? <Ruler className="h-3 w-3 shrink-0" aria-hidden="true" /> : null}
-        {activity.type === "Reservation" ? <CalendarDays className="h-3 w-3 shrink-0" aria-hidden="true" /> : null}
         <span className="truncate">{veryCompact ? activity.type.slice(0, 3) : activity.type}</span>
       </span>
       <span className={cn("block truncate font-medium", compact ? "mt-0.5 text-[0.66rem]" : "mt-1 text-[0.72rem]")}>
@@ -556,7 +554,6 @@ const AGENDA_FILTERS: readonly ("All" | CalendarActivityType)[] = [
   "Pickup",
   "Return",
   "Fitting",
-  "Reservation",
 ];
 
 const reservationStatusTone = {
@@ -916,8 +913,8 @@ function DayAgendaSheet({
                 </div>
               </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {(["Pickup", "Return", "Fitting", "Reservation"] as const).map((type) => (
+              <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {(["Pickup", "Return", "Fitting"] as const).map((type) => (
                   <button
                     key={type}
                     type="button"
@@ -925,7 +922,7 @@ function DayAgendaSheet({
                     className="rounded-lg border border-dashboard-border bg-dashboard-surface px-3 py-3 text-left transition-colors hover:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
                   >
                     <span className="block text-lg font-semibold text-dashboard-navy">{counts[type]}</span>
-                    <span className="mt-1 block text-xs text-dashboard-muted">{type === "Reservation" ? "Reservations" : `${type}s`}</span>
+                    <span className="mt-1 block text-xs text-dashboard-muted">{`${type}s`}</span>
                   </button>
                 ))}
               </div>

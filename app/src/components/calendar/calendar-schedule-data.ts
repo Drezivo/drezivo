@@ -1,4 +1,4 @@
-export type CalendarActivityType = "Pickup" | "Return" | "Fitting" | "Reservation";
+export type CalendarActivityType = "Pickup" | "Return" | "Fitting";
 
 export type CalendarDay = {
   key: string;
@@ -43,7 +43,6 @@ export const CALENDAR_ACTIVITIES: readonly CalendarActivity[] = [
   { id: "mon-fit-bea", day: "mon", type: "Fitting", customer: "Bea Tan", clothing: "Red Gown", startTime: "09:00", durationMinutes: 60 },
   { id: "mon-pickup", day: "mon", type: "Pickup", customer: "Leanne Cruz", clothing: "Black Satin Gown", startTime: "11:00", durationMinutes: 60 },
   { id: "mon-return", day: "mon", type: "Return", customer: "Sofia Garcia", clothing: "Red Evening Dress", startTime: "14:00", durationMinutes: 60 },
-  { id: "mon-reservation", day: "mon", type: "Reservation", customer: "Camille Reyes", clothing: "Filipiniana Dress", startTime: "19:30", durationMinutes: 30 },
 
   // Tuesday: two simultaneous activities for a clean 50 / 50 split.
   { id: "tue-return", day: "tue", type: "Return", customer: "Daniel Lopez", clothing: "Barong Tagalog", startTime: "10:00", durationMinutes: 60 },
@@ -58,12 +57,10 @@ export const CALENDAR_ACTIVITIES: readonly CalendarActivity[] = [
   { id: "wed-fit-katrina", day: "wed", type: "Fitting", customer: "Katrina Santos", clothing: "Emerald Gown", startTime: "13:30", durationMinutes: 60 },
   { id: "wed-fit-melanie", day: "wed", type: "Fitting", customer: "Melanie Cruz", clothing: "Ivory Dress", startTime: "13:30", durationMinutes: 30 },
   { id: "wed-fit-paolo", day: "wed", type: "Fitting", customer: "Paolo Lim", clothing: "Barong Tagalog", startTime: "13:30", durationMinutes: 60 },
-  { id: "wed-reservation", day: "wed", type: "Reservation", customer: "Sophia Garcia", clothing: "Red Dress", startTime: "16:00", durationMinutes: 60 },
 
   // Thursday: four simultaneous mixed activities for a 25% split.
   { id: "thu-return", day: "thu", type: "Return", customer: "Elise Cruz", clothing: "Wedding Gown", startTime: "10:00", durationMinutes: 60 },
   { id: "thu-fitting", day: "thu", type: "Fitting", customer: "Melanie Santos", clothing: "Gown", startTime: "13:30", durationMinutes: 60 },
-  { id: "thu-reservation-overlap", day: "thu", type: "Reservation", customer: "Janelle Cruz", clothing: "Gold Dress", startTime: "15:00", durationMinutes: 60 },
   { id: "thu-fitting-overlap", day: "thu", type: "Fitting", customer: "Alyssa Tan", clothing: "Wedding Gown", startTime: "15:00", durationMinutes: 30 },
   { id: "thu-pickup-overlap", day: "thu", type: "Pickup", customer: "Luis Navarro", clothing: "Barong Tagalog", startTime: "15:00", durationMinutes: 60 },
   { id: "thu-return-overlap", day: "thu", type: "Return", customer: "Karen Lim", clothing: "Blue Dress", startTime: "15:00", durationMinutes: 30 },
@@ -79,7 +76,6 @@ export const CALENDAR_ACTIVITIES: readonly CalendarActivity[] = [
   { id: "sat-pickup", day: "sat", type: "Pickup", customer: "Kristine Cruz", clothing: "Black Gown", startTime: "10:30", durationMinutes: 60 },
   { id: "sat-return", day: "sat", type: "Return", customer: "Mark Santos", clothing: "Suit", startTime: "13:00", durationMinutes: 60 },
   { id: "sat-fitting", day: "sat", type: "Fitting", customer: "Jasmine Lee", clothing: "Wedding Gown", startTime: "15:30", durationMinutes: 30 },
-  { id: "sat-reservation-evening", day: "sat", type: "Reservation", customer: "Janine Cruz", clothing: "Beige Midi Dress", startTime: "20:00", durationMinutes: 60 },
 
   { id: "sun-fitting", day: "sun", type: "Fitting", customer: "Denise Ramos", clothing: "Gown", startTime: "09:00", durationMinutes: 60 },
   { id: "sun-pickup", day: "sun", type: "Pickup", customer: "Luis Navarro", clothing: "Barong Tagalog", startTime: "12:00", durationMinutes: 60 },
