@@ -318,6 +318,21 @@ function ReservationDetails({
                 label="Recorded amount"
                 value={formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)}
               />
+              {detail.payment.rail === "cash" && detail.payment.cash_tendered_minor !== null ? (
+                <DetailValue
+                  label="Cash tendered"
+                  value={formatMinorMoney(
+                    detail.payment.cash_tendered_minor,
+                    detail.payment.currency
+                  )}
+                />
+              ) : null}
+              {detail.payment.rail === "cash" && detail.payment.change_due_minor !== null ? (
+                <DetailValue
+                  label="Change due"
+                  value={formatMinorMoney(detail.payment.change_due_minor, detail.payment.currency)}
+                />
+              ) : null}
               <DetailValue
                 label="Verified"
                 value={

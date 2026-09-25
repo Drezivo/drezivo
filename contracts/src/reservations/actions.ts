@@ -36,10 +36,10 @@ export type ReservationSubmitResponse = z.infer<typeof reservationSubmitResponse
  * but it never skips the canonical held -> pending_confirmation -> confirmed states.
  */
 export const staffReservationCompleteRequest = reservationSubmitRequest.extend({
-  /** Staff may record the exact cash received during the same walk-in completion intent. */
+  /** Staff records physical cash tendered; verified payment remains the exact amount due. */
   cash_collection: z
     .object({
-      amount_received_minor: moneyString,
+      amount_tendered_minor: moneyString,
     })
     .strict()
     .optional(),

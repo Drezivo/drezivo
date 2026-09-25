@@ -536,6 +536,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       return String(requireRow(payment.rows, 'cash direct payment').amount_minor);
     });
 
+    const tenderedMinor = String(BigInt(amountMinor) + 20_000n);
     const result = await completeStaffReservation(
       reviewContext(seed, 'req-rsv032-cash-direct', 'idem-rsv032-cash-direct'),
       held.id,
@@ -543,7 +544,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
         version: 1,
         terms_accepted: true,
         customer: walkInCustomer('Cash Walk-in Customer'),
-        cash_collection: { amount_received_minor: amountMinor },
+        cash_collection: { amount_tendered_minor: tenderedMinor },
       },
     );
 
@@ -561,8 +562,13 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
         `SELECT status, verified_at FROM payment WHERE tenant_id = $1 AND id = $2`,
         [seed.tenantId, held.paymentId],
       );
-      const verification = await client.query<{ decision: string; verified_amount_minor: number | null }>(
-        `SELECT decision, verified_amount_minor
+      const verification = await client.query<{
+        decision: string;
+        verified_amount_minor: number | null;
+        cash_tendered_minor: number | null;
+        change_due_minor: number | null;
+      }>(
+        `SELECT decision, verified_amount_minor, cash_tendered_minor, change_due_minor
            FROM payment_verification
           WHERE tenant_id = $1 AND payment_id = $2
           ORDER BY decided_at DESC, id DESC LIMIT 1`,
@@ -578,6 +584,8 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     expect(financial.verification).toMatchObject({
       decision: 'verified',
       verified_amount_minor: Number(amountMinor),
+      cash_tendered_minor: Number(tenderedMinor),
+      change_due_minor: 20_000,
     });
   });
 

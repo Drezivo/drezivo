@@ -639,6 +639,10 @@ function toPaymentProjection(
     amount_minor: String(row.payment_amount_minor),
     currency: row.payment_currency,
     verified_at: row.payment_verified_at?.toISOString() ?? null,
+    cash_tendered_minor:
+      row.payment_cash_tendered_minor === null ? null : String(row.payment_cash_tendered_minor),
+    change_due_minor:
+      row.payment_change_due_minor === null ? null : String(row.payment_change_due_minor),
   });
 }
 

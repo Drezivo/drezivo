@@ -32,7 +32,7 @@ export function PostAuthResolver() {
         getToken,
         setActive,
       });
-      router.replace(resolution.kind === "workspace" ? "/" : "/onboarding");
+      router.replace(resolution.kind === "workspace" ? "/calendar" : "/onboarding");
     } catch (error) {
       setState({ kind: "error", error: toDrezivoApiError(error) });
     }

@@ -458,7 +458,7 @@ describe("NewReservationSheet", () => {
             source: "new",
             customer: { full_name: "Walk-in Customer", phone: "09171234567" },
           },
-          cash_collection: { amount_received_minor: "200000" },
+          cash_collection: { amount_tendered_minor: "200000" },
         },
         expect.any(String)
       )
@@ -571,7 +571,7 @@ describe("NewReservationSheet", () => {
           version: 1,
           terms_accepted: true,
           customer: { source: "existing", customer_id: ids.customer },
-          cash_collection: { amount_received_minor: "200000" },
+          cash_collection: { amount_tendered_minor: "200000" },
         },
         expect.any(String)
       )

@@ -374,14 +374,16 @@ export async function insertReservationPaymentVerification(
     paymentId: string;
     membershipId: string;
     verifiedAmountMinor: number;
+    cashTenderedMinor?: number | null;
+    changeDueMinor?: number | null;
     evidenceNote: string;
   },
 ): Promise<string | null> {
   const result = await client.query<{ id: string }>(
     `INSERT INTO payment_verification
        (tenant_id, payment_id, verifier_membership_id, decision,
-        verified_amount_minor, evidence_note, business_key)
-     VALUES ($1, $2::uuid, $3::uuid, 'verified', $4, $5, $6)
+        verified_amount_minor, cash_tendered_minor, change_due_minor, evidence_note, business_key)
+     VALUES ($1, $2::uuid, $3::uuid, 'verified', $4, $5, $6, $7, $8)
      ON CONFLICT (tenant_id, business_key) DO NOTHING
      RETURNING id`,
     [
@@ -389,6 +391,8 @@ export async function insertReservationPaymentVerification(
       input.paymentId,
       input.membershipId,
       input.verifiedAmountMinor,
+      input.cashTenderedMinor ?? null,
+      input.changeDueMinor ?? null,
       input.evidenceNote,
       `reservation-payment-verified:${input.paymentId}`,
     ],

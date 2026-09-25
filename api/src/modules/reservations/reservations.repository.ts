@@ -56,6 +56,8 @@ export interface ReservationListReadRow {
   payment_amount_minor: string | number | null;
   payment_currency: string | null;
   payment_verified_at: Date | null;
+  payment_cash_tendered_minor: string | number | null;
+  payment_change_due_minor: string | number | null;
   version: number;
   created_at: Date;
   sort_reference: string;
@@ -101,6 +103,8 @@ export interface ReservationDetailHeaderRow {
   payment_amount_minor: string | number | null;
   payment_currency: string | null;
   payment_verified_at: Date | null;
+  payment_cash_tendered_minor: string | number | null;
+  payment_change_due_minor: string | number | null;
   version: number;
   created_at: Date;
 }
@@ -276,6 +280,20 @@ export async function listReservationsReadModel(
        payment_summary.amount_minor AS payment_amount_minor,
        payment_summary.currency AS payment_currency,
        payment_summary.verified_at AS payment_verified_at,
+       (SELECT pv.cash_tendered_minor
+          FROM payment_verification pv
+         WHERE pv.tenant_id = r.tenant_id
+           AND pv.payment_id = payment_summary.id
+           AND pv.decision = 'verified'
+         ORDER BY pv.decided_at DESC, pv.id DESC
+         LIMIT 1) AS payment_cash_tendered_minor,
+       (SELECT pv.change_due_minor
+          FROM payment_verification pv
+         WHERE pv.tenant_id = r.tenant_id
+           AND pv.payment_id = payment_summary.id
+           AND pv.decision = 'verified'
+         ORDER BY pv.decided_at DESC, pv.id DESC
+         LIMIT 1) AS payment_change_due_minor,
        r.version,
        r.created_at,
        lower(r.reference_code) AS sort_reference
@@ -380,6 +398,20 @@ export async function readReservationDetailModel(
        payment_summary.amount_minor AS payment_amount_minor,
        payment_summary.currency AS payment_currency,
        payment_summary.verified_at AS payment_verified_at,
+       (SELECT pv.cash_tendered_minor
+          FROM payment_verification pv
+         WHERE pv.tenant_id = r.tenant_id
+           AND pv.payment_id = payment_summary.id
+           AND pv.decision = 'verified'
+         ORDER BY pv.decided_at DESC, pv.id DESC
+         LIMIT 1) AS payment_cash_tendered_minor,
+       (SELECT pv.change_due_minor
+          FROM payment_verification pv
+         WHERE pv.tenant_id = r.tenant_id
+           AND pv.payment_id = payment_summary.id
+           AND pv.decision = 'verified'
+         ORDER BY pv.decided_at DESC, pv.id DESC
+         LIMIT 1) AS payment_change_due_minor,
        r.version,
        r.created_at
      FROM reservation r

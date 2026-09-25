@@ -1,10 +1,10 @@
 "use client";
 
 import { useClerk } from "@clerk/nextjs";
-import { Bell, ChevronDown, LogOut, Moon, Settings, Sun, UserRound } from "lucide-react";
+import { ChevronDown, LogOut, Settings, UserRound } from "lucide-react";
 import { usePathname } from "next/navigation";
 
-import type { DashboardIdentity, DashboardTheme } from "@/components/shell/dashboard-shell";
+import type { DashboardIdentity } from "@/components/shell/dashboard-shell";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -50,16 +50,11 @@ function dashboardPageLabel(pathname: string) {
 
 export function DashboardHeader({
   identity,
-  onToggleTheme,
-  theme,
 }: {
   identity: DashboardIdentity;
-  onToggleTheme: () => void;
-  theme: DashboardTheme;
 }) {
   const { signOut } = useClerk();
   const pathname = usePathname();
-  const isDark = theme === "dark";
   const pageLabel = dashboardPageLabel(pathname);
 
   return (
@@ -81,40 +76,7 @@ export function DashboardHeader({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2 sm:gap-4">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Open notifications"
-              className="relative border border-dashboard-border bg-dashboard-surface hover:bg-dashboard-active"
-            >
-              <Bell className="h-5 w-5 text-dashboard-navy" />
-              <span
-                aria-label="3 unread notifications"
-                className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-dashboard-danger ring-2 ring-dashboard-surface"
-              />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-72">
-            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>New reservation request</DropdownMenuItem>
-            <DropdownMenuItem>Payment receipt ready for review</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-          aria-pressed={isDark}
-          title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-          onClick={onToggleTheme}
-          className="border border-dashboard-border bg-dashboard-surface text-dashboard-accent hover:bg-dashboard-active hover:text-dashboard-accent"
-        >
-          {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-        </Button>
+        {/* Notifications and theme controls are intentionally hidden for now. Dark mode is the dashboard default. */}
         <Separator orientation="vertical" className="h-8" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -68,6 +68,12 @@ export async function completeStaffReservationCommand(
       `Reservation cannot be completed from ${current.status}.`,
     );
   }
+  if (
+    request.cash_collection &&
+    BigInt(request.cash_collection.amount_tendered_minor) < BigInt(current.price_snapshot.due_now_minor)
+  ) {
+    throw new ValidationError('Cash tendered cannot be less than the amount due.');
+  }
 
   let pendingReservation: ReservationSummary;
   if (current.status === 'held') {
@@ -120,9 +126,12 @@ export async function completeStaffReservationCommand(
       reservationId,
       {
         version: pendingReservation.version,
-        verified_amount_minor: request.cash_collection.amount_received_minor,
+        verified_amount_minor: pendingReservation.price_snapshot.due_now_minor,
       },
-      { requireRail: 'cash' },
+      {
+        requireRail: 'cash',
+        cashTenderedMinor: request.cash_collection.amount_tendered_minor,
+      },
     );
     if (!verified.body.success) {
       return { status: verified.status, body: verified.body };
