@@ -354,14 +354,23 @@ describe("ReservationsPage", () => {
     });
   });
 
-  it("converts inclusive pickup dates using the active branch timezone and rejects windows over 31 days", async () => {
+  it("treats the first pickup-date selection as an exact day and the second as an inclusive range", async () => {
     render(<ReservationsPage />);
     await screen.findByText("RSV-REAL-001");
     await waitFor(() => expect(api.getActorContext).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByRole("button", { name: "Pickup from" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pickup date" }));
     fireEvent.click(screen.getByRole("button", { name: /October 10/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Pickup through" }));
+
+    await waitFor(() =>
+      expect(api.getReservations).toHaveBeenLastCalledWith({
+        limit: 10,
+        sort: "created_desc",
+        pickup_start: "2026-10-09T16:00:00.000Z",
+        pickup_end: "2026-10-10T16:00:00.000Z",
+      })
+    );
+
     fireEvent.click(screen.getByRole("button", { name: /October 12/i }));
 
     await waitFor(() =>
@@ -372,15 +381,16 @@ describe("ReservationsPage", () => {
         pickup_end: "2026-10-12T16:00:00.000Z",
       })
     );
+  });
 
-    const callCount = api.getReservations.mock.calls.length;
-    fireEvent.click(screen.getByRole("button", { name: "Pickup through" }));
-    fireEvent.click(screen.getByRole("button", { name: /next month/i }));
-    fireEvent.click(screen.getByRole("button", { name: /November 15/i }));
+  it("rejects pickup ranges over 31 days", async () => {
+    navigation.search = "from=2026-10-01&to=2026-11-15";
+
+    render(<ReservationsPage />);
 
     expect(await screen.findByText("Check the pickup date range")).toBeVisible();
     expect(screen.getByText("Pickup date filters can cover at most 31 days.")).toBeVisible();
-    expect(api.getReservations.mock.calls.length).toBe(callCount);
+    expect(api.getReservations).not.toHaveBeenCalled();
   });
 
   it("uses opaque next cursors and remembered prior cursors for stable pagination", async () => {

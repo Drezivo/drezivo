@@ -299,6 +299,17 @@ describe('reservation contracts', () => {
     expect(
       reservationListQuery.safeParse({
         pickup_start: '2026-10-01T00:00:00.000Z',
+      }).success,
+    ).toBe(false);
+    expect(
+      reservationListQuery.safeParse({
+        pickup_end: '2026-10-31T00:00:00.000Z',
+      }).success,
+    ).toBe(false);
+
+    expect(
+      reservationListQuery.safeParse({
+        pickup_start: '2026-10-01T00:00:00.000Z',
         pickup_end: '2026-11-02T00:00:00.000Z',
       }).success,
     ).toBe(false);
@@ -357,6 +368,7 @@ describe('reservation contracts', () => {
         {
           id: ids.line,
           variant_id: ids.variant,
+          variant: { sku: 'EMERALD-M', size_label: 'M', color_label: 'Emerald' },
           line_number: 1,
           name_snapshot: 'Emerald Gown',
           measurements_snapshot: { bust: 91.5, waist: 72 },
