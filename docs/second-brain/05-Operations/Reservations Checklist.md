@@ -447,6 +447,16 @@ Before marking a task complete:
   - **Implemented:** forward migration `0040_cash_tendered_change.sql` adds nullable non-negative tender/change columns plus a consistency constraint requiring `cash_tendered = verified_amount + change_due` when cash metadata is present. The migration was applied to the local development database.
   - **Tests/evidence:** Contracts pass `94/94`; API typecheck/lint pass; isolated reservation lifecycle integration passes `37/37`, including an over-tender case that records payment due separately from tendered cash/change.
 
+- [x] **RSV-069B — Separate calendar-day occupancy from rental-start feasibility**
+  - **Outcome:** The inline availability calendar colors a date only when a serialized garment is actually occupied on that local calendar day; it no longer makes the previous day look busy merely because a hypothetical rental starting there would run into a future booking after applying Recovery.
+  - **Acceptance:**
+    - [x] Calendar day projection checks each branch-local day as `[day start, next day start)` without appending the variant Recovery duration to that day.
+    - [x] Authoritative reservation allocation periods continue to include post-return Recovery, so a date that is genuinely occupied by Recovery still appears busy.
+    - [x] Exact availability/reservation creation still validates the requested pickup → return interval plus Recovery and remains the authority for whether a proposed range can be booked.
+    - [x] A day immediately before a future reservation remains visually Available when the garment is physically free that day, even if a new multi-day rental starting there would later conflict.
+    - [x] Staff copy now explains that day colors represent actual occupancy while the full rental + Recovery interval is revalidated after exact times are selected.
+  - **Tests/evidence:** API typecheck/lint pass; isolated reservation create/availability integration passes `13/13`. The regression fixture proves an Oct 11–12 maintenance block with 24h Recovery leaves Oct 10 fully available while Oct 11–12 remain limited, and exact availability still returns Recovery-extended blocked intervals.
+
 ## Phase 8: Security and completion evidence
 
 - [ ] **RSV-070 — Complete reservation authorization/RLS suite**
