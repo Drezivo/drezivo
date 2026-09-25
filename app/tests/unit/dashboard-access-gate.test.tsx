@@ -66,4 +66,29 @@ describe("DashboardAccessGate", () => {
     expect(await screen.findByText("Private dashboard")).toBeVisible();
     expect(router.replace).not.toHaveBeenCalledWith("/onboarding");
   });
+
+  it("does not restart the access check when Clerk returns new function references on render", async () => {
+    clerk.useAuth.mockImplementation(() => ({
+      getToken: () => clerk.getToken(),
+      isLoaded: true,
+      isSignedIn: true,
+      orgId: "org_123",
+    }));
+    clerk.useClerk.mockImplementation(() => ({
+      setActive: (params: { organization: string | null }) => clerk.setActive(params),
+    }));
+    resolver.resolveStaffLanding.mockResolvedValue({
+      kind: "workspace",
+      workspace: { clerk_org_id: "org_123", tenant: { id: "tenant_123" } },
+    });
+
+    render(
+      <DashboardAccessGate>
+        <div>Private dashboard</div>
+      </DashboardAccessGate>
+    );
+
+    expect(await screen.findByText("Private dashboard")).toBeVisible();
+    await waitFor(() => expect(resolver.resolveStaffLanding).toHaveBeenCalledTimes(1));
+  });
 });

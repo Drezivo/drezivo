@@ -43,6 +43,14 @@ export function ReservationAvailabilityCalendar({
     ? Math.floor(availability.pricing.minimum_duration_minutes / (24 * 60))
     : 0;
   const branchToday = parseCalendarDate(todayInTimeZone(timeZone));
+  const disabledDates = useMemo(
+    () =>
+      availability?.days
+        .filter((day) => day.state === "unavailable")
+        .map((day) => parseCalendarDate(day.date))
+        .filter((date): date is Date => date !== null) ?? [],
+    [availability?.days]
+  );
   const earliestCandidateReturn =
     selected?.from && !selected.to && minimumCalendarDays > 0
       ? addCalendarDays(selected.from, minimumCalendarDays)
@@ -75,7 +83,7 @@ export function ReservationAvailabilityCalendar({
           dayAvailability?.state === "limited" &&
             "bg-dashboard-gold-soft text-dashboard-gold-text hover:bg-dashboard-gold-soft/80",
           dayAvailability?.state === "unavailable" &&
-            "border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/15",
+            "cursor-not-allowed border-red-500/20 bg-red-500/10 text-red-400",
           !dayAvailability && "text-dashboard-muted",
           isSelected && "border-dashboard-accent bg-dashboard-active text-dashboard-accent",
           modifiers.today && "ring-1 ring-dashboard-accent/40",
@@ -108,7 +116,11 @@ export function ReservationAvailabilityCalendar({
           selected={selected}
           min={minimumCalendarDays}
           resetOnSelect
-          disabled={branchToday ? { before: branchToday } : undefined}
+          disabled={[
+            ...(branchToday ? [{ before: branchToday }] : []),
+            ...disabledDates,
+          ]}
+          excludeDisabled
           onSelect={(range, triggerDate) => {
             if (
               minimumCalendarDays === 0 &&
