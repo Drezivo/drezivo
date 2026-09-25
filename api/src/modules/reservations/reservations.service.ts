@@ -149,8 +149,7 @@ export async function getStaffReservationAvailabilityCalendar(
         included_duration_minutes: metadata.included_duration_minutes,
         minimum_duration_minutes: minimumDurationMinutes,
         extra_day_price_minor: String(metadata.extra_day_price_minor),
-        prep_minutes: metadata.prep_minutes,
-        turnaround_minutes: metadata.turnaround_minutes,
+        recovery_minutes: metadata.turnaround_minutes,
       },
       days: projection.days.map((day) => ({
         ...day,
@@ -215,8 +214,7 @@ export async function getStaffReservationAvailabilityCheck(
         included_duration_minutes: catalogue.variant.included_duration_minutes,
         minimum_duration_minutes: minimumDurationMinutes,
         extra_day_price_minor: catalogue.variant.extra_day_price_minor,
-        prep_minutes: catalogue.variant.prep_minutes,
-        turnaround_minutes: catalogue.variant.turnaround_minutes,
+        recovery_minutes: catalogue.variant.turnaround_minutes,
       },
       rental_preview: {
         rental_total_minor: rental.totalMinor.toString(),

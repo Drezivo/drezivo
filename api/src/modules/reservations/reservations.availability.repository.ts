@@ -9,7 +9,6 @@ export interface StaffVariantCalendarMetadataRow {
   currency: string;
   included_duration_minutes: number;
   extra_day_price_minor: string | number;
-  prep_minutes: number;
   turnaround_minutes: number;
   active_assets: number;
   ready_assets: number;
@@ -35,7 +34,7 @@ export interface StaffVariantCalendarReadModel {
 /**
  * Reads a bounded, branch-local calendar projection for one active variant without per-day queries. Each day
  * asks whether a currently ready serialized garment is free for the full local calendar day plus
- * that variant's preparation/turnaround buffers. It is deliberately advisory; reservation create
+ * that variant's post-return recovery buffer. It is deliberately advisory; reservation create
  * still revalidates the exact timestamp interval under asset locks.
  */
 export async function readStaffVariantCalendarAvailability(
@@ -58,7 +57,6 @@ export async function readStaffVariantCalendarAvailability(
        pv.currency,
        pv.included_duration_minutes,
        pv.extra_day_price_minor,
-       pv.prep_minutes,
        pv.turnaround_minutes,
        count(pa.id) FILTER (WHERE pa.lifecycle_status = 'active')::int AS active_assets,
        count(pa.id) FILTER (
@@ -93,7 +91,6 @@ export async function readStaffVariantCalendarAvailability(
        pv.currency,
        pv.included_duration_minutes,
        pv.extra_day_price_minor,
-       pv.prep_minutes,
        pv.turnaround_minutes
      LIMIT 1`,
     [input.tenantId, input.branchId, input.variantId],
@@ -105,10 +102,9 @@ export async function readStaffVariantCalendarAvailability(
     `WITH calendar_days AS (
        SELECT
          gs::date AS day_date,
-         (gs::date::timestamp AT TIME ZONE $6)
-           - ($7::int * interval '1 minute') AS blocked_start,
+         (gs::date::timestamp AT TIME ZONE $6) AS blocked_start,
          ((gs::date + 1)::timestamp AT TIME ZONE $6)
-           + ($8::int * interval '1 minute') AS blocked_end
+           + ($7::int * interval '1 minute') AS blocked_end
        FROM generate_series($4::date, $5::date, interval '1 day') AS gs
      ),
      eligible_assets AS (
@@ -122,8 +118,8 @@ export async function readStaffVariantCalendarAvailability(
      )
      SELECT
        to_char(day.day_date, 'YYYY-MM-DD') AS date,
-       $9::int AS active_assets,
-       $10::int AS ready_assets,
+       $8::int AS active_assets,
+       $9::int AS ready_assets,
        count(DISTINCT asset.id) FILTER (WHERE allocation.id IS NULL)::int AS available_assets,
        count(DISTINCT asset.id) FILTER (
          WHERE allocation.kind IN ('reservation_hold', 'reservation_confirmed')
@@ -174,7 +170,6 @@ export async function readStaffVariantCalendarAvailability(
       input.startDate,
       input.endDate,
       metadata.timezone,
-      metadata.prep_minutes,
       metadata.turnaround_minutes,
       metadata.active_assets,
       metadata.ready_assets,

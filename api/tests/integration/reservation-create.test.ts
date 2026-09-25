@@ -178,7 +178,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
       .toBe(15 * 60 * 1000);
     expect(persisted.lineCount).toBe(1);
     expect(persisted.allocation).toMatchObject({ asset_id: seed.assetId, is_blocking: true });
-    expect(persisted.allocation.starts_at.toISOString()).toBe('2026-10-10T01:00:00.000Z');
+    expect(persisted.allocation.starts_at.toISOString()).toBe('2026-10-10T02:00:00.000Z');
     expect(persisted.allocation.ends_at.toISOString()).toBe('2026-10-14T02:00:00.000Z');
     expect(persisted.payment).toEqual({ status: 'pending', amount_minor: 225000 });
     expect(persisted.auditCount).toBe(1);
@@ -557,8 +557,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
           included_duration_minutes: 4320,
           minimum_duration_minutes: 4320,
           extra_day_price_minor: '40000',
-          prep_minutes: 60,
-          turnaround_minutes: 1440,
+          recovery_minutes: 1440,
         },
       },
     });
@@ -590,7 +589,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
           end: '2026-10-13T02:00:00.000Z',
         },
         blocked_interval: {
-          start: '2026-10-10T01:00:00.000Z',
+          start: '2026-10-10T02:00:00.000Z',
           end: '2026-10-14T02:00:00.000Z',
         },
         rental_preview: {

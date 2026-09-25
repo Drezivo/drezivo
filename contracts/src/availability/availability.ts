@@ -112,8 +112,7 @@ export const staffReservationAvailabilityPricing = z
     included_duration_minutes: z.number().int().positive(),
     minimum_duration_minutes: z.number().int().nonnegative(),
     extra_day_price_minor: nonNegativeMoneyString,
-    prep_minutes: z.number().int().nonnegative(),
-    turnaround_minutes: z.number().int().nonnegative(),
+    recovery_minutes: z.number().int().nonnegative(),
   })
   .strict();
 export type StaffReservationAvailabilityPricing = z.infer<

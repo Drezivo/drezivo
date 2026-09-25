@@ -59,7 +59,7 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
     await closePool();
   });
 
-  it('computes fixed-duration pricing, delivery, policy, buffers, and concrete branch candidates without writing a hold', async () => {
+  it('computes fixed-duration pricing, delivery, policy, recovery, and concrete branch candidates without writing a hold', async () => {
     const seed = await seedQuoteWorkspace({
       clerkOrgId: 'org_rsv020_quote',
       principalId: 'user_rsv020_quote',
@@ -96,7 +96,7 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
       due_at: '2026-10-14T02:00:00.000Z',
       timezone_snapshot: 'Asia/Manila',
       blocked_interval: {
-        start: '2026-10-10T00:00:00.000Z',
+        start: '2026-10-10T02:00:00.000Z',
         end: '2026-10-15T02:00:00.000Z',
       },
       capacity: { guaranteed: false },
@@ -222,7 +222,7 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
     ).resolves.toMatchObject({ pickup_at: base.requested_interval.start, due_at: base.requested_interval.end });
   });
 
-  it('honors half-open adjacency while excluding an asset whose block overlaps the buffered window', async () => {
+  it('honors half-open adjacency while excluding an asset whose block overlaps the rental-plus-recovery window', async () => {
     const seed = await seedQuoteWorkspace({
       clerkOrgId: 'org_rsv020_adjacency',
       principalId: 'user_rsv020_adjacency',
@@ -242,8 +242,8 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
 
     await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       await addMaintenanceBlock(client, seed, beforeAsset, {
-        start: '2026-10-08T01:00:00.000Z',
-        end: '2026-10-10T01:00:00.000Z',
+        start: '2026-10-08T02:00:00.000Z',
+        end: '2026-10-10T02:00:00.000Z',
       });
       await addMaintenanceBlock(client, seed, afterAsset, {
         start: '2026-10-12T04:00:00.000Z',
@@ -267,7 +267,7 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
     );
 
     expect(quote.blocked_interval).toEqual({
-      start: '2026-10-10T01:00:00.000Z',
+      start: '2026-10-10T02:00:00.000Z',
       end: '2026-10-12T04:00:00.000Z',
     });
     expect(quote.capacity.candidate_asset_ids).toEqual([beforeAsset, afterAsset].sort());
@@ -275,7 +275,7 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
     expect(quote.price_snapshot.delivery_total_minor).toBe('0');
   });
 
-  it('preserves timezone-safe deadlines and buffer arithmetic across a DST transition', async () => {
+  it('preserves timezone-safe deadlines and recovery arithmetic across a DST transition', async () => {
     const seed = await seedQuoteWorkspace({
       clerkOrgId: 'org_rsv020_dst',
       principalId: 'user_rsv020_dst',
@@ -307,7 +307,7 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
     expect(quote.pickup_at).toBe('2026-03-08T06:30:00.000Z');
     expect(quote.due_at).toBe('2026-03-09T05:30:00.000Z');
     expect(quote.blocked_interval).toEqual({
-      start: '2026-03-08T05:30:00.000Z',
+      start: '2026-03-08T06:30:00.000Z',
       end: '2026-03-09T06:30:00.000Z',
     });
     expect(quote.price_snapshot).toMatchObject({

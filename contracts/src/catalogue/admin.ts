@@ -118,7 +118,7 @@ const commonPricing = z.object({
   rental_price_minor: nonNegativeMoneyString,
   security_deposit_minor: nonNegativeMoneyString,
   extra_day_price_minor: nonNegativeMoneyString.default('0'),
-  prep_minutes: z.number().int().min(0).max(7 * 24 * 60).default(0),
+  prep_minutes: z.literal(0).default(0),
   turnaround_minutes: z.number().int().min(0).max(14 * 24 * 60).default(0),
 });
 

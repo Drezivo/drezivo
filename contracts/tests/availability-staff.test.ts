@@ -132,8 +132,7 @@ describe('staff availability maintenance contracts', () => {
         included_duration_minutes: 4320,
         minimum_duration_minutes: 4320,
         extra_day_price_minor: '15000',
-        prep_minutes: 60,
-        turnaround_minutes: 1440,
+        recovery_minutes: 1440,
       },
       days: [
         {

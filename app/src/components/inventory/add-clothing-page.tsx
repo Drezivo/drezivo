@@ -126,7 +126,6 @@ export function AddClothingPage() {
   const [includedDays, setIncludedDays] = useState("3");
   const [extraDayPrice, setExtraDayPrice] = useState("100");
   const [securityDeposit, setSecurityDeposit] = useState("500");
-  const [prepDays, setPrepDays] = useState("0");
   const [recoveryDays, setRecoveryDays] = useState("1");
   const [timingOpen, setTimingOpen] = useState(true);
   const [measurementGuideOpen, setMeasurementGuideOpen] = useState(false);
@@ -640,7 +639,7 @@ export function AddClothingPage() {
         pricingMode === "fixed_duration"
           ? pesosToMinor(extraDayPrice || "0", "Extra day price")
           : "0",
-      prep_minutes: daysToMinutes(prepDays || "0", "Prep days before rental", 7),
+      prep_minutes: 0,
       turnaround_minutes: daysToMinutes(recoveryDays || "0", "Recovery days after return", 14),
     };
 
@@ -1267,7 +1266,7 @@ export function AddClothingPage() {
                   <span>
                     <span className="block text-sm font-semibold text-dashboard-navy">Rental Timing</span>
                     <span className="mt-0.5 block text-xs text-dashboard-muted">
-                      {formatDayCount(prepDays)} before · {formatDayCount(recoveryDays)} after
+                      {formatDayCount(recoveryDays)} recovery after return
                     </span>
                   </span>
                 </span>
@@ -1277,25 +1276,7 @@ export function AddClothingPage() {
                 />
               </button>
               {timingOpen ? (
-                <CardContent className="grid gap-4 border-t border-dashboard-border p-5 sm:grid-cols-2">
-                  <Field label="Prep Days Before Rental">
-                    <div className="relative">
-                      <Input
-                        aria-label="Prep Days Before Rental"
-                        inputMode="numeric"
-                        value={prepDays}
-                        onChange={(event) => {
-                          setPrepDays(event.target.value);
-                          markDirty();
-                        }}
-                        className="pr-12"
-                      />
-                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">days</span>
-                    </div>
-                    <p className="mt-1.5 text-xs text-dashboard-muted">
-                      Days reserved for preparing the clothing before the rental starts.
-                    </p>
-                  </Field>
+                <CardContent className="border-t border-dashboard-border p-5">
                   <Field label="Recovery Days After Return">
                     <div className="relative">
                       <Input
@@ -1314,8 +1295,8 @@ export function AddClothingPage() {
                       Days reserved for cleaning or inspection before the clothing can be rented again.
                     </p>
                   </Field>
-                  <p className="text-xs text-dashboard-muted sm:col-span-2">
-                    These days keep the clothing unavailable while it is being prepared or cleaned between rentals.
+                  <p className="mt-3 text-xs text-dashboard-muted">
+                    Recovery starts after return and keeps the clothing unavailable for cleaning, inspection, or preparation for the next rental.
                   </p>
                 </CardContent>
               ) : null}

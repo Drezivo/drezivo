@@ -242,8 +242,7 @@ const calendarResponse = staffReservationAvailabilityCalendarResponse.parse({
     included_duration_minutes: 4320,
     minimum_duration_minutes: 4320,
     extra_day_price_minor: "40000",
-    prep_minutes: 60,
-    turnaround_minutes: 1440,
+    recovery_minutes: 1440,
   },
   days: [
     {
@@ -268,7 +267,7 @@ const exactResponse = staffReservationAvailabilityCheckResponse.parse({
     end: "2026-10-13T02:00:00.000Z",
   },
   blocked_interval: {
-    start: "2026-10-10T01:00:00.000Z",
+    start: "2026-10-10T02:00:00.000Z",
     end: "2026-10-14T02:00:00.000Z",
   },
   available: true,
@@ -381,8 +380,8 @@ describe("NewReservationSheet", () => {
     fireEvent.change(screen.getByLabelText("Return time"), { target: { value: "10:00" } });
 
     expect(await screen.findByText(/this is a 3 days fixed rental/i)).toBeVisible();
-    expect(screen.getByText(/1 day before pickup for preparation/i)).toBeVisible();
-    expect(screen.getByText(/1 day after return for turnaround/i)).toBeVisible();
+    expect(screen.getByText(/stays unavailable for 1 day of recovery/i)).toBeVisible();
+    expect(screen.queryByText(/preparation/i)).not.toBeInTheDocument();
     expect(api.getStaffReservationAvailabilityCheck).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Reserve" })).toBeDisabled();
   });

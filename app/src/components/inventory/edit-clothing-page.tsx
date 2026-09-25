@@ -87,8 +87,7 @@ type VariantDraft = {
   securityDeposit: string;
   includedDays: string;
   extraDayPrice: string;
-  prepHours: string;
-  turnaroundHours: string;
+  recoveryHours: string;
 };
 
 type ExistingPhoto = {
@@ -925,8 +924,7 @@ function AddVariantDialog({
   const [securityDeposit, setSecurityDeposit] = useState("0");
   const [includedDays, setIncludedDays] = useState("3");
   const [extraDayPrice, setExtraDayPrice] = useState("");
-  const [prepHours, setPrepHours] = useState("0");
-  const [turnaroundHours, setTurnaroundHours] = useState("24");
+  const [recoveryHours, setRecoveryHours] = useState("24");
   const [error, setError] = useState<string | null>(null);
 
   const reset = () => {
@@ -940,8 +938,7 @@ function AddVariantDialog({
     setSecurityDeposit("0");
     setIncludedDays("3");
     setExtraDayPrice("");
-    setPrepHours("0");
-    setTurnaroundHours("24");
+    setRecoveryHours("24");
     setError(null);
     submitGuard.resetIntent();
   };
@@ -972,8 +969,7 @@ function AddVariantDialog({
         securityDeposit,
         includedDays,
         extraDayPrice,
-        prepHours,
-        turnaroundHours,
+        recoveryHours,
       };
       if (!sizeLabel.trim()) throw new Error("Enter a size label.");
       const measurement = buildMeasurementPatch(draft, defaultGuide);
@@ -1092,11 +1088,8 @@ function AddVariantDialog({
                 </Field>
               ) : null}
               <MoneyField label="Extra Day Price" value={extraDayPrice} disabled={submitGuard.isSubmitting || pricingMode === "daily"} onChange={setExtraDayPrice} />
-              <Field label="Preparation Time">
-                <div className="relative"><Input aria-label="New Variant Preparation Time" inputMode="decimal" value={prepHours} disabled={submitGuard.isSubmitting} onChange={(event) => setPrepHours(event.target.value)} className="pr-14" /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">hours</span></div>
-              </Field>
-              <Field label="Turnaround Time">
-                <div className="relative"><Input aria-label="New Variant Turnaround Time" inputMode="decimal" value={turnaroundHours} disabled={submitGuard.isSubmitting} onChange={(event) => setTurnaroundHours(event.target.value)} className="pr-14" /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">hours</span></div>
+              <Field label="Recovery Time After Return">
+                <div className="relative"><Input aria-label="New Variant Recovery Time" inputMode="decimal" value={recoveryHours} disabled={submitGuard.isSubmitting} onChange={(event) => setRecoveryHours(event.target.value)} className="pr-14" /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">hours</span></div>
               </Field>
             </div>
           </div>
@@ -1351,27 +1344,14 @@ function VariantEditor({
             disabled={disabled || variant.pricingMode === "daily"}
             onChange={(value) => onChange({ extraDayPrice: value })}
           />
-          <Field label="Preparation Buffer">
+          <Field label="Recovery After Return">
             <div className="relative">
               <Input
-                aria-label={`${variant.sku} Preparation Buffer`}
+                aria-label={`${variant.sku} Recovery After Return`}
                 inputMode="decimal"
-                value={variant.prepHours}
+                value={variant.recoveryHours}
                 disabled={disabled}
-                onChange={(event) => onChange({ prepHours: event.target.value })}
-                className="pr-14"
-              />
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">hours</span>
-            </div>
-          </Field>
-          <Field label="Turnaround Buffer">
-            <div className="relative">
-              <Input
-                aria-label={`${variant.sku} Turnaround Buffer`}
-                inputMode="decimal"
-                value={variant.turnaroundHours}
-                disabled={disabled}
-                onChange={(event) => onChange({ turnaroundHours: event.target.value })}
+                onChange={(event) => onChange({ recoveryHours: event.target.value })}
                 className="pr-14"
               />
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">hours</span>
@@ -1792,8 +1772,8 @@ function buildPricingInput(draft: VariantDraft): ClothingPricingInput {
     rental_price_minor: pesosToMinor(draft.rentalPrice, `${draft.sku} rental price`),
     security_deposit_minor: pesosToMinor(draft.securityDeposit || "0", `${draft.sku} security deposit`),
     extra_day_price_minor: pesosToMinor(draft.extraDayPrice || draft.rentalPrice, `${draft.sku} extra day price`),
-    prep_minutes: hoursToMinutes(draft.prepHours || "0", `${draft.sku} preparation buffer`),
-    turnaround_minutes: hoursToMinutes(draft.turnaroundHours || "0", `${draft.sku} turnaround buffer`),
+    prep_minutes: 0 as const,
+    turnaround_minutes: hoursToMinutes(draft.recoveryHours || "0", `${draft.sku} recovery after return`),
   };
   if (draft.pricingMode === "daily") return { mode: "daily", ...common };
   const includedDays = Number(draft.includedDays);
@@ -1808,7 +1788,7 @@ function variantPricingFromDetail(variant: ClothingVariantDetail): ClothingPrici
     rental_price_minor: variant.rental_price_minor,
     security_deposit_minor: variant.security_deposit_minor,
     extra_day_price_minor: variant.extra_day_price_minor,
-    prep_minutes: variant.prep_minutes,
+    prep_minutes: 0 as const,
     turnaround_minutes: variant.turnaround_minutes,
   };
   if (variant.pricing_mode === "daily") return { mode: "daily", ...common };
@@ -1838,8 +1818,7 @@ function variantToDraft(variant: ClothingVariantDetail): VariantDraft {
     securityDeposit: minorToPesos(variant.security_deposit_minor),
     includedDays: String(variant.included_duration_minutes / (24 * 60)),
     extraDayPrice: minorToPesos(variant.extra_day_price_minor),
-    prepHours: formatDecimal(variant.prep_minutes / 60),
-    turnaroundHours: formatDecimal(variant.turnaround_minutes / 60),
+    recoveryHours: formatDecimal(variant.turnaround_minutes / 60),
   };
 }
 

@@ -1171,7 +1171,7 @@ function minimumRentalDurationIssue(
   const minimumMs = variant.included_duration_minutes * 60 * 1_000;
   if (durationMs >= minimumMs) return null;
   const earliestReturn = new Date(start.getTime() + minimumMs);
-  return `This is a ${formatDurationMinutes(variant.included_duration_minutes)} fixed rental. With this pickup time, the earliest valid return is ${formatInstantForBranch(earliestReturn, timeZone)}. ${formatOperationalBufferPolicy(variant)}`;
+  return `This is a ${formatDurationMinutes(variant.included_duration_minutes)} fixed rental. With this pickup time, the earliest valid return is ${formatInstantForBranch(earliestReturn, timeZone)}. ${formatRecoveryPolicy(variant)}`;
 }
 
 function minimumReturnTime(
@@ -1204,13 +1204,15 @@ function formatRentalAvailabilityPolicy(variant: ClothingDetail["variants"][numb
     variant.pricing_mode === "fixed_duration"
       ? `${formatDurationMinutes(variant.included_duration_minutes)} fixed rental`
       : "Daily rental";
-  return `${rentalRule}. ${formatOperationalBufferPolicy(variant)}`;
+  return `${rentalRule}. ${formatRecoveryPolicy(variant)}`;
 }
 
-function formatOperationalBufferPolicy(variant: ClothingDetail["variants"][number]): string {
-  const prep = formatDurationMinutes(variant.prep_minutes);
-  const turnaround = formatDurationMinutes(variant.turnaround_minutes);
-  return `Availability also reserves ${prep} before pickup for preparation and ${turnaround} after return for turnaround.`;
+function formatRecoveryPolicy(variant: ClothingDetail["variants"][number]): string {
+  const recovery = formatDurationMinutes(variant.turnaround_minutes);
+  if (variant.turnaround_minutes === 0) {
+    return "No recovery period is added after return.";
+  }
+  return `After return, this garment stays unavailable for ${recovery} of recovery before it can be rented again.`;
 }
 
 function formatInstantForBranch(instant: Date, timeZone: string): string {

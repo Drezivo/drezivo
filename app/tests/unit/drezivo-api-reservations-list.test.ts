@@ -297,8 +297,7 @@ describe("Drezivo reservations list API client", () => {
           included_duration_minutes: 4320,
           minimum_duration_minutes: 4320,
           extra_day_price_minor: "15000",
-          prep_minutes: 60,
-          turnaround_minutes: 1440,
+          recovery_minutes: 1440,
         },
         days: [
           {
@@ -339,7 +338,7 @@ describe("Drezivo reservations list API client", () => {
           end: "2026-10-13T02:00:00.000Z",
         },
         blocked_interval: {
-          start: "2026-10-10T01:00:00.000Z",
+          start: "2026-10-10T02:00:00.000Z",
           end: "2026-10-14T02:00:00.000Z",
         },
         available: true,
@@ -353,8 +352,7 @@ describe("Drezivo reservations list API client", () => {
           included_duration_minutes: 4320,
           minimum_duration_minutes: 4320,
           extra_day_price_minor: "15000",
-          prep_minutes: 60,
-          turnaround_minutes: 1440,
+          recovery_minutes: 1440,
         },
         rental_preview: {
           rental_total_minor: "50000",
