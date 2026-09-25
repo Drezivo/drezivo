@@ -15,7 +15,7 @@ import {
 } from '@drezivo/contracts';
 
 import { resolveReservationCatalogueQuoteSelection } from '../catalogue/catalogue-allocation.service.js';
-import { NotFoundError, StateConflictError } from '../../shared/errors.js';
+import { NotFoundError, StateConflictError, ValidationError } from '../../shared/errors.js';
 import {
   readReservationQuoteFoundation,
   readReservationQuotePaymentMethod,
@@ -97,7 +97,11 @@ export async function resolveReservationQuote(
     branchId: string;
     request: Pick<
       StaffReservationCreateRequest,
-      'variant_id' | 'requested_interval' | 'fulfillment_method' | 'payment_method_id'
+      | 'variant_id'
+      | 'requested_interval'
+      | 'event_date'
+      | 'fulfillment_method'
+      | 'payment_method_id'
     >;
   },
 ): Promise<ReservationQuote> {
@@ -111,6 +115,11 @@ export async function resolveReservationQuote(
     );
   }
   assertSupportedTimezone(foundation.branch_timezone);
+  assertEventDateWithinRentalPeriod({
+    eventDate: input.request.event_date,
+    requestedInterval: input.request.requested_interval,
+    timeZone: foundation.branch_timezone,
+  });
   if (foundation.tenant_currency !== 'PHP') {
     throw new StateConflictError('V1 reservation quotes require the tenant currency to be PHP.');
   }
@@ -138,6 +147,7 @@ export async function resolveReservationQuote(
 
   const rental = computeRentalTotal({
     requestedInterval: input.request.requested_interval,
+    pricingMode: catalogue.variant.pricing_mode,
     baseRentalMinor: catalogue.variant.rental_price_minor,
     includedDurationMinutes: catalogue.variant.included_duration_minutes,
     extraDayPriceMinor: catalogue.variant.extra_day_price_minor,
@@ -215,8 +225,9 @@ export async function resolveReservationQuote(
   };
 }
 
-function computeRentalTotal(input: {
+export function computeRentalTotal(input: {
   requestedInterval: InstantInterval;
+  pricingMode: 'fixed_duration' | 'daily';
   baseRentalMinor: string;
   includedDurationMinutes: number;
   extraDayPriceMinor: string;
@@ -225,6 +236,11 @@ function computeRentalTotal(input: {
   const endMs = BigInt(new Date(input.requestedInterval.end).getTime());
   const durationMs = endMs - startMs;
   const includedMs = BigInt(input.includedDurationMinutes) * MINUTE_MS;
+  assertMinimumRentalDuration({
+    durationMs,
+    pricingMode: input.pricingMode,
+    includedDurationMinutes: input.includedDurationMinutes,
+  });
   const extraDurationMs = durationMs > includedMs ? durationMs - includedMs : 0n;
   const extraDays = extraDurationMs === 0n ? 0n : (extraDurationMs + DAY_MS - 1n) / DAY_MS;
 
@@ -238,6 +254,58 @@ function computeRentalTotal(input: {
     throw new StateConflictError('Rental duration exceeds the supported quote range.');
   }
   return { totalMinor, extraDayCount: Number(extraDays) };
+}
+
+export function assertMinimumRentalDuration(input: {
+  durationMs: bigint;
+  pricingMode: 'fixed_duration' | 'daily';
+  includedDurationMinutes: number;
+}): void {
+  if (input.pricingMode !== 'fixed_duration') return;
+  const minimumMs = BigInt(input.includedDurationMinutes) * MINUTE_MS;
+  if (input.durationMs >= minimumMs) return;
+  throw new StateConflictError(
+    `This clothing variant requires a minimum rental period of ${formatDuration(input.includedDurationMinutes)}.`,
+  );
+}
+
+function assertEventDateWithinRentalPeriod(input: {
+  eventDate: string | undefined;
+  requestedInterval: InstantInterval;
+  timeZone: string;
+}): void {
+  if (!input.eventDate) return;
+  const pickupDate = localIsoDate(input.requestedInterval.start, input.timeZone);
+  const dueDate = localIsoDate(input.requestedInterval.end, input.timeZone);
+  if (input.eventDate < pickupDate || input.eventDate > dueDate) {
+    throw new ValidationError('Event date must fall within the pickup and return dates.');
+  }
+}
+
+function localIsoDate(instantValue: string, timeZone: string): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+      .formatToParts(new Date(instantValue))
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts['year']}-${parts['month']}-${parts['day']}`;
+}
+
+function formatDuration(minutes: number): string {
+  if (minutes % (24 * 60) === 0) {
+    const days = minutes / (24 * 60);
+    return `${days} ${days === 1 ? 'day' : 'days'}`;
+  }
+  if (minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+  }
+  return `${minutes} minutes`;
 }
 
 function resolveDeliveryFee(

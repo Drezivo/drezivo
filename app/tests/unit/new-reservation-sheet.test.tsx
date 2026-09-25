@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clothingDetail,
   clothingListItem,
+  staffReservationAvailabilityCalendarResponse,
+  staffReservationAvailabilityCheckResponse,
   staffReservationCompleteResponse,
   staffReservationCreateResponse,
 } from "@drezivo/contracts";
@@ -21,11 +23,48 @@ const api = vi.hoisted(() => ({
   createStaffReservation: vi.fn(),
   getCatalogueClothing: vi.fn(),
   getCatalogueClothingDetail: vi.fn(),
+  getStaffReservationAvailabilityCalendar: vi.fn(),
+  getStaffReservationAvailabilityCheck: vi.fn(),
   getStaffReservationIntakeOptions: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({
   useAuth: clerk.useAuth,
+}));
+
+vi.mock("@/components/reservations/reservation-availability-calendar", () => ({
+  ReservationAvailabilityCalendar: ({
+    onRangeChange,
+  }: {
+    onRangeChange: (range: { pickupDate: string; dueDate: string }) => void;
+  }) => (
+    <div>
+      <button
+        type="button"
+        onClick={() => onRangeChange({ pickupDate: "2026-10-10", dueDate: "2026-10-13" })}
+      >
+        Select Oct 10 to Oct 13
+      </button>
+      <button
+        type="button"
+        onClick={() => onRangeChange({ pickupDate: "2026-10-10", dueDate: "2026-10-12" })}
+      >
+        Select short range
+      </button>
+      <button
+        type="button"
+        onClick={() => onRangeChange({ pickupDate: "2026-10-20", dueDate: "2026-10-23" })}
+      >
+        Select later range
+      </button>
+    </div>
+  ),
+  monthWindow: () => ({ startDate: "2026-10-01", endDate: "2026-10-31" }),
+  parseCalendarDate: (value: string) => {
+    const [year, month, day] = value.split("-").map(Number);
+    return year && month && day ? new Date(year, month - 1, day) : null;
+  },
+  todayInTimeZone: () => "2026-10-01",
 }));
 
 vi.mock("@/lib/drezivo-api", () => ({
@@ -158,8 +197,8 @@ const heldResponse = staffReservationCreateResponse.parse({
     variant_id: ids.variant,
     payment_method_id: ids.paymentMethod,
     fulfillment_method: "pickup",
-    pickup_at: "2026-10-09T18:00:00.000Z",
-    due_at: "2026-10-11T18:00:00.000Z",
+    pickup_at: "2026-10-10T02:00:00.000Z",
+    due_at: "2026-10-13T02:00:00.000Z",
     timezone_snapshot: "Asia/Manila",
     event_date: "2026-10-11",
     price_snapshot: {
@@ -189,6 +228,60 @@ const pendingResponse = staffReservationCompleteResponse.parse({
   next_action: "payment_verification",
 });
 
+const calendarResponse = staffReservationAvailabilityCalendarResponse.parse({
+  variant_id: ids.variant,
+  timezone: "Asia/Manila",
+  window: { start_date: "2026-10-01", end_date: "2026-10-31" },
+  active_assets: 1,
+  ready_assets: 1,
+  pricing: {
+    pricing_mode: "fixed_duration",
+    rental_price_minor: "150000",
+    security_deposit_minor: "50000",
+    currency: "PHP",
+    included_duration_minutes: 4320,
+    minimum_duration_minutes: 4320,
+    extra_day_price_minor: "40000",
+    prep_minutes: 60,
+    turnaround_minutes: 1440,
+  },
+  days: [
+    {
+      date: "2026-10-10",
+      state: "available",
+      active_assets: 1,
+      ready_assets: 1,
+      available_assets: 1,
+      reserved_assets: 0,
+      rented_assets: 0,
+      fitting_assets: 0,
+      maintenance_assets: 0,
+      transfer_assets: 0,
+    },
+  ],
+});
+
+const exactResponse = staffReservationAvailabilityCheckResponse.parse({
+  variant_id: ids.variant,
+  requested_interval: {
+    start: "2026-10-10T02:00:00.000Z",
+    end: "2026-10-13T02:00:00.000Z",
+  },
+  blocked_interval: {
+    start: "2026-10-10T01:00:00.000Z",
+    end: "2026-10-14T02:00:00.000Z",
+  },
+  available: true,
+  available_assets: 1,
+  guaranteed: false,
+  pricing: calendarResponse.pricing,
+  rental_preview: {
+    rental_total_minor: "150000",
+    extra_day_count: 0,
+    currency: "PHP",
+  },
+});
+
 function listPage(items = [product]) {
   return {
     data: { items, page_meta: { next_cursor: null, has_more: false } },
@@ -209,19 +302,20 @@ function renderSheet(overrides: Partial<React.ComponentProps<typeof NewReservati
   return { ...render(<NewReservationSheet {...props} />), props };
 }
 
-async function fillDatesAndSelectProduct() {
-  fireEvent.change(screen.getByLabelText("Pickup date and time"), {
-    target: { value: "2026-10-10T02:00" },
-  });
-  fireEvent.change(screen.getByLabelText("Return date and time"), {
-    target: { value: "2026-10-12T02:00" },
-  });
+async function selectProductVariantAndRentalPeriod() {
+  fireEvent.click(await screen.findByRole("button", { name: /Emerald Gown/i }));
+  const variant = await screen.findByRole("button", { name: /M · Emerald/i });
+  fireEvent.click(variant);
+  fireEvent.click(await screen.findByRole("button", { name: "Select Oct 10 to Oct 13" }));
+  fireEvent.change(screen.getByLabelText("Pickup time"), { target: { value: "10:00" } });
+  fireEvent.change(screen.getByLabelText("Return time"), { target: { value: "10:00" } });
   fireEvent.change(screen.getByLabelText("Event date (optional)"), {
     target: { value: "2026-10-11" },
   });
-  fireEvent.click(await screen.findByRole("button", { name: /Emerald Gown/i }));
-  await screen.findByRole("button", { name: /M · Emerald/i });
+  await waitFor(() => expect(api.getStaffReservationAvailabilityCheck).toHaveBeenCalled());
 }
+
+const fillDatesAndSelectProduct = selectProductVariantAndRentalPeriod;
 
 describe("NewReservationSheet", () => {
   beforeEach(() => {
@@ -237,6 +331,14 @@ describe("NewReservationSheet", () => {
     });
     api.getCatalogueClothing.mockResolvedValue(listPage());
     api.getCatalogueClothingDetail.mockResolvedValue({ data: detail, requestId: "req-detail" });
+    api.getStaffReservationAvailabilityCalendar.mockResolvedValue({
+      data: calendarResponse,
+      requestId: "req-calendar",
+    });
+    api.getStaffReservationAvailabilityCheck.mockResolvedValue({
+      data: exactResponse,
+      requestId: "req-exact",
+    });
     api.createStaffReservation.mockResolvedValue({ data: heldResponse, requestId: "req-hold" });
     api.completeStaffReservation.mockResolvedValue({
       data: pendingResponse,
@@ -246,6 +348,58 @@ describe("NewReservationSheet", () => {
       data: { reservation: { ...heldResponse.reservation, status: "cancelled", version: 2 } },
       requestId: "req-cancel",
     });
+  });
+
+  it("requires clothing and an explicit variant before showing the rental calendar", async () => {
+    renderSheet();
+
+    expect(screen.queryByText("Rental period")).not.toBeInTheDocument();
+    expect(api.getStaffReservationAvailabilityCalendar).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Emerald Gown/i }));
+    const variant = await screen.findByRole("button", { name: /M · Emerald/i });
+    expect(screen.queryByText("Rental period")).not.toBeInTheDocument();
+
+    fireEvent.click(variant);
+    expect(await screen.findByText("Rental period")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Select Oct 10 to Oct 13" })).toBeVisible();
+    await waitFor(() =>
+      expect(api.getStaffReservationAvailabilityCalendar).toHaveBeenCalledWith({
+        variant_id: ids.variant,
+        start_date: "2026-10-01",
+        end_date: "2026-10-31",
+      })
+    );
+  });
+
+  it("keeps a three-day fixed rental from progressing with only a two-day exact interval", async () => {
+    renderSheet();
+    fireEvent.click(await screen.findByRole("button", { name: /Emerald Gown/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /M · Emerald/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Select short range" }));
+    fireEvent.change(screen.getByLabelText("Pickup time"), { target: { value: "10:00" } });
+    fireEvent.change(screen.getByLabelText("Return time"), { target: { value: "10:00" } });
+
+    expect(await screen.findByText(/this is a 3 days fixed rental/i)).toBeVisible();
+    expect(screen.getByText(/1 day before pickup for preparation/i)).toBeVisible();
+    expect(screen.getByText(/1 day after return for turnaround/i)).toBeVisible();
+    expect(api.getStaffReservationAvailabilityCheck).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Reserve" })).toBeDisabled();
+  });
+
+  it("bounds event date to the selected rental dates and clears it when the range changes", async () => {
+    renderSheet();
+    await fillDatesAndSelectProduct();
+
+    const eventDate = screen.getByLabelText("Event date (optional)");
+    expect(eventDate).toHaveAttribute("min", "2026-10-10");
+    expect(eventDate).toHaveAttribute("max", "2026-10-13");
+    expect(eventDate).toHaveValue("2026-10-11");
+
+    fireEvent.click(screen.getByRole("button", { name: "Select later range" }));
+    await waitFor(() => expect(screen.getByLabelText("Event date (optional)")).toHaveValue(""));
+    expect(screen.getByLabelText("Event date (optional)")).toHaveAttribute("min", "2026-10-20");
+    expect(screen.getByLabelText("Event date (optional)")).toHaveAttribute("max", "2026-10-23");
   });
 
   it("runs the staff fast path from advisory availability through hold and truthful pending completion", async () => {
@@ -259,8 +413,8 @@ describe("NewReservationSheet", () => {
         {
           variant_id: ids.variant,
           requested_interval: {
-            start: "2026-10-09T18:00:00.000Z",
-            end: "2026-10-11T18:00:00.000Z",
+            start: "2026-10-10T02:00:00.000Z",
+            end: "2026-10-13T02:00:00.000Z",
           },
           event_date: "2026-10-11",
           fulfillment_method: "pickup",
@@ -328,23 +482,22 @@ describe("NewReservationSheet", () => {
     );
   });
 
-  it("stops before creating a reservation when the availability preview has no free garment", async () => {
-    api.getCatalogueClothing.mockResolvedValue(
-      listPage([
-        clothingListItem.parse({
-          ...product,
-          availability: { ...product.availability, available_assets: 0, unavailable_assets: 1 },
-        }),
-      ])
-    );
+  it("stops before creating a reservation when no single physical piece is free for the exact times", async () => {
+    api.getStaffReservationAvailabilityCheck.mockResolvedValue({
+      data: staffReservationAvailabilityCheckResponse.parse({
+        ...exactResponse,
+        available: false,
+        available_assets: 0,
+      }),
+      requestId: "req-exact-unavailable",
+    });
     renderSheet();
     await fillDatesAndSelectProduct();
 
-    fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "The availability preview shows no free garment for this window."
-    );
+    expect(
+      await screen.findByText(/No single garment in this variant is free for the exact pickup and return times/i)
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Reserve" })).toBeDisabled();
     expect(api.createStaffReservation).not.toHaveBeenCalled();
   });
 
@@ -408,7 +561,7 @@ describe("NewReservationSheet", () => {
     );
     renderSheet();
     await fillDatesAndSelectProduct();
-    const readsBeforeReserve = api.getCatalogueClothing.mock.calls.length;
+    const readsBeforeReserve = api.getStaffReservationAvailabilityCalendar.mock.calls.length;
 
     fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
 
@@ -416,7 +569,9 @@ describe("NewReservationSheet", () => {
       "The last garment was reserved by another staff member."
     );
     await waitFor(() =>
-      expect(api.getCatalogueClothing.mock.calls.length).toBeGreaterThan(readsBeforeReserve)
+      expect(api.getStaffReservationAvailabilityCalendar.mock.calls.length).toBeGreaterThan(
+        readsBeforeReserve
+      )
     );
   });
 
@@ -443,7 +598,7 @@ describe("NewReservationSheet", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Complete Reservation" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/hold has expired/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/hold (has )?expired/i);
     expect(screen.getByRole("button", { name: "Start over" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Complete Reservation" })).not.toBeInTheDocument();
   });

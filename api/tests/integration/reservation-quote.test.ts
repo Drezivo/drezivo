@@ -155,6 +155,73 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
     expect(writes).toEqual({ reservations: 0, allocations: 0 });
   });
 
+  it('rejects a fixed-duration rental that is shorter than the included duration', async () => {
+    const seed = await seedQuoteWorkspace({
+      clerkOrgId: 'org_rsv020_minimum',
+      principalId: 'user_rsv020_minimum',
+      timezone: 'Asia/Manila',
+      assetCount: 1,
+      pricingMode: 'fixed_duration',
+      rentalPriceMinor: 50000,
+      securityDepositMinor: 20000,
+      includedDurationMinutes: 3 * 24 * 60,
+      extraDayPriceMinor: 15000,
+      prepMinutes: 0,
+      turnaroundMinutes: 0,
+      deliveryRules: {},
+    });
+
+    await expect(
+      getStaffReservationQuote(
+        reservationContext(seed),
+        staffRequest(seed, {
+          fulfillment_method: 'pickup',
+          requested_interval: {
+            start: '2026-10-10T02:00:00.000Z',
+            end: '2026-10-13T01:59:00.000Z',
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'STATE_CONFLICT',
+      message: 'This clothing variant requires a minimum rental period of 3 days.',
+    });
+  });
+
+  it('requires an event date to stay inside the branch-local pickup and return dates', async () => {
+    const seed = await seedQuoteWorkspace({
+      clerkOrgId: 'org_rsv020_event_date',
+      principalId: 'user_rsv020_event_date',
+      timezone: 'Asia/Manila',
+      assetCount: 1,
+      pricingMode: 'daily',
+      rentalPriceMinor: 50000,
+      securityDepositMinor: 20000,
+      includedDurationMinutes: 24 * 60,
+      extraDayPriceMinor: 50000,
+      prepMinutes: 0,
+      turnaroundMinutes: 0,
+      deliveryRules: {},
+    });
+    const base = staffRequest(seed, {
+      fulfillment_method: 'pickup',
+      requested_interval: {
+        start: '2026-10-10T02:00:00.000Z',
+        end: '2026-10-11T02:00:00.000Z',
+      },
+    });
+
+    await expect(
+      getStaffReservationQuote(reservationContext(seed), { ...base, event_date: '2026-10-09' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(
+      getStaffReservationQuote(reservationContext(seed), { ...base, event_date: '2026-10-12' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(
+      getStaffReservationQuote(reservationContext(seed), { ...base, event_date: '2026-10-11' }),
+    ).resolves.toMatchObject({ pickup_at: base.requested_interval.start, due_at: base.requested_interval.end });
+  });
+
   it('honors half-open adjacency while excluding an asset whose block overlaps the buffered window', async () => {
     const seed = await seedQuoteWorkspace({
       clerkOrgId: 'org_rsv020_adjacency',

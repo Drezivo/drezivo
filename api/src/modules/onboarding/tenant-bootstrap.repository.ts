@@ -264,6 +264,16 @@ export async function createTenantBootstrapGraph(
        VALUES ($1, $2, $3, $4, 'draft', '{}'::jsonb, '{}'::jsonb)`,
       [storefrontId, tenantId, branchId, slug],
     );
+    // Reservations always retain the exact business rules that applied when they were created.
+    // Seed an internal default snapshot during workspace bootstrap so staff bookings work before
+    // the optional public storefront is configured or published.
+    await client.query(
+      `INSERT INTO policy_snapshot
+         (tenant_id, storefront_id, version, rental_rules, deposit_rules, cancellation_rules,
+          delivery_rules, privacy_notice, effective_at)
+       VALUES ($1, $2, 1, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '', $3)`,
+      [tenantId, storefrontId, now],
+    );
     await client.query(
       `INSERT INTO subscription
          (id, tenant_id, plan_id, status, trial_ends_at, current_period_start,

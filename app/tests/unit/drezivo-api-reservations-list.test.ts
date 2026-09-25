@@ -278,6 +278,106 @@ describe("Drezivo reservations list API client", () => {
     });
   });
 
+  it("serializes and validates staff variant calendar and exact-time availability previews", async () => {
+    const variantId = "00000000-0000-4000-8000-000000000104" as ProductVariantId;
+    const client = createDrezivoApiClient(getToken);
+
+    fetchMock.mockResolvedValueOnce(
+      success({
+        variant_id: variantId,
+        timezone: "Asia/Manila",
+        window: { start_date: "2026-10-01", end_date: "2026-10-31" },
+        active_assets: 2,
+        ready_assets: 2,
+        pricing: {
+          pricing_mode: "fixed_duration",
+          rental_price_minor: "50000",
+          security_deposit_minor: "20000",
+          currency: "PHP",
+          included_duration_minutes: 4320,
+          minimum_duration_minutes: 4320,
+          extra_day_price_minor: "15000",
+          prep_minutes: 60,
+          turnaround_minutes: 1440,
+        },
+        days: [
+          {
+            date: "2026-10-10",
+            state: "limited",
+            active_assets: 2,
+            ready_assets: 2,
+            available_assets: 1,
+            reserved_assets: 1,
+            rented_assets: 0,
+            fitting_assets: 0,
+            maintenance_assets: 0,
+            transfer_assets: 0,
+          },
+        ],
+      })
+    );
+
+    const calendar = await client.getStaffReservationAvailabilityCalendar({
+      variant_id: variantId,
+      start_date: "2026-10-01",
+      end_date: "2026-10-31",
+    });
+    const [calendarUrl, calendarInit] = fetchMock.mock.calls[0]!;
+    const parsedCalendarUrl = new URL(String(calendarUrl));
+    expect(parsedCalendarUrl.pathname).toBe("/api/v1/reservations/availability-calendar");
+    expect(parsedCalendarUrl.searchParams.get("variant_id")).toBe(variantId);
+    expect(parsedCalendarUrl.searchParams.get("start_date")).toBe("2026-10-01");
+    expect(parsedCalendarUrl.searchParams.get("end_date")).toBe("2026-10-31");
+    expect(calendarInit?.method).toBe("GET");
+    expect(calendar.data.days[0]).toMatchObject({ state: "limited", available_assets: 1 });
+
+    fetchMock.mockResolvedValueOnce(
+      success({
+        variant_id: variantId,
+        requested_interval: {
+          start: "2026-10-10T02:00:00.000Z",
+          end: "2026-10-13T02:00:00.000Z",
+        },
+        blocked_interval: {
+          start: "2026-10-10T01:00:00.000Z",
+          end: "2026-10-14T02:00:00.000Z",
+        },
+        available: true,
+        available_assets: 1,
+        guaranteed: false,
+        pricing: {
+          pricing_mode: "fixed_duration",
+          rental_price_minor: "50000",
+          security_deposit_minor: "20000",
+          currency: "PHP",
+          included_duration_minutes: 4320,
+          minimum_duration_minutes: 4320,
+          extra_day_price_minor: "15000",
+          prep_minutes: 60,
+          turnaround_minutes: 1440,
+        },
+        rental_preview: {
+          rental_total_minor: "50000",
+          extra_day_count: 0,
+          currency: "PHP",
+        },
+      })
+    );
+
+    const exact = await client.getStaffReservationAvailabilityCheck({
+      variant_id: variantId,
+      pickup_at: "2026-10-10T02:00:00.000Z",
+      due_at: "2026-10-13T02:00:00.000Z",
+    });
+    const [exactUrl, exactInit] = fetchMock.mock.calls[1]!;
+    const parsedExactUrl = new URL(String(exactUrl));
+    expect(parsedExactUrl.pathname).toBe("/api/v1/reservations/availability-check");
+    expect(parsedExactUrl.searchParams.get("pickup_at")).toBe("2026-10-10T02:00:00.000Z");
+    expect(parsedExactUrl.searchParams.get("due_at")).toBe("2026-10-13T02:00:00.000Z");
+    expect(exactInit?.method).toBe("GET");
+    expect(exact.data).toMatchObject({ available: true, available_assets: 1 });
+  });
+
   it("sends strict versioned reservation mutation bodies with the supplied idempotency key", async () => {
     const reservationId = "00000000-0000-4000-8000-000000000101";
     const summary = {

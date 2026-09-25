@@ -68,6 +68,10 @@ import {
   reservationRescheduleResponse,
   reservationReturnRequest,
   reservationReturnResponse,
+  staffReservationAvailabilityCalendarQuery,
+  staffReservationAvailabilityCalendarResponse,
+  staffReservationAvailabilityCheckQuery,
+  staffReservationAvailabilityCheckResponse,
   staffReservationCreateRequest,
   staffReservationCreateResponse,
   subscriptionStatus,
@@ -508,6 +512,46 @@ registry.registerPath({
     },
     409: jsonError('The requested asset/interval is no longer available (CAPACITY_CONFLICT).'),
     422: jsonError('Validation failed.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/reservations/availability-calendar',
+  tags: ['reservations', 'availability'],
+  summary: 'Staff variant-aware calendar availability preview for one bounded date window.',
+  request: { query: staffReservationAvailabilityCalendarQuery },
+  responses: {
+    200: {
+      description: 'Advisory branch-local day availability. Never a capacity guarantee.',
+      content: {
+        'application/json': { schema: successEnvelope(staffReservationAvailabilityCalendarResponse) },
+      },
+    },
+    403: jsonError('Reservation management permission is required.'),
+    404: jsonError('The active clothing variant could not be found.'),
+    409: jsonError('The active branch cannot resolve the current reservation quote context.'),
+    422: jsonError('The bounded availability calendar query is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/reservations/availability-check',
+  tags: ['reservations', 'availability'],
+  summary: 'Staff exact-time availability and rental-price preview before reservation creation.',
+  request: { query: staffReservationAvailabilityCheckQuery },
+  responses: {
+    200: {
+      description: 'Exact timestamp preview. Reservation creation still revalidates under asset locks.',
+      content: {
+        'application/json': { schema: successEnvelope(staffReservationAvailabilityCheckResponse) },
+      },
+    },
+    403: jsonError('Reservation management permission is required.'),
+    404: jsonError('The active clothing variant could not be found.'),
+    409: jsonError('The requested fixed-duration rental is shorter than the configured minimum.'),
+    422: jsonError('The exact availability interval is invalid.'),
   },
 });
 

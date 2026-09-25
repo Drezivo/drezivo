@@ -12,11 +12,20 @@ import type {
   PaymentMethodId,
   PermissionCode,
   ReservationSummary,
+  ProductVariantId,
+  StaffReservationAvailabilityCalendarResponse,
+  StaffReservationAvailabilityCheckResponse,
   StaffReservationCustomerInput,
   StaffReservationCustomerOption,
   StaffReservationPaymentMethodOption,
 } from "@drezivo/contracts";
 
+import {
+  ReservationAvailabilityCalendar,
+  monthWindow,
+  parseCalendarDate,
+  todayInTimeZone,
+} from "@/components/reservations/reservation-availability-calendar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,9 +72,21 @@ export function NewReservationSheet({
   } | null>(null);
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
-  const [pickupLocal, setPickupLocal] = useState("");
-  const [dueLocal, setDueLocal] = useState("");
+  const [pickupDate, setPickupDate] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [pickupTime, setPickupTime] = useState("");
+  const [dueTime, setDueTime] = useState("");
   const [eventDate, setEventDate] = useState("");
+  const [calendarMonth, setCalendarMonth] = useState(
+    () => parseCalendarDate(todayInTimeZone(timeZone)) ?? new Date()
+  );
+  const [calendarAvailability, setCalendarAvailability] =
+    useState<StaffReservationAvailabilityCalendarResponse | null>(null);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [exactAvailability, setExactAvailability] =
+    useState<StaffReservationAvailabilityCheckResponse | null>(null);
+  const [exactAvailabilityLoading, setExactAvailabilityLoading] = useState(false);
+  const [exactAvailabilityError, setExactAvailabilityError] = useState<string | null>(null);
   const [fulfillmentMethod, setFulfillmentMethod] = useState<"pickup" | "delivery">("pickup");
   const [paymentMethods, setPaymentMethods] = useState<StaffReservationPaymentMethodOption[]>([]);
   const [paymentMethodId, setPaymentMethodId] = useState<PaymentMethodId | "">("");
@@ -74,7 +95,7 @@ export function NewReservationSheet({
   const [availabilityReloadVersion, setAvailabilityReloadVersion] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState<ClothingListItem | null>(null);
   const [productDetail, setProductDetail] = useState<ClothingDetail | null>(null);
-  const [selectedVariantId, setSelectedVariantId] = useState("");
+  const [selectedVariantId, setSelectedVariantId] = useState<ProductVariantId | "">("");
   const [held, setHeld] = useState<HeldState | null>(null);
   const [serverExpired, setServerExpired] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -91,12 +112,23 @@ export function NewReservationSheet({
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   const canCreate = permissionCodes.includes("reservations.manage");
-  const requestedInterval = useMemo(
-    () => toRequestedInterval(pickupLocal, dueLocal, timeZone),
-    [dueLocal, pickupLocal, timeZone]
-  );
   const selectedVariant =
     productDetail?.variants.find((variant) => variant.id === selectedVariantId) ?? null;
+  const requestedInterval = useMemo(
+    () => toRequestedInterval(pickupDate, pickupTime, dueDate, dueTime, timeZone),
+    [dueDate, dueTime, pickupDate, pickupTime, timeZone]
+  );
+  const minimumDurationIssue = useMemo(
+    () => minimumRentalDurationIssue(selectedVariant, requestedInterval, timeZone),
+    [requestedInterval, selectedVariant, timeZone]
+  );
+  const exactAvailabilityMatchesSelection = Boolean(
+    exactAvailability &&
+      requestedInterval &&
+      exactAvailability.variant_id === selectedVariant?.id &&
+      exactAvailability.requested_interval.start === requestedInterval.start &&
+      exactAvailability.requested_interval.end === requestedInterval.end
+  );
   const holdRemainingMs = held?.reservation.hold_expires_at
     ? new Date(held.reservation.hold_expires_at).getTime() - now
     : null;
@@ -130,12 +162,6 @@ export function NewReservationSheet({
       sort: "name_asc" as const,
       product_status: "active" as const,
       ...(deferredSearch ? { search: deferredSearch } : {}),
-      ...(requestedInterval
-        ? {
-            availability_start: requestedInterval.start,
-            availability_end: requestedInterval.end,
-          }
-        : {}),
     };
 
     void createDrezivoApiClient(getToken)
@@ -153,7 +179,7 @@ export function NewReservationSheet({
     return () => {
       cancelled = true;
     };
-  }, [availabilityReloadVersion, deferredSearch, getToken, open, requestedInterval, step]);
+  }, [deferredSearch, getToken, open, step]);
 
   useEffect(() => {
     if (!selectedProduct) {
@@ -167,8 +193,7 @@ export function NewReservationSheet({
       .then((result) => {
         if (cancelled) return;
         setProductDetail(result.data);
-        const firstActive = result.data.variants.find((variant) => variant.status === "active");
-        setSelectedVariantId(firstActive?.id ?? "");
+        setSelectedVariantId("");
       })
       .catch((error) => {
         if (!cancelled) setNotice({ tone: "attention", text: toMessage(error) });
@@ -177,6 +202,93 @@ export function NewReservationSheet({
       cancelled = true;
     };
   }, [getToken, selectedProduct]);
+
+  useEffect(() => {
+    if (!open || step !== "select" || !selectedVariantId) {
+      setCalendarAvailability(null);
+      setCalendarLoading(false);
+      return;
+    }
+    let cancelled = false;
+    const window = monthWindow(calendarMonth);
+    setCalendarLoading(true);
+    void createDrezivoApiClient(getToken)
+      .getStaffReservationAvailabilityCalendar({
+        variant_id: selectedVariantId,
+        start_date: window.startDate,
+        end_date: window.endDate,
+      })
+      .then((result) => {
+        if (!cancelled) setCalendarAvailability(result.data);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setCalendarAvailability(null);
+          setNotice({ tone: "attention", text: toMessage(error) });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCalendarLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [availabilityReloadVersion, calendarMonth, getToken, open, selectedVariantId, step]);
+
+  useEffect(() => {
+    if (
+      !open ||
+      step !== "select" ||
+      !selectedVariantId ||
+      !requestedInterval ||
+      minimumDurationIssue
+    ) {
+      setExactAvailability(null);
+      setExactAvailabilityLoading(false);
+      setExactAvailabilityError(null);
+      return;
+    }
+    let cancelled = false;
+    setExactAvailability(null);
+    setExactAvailabilityError(null);
+    setExactAvailabilityLoading(true);
+    void createDrezivoApiClient(getToken)
+      .getStaffReservationAvailabilityCheck({
+        variant_id: selectedVariantId,
+        pickup_at: requestedInterval.start,
+        due_at: requestedInterval.end,
+      })
+      .then((result) => {
+        if (!cancelled) setExactAvailability(result.data);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setExactAvailability(null);
+          setExactAvailabilityError(toMessage(error));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setExactAvailabilityLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    availabilityReloadVersion,
+    getToken,
+    minimumDurationIssue,
+    open,
+    requestedInterval,
+    selectedVariantId,
+    step,
+  ]);
+
+  useEffect(() => {
+    if (!eventDate) return;
+    if (!pickupDate || !dueDate || eventDate < pickupDate || eventDate > dueDate) {
+      setEventDate("");
+    }
+  }, [dueDate, eventDate, pickupDate]);
 
   useEffect(() => {
     if (
@@ -225,9 +337,17 @@ export function NewReservationSheet({
     setStep("select");
     setNotice(null);
     setSearch("");
-    setPickupLocal("");
-    setDueLocal("");
+    setPickupDate("");
+    setDueDate("");
+    setPickupTime("");
+    setDueTime("");
     setEventDate("");
+    setCalendarMonth(parseCalendarDate(todayInTimeZone(timeZone)) ?? new Date());
+    setCalendarAvailability(null);
+    setCalendarLoading(false);
+    setExactAvailability(null);
+    setExactAvailabilityLoading(false);
+    setExactAvailabilityError(null);
     setFulfillmentMethod("pickup");
     setSelectedProduct(null);
     setProductDetail(null);
@@ -266,14 +386,25 @@ export function NewReservationSheet({
     if (!selectedVariant || !requestedInterval || !paymentMethodId) {
       setNotice({
         tone: "attention",
-        text: "Choose a garment, active variant, pickup/return time, and payment method before reserving.",
+        text: "Choose clothing, a variant, rental dates, pickup/return times, and a payment method before reserving.",
       });
       return;
     }
-    if (selectedProduct && selectedProduct.availability.available_assets === 0) {
+    if (minimumDurationIssue) {
+      setNotice({ tone: "attention", text: minimumDurationIssue });
+      return;
+    }
+    if (!exactAvailability || !exactAvailabilityMatchesSelection) {
       setNotice({
         tone: "attention",
-        text: "The availability preview shows no free garment for this window. Choose other dates before reserving.",
+        text: "Wait for the exact pickup and return time availability check before reserving.",
+      });
+      return;
+    }
+    if (!exactAvailability.available) {
+      setNotice({
+        tone: "attention",
+        text: "No single garment in this variant is available for the exact pickup and return times. Choose another period.",
       });
       return;
     }
@@ -440,63 +571,6 @@ export function NewReservationSheet({
         {step === "select" ? (
           <div className="space-y-5 p-5">
             <section>
-              <SectionTitle icon={CalendarDays} title="Rental dates" />
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <Field label="Pickup date and time">
-                  <Input
-                    type="datetime-local"
-                    value={pickupLocal}
-                    onChange={(event) => {
-                      setPickupLocal(event.target.value);
-                      reserveGuard.resetIntent();
-                    }}
-                  />
-                </Field>
-                <Field label="Return date and time">
-                  <Input
-                    type="datetime-local"
-                    value={dueLocal}
-                    onChange={(event) => {
-                      setDueLocal(event.target.value);
-                      reserveGuard.resetIntent();
-                    }}
-                  />
-                </Field>
-                <Field label="Event date (optional)">
-                  <Input
-                    type="date"
-                    value={eventDate}
-                    onChange={(event) => {
-                      setEventDate(event.target.value);
-                      reserveGuard.resetIntent();
-                    }}
-                  />
-                </Field>
-                <Field label="Fulfillment">
-                  <select
-                    aria-label="Fulfillment"
-                    value={fulfillmentMethod}
-                    onChange={(event) => {
-                      setFulfillmentMethod(event.target.value as "pickup" | "delivery");
-                      reserveGuard.resetIntent();
-                    }}
-                    className="h-9 w-full rounded-md border border-dashboard-border bg-dashboard-surface px-3 text-sm text-dashboard-navy"
-                  >
-                    <option value="pickup">Pickup</option>
-                    <option value="delivery">Delivery</option>
-                  </select>
-                </Field>
-              </div>
-              {!requestedInterval && (pickupLocal || dueLocal) ? (
-                <p className="mt-2 text-xs text-amber-700">
-                  Return must be after pickup. The selected branch timezone is used.
-                </p>
-              ) : null}
-            </section>
-
-            <Separator />
-
-            <section>
               <SectionTitle icon={Search} title="Choose clothing" />
               <Input
                 className="mt-3"
@@ -507,7 +581,7 @@ export function NewReservationSheet({
               />
               <div className="mt-3 grid gap-2">
                 {productsLoading ? (
-                  <p className="text-sm text-dashboard-muted">Checking catalogue availability…</p>
+                  <p className="text-sm text-dashboard-muted">Loading active clothing…</p>
                 ) : products.length === 0 ? (
                   <p className="text-sm text-dashboard-muted">
                     No active clothing matches this search.
@@ -519,6 +593,17 @@ export function NewReservationSheet({
                       type="button"
                       onClick={() => {
                         setSelectedProduct(product);
+                        setProductDetail(null);
+                        setSelectedVariantId("");
+                        setPickupDate("");
+                        setDueDate("");
+                        setPickupTime("");
+                        setDueTime("");
+                        setEventDate("");
+                        setCalendarAvailability(null);
+                        setExactAvailability(null);
+                        setExactAvailabilityError(null);
+                        setCalendarMonth(parseCalendarDate(todayInTimeZone(timeZone)) ?? new Date());
                         reserveGuard.resetIntent();
                       }}
                       className={cn(
@@ -536,25 +621,20 @@ export function NewReservationSheet({
                         </p>
                       </div>
                       <Badge variant="outline" className="shrink-0">
-                        {requestedInterval
-                          ? `${product.availability.available_assets} preview available`
-                          : `${product.readiness.ready} ready`}
+                        {product.readiness.ready} ready
                       </Badge>
                     </button>
                   ))
                 )}
               </div>
-              {requestedInterval ? (
-                <p className="mt-2 text-xs text-dashboard-muted">
-                  Availability is a preview. Reserve is the authoritative allocation attempt and may
-                  still conflict with another staff action.
-                </p>
-              ) : null}
             </section>
 
             {productDetail ? (
               <section>
                 <SectionTitle icon={Shirt} title="Choose size / variant" />
+                <p className="mt-1 text-xs text-dashboard-muted">
+                  Availability is calculated per variant because each size can have different serialized garments and bookings.
+                </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {productDetail.variants
                     .filter((variant) => variant.status === "active")
@@ -566,6 +646,14 @@ export function NewReservationSheet({
                         variant={selectedVariantId === variant.id ? "default" : "secondary"}
                         onClick={() => {
                           setSelectedVariantId(variant.id);
+                          setPickupDate("");
+                          setDueDate("");
+                          setPickupTime("");
+                          setDueTime("");
+                          setEventDate("");
+                          setCalendarAvailability(null);
+                          setExactAvailability(null);
+                          setExactAvailabilityError(null);
                           reserveGuard.resetIntent();
                         }}
                       >
@@ -576,22 +664,152 @@ export function NewReservationSheet({
                 </div>
                 {selectedVariant ? (
                   <div className="mt-3 rounded-lg bg-dashboard-active/50 p-3 text-sm">
-                    <p className="font-medium text-dashboard-navy">{selectedVariant.size_label}</p>
-                    <p className="mt-1 text-dashboard-muted">
-                      Base rental{" "}
-                      {formatMinorMoney(
-                        selectedVariant.rental_price_minor,
-                        selectedVariant.currency
-                      )}{" "}
-                      · Deposit{" "}
-                      {formatMinorMoney(
-                        selectedVariant.security_deposit_minor,
-                        selectedVariant.currency
-                      )}
-                    </p>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="font-medium text-dashboard-navy">
+                          {selectedVariant.size_label}
+                          {selectedVariant.color_label ? ` · ${selectedVariant.color_label}` : ""}
+                        </p>
+                        <p className="mt-1 text-dashboard-muted">
+                          {formatVariantPricingRule(selectedVariant)} · Deposit{" "}
+                          {formatMinorMoney(
+                            selectedVariant.security_deposit_minor,
+                            selectedVariant.currency
+                          )}
+                        </p>
+                        <p className="mt-2 text-xs leading-5 text-dashboard-muted">
+                          {formatRentalAvailabilityPolicy(selectedVariant)}
+                        </p>
+                      </div>
+                      {calendarAvailability ? (
+                        <Badge variant="outline">
+                          {calendarAvailability.ready_assets} ready {calendarAvailability.ready_assets === 1 ? "piece" : "pieces"}
+                        </Badge>
+                      ) : null}
+                    </div>
                   </div>
-                ) : null}
+                ) : (
+                  <p className="mt-3 text-sm text-dashboard-muted">
+                    Select a variant to view its rental calendar.
+                  </p>
+                )}
               </section>
+            ) : null}
+
+            {selectedVariant ? (
+              <>
+                <Separator />
+                <section>
+                  <SectionTitle icon={CalendarDays} title="Rental period" />
+                  <div className="mt-3">
+                    <ReservationAvailabilityCalendar
+                      availability={calendarAvailability}
+                      loading={calendarLoading}
+                      month={calendarMonth}
+                      onMonthChange={setCalendarMonth}
+                      pickupDate={pickupDate}
+                      dueDate={dueDate}
+                      onRangeChange={(range) => {
+                        setPickupDate(range.pickupDate);
+                        setDueDate(range.dueDate);
+                        setExactAvailability(null);
+                        setExactAvailabilityError(null);
+                        reserveGuard.resetIntent();
+                      }}
+                      timeZone={timeZone}
+                    />
+                  </div>
+
+                  {pickupDate && dueDate ? (
+                    <div className="mt-4 space-y-3">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label={`Pickup time · ${formatIsoDateForDisplay(pickupDate)}`}>
+                          <Input
+                            type="time"
+                            aria-label="Pickup time"
+                            value={pickupTime}
+                            onChange={(event) => {
+                              setPickupTime(event.target.value);
+                              setExactAvailability(null);
+                              reserveGuard.resetIntent();
+                            }}
+                          />
+                        </Field>
+                        <Field label={`Return time · ${formatIsoDateForDisplay(dueDate)}`}>
+                          <Input
+                            type="time"
+                            aria-label="Return time"
+                            value={dueTime}
+                            min={minimumReturnTime(
+                              selectedVariant,
+                              pickupDate,
+                              dueDate,
+                              pickupTime,
+                              timeZone
+                            )}
+                            onChange={(event) => {
+                              setDueTime(event.target.value);
+                              setExactAvailability(null);
+                              reserveGuard.resetIntent();
+                            }}
+                          />
+                        </Field>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label="Event date (optional)">
+                          <Input
+                            type="date"
+                            value={eventDate}
+                            min={pickupDate}
+                            max={dueDate}
+                            onChange={(event) => {
+                              setEventDate(event.target.value);
+                              reserveGuard.resetIntent();
+                            }}
+                          />
+                        </Field>
+                        <Field label="Fulfillment">
+                          <select
+                            aria-label="Fulfillment"
+                            value={fulfillmentMethod}
+                            onChange={(event) => {
+                              setFulfillmentMethod(event.target.value as "pickup" | "delivery");
+                              reserveGuard.resetIntent();
+                            }}
+                            className="h-9 w-full rounded-md border border-dashboard-border bg-dashboard-surface px-3 text-sm text-dashboard-navy"
+                          >
+                            <option value="pickup">Pickup</option>
+                            <option value="delivery">Delivery</option>
+                          </select>
+                        </Field>
+                      </div>
+
+                      {minimumDurationIssue ? (
+                        <p className="text-xs text-warning-500" role="alert">
+                          {minimumDurationIssue}
+                        </p>
+                      ) : null}
+                      {!requestedInterval && pickupTime && dueTime && !minimumDurationIssue ? (
+                        <p className="text-xs text-warning-500" role="alert">
+                          Return must be after pickup and the rental period cannot exceed 31 days. Times use the selected branch timezone.
+                        </p>
+                      ) : null}
+
+                      <ExactAvailabilityStatus
+                        availability={exactAvailability}
+                        error={exactAvailabilityError}
+                        loading={exactAvailabilityLoading}
+                      />
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-dashboard-muted">
+                      Select a pickup date and a valid return date from the calendar. Pickup and return times come next.
+                    </p>
+                  )}
+                </section>
+
+              </>
             ) : null}
 
             <Separator />
@@ -635,8 +853,12 @@ export function NewReservationSheet({
                 type="button"
                 disabled={
                   reserveGuard.isSubmitting ||
+                  exactAvailabilityLoading ||
                   !selectedVariant ||
                   !requestedInterval ||
+                  Boolean(minimumDurationIssue) ||
+                  !exactAvailabilityMatchesSelection ||
+                  !exactAvailability?.available ||
                   !paymentMethodId
                 }
                 onClick={() =>
@@ -923,16 +1145,128 @@ function buildCustomerInput(input: {
 }
 
 function toRequestedInterval(
-  pickupLocal: string,
-  dueLocal: string,
+  pickupDate: string,
+  pickupTime: string,
+  dueDate: string,
+  dueTime: string,
   timeZone: string
 ): { start: string; end: string } | null {
-  if (!pickupLocal || !dueLocal) return null;
-  const start = zonedLocalDateTimeToInstant(pickupLocal, timeZone);
-  const end = zonedLocalDateTimeToInstant(dueLocal, timeZone);
+  if (!pickupDate || !pickupTime || !dueDate || !dueTime) return null;
+  const start = zonedLocalDateTimeToInstant(`${pickupDate}T${pickupTime}`, timeZone);
+  const end = zonedLocalDateTimeToInstant(`${dueDate}T${dueTime}`, timeZone);
   if (!start || !end || start.getTime() >= end.getTime()) return null;
   if (end.getTime() - start.getTime() > 31 * 24 * 60 * 60 * 1000) return null;
   return { start: start.toISOString(), end: end.toISOString() };
+}
+
+function minimumRentalDurationIssue(
+  variant: ClothingDetail["variants"][number] | null,
+  requestedInterval: { start: string; end: string } | null,
+  timeZone: string
+): string | null {
+  if (!variant || !requestedInterval || variant.pricing_mode !== "fixed_duration") return null;
+  const start = new Date(requestedInterval.start);
+  const end = new Date(requestedInterval.end);
+  const durationMs = end.getTime() - start.getTime();
+  const minimumMs = variant.included_duration_minutes * 60 * 1_000;
+  if (durationMs >= minimumMs) return null;
+  const earliestReturn = new Date(start.getTime() + minimumMs);
+  return `This is a ${formatDurationMinutes(variant.included_duration_minutes)} fixed rental. With this pickup time, the earliest valid return is ${formatInstantForBranch(earliestReturn, timeZone)}. ${formatOperationalBufferPolicy(variant)}`;
+}
+
+function minimumReturnTime(
+  variant: ClothingDetail["variants"][number],
+  pickupDate: string,
+  dueDate: string,
+  pickupTime: string,
+  timeZone: string
+): string | undefined {
+  if (variant.pricing_mode !== "fixed_duration" || !pickupTime) return undefined;
+  const pickup = zonedLocalDateTimeToInstant(`${pickupDate}T${pickupTime}`, timeZone);
+  if (!pickup) return undefined;
+  const earliestReturn = new Date(
+    pickup.getTime() + variant.included_duration_minutes * 60 * 1_000
+  );
+  const localEarliest = localDateTimeParts(earliestReturn, timeZone);
+  return dueDate === localEarliest.date ? localEarliest.time : undefined;
+}
+
+function formatVariantPricingRule(variant: ClothingDetail["variants"][number]): string {
+  const price = formatMinorMoney(variant.rental_price_minor, variant.currency);
+  if (variant.pricing_mode === "daily") return `${price}/day`;
+  const duration = formatDurationMinutes(variant.included_duration_minutes);
+  const extra = formatMinorMoney(variant.extra_day_price_minor, variant.currency);
+  return `${price} · ${duration} fixed rental · Extra days ${extra}/day`;
+}
+
+function formatRentalAvailabilityPolicy(variant: ClothingDetail["variants"][number]): string {
+  const rentalRule =
+    variant.pricing_mode === "fixed_duration"
+      ? `${formatDurationMinutes(variant.included_duration_minutes)} fixed rental`
+      : "Daily rental";
+  return `${rentalRule}. ${formatOperationalBufferPolicy(variant)}`;
+}
+
+function formatOperationalBufferPolicy(variant: ClothingDetail["variants"][number]): string {
+  const prep = formatDurationMinutes(variant.prep_minutes);
+  const turnaround = formatDurationMinutes(variant.turnaround_minutes);
+  return `Availability also reserves ${prep} before pickup for preparation and ${turnaround} after return for turnaround.`;
+}
+
+function formatInstantForBranch(instant: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-PH", {
+    timeZone,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(instant);
+}
+
+function formatDurationMinutes(minutes: number): string {
+  if (minutes % (24 * 60) === 0) {
+    const days = minutes / (24 * 60);
+    return `${days} ${days === 1 ? "day" : "days"}`;
+  }
+  if (minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return `${hours} ${hours === 1 ? "hour" : "hours"}`;
+  }
+  return `${minutes} minutes`;
+}
+
+function formatIsoDateForDisplay(value: string): string {
+  const date = parseCalendarDate(value);
+  if (!date) return value;
+  return new Intl.DateTimeFormat("en-PH", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+function localDateTimeParts(
+  instant: Date,
+  timeZone: string
+): { date: string; time: string } {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(instant)
+      .map((part) => [part.type, part.value])
+  );
+  return {
+    date: `${parts["year"]}-${parts["month"]}-${parts["day"]}`,
+    time: `${parts["hour"]}:${parts["minute"]}`,
+  };
 }
 
 function zonedLocalDateTimeToInstant(value: string, timeZone: string): Date | null {
@@ -977,6 +1311,53 @@ function timeZoneOffsetMs(instant: Date, timeZone: string): number {
       Number(values["minute"]),
       Number(values["second"])
     ) - instant.getTime()
+  );
+}
+
+function ExactAvailabilityStatus({
+  availability,
+  error,
+  loading,
+}: {
+  availability: StaffReservationAvailabilityCheckResponse | null;
+  error: string | null;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="rounded-lg border border-dashboard-border bg-dashboard-neutral-soft px-3 py-2 text-sm text-dashboard-neutral-text" role="status">
+        Checking exact pickup and return times…
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="rounded-lg border border-dashboard-border bg-dashboard-neutral-soft px-3 py-2 text-sm text-dashboard-neutral-text" role="alert">
+        {error}
+      </div>
+    );
+  }
+  if (!availability) return null;
+  if (!availability.available) {
+    return (
+      <div className="rounded-lg border border-dashboard-border bg-dashboard-neutral-soft px-3 py-2 text-sm text-dashboard-neutral-text" role="status">
+        No single garment in this variant is free for the exact pickup and return times. Try another time or date range.
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-lg border border-dashboard-border bg-dashboard-green-soft px-3 py-2 text-sm text-dashboard-green-text" role="status">
+      <p className="font-medium">
+        Available · {availability.available_assets} {availability.available_assets === 1 ? "piece" : "pieces"}
+      </p>
+      <p className="mt-1 text-xs">
+        Rental preview {formatMinorMoney(availability.rental_preview.rental_total_minor, availability.rental_preview.currency)}
+        {availability.rental_preview.extra_day_count > 0
+          ? ` · ${availability.rental_preview.extra_day_count} extra ${availability.rental_preview.extra_day_count === 1 ? "day" : "days"}`
+          : ""}
+        . Reserve revalidates this interval before claiming a physical garment.
+      </p>
+    </div>
   );
 }
 

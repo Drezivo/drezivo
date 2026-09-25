@@ -179,7 +179,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
     expect(persisted.lineCount).toBe(1);
     expect(persisted.allocation).toMatchObject({ asset_id: seed.assetId, is_blocking: true });
     expect(persisted.allocation.starts_at.toISOString()).toBe('2026-10-10T01:00:00.000Z');
-    expect(persisted.allocation.ends_at.toISOString()).toBe('2026-10-13T04:00:00.000Z');
+    expect(persisted.allocation.ends_at.toISOString()).toBe('2026-10-14T02:00:00.000Z');
     expect(persisted.payment).toEqual({ status: 'pending', amount_minor: 225000 });
     expect(persisted.auditCount).toBe(1);
     expect(persisted.outbox).toEqual({
@@ -502,6 +502,151 @@ describe('RSV-021/022 staff reservation creation', async () => {
     expectSafeError(tooShort.body, 'VALIDATION_FAILED');
   });
 
+  it('returns a variant-aware calendar preview and exact timestamp availability without claiming capacity', async () => {
+    const seed = await seedWorkspace('org_rsv063_calendar', 'user_rsv063_calendar', [
+      'reservations.manage',
+    ]);
+    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      await client.query(
+        `INSERT INTO physical_asset
+           (tenant_id, branch_id, variant_id, asset_code, lifecycle_status, readiness, custody_kind)
+         VALUES ($1, $2, $3, 'RSV063-ASSET-2', 'active', 'ready', 'at_branch')`,
+        [seed.tenantId, seed.branchId, seed.variantId],
+      );
+      const workOrder = await client.query<{ id: string }>(
+        `INSERT INTO maintenance_work_order
+           (tenant_id, branch_id, asset_id, kind, status, reason)
+         VALUES ($1, $2, $3, 'manual_block', 'open', 'Variant calendar regression block')
+         RETURNING id`,
+        [seed.tenantId, seed.branchId, seed.assetId],
+      );
+      const workOrderId = requireRow(workOrder.rows, 'calendar maintenance work order').id;
+      await client.query(
+        `INSERT INTO asset_allocation
+           (tenant_id, branch_id, asset_id, maintenance_id, kind, period, is_blocking)
+         VALUES ($1, $2, $3, $4, 'maintenance',
+                 tstzrange('2026-10-11T02:00:00Z', '2026-10-12T02:00:00Z', '[)'), true)`,
+        [seed.tenantId, seed.branchId, seed.assetId, workOrderId],
+      );
+      // Staff availability is operational inventory data and must not depend on storefront policy
+      // configuration. Reservation creation still requires/snapshots an effective policy.
+      await client.query('DELETE FROM policy_snapshot WHERE tenant_id = $1', [seed.tenantId]);
+    });
+    useClerk(seed);
+
+    const calendar = await request(createApp())
+      .get('/api/v1/reservations/availability-calendar')
+      .query({
+        variant_id: seed.variantId,
+        start_date: '2026-10-10',
+        end_date: '2026-10-14',
+      });
+
+    expect(calendar.status).toBe(200);
+    expect(calendar.body).toMatchObject({
+      success: true,
+      data: {
+        variant_id: seed.variantId,
+        timezone: 'Asia/Manila',
+        active_assets: 2,
+        ready_assets: 2,
+        pricing: {
+          pricing_mode: 'fixed_duration',
+          rental_price_minor: '150000',
+          security_deposit_minor: '50000',
+          included_duration_minutes: 4320,
+          minimum_duration_minutes: 4320,
+          extra_day_price_minor: '40000',
+          prep_minutes: 60,
+          turnaround_minutes: 1440,
+        },
+      },
+    });
+    const calendarBody = calendar.body as {
+      data: { days: Array<{ date: string; state: string; available_assets: number }> };
+    };
+    const calendarData = calendarBody.data;
+    expect(calendarData.days).toHaveLength(5);
+    expect(calendarData.days.some((day) => day.available_assets === 1 && day.state === 'limited')).toBe(true);
+    expect(calendarData.days.some((day) => day.available_assets === 2 && day.state === 'available')).toBe(true);
+
+    const exact = await request(createApp())
+      .get('/api/v1/reservations/availability-check')
+      .query({
+        variant_id: seed.variantId,
+        pickup_at: '2026-10-10T02:00:00.000Z',
+        due_at: '2026-10-13T02:00:00.000Z',
+      });
+    expect(exact.status).toBe(200);
+    expect(exact.body).toMatchObject({
+      success: true,
+      data: {
+        variant_id: seed.variantId,
+        available: true,
+        available_assets: 1,
+        guaranteed: false,
+        requested_interval: {
+          start: '2026-10-10T02:00:00.000Z',
+          end: '2026-10-13T02:00:00.000Z',
+        },
+        blocked_interval: {
+          start: '2026-10-10T01:00:00.000Z',
+          end: '2026-10-14T02:00:00.000Z',
+        },
+        rental_preview: {
+          rental_total_minor: '150000',
+          extra_day_count: 0,
+          currency: 'PHP',
+        },
+      },
+    });
+    expect(await graphCounts(seed)).toMatchObject({ reservations: 0, allocations: 0 });
+
+    const tooShort = await request(createApp())
+      .get('/api/v1/reservations/availability-check')
+      .query({
+        variant_id: seed.variantId,
+        pickup_at: '2026-10-10T02:00:00.000Z',
+        due_at: '2026-10-12T02:00:00.000Z',
+      });
+    expect(tooShort.status).toBe(409);
+    expectSafeError(tooShort.body, 'STATE_CONFLICT');
+  });
+
+  it('treats a database-expired hold as available in staff previews before create releases it', async () => {
+    const seed = await seedWorkspace('org_rsv063_expired_preview', 'user_rsv063_expired_preview', [
+      'reservations.manage',
+    ]);
+    await seedExpiredHold(seed);
+    useClerk(seed);
+
+    const calendar = await request(createApp())
+      .get('/api/v1/reservations/availability-calendar')
+      .query({
+        variant_id: seed.variantId,
+        start_date: '2026-10-10',
+        end_date: '2026-10-13',
+      });
+    expect(calendar.status).toBe(200);
+    const calendarBody = calendar.body as {
+      data: { days: Array<{ date: string; available_assets: number }> };
+    };
+    expect(calendarBody.data.days.every((day) => day.available_assets === 1)).toBe(true);
+
+    const exact = await request(createApp())
+      .get('/api/v1/reservations/availability-check')
+      .query({
+        variant_id: seed.variantId,
+        pickup_at: '2026-10-10T02:00:00.000Z',
+        due_at: '2026-10-13T02:00:00.000Z',
+      });
+    expect(exact.status).toBe(200);
+    expect(exact.body).toMatchObject({
+      success: true,
+      data: { available: true, available_assets: 1, guaranteed: false },
+    });
+  });
+
   it('guards staff intake options with auth, branch permission, and new-booking lifecycle policy', async () => {
     clerk.getAuth.mockReturnValueOnce({ userId: null, orgId: null });
     const unauthenticated = await request(createApp()).get('/api/v1/reservations/intake-options');
@@ -759,7 +904,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
       variant_id: seed.variantId as StaffReservationCreateRequest['variant_id'],
       requested_interval: {
         start: '2026-10-10T02:00:00.000Z',
-        end: '2026-10-12T04:00:00.000Z',
+        end: '2026-10-13T02:00:00.000Z',
       },
       event_date: '2026-10-11',
       fulfillment_method: 'delivery',

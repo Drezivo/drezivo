@@ -3,7 +3,7 @@ title: Reservations V1 End-to-End Checklist
 type: implementation-checklist
 status: planned
 owner: Drezivo team
-updated: 2026-09-23
+updated: 2026-09-25
 tags: [drezivo, v1, reservations, booking, checklist]
 ---
 
@@ -349,7 +349,55 @@ Before marking a task complete:
   - **Finance evidence boundary:** Cash can progress through the existing cash path. Manual QR/transfer can be selected and the safe payment instructions returned by Reservation creation are shown, but the repository currently contains only the shared `paymentReceiptSubmitRequest` contract and no implemented receipt POST route/service. Therefore the staff Sheet does not fake screenshot upload or mark evidence paid; attempting completion without required evidence truthfully surfaces the backend Finance prerequisite until that separate Finance endpoint is implemented.
   - **Tests/evidence:** `app/tests/unit/new-reservation-sheet.test.tsx` plus the Phase-6 reservation page/mutation/API-client tests pass `4` files / `27/27`, covering advisory availability, Manila branch-time conversion, customer-less Reserve, hold countdown, existing-customer completion, explicit cancel/release, unavailable stop, capacity-conflict preview refresh, database-side hold-expiry recovery, API request/idempotency serialization, and authoritative list/detail refresh behavior. `api/tests/integration/reservation-create.test.ts` passes `11/11` against real PostgreSQL, including the safe intake-options projection and auth/permission/restricted-tenant guards. Contracts pass `11` files / `90/90`; API unit/service passes `20` files / `82/82`; API/Contracts typecheck, lint, and build pass. The broader API integration regression passes `32` files / `219/219` with only the pre-existing catalogue scale-timeout file intentionally excluded. App typecheck and focused formatting pass; `next build` compiles and generates `/reservations`, while its lint phase still reports the pre-existing root `eslint-config-next@16.3.5` versus app `next@15.5.24` parser mismatch.
 
-## Phase 7: Security and completion evidence
+## Phase 7: Staff availability calendar and reservation intake hardening
+
+- [x] **RSV-064 — Redesign New Reservation around product → variant → availability dependencies**
+  - **Depends on:** RSV-063 and authoritative Catalogue/Availability reads.
+  - **Outcome:** Staff chooses the garment and exact variant before date selection, so the calendar can show availability for the correct serialized-asset pool instead of asking for dates first.
+  - **Acceptance:**
+    - [x] Clothing selection is the first booking decision in the Sheet.
+    - [x] Variant/size selection is required before availability appears.
+    - [x] Staff selects a variant, not a physical asset; Drezivo resolves whether one serialized garment can satisfy the whole interval and later allocates one authoritative asset.
+    - [x] Availability is variant-aware: if one Medium piece is busy but another Medium piece is free, Medium remains bookable.
+    - [x] Changing product/variant resets dependent date/time/event/availability state rather than carrying stale values forward.
+    - [x] Fulfillment and payment remain downstream of garment/date selection.
+  - **Implemented:** `NewReservationSheet` now follows `Choose clothing → Choose size/variant → Rental period → pickup/return times → Event date + Fulfillment → Payment method → Reserve`. The selected variant summary shows fixed/daily pricing, deposit, piece readiness, prep/turnaround timing, and extra-day pricing without exposing physical-asset choice to the browser.
+  - **Tests/evidence:** focused New Reservation unit coverage verifies clothing/variant dependency ordering, reset behavior, fixed-duration guards, event-date bounds, authoritative API request shapes, and reserve/completion behavior.
+
+- [x] **RSV-065 — Add variant-aware inline availability calendar and fixed-duration enforcement**
+  - **Depends on:** RSV-064, RSV-020/021 availability/allocation rules.
+  - **Outcome:** Staff can visually plan a rental from a full inline calendar while exact timestamp validation remains authoritative.
+  - **Acceptance:**
+    - [x] Use `react-day-picker` through a reusable shadcn-style Calendar primitive instead of a custom date engine or small popover picker.
+    - [x] Calendar is inline/full-width in the reservation Sheet and supports month navigation plus range selection.
+    - [x] Day availability is derived from the selected variant's serialized physical assets, not product-level status alone.
+    - [x] `Available` means at least one eligible physical piece can cover that day; `Limited` means at least one piece is free but fewer than the ready piece count; `Unavailable / busy` means zero eligible pieces for that day.
+    - [x] Calendar visuals use transparent/no-fill for normal Available days, subtle amber for Limited capacity, light red for Unavailable/busy, and the normal accent for the selected range.
+    - [x] Fixed-duration tariffs treat `included_duration_minutes` as a hard minimum, not merely a price label. A ₱500 / 3-day tariff cannot be booked for 1–2 days; longer rentals are allowed and use the configured extra-day rate.
+    - [x] Pickup/return dates come from the range calendar while pickup/return times remain explicit inputs so the final reservation continues to use exact timestamps.
+    - [x] Exact pickup/return availability is revalidated server-side after times are selected; the calendar remains advisory and never guarantees capacity.
+    - [x] Prep and turnaround buffers participate in the blocked interval without being charged as customer rental duration.
+    - [x] Event date is optional but constrained inclusively to the selected pickup/return calendar dates; changing the range clears an event date that is no longer valid.
+    - [x] Month previous/next controls remain positioned inside the calendar header rather than escaping to the Sheet corners.
+  - **Implemented API:** staff-only `GET /api/v1/reservations/availability-calendar` returns a bounded branch-local variant/day projection; `GET /api/v1/reservations/availability-check` rechecks the exact timestamp interval, buffered interval, available serialized-asset count, minimum duration, and rental preview without claiming capacity. Expired holds are treated as logically released in previews, matching the authoritative create transaction.
+  - **Implemented UX details:** Limited displays the remaining free-piece count (for example `1 left`). Available days are intentionally visually quiet/transparent. Busy days display operational labels such as Reserved, Rented, Fitting, Maintenance, or Unavailable while sharing the light-red unavailable treatment. Fixed-duration messaging now explains the base rental duration separately from preparation before pickup and turnaround after return, e.g. `3 days fixed rental; availability also reserves 1 day before pickup for preparation and 1 day after return for turnaround`, and short-range validation explains the earliest valid return timestamp.
+  - **Tests/evidence:** Contracts availability tests pass; API typecheck/lint pass; reservation quote integration passes `7/7`; reservation create/availability integration passes `13/13`; focused app reservation/calendar/API-client tests pass `19/19` in a clean validation environment. App source-only TypeScript validation and `git diff --check` pass. Repo-wide OpenAPI generation and full app lint/typecheck remain affected by pre-existing Zod/OpenAPI and ESLint/jest-dom configuration issues already documented elsewhere.
+
+- [x] **RSV-066 — Decouple staff availability from storefront setup and seed default policy snapshots**
+  - **Depends on:** RSV-020 through RSV-023, tenant bootstrap.
+  - **Outcome:** Business-side reservation creation works immediately after workspace bootstrap without requiring the owner to configure or publish the public storefront.
+  - **Policy snapshot meaning:** a policy snapshot is the immutable version of rental/deposit/cancellation/delivery/privacy rules that applied when a reservation was created. Old reservations keep their accepted rules even if the business changes settings later. It is historical reservation truth, not a requirement that the public storefront be published.
+  - **Acceptance:**
+    - [x] Calendar/day availability does not require storefront or policy context because it only needs tenant/branch/variant/assets/timing.
+    - [x] Exact timestamp availability does not require storefront or policy context for the same reason.
+    - [x] Actual reservation creation still stores the immutable policy snapshot required by the reservation model.
+    - [x] New tenant bootstrap automatically creates an internal draft storefront row plus default policy snapshot version 1; this internal row does not imply that a public storefront is configured or published.
+    - [x] Existing workspaces that already have a draft storefront but no policy snapshot are safely backfilled.
+    - [x] Default policy is intentionally neutral: empty rental/deposit/cancellation rules, delivery enabled with zero fee, and a default Drezivo reservation privacy notice; owners can later publish newer policy versions without rewriting historical reservations.
+  - **Implemented:** tenant bootstrap now inserts the default `policy_snapshot` immediately after the auto-created draft storefront. Forward migration `0038_default_reservation_policy_snapshot.sql` inserts version 1 only for storefront rows that currently have no policy row, preserving any workspace that already has configured policy history. The migration was applied successfully to the local development database so the current workspace can create staff reservations immediately.
+  - **Tests/evidence:** tenant bootstrap integration passes `4/4`, reservation create/availability passes `13/13`, API typecheck/lint pass, and `git diff --check` passes. The prior staff-facing error `Reservation quote context could not be resolved for this branch.` no longer blocks availability; actual reservation creation now has the automatically seeded immutable policy snapshot it needs.
+
+## Phase 8: Security and completion evidence
 
 - [ ] **RSV-070 — Complete reservation authorization/RLS suite**
   - **Depends on:** All Reservation API tasks.

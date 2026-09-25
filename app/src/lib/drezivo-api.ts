@@ -36,6 +36,10 @@ import {
   reservationRejectResponse,
   reservationReturnRequest,
   reservationReturnResponse,
+  staffReservationAvailabilityCalendarQuery,
+  staffReservationAvailabilityCalendarResponse,
+  staffReservationAvailabilityCheckQuery,
+  staffReservationAvailabilityCheckResponse,
   staffReservationCompleteRequest,
   staffReservationCompleteResponse,
   staffReservationCreateRequest,
@@ -105,6 +109,10 @@ import {
   type ReservationRejectResponse,
   type ReservationReturnRequest,
   type ReservationReturnResponse,
+  type StaffReservationAvailabilityCalendarQuery,
+  type StaffReservationAvailabilityCalendarResponse,
+  type StaffReservationAvailabilityCheckQuery,
+  type StaffReservationAvailabilityCheckResponse,
   type StaffReservationCompleteRequest,
   type StaffReservationCompleteResponse,
   type StaffReservationCreateRequest,
@@ -290,6 +298,36 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "GET",
         path: `/api/v1/reservations/intake-options${suffix ? `?${suffix}` : ""}`,
         responseSchema: apiEnvelope(staffReservationIntakeResponse),
+      });
+    },
+    getStaffReservationAvailabilityCalendar: (
+      input: StaffReservationAvailabilityCalendarQuery
+    ) => {
+      const query = staffReservationAvailabilityCalendarQuery.parse(input);
+      const searchParams = new URLSearchParams({
+        variant_id: query.variant_id,
+        start_date: query.start_date,
+        end_date: query.end_date,
+      });
+      return request<StaffReservationAvailabilityCalendarResponse>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/reservations/availability-calendar?${searchParams.toString()}`,
+        responseSchema: apiEnvelope(staffReservationAvailabilityCalendarResponse),
+      });
+    },
+    getStaffReservationAvailabilityCheck: (input: StaffReservationAvailabilityCheckQuery) => {
+      const query = staffReservationAvailabilityCheckQuery.parse(input);
+      const searchParams = new URLSearchParams({
+        variant_id: query.variant_id,
+        pickup_at: query.pickup_at,
+        due_at: query.due_at,
+      });
+      return request<StaffReservationAvailabilityCheckResponse>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/reservations/availability-check?${searchParams.toString()}`,
+        responseSchema: apiEnvelope(staffReservationAvailabilityCheckResponse),
       });
     },
     createStaffReservation: (
