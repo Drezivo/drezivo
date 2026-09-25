@@ -406,7 +406,9 @@ export async function submitReservation(
   request: ReservationSubmitRequest,
 ): Promise<ReservationReviewCommandResponse<ReservationSubmitResponse>> {
   assertReservationReviewContext(input);
-  return submitReservationForConfirmation(toReviewContext(input), reservationId, request);
+  return submitReservationForConfirmation(toReviewContext(input), reservationId, request, {
+    allowMissingPaymentEvidence: true,
+  });
 }
 
 export async function attachReservationReceipt(
@@ -433,7 +435,9 @@ export async function verifyReservationPayment(
   ) {
     throw new ForbiddenError('Payment evidence verification permission is required.');
   }
-  return verifyReservationPaymentByStaff(toReviewContext(input), reservationId, request);
+  return verifyReservationPaymentByStaff(toReviewContext(input), reservationId, request, {
+    allowMissingPaymentEvidence: true,
+  });
 }
 
 export async function confirmReservation(

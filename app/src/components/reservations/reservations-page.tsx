@@ -685,7 +685,12 @@ function PaymentCell({ reservation }: { reservation: ReservationListItem }) {
         className={PAYMENT_STATUS_CLASSES[payment.status]}
       />
       <p className="text-xs text-dashboard-muted">
-        {PAYMENT_EVIDENCE_LABELS[payment.evidence_status]}
+        {payment.rail !== "cash" &&
+        payment.status === "paid" &&
+        payment.verified_at &&
+        payment.evidence_status === "awaiting_upload"
+          ? "Not provided (optional)"
+          : PAYMENT_EVIDENCE_LABELS[payment.evidence_status]}
       </p>
       <p className="text-xs font-medium text-dashboard-navy">
         {formatMinorMoney(payment.amount_minor, payment.currency)}

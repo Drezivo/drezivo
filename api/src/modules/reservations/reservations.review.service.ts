@@ -119,11 +119,16 @@ export async function submitReservationForConfirmation(
   context: ReservationReviewContext,
   reservationId: string,
   requestInput: ReservationSubmitRequest,
+  options: { allowMissingPaymentEvidence?: boolean } = {},
 ): Promise<ReservationReviewCommandResponse<ReservationSubmitResponse>> {
   const parsed = reservationSubmitRequest.safeParse(requestInput);
   if (!parsed.success) throw new ValidationError('Reservation submission request is invalid.');
   const request = parsed.data;
-  const payloadHash = canonicalRequestHash({ reservation_id: reservationId, ...request });
+  const payloadHash = canonicalRequestHash({
+    reservation_id: reservationId,
+    ...request,
+    allow_missing_payment_evidence: options.allowMissingPaymentEvidence === true,
+  });
 
   return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
     const claim = await claimReviewIdempotency(client, context, SUBMIT_OPERATION, payloadHash);
@@ -167,7 +172,7 @@ export async function submitReservationForConfirmation(
           throw new StateConflictError('This reservation already has a customer snapshot.');
         }
       }
-      assertSubmissionEvidence(reservation, payment, receipt);
+      assertSubmissionEvidence(reservation, payment, receipt, options);
 
       await client.query(`SAVEPOINT ${REVIEW_EFFECTS_SAVEPOINT}`);
       savepointOpen = true;
@@ -337,6 +342,7 @@ export async function verifyReservationPaymentByStaff(
   options: {
     requireRail?: 'cash' | 'manual_qr' | 'manual_transfer';
     cashTenderedMinor?: string;
+    allowMissingPaymentEvidence?: boolean;
   } = {},
 ): Promise<ReservationReviewCommandResponse<ReservationPaymentVerifyResponse>> {
   const parsed = reservationPaymentVerifyRequest.safeParse(requestInput);
@@ -348,6 +354,7 @@ export async function verifyReservationPaymentByStaff(
     ...(options.cashTenderedMinor !== undefined
       ? { cash_tendered_minor: options.cashTenderedMinor }
       : {}),
+    allow_missing_payment_evidence: options.allowMissingPaymentEvidence === true,
   });
 
   return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
@@ -387,13 +394,15 @@ export async function verifyReservationPaymentByStaff(
         tenantId: context.tenantId,
         paymentId: payment.payment_id,
       });
-      if (payment.rail !== 'cash') {
-        if (!receipt || !isImmutableAcceptedReceipt(receipt)) {
-          throw new PaymentPrerequisiteFailedError('Accepted payment evidence is required before verification.');
+      if (payment.rail !== 'cash' && receipt) {
+        if (!isImmutableAcceptedReceipt(receipt)) {
+          throw new PaymentPrerequisiteFailedError('Uploaded payment evidence is not an accepted immutable receipt.');
         }
         if (receipt.evidence_status !== 'uploaded' && receipt.evidence_status !== 'under_review') {
           throw new PaymentPrerequisiteFailedError('Payment evidence is not eligible for verification.');
         }
+      } else if (payment.rail !== 'cash' && !options.allowMissingPaymentEvidence) {
+        throw new PaymentPrerequisiteFailedError('Accepted payment evidence is required before verification.');
       }
 
       const existingVerification = await readLatestReservationVerification(client, {
@@ -443,7 +452,9 @@ export async function verifyReservationPaymentByStaff(
         evidenceNote:
           payment.rail === 'cash'
             ? 'Cash collection recorded by staff.'
-            : 'Payment evidence verified by staff against merchant collection.',
+            : receipt
+              ? 'Payment evidence verified by staff against merchant collection.'
+              : 'Merchant collection manually verified by staff without uploaded receipt evidence.',
       });
       if (!verificationId) {
         throw new StateConflictError('Payment was already verified by another action. Refresh before retrying.');
@@ -466,6 +477,12 @@ export async function verifyReservationPaymentByStaff(
           reservation_id: reservationId,
           payment_rail: payment.rail,
           verified_amount_minor: payment.amount_minor,
+          verification_basis:
+            payment.rail === 'cash'
+              ? 'cash_collection'
+              : receipt
+                ? 'uploaded_receipt'
+                : 'staff_manual_verification',
           verification_id: verificationId,
         },
         requestId: context.requestId,
@@ -772,6 +789,7 @@ function assertSubmissionEvidence(
   reservation: LockedReservationReviewRow,
   payment: LockedReservationPaymentRow | null,
   receipt: LockedReservationReceiptRow | null,
+  options: { allowMissingPaymentEvidence?: boolean } = {},
 ): void {
   if (reservation.due_now_minor === 0) return;
   if (!payment) {
@@ -785,6 +803,7 @@ function assertSubmissionEvidence(
   }
   if (payment.rail === 'cash') return;
   if (!receipt) {
+    if (options.allowMissingPaymentEvidence) return;
     throw new PaymentPrerequisiteFailedError('Payment evidence must be uploaded before submission.');
   }
   if (!isImmutableAcceptedReceipt(receipt)) {
@@ -828,7 +847,12 @@ function assertVerifiedMerchantCollection(
     throw new PaymentPrerequisiteFailedError('A verified merchant decision is required before confirmation.');
   }
   if (payment.rail === 'cash') return;
-  if (!receipt || receipt.evidence_status !== 'verified' || !isImmutableAcceptedReceipt(receipt)) {
+  // Staff may explicitly verify a manual payment after checking the merchant account or an
+  // in-person receipt without uploading evidence. The immutable payment_verification decision
+  // above is the authority in that staff-only case. When a receipt does exist, it must still be
+  // accepted, immutable, and verified; optional evidence never makes invalid evidence acceptable.
+  if (!receipt) return;
+  if (receipt.evidence_status !== 'verified' || !isImmutableAcceptedReceipt(receipt)) {
     throw new PaymentPrerequisiteFailedError(
       'Uploaded evidence alone is insufficient; verified merchant evidence is required.',
     );

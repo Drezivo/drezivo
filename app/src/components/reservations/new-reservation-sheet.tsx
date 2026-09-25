@@ -569,14 +569,6 @@ export function NewReservationSheet({
         return;
       }
     }
-    if (paymentDue && !isCash && !receiptAttached) {
-      setNotice({
-        tone: "attention",
-        text: "Upload the payment receipt before completing this manual payment reservation.",
-      });
-      return;
-    }
-
     setNotice(null);
     const result = await completeGuard.submit((idempotencyKey) =>
       createDrezivoApiClient(getToken).completeStaffReservation(
@@ -1108,7 +1100,7 @@ export function NewReservationSheet({
                 ) : (
                   <div className="mt-3 space-y-2">
                     <p className="text-xs text-dashboard-muted">
-                      Upload the customer&apos;s payment receipt before completing this reservation.
+                      Payment evidence is optional for staff-created reservations. Upload a receipt only if you want to keep it with this reservation; staff can verify the payment manually after checking the merchant account or the customer&apos;s receipt in person.
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
                       <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-dashboard-border px-3 text-sm font-medium text-dashboard-navy hover:bg-dashboard-active">
@@ -1306,7 +1298,7 @@ export function NewReservationSheet({
                             cashTenderedMinor === null ||
                             BigInt(cashTenderedMinor) <
                               BigInt(held.reservation.price_snapshot.due_now_minor)
-                          : !receiptAttached))
+                          : false))
                     }
                     onClick={() =>
                       void complete().catch((error) => handleFailure(error, completeGuard))
