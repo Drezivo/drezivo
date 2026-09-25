@@ -81,6 +81,7 @@ export async function completeStaffReservationCommand(
       childContext(context, 'submit'),
       reservationId,
       submissionRequest,
+      { allowMissingPaymentEvidence: true },
     );
     if (!submitted.body.success) {
       return { status: submitted.status, body: submitted.body };
@@ -95,6 +96,7 @@ export async function completeStaffReservationCommand(
         childContext(context, 'submit'),
         reservationId,
         submissionRequest,
+        { allowMissingPaymentEvidence: true },
       );
       if (!replayedSubmission.body.success) {
         return { status: replayedSubmission.status, body: replayedSubmission.body };

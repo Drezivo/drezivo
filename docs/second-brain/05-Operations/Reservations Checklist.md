@@ -447,6 +447,28 @@ Before marking a task complete:
   - **Implemented:** forward migration `0040_cash_tendered_change.sql` adds nullable non-negative tender/change columns plus a consistency constraint requiring `cash_tendered = verified_amount + change_due` when cash metadata is present. The migration was applied to the local development database.
   - **Tests/evidence:** Contracts pass `94/94`; API typecheck/lint pass; isolated reservation lifecycle integration passes `37/37`, including an over-tender case that records payment due separately from tendered cash/change.
 
+- [x] **RSV-069B — Separate calendar-day occupancy from rental-start feasibility**
+  - **Outcome:** The inline availability calendar colors a date only when a serialized garment is actually occupied on that local calendar day; it no longer makes the previous day look busy merely because a hypothetical rental starting there would run into a future booking after applying Recovery.
+  - **Acceptance:**
+    - [x] Calendar day projection checks each branch-local day as `[day start, next day start)` without appending the variant Recovery duration to that day.
+    - [x] Authoritative reservation allocation periods continue to include post-return Recovery, so a date that is genuinely occupied by Recovery still appears busy.
+    - [x] Exact availability/reservation creation still validates the requested pickup → return interval plus Recovery and remains the authority for whether a proposed range can be booked.
+    - [x] A day immediately before a future reservation remains visually Available when the garment is physically free that day, even if a new multi-day rental starting there would later conflict.
+    - [x] Staff copy now explains that day colors represent actual occupancy while the full rental + Recovery interval is revalidated after exact times are selected.
+  - **Tests/evidence:** API typecheck/lint pass; isolated reservation create/availability integration passes `13/13`. The regression fixture proves an Oct 11–12 maintenance block with 24h Recovery leaves Oct 10 fully available while Oct 11–12 remain limited, and exact availability still returns Recovery-extended blocked intervals.
+
+- [x] **RSV-069C — Make manual-payment receipt optional for staff while keeping storefront/default evidence strict**
+  - **Outcome:** Staff can complete a GCash/manual-payment reservation after directly checking the merchant account or an in-person customer receipt without downloading and re-uploading an image, while guest/storefront submission remains receipt-required by default.
+  - **Acceptance:**
+    - [x] New Reservation labels manual-payment receipt evidence as optional for staff-created reservations and no longer disables `Submit for Verification` when no receipt is attached.
+    - [x] Staff submission explicitly opts into missing-evidence allowance; the lower-level/default submission path still rejects manual payments without accepted immutable receipt evidence.
+    - [x] Staff payment verification may record an immutable merchant verification decision without an uploaded receipt, but any uploaded receipt that exists must still be accepted/immutable and eligible for review.
+    - [x] A manually verified non-cash payment can be confirmed without receipt evidence because the immutable staff verification decision is authoritative; uploaded evidence, when present, must still be verified before confirmation.
+    - [x] Payment verification audit records distinguish `uploaded_receipt` from `staff_manual_verification` basis.
+    - [x] Reservations list/details show `Not provided (optional)` for a paid/verified manual payment with no receipt instead of misleading staff with `Awaiting upload`.
+    - [x] The public/storefront scaffold remains fail-closed through the strict/default review path; its guest receipt-upload API is still a separate storefront implementation increment and was not weakened by this staff exception.
+  - **Tests/evidence:** API typecheck/lint pass; isolated reservation lifecycle integration passes `39/39`, including explicit staff manual-QR verification without receipt plus a strict/default missing-receipt rejection. Focused New Reservation unit coverage now asserts `Submit for Verification` is enabled without receipt and sends no upload/attachment request.
+
 ## Phase 8: Security and completion evidence
 
 - [ ] **RSV-070 — Complete reservation authorization/RLS suite**

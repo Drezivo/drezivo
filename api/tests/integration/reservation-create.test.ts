@@ -566,8 +566,13 @@ describe('RSV-021/022 staff reservation creation', async () => {
     };
     const calendarData = calendarBody.data;
     expect(calendarData.days).toHaveLength(5);
-    expect(calendarData.days.some((day) => day.available_assets === 1 && day.state === 'limited')).toBe(true);
-    expect(calendarData.days.some((day) => day.available_assets === 2 && day.state === 'available')).toBe(true);
+    expect(calendarData.days).toEqual([
+      expect.objectContaining({ date: '2026-10-10', available_assets: 2, state: 'available' }),
+      expect.objectContaining({ date: '2026-10-11', available_assets: 1, state: 'limited' }),
+      expect.objectContaining({ date: '2026-10-12', available_assets: 1, state: 'limited' }),
+      expect.objectContaining({ date: '2026-10-13', available_assets: 2, state: 'available' }),
+      expect.objectContaining({ date: '2026-10-14', available_assets: 2, state: 'available' }),
+    ]);
 
     const exact = await request(createApp())
       .get('/api/v1/reservations/availability-check')

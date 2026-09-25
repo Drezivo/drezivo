@@ -231,6 +231,28 @@ const confirmedResponse = staffReservationCompleteResponse.parse({
   next_action: "none",
 });
 
+const gcashHeldResponse = staffReservationCreateResponse.parse({
+  reservation: {
+    ...heldResponse.reservation,
+    payment_method_id: ids.gcashPaymentMethod,
+  },
+  payment_instructions: {
+    method_name: "GCash",
+    rail: "manual_qr",
+    destination_note: "Scan the merchant QR.",
+  },
+});
+
+const gcashPendingResponse = staffReservationCompleteResponse.parse({
+  reservation: {
+    ...gcashHeldResponse.reservation,
+    status: "pending_confirmation",
+    version: 2,
+  },
+  completion_state: "pending_confirmation",
+  next_action: "payment_verification",
+});
+
 const calendarResponse = staffReservationAvailabilityCalendarResponse.parse({
   variant_id: ids.variant,
   timezone: "Asia/Manila",
@@ -506,6 +528,66 @@ describe("NewReservationSheet", () => {
         expect.any(String)
       )
     );
+  });
+
+  it("lets staff submit manual QR for verification without uploading a receipt", async () => {
+    api.getStaffReservationIntakeOptions.mockResolvedValue({
+      data: {
+        payment_methods: [
+          { id: ids.paymentMethod, name: "Cash", rail: "cash" },
+          { id: ids.gcashPaymentMethod, name: "GCash", rail: "manual_qr" },
+        ],
+        customers: [],
+      },
+      requestId: "req-intake",
+    });
+    api.createStaffReservation.mockResolvedValueOnce({
+      data: gcashHeldResponse,
+      requestId: "req-hold-gcash",
+    });
+    api.completeStaffReservation.mockResolvedValueOnce({
+      data: gcashPendingResponse,
+      requestId: "req-complete-gcash",
+    });
+
+    renderSheet();
+    await fillDatesAndSelectProduct();
+    fireEvent.click(screen.getByRole("button", { name: /GCash/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
+    await screen.findByText("RSV-WALKIN-001");
+
+    expect(screen.getByText(/Payment evidence is optional for staff-created reservations/i)).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Full name"), {
+      target: { value: "Walk-in GCash Customer" },
+    });
+    fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /Customer has reviewed and accepted the business rental terms/i,
+      })
+    );
+
+    const submit = screen.getByRole("button", { name: "Submit for Verification" });
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+
+    await waitFor(() =>
+      expect(api.completeStaffReservation).toHaveBeenCalledWith(
+        ids.reservation,
+        {
+          version: 1,
+          terms_accepted: true,
+          customer: {
+            source: "new",
+            customer: { full_name: "Walk-in GCash Customer", phone: "09171234567" },
+          },
+        },
+        expect.any(String)
+      )
+    );
+    expect(api.authorizeUpload).not.toHaveBeenCalled();
+    expect(api.attachReservationPaymentReceipt).not.toHaveBeenCalled();
+    expect(await screen.findByText("Reservation saved. Payment verification required.")).toBeVisible();
   });
 
   it("stops before creating a reservation when no single physical piece is free for the exact times", async () => {

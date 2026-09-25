@@ -33,9 +33,10 @@ export interface StaffVariantCalendarReadModel {
 
 /**
  * Reads a bounded, branch-local calendar projection for one active variant without per-day queries. Each day
- * asks whether a currently ready serialized garment is free for the full local calendar day plus
- * that variant's post-return recovery buffer. It is deliberately advisory; reservation create
- * still revalidates the exact timestamp interval under asset locks.
+ * asks whether a currently ready serialized garment is free for that local calendar day. Recovery is not
+ * added again here because authoritative reservation allocations already include their post-return recovery
+ * occupancy. It is deliberately advisory; reservation create still revalidates the exact timestamp interval
+ * plus recovery under asset locks.
  */
 export async function readStaffVariantCalendarAvailability(
   client: PoolClient,
@@ -103,8 +104,7 @@ export async function readStaffVariantCalendarAvailability(
        SELECT
          gs::date AS day_date,
          (gs::date::timestamp AT TIME ZONE $6) AS blocked_start,
-         ((gs::date + 1)::timestamp AT TIME ZONE $6)
-           + ($7::int * interval '1 minute') AS blocked_end
+         ((gs::date + 1)::timestamp AT TIME ZONE $6) AS blocked_end
        FROM generate_series($4::date, $5::date, interval '1 day') AS gs
      ),
      eligible_assets AS (
@@ -118,8 +118,8 @@ export async function readStaffVariantCalendarAvailability(
      )
      SELECT
        to_char(day.day_date, 'YYYY-MM-DD') AS date,
-       $8::int AS active_assets,
-       $9::int AS ready_assets,
+       $7::int AS active_assets,
+       $8::int AS ready_assets,
        count(DISTINCT asset.id) FILTER (WHERE allocation.id IS NULL)::int AS available_assets,
        count(DISTINCT asset.id) FILTER (
          WHERE allocation.kind IN ('reservation_hold', 'reservation_confirmed')
@@ -170,7 +170,6 @@ export async function readStaffVariantCalendarAvailability(
       input.startDate,
       input.endDate,
       metadata.timezone,
-      metadata.turnaround_minutes,
       metadata.active_assets,
       metadata.ready_assets,
     ],

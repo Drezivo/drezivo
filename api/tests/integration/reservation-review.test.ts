@@ -88,6 +88,9 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     submitReservation,
     verifyReservationPayment,
   } = await import('../../src/modules/reservations/reservations.service.js');
+  const { submitReservationForConfirmation } = await import(
+    '../../src/modules/reservations/reservations.review.service.js'
+  );
   const { expireDueHoldsForAllTenants } = await import('../../src/worker/handlers/hold-expirer.js');
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
 
@@ -190,7 +193,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       );
     });
 
-    const wrongPayment = await submitReservation(
+    const wrongPayment = await submitReservationForConfirmation(
       reviewContext(seed, 'req-scope-wrong', 'idem-scope-wrong'),
       held.id,
       { version: 1, terms_accepted: true },
@@ -199,7 +202,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     expect((await reservationReviewState(seed, held.id)).reservation.status).toBe('held');
 
     await attachAcceptedReceipt(seed, held, 16);
-    const lateEvidence = await submitReservation(
+    const lateEvidence = await submitReservationForConfirmation(
       reviewContext(seed, 'req-scope-late', 'idem-scope-late'),
       held.id,
       { version: 1, terms_accepted: true },
@@ -494,6 +497,88 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       audit: 0,
       outbox: 0,
     });
+  });
+
+  it('keeps the strict/default manual-payment submission path receipt-required', async () => {
+    const seed = await seedWorkspace('org_rsv032_qr_strict', 'user_rsv032_qr_strict', 'manual_qr');
+    const held = await createWalkInHold(seed, 'qr-strict');
+
+    const result = await submitReservationForConfirmation(
+      reviewContext(seed, 'req-rsv032-qr-strict', 'idem-rsv032-qr-strict'),
+      held.id,
+      {
+        version: 1,
+        terms_accepted: true,
+        customer: walkInCustomer('Strict QR Customer'),
+      },
+    );
+
+    expect(result.status).toBe(409);
+    expect(result.body).toMatchObject({
+      success: false,
+      error: { code: 'PAYMENT_PREREQUISITE_FAILED' },
+    });
+    const state = await reservationReviewState(seed, held.id);
+    expect(state.reservation.status).toBe('held');
+    expect(state.receipt).toBeNull();
+  });
+
+  it('lets staff submit, manually verify, and confirm manual QR without uploading a receipt', async () => {
+    const seed = await seedWorkspace('org_rsv032_qr_manual', 'user_rsv032_qr_manual', 'manual_qr');
+    const held = await createWalkInHold(seed, 'qr-manual');
+
+    const submitted = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-qr-manual-submit', 'idem-rsv032-qr-manual-submit'),
+      held.id,
+      {
+        version: 1,
+        terms_accepted: true,
+        customer: walkInCustomer('Manual QR Customer'),
+      },
+    );
+    expect(submitted.body).toMatchObject({
+      success: true,
+      data: {
+        completion_state: 'pending_confirmation',
+        next_action: 'payment_verification',
+        reservation: { status: 'pending_confirmation', version: 2 },
+      },
+    });
+
+    const amountMinor = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const payment = await client.query<{ amount_minor: number }>(
+        `SELECT amount_minor FROM payment WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, held.paymentId],
+      );
+      return String(requireRow(payment.rows, 'manual QR payment').amount_minor);
+    });
+    const verified = await verifyReservationPayment(
+      reviewContext(seed, 'req-rsv032-qr-manual-verify', 'idem-rsv032-qr-manual-verify'),
+      held.id,
+      {
+        version: 2,
+        verified_amount_minor: amountMinor,
+        merchant_reference: 'GCASH-IN-PERSON',
+      },
+    );
+    expect(verified.body).toMatchObject({
+      success: true,
+      data: { payment_status: 'paid', verified_amount_minor: amountMinor },
+    });
+
+    const confirmed = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-qr-manual-confirm', 'idem-rsv032-qr-manual-confirm'),
+      held.id,
+      { version: 2, terms_accepted: true },
+    );
+    expect(confirmed.body).toMatchObject({
+      success: true,
+      data: { completion_state: 'confirmed', next_action: 'none' },
+    });
+    const state = await reservationReviewState(seed, held.id);
+    expect(state.reservation.status).toBe('confirmed');
+    expect(state.payment.status).toBe('paid');
+    expect(state.receipt).toBeNull();
   });
 
   it('never auto-confirms a manual QR screenshot through the staff completion action', async () => {

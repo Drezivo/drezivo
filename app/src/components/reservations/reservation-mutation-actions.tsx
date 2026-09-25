@@ -498,6 +498,7 @@ export function ReservationMutationActions({
                 variant="ghost"
                 disabled={submitGuard.isSubmitting}
                 onClick={cancelIntent}
+                className="text-dashboard-navy hover:text-dashboard-navy"
               >
                 Back
               </Button>

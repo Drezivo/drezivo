@@ -168,7 +168,7 @@ export function ReservationAvailabilityCalendar({
         </p>
       ) : null}
       <p className="text-xs text-dashboard-muted">
-        Day labels are planning guidance based on this variant&apos;s serialized garments. Exact pickup and return times are checked before the garment is reserved.
+        Day colors show when this variant&apos;s serialized garments are actually occupied. Your full rental interval plus post-return recovery is revalidated after pickup and return times are selected.
       </p>
     </div>
   );

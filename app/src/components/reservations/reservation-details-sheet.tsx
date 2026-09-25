@@ -312,7 +312,14 @@ function ReservationDetails({
               </div>
               <DetailValue
                 label="Evidence"
-                value={PAYMENT_EVIDENCE_LABELS[detail.payment.evidence_status]}
+                value={
+                  detail.payment.rail !== "cash" &&
+                  detail.payment.status === "paid" &&
+                  detail.payment.verified_at &&
+                  detail.payment.evidence_status === "awaiting_upload"
+                    ? "Not provided (optional)"
+                    : PAYMENT_EVIDENCE_LABELS[detail.payment.evidence_status]
+                }
               />
               <DetailValue
                 label="Recorded amount"
