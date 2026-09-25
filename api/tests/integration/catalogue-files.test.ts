@@ -274,7 +274,7 @@ describe('CLT-022 clothing file attachment flow', async () => {
         ...paymentFileContext,
         fileId,
         requestId: 'req-clt022-receipt-finalize',
-        idempotencyKey: 'clt022-receipt-finalize',
+        idempotencyKey: 'receipt-finish',
       },
       storage,
     );
@@ -292,7 +292,7 @@ describe('CLT-022 clothing file attachment flow', async () => {
         {
           ...paymentFileContext,
           requestId: 'req-clt022-receipt-catalogue-denied',
-          idempotencyKey: 'clt022-receipt-catalogue-denied',
+          idempotencyKey: 'receipt-denied',
           request: uploadAuthorizationRequest.parse({
             purpose: 'catalogue_image',
             content_type: 'image/png',
