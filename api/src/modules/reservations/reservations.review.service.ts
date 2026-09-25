@@ -334,12 +334,21 @@ export async function verifyReservationPaymentByStaff(
   context: ReservationReviewContext,
   reservationId: string,
   requestInput: ReservationPaymentVerifyRequest,
-  options: { requireRail?: 'cash' | 'manual_qr' | 'manual_transfer' } = {},
+  options: {
+    requireRail?: 'cash' | 'manual_qr' | 'manual_transfer';
+    cashTenderedMinor?: string;
+  } = {},
 ): Promise<ReservationReviewCommandResponse<ReservationPaymentVerifyResponse>> {
   const parsed = reservationPaymentVerifyRequest.safeParse(requestInput);
   if (!parsed.success) throw new ValidationError('Reservation payment verification request is invalid.');
   const request = parsed.data;
-  const payloadHash = canonicalRequestHash({ reservation_id: reservationId, ...request });
+  const payloadHash = canonicalRequestHash({
+    reservation_id: reservationId,
+    ...request,
+    ...(options.cashTenderedMinor !== undefined
+      ? { cash_tendered_minor: options.cashTenderedMinor }
+      : {}),
+  });
 
   return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
     const claim = await claimReviewIdempotency(client, context, VERIFY_PAYMENT_OPERATION, payloadHash);
@@ -418,11 +427,19 @@ export async function verifyReservationPaymentByStaff(
       if (!verifiedAt) {
         throw new StateConflictError('Payment verification lost a concurrent state change.');
       }
+      const cashTenderedMinor =
+        payment.rail === 'cash' && options.cashTenderedMinor !== undefined
+          ? Number(BigInt(options.cashTenderedMinor))
+          : null;
+      const changeDueMinor =
+        cashTenderedMinor === null ? null : cashTenderedMinor - payment.amount_minor;
       const verificationId = await insertReservationPaymentVerification(client, {
         tenantId: context.tenantId,
         paymentId: payment.payment_id,
         membershipId: context.membershipId,
         verifiedAmountMinor: payment.amount_minor,
+        cashTenderedMinor,
+        changeDueMinor,
         evidenceNote:
           payment.rail === 'cash'
             ? 'Cash collection recorded by staff.'

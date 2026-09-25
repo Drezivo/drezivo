@@ -111,6 +111,8 @@ export const reservationPaymentProjection = z
     amount_minor: moneyString,
     currency: currencyCode,
     verified_at: isoInstant.nullable(),
+    cash_tendered_minor: moneyString.nullable().default(null),
+    change_due_minor: moneyString.nullable().default(null),
   })
   .strict();
 export type ReservationPaymentProjection = z.infer<typeof reservationPaymentProjection>;

@@ -433,6 +433,20 @@ Before marking a task complete:
     - [x] Return-time picker preserves the fixed-duration minimum by preventing a time earlier than the calculated same-day minimum.
     - [x] Production Next build compiles the new controls and prerenders `/reservations`; the known unrelated Next/ESLint parser mismatch remains after compilation.
 
+- [x] **RSV-069A — Support cash tendered amounts and change due**
+  - **Outcome:** Staff can record the actual cash handed over by the customer without overstating the reservation payment when the customer tenders more than the amount due.
+  - **Final V1 rule:** `cash_tendered >= amount_due`; underpayment is rejected. The verified payment amount remains exactly the amount due, and `change_due = cash_tendered - amount_due`.
+  - **Acceptance:**
+    - [x] New Reservation labels the input `Cash tendered` rather than `Amount received` and shows calculated Change due when tendered cash exceeds the amount due.
+    - [x] Existing Pending Confirmation cash reservations use the same cash-tendered/change behavior through `Record Cash & Confirm`.
+    - [x] Cash tendered below the amount due is rejected before any reservation lifecycle transition, so a bad tender cannot mutate a held reservation into pending confirmation.
+    - [x] Cash tendered equal to or above the amount due is valid; only the exact amount due is marked paid/verified.
+    - [x] Immutable `payment_verification` stores `cash_tendered_minor` and `change_due_minor` separately from `verified_amount_minor`.
+    - [x] Reservation Details projects Cash tendered and Change due for verified cash payments.
+    - [x] Cash tendered participates in the verification idempotency hash so the same key cannot silently replay with a different tendered amount.
+  - **Implemented:** forward migration `0040_cash_tendered_change.sql` adds nullable non-negative tender/change columns plus a consistency constraint requiring `cash_tendered = verified_amount + change_due` when cash metadata is present. The migration was applied to the local development database.
+  - **Tests/evidence:** Contracts pass `94/94`; API typecheck/lint pass; isolated reservation lifecycle integration passes `37/37`, including an over-tender case that records payment due separately from tendered cash/change.
+
 ## Phase 8: Security and completion evidence
 
 - [ ] **RSV-070 — Complete reservation authorization/RLS suite**

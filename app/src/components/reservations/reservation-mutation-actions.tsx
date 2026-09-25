@@ -145,7 +145,7 @@ export function ReservationMutationActions({
               {
                 version: detail.version,
                 terms_accepted: true,
-                cash_collection: { amount_received_minor: amountMinor },
+                cash_collection: { amount_tendered_minor: amountMinor },
               },
               idempotencyKey
             );
@@ -265,13 +265,19 @@ export function ReservationMutationActions({
     detail.terms_accepted_at === null &&
     !termsAccepted;
   const rejectNeedsReason = selectedAction === "reject" && reason.trim().length === 0;
-  const cashAmountMinor = majorInputToMinorUnits(amountReceived);
+  const cashTenderedMinor = majorInputToMinorUnits(amountReceived);
+  const cashChangeDueMinor =
+    detail.payment &&
+    cashTenderedMinor !== null &&
+    BigInt(cashTenderedMinor) >= BigInt(detail.payment.amount_minor)
+      ? (BigInt(cashTenderedMinor) - BigInt(detail.payment.amount_minor)).toString()
+      : null;
   const recordCashInvalid =
     selectedAction === "record_cash" &&
     (!detail.payment ||
       !cashReceived ||
-      cashAmountMinor === null ||
-      cashAmountMinor !== detail.payment.amount_minor);
+      cashTenderedMinor === null ||
+      BigInt(cashTenderedMinor) < BigInt(detail.payment.amount_minor));
   const verifyPaymentInvalid = selectedAction === "verify_payment" && !detail.payment;
   const submitDisabled =
     submitGuard.isSubmitting ||
@@ -339,14 +345,14 @@ export function ReservationMutationActions({
               <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
-                    Amount received
+                    Cash tendered
                   </span>
                   <div className="relative">
                     <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-dashboard-muted">
                       ₱
                     </span>
                     <Input
-                      aria-label="Cash amount received"
+                      aria-label="Cash tendered"
                       inputMode="decimal"
                       value={amountReceived}
                       disabled={submitGuard.isSubmitting}
@@ -361,6 +367,11 @@ export function ReservationMutationActions({
                   <span className="mt-1 block text-xs text-dashboard-muted">
                     Amount due: {formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)}
                   </span>
+                  {cashChangeDueMinor !== null ? (
+                    <span className="mt-1 block text-xs text-dashboard-muted">
+                      Change due: {formatMinorMoney(cashChangeDueMinor, detail.payment.currency)}
+                    </span>
+                  ) : null}
                 </label>
                 <label className="flex h-10 items-center gap-2 rounded-md border border-dashboard-border px-3 text-sm text-dashboard-navy">
                   <input

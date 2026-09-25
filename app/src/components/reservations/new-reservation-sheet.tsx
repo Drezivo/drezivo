@@ -549,19 +549,19 @@ export function NewReservationSheet({
 
     const paymentDue = BigInt(held.reservation.price_snapshot.due_now_minor) > 0n;
     const isCash = held.paymentInstructions.rail === "cash";
-    const cashAmountMinor = majorInputToMinorUnits(cashAmountReceived);
+    const cashTenderedMinor = majorInputToMinorUnits(cashAmountReceived);
     if (paymentDue && isCash) {
       if (!cashReceived) {
         setNotice({ tone: "attention", text: "Confirm that the cash payment was received." });
         return;
       }
       if (
-        cashAmountMinor === null ||
-        cashAmountMinor !== held.reservation.price_snapshot.due_now_minor
+        cashTenderedMinor === null ||
+        BigInt(cashTenderedMinor) < BigInt(held.reservation.price_snapshot.due_now_minor)
       ) {
         setNotice({
           tone: "attention",
-          text: `Amount received must match the amount due (${formatMinorMoney(
+          text: `Cash tendered must be at least the amount due (${formatMinorMoney(
             held.reservation.price_snapshot.due_now_minor,
             held.reservation.price_snapshot.currency
           )}).`,
@@ -585,8 +585,8 @@ export function NewReservationSheet({
           version: held.reservation.version,
           terms_accepted: true,
           customer,
-          ...(paymentDue && isCash && cashAmountMinor
-            ? { cash_collection: { amount_received_minor: cashAmountMinor } }
+          ...(paymentDue && isCash && cashTenderedMinor
+            ? { cash_collection: { amount_tendered_minor: cashTenderedMinor } }
             : {}),
         },
         idempotencyKey
@@ -665,6 +665,16 @@ export function NewReservationSheet({
     }
     if (apiError.status < 500 || apiError.requestId) guard.resetIntent();
   };
+
+  const cashTenderedMinor = held ? majorInputToMinorUnits(cashAmountReceived) : null;
+  const cashChangeDueMinor =
+    held &&
+    cashTenderedMinor !== null &&
+    BigInt(cashTenderedMinor) >= BigInt(held.reservation.price_snapshot.due_now_minor)
+      ? (
+          BigInt(cashTenderedMinor) - BigInt(held.reservation.price_snapshot.due_now_minor)
+        ).toString()
+      : null;
 
   return (
     <Sheet open={open} onOpenChange={requestClose}>
@@ -1058,14 +1068,14 @@ export function NewReservationSheet({
 
                 {held.paymentInstructions.rail === "cash" ? (
                   <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                    <Field label="Amount received">
+                    <Field label="Cash tendered">
                       <div className="relative">
                         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-dashboard-muted">
                           ₱
                         </span>
                         <Input
                           inputMode="decimal"
-                          aria-label="Amount received"
+                          aria-label="Cash tendered"
                           value={cashAmountReceived}
                           onChange={(event) => {
                             setCashAmountReceived(event.target.value.replace(/[^0-9.]/g, ""));
@@ -1074,6 +1084,14 @@ export function NewReservationSheet({
                           className="pl-7"
                         />
                       </div>
+                      {cashChangeDueMinor !== null ? (
+                        <p className="mt-1 text-xs text-dashboard-muted">
+                          Change due: {formatMinorMoney(
+                            cashChangeDueMinor,
+                            held.reservation.price_snapshot.currency
+                          )}
+                        </p>
+                      ) : null}
                     </Field>
                     <label className="flex h-10 items-center gap-2 rounded-md border border-dashboard-border px-3 text-sm text-dashboard-navy">
                       <input
@@ -1285,8 +1303,9 @@ export function NewReservationSheet({
                       (BigInt(held.reservation.price_snapshot.due_now_minor) > 0n &&
                         (held.paymentInstructions.rail === "cash"
                           ? !cashReceived ||
-                            majorInputToMinorUnits(cashAmountReceived) !==
-                              held.reservation.price_snapshot.due_now_minor
+                            cashTenderedMinor === null ||
+                            BigInt(cashTenderedMinor) <
+                              BigInt(held.reservation.price_snapshot.due_now_minor)
                           : !receiptAttached))
                     }
                     onClick={() =>

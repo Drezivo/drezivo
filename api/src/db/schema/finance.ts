@@ -94,6 +94,8 @@ export const paymentVerification = pgTable(
       .references(() => membership.id),
     decision: verificationDecisionEnum('decision').notNull(),
     verifiedAmountMinor: integer('verified_amount_minor'),
+    cashTenderedMinor: integer('cash_tendered_minor'),
+    changeDueMinor: integer('change_due_minor'),
     evidenceNote: text('evidence_note'),
     decidedAt: timestamp('decided_at', { withTimezone: true }).notNull().defaultNow(),
     businessKey: text('business_key').notNull(),
