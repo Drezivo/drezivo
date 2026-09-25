@@ -10,20 +10,13 @@ export const FITTING_PROTOTYPE_ROUTES = {
   schedule: "/fittings/schedule",
 } as const;
 
+export const FITTING_PROTOTYPE_TODAY = "2026-09-26";
+
 export type FittingPrototypeStatus =
-  | "Pending"
-  | "Confirmed"
-  | "Completed"
-  | "Cancelled"
-  | "Rejected"
-  | "No-show";
+  "Pending" | "Confirmed" | "Completed" | "Cancelled" | "Rejected" | "No-show";
 
 export type FittingPrototypePaymentState = "Not required" | "Pending review" | "Verified";
-export type FittingPrototypeResourceKind = "Room" | "Staff" | "Capacity slot";
-export type FittingPrototypeAttentionKind =
-  | "Payment review"
-  | "Resource missing"
-  | "Preference only";
+export type FittingPrototypeAttentionKind = "Payment review" | "Preference only";
 
 export interface FittingPrototypeGarment {
   id: string;
@@ -31,12 +24,6 @@ export interface FittingPrototypeGarment {
   variantLabel: string;
   guarantee: "Preference only" | "Guaranteed";
   assetCode?: string;
-}
-
-export interface FittingPrototypeResourceAssignment {
-  resourceId: string;
-  label: string;
-  kind: FittingPrototypeResourceKind;
 }
 
 export interface FittingPrototypeAppointment {
@@ -51,85 +38,11 @@ export interface FittingPrototypeAppointment {
   endsAt: string;
   status: FittingPrototypeStatus;
   garments: readonly FittingPrototypeGarment[];
-  resources: readonly FittingPrototypeResourceAssignment[];
   feeMinor: number | null;
   currency: "PHP";
   paymentState: FittingPrototypePaymentState;
   attention: readonly FittingPrototypeAttentionKind[];
 }
-
-export interface FittingPrototypeWorkingWindow {
-  weekday: "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
-  startsAt: string;
-  endsAt: string;
-}
-
-export interface FittingPrototypeClosure {
-  id: string;
-  startsAt: string;
-  endsAt: string;
-  label: string;
-}
-
-export interface FittingPrototypeResource {
-  id: string;
-  label: string;
-  kind: FittingPrototypeResourceKind;
-  active: boolean;
-  workingWindows: readonly FittingPrototypeWorkingWindow[];
-  closures: readonly FittingPrototypeClosure[];
-}
-
-const WEEKDAY_HOURS: readonly FittingPrototypeWorkingWindow[] = [
-  { weekday: "Mon", startsAt: "09:00", endsAt: "17:00" },
-  { weekday: "Tue", startsAt: "09:00", endsAt: "17:00" },
-  { weekday: "Wed", startsAt: "09:00", endsAt: "17:00" },
-  { weekday: "Thu", startsAt: "09:00", endsAt: "17:00" },
-  { weekday: "Fri", startsAt: "09:00", endsAt: "17:00" },
-  { weekday: "Sat", startsAt: "09:00", endsAt: "15:00" },
-];
-
-export const FITTING_PROTOTYPE_RESOURCES: readonly FittingPrototypeResource[] = [
-  {
-    id: "fit-resource-room-01",
-    label: "Fitting Room 1",
-    kind: "Room",
-    active: true,
-    workingWindows: WEEKDAY_HOURS,
-    closures: [
-      {
-        id: "fit-closure-room-01-lunch",
-        startsAt: "2026-09-26T12:00:00+08:00",
-        endsAt: "2026-09-26T13:00:00+08:00",
-        label: "Lunch closure",
-      },
-    ],
-  },
-  {
-    id: "fit-resource-room-02",
-    label: "Fitting Room 2",
-    kind: "Room",
-    active: true,
-    workingWindows: WEEKDAY_HOURS,
-    closures: [],
-  },
-  {
-    id: "fit-resource-staff-01",
-    label: "Fitting Staff A",
-    kind: "Staff",
-    active: true,
-    workingWindows: WEEKDAY_HOURS,
-    closures: [],
-  },
-  {
-    id: "fit-resource-slot-01",
-    label: "Capacity Slot 1",
-    kind: "Capacity slot",
-    active: true,
-    workingWindows: WEEKDAY_HOURS,
-    closures: [],
-  },
-] as const;
 
 export const FITTING_PROTOTYPE_APPOINTMENTS: readonly FittingPrototypeAppointment[] = [
   {
@@ -151,10 +64,6 @@ export const FITTING_PROTOTYPE_APPOINTMENTS: readonly FittingPrototypeAppointmen
         guarantee: "Guaranteed",
         assetCode: "PROTO-GWN-0042",
       },
-    ],
-    resources: [
-      { resourceId: "fit-resource-room-01", label: "Fitting Room 1", kind: "Room" },
-      { resourceId: "fit-resource-staff-01", label: "Fitting Staff A", kind: "Staff" },
     ],
     feeMinor: 30000,
     currency: "PHP",
@@ -179,9 +88,6 @@ export const FITTING_PROTOTYPE_APPOINTMENTS: readonly FittingPrototypeAppointmen
         variantLabel: "Small / Ivory",
         guarantee: "Preference only",
       },
-    ],
-    resources: [
-      { resourceId: "fit-resource-room-02", label: "Fitting Room 2", kind: "Room" },
     ],
     feeMinor: 30000,
     currency: "PHP",
@@ -213,9 +119,6 @@ export const FITTING_PROTOTYPE_APPOINTMENTS: readonly FittingPrototypeAppointmen
         guarantee: "Preference only",
       },
     ],
-    resources: [
-      { resourceId: "fit-resource-staff-01", label: "Fitting Staff A", kind: "Staff" },
-    ],
     feeMinor: null,
     currency: "PHP",
     paymentState: "Not required",
@@ -241,11 +144,10 @@ export const FITTING_PROTOTYPE_APPOINTMENTS: readonly FittingPrototypeAppointmen
         assetCode: "PROTO-GWN-0088",
       },
     ],
-    resources: [],
     feeMinor: 30000,
     currency: "PHP",
     paymentState: "Verified",
-    attention: ["Resource missing"],
+    attention: [],
   },
   {
     id: "fit-proto-005",
@@ -266,10 +168,6 @@ export const FITTING_PROTOTYPE_APPOINTMENTS: readonly FittingPrototypeAppointmen
         guarantee: "Guaranteed",
         assetCode: "PROTO-BRG-0013",
       },
-    ],
-    resources: [
-      { resourceId: "fit-resource-room-01", label: "Fitting Room 1", kind: "Room" },
-      { resourceId: "fit-resource-staff-01", label: "Fitting Staff A", kind: "Staff" },
     ],
     feeMinor: 30000,
     currency: "PHP",
@@ -294,9 +192,6 @@ export const FITTING_PROTOTYPE_APPOINTMENTS: readonly FittingPrototypeAppointmen
         variantLabel: "Medium / Rose",
         guarantee: "Preference only",
       },
-    ],
-    resources: [
-      { resourceId: "fit-resource-room-02", label: "Fitting Room 2", kind: "Room" },
     ],
     feeMinor: 30000,
     currency: "PHP",
