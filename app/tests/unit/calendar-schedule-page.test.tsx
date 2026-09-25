@@ -38,9 +38,44 @@ describe("CalendarSchedulePage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open Wed Sep 16 agenda" }));
 
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("September 16, 2025")).toBeVisible();
+    expect(within(dialog).getByText("September 16, 2026")).toBeVisible();
     expect(within(dialog).getByText("Wednesday")).toBeVisible();
-    expect(within(dialog).getByRole("tab", { name: "All (6)" })).toBeVisible();
+    expect(within(dialog).getByRole("tab", { name: "All (5)" })).toBeVisible();
+  });
+
+  it("renders the month overview with compact activities and overflow into the day agenda", () => {
+    render(<CalendarSchedulePage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Month" }));
+
+    expect(screen.getByRole("button", { name: "Month" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("September 2026")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Open September 26, 2026 agenda" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Open September 26, 2026 agenda" })).toHaveAttribute(
+      "aria-current",
+      "date"
+    );
+    expect(screen.queryByRole("button", { name: "Today" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open 5 more activities on 2026-09-25" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open 5 more activities on 2026-09-25" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("September 25, 2026")).toBeVisible();
+    expect(within(dialog).getByRole("tab", { name: "All (9)" })).toBeVisible();
+  });
+
+  it("shows Today only when the current period is away from today", () => {
+    render(<CalendarSchedulePage />);
+
+    expect(screen.getByRole("button", { name: "Today" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Today" }));
+
+    expect(screen.queryByRole("button", { name: "Today" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Sat Sep 26 agenda" })).toHaveAttribute(
+      "aria-current",
+      "date"
+    );
+    expect(screen.getByText("Today")).toBeVisible();
   });
 
   it("lays simultaneous activities side by side instead of stacking them", () => {

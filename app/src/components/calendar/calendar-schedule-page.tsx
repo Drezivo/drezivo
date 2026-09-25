@@ -36,16 +36,19 @@ import { cn } from "@/lib/utils";
 import {
   CALENDAR_ACTIVITIES,
   CALENDAR_DAY_AGENDA,
-  CALENDAR_DAYS,
   CALENDAR_END_HOUR,
   CALENDAR_HOUR_HEIGHT,
   CALENDAR_HOURS,
-  CALENDAR_METRICS,
   CALENDAR_MINUTE_HEIGHT,
+  CALENDAR_MOCK_MONTH,
+  CALENDAR_MOCK_TODAY,
+  CALENDAR_MOCK_YEAR,
   CALENDAR_START_HOUR,
   CALENDAR_TOTAL_HEIGHT,
+  CALENDAR_WEEK_START,
   type CalendarActivity,
   type CalendarActivityType,
+  type CalendarDay,
 } from "./calendar-schedule-data";
 
 const activityTone: Record<CalendarActivityType, string> = {
@@ -63,60 +66,127 @@ const metricTone = {
   danger: "bg-dashboard-danger/10 text-dashboard-danger",
 } as const;
 
+type CalendarView = "week" | "month";
+
 export function CalendarSchedulePage() {
   const [activityFilter, setActivityFilter] = useState<"All Activity" | CalendarActivityType>(
     "All Activity"
   );
-  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+  const [view, setView] = useState<CalendarView>("week");
+  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<CalendarActivity | null>(null);
   const [agendaFilter, setAgendaFilter] = useState<"All" | CalendarActivityType>("All");
+  const [monthCursor, setMonthCursor] = useState(
+    () => new Date(Date.UTC(CALENDAR_MOCK_YEAR, CALENDAR_MOCK_MONTH, 1))
+  );
+  const [weekCursor, setWeekCursor] = useState(() => parseDateKey(CALENDAR_WEEK_START));
 
+  const weekDays = useMemo(() => buildWeekDays(weekCursor), [weekCursor]);
+  const periodActivities = useMemo(() => {
+    if (view === "week") {
+      const weekEnd = addUtcDays(weekCursor, 6);
+      return CALENDAR_ACTIVITIES.filter((activity) => {
+        const activityDate = parseDateKey(activity.dateKey);
+        return activityDate >= weekCursor && activityDate <= weekEnd;
+      });
+    }
+    return CALENDAR_ACTIVITIES.filter((activity) => {
+      const activityDate = parseDateKey(activity.dateKey);
+      return (
+        activityDate.getUTCFullYear() === monthCursor.getUTCFullYear() &&
+        activityDate.getUTCMonth() === monthCursor.getUTCMonth()
+      );
+    });
+  }, [monthCursor, view, weekCursor]);
   const visibleActivities = useMemo(
     () =>
       activityFilter === "All Activity"
-        ? CALENDAR_ACTIVITIES
-        : CALENDAR_ACTIVITIES.filter((activity) => activity.type === activityFilter),
-    [activityFilter]
+        ? periodActivities
+        : periodActivities.filter((activity) => activity.type === activityFilter),
+    [activityFilter, periodActivities]
   );
 
-  const openDayAgenda = (dayKey: string) => {
+  const openDayAgenda = (dateKey: string) => {
     setSelectedActivity(null);
-    setSelectedDayKey(dayKey);
+    setSelectedDateKey(dateKey);
     setAgendaFilter("All");
   };
 
   const openActivityDetails = (activity: CalendarActivity) => {
-    setSelectedDayKey(null);
+    setSelectedDateKey(null);
     setSelectedActivity(activity);
   };
+
+  const navigate = (direction: -1 | 1) => {
+    if (view === "month") {
+      setMonthCursor(
+        (current) => new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + direction, 1))
+      );
+      return;
+    }
+    setWeekCursor((current) => addUtcDays(current, direction * 7));
+  };
+
+  const goToday = () => {
+    const today = parseDateKey(CALENDAR_MOCK_TODAY);
+    setMonthCursor(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)));
+    const day = today.getUTCDay();
+    const mondayOffset = (day + 6) % 7;
+    setWeekCursor(addUtcDays(today, -mondayOffset));
+  };
+
+  const today = parseDateKey(CALENDAR_MOCK_TODAY);
+  const currentPeriodContainsToday =
+    view === "month"
+      ? monthCursor.getUTCFullYear() === today.getUTCFullYear() &&
+        monthCursor.getUTCMonth() === today.getUTCMonth()
+      : today >= weekCursor && today <= addUtcDays(weekCursor, 6);
 
   return (
     <div className="min-h-full bg-dashboard-canvas px-3 py-5 sm:px-4 lg:px-5">
       <div className="flex w-full max-w-none flex-col gap-4">
-        <CalendarHeading />
-        <CalendarControls activityFilter={activityFilter} onActivityFilterChange={setActivityFilter} />
-        <ScheduleGrid
-          activities={visibleActivities}
-          onOpenActivity={openActivityDetails}
-          onOpenDay={openDayAgenda}
+        <CalendarHeading activities={periodActivities} />
+        <CalendarControls
+          activityFilter={activityFilter}
+          dateLabel={calendarDateLabel(view, monthCursor, weekCursor)}
+          onActivityFilterChange={setActivityFilter}
+          onNavigate={navigate}
+          onToday={goToday}
+          onViewChange={setView}
+          showTodayAction={!currentPeriodContainsToday}
+          view={view}
         />
+        {view === "week" ? (
+          <ScheduleGrid
+            activities={visibleActivities}
+            days={weekDays}
+            onOpenActivity={openActivityDetails}
+            onOpenDay={openDayAgenda}
+          />
+        ) : null}
+        {view === "month" ? (
+          <MonthGrid
+            activities={visibleActivities}
+            cursor={monthCursor}
+            onOpenActivity={openActivityDetails}
+            onOpenDay={openDayAgenda}
+          />
+        ) : null}
       </div>
 
       <DayAgendaSheet
         agendaFilter={agendaFilter}
-        dayKey={selectedDayKey}
+        dateKey={selectedDateKey}
         onAgendaFilterChange={setAgendaFilter}
         onViewDetails={(activity) => {
-          setSelectedDayKey(null);
+          setSelectedDateKey(null);
           setSelectedActivity(activity);
         }}
         onOpenChange={(open) => {
-          if (!open) {
-            setSelectedDayKey(null);
-          }
+          if (!open) setSelectedDateKey(null);
         }}
-        onSelectDay={(dayKey) => {
-          setSelectedDayKey(dayKey);
+        onSelectDate={(dateKey) => {
+          setSelectedDateKey(dateKey);
           setAgendaFilter("All");
         }}
       />
@@ -131,7 +201,14 @@ export function CalendarSchedulePage() {
   );
 }
 
-function CalendarHeading() {
+function CalendarHeading({ activities }: { activities: readonly CalendarActivity[] }) {
+  const metrics = [
+    { label: "Pickups", value: activities.filter((activity) => activity.type === "Pickup").length, tone: "blue" },
+    { label: "Returns", value: activities.filter((activity) => activity.type === "Return").length, tone: "mint" },
+    { label: "Fittings", value: activities.filter((activity) => activity.type === "Fitting").length, tone: "purple" },
+    { label: "Issues", value: 3, tone: "danger" },
+  ] as const;
+
   return (
     <section aria-labelledby="calendar-heading" className="space-y-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -168,7 +245,7 @@ function CalendarHeading() {
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {CALENDAR_METRICS.map((metric, index) => {
+        {metrics.map((metric, index) => {
           const Icon = metricIcons[index] ?? CalendarDays;
           return (
             <Card key={metric.label} className="gap-0 py-0">
@@ -198,38 +275,61 @@ function CalendarHeading() {
 
 function CalendarControls({
   activityFilter,
+  dateLabel,
   onActivityFilterChange,
+  onNavigate,
+  onToday,
+  onViewChange,
+  showTodayAction,
+  view,
 }: {
   activityFilter: "All Activity" | CalendarActivityType;
+  dateLabel: string;
   onActivityFilterChange: (value: "All Activity" | CalendarActivityType) => void;
+  onNavigate: (direction: -1 | 1) => void;
+  onToday: () => void;
+  onViewChange: (view: CalendarView) => void;
+  showTodayAction: boolean;
+  view: CalendarView;
 }) {
   return (
     <Card className="gap-0 py-0">
       <CardContent className="flex flex-col gap-3 p-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="ghost" size="icon" aria-label="Previous week" className="border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active">
+          <Button variant="ghost" size="icon" aria-label="Previous period" onClick={() => onNavigate(-1)} className="border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active">
             <ChevronLeft className="h-4 w-4" aria-hidden="true" />
           </Button>
-          <Button variant="ghost" size="icon" aria-label="Next week" className="border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active">
+          <Button variant="ghost" size="icon" aria-label="Next period" onClick={() => onNavigate(1)} className="border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active">
             <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </Button>
           <Button variant="ghost" className="border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active">
             <CalendarDays className="h-4 w-4" aria-hidden="true" />
-            Sep 14 – Sep 20, 2025
+            {dateLabel}
           </Button>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-surface">
-            <button type="button" aria-pressed="true" className="min-h-9 bg-dashboard-active px-5 text-xs font-semibold text-dashboard-accent">
-              Week
-            </button>
-            <button type="button" className="min-h-9 border-l border-dashboard-border px-5 text-xs font-medium text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy">
-              Month
-            </button>
-            <button type="button" className="min-h-9 border-l border-dashboard-border px-5 text-xs font-medium text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy">
-              Day
-            </button>
+            {(["week", "month"] as const).map((calendarView) => {
+              const active = view === calendarView;
+              return (
+                <button
+                  key={calendarView}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => onViewChange(calendarView)}
+                  className={cn(
+                    "min-h-9 px-5 text-xs transition-colors first:border-l-0",
+                    calendarView !== "week" && "border-l border-dashboard-border",
+                    active
+                      ? "bg-dashboard-active font-semibold text-dashboard-accent"
+                      : "font-medium text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy"
+                  )}
+                >
+                  {calendarView[0]!.toUpperCase() + calendarView.slice(1)}
+                </button>
+              );
+            })}
           </div>
 
           <DropdownMenu>
@@ -277,9 +377,15 @@ function CalendarControls({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button variant="ghost" className="border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active">
-            Today
-          </Button>
+          {showTodayAction ? (
+            <Button
+              variant="ghost"
+              onClick={onToday}
+              className="border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+            >
+              Today
+            </Button>
+          ) : null}
         </div>
       </CardContent>
     </Card>
@@ -288,12 +394,14 @@ function CalendarControls({
 
 function ScheduleGrid({
   activities,
+  days,
   onOpenActivity,
   onOpenDay,
 }: {
   activities: readonly CalendarActivity[];
+  days: readonly CalendarDay[];
   onOpenActivity: (activity: CalendarActivity) => void;
-  onOpenDay: (dayKey: string) => void;
+  onOpenDay: (dateKey: string) => void;
 }) {
   return (
     <Card className="gap-0 overflow-hidden py-0">
@@ -302,36 +410,155 @@ function ScheduleGrid({
           <div className="w-full min-w-[82rem]">
             <div className="sticky top-0 z-30 grid grid-cols-[5rem_repeat(7,minmax(0,1fr))] border-b border-dashboard-border bg-dashboard-surface shadow-sm">
               <div className="border-r border-dashboard-border bg-dashboard-surface" />
-              {CALENDAR_DAYS.map((day) => (
-                <button
-                  key={day.key}
-                  type="button"
-                  onClick={() => onOpenDay(day.key)}
-                  aria-label={`Open ${day.label} ${day.date} agenda`}
-                  className={cn(
-                    "border-r border-dashboard-border bg-dashboard-surface px-4 py-3 text-left transition-colors hover:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/30 last:border-r-0",
-                    day.key === "wed" && "bg-dashboard-active"
-                  )}
-                >
-                  <p className={cn("text-sm font-semibold text-dashboard-navy", day.key === "wed" && "text-dashboard-accent")}>{day.label}</p>
-                  <p className="mt-0.5 text-xs text-dashboard-muted">{day.date}</p>
-                  <span className="mt-2 inline-flex rounded-full bg-dashboard-neutral-soft px-2 py-1 text-[0.7rem] font-medium text-dashboard-neutral-text">
-                    {day.activityCount} activities
-                  </span>
-                </button>
-              ))}
+              {days.map((day) => {
+                const isToday = day.dateKey === CALENDAR_MOCK_TODAY;
+                return (
+                  <button
+                    key={day.key}
+                    type="button"
+                    onClick={() => onOpenDay(day.dateKey)}
+                    aria-label={`Open ${day.label} ${day.date} agenda`}
+                    aria-current={isToday ? "date" : undefined}
+                    className={cn(
+                      "border-r border-dashboard-border bg-dashboard-surface px-4 py-3 text-left transition-colors hover:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/30 last:border-r-0",
+                      isToday && "bg-dashboard-active"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <p className={cn("text-sm font-semibold text-dashboard-navy", isToday && "text-dashboard-accent")}>{day.label}</p>
+                      {isToday ? (
+                        <span className="rounded-full bg-dashboard-gold-soft px-2 py-0.5 text-[0.62rem] font-semibold text-dashboard-gold-text">
+                          Today
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className={cn("mt-0.5 text-xs text-dashboard-muted", isToday && "text-dashboard-accent")}>{day.date}</p>
+                    <span className="mt-2 inline-flex rounded-full bg-dashboard-neutral-soft px-2 py-1 text-[0.7rem] font-medium text-dashboard-neutral-text">
+                      {day.activityCount} activities
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
             <div className="grid grid-cols-[5rem_repeat(7,minmax(0,1fr))]">
               <TimeColumn />
-              {CALENDAR_DAYS.map((day) => (
+              {days.map((day) => (
                 <DayColumn
-                  key={day.key}
-                  highlighted={day.key === "wed"}
-                  activities={activities.filter((activity) => activity.day === day.key)}
+                  key={day.dateKey}
+                  highlighted={day.dateKey === CALENDAR_MOCK_TODAY}
+                  activities={activities.filter((activity) => activity.dateKey === day.dateKey)}
                   onOpenActivity={onOpenActivity}
                 />
               ))}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+const MONTH_WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+
+function MonthGrid({
+  activities,
+  cursor,
+  onOpenActivity,
+  onOpenDay,
+}: {
+  activities: readonly CalendarActivity[];
+  cursor: Date;
+  onOpenActivity: (activity: CalendarActivity) => void;
+  onOpenDay: (dateKey: string) => void;
+}) {
+  const cells = monthCells(cursor);
+  const cursorMonth = cursor.getUTCMonth();
+
+  return (
+    <Card className="gap-0 overflow-hidden py-0">
+      <CardContent className="p-0">
+        <div className="h-[clamp(40rem,78vh,60rem)] overflow-auto">
+          <div className="min-w-[72rem]">
+            <div className="sticky top-0 z-30 grid grid-cols-7 border-b border-dashboard-border bg-dashboard-surface shadow-sm">
+              {MONTH_WEEKDAYS.map((weekday) => (
+                <div
+                  key={weekday}
+                  className="border-r border-dashboard-border px-3 py-3 text-xs font-semibold text-dashboard-navy last:border-r-0"
+                >
+                  {weekday}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7">
+              {cells.map((date) => {
+                const dateKey = formatDateKey(date);
+                const inMonth = date.getUTCMonth() === cursorMonth;
+                const dayActivities = activities
+                  .filter((activity) => activity.dateKey === dateKey)
+                  .sort((a, b) => a.startTime.localeCompare(b.startTime));
+                const visible = dayActivities.slice(0, 4);
+                const hiddenCount = Math.max(0, dayActivities.length - visible.length);
+                const isToday = dateKey === CALENDAR_MOCK_TODAY;
+
+                return (
+                  <div
+                    key={dateKey}
+                    className={cn(
+                      "min-h-[10.5rem] border-b border-r border-dashboard-border bg-dashboard-surface p-2 last:border-r-0",
+                      !inMonth && "bg-dashboard-canvas/60 text-dashboard-muted"
+                    )}
+                  >
+                    <div className="mb-2 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onOpenDay(dateKey)}
+                        className={cn(
+                          "flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-xs font-semibold text-dashboard-navy transition-colors hover:bg-dashboard-active",
+                          isToday && "bg-dashboard-active text-dashboard-accent ring-1 ring-dashboard-accent/50"
+                        )}
+                        aria-current={isToday ? "date" : undefined}
+                        aria-label={`Open ${date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })} agenda`}
+                      >
+                        {date.getUTCDate()}
+                      </button>
+                      {isToday ? (
+                        <span className="rounded-full bg-dashboard-gold-soft px-2 py-0.5 text-[0.62rem] font-semibold text-dashboard-gold-text">
+                          Today
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="space-y-1">
+                      {visible.map((activity) => (
+                        <button
+                          key={activity.id}
+                          type="button"
+                          onClick={() => onOpenActivity(activity)}
+                          className={cn(
+                            "flex w-full min-w-0 items-center gap-1.5 rounded-md border px-2 py-1.5 text-left text-[0.68rem] transition hover:brightness-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30",
+                            activityTone[activity.type]
+                          )}
+                          aria-label={`${activity.type}: ${activity.customer}, ${activity.clothing}, ${formatActivityTime(activity)}`}
+                        >
+                          <span className="shrink-0 font-semibold">{formatClockMinutes(timeToMinutes(activity.startTime))}</span>
+                          <span className="truncate">{activity.type} · {activity.customer}</span>
+                        </button>
+                      ))}
+                      {hiddenCount > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenDay(dateKey)}
+                          className="w-full rounded-md px-2 py-1 text-left text-[0.68rem] font-semibold text-dashboard-accent transition hover:bg-dashboard-active"
+                          aria-label={`Open ${hiddenCount} more activities on ${dateKey}`}
+                        >
+                          +{hiddenCount} more
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -539,15 +766,67 @@ function formatClockMinutes(totalMinutes: number): string {
   return `${hour12}:${String(minute).padStart(2, "0")} ${hour24 < 12 ? "AM" : "PM"}`;
 }
 
-const WEEKDAY_NAMES: Record<string, string> = {
-  mon: "Monday",
-  tue: "Tuesday",
-  wed: "Wednesday",
-  thu: "Thursday",
-  fri: "Friday",
-  sat: "Saturday",
-  sun: "Sunday",
-};
+function parseDateKey(dateKey: string): Date {
+  return new Date(`${dateKey}T00:00:00Z`);
+}
+
+function formatDateKey(date: Date): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+function addUtcDays(date: Date, amount: number): Date {
+  const copy = new Date(date.getTime());
+  copy.setUTCDate(copy.getUTCDate() + amount);
+  return copy;
+}
+
+function monthCells(cursor: Date): Date[] {
+  const firstOfMonth = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), 1));
+  const mondayOffset = (firstOfMonth.getUTCDay() + 6) % 7;
+  const firstCell = addUtcDays(firstOfMonth, -mondayOffset);
+  return Array.from({ length: 42 }, (_, index) => addUtcDays(firstCell, index));
+}
+
+function buildWeekDays(weekStart: Date): CalendarDay[] {
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = addUtcDays(weekStart, index);
+    const dateKey = formatDateKey(date);
+    return {
+      key: date.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }).toLowerCase(),
+      label: date.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }),
+      date: date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
+      dateKey,
+      activityCount: CALENDAR_ACTIVITIES.filter((activity) => activity.dateKey === dateKey).length,
+    };
+  });
+}
+
+function calendarDateLabel(
+  view: CalendarView,
+  monthCursor: Date,
+  weekCursor: Date,
+): string {
+  if (view === "month") {
+    return monthCursor.toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+  }
+  const weekEnd = addUtcDays(weekCursor, 6);
+  const startLabel = weekCursor.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+  const endLabel = weekEnd.toLocaleDateString("en-US", {
+    month: weekEnd.getUTCMonth() === weekCursor.getUTCMonth() ? undefined : "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  return `${startLabel} – ${endLabel}`;
+}
 
 const AGENDA_FILTERS: readonly ("All" | CalendarActivityType)[] = [
   "All",
@@ -563,12 +842,9 @@ const reservationStatusTone = {
 } as const;
 
 function reservationDetailsFor(activity: CalendarActivity) {
-  const allActivities = Object.values(CALENDAR_DAY_AGENDA).flat();
-  const index = Math.max(0, allActivities.findIndex((item) => item.id === activity.id));
-  const day = CALENDAR_DAYS.find((item) => item.key === activity.day) ?? CALENDAR_DAYS[0]!;
-  const dayNumber = Number(day.date.replace("Sep ", ""));
-  const startDate = new Date(2025, 8, dayNumber);
-  const endDate = new Date(2025, 8, dayNumber + 3);
+  const index = Math.max(0, CALENDAR_ACTIVITIES.findIndex((item) => item.id === activity.id));
+  const startDate = parseDateKey(activity.dateKey);
+  const endDate = addUtcDays(startDate, 3);
   const formatDate = (date: Date) =>
     date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   const status: keyof typeof reservationStatusTone =
@@ -709,8 +985,8 @@ function ReservationDetailsSheet({
                     {details.rentalStart} <span className="text-dashboard-muted">→</span> {details.rentalEnd}
                   </p>
                   <div className="mt-4 grid grid-cols-1 gap-3 border-t border-dashboard-border pt-4 sm:grid-cols-3">
-                    <DetailMetric icon={Truck} label="Pickup" value={`${details.rentalStart.replace(", 2025", "")}, ${details.pickupTime}`} />
-                    <DetailMetric icon={RotateCcw} label="Return" value={`${details.rentalEnd.replace(", 2025", "")}, ${details.returnTime}`} />
+                    <DetailMetric icon={Truck} label="Pickup" value={`${details.rentalStart.replace(", 2026", "")}, ${details.pickupTime}`} />
+                    <DetailMetric icon={RotateCcw} label="Return" value={`${details.rentalEnd.replace(", 2026", "")}, ${details.returnTime}`} />
                     <DetailMetric icon={Clock3} label="Duration" value={details.duration} />
                   </div>
                 </CardContent>
@@ -720,10 +996,10 @@ function ReservationDetailsSheet({
                 <CardContent className="p-4">
                   <h3 className="text-sm font-semibold text-dashboard-navy">Status Timeline</h3>
                   <div className="mt-4 space-y-0">
-                    <TimelineStep label="Reservation Created" note={`${details.rentalStart.replace(", 2025", "")}, 11:24 AM`} complete />
-                    <TimelineStep label="Payment Confirmed" note={`${details.rentalStart.replace(", 2025", "")}, 11:35 AM`} complete />
-                    <TimelineStep label="Pickup Completed" note={`${details.rentalStart.replace(", 2025", "")}, 9:52 AM`} complete={activity.type !== "Fitting"} />
-                    <TimelineStep label="Return Pending" note={`${details.rentalEnd.replace(", 2025", "")}, ${details.returnTime}`} complete={false} last />
+                    <TimelineStep label="Reservation Created" note={`${details.rentalStart.replace(", 2026", "")}, 11:24 AM`} complete />
+                    <TimelineStep label="Payment Confirmed" note={`${details.rentalStart.replace(", 2026", "")}, 11:35 AM`} complete />
+                    <TimelineStep label="Pickup Completed" note={`${details.rentalStart.replace(", 2026", "")}, 9:52 AM`} complete={activity.type !== "Fitting"} />
+                    <TimelineStep label="Return Pending" note={`${details.rentalEnd.replace(", 2026", "")}, ${details.returnTime}`} complete={false} last />
                   </div>
                 </CardContent>
               </Card>
@@ -833,22 +1109,21 @@ function InfoRow({
 
 function DayAgendaSheet({
   agendaFilter,
-  dayKey,
+  dateKey,
   onAgendaFilterChange,
   onOpenChange,
-  onSelectDay,
+  onSelectDate,
   onViewDetails,
 }: {
   agendaFilter: "All" | CalendarActivityType;
-  dayKey: string | null;
+  dateKey: string | null;
   onAgendaFilterChange: (filter: "All" | CalendarActivityType) => void;
   onOpenChange: (open: boolean) => void;
-  onSelectDay: (dayKey: string) => void;
+  onSelectDate: (dateKey: string) => void;
   onViewDetails: (activity: CalendarActivity) => void;
 }) {
-  const dayIndex = dayKey ? CALENDAR_DAYS.findIndex((day) => day.key === dayKey) : -1;
-  const day = dayIndex >= 0 ? CALENDAR_DAYS[dayIndex] : undefined;
-  const agenda = dayKey ? CALENDAR_DAY_AGENDA[dayKey] ?? [] : [];
+  const day = dateKey ? parseDateKey(dateKey) : null;
+  const agenda = dateKey ? CALENDAR_DAY_AGENDA[dateKey] ?? [] : [];
   const filteredAgenda =
     agendaFilter === "All" ? agenda : agenda.filter((activity) => activity.type === agendaFilter);
 
@@ -860,9 +1135,8 @@ function DayAgendaSheet({
   ) as Record<(typeof AGENDA_FILTERS)[number], number>;
 
   const moveDay = (direction: -1 | 1) => {
-    if (dayIndex < 0) return;
-    const next = CALENDAR_DAYS[dayIndex + direction];
-    if (next) onSelectDay(next.key);
+    if (!day) return;
+    onSelectDate(formatDateKey(addUtcDays(day, direction)));
   };
 
   return (
@@ -881,10 +1155,10 @@ function DayAgendaSheet({
                   </span>
                   <div className="min-w-0">
                     <SheetTitle className="text-lg sm:text-xl">
-                      {day.date.replace("Sep", "September")}, 2025
+                      {day.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })}
                     </SheetTitle>
                     <SheetDescription className="mt-0.5">
-                      {WEEKDAY_NAMES[day.key] ?? day.label}
+                      {day.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" })}
                     </SheetDescription>
                   </div>
                 </div>
@@ -894,7 +1168,6 @@ function DayAgendaSheet({
                     variant="ghost"
                     size="icon"
                     aria-label="Previous day"
-                    disabled={dayIndex <= 0}
                     onClick={() => moveDay(-1)}
                     className="h-9 w-9"
                   >
@@ -904,7 +1177,6 @@ function DayAgendaSheet({
                     variant="ghost"
                     size="icon"
                     aria-label="Next day"
-                    disabled={dayIndex === CALENDAR_DAYS.length - 1}
                     onClick={() => moveDay(1)}
                     className="h-9 w-9"
                   >
