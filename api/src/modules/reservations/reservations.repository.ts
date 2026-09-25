@@ -481,13 +481,28 @@ export async function readReservationDetailModel(
       AND pv.id = rl.variant_id
      LEFT JOIN LATERAL (
        SELECT pa.readiness
-         FROM asset_allocation aa
-         JOIN physical_asset pa
-           ON pa.tenant_id = aa.tenant_id
-          AND pa.id = aa.asset_id
-        WHERE aa.tenant_id = rl.tenant_id
-          AND aa.reservation_line_id = rl.id
-        ORDER BY (aa.is_blocking AND aa.released_at IS NULL) DESC, aa.created_at DESC, aa.id DESC
+         FROM physical_asset pa
+        WHERE pa.tenant_id = rl.tenant_id
+          AND pa.id = COALESCE(
+            (
+              SELECT aa.asset_id
+                FROM asset_allocation aa
+               WHERE aa.tenant_id = rl.tenant_id
+                 AND aa.reservation_line_id = rl.id
+               ORDER BY (aa.is_blocking AND aa.released_at IS NULL) DESC,
+                        aa.created_at DESC,
+                        aa.id DESC
+               LIMIT 1
+            ),
+            (
+              SELECT ce.asset_id
+                FROM custody_event ce
+               WHERE ce.tenant_id = rl.tenant_id
+                 AND ce.reservation_line_id = rl.id
+               ORDER BY ce.occurred_at DESC, ce.id DESC
+               LIMIT 1
+            )
+          )
         LIMIT 1
      ) asset_state ON true
      WHERE rl.tenant_id = $1
