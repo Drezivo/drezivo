@@ -223,33 +223,50 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
 
 # Phase 2: Appointment list/table
 
-- [ ] **FIT-FE-020 — Build the fitting appointment table/list**
+- [ ] **FIT-FE-020 — Build the fitting appointment table/list** _(implementation complete; browser/mobile verification pending)_
   - **Depends on:** FIT-FE-011, FIT-FE-012.
   - **Acceptance:**
-    - [ ] Show appointment date/time.
-    - [ ] Show customer name.
-    - [ ] Show garment summary.
-    - [ ] Show fitting fee/payment summary only where present.
-    - [ ] Show appointment status separately from payment status.
-    - [ ] Do not show room/staff/resource fields.
-    - [ ] Avoid phone, email, evidence, measurements, or long notes in the table.
-    - [ ] Row opens Fitting Details Sheet.
-    - [ ] Desktop rows remain scan-friendly.
-    - [ ] Mobile becomes a compact stacked list where needed.
+    - [x] Show appointment date/time.
+    - [x] Show customer name.
+    - [x] Show garment summary.
+    - [x] Show fitting fee/payment summary only where present.
+    - [x] Show appointment status separately from payment status.
+    - [x] Do not show room/staff/resource fields.
+    - [x] Avoid phone, email, evidence, measurements, or long notes in the table.
+    - [x] Row opens Fitting Details Sheet.
+    - [x] Desktop rows remain scan-friendly in the responsive implementation.
+    - [x] Mobile becomes a compact stacked list in the responsive implementation.
+  - **Evidence:**
+    - `app/src/components/fittings/fittings-page.tsx` renders one responsive appointment list source: stacked two-column appointment rows below `lg`, and a six-column operational row layout at `lg` and above.
+    - Visible list fields are limited to date/time, customer, garment summary, fee/payment, appointment status, and attention. Phone, email, payment evidence, measurements, long notes, and all room/staff/resource concepts stay out of the list.
+    - Appointment status and payment state use separate badges and separate fixture fields; no payment state mutates appointment state in the frontend.
+    - Clicking or keyboard-activating an appointment row opens a minimal `Fitting Details` Sheet preview. Phase 3 remains responsible for the richer details layout.
+    - `app/tests/unit/fittings-page.test.tsx` defines coverage for the list fields, absence of fitting room/staff labels, and row-to-sheet opening.
+    - A real authenticated desktop/360px browser walkthrough is still required before the Phase 2 visual acceptance is considered fully verified.
 
-- [ ] **FIT-FE-021 — Add meaningful attention states**
+- [x] **FIT-FE-021 — Add meaningful attention states**
   - **Acceptance:**
-    - [ ] Seed payment-review attention.
-    - [ ] Seed a preference-only garment attention state.
-    - [ ] Communicate attention with text/icon, not color alone.
-    - [ ] Do not claim the frontend detected a real backend conflict.
+    - [x] Seed payment-review attention.
+    - [x] Seed a preference-only garment attention state.
+    - [x] Communicate attention with text/icon, not color alone.
+    - [x] Do not claim the frontend detected a real backend conflict.
+  - **Evidence:**
+    - `Bianca Flores` carries `Payment review` plus `Preference only`; other preference-only examples remain available in the fixture.
+    - Attention badges include explicit text and an icon (`CircleAlert` for payment review, `Info` for preference-only), so meaning is not color-only.
+    - No overlap, resource, or backend-conflict detection language is displayed by the frontend.
 
-- [ ] **FIT-FE-022 — Add list empty/loading/error prototype states**
+- [x] **FIT-FE-022 — Add list empty/loading/error prototype states**
   - **Acceptance:**
-    - [ ] Empty tenant state differs from empty filtered state.
-    - [ ] Loading skeleton follows the list structure.
-    - [ ] Error state includes retry UI.
-    - [ ] No fake zero counts appear as authoritative while loading.
+    - [x] Empty tenant state differs from empty filtered state.
+    - [x] Loading skeleton follows the list structure.
+    - [x] Error state includes retry UI.
+    - [x] No fake zero counts appear as authoritative while loading.
+  - **Evidence:**
+    - `appointments={[]}` renders `No fitting appointments yet`; a filter with no matches renders `No fittings match these filters` with a clear-filter action.
+    - `initialViewState="loading"` renders four list-structured skeleton rows and replaces summary counts with skeletons instead of zeroes.
+    - `initialViewState="error"` renders a retry action that returns the local prototype to its ready state without a network request.
+    - Prettier, TypeScript transpile checks, and `git diff --check` pass for the Phase 2 source/tests.
+    - Targeted Vitest still fails before test collection because the repository root resolves `@testing-library/jest-dom/dist/vitest.mjs` without a resolvable root `vitest` package; the two fitting suites report `0 test` before failing on that existing dependency-resolution issue.
 
 ---
 
