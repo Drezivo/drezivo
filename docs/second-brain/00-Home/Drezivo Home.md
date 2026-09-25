@@ -2,7 +2,9 @@
 title: Drezivo Home
 type: index
 status: active
-updated: 2026-09-16
+owner: Drezivo team
+source: "ROOT-REPOSITORY-ARCHITECTURE.md and linked second-brain notes"
+updated: 2026-09-23
 tags: [drezivo, index]
 ---
 
@@ -21,11 +23,13 @@ The navigation hub for the Drezivo second brain.
 - [[03-Repositories/Repository Map]]
 - [[04-Decisions/Decision Register]]
 - [[05-Operations/Operating Model]]
+- [[05-Operations/API Security Review 2026-09-23]]
 - [[06-Research/Research Register]]
 - [[07-Glossary/Glossary]]
 - [[08-Daily/2026-09-16]]
 - [[08-Daily/2026-09-17]]
 - [[08-Daily/2026-09-18]]
+- [[08-Daily/2026-09-23]]
 
 ## Current truth
 

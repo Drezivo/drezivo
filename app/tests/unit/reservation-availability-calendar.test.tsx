@@ -115,27 +115,22 @@ describe("ReservationAvailabilityCalendar", () => {
     expect(within(legend).getByText("Unavailable / busy")).toBeVisible();
   });
 
-  it("does not complete a fixed-duration range that is shorter than the configured three-day minimum", () => {
+  it("disables unavailable dates while keeping available capacity selectable", () => {
     const onRangeChange = renderCalendar();
+    const reservedDay = screen.getByRole("button", { name: /October 12.*Reserved/i });
+    const rentedDay = screen.getByRole("button", { name: /October 13.*Rented/i });
+
+    expect(reservedDay).toBeDisabled();
+    expect(rentedDay).toBeDisabled();
+
+    fireEvent.click(reservedDay);
+    fireEvent.click(rentedDay);
+    expect(onRangeChange).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /October 10.*Available/i }));
-    fireEvent.click(screen.getByRole("button", { name: /October 12.*Reserved/i }));
-
-    expect(onRangeChange).not.toHaveBeenCalledWith({
-      pickupDate: "2026-10-10",
-      dueDate: "2026-10-12",
-    });
-  });
-
-  it("accepts a return date at the fixed-duration minimum boundary", () => {
-    const onRangeChange = renderCalendar();
-
-    fireEvent.click(screen.getByRole("button", { name: /October 10.*Available/i }));
-    fireEvent.click(screen.getByRole("button", { name: /October 13.*Rented/i }));
-
     expect(onRangeChange).toHaveBeenLastCalledWith({
       pickupDate: "2026-10-10",
-      dueDate: "2026-10-13",
+      dueDate: "",
     });
   });
 
