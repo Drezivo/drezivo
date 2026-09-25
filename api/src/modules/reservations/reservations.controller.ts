@@ -5,6 +5,7 @@ import type { PermissionCode, TenantStatus } from '@drezivo/contracts';
 import { ValidationError } from '../../shared/errors.js';
 import { sendError, sendSuccess } from '../../shared/response.js';
 import {
+  attachReservationReceipt,
   cancelReservation,
   completeStaffReservation,
   confirmReservation,
@@ -17,6 +18,7 @@ import {
   getStaffReservationIntakeOptions,
   pickupReservation,
   rejectReservation,
+  verifyReservationPayment,
   returnReservation,
   inspectReturnedReservation,
   completeRentalReservation,
@@ -179,6 +181,41 @@ export async function submitReservationController(req: Request, res: Response): 
   if (!idempotencyKey) throw new ValidationError('A valid Idempotency-Key header is required.');
 
   const result = await submitReservation(
+    { ...requireContext(req), requestId: req.requestId, idempotencyKey },
+    reservationId,
+    request,
+  );
+  res.status(result.status).json(result.body);
+}
+
+export async function attachReservationPaymentReceiptController(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const reservationId = req.reservationId;
+  const request = req.reservationPaymentReceiptAttachRequest;
+  const idempotencyKey = req.reservationIdempotencyKey;
+  if (!reservationId) throw new ValidationError('A valid reservation id is required.');
+  if (!request) throw new ValidationError('Reservation payment receipt request is invalid.');
+  if (!idempotencyKey) throw new ValidationError('A valid Idempotency-Key header is required.');
+
+  const result = await attachReservationReceipt(
+    { ...requireContext(req), requestId: req.requestId, idempotencyKey },
+    reservationId,
+    request,
+  );
+  res.status(result.status).json(result.body);
+}
+
+export async function verifyReservationPaymentController(req: Request, res: Response): Promise<void> {
+  const reservationId = req.reservationId;
+  const request = req.reservationPaymentVerifyRequest;
+  const idempotencyKey = req.reservationIdempotencyKey;
+  if (!reservationId) throw new ValidationError('A valid reservation id is required.');
+  if (!request) throw new ValidationError('Reservation payment verification request is invalid.');
+  if (!idempotencyKey) throw new ValidationError('A valid Idempotency-Key header is required.');
+
+  const result = await verifyReservationPayment(
     { ...requireContext(req), requestId: req.requestId, idempotencyKey },
     reservationId,
     request,

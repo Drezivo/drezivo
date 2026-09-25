@@ -35,6 +35,7 @@ process.env.S3_ACCESS_KEY_ID ??= 'test';
 process.env.S3_SECRET_ACCESS_KEY ??= 'test';
 
 const PNG_PREFIX = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+const PDF_PREFIX = Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]);
 const SHA_A = Buffer.alloc(32, 1).toString('base64');
 const SHA_B = Buffer.alloc(32, 2).toString('base64');
 
@@ -232,6 +233,76 @@ describe('CLT-022 clothing file attachment flow', async () => {
     expect(accepted.lifecycle_status).toBe('accepted');
     expect(accepted.version_id).toBe('version-accepted-1');
     expect(accepted.frozen_at).toBeInstanceOf(Date);
+  });
+
+  it('allows reservation/payment staff to upload a private payment receipt without granting catalogue file access', async () => {
+    const seed = await seedTenant('org_clt022_receipt', 'user_clt022_receipt');
+    const storage = new FakeStorage();
+    const paymentFileContext = {
+      ...seed.fileContext,
+      permissionCodes: ['reservations.manage', 'payments.manage'] as PermissionCode[],
+    };
+    const authorization = await authorizeUpload(
+      {
+        ...paymentFileContext,
+        requestId: 'req-clt022-receipt-authorize',
+        idempotencyKey: 'clt022-receipt-authorize',
+        request: uploadAuthorizationRequest.parse({
+          purpose: 'payment_receipt',
+          content_type: 'application/pdf',
+          byte_size: 512,
+          sha256: SHA_A,
+        }),
+      },
+      storage,
+    );
+    expect(authorization.status).toBe(201);
+    if (!authorization.body.success) throw new Error('Expected payment receipt authorization success.');
+
+    const fileId = authorization.body.data.file_id;
+    const pending = await readFile(seed.tenantId, seed.principalId, fileId);
+    storage.objects.set(pending.storage_key, {
+      contentType: 'application/pdf',
+      byteSize: 512,
+      sha256: SHA_A,
+      versionId: 'receipt-version-1',
+      prefix: PDF_PREFIX,
+    });
+
+    const finalized = await finalizeUpload(
+      {
+        ...paymentFileContext,
+        fileId,
+        requestId: 'req-clt022-receipt-finalize',
+        idempotencyKey: 'clt022-receipt-finalize',
+      },
+      storage,
+    );
+    expect(finalized.status).toBe(200);
+    if (!finalized.body.success) throw new Error('Expected payment receipt finalization success.');
+    expect(finalized.body.data.file).toMatchObject({
+      file_id: fileId,
+      purpose: 'payment_receipt',
+      content_type: 'application/pdf',
+      lifecycle_status: 'accepted',
+    });
+
+    await expect(
+      authorizeUpload(
+        {
+          ...paymentFileContext,
+          requestId: 'req-clt022-receipt-catalogue-denied',
+          idempotencyKey: 'clt022-receipt-catalogue-denied',
+          request: uploadAuthorizationRequest.parse({
+            purpose: 'catalogue_image',
+            content_type: 'image/png',
+            byte_size: 512,
+            sha256: SHA_B,
+          }),
+        },
+        storage,
+      ),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it('rejects mismatched uploaded bytes and never marks provider failures as accepted', async () => {

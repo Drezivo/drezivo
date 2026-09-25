@@ -63,6 +63,8 @@ describe("Drezivo reservations list API client", () => {
             payment: {
               id: "00000000-0000-4000-8000-000000000105",
               payment_method_id: "00000000-0000-4000-8000-000000000106",
+              method_name: "Cash",
+              rail: "cash",
               status: "paid",
               evidence_status: "verified",
               amount_minor: "200000",
@@ -147,6 +149,8 @@ describe("Drezivo reservations list API client", () => {
         payment: {
           id: "00000000-0000-4000-8000-000000000105",
           payment_method_id: "00000000-0000-4000-8000-000000000106",
+          method_name: "Cash",
+          rail: "cash",
           status: "paid",
           evidence_status: "verified",
           amount_minor: "200000",

@@ -294,6 +294,122 @@ export async function markReceiptUnderReview(
   );
 }
 
+export async function attachAcceptedReservationReceipt(
+  client: PoolClient,
+  input: { tenantId: string; paymentId: string; fileId: string },
+): Promise<{ receipt_id: string; payment_id: string } | null> {
+  const file = await client.query<{ id: string }>(
+    `SELECT id
+       FROM file_object
+      WHERE tenant_id = $1
+        AND id = $2::uuid
+        AND purpose = 'payment_receipt'
+        AND lifecycle_status = 'accepted'
+        AND is_private = true
+        AND frozen_at IS NOT NULL
+        AND (version_id IS NOT NULL OR sha256 IS NOT NULL)
+      LIMIT 1
+      FOR UPDATE`,
+    [input.tenantId, input.fileId],
+  );
+  if (!file.rows[0]) return null;
+
+  const existing = await client.query<{ receipt_id: string; payment_id: string }>(
+    `SELECT id AS receipt_id, payment_id
+       FROM payment_receipt
+      WHERE tenant_id = $1
+        AND payment_id = $2::uuid
+        AND file_id = $3::uuid
+      ORDER BY submitted_at DESC, id DESC
+      LIMIT 1`,
+    [input.tenantId, input.paymentId, input.fileId],
+  );
+  if (existing.rows[0]) return existing.rows[0];
+
+  await client.query(
+    `UPDATE payment_receipt
+        SET evidence_status = 'superseded'
+      WHERE tenant_id = $1
+        AND payment_id = $2::uuid
+        AND evidence_status IN ('uploaded', 'under_review')`,
+    [input.tenantId, input.paymentId],
+  );
+
+  const inserted = await client.query<{ receipt_id: string; payment_id: string }>(
+    `INSERT INTO payment_receipt (tenant_id, payment_id, file_id, evidence_status, submitted_at)
+     VALUES ($1, $2::uuid, $3::uuid, 'uploaded', statement_timestamp())
+     RETURNING id AS receipt_id, payment_id`,
+    [input.tenantId, input.paymentId, input.fileId],
+  );
+  return inserted.rows[0] ?? null;
+}
+
+export async function verifyReservationPaymentCollection(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    paymentId: string;
+    merchantReference: string | null;
+  },
+): Promise<Date | null> {
+  const result = await client.query<{ verified_at: Date }>(
+    `UPDATE payment
+        SET status = 'paid',
+            verified_at = statement_timestamp(),
+            merchant_reference = COALESCE($3, merchant_reference)
+      WHERE tenant_id = $1
+        AND id = $2::uuid
+        AND status IN ('pending', 'partially_paid')
+        AND verified_at IS NULL
+      RETURNING verified_at`,
+    [input.tenantId, input.paymentId, input.merchantReference],
+  );
+  return result.rows[0]?.verified_at ?? null;
+}
+
+export async function insertReservationPaymentVerification(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    paymentId: string;
+    membershipId: string;
+    verifiedAmountMinor: number;
+    evidenceNote: string;
+  },
+): Promise<string | null> {
+  const result = await client.query<{ id: string }>(
+    `INSERT INTO payment_verification
+       (tenant_id, payment_id, verifier_membership_id, decision,
+        verified_amount_minor, evidence_note, business_key)
+     VALUES ($1, $2::uuid, $3::uuid, 'verified', $4, $5, $6)
+     ON CONFLICT (tenant_id, business_key) DO NOTHING
+     RETURNING id`,
+    [
+      input.tenantId,
+      input.paymentId,
+      input.membershipId,
+      input.verifiedAmountMinor,
+      input.evidenceNote,
+      `reservation-payment-verified:${input.paymentId}`,
+    ],
+  );
+  return result.rows[0]?.id ?? null;
+}
+
+export async function markReservationReceiptVerified(
+  client: PoolClient,
+  input: { tenantId: string; receiptId: string },
+): Promise<void> {
+  await client.query(
+    `UPDATE payment_receipt
+        SET evidence_status = 'verified'
+      WHERE tenant_id = $1
+        AND id = $2::uuid
+        AND evidence_status IN ('uploaded', 'under_review')`,
+    [input.tenantId, input.receiptId],
+  );
+}
+
 export async function submitReservationForReview(
   client: PoolClient,
   input: { tenantId: string; branchId: string; reservationId: string; version: number },

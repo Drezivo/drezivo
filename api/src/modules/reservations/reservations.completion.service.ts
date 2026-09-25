@@ -21,6 +21,7 @@ import {
   confirmReservationByMerchant,
   readReservationReviewSummary,
   submitReservationForConfirmation,
+  verifyReservationPaymentByStaff,
   type ReservationReviewCommandResponse,
   type ReservationReviewContext,
 } from './reservations.review.service.js';
@@ -49,6 +50,11 @@ export async function completeStaffReservationCommand(
   const parsed = staffReservationCompleteRequest.safeParse(requestInput);
   if (!parsed.success) throw new ValidationError('Staff reservation completion request is invalid.');
   const request = parsed.data;
+  const submissionRequest = {
+    version: request.version,
+    terms_accepted: request.terms_accepted,
+    ...(request.customer ? { customer: request.customer } : {}),
+  };
 
   let current = await readReservationReviewSummary(context, reservationId);
   if (current.status === 'expired') {
@@ -68,7 +74,7 @@ export async function completeStaffReservationCommand(
     const submitted = await submitReservationForConfirmation(
       childContext(context, 'submit'),
       reservationId,
-      request,
+      submissionRequest,
     );
     if (!submitted.body.success) {
       return { status: submitted.status, body: submitted.body };
@@ -82,7 +88,7 @@ export async function completeStaffReservationCommand(
       const replayedSubmission = await submitReservationForConfirmation(
         childContext(context, 'submit'),
         reservationId,
-        request,
+        submissionRequest,
       );
       if (!replayedSubmission.body.success) {
         return { status: replayedSubmission.status, body: replayedSubmission.body };
@@ -103,6 +109,24 @@ export async function completeStaffReservationCommand(
   }
   if (pendingReservation.status !== 'pending_confirmation') {
     throw new StateConflictError('Reservation submission did not reach pending confirmation.');
+  }
+
+  if (request.cash_collection) {
+    if (!context.permissionCodes.includes('payments.manage')) {
+      return completionSuccess(context, pendingReservation, 'merchant_review');
+    }
+    const verified = await verifyReservationPaymentByStaff(
+      childContext(context, 'verify'),
+      reservationId,
+      {
+        version: pendingReservation.version,
+        verified_amount_minor: request.cash_collection.amount_received_minor,
+      },
+      { requireRail: 'cash' },
+    );
+    if (!verified.body.success) {
+      return { status: verified.status, body: verified.body };
+    }
   }
 
   if (!hasMerchantReviewAuthority(context.permissionCodes)) {
@@ -139,16 +163,12 @@ export async function completeStaffReservationCommand(
 }
 
 function hasMerchantReviewAuthority(permissions: PermissionCode[]): boolean {
-  return (
-    permissions.includes('reservations.manage') &&
-    permissions.includes('payments.manage') &&
-    permissions.includes('evidence.verify')
-  );
+  return permissions.includes('reservations.manage') && permissions.includes('payments.manage');
 }
 
 function childContext(
   context: StaffReservationCompletionContext,
-  stage: 'submit' | 'confirm',
+  stage: 'submit' | 'verify' | 'confirm',
 ): ReservationReviewContext {
   const digest = createHash('sha256')
     .update(`${context.idempotencyKey}:${stage}`, 'utf8')

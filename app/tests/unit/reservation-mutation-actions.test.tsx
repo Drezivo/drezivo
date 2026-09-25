@@ -14,6 +14,8 @@ const api = vi.hoisted(() => ({
   cancelReservation: vi.fn(),
   completeRentalReservation: vi.fn(),
   completeStaffReservation: vi.fn(),
+  confirmReservation: vi.fn(),
+  verifyReservationPayment: vi.fn(),
   inspectReservationReturn: vi.fn(),
   pickupReservation: vi.fn(),
   rejectReservation: vi.fn(),
@@ -83,6 +85,8 @@ const confirmedDetail = reservationDetail.parse({
   payment: {
     id: "00000000-0000-4000-8000-000000000105",
     payment_method_id: "00000000-0000-4000-8000-000000000106",
+    method_name: "Cash",
+    rail: "cash",
     status: "paid",
     evidence_status: "verified",
     amount_minor: "200000",
@@ -238,34 +242,29 @@ describe("ReservationMutationActions", () => {
     expect(api.pickupReservation.mock.calls[1]![2]).not.toBe(firstKey);
   });
 
-  it("reports pending confirmation truthfully when Complete Reservation still needs payment verification", async () => {
+  it("confirms an already verified pending reservation through the merchant confirmation endpoint", async () => {
     const pendingDetail = reservationDetail.parse({
       ...confirmedDetail,
       status: "pending_confirmation",
       confirmed_at: null,
       version: 2,
     });
-    api.completeStaffReservation.mockResolvedValueOnce({
-      data: {
-        ...mutationResult("pending_confirmation", 2).data,
-        completion_state: "pending_confirmation",
-        next_action: "payment_verification",
-      },
-      requestId: "req-complete",
+    api.confirmReservation.mockResolvedValueOnce({
+      data: mutationResult("confirmed", 3).data,
+      requestId: "req-confirm",
     });
     const callbacks = renderActions(pendingDetail);
 
-    fireEvent.click(screen.getByRole("button", { name: "Complete Reservation" }));
-    fireEvent.click(screen.getAllByRole("button", { name: "Complete Reservation" })[1]!);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Reservation" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Confirm Reservation" })[1]!);
 
-    await waitFor(() => expect(api.completeStaffReservation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.confirmReservation).toHaveBeenCalledTimes(1));
+    expect(api.confirmReservation).toHaveBeenCalledWith(pendingDetail.id, { version: 2 }, expect.any(String));
+    expect(api.completeStaffReservation).not.toHaveBeenCalled();
     expect(callbacks.onNotice).toHaveBeenLastCalledWith({
-      tone: "attention",
-      message: "Reservation submitted. Awaiting payment verification.",
+      tone: "success",
+      message: "Reservation confirmed.",
     });
-    expect(callbacks.onNotice).not.toHaveBeenCalledWith(
-      expect.objectContaining({ message: "Reservation confirmed." })
-    );
   });
 
   it("refreshes instead of auto-retrying when the reservation version is stale", async () => {

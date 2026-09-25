@@ -6,8 +6,8 @@ import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
 import { authorizeUploadController, finalizeUploadController } from './files.controller.js';
 import {
-  requireClothingFilePermission,
   requireFileIdempotencyKey,
+  requireFileUploadPermission,
   validateUploadAuthorization,
   validateUploadFinalize,
 } from './files.middleware.js';
@@ -27,7 +27,7 @@ filesRouter.post(
   requireTenantContext,
   fileWriteRateLimit,
   writePolicy,
-  requireClothingFilePermission,
+  requireFileUploadPermission,
   validateUploadAuthorization,
   requireFileIdempotencyKey,
   authorizeUploadController,
@@ -39,7 +39,7 @@ filesRouter.post(
   requireTenantContext,
   fileWriteRateLimit,
   writePolicy,
-  requireClothingFilePermission,
+  requireFileUploadPermission,
   validateUploadFinalize,
   requireFileIdempotencyKey,
   finalizeUploadController,

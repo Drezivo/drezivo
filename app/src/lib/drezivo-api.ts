@@ -25,6 +25,12 @@ import {
   reservationCancelResponse,
   reservationCompleteRequest,
   reservationCompleteResponse,
+  reservationConfirmRequest,
+  reservationConfirmResponse,
+  reservationPaymentReceiptAttachRequest,
+  reservationPaymentReceiptAttachResponse,
+  reservationPaymentVerifyRequest,
+  reservationPaymentVerifyResponse,
   reservationDetail,
   reservationInspectionRequest,
   reservationInspectionResponse,
@@ -98,6 +104,12 @@ import {
   type ReservationCancelResponse,
   type ReservationCompleteRequest,
   type ReservationCompleteResponse,
+  type ReservationConfirmRequest,
+  type ReservationConfirmResponse,
+  type ReservationPaymentReceiptAttachRequest,
+  type ReservationPaymentReceiptAttachResponse,
+  type ReservationPaymentVerifyRequest,
+  type ReservationPaymentVerifyResponse,
   type ReservationDetail,
   type ReservationInspectionRequest,
   type ReservationInspectionResponse,
@@ -419,6 +431,45 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "POST",
         path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/complete-rental`,
         responseSchema: apiEnvelope(reservationCompleteResponse),
+      }),
+    attachReservationPaymentReceipt: (
+      reservationId: string,
+      input: ReservationPaymentReceiptAttachRequest,
+      idempotencyKey: string
+    ) =>
+      request<ReservationPaymentReceiptAttachResponse>({
+        getToken,
+        body: reservationPaymentReceiptAttachRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/payment-receipt`,
+        responseSchema: apiEnvelope(reservationPaymentReceiptAttachResponse),
+      }),
+    verifyReservationPayment: (
+      reservationId: string,
+      input: ReservationPaymentVerifyRequest,
+      idempotencyKey: string
+    ) =>
+      request<ReservationPaymentVerifyResponse>({
+        getToken,
+        body: reservationPaymentVerifyRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/verify-payment`,
+        responseSchema: apiEnvelope(reservationPaymentVerifyResponse),
+      }),
+    confirmReservation: (
+      reservationId: string,
+      input: ReservationConfirmRequest,
+      idempotencyKey: string
+    ) =>
+      request<ReservationConfirmResponse>({
+        getToken,
+        body: reservationConfirmRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/confirm`,
+        responseSchema: apiEnvelope(reservationConfirmResponse),
       }),
     rejectReservation: (
       reservationId: string,

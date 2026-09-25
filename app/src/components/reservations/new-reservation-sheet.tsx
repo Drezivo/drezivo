@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { CalendarDays, Check, Search, Shirt, TimerReset, UserRound } from "lucide-react";
+import { CalendarDays, Check, FileUp, Search, Shirt, TimerReset, UserRound } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import type {
@@ -66,6 +66,7 @@ export function NewReservationSheet({
   const reserveGuard = useSubmitGuard();
   const completeGuard = useSubmitGuard();
   const cancelGuard = useSubmitGuard();
+  const receiptGuard = useSubmitGuard();
 
   const [step, setStep] = useState<Step>("select");
   const [notice, setNotice] = useState<{
@@ -99,6 +100,13 @@ export function NewReservationSheet({
   const [productDetail, setProductDetail] = useState<ClothingDetail | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<ProductVariantId | "">("");
   const [held, setHeld] = useState<HeldState | null>(null);
+  const [cashAmountReceived, setCashAmountReceived] = useState("");
+  const [cashReceived, setCashReceived] = useState(false);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptAttached, setReceiptAttached] = useState(false);
+  const [completionNextAction, setCompletionNextAction] = useState<
+    "none" | "merchant_review" | "payment_verification" | null
+  >(null);
   const [serverExpired, setServerExpired] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
@@ -336,6 +344,7 @@ export function NewReservationSheet({
     reserveGuard.resetIntent();
     completeGuard.resetIntent();
     cancelGuard.resetIntent();
+    receiptGuard.resetIntent();
     setStep("select");
     setNotice(null);
     setSearch("");
@@ -355,6 +364,11 @@ export function NewReservationSheet({
     setProductDetail(null);
     setSelectedVariantId("");
     setHeld(null);
+    setCashAmountReceived("");
+    setCashReceived(false);
+    setReceiptFile(null);
+    setReceiptAttached(false);
+    setCompletionNextAction(null);
     setServerExpired(false);
     setCustomerMode("new");
     setCustomerSearch("");
@@ -429,6 +443,14 @@ export function NewReservationSheet({
       reservation: result.data.reservation,
       paymentInstructions: result.data.payment_instructions,
     });
+    setCashAmountReceived(
+      minorUnitsToMajorInput(result.data.reservation.price_snapshot.due_now_minor)
+    );
+    setCashReceived(false);
+    setReceiptFile(null);
+    setReceiptAttached(false);
+    setCompletionNextAction(null);
+    receiptGuard.resetIntent();
     setServerExpired(false);
     setStep("held");
     setNow(Date.now());
@@ -438,6 +460,56 @@ export function NewReservationSheet({
     });
     reserveGuard.resetIntent();
     onReservationChanged(result.data.reservation.id);
+  };
+
+  const uploadPaymentReceipt = async () => {
+    if (!held || !receiptFile || holdExpired) return;
+    setNotice(null);
+
+    const result = await receiptGuard.submit(async (idempotencyKey) => {
+      const client = createDrezivoApiClient(getToken);
+      if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(receiptFile.type)) {
+        throw new Error("Payment receipt must be JPEG, PNG, WebP, or PDF.");
+      }
+      if (receiptFile.size > 10 * 1024 * 1024) {
+        throw new Error("Payment receipt must be 10 MB or smaller.");
+      }
+
+      const authorized = await client.authorizeUpload(
+        {
+          purpose: "payment_receipt",
+          content_type: receiptFile.type as
+            | "image/jpeg"
+            | "image/png"
+            | "image/webp"
+            | "application/pdf",
+          byte_size: receiptFile.size,
+          sha256: await fileSha256Base64(receiptFile),
+        },
+        idempotencyKey
+      );
+      const uploaded = await fetch(authorized.data.upload_url, {
+        method: "PUT",
+        headers: authorized.data.required_headers,
+        body: receiptFile,
+      });
+      if (!uploaded.ok) throw new Error("The payment receipt upload did not finish successfully.");
+      const finalized = await client.finalizeUpload(authorized.data.file_id, idempotencyKey);
+      return client.attachReservationPaymentReceipt(
+        held.reservation.id,
+        { file_id: finalized.data.file.file_id },
+        idempotencyKey
+      );
+    });
+    if (!result) return;
+
+    setReceiptAttached(true);
+    receiptGuard.resetIntent();
+    completeGuard.resetIntent();
+    setNotice({
+      tone: "success",
+      text: "Payment receipt uploaded. Complete the reservation to send it for verification.",
+    });
   };
 
   const complete = async () => {
@@ -475,6 +547,36 @@ export function NewReservationSheet({
       return;
     }
 
+    const paymentDue = BigInt(held.reservation.price_snapshot.due_now_minor) > 0n;
+    const isCash = held.paymentInstructions.rail === "cash";
+    const cashAmountMinor = majorInputToMinorUnits(cashAmountReceived);
+    if (paymentDue && isCash) {
+      if (!cashReceived) {
+        setNotice({ tone: "attention", text: "Confirm that the cash payment was received." });
+        return;
+      }
+      if (
+        cashAmountMinor === null ||
+        cashAmountMinor !== held.reservation.price_snapshot.due_now_minor
+      ) {
+        setNotice({
+          tone: "attention",
+          text: `Amount received must match the amount due (${formatMinorMoney(
+            held.reservation.price_snapshot.due_now_minor,
+            held.reservation.price_snapshot.currency
+          )}).`,
+        });
+        return;
+      }
+    }
+    if (paymentDue && !isCash && !receiptAttached) {
+      setNotice({
+        tone: "attention",
+        text: "Upload the payment receipt before completing this manual payment reservation.",
+      });
+      return;
+    }
+
     setNotice(null);
     const result = await completeGuard.submit((idempotencyKey) =>
       createDrezivoApiClient(getToken).completeStaffReservation(
@@ -483,6 +585,9 @@ export function NewReservationSheet({
           version: held.reservation.version,
           terms_accepted: true,
           customer,
+          ...(paymentDue && isCash && cashAmountMinor
+            ? { cash_collection: { amount_received_minor: cashAmountMinor } }
+            : {}),
         },
         idempotencyKey
       )
@@ -494,15 +599,21 @@ export function NewReservationSheet({
     );
     completeGuard.resetIntent();
     onReservationChanged(result.data.reservation.id);
+    setCompletionNextAction(result.data.next_action);
     setStep("done");
     setNotice({
       tone: result.data.completion_state === "confirmed" ? "success" : "info",
       text:
         result.data.completion_state === "confirmed"
-          ? "Reservation confirmed."
+          ? isCash && paymentDue
+            ? `Reservation confirmed. Cash payment of ${formatMinorMoney(
+                held.reservation.price_snapshot.due_now_minor,
+                held.reservation.price_snapshot.currency
+              )} was recorded.`
+            : "Reservation confirmed."
           : result.data.next_action === "payment_verification"
-            ? "Reservation saved. Awaiting payment verification."
-            : "Reservation saved. Awaiting merchant review.",
+            ? "Reservation saved. Payment verification required."
+            : "Reservation saved. Merchant review required.",
     });
   };
 
@@ -934,19 +1045,93 @@ export function NewReservationSheet({
                   )}
                 />
               </div>
-              <div className="mt-3 rounded-md bg-dashboard-surface p-3 text-xs text-dashboard-muted">
-                <span className="font-medium text-dashboard-navy">
-                  {held.paymentInstructions.method_name}
-                </span>
-                {held.paymentInstructions.destination_note
-                  ? ` · ${held.paymentInstructions.destination_note}`
-                  : ""}
-                {held.paymentInstructions.rail !== "cash" ? (
-                  <p className="mt-1">
-                    Manual QR/transfer evidence cannot be uploaded from this screen yet; completion
-                    will remain blocked until the Finance evidence workflow records accepted proof.
-                  </p>
-                ) : null}
+              <div className="mt-3 rounded-md bg-dashboard-surface p-3">
+                <div className="text-xs text-dashboard-muted">
+                  <span className="font-medium text-dashboard-navy">
+                    {held.paymentInstructions.method_name}
+                  </span>
+                  {held.paymentInstructions.destination_note
+                    ? ` · ${held.paymentInstructions.destination_note}`
+                    : ""}
+                </div>
+
+                {held.paymentInstructions.rail === "cash" ? (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                    <Field label="Amount received">
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-dashboard-muted">
+                          ₱
+                        </span>
+                        <Input
+                          inputMode="decimal"
+                          aria-label="Amount received"
+                          value={cashAmountReceived}
+                          onChange={(event) => {
+                            setCashAmountReceived(event.target.value.replace(/[^0-9.]/g, ""));
+                            completeGuard.resetIntent();
+                          }}
+                          className="pl-7"
+                        />
+                      </div>
+                    </Field>
+                    <label className="flex h-10 items-center gap-2 rounded-md border border-dashboard-border px-3 text-sm text-dashboard-navy">
+                      <input
+                        type="checkbox"
+                        checked={cashReceived}
+                        onChange={(event) => {
+                          setCashReceived(event.target.checked);
+                          completeGuard.resetIntent();
+                        }}
+                      />
+                      Cash received
+                    </label>
+                  </div>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-xs text-dashboard-muted">
+                      Upload the customer&apos;s payment receipt before completing this reservation.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-dashboard-border px-3 text-sm font-medium text-dashboard-navy hover:bg-dashboard-active">
+                        <FileUp className="h-4 w-4" aria-hidden="true" />
+                        {receiptFile ? receiptFile.name : "Choose receipt"}
+                        <input
+                          type="file"
+                          className="sr-only"
+                          accept="image/jpeg,image/png,image/webp,application/pdf"
+                          onChange={(event) => {
+                            setReceiptFile(event.target.files?.[0] ?? null);
+                            setReceiptAttached(false);
+                            receiptGuard.resetIntent();
+                            completeGuard.resetIntent();
+                          }}
+                        />
+                      </label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={!receiptFile || receiptAttached || receiptGuard.isSubmitting}
+                        onClick={() =>
+                          void uploadPaymentReceipt().catch((error) =>
+                            handleFailure(error, receiptGuard)
+                          )
+                        }
+                      >
+                        {receiptGuard.isSubmitting
+                          ? "Uploading…"
+                          : receiptAttached
+                            ? "Receipt uploaded"
+                            : "Upload receipt"}
+                      </Button>
+                    </div>
+                    {receiptAttached ? (
+                      <p className="text-xs font-medium text-success-500">
+                        Receipt attached. Payment will still require staff verification before confirmation.
+                      </p>
+                    ) : null}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1092,13 +1277,26 @@ export function NewReservationSheet({
                   <Button
                     type="button"
                     disabled={
-                      completeGuard.isSubmitting || cancelGuard.isSubmitting || !termsAccepted
+                      completeGuard.isSubmitting ||
+                      cancelGuard.isSubmitting ||
+                      receiptGuard.isSubmitting ||
+                      !termsAccepted ||
+                      (BigInt(held.reservation.price_snapshot.due_now_minor) > 0n &&
+                        (held.paymentInstructions.rail === "cash"
+                          ? !cashReceived ||
+                            majorInputToMinorUnits(cashAmountReceived) !==
+                              held.reservation.price_snapshot.due_now_minor
+                          : !receiptAttached))
                     }
                     onClick={() =>
                       void complete().catch((error) => handleFailure(error, completeGuard))
                     }
                   >
-                    {completeGuard.isSubmitting ? "Completing…" : "Complete Reservation"}
+                    {completeGuard.isSubmitting
+                      ? "Completing…"
+                      : held.paymentInstructions.rail === "cash"
+                        ? "Confirm Reservation"
+                        : "Submit for Verification"}
                   </Button>
                 </div>
               </>
@@ -1122,7 +1320,9 @@ export function NewReservationSheet({
                     onViewReservation(id);
                   }}
                 >
-                  View Reservation
+                  {completionNextAction === "payment_verification"
+                    ? "Review Payment"
+                    : "View Reservation"}
                 </Button>
               </div>
             )}
@@ -1438,6 +1638,32 @@ function Notice({ tone, text }: { tone: "info" | "success" | "attention"; text: 
       {text}
     </div>
   );
+}
+
+function minorUnitsToMajorInput(value: string): string {
+  const minor = BigInt(value);
+  const whole = minor / 100n;
+  const cents = minor % 100n;
+  return cents === 0n ? whole.toString() : `${whole}.${cents.toString().padStart(2, "0")}`;
+}
+
+function majorInputToMinorUnits(value: string): string | null {
+  const match = /^(0|[1-9]\d*)(?:\.(\d{1,2}))?$/.exec(value.trim());
+  if (!match) return null;
+  const whole = BigInt(match[1] ?? "0");
+  const centsText = (match[2] ?? "").padEnd(2, "0");
+  const cents = BigInt(centsText || "0");
+  return (whole * 100n + cents).toString();
+}
+
+async function fileSha256Base64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const digest = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytes));
+  let binary = "";
+  digest.forEach((value) => {
+    binary += String.fromCharCode(value);
+  });
+  return btoa(binary);
 }
 
 function formatMinorMoney(value: string, currency: string): string {

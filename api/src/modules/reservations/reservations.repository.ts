@@ -41,6 +41,8 @@ export interface ReservationListReadRow {
   reservation_currency: string;
   payment_id: string | null;
   payment_method_id: string | null;
+  payment_method_name: string | null;
+  payment_rail: 'cash' | 'manual_qr' | 'manual_transfer' | null;
   payment_status: 'pending' | 'partially_paid' | 'paid' | 'failed' | 'refunded' | null;
   payment_evidence_status:
     | 'not_required'
@@ -92,6 +94,8 @@ export interface ReservationDetailHeaderRow {
   completed_at: Date | null;
   payment_id: string | null;
   payment_method_id: string | null;
+  payment_method_name: string | null;
+  payment_rail: ReservationListReadRow['payment_rail'];
   payment_status: ReservationListReadRow['payment_status'];
   payment_evidence_status: ReservationListReadRow['payment_evidence_status'];
   payment_amount_minor: string | number | null;
@@ -265,6 +269,8 @@ export async function listReservationsReadModel(
        r.currency AS reservation_currency,
        payment_summary.id AS payment_id,
        payment_summary.payment_method_id,
+       payment_summary.method_name AS payment_method_name,
+       payment_summary.rail AS payment_rail,
        payment_summary.status AS payment_status,
        payment_summary.evidence_status AS payment_evidence_status,
        payment_summary.amount_minor AS payment_amount_minor,
@@ -286,6 +292,8 @@ export async function listReservationsReadModel(
        SELECT
          p.id,
          p.payment_method_id,
+         pm.name AS method_name,
+         pm.rail,
          p.status,
          CASE
            WHEN receipt.evidence_status IS NOT NULL THEN receipt.evidence_status
@@ -365,6 +373,8 @@ export async function readReservationDetailModel(
        r.completed_at,
        payment_summary.id AS payment_id,
        payment_summary.payment_method_id,
+       payment_summary.method_name AS payment_method_name,
+       payment_summary.rail AS payment_rail,
        payment_summary.status AS payment_status,
        payment_summary.evidence_status AS payment_evidence_status,
        payment_summary.amount_minor AS payment_amount_minor,
@@ -377,6 +387,8 @@ export async function readReservationDetailModel(
        SELECT
          p.id,
          p.payment_method_id,
+         pm.name AS method_name,
+         pm.rail,
          p.status,
          CASE
            WHEN receipt.evidence_status IS NOT NULL THEN receipt.evidence_status

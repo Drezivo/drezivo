@@ -1,6 +1,10 @@
 import {
   reservationConfirmRequest,
   reservationConfirmResponse,
+  reservationPaymentReceiptAttachRequest,
+  reservationPaymentReceiptAttachResponse,
+  reservationPaymentVerifyRequest,
+  reservationPaymentVerifyResponse,
   reservationRejectRequest,
   reservationRejectResponse,
   reservationSubmitRequest,
@@ -8,6 +12,10 @@ import {
   reservationSummary,
   type ReservationConfirmRequest,
   type ReservationConfirmResponse,
+  type ReservationPaymentReceiptAttachRequest,
+  type ReservationPaymentReceiptAttachResponse,
+  type ReservationPaymentVerifyRequest,
+  type ReservationPaymentVerifyResponse,
   type ReservationRejectRequest,
   type ReservationRejectResponse,
   type ReservationSubmitRequest,
@@ -43,6 +51,7 @@ import {
   type ReservationCustomerSnapshotRow,
 } from './reservations.command.repository.js';
 import {
+  attachAcceptedReservationReceipt,
   bindReservationCustomerForSubmit,
   confirmReservationReview,
   expireReservationReview,
@@ -50,13 +59,16 @@ import {
   lockReservationAllocationsForReview,
   lockReservationForReview,
   lockReservationPaymentForReview,
+  insertReservationPaymentVerification,
   markReceiptUnderReview,
+  markReservationReceiptVerified,
   markReservationAllocationsConfirmed,
   readLatestReservationVerification,
   readReservationMutationSummary,
   rejectReservationReview,
   releaseReservationAllocations,
   submitReservationForReview,
+  verifyReservationPaymentCollection,
   type LockedReservationPaymentRow,
   type LockedReservationReceiptRow,
   type LockedReservationReviewRow,
@@ -64,6 +76,8 @@ import {
 } from './reservations.review.repository.js';
 
 const SUBMIT_OPERATION = 'reservation.submit.v1';
+const ATTACH_PAYMENT_RECEIPT_OPERATION = 'reservation.payment_receipt.attach.v1';
+const VERIFY_PAYMENT_OPERATION = 'reservation.payment.verify.v1';
 const CONFIRM_OPERATION = 'reservation.confirm.v1';
 const REJECT_OPERATION = 'reservation.reject.v1';
 const REVIEW_EFFECTS_SAVEPOINT = 'reservation_review_effects';
@@ -225,6 +239,237 @@ export async function submitReservationForConfirmation(
         await client.query(`RELEASE SAVEPOINT ${REVIEW_EFFECTS_SAVEPOINT}`);
       }
       return finalizeKnownFailure(client, context, SUBMIT_OPERATION, payloadHash, error);
+    }
+  });
+}
+
+export async function attachReservationPaymentReceipt(
+  context: ReservationReviewContext,
+  reservationId: string,
+  requestInput: ReservationPaymentReceiptAttachRequest,
+): Promise<ReservationReviewCommandResponse<ReservationPaymentReceiptAttachResponse>> {
+  const parsed = reservationPaymentReceiptAttachRequest.safeParse(requestInput);
+  if (!parsed.success) throw new ValidationError('Reservation payment receipt request is invalid.');
+  const request = parsed.data;
+  const payloadHash = canonicalRequestHash({ reservation_id: reservationId, ...request });
+
+  return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+    const claim = await claimReviewIdempotency(
+      client,
+      context,
+      ATTACH_PAYMENT_RECEIPT_OPERATION,
+      payloadHash,
+    );
+    const replay = replayOrThrow<ReservationPaymentReceiptAttachResponse>(claim);
+    if (replay) return replay;
+
+    try {
+      const reservation = await requireLockedReservation(client, context, reservationId);
+      if (reservation.status !== 'held' && reservation.status !== 'pending_confirmation') {
+        throw new InvalidReservationTransitionError(
+          `Payment evidence cannot be attached while reservation is ${reservation.status}.`,
+        );
+      }
+      if (deadlineElapsed(reservation)) {
+        throw new HoldExpiredError('This reservation deadline has expired.');
+      }
+
+      const payment = await lockReservationPaymentForReview(client, {
+        tenantId: context.tenantId,
+        reservationId,
+      });
+      if (!payment) throw new PaymentPrerequisiteFailedError('Reservation payment intent is missing.');
+      if (payment.rail === 'cash') {
+        throw new StateConflictError('Cash payments do not require uploaded payment evidence.');
+      }
+      if (payment.status === 'paid' || payment.verified_at !== null) {
+        throw new StateConflictError('This reservation payment is already verified.');
+      }
+
+      const receipt = await attachAcceptedReservationReceipt(client, {
+        tenantId: context.tenantId,
+        paymentId: payment.payment_id,
+        fileId: request.file_id,
+      });
+      if (!receipt) {
+        throw new StateConflictError('Payment receipt must be an accepted immutable payment-receipt file.');
+      }
+
+      await appendReservationAuditEvent(client, {
+        tenantId: context.tenantId,
+        actorKind: 'staff',
+        actorKey: context.principalId,
+        action: 'payment.receipt_attached',
+        entityType: 'payment',
+        entityId: payment.payment_id,
+        redactedSummary: { reservation_id: reservationId, receipt_id: receipt.receipt_id },
+        requestId: context.requestId,
+      });
+
+      const data = reservationPaymentReceiptAttachResponse.parse({
+        receipt_id: receipt.receipt_id,
+        payment_id: receipt.payment_id,
+        evidence_status: 'uploaded',
+      });
+      return finalizeSuccess(
+        client,
+        context,
+        ATTACH_PAYMENT_RECEIPT_OPERATION,
+        payloadHash,
+        data,
+      );
+    } catch (error) {
+      return finalizeKnownFailure(
+        client,
+        context,
+        ATTACH_PAYMENT_RECEIPT_OPERATION,
+        payloadHash,
+        error,
+      );
+    }
+  });
+}
+
+export async function verifyReservationPaymentByStaff(
+  context: ReservationReviewContext,
+  reservationId: string,
+  requestInput: ReservationPaymentVerifyRequest,
+  options: { requireRail?: 'cash' | 'manual_qr' | 'manual_transfer' } = {},
+): Promise<ReservationReviewCommandResponse<ReservationPaymentVerifyResponse>> {
+  const parsed = reservationPaymentVerifyRequest.safeParse(requestInput);
+  if (!parsed.success) throw new ValidationError('Reservation payment verification request is invalid.');
+  const request = parsed.data;
+  const payloadHash = canonicalRequestHash({ reservation_id: reservationId, ...request });
+
+  return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+    const claim = await claimReviewIdempotency(client, context, VERIFY_PAYMENT_OPERATION, payloadHash);
+    const replay = replayOrThrow<ReservationPaymentVerifyResponse>(claim);
+    if (replay) return replay;
+
+    try {
+      const reservation = await requireLockedReservation(client, context, reservationId);
+      assertActionableState(reservation, request.version, 'pending_confirmation');
+      if (deadlineElapsed(reservation)) {
+        await expireLockedReview(client, context, reservation, reservationId);
+        throw new HoldExpiredError('The merchant review deadline has expired.');
+      }
+
+      const payment = await lockReservationPaymentForReview(client, {
+        tenantId: context.tenantId,
+        reservationId,
+      });
+      if (!payment) throw new PaymentPrerequisiteFailedError('Reservation payment intent is missing.');
+      if (options.requireRail && payment.rail !== options.requireRail) {
+        throw new PaymentPrerequisiteFailedError(
+          `This payment action requires the ${options.requireRail} payment rail.`,
+        );
+      }
+      if (payment.status === 'failed' || payment.status === 'refunded') {
+        throw new PaymentPrerequisiteFailedError('Reservation payment is not eligible for verification.');
+      }
+      if (
+        BigInt(request.verified_amount_minor) !== BigInt(payment.amount_minor) ||
+        BigInt(request.verified_amount_minor) < BigInt(reservation.due_now_minor)
+      ) {
+        throw new PaymentPrerequisiteFailedError('Verified amount must exactly match the recorded amount due.');
+      }
+
+      const receipt = await lockLatestReservationReceipt(client, {
+        tenantId: context.tenantId,
+        paymentId: payment.payment_id,
+      });
+      if (payment.rail !== 'cash') {
+        if (!receipt || !isImmutableAcceptedReceipt(receipt)) {
+          throw new PaymentPrerequisiteFailedError('Accepted payment evidence is required before verification.');
+        }
+        if (receipt.evidence_status !== 'uploaded' && receipt.evidence_status !== 'under_review') {
+          throw new PaymentPrerequisiteFailedError('Payment evidence is not eligible for verification.');
+        }
+      }
+
+      const existingVerification = await readLatestReservationVerification(client, {
+        tenantId: context.tenantId,
+        paymentId: payment.payment_id,
+      });
+      if (
+        payment.status === 'paid' &&
+        payment.verified_at &&
+        existingVerification?.decision === 'verified' &&
+        existingVerification.verified_amount_minor === payment.amount_minor
+      ) {
+        const data = reservationPaymentVerifyResponse.parse({
+          reservation: await requireMutationSummary(client, context, reservationId),
+          payment_id: payment.payment_id,
+          payment_status: 'paid',
+          verified_amount_minor: String(payment.amount_minor),
+          verified_at: payment.verified_at.toISOString(),
+        });
+        return finalizeSuccess(client, context, VERIFY_PAYMENT_OPERATION, payloadHash, data);
+      }
+      if (payment.status === 'paid' || payment.verified_at !== null || existingVerification) {
+        throw new StateConflictError('Payment verification state changed. Refresh before retrying.');
+      }
+
+      const verifiedAt = await verifyReservationPaymentCollection(client, {
+        tenantId: context.tenantId,
+        paymentId: payment.payment_id,
+        merchantReference: request.merchant_reference ?? null,
+      });
+      if (!verifiedAt) {
+        throw new StateConflictError('Payment verification lost a concurrent state change.');
+      }
+      const verificationId = await insertReservationPaymentVerification(client, {
+        tenantId: context.tenantId,
+        paymentId: payment.payment_id,
+        membershipId: context.membershipId,
+        verifiedAmountMinor: payment.amount_minor,
+        evidenceNote:
+          payment.rail === 'cash'
+            ? 'Cash collection recorded by staff.'
+            : 'Payment evidence verified by staff against merchant collection.',
+      });
+      if (!verificationId) {
+        throw new StateConflictError('Payment was already verified by another action. Refresh before retrying.');
+      }
+      if (payment.rail !== 'cash' && receipt) {
+        await markReservationReceiptVerified(client, {
+          tenantId: context.tenantId,
+          receiptId: receipt.receipt_id,
+        });
+      }
+
+      await appendReservationAuditEvent(client, {
+        tenantId: context.tenantId,
+        actorKind: 'staff',
+        actorKey: context.principalId,
+        action: 'payment.verified',
+        entityType: 'payment',
+        entityId: payment.payment_id,
+        redactedSummary: {
+          reservation_id: reservationId,
+          payment_rail: payment.rail,
+          verified_amount_minor: payment.amount_minor,
+          verification_id: verificationId,
+        },
+        requestId: context.requestId,
+      });
+      await appendReservationOutboxEvent(client, {
+        tenantId: context.tenantId,
+        dedupeKey: `payment-verified:${payment.payment_id}`,
+        eventType: 'payment.verified',
+        payload: { reservationId, paymentId: payment.payment_id },
+      });
+
+      const data = reservationPaymentVerifyResponse.parse({
+        reservation: await requireMutationSummary(client, context, reservationId),
+        payment_id: payment.payment_id,
+        payment_status: 'paid',
+        verified_amount_minor: String(payment.amount_minor),
+        verified_at: verifiedAt.toISOString(),
+      });
+      return finalizeSuccess(client, context, VERIFY_PAYMENT_OPERATION, payloadHash, data);
+    } catch (error) {
+      return finalizeKnownFailure(client, context, VERIFY_PAYMENT_OPERATION, payloadHash, error);
     }
   });
 }

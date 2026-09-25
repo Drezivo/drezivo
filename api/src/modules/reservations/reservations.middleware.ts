@@ -5,6 +5,8 @@ import {
   reservationCancelRequest,
   reservationConfirmRequest,
   reservationId,
+  reservationPaymentReceiptAttachRequest,
+  reservationPaymentVerifyRequest,
   reservationListQuery,
   reservationPickupRequest,
   reservationRejectRequest,
@@ -19,6 +21,8 @@ import {
   staffReservationIntakeQuery,
   type ReservationCancelRequest,
   type ReservationConfirmRequest,
+  type ReservationPaymentReceiptAttachRequest,
+  type ReservationPaymentVerifyRequest,
   type ReservationListQuery,
   type ReservationPickupRequest,
   type ReservationRejectRequest,
@@ -51,6 +55,8 @@ declare module 'express-serve-static-core' {
     reservationRentalCompleteRequest?: ReservationCompleteRequest;
     reservationSubmitRequest?: ReservationSubmitRequest;
     reservationConfirmRequest?: ReservationConfirmRequest;
+    reservationPaymentReceiptAttachRequest?: ReservationPaymentReceiptAttachRequest;
+    reservationPaymentVerifyRequest?: ReservationPaymentVerifyRequest;
     reservationRejectRequest?: ReservationRejectRequest;
     reservationIdempotencyKey?: string;
   }
@@ -229,6 +235,28 @@ export const validateReservationSubmit: RequestHandler = (req, _res, next): void
   }
   req.body = parsed.data;
   req.reservationSubmitRequest = parsed.data;
+  next();
+};
+
+export const validateReservationPaymentReceiptAttach: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationPaymentReceiptAttachRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Reservation payment receipt request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  req.reservationPaymentReceiptAttachRequest = parsed.data;
+  next();
+};
+
+export const validateReservationPaymentVerify: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationPaymentVerifyRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Reservation payment verification request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  req.reservationPaymentVerifyRequest = parsed.data;
   next();
 };
 
