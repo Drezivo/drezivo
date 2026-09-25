@@ -124,6 +124,12 @@ export function NewReservationSheet({
   const canCreate = permissionCodes.includes("reservations.manage");
   const selectedVariant =
     productDetail?.variants.find((variant) => variant.id === selectedVariantId) ?? null;
+  const selectedCustomer =
+    customerOptions.find((customer) => customer.id === selectedCustomerId) ?? null;
+  const customerReady =
+    customerMode === "existing"
+      ? Boolean(selectedCustomerId)
+      : Boolean(fullName.trim() && (phone.trim() || email.trim()));
   const requestedInterval = useMemo(
     () => toRequestedInterval(pickupDate, pickupTime, dueDate, dueTime, timeZone),
     [dueDate, dueTime, pickupDate, pickupTime, timeZone]
@@ -1247,29 +1253,67 @@ export function NewReservationSheet({
                           completeGuard.resetIntent();
                         }}
                       />
+                      {deferredCustomerSearch.length < 2 ? (
+                        <p className="mt-2 text-xs text-dashboard-muted">
+                          Type at least 2 characters to find an existing customer.
+                        </p>
+                      ) : null}
                       <div className="mt-2 grid gap-2">
-                        {customerOptions.map((customer) => (
-                          <button
-                            key={customer.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedCustomerId(customer.id);
-                              completeGuard.resetIntent();
-                            }}
-                            className={cn(
-                              "rounded-lg border p-3 text-left",
-                              selectedCustomerId === customer.id
-                                ? "border-dashboard-accent bg-dashboard-active"
-                                : "border-dashboard-border"
-                            )}
-                          >
-                            <p className="font-medium text-dashboard-navy">{customer.full_name}</p>
-                            <p className="mt-1 text-xs text-dashboard-muted">
-                              {customer.phone ?? customer.email ?? "No contact shown"}
-                            </p>
-                          </button>
-                        ))}
+                        {customerOptions.map((customer) => {
+                          const isSelected = selectedCustomerId === customer.id;
+                          return (
+                            <button
+                              key={customer.id}
+                              type="button"
+                              aria-pressed={isSelected}
+                              onClick={() => {
+                                setSelectedCustomerId(customer.id);
+                                setNotice(null);
+                                completeGuard.resetIntent();
+                              }}
+                              className={cn(
+                                "flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition-colors",
+                                isSelected
+                                  ? "border-dashboard-accent bg-dashboard-active"
+                                  : "border-dashboard-border hover:bg-dashboard-active/40"
+                              )}
+                            >
+                              <span className="min-w-0">
+                                <span className="block truncate font-medium text-dashboard-navy">
+                                  {customer.full_name}
+                                </span>
+                                <span className="mt-1 block truncate text-xs text-dashboard-muted">
+                                  {customer.phone ?? customer.email ?? "No contact shown"}
+                                </span>
+                              </span>
+                              <span
+                                className={cn(
+                                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border",
+                                  isSelected
+                                    ? "border-dashboard-accent bg-dashboard-accent text-white"
+                                    : "border-dashboard-border text-transparent"
+                                )}
+                                aria-hidden="true"
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
+                      {selectedCustomer ? (
+                        <div className="mt-3 rounded-lg border border-dashboard-accent/50 bg-dashboard-active/60 p-3">
+                          <p className="text-xs font-medium uppercase tracking-wide text-dashboard-muted">
+                            Selected customer
+                          </p>
+                          <p className="mt-1 font-medium text-dashboard-navy">
+                            {selectedCustomer.full_name}
+                          </p>
+                          <p className="mt-1 text-xs text-dashboard-muted">
+                            {selectedCustomer.phone ?? selectedCustomer.email ?? "No contact shown"}
+                          </p>
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </section>
@@ -1307,6 +1351,7 @@ export function NewReservationSheet({
                       cancelGuard.isSubmitting ||
                       receiptGuard.isSubmitting ||
                       !termsAccepted ||
+                      !customerReady ||
                       (BigInt(held.reservation.price_snapshot.due_now_minor) > 0n &&
                         (held.paymentInstructions.rail === "cash"
                           ? !cashReceived ||

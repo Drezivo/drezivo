@@ -637,7 +637,10 @@ describe("NewReservationSheet", () => {
     fireEvent.change(screen.getByLabelText("Search existing customer"), {
       target: { value: "Maria" },
     });
-    fireEvent.click(await screen.findByRole("button", { name: /Maria Existing/i }));
+    const existingCustomer = await screen.findByRole("button", { name: /Maria Existing/i });
+    fireEvent.click(existingCustomer);
+    expect(existingCustomer).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Selected customer")).toBeVisible();
     fireEvent.click(
       screen.getByRole("checkbox", {
         name: /Customer has reviewed and accepted the business rental terms/i,
