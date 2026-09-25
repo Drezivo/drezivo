@@ -325,7 +325,7 @@ describe("ReservationsPage", () => {
 
     expect(api.getReservations).toHaveBeenCalledWith({
       limit: 10,
-      sort: "pickup_asc",
+      sort: "created_desc",
     });
   });
 
@@ -341,7 +341,7 @@ describe("ReservationsPage", () => {
     await waitFor(() =>
       expect(api.getReservations).toHaveBeenLastCalledWith({
         limit: 10,
-        sort: "pickup_asc",
+        sort: "created_desc",
         search: "Emerald",
         status: "confirmed",
       })
@@ -356,26 +356,24 @@ describe("ReservationsPage", () => {
     await screen.findByText("RSV-REAL-001");
     await waitFor(() => expect(api.getActorContext).toHaveBeenCalledTimes(1));
 
-    fireEvent.change(screen.getByLabelText("Pickup from"), {
-      target: { value: "2026-10-10" },
-    });
-    fireEvent.change(screen.getByLabelText("Pickup through"), {
-      target: { value: "2026-10-12" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Pickup from" }));
+    fireEvent.click(screen.getByRole("button", { name: /October 10/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Pickup through" }));
+    fireEvent.click(screen.getByRole("button", { name: /October 12/i }));
 
     await waitFor(() =>
       expect(api.getReservations).toHaveBeenLastCalledWith({
         limit: 10,
-        sort: "pickup_asc",
+        sort: "created_desc",
         pickup_start: "2026-10-09T16:00:00.000Z",
         pickup_end: "2026-10-12T16:00:00.000Z",
       })
     );
 
     const callCount = api.getReservations.mock.calls.length;
-    fireEvent.change(screen.getByLabelText("Pickup through"), {
-      target: { value: "2026-11-15" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Pickup through" }));
+    fireEvent.click(screen.getByRole("button", { name: /next month/i }));
+    fireEvent.click(screen.getByRole("button", { name: /November 15/i }));
 
     expect(await screen.findByText("Check the pickup date range")).toBeVisible();
     expect(screen.getByText("Pickup date filters can cover at most 31 days.")).toBeVisible();
@@ -396,7 +394,7 @@ describe("ReservationsPage", () => {
       expect(api.getReservations).toHaveBeenLastCalledWith({
         cursor: "cursor-page-2",
         limit: 10,
-        sort: "pickup_asc",
+        sort: "created_desc",
       })
     );
     expect(await screen.findByText("RSV-HOLD-002")).toBeVisible();
@@ -406,7 +404,7 @@ describe("ReservationsPage", () => {
     await waitFor(() =>
       expect(api.getReservations).toHaveBeenLastCalledWith({
         limit: 10,
-        sort: "pickup_asc",
+        sort: "created_desc",
       })
     );
   });

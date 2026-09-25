@@ -12,6 +12,8 @@ import {
   reservationInspectionRequest,
   reservationCompleteRequest,
   reservationSubmitRequest,
+  staffReservationAvailabilityCalendarQuery,
+  staffReservationAvailabilityCheckQuery,
   staffReservationCompleteRequest,
   staffReservationCreateRequest,
   staffReservationIntakeQuery,
@@ -24,6 +26,8 @@ import {
   type ReservationInspectionRequest,
   type ReservationCompleteRequest,
   type ReservationSubmitRequest,
+  type StaffReservationAvailabilityCalendarQuery,
+  type StaffReservationAvailabilityCheckQuery,
   type StaffReservationCompleteRequest,
   type StaffReservationCreateRequest,
   type StaffReservationIntakeQuery,
@@ -35,6 +39,8 @@ declare module 'express-serve-static-core' {
   interface Request {
     reservationListQuery?: ReservationListQuery;
     reservationIntakeQuery?: StaffReservationIntakeQuery;
+    reservationAvailabilityCalendarQuery?: StaffReservationAvailabilityCalendarQuery;
+    reservationAvailabilityCheckQuery?: StaffReservationAvailabilityCheckQuery;
     reservationId?: string;
     reservationCreateRequest?: StaffReservationCreateRequest;
     reservationCompleteRequest?: StaffReservationCompleteRequest;
@@ -97,6 +103,34 @@ export const validateStaffReservationIntakeQuery: RequestHandler = (req, _res, n
     return;
   }
   req.reservationIntakeQuery = parsed.data;
+  next();
+};
+
+export const validateStaffReservationAvailabilityCalendarQuery: RequestHandler = (
+  req,
+  _res,
+  next,
+): void => {
+  const parsed = staffReservationAvailabilityCalendarQuery.safeParse(req.query);
+  if (!parsed.success) {
+    next(new ValidationError('Reservation availability calendar query is invalid.'));
+    return;
+  }
+  req.reservationAvailabilityCalendarQuery = parsed.data;
+  next();
+};
+
+export const validateStaffReservationAvailabilityCheckQuery: RequestHandler = (
+  req,
+  _res,
+  next,
+): void => {
+  const parsed = staffReservationAvailabilityCheckQuery.safeParse(req.query);
+  if (!parsed.success) {
+    next(new ValidationError('Reservation availability check query is invalid.'));
+    return;
+  }
+  req.reservationAvailabilityCheckQuery = parsed.data;
   next();
 };
 

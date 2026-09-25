@@ -101,7 +101,25 @@ describe('TBF-030 tenant bootstrap', async () => {
            FROM category
           ORDER BY display_order ASC, name ASC`,
       );
-      return { subscription: subscription.rows[0], outbox: outbox.rows[0], categories: categories.rows };
+      const policy = await client.query<{
+        version: number;
+        rental_rules: Record<string, unknown>;
+        deposit_rules: Record<string, unknown>;
+        cancellation_rules: Record<string, unknown>;
+        delivery_rules: Record<string, unknown>;
+        privacy_notice: string;
+      }>(
+        `SELECT version, rental_rules, deposit_rules, cancellation_rules, delivery_rules, privacy_notice
+           FROM policy_snapshot
+          ORDER BY version ASC
+          LIMIT 1`,
+      );
+      return {
+        subscription: subscription.rows[0],
+        outbox: outbox.rows[0],
+        categories: categories.rows,
+        policy: policy.rows[0],
+      };
     });
     if (!tenantState.subscription) throw new Error('expected subscription');
     expect(tenantState.subscription.current_period_end.getTime() - tenantState.subscription.current_period_start.getTime()).toBe(
@@ -117,6 +135,14 @@ describe('TBF-030 tenant bootstrap', async () => {
       { name: 'Costumes', status: 'active', display_order: 50 },
       { name: 'Formal Wear', status: 'active', display_order: 60 },
     ]);
+    expect(tenantState.policy).toEqual({
+      version: 1,
+      rental_rules: {},
+      deposit_rules: {},
+      cancellation_rules: {},
+      delivery_rules: {},
+      privacy_notice: '',
+    });
   });
 
   it('replays one committed graph for concurrent same-key requests', async () => {

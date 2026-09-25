@@ -88,7 +88,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
         security_deposit_minor: '50000',
         extra_day_price_minor: '30000',
         included_days: 3,
-        prep_minutes: 60,
+        prep_minutes: 0,
         turnaround_minutes: 1440,
       },
       activate: true,

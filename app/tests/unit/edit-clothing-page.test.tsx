@@ -352,7 +352,7 @@ describe("EditClothingPage", () => {
         mode: "daily",
         rental_price_minor: "175000",
         security_deposit_minor: "50000",
-        prep_minutes: 60,
+        prep_minutes: 0,
         turnaround_minutes: 1440,
       },
     });

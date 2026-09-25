@@ -4,7 +4,7 @@
  * Data-Model §2 — "created_at records insertion; occurred_at records physical
  * event time. Use timestamptz for instants and an IANA timezone snapshot for
  * interpretation." Data-Model §5 — "period is a finite, nonempty half-open
- * tstzrange including preparation and turnaround."
+ * tstzrange including post-return recovery."
  *
  * A `tstzrange` in Postgres is a half-open interval `[start, end)`. On the
  * wire it is a plain `{ start, end }` object of ISO instants — never a

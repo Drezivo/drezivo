@@ -303,7 +303,10 @@ export async function submitReservationForReview(
         SET status = 'pending_confirmation',
             terms_accepted_at = statement_timestamp(),
             submitted_at = statement_timestamp(),
-            hold_expires_at = LEAST(hold_acquired_at + interval '24 hours', pickup_at),
+            hold_expires_at = GREATEST(
+              hold_expires_at,
+              LEAST(hold_acquired_at + interval '24 hours', pickup_at)
+            ),
             version = version + 1
       WHERE tenant_id = $1
         AND branch_id = $2

@@ -106,7 +106,7 @@ describe('CLT-030 product and variant edit commands', async () => {
           security_deposit_minor: '9000',
           extra_day_price_minor: '7000',
           included_days: 3,
-          prep_minutes: 120,
+          prep_minutes: 0,
           turnaround_minutes: 2880,
         },
       });
@@ -127,7 +127,7 @@ describe('CLT-030 product and variant edit commands', async () => {
         pricing_mode: 'fixed_duration',
         included_duration_minutes: 4320,
         extra_day_price_minor: '7000',
-        prep_minutes: 120,
+        prep_minutes: 0,
         turnaround_minutes: 2880,
         status: 'active',
       },
@@ -144,7 +144,7 @@ describe('CLT-030 product and variant edit commands', async () => {
       pricing_mode: 'fixed_duration',
       included_duration_minutes: 4320,
       extra_day_price_minor: 7000,
-      prep_minutes: 120,
+      prep_minutes: 0,
       turnaround_minutes: 2880,
     });
     expect(state.guides).toEqual([

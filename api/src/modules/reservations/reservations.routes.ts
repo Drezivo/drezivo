@@ -11,6 +11,8 @@ import {
   createPublicHoldController,
   createStaffReservationController,
   getReservationDetailController,
+  getStaffReservationAvailabilityCalendarController,
+  getStaffReservationAvailabilityCheckController,
   getStaffReservationIntakeOptionsController,
   listReservationsController,
   pickupReservationController,
@@ -35,6 +37,8 @@ import {
   validateReservationInspection,
   validateReservationRentalComplete,
   validateReservationSubmit,
+  validateStaffReservationAvailabilityCalendarQuery,
+  validateStaffReservationAvailabilityCheckQuery,
   validateStaffReservationComplete,
   validateStaffReservationCreate,
   validateStaffReservationIntakeQuery,
@@ -53,6 +57,28 @@ const writeRateLimit = rateLimit({
   max: 30,
   keyOf: (req) => req.tenantContext?.tenantId ?? req.clerkPrincipal?.clerkUserId ?? req.ip ?? 'unknown',
 });
+
+reservationsRouter.get(
+  '/reservations/availability-calendar',
+  requireStaffAuth,
+  requireTenantContext,
+  readRateLimit,
+  requireTenantAction('new_booking'),
+  requireReservationManagePermission,
+  validateStaffReservationAvailabilityCalendarQuery,
+  getStaffReservationAvailabilityCalendarController,
+);
+
+reservationsRouter.get(
+  '/reservations/availability-check',
+  requireStaffAuth,
+  requireTenantContext,
+  readRateLimit,
+  requireTenantAction('new_booking'),
+  requireReservationManagePermission,
+  validateStaffReservationAvailabilityCheckQuery,
+  getStaffReservationAvailabilityCheckController,
+);
 
 reservationsRouter.get(
   '/reservations/intake-options',

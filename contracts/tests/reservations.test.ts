@@ -172,6 +172,33 @@ describe('reservation contracts', () => {
         },
       }).success,
     ).toBe(false);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        customer: {
+          source: 'new',
+          customer: { full_name: 'Too Short', phone: '0917123456' },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        customer: {
+          source: 'new',
+          customer: { full_name: 'Too Long', phone: '091712345678' },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        customer: {
+          source: 'new',
+          customer: { full_name: 'Non Numeric', phone: '0917ABC4567' },
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it('keeps guest checkout stricter than staff intake and rejects unknown authority fields', () => {
@@ -258,6 +285,8 @@ describe('reservation contracts', () => {
   });
 
   it('bounds reservation list queries and rejects tenant or branch selectors', () => {
+    expect(reservationListQuery.parse({}).sort).toBe('created_desc');
+
     expect(
       reservationListQuery.safeParse({
         status: 'confirmed',

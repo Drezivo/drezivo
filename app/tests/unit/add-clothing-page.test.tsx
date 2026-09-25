@@ -286,13 +286,13 @@ describe("AddClothingPage", () => {
     expect(screen.queryByRole("button", { name: "Add Default Size Guide" })).not.toBeInTheDocument();
   });
 
-  it("uses whole calendar days for prep and recovery timing", async () => {
+  it("uses one whole-day recovery setting after return", async () => {
     renderPage();
     await screen.findByText("Default Size Guide");
 
-    expect(screen.getByText("0 days before · 1 day after")).toBeVisible();
+    expect(screen.getByText("1 day recovery after return")).toBeVisible();
     expect(screen.getByRole("button", { name: /Rental Timing/ })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByLabelText("Prep Days Before Rental")).toHaveValue("0");
+    expect(screen.queryByLabelText("Prep Days Before Rental")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Recovery Days After Return")).toHaveValue("1");
   });
 
@@ -386,9 +386,6 @@ describe("AddClothingPage", () => {
       target: { value: "GOWN-001" },
     });
     expect(screen.getByRole("button", { name: /Rental Timing/ })).toHaveAttribute("aria-expanded", "true");
-    fireEvent.change(screen.getByLabelText("Prep Days Before Rental"), {
-      target: { value: "1" },
-    });
     fireEvent.change(screen.getByLabelText("Recovery Days After Return"), {
       target: { value: "2" },
     });
@@ -420,7 +417,7 @@ describe("AddClothingPage", () => {
         security_deposit_minor: "50000",
         extra_day_price_minor: "10000",
         included_days: 3,
-        prep_minutes: 1440,
+        prep_minutes: 0,
         turnaround_minutes: 2880,
       },
       activate: false,

@@ -101,7 +101,7 @@ export async function readReservationCatalogueSelection(
 
 /**
  * Reservation quote read that derives the blocked window from the variant's current prep/
- * turnaround configuration before testing candidate allocations. This remains advisory only;
+ * post-return recovery configuration before testing candidate allocations. This remains advisory only;
  * RSV-021 must lock/revalidate the returned assets before it promises capacity.
  */
 export async function readReservationCatalogueQuoteSelection(
@@ -150,7 +150,7 @@ export async function readReservationCatalogueQuoteSelection(
       AND b.id = $2
      CROSS JOIN LATERAL (
        SELECT
-         $4::timestamptz - (pv.prep_minutes * interval '1 minute') AS blocked_start,
+         $4::timestamptz AS blocked_start,
          $5::timestamptz + (pv.turnaround_minutes * interval '1 minute') AS blocked_end
      ) booking_window
      LEFT JOIN LATERAL (

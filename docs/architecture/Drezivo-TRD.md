@@ -193,6 +193,8 @@ Use `/api/v1` for the first API major version. Product V2 branches do not requir
 | `/public/stores/{slug}/holds`        | POST checkout intent           | Rate-limited anonymous checkout identity + idempotency; database capacity claim |
 | `/guest/reservations/{id}/receipts`  | POST evidence attachment       | Scoped capability; immutable uploaded object; idempotency                       |
 | `/guest/reservations/{id}`           | GET own summary                | Scoped capability, `no-store`                                                   |
+| `/reservations/availability-calendar` | GET staff variant/day preview | Membership + reservation permission; branch-local bounded advisory projection, never a guarantee |
+| `/reservations/availability-check`   | GET staff exact-time preview  | Membership + reservation permission; exact buffered interval and server pricing, still non-binding |
 | `/reservations`                      | POST staff/walk-in request     | Membership; same quote/hold logic as storefront                                 |
 | `/reservations/{id}/confirm`         | POST merchant confirmation     | Financial capability, state/version checks, idempotency                         |
 | `/reservations/{id}/reschedule`      | POST new interval              | Capability, fresh quote, atomic allocation replacement                          |
@@ -222,9 +224,11 @@ Retain records for a documented retry window (proposed seven days for general mu
 
 ### Time and prices
 
-Persist UTC instants with the booking's IANA timezone snapshot. Customer date selection resolves to explicit local pickup and return deadlines. Validate time ordering and policy bounds on the server. Store the resulting price/policy snapshot; editing a catalogue price never rewrites an accepted rental.
+Persist UTC instants with the booking's IANA timezone snapshot. Customer/staff date selection resolves to explicit local pickup and return deadlines. Validate time ordering and policy bounds on the server. For staff intake, clothing and variant selection precede date selection; a bounded inline calendar may project branch-local day availability from the selected variant's active/ready serialized assets, but that projection is advisory because actual capacity depends on exact timestamps and one physical asset covering the entire interval. After pickup/return times are selected, a non-mutating exact preview recomputes the buffered interval and eligible asset count; reservation creation still locks/revalidates before claiming one asset. Store the resulting price/policy snapshot; editing a catalogue price never rewrites an accepted rental.
 
-Use `[blocked_start, blocked_end)` where the bounds include preparation and cleaning. Example: pickup 10:00 Friday, due 10:00 Monday, two-hour preparation and 24-hour turnaround blocks Friday 08:00 through Tuesday 10:00. An adjacent allocation starting Tuesday 10:00 can be accepted if other readiness constraints allow it. Charging duration is a separate policy from occupied duration; display both clearly.
+A `fixed_duration` tariff treats `included_duration_minutes` as both the base-price duration and the minimum elapsed rental duration. A request shorter than that minimum fails server-side. Longer intervals retain the existing extra-day pricing rule, including rounding a partial extra day upward. `daily` pricing does not inherit that fixed-duration minimum. Optional `event_date` must fall inclusively between the branch-local pickup and return calendar dates; frontend bounds are convenience only and the API repeats the rule.
+
+Use `[blocked_start, blocked_end)` where `blocked_start = pickup_at` and `blocked_end = due_at + recovery_duration`. V1 has no pre-pickup preparation buffer. Example: pickup 10:00 Friday, due 10:00 Monday, and 24 hours of recovery blocks Friday 10:00 through Tuesday 10:00. An adjacent allocation starting Tuesday 10:00 can be accepted if other readiness constraints allow it. Recovery is the single owner-configured post-return operational buffer for cleaning, inspection, transport, or preparation for the next rental. Charging duration is separate from occupied duration; display both clearly.
 
 ### Hold transaction
 
@@ -240,7 +244,7 @@ PostgreSQL supports range overlap exclusion, and Neon documents `btree_gist`, wh
 
 ### Receipt and confirmation
 
-Receipt submission must finish before expiry, attach an accepted immutable object, and convert the same allocation to `pending_confirmation` with a deadline no later than 24 hours from initial acquisition. Never extend repeatedly without bound. Warn the merchant before expiry. If the shop is closed, show that fact and the fixed deadline before the renter sends money.
+Receipt submission must finish before the original 15-minute hold expires, attach an accepted immutable object, and convert the same allocation to `pending_confirmation`. The review deadline may extend toward pickup but must never shorten the original 15-minute hold and must remain no later than 24 hours from initial acquisition. Never extend repeatedly without bound. Warn the merchant before expiry. If the shop is closed, show that fact and the fixed deadline before the renter sends money.
 
 Merchant approval locks reservation, payment intent and assets, verifies the review deadline and current eligibility, records the actual merchant-account verification, posts verified money, and transitions the same allocation to confirmed. A screenshot alone is insufficient. Repeated approval returns the original outcome. Cash collection records amount, actor, time and purpose through the same posting layer; permission to record cash is explicit.
 

@@ -1,4 +1,7 @@
 import {
+  branchId,
+  productVariantId,
+  tenantId,
   reservationDetail,
   reservationListItem,
   reservationListResponse,
@@ -27,7 +30,13 @@ import {
   type ReservationRejectResponse,
   type StaffReservationCompleteRequest,
   type StaffReservationCompleteResponse,
+  staffReservationAvailabilityCalendarResponse,
+  staffReservationAvailabilityCheckResponse,
   staffReservationIntakeResponse,
+  type StaffReservationAvailabilityCalendarQuery,
+  type StaffReservationAvailabilityCalendarResponse,
+  type StaffReservationAvailabilityCheckQuery,
+  type StaffReservationAvailabilityCheckResponse,
   type StaffReservationCreateRequest,
   type StaffReservationIntakeQuery,
   type StaffReservationIntakeResponse,
@@ -42,7 +51,13 @@ import {
   TenantCancelledError,
   TenantRestrictedError,
 } from '../../shared/errors.js';
-import { resolveReservationQuote, type ReservationQuote } from './reservations.quote.js';
+import { resolveReservationCatalogueQuoteSelection } from '../catalogue/catalogue-allocation.service.js';
+import {
+  assertRequestedPickupNotInPast,
+  resolveReservationQuote,
+  computeRentalTotal,
+  type ReservationQuote,
+} from './reservations.quote.js';
 import {
   createStaffReservationCommand,
   type ReservationCommandResponse,
@@ -62,6 +77,10 @@ import {
   type ReservationReviewCommandResponse,
   type ReservationReviewContext,
 } from './reservations.review.service.js';
+import {
+  countStaffVariantAvailableAssets,
+  readStaffVariantCalendarAvailability,
+} from './reservations.availability.repository.js';
 import {
   listReservationsReadModel,
   listStaffReservationPaymentMethodOptions,
@@ -101,6 +120,115 @@ export async function getStaffReservationIntakeOptions(
       }),
     }),
   );
+}
+
+export async function getStaffReservationAvailabilityCalendar(
+  input: ReservationReadContext,
+  query: StaffReservationAvailabilityCalendarQuery,
+): Promise<StaffReservationAvailabilityCalendarResponse> {
+  assertReservationBookingContext(input);
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const projection = await readStaffVariantCalendarAvailability(client, {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      variantId: query.variant_id,
+      startDate: query.start_date,
+      endDate: query.end_date,
+    });
+    if (!projection) throw new NotFoundError('Clothing variant could not be found.');
+
+    const { metadata } = projection;
+    const minimumDurationMinutes =
+      metadata.pricing_mode === 'fixed_duration' ? metadata.included_duration_minutes : 0;
+    return staffReservationAvailabilityCalendarResponse.parse({
+      variant_id: metadata.variant_id,
+      timezone: metadata.timezone,
+      window: { start_date: query.start_date, end_date: query.end_date },
+      active_assets: metadata.active_assets,
+      ready_assets: metadata.ready_assets,
+      pricing: {
+        pricing_mode: metadata.pricing_mode,
+        rental_price_minor: String(metadata.rental_price_minor),
+        security_deposit_minor: String(metadata.security_deposit_minor),
+        currency: metadata.currency,
+        included_duration_minutes: metadata.included_duration_minutes,
+        minimum_duration_minutes: minimumDurationMinutes,
+        extra_day_price_minor: String(metadata.extra_day_price_minor),
+        recovery_minutes: metadata.turnaround_minutes,
+      },
+      days: projection.days.map((day) => ({
+        ...day,
+        state:
+          day.available_assets === 0
+            ? 'unavailable'
+            : day.available_assets < day.ready_assets
+              ? 'limited'
+              : 'available',
+      })),
+    });
+  });
+}
+
+export async function getStaffReservationAvailabilityCheck(
+  input: ReservationReadContext,
+  query: StaffReservationAvailabilityCheckQuery,
+): Promise<StaffReservationAvailabilityCheckResponse> {
+  assertReservationBookingContext(input);
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    await assertRequestedPickupNotInPast(client, query.pickup_at);
+    const requestedInterval = { start: query.pickup_at, end: query.due_at };
+    const catalogue = await resolveReservationCatalogueQuoteSelection(client, {
+      tenantId: tenantId.parse(input.tenantId),
+      branchId: branchId.parse(input.branchId),
+      variantId: productVariantId.parse(query.variant_id),
+      requestedInterval,
+    });
+    if (!catalogue) throw new NotFoundError('Clothing variant could not be found.');
+
+    const rental = computeRentalTotal({
+      requestedInterval,
+      pricingMode: catalogue.variant.pricing_mode,
+      baseRentalMinor: catalogue.variant.rental_price_minor,
+      includedDurationMinutes: catalogue.variant.included_duration_minutes,
+      extraDayPriceMinor: catalogue.variant.extra_day_price_minor,
+    });
+    const minimumDurationMinutes =
+      catalogue.variant.pricing_mode === 'fixed_duration'
+        ? catalogue.variant.included_duration_minutes
+        : 0;
+
+    const availableAssets = await countStaffVariantAvailableAssets(client, {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      variantId: query.variant_id,
+      blockedStart: catalogue.blocked_interval.start,
+      blockedEnd: catalogue.blocked_interval.end,
+    });
+
+    return staffReservationAvailabilityCheckResponse.parse({
+      variant_id: catalogue.variant_id,
+      requested_interval: requestedInterval,
+      blocked_interval: catalogue.blocked_interval,
+      available: availableAssets > 0,
+      available_assets: availableAssets,
+      guaranteed: false,
+      pricing: {
+        pricing_mode: catalogue.variant.pricing_mode,
+        rental_price_minor: catalogue.variant.rental_price_minor,
+        security_deposit_minor: catalogue.variant.security_deposit_minor,
+        currency: catalogue.variant.currency,
+        included_duration_minutes: catalogue.variant.included_duration_minutes,
+        minimum_duration_minutes: minimumDurationMinutes,
+        extra_day_price_minor: catalogue.variant.extra_day_price_minor,
+        recovery_minutes: catalogue.variant.turnaround_minutes,
+      },
+      rental_preview: {
+        rental_total_minor: rental.totalMinor.toString(),
+        extra_day_count: rental.extraDayCount,
+        currency: catalogue.variant.currency,
+      },
+    });
+  });
 }
 
 /**

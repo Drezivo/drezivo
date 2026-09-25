@@ -12,6 +12,8 @@ import {
   createStaffReservation,
   getReservationDetail,
   getReservationList,
+  getStaffReservationAvailabilityCalendar,
+  getStaffReservationAvailabilityCheck,
   getStaffReservationIntakeOptions,
   pickupReservation,
   rejectReservation,
@@ -39,6 +41,24 @@ export async function getStaffReservationIntakeOptionsController(
   const query = req.reservationIntakeQuery;
   if (!query) throw new ValidationError('A valid reservation intake query is required.');
   sendSuccess(req, res, await getStaffReservationIntakeOptions(requireContext(req), query));
+}
+
+export async function getStaffReservationAvailabilityCalendarController(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const query = req.reservationAvailabilityCalendarQuery;
+  if (!query) throw new ValidationError('A valid reservation availability calendar query is required.');
+  sendSuccess(req, res, await getStaffReservationAvailabilityCalendar(requireContext(req), query));
+}
+
+export async function getStaffReservationAvailabilityCheckController(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const query = req.reservationAvailabilityCheckQuery;
+  if (!query) throw new ValidationError('A valid reservation availability check query is required.');
+  sendSuccess(req, res, await getStaffReservationAvailabilityCheck(requireContext(req), query));
 }
 
 export async function createStaffReservationController(req: Request, res: Response): Promise<void> {

@@ -129,7 +129,7 @@ describe('CLT-062 Clothing vertical slice completion', async () => {
           rental_price_minor: '15000',
           security_deposit_minor: '5000',
           extra_day_price_minor: '2500',
-          prep_minutes: 60,
+          prep_minutes: 0,
           turnaround_minutes: 1440,
         },
         activate: false,

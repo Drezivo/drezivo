@@ -107,7 +107,7 @@ describe('CLT-076 add variant HTTP route', async () => {
       security_deposit_minor: '50000',
       included_days: 3,
       extra_day_price_minor: '60000',
-      prep_minutes: 60,
+      prep_minutes: 0,
       turnaround_minutes: 1440,
     },
   } as const;
