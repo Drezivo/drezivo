@@ -37,9 +37,13 @@ import {
   CALENDAR_ACTIVITIES,
   CALENDAR_DAY_AGENDA,
   CALENDAR_DAYS,
+  CALENDAR_END_HOUR,
+  CALENDAR_HOUR_HEIGHT,
   CALENDAR_HOURS,
   CALENDAR_METRICS,
-  CALENDAR_MORE_COUNTS,
+  CALENDAR_MINUTE_HEIGHT,
+  CALENDAR_START_HOUR,
+  CALENDAR_TOTAL_HEIGHT,
   type CalendarActivity,
   type CalendarActivityType,
 } from "./calendar-schedule-data";
@@ -88,8 +92,8 @@ export function CalendarSchedulePage() {
   };
 
   return (
-    <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-4">
+    <div className="min-h-full bg-dashboard-canvas px-3 py-5 sm:px-4 lg:px-5">
+      <div className="flex w-full max-w-none flex-col gap-4">
         <CalendarHeading />
         <CalendarControls activityFilter={activityFilter} onActivityFilterChange={setActivityFilter} />
         <ScheduleGrid
@@ -295,9 +299,9 @@ function ScheduleGrid({
   return (
     <Card className="gap-0 overflow-hidden py-0">
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <div className="min-w-[70rem]">
-            <div className="grid grid-cols-[5rem_repeat(7,minmax(0,1fr))] border-b border-dashboard-border">
+        <div className="h-[clamp(40rem,78vh,60rem)] overflow-auto">
+          <div className="w-full min-w-[82rem]">
+            <div className="sticky top-0 z-30 grid grid-cols-[5rem_repeat(7,minmax(0,1fr))] border-b border-dashboard-border bg-dashboard-surface shadow-sm">
               <div className="border-r border-dashboard-border bg-dashboard-surface" />
               {CALENDAR_DAYS.map((day) => (
                 <button
@@ -324,11 +328,9 @@ function ScheduleGrid({
               {CALENDAR_DAYS.map((day) => (
                 <DayColumn
                   key={day.key}
-                  dayKey={day.key}
                   highlighted={day.key === "wed"}
                   activities={activities.filter((activity) => activity.day === day.key)}
                   onOpenActivity={onOpenActivity}
-                  onOpenDay={onOpenDay}
                 />
               ))}
             </div>
@@ -340,84 +342,203 @@ function ScheduleGrid({
 }
 
 function TimeColumn() {
+  const visibleHours = CALENDAR_HOURS.slice(0, -1);
+  const finalHour = CALENDAR_HOURS.at(-1);
+
   return (
-    <div className="grid grid-rows-10 border-r border-dashboard-border bg-dashboard-surface">
-      {CALENDAR_HOURS.map((hour) => (
-        <div key={hour} className="min-h-16 border-b border-dashboard-border px-3 pt-2 text-right text-[0.7rem] text-dashboard-muted last:border-b-0">
+    <div
+      className="relative border-r border-dashboard-border bg-dashboard-surface"
+      style={{ height: CALENDAR_TOTAL_HEIGHT }}
+      aria-label={`Schedule hours ${CALENDAR_HOURS[0]} to ${finalHour}`}
+    >
+      {visibleHours.map((hour, index) => (
+        <div
+          key={hour}
+          className="relative border-b border-dashboard-border px-3 pt-2 text-right text-[0.7rem] text-dashboard-muted"
+          style={{ height: CALENDAR_HOUR_HEIGHT }}
+        >
           {hour}
+          <span className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-dashed border-dashboard-border/45" />
         </div>
       ))}
+      {finalHour ? (
+        <span className="absolute bottom-1 right-3 text-[0.7rem] text-dashboard-muted">{finalHour}</span>
+      ) : null}
     </div>
   );
 }
 
+type PositionedActivity = {
+  activity: CalendarActivity;
+  columnCount: number;
+  columnIndex: number;
+  height: number;
+  top: number;
+};
+
 function DayColumn({
   activities,
-  dayKey,
   highlighted,
   onOpenActivity,
-  onOpenDay,
 }: {
   activities: readonly CalendarActivity[];
-  dayKey: string;
   highlighted: boolean;
   onOpenActivity: (activity: CalendarActivity) => void;
-  onOpenDay: (dayKey: string) => void;
 }) {
+  const positionedActivities = layoutOverlappingActivities(activities);
+  const hourCount = CALENDAR_END_HOUR - CALENDAR_START_HOUR;
+
   return (
-    <div className={cn("relative grid grid-rows-[repeat(20,minmax(0,1fr))] border-r border-dashboard-border last:border-r-0", highlighted && "bg-dashboard-active/40")}> 
-      {Array.from({ length: 20 }).map((_, index) => (
-        <div key={index} className={cn("min-h-8", index % 2 === 1 && "border-b border-dashboard-border")} />
+    <div
+      className={cn(
+        "relative border-r border-dashboard-border last:border-r-0",
+        highlighted && "bg-dashboard-active/40"
+      )}
+      style={{ height: CALENDAR_TOTAL_HEIGHT }}
+    >
+      {Array.from({ length: hourCount }).map((_, index) => (
+        <div
+          key={index}
+          className="pointer-events-none absolute inset-x-0 border-b border-dashboard-border"
+          style={{ top: index * CALENDAR_HOUR_HEIGHT, height: CALENDAR_HOUR_HEIGHT }}
+        >
+          <span className="absolute inset-x-0 top-1/2 border-t border-dashed border-dashboard-border/45" />
+        </div>
       ))}
 
-      <div className="pointer-events-none absolute inset-0 grid grid-rows-[repeat(20,minmax(0,1fr))] p-2">
-        {activities.map((activity) => (
-          <ActivityCard key={activity.id} activity={activity} onClick={() => onOpenActivity(activity)} />
-        ))}
-        <button
-          type="button"
-          onClick={() => onOpenDay(dayKey)}
-          className="pointer-events-auto mx-1 self-end rounded-full bg-dashboard-neutral-soft px-2 py-1 text-center text-[0.7rem] font-medium text-dashboard-neutral-text transition-colors hover:bg-dashboard-active hover:text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
-          style={{ gridRow: "20" }}
-          aria-label={`Open all ${dayKey} activities`}
-        >
-          + {CALENDAR_MORE_COUNTS[dayKey] ?? 0} more
-        </button>
-      </div>
+      {positionedActivities.map((positioned) => (
+        <ActivityCard
+          key={positioned.activity.id}
+          positioned={positioned}
+          onClick={() => onOpenActivity(positioned.activity)}
+        />
+      ))}
     </div>
   );
 }
 
 function ActivityCard({
-  activity,
+  positioned,
   onClick,
 }: {
-  activity: CalendarActivity;
+  positioned: PositionedActivity;
   onClick: () => void;
 }) {
+  const { activity, columnCount, columnIndex, height, top } = positioned;
+  const compact = columnCount >= 3;
+  const veryCompact = columnCount >= 4;
+  const timeLabel = formatActivityTime(activity);
+
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        "pointer-events-auto mx-1 min-w-0 self-stretch rounded-lg border px-2.5 py-2 text-left shadow-sm transition hover:brightness-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30",
+        "absolute z-10 min-w-0 overflow-hidden rounded-md border text-left shadow-sm transition hover:z-20 hover:brightness-[0.98] focus-visible:z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30",
+        compact ? "px-1.5 py-1.5" : "px-2.5 py-2",
         activityTone[activity.type]
       )}
-      style={{ gridRow: `${activity.rowStart} / span ${activity.rowSpan ?? 2}` }}
-      aria-label={`${activity.type}: ${activity.customer}, ${activity.clothing}, ${activity.time}`}
+      style={{
+        top: top + 2,
+        height: Math.max(42, height - 4),
+        left: `calc(${(columnIndex / columnCount) * 100}% + 3px)`,
+        width: `calc(${100 / columnCount}% - 6px)`,
+      }}
+      aria-label={`${activity.type}: ${activity.customer}, ${activity.clothing}, ${timeLabel}`}
+      data-overlap-count={columnCount}
     >
-      <span className="flex items-center gap-1.5 text-xs font-semibold">
-        {activity.type === "Pickup" ? <Truck className="h-3 w-3" aria-hidden="true" /> : null}
-        {activity.type === "Return" ? <RotateCcw className="h-3 w-3" aria-hidden="true" /> : null}
-        {activity.type === "Fitting" ? <Ruler className="h-3 w-3" aria-hidden="true" /> : null}
-        {activity.type === "Reservation" ? <CalendarDays className="h-3 w-3" aria-hidden="true" /> : null}
-        {activity.type}
+      <span className={cn("flex min-w-0 items-center gap-1 font-semibold", veryCompact ? "text-[0.62rem]" : "text-xs")}>
+        {activity.type === "Pickup" ? <Truck className="h-3 w-3 shrink-0" aria-hidden="true" /> : null}
+        {activity.type === "Return" ? <RotateCcw className="h-3 w-3 shrink-0" aria-hidden="true" /> : null}
+        {activity.type === "Fitting" ? <Ruler className="h-3 w-3 shrink-0" aria-hidden="true" /> : null}
+        {activity.type === "Reservation" ? <CalendarDays className="h-3 w-3 shrink-0" aria-hidden="true" /> : null}
+        <span className="truncate">{veryCompact ? activity.type.slice(0, 3) : activity.type}</span>
       </span>
-      <span className="mt-1 block truncate text-[0.72rem] font-medium">{activity.customer}</span>
-      <span className="block truncate text-[0.68rem] opacity-80">{activity.clothing}</span>
-      <span className="block text-[0.68rem] opacity-80">{activity.time}</span>
+      <span className={cn("block truncate font-medium", compact ? "mt-0.5 text-[0.66rem]" : "mt-1 text-[0.72rem]")}>
+        {veryCompact ? activity.customer.split(" ")[0] : activity.customer}
+      </span>
+      {!compact ? <span className="block truncate text-[0.68rem] opacity-80">{activity.clothing}</span> : null}
+      {!veryCompact ? <span className="block truncate text-[0.66rem] opacity-80">{timeLabel}</span> : null}
     </button>
   );
+}
+
+function layoutOverlappingActivities(activities: readonly CalendarActivity[]): PositionedActivity[] {
+  const sorted = [...activities]
+    .map((activity) => ({
+      activity,
+      start: timeToMinutes(activity.startTime),
+      end: timeToMinutes(activity.startTime) + activity.durationMinutes,
+    }))
+    .filter(
+      ({ start, end }) =>
+        start < CALENDAR_END_HOUR * 60 && end > CALENDAR_START_HOUR * 60
+    )
+    .sort((a, b) => a.start - b.start || a.end - b.end || a.activity.id.localeCompare(b.activity.id));
+
+  const result: PositionedActivity[] = [];
+  let cluster: typeof sorted = [];
+  let clusterEnd = -1;
+
+  const flushCluster = () => {
+    if (cluster.length === 0) return;
+    const columnEnds: number[] = [];
+    const assigned = cluster.map((entry) => {
+      let columnIndex = columnEnds.findIndex((end) => end <= entry.start);
+      if (columnIndex === -1) {
+        columnIndex = columnEnds.length;
+        columnEnds.push(entry.end);
+      } else {
+        columnEnds[columnIndex] = entry.end;
+      }
+      return { ...entry, columnIndex };
+    });
+    const columnCount = Math.max(1, columnEnds.length);
+
+    assigned.forEach(({ activity, columnIndex, start, end }) => {
+      const visibleStart = Math.max(start, CALENDAR_START_HOUR * 60);
+      const visibleEnd = Math.min(end, CALENDAR_END_HOUR * 60);
+      result.push({
+        activity,
+        columnCount,
+        columnIndex,
+        top: (visibleStart - CALENDAR_START_HOUR * 60) * CALENDAR_MINUTE_HEIGHT,
+        height: (visibleEnd - visibleStart) * CALENDAR_MINUTE_HEIGHT,
+      });
+    });
+
+    cluster = [];
+    clusterEnd = -1;
+  };
+
+  sorted.forEach((entry) => {
+    if (cluster.length > 0 && entry.start >= clusterEnd) flushCluster();
+    cluster.push(entry);
+    clusterEnd = Math.max(clusterEnd, entry.end);
+  });
+  flushCluster();
+
+  return result;
+}
+
+function timeToMinutes(value: string): number {
+  const [hourText, minuteText] = value.split(":");
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  return hour * 60 + minute;
+}
+
+function formatActivityTime(activity: CalendarActivity): string {
+  const start = timeToMinutes(activity.startTime);
+  const end = start + activity.durationMinutes;
+  return `${formatClockMinutes(start)}–${formatClockMinutes(end)}`;
+}
+
+function formatClockMinutes(totalMinutes: number): string {
+  const hour24 = Math.floor(totalMinutes / 60) % 24;
+  const minute = totalMinutes % 60;
+  const hour12 = hour24 % 12 || 12;
+  return `${hour12}:${String(minute).padStart(2, "0")} ${hour24 < 12 ? "AM" : "PM"}`;
 }
 
 const WEEKDAY_NAMES: Record<string, string> = {
@@ -475,8 +596,14 @@ function reservationDetailsFor(activity: CalendarActivity) {
     email,
     rentalStart: formatDate(startDate),
     rentalEnd: formatDate(endDate),
-    pickupTime: activity.type === "Pickup" ? activity.time : "10:00 AM",
-    returnTime: activity.type === "Return" ? activity.time : "10:00 AM",
+    pickupTime:
+      activity.type === "Pickup"
+        ? formatClockMinutes(timeToMinutes(activity.startTime))
+        : "10:00 AM",
+    returnTime:
+      activity.type === "Return"
+        ? formatClockMinutes(timeToMinutes(activity.startTime))
+        : "10:00 AM",
     duration: "4 days",
     price: "₱1,500/day",
   };
@@ -839,11 +966,13 @@ function DayAgendaSheet({
                   <button
                     key={activity.id}
                     type="button"
-                    aria-label={`Agenda ${activity.type}: ${activity.customer}, ${activity.clothing}, ${activity.time}`}
+                    aria-label={`Agenda ${activity.type}: ${activity.customer}, ${activity.clothing}, ${formatActivityTime(activity)}`}
                     onClick={() => onViewDetails(activity)}
                     className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3 rounded-xl border border-dashboard-border bg-dashboard-surface p-3 text-left transition-colors hover:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30 sm:grid-cols-[5rem_minmax(0,1fr)_auto] sm:items-center sm:p-4"
                   >
-                    <span className="text-xs font-semibold text-dashboard-muted">{activity.time}</span>
+                    <span className="text-xs font-semibold text-dashboard-muted">
+                      {formatActivityTime(activity)}
+                    </span>
                     <span className="min-w-0">
                       <Badge
                         variant="outline"

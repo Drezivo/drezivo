@@ -13,154 +13,117 @@ export type CalendarActivity = {
   type: CalendarActivityType;
   customer: string;
   clothing: string;
-  time: string;
-  rowStart: number;
-  rowSpan?: number;
+  startTime: string;
+  durationMinutes: 30 | 60;
 };
 
-export const CALENDAR_DAYS: readonly CalendarDay[] = [
-  { key: "mon", label: "Mon", date: "Sep 14", activityCount: 8 },
-  { key: "tue", label: "Tue", date: "Sep 15", activityCount: 14 },
-  { key: "wed", label: "Wed", date: "Sep 16", activityCount: 21 },
-  { key: "thu", label: "Thu", date: "Sep 17", activityCount: 12 },
-  { key: "fri", label: "Fri", date: "Sep 18", activityCount: 16 },
-  { key: "sat", label: "Sat", date: "Sep 19", activityCount: 10 },
-  { key: "sun", label: "Sun", date: "Sep 20", activityCount: 7 },
+export const CALENDAR_START_HOUR = 7;
+export const CALENDAR_END_HOUR = 21;
+export const CALENDAR_HOUR_HEIGHT = 120;
+export const CALENDAR_MINUTE_HEIGHT = CALENDAR_HOUR_HEIGHT / 60;
+export const CALENDAR_TOTAL_HEIGHT =
+  (CALENDAR_END_HOUR - CALENDAR_START_HOUR) * CALENDAR_HOUR_HEIGHT;
+
+const DAY_META = [
+  { key: "mon", label: "Mon", date: "Sep 14" },
+  { key: "tue", label: "Tue", date: "Sep 15" },
+  { key: "wed", label: "Wed", date: "Sep 16" },
+  { key: "thu", label: "Thu", date: "Sep 17" },
+  { key: "fri", label: "Fri", date: "Sep 18" },
+  { key: "sat", label: "Sat", date: "Sep 19" },
+  { key: "sun", label: "Sun", date: "Sep 20" },
 ] as const;
 
 export const CALENDAR_ACTIVITIES: readonly CalendarActivity[] = [
-  { id: "mon-pickup", day: "mon", type: "Pickup", customer: "Maria Santos", clothing: "Black Satin Gown", time: "9:00 AM", rowStart: 3, rowSpan: 2 },
-  { id: "mon-fitting", day: "mon", type: "Fitting", customer: "Leanne Cruz", clothing: "Wedding Gown", time: "11:00 AM", rowStart: 7, rowSpan: 2 },
-  { id: "mon-return", day: "mon", type: "Return", customer: "Sofia Garcia", clothing: "Red Evening Dress", time: "2:00 PM", rowStart: 13, rowSpan: 2 },
-  { id: "mon-reservation", day: "mon", type: "Reservation", customer: "Camille Reyes", clothing: "Filipiniana Dress", time: "4:00 PM", rowStart: 17, rowSpan: 2 },
+  // Monday stress test: five simultaneous fittings at 9:00 AM.
+  { id: "mon-fit-maria", day: "mon", type: "Fitting", customer: "Maria Santos", clothing: "Emerald Gown", startTime: "09:00", durationMinutes: 60 },
+  { id: "mon-fit-carla", day: "mon", type: "Fitting", customer: "Carla Reyes", clothing: "Blue Dress", startTime: "09:00", durationMinutes: 30 },
+  { id: "mon-fit-ana", day: "mon", type: "Fitting", customer: "Ana Lim", clothing: "Wedding Gown", startTime: "09:00", durationMinutes: 60 },
+  { id: "mon-fit-jamie", day: "mon", type: "Fitting", customer: "Jamie Cruz", clothing: "Filipiniana Dress", startTime: "09:00", durationMinutes: 30 },
+  { id: "mon-fit-bea", day: "mon", type: "Fitting", customer: "Bea Tan", clothing: "Red Gown", startTime: "09:00", durationMinutes: 60 },
+  { id: "mon-pickup", day: "mon", type: "Pickup", customer: "Leanne Cruz", clothing: "Black Satin Gown", startTime: "11:00", durationMinutes: 60 },
+  { id: "mon-return", day: "mon", type: "Return", customer: "Sofia Garcia", clothing: "Red Evening Dress", startTime: "14:00", durationMinutes: 60 },
+  { id: "mon-reservation", day: "mon", type: "Reservation", customer: "Camille Reyes", clothing: "Filipiniana Dress", startTime: "19:30", durationMinutes: 30 },
 
-  { id: "tue-return", day: "tue", type: "Return", customer: "Daniel Lopez", clothing: "Barong Tagalog", time: "10:00 AM", rowStart: 5, rowSpan: 2 },
-  { id: "tue-pickup", day: "tue", type: "Pickup", customer: "Anna Rivera", clothing: "Gown", time: "1:00 PM", rowStart: 11, rowSpan: 2 },
-  { id: "tue-fitting", day: "tue", type: "Fitting", customer: "Patricia Lim", clothing: "Wedding Gown", time: "3:00 PM", rowStart: 15, rowSpan: 2 },
+  // Tuesday: two simultaneous activities for a clean 50 / 50 split.
+  { id: "tue-return", day: "tue", type: "Return", customer: "Daniel Lopez", clothing: "Barong Tagalog", startTime: "10:00", durationMinutes: 60 },
+  { id: "tue-fitting-overlap", day: "tue", type: "Fitting", customer: "Mica Ramos", clothing: "Champagne Gown", startTime: "10:00", durationMinutes: 30 },
+  { id: "tue-pickup", day: "tue", type: "Pickup", customer: "Anna Rivera", clothing: "Gown", startTime: "13:00", durationMinutes: 60 },
+  { id: "tue-fitting", day: "tue", type: "Fitting", customer: "Patricia Lim", clothing: "Wedding Gown", startTime: "15:00", durationMinutes: 60 },
+  { id: "tue-return-evening", day: "tue", type: "Return", customer: "Paolo Dizon", clothing: "Black Suit", startTime: "18:30", durationMinutes: 30 },
 
-  { id: "wed-pickup", day: "wed", type: "Pickup", customer: "Carla Dela Cruz", clothing: "Blue Dress", time: "9:30 AM", rowStart: 4, rowSpan: 2 },
-  { id: "wed-return", day: "wed", type: "Return", customer: "James Tan", clothing: "Black Suit", time: "11:30 AM", rowStart: 8, rowSpan: 2 },
-  { id: "wed-fitting", day: "wed", type: "Fitting", customer: "Katrina Santos", clothing: "Gown", time: "2:00 PM", rowStart: 13, rowSpan: 2 },
-  { id: "wed-reservation", day: "wed", type: "Reservation", customer: "Sophia Garcia", clothing: "Red Dress", time: "4:00 PM", rowStart: 17, rowSpan: 2 },
+  // Wednesday: three simultaneous fittings for a 33 / 33 / 33 split.
+  { id: "wed-pickup", day: "wed", type: "Pickup", customer: "Carla Dela Cruz", clothing: "Blue Dress", startTime: "09:30", durationMinutes: 60 },
+  { id: "wed-return", day: "wed", type: "Return", customer: "James Tan", clothing: "Black Suit", startTime: "11:30", durationMinutes: 60 },
+  { id: "wed-fit-katrina", day: "wed", type: "Fitting", customer: "Katrina Santos", clothing: "Emerald Gown", startTime: "13:30", durationMinutes: 60 },
+  { id: "wed-fit-melanie", day: "wed", type: "Fitting", customer: "Melanie Cruz", clothing: "Ivory Dress", startTime: "13:30", durationMinutes: 30 },
+  { id: "wed-fit-paolo", day: "wed", type: "Fitting", customer: "Paolo Lim", clothing: "Barong Tagalog", startTime: "13:30", durationMinutes: 60 },
+  { id: "wed-reservation", day: "wed", type: "Reservation", customer: "Sophia Garcia", clothing: "Red Dress", startTime: "16:00", durationMinutes: 60 },
 
-  { id: "thu-return", day: "thu", type: "Return", customer: "Elise Cruz", clothing: "Wedding Gown", time: "10:00 AM", rowStart: 5, rowSpan: 2 },
-  { id: "thu-fitting", day: "thu", type: "Fitting", customer: "Melanie Santos", clothing: "Gown", time: "1:30 PM", rowStart: 12, rowSpan: 2 },
-  { id: "thu-reservation", day: "thu", type: "Reservation", customer: "Janelle Cruz", clothing: "Gown", time: "4:00 PM", rowStart: 17, rowSpan: 2 },
+  // Thursday: four simultaneous mixed activities for a 25% split.
+  { id: "thu-return", day: "thu", type: "Return", customer: "Elise Cruz", clothing: "Wedding Gown", startTime: "10:00", durationMinutes: 60 },
+  { id: "thu-fitting", day: "thu", type: "Fitting", customer: "Melanie Santos", clothing: "Gown", startTime: "13:30", durationMinutes: 60 },
+  { id: "thu-reservation-overlap", day: "thu", type: "Reservation", customer: "Janelle Cruz", clothing: "Gold Dress", startTime: "15:00", durationMinutes: 60 },
+  { id: "thu-fitting-overlap", day: "thu", type: "Fitting", customer: "Alyssa Tan", clothing: "Wedding Gown", startTime: "15:00", durationMinutes: 30 },
+  { id: "thu-pickup-overlap", day: "thu", type: "Pickup", customer: "Luis Navarro", clothing: "Barong Tagalog", startTime: "15:00", durationMinutes: 60 },
+  { id: "thu-return-overlap", day: "thu", type: "Return", customer: "Karen Lim", clothing: "Blue Dress", startTime: "15:00", durationMinutes: 30 },
+  { id: "thu-pickup-evening", day: "thu", type: "Pickup", customer: "Rina Gomez", clothing: "Green Gown", startTime: "20:00", durationMinutes: 60 },
 
-  { id: "fri-return", day: "fri", type: "Return", customer: "Chloe Tan", clothing: "Blue Dress", time: "9:00 AM", rowStart: 3, rowSpan: 2 },
-  { id: "fri-pickup", day: "fri", type: "Pickup", customer: "Isabella Lopez", clothing: "Gown", time: "11:00 AM", rowStart: 7, rowSpan: 2 },
-  { id: "fri-fitting", day: "fri", type: "Fitting", customer: "Andrew Ramos", clothing: "Filipiniana Dress", time: "2:00 PM", rowStart: 13, rowSpan: 2 },
-  { id: "fri-return-late", day: "fri", type: "Return", customer: "Paolo Diron", clothing: "Barong Tagalog", time: "4:30 PM", rowStart: 18, rowSpan: 2 },
+  // Friday: a mostly normal operational day.
+  { id: "fri-return-early", day: "fri", type: "Return", customer: "Chloe Tan", clothing: "Blue Dress", startTime: "07:30", durationMinutes: 30 },
+  { id: "fri-pickup", day: "fri", type: "Pickup", customer: "Isabella Lopez", clothing: "Gown", startTime: "09:00", durationMinutes: 60 },
+  { id: "fri-fitting", day: "fri", type: "Fitting", customer: "Andrew Ramos", clothing: "Filipiniana Dress", startTime: "12:30", durationMinutes: 30 },
+  { id: "fri-return", day: "fri", type: "Return", customer: "Paolo Diron", clothing: "Barong Tagalog", startTime: "16:00", durationMinutes: 60 },
+  { id: "fri-pickup-evening", day: "fri", type: "Pickup", customer: "Nina Reyes", clothing: "Black Gown", startTime: "19:30", durationMinutes: 30 },
 
-  { id: "sat-pickup", day: "sat", type: "Pickup", customer: "Kristine Cruz", clothing: "Black Gown", time: "10:30 AM", rowStart: 6, rowSpan: 2 },
-  { id: "sat-return", day: "sat", type: "Return", customer: "Mark Santos", clothing: "Suit", time: "1:00 PM", rowStart: 11, rowSpan: 2 },
-  { id: "sat-fitting", day: "sat", type: "Fitting", customer: "Jasmine Lee", clothing: "Wedding Gown", time: "3:30 PM", rowStart: 16, rowSpan: 2 },
+  { id: "sat-pickup", day: "sat", type: "Pickup", customer: "Kristine Cruz", clothing: "Black Gown", startTime: "10:30", durationMinutes: 60 },
+  { id: "sat-return", day: "sat", type: "Return", customer: "Mark Santos", clothing: "Suit", startTime: "13:00", durationMinutes: 60 },
+  { id: "sat-fitting", day: "sat", type: "Fitting", customer: "Jasmine Lee", clothing: "Wedding Gown", startTime: "15:30", durationMinutes: 30 },
+  { id: "sat-reservation-evening", day: "sat", type: "Reservation", customer: "Janine Cruz", clothing: "Beige Midi Dress", startTime: "20:00", durationMinutes: 60 },
 
-  { id: "sun-fitting", day: "sun", type: "Fitting", customer: "Denise Ramos", clothing: "Gown", time: "9:00 AM", rowStart: 3, rowSpan: 2 },
-  { id: "sun-pickup", day: "sun", type: "Pickup", customer: "Luis Navarro", clothing: "Barong Tagalog", time: "12:00 PM", rowStart: 9, rowSpan: 2 },
+  { id: "sun-fitting", day: "sun", type: "Fitting", customer: "Denise Ramos", clothing: "Gown", startTime: "09:00", durationMinutes: 60 },
+  { id: "sun-pickup", day: "sun", type: "Pickup", customer: "Luis Navarro", clothing: "Barong Tagalog", startTime: "12:00", durationMinutes: 60 },
+  { id: "sun-return-evening", day: "sun", type: "Return", customer: "Bea Lim", clothing: "Emerald Dress", startTime: "20:30", durationMinutes: 30 },
 ] as const;
 
-export const CALENDAR_HOURS = [
-  "8:00 AM",
-  "9:00 AM",
-  "10:00 AM",
-  "11:00 AM",
-  "12:00 PM",
-  "1:00 PM",
-  "2:00 PM",
-  "3:00 PM",
-  "4:00 PM",
-  "5:00 PM",
-] as const;
+export const CALENDAR_DAYS: readonly CalendarDay[] = DAY_META.map((day) => ({
+  ...day,
+  activityCount: CALENDAR_ACTIVITIES.filter((activity) => activity.day === day.key).length,
+}));
+
+export const CALENDAR_HOURS = Array.from(
+  { length: CALENDAR_END_HOUR - CALENDAR_START_HOUR + 1 },
+  (_, index) => {
+    const hour = CALENDAR_START_HOUR + index;
+    const normalized = hour % 12 || 12;
+    return `${normalized}:00 ${hour < 12 ? "AM" : "PM"}`;
+  },
+);
 
 export const CALENDAR_METRICS = [
-  { label: "Pickups", value: 12, tone: "blue" },
-  { label: "Returns", value: 8, tone: "mint" },
-  { label: "Fittings", value: 14, tone: "purple" },
+  {
+    label: "Pickups",
+    value: CALENDAR_ACTIVITIES.filter((activity) => activity.type === "Pickup").length,
+    tone: "blue",
+  },
+  {
+    label: "Returns",
+    value: CALENDAR_ACTIVITIES.filter((activity) => activity.type === "Return").length,
+    tone: "mint",
+  },
+  {
+    label: "Fittings",
+    value: CALENDAR_ACTIVITIES.filter((activity) => activity.type === "Fitting").length,
+    tone: "purple",
+  },
   { label: "Issues", value: 3, tone: "danger" },
 ] as const;
 
-export const CALENDAR_MORE_COUNTS: Record<string, number> = {
-  mon: 2,
-  tue: 4,
-  wed: 6,
-  thu: 3,
-  fri: 5,
-  sat: 2,
-  sun: 1,
-};
-
-const AGENDA_CUSTOMERS = [
-  "Alyssa Tan",
-  "Bea Lim",
-  "Christine Tan",
-  "Daniel Cruz",
-  "Ella Santos",
-  "Isabel Garcia",
-  "Janine Cruz",
-  "Kaye Santos",
-  "Martin Lopez",
-  "Miguel Santos",
-  "Paolo Dizon",
-  "Sofia Reyes",
-] as const;
-
-const AGENDA_CLOTHING = [
-  "Black Satin Gown",
-  "Red Evening Dress",
-  "Wedding Gown",
-  "Blue Dress",
-  "Filipiniana Dress",
-  "Barong Tagalog",
-  "Pink Gown",
-  "Beige Midi Dress",
-] as const;
-
-const AGENDA_TIMES = [
-  "8:00 AM",
-  "8:30 AM",
-  "9:00 AM",
-  "9:30 AM",
-  "10:00 AM",
-  "10:30 AM",
-  "11:00 AM",
-  "11:30 AM",
-  "12:00 PM",
-  "1:00 PM",
-  "1:30 PM",
-  "2:00 PM",
-  "2:30 PM",
-  "3:00 PM",
-  "3:30 PM",
-  "4:00 PM",
-  "4:30 PM",
-] as const;
-
-const AGENDA_TYPES: readonly CalendarActivityType[] = [
-  "Pickup",
-  "Return",
-  "Fitting",
-  "Reservation",
-];
-
 export const CALENDAR_DAY_AGENDA: Record<string, readonly CalendarActivity[]> = Object.fromEntries(
-  CALENDAR_DAYS.map((day, dayIndex) => {
-    const visible = CALENDAR_ACTIVITIES.filter((activity) => activity.day === day.key);
-    const missingCount = Math.max(0, day.activityCount - visible.length);
-    const generated: CalendarActivity[] = Array.from({ length: missingCount }, (_, index) => {
-      const sequence = dayIndex * 7 + index;
-      return {
-        id: `${day.key}-agenda-${index + 1}`,
-        day: day.key,
-        type: AGENDA_TYPES[sequence % AGENDA_TYPES.length]!,
-        customer: AGENDA_CUSTOMERS[sequence % AGENDA_CUSTOMERS.length]!,
-        clothing: AGENDA_CLOTHING[(sequence + 2) % AGENDA_CLOTHING.length]!,
-        time: AGENDA_TIMES[(index + dayIndex) % AGENDA_TIMES.length]!,
-        rowStart: ((index * 2 + dayIndex) % 19) + 1,
-        rowSpan: 2,
-      };
-    });
-
-    return [day.key, [...visible, ...generated].sort((a, b) => a.rowStart - b.rowStart)];
-  }),
+  CALENDAR_DAYS.map((day) => [
+    day.key,
+    CALENDAR_ACTIVITIES.filter((activity) => activity.day === day.key).sort((a, b) =>
+      a.startTime.localeCompare(b.startTime),
+    ),
+  ]),
 ) as Record<string, readonly CalendarActivity[]>;

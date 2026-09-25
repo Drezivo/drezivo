@@ -13,8 +13,8 @@ describe("CalendarSchedulePage", () => {
       "href",
       "/calendar/availability"
     );
-    expect(screen.getByText("Maria Santos")).toBeVisible();
-    expect(screen.getByText("Black Satin Gown")).toBeVisible();
+    expect(screen.getByLabelText(/Fitting: Maria Santos, Emerald Gown/)).toBeVisible();
+    expect(screen.getByLabelText("Schedule hours 7:00 AM to 9:00 PM")).toBeVisible();
   });
 
   it("filters visible schedule activities by activity type", async () => {
@@ -40,27 +40,37 @@ describe("CalendarSchedulePage", () => {
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("September 16, 2025")).toBeVisible();
     expect(within(dialog).getByText("Wednesday")).toBeVisible();
-    expect(within(dialog).getByRole("tab", { name: "All (21)" })).toBeVisible();
+    expect(within(dialog).getByRole("tab", { name: "All (6)" })).toBeVisible();
   });
 
-  it("opens the same day agenda from the more button", () => {
+  it("lays simultaneous activities side by side instead of stacking them", () => {
     render(<CalendarSchedulePage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open all mon activities" }));
+    const overlapping = [
+      screen.getByLabelText(/Fitting: Maria Santos, Emerald Gown/),
+      screen.getByLabelText(/Fitting: Carla Reyes, Blue Dress/),
+      screen.getByLabelText(/Fitting: Ana Lim, Wedding Gown/),
+      screen.getByLabelText(/Fitting: Jamie Cruz, Filipiniana Dress/),
+      screen.getByLabelText(/Fitting: Bea Tan, Red Gown/),
+    ];
 
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("September 14, 2025")).toBeVisible();
-    expect(within(dialog).getByRole("tab", { name: "All (8)" })).toBeVisible();
+    overlapping.forEach((activity) => {
+      expect(activity).toHaveAttribute("data-overlap-count", "5");
+      expect(activity.getAttribute("style")).toContain("width: calc(20% - 6px)");
+    });
+    expect(screen.queryByText(/\+ \d+ more/)).not.toBeInTheDocument();
   });
 
   it("opens reservation details directly from an individual agenda block", () => {
     render(<CalendarSchedulePage />);
 
-    fireEvent.click(screen.getByLabelText("Pickup: Maria Santos, Black Satin Gown, 9:00 AM"));
+    fireEvent.click(
+      screen.getByLabelText("Fitting: Maria Santos, Emerald Gown, 9:00 AM–10:00 AM")
+    );
 
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText(/Reservation #R-/)).toBeVisible();
-    expect(within(dialog).getByText("Black Satin Gown")).toBeVisible();
+    expect(within(dialog).getByText("Emerald Gown")).toBeVisible();
     expect(within(dialog).getByText("Customer Details")).toBeVisible();
     expect(within(dialog).getByText("Rental Period")).toBeVisible();
     expect(within(dialog).getByText("Status Timeline")).toBeVisible();
@@ -72,7 +82,7 @@ describe("CalendarSchedulePage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open Wed Sep 16 agenda" }));
     fireEvent.click(
       within(screen.getByRole("dialog")).getByRole("button", {
-        name: "Agenda Pickup: Carla Dela Cruz, Blue Dress, 9:30 AM",
+        name: "Agenda Pickup: Carla Dela Cruz, Blue Dress, 9:30 AM–10:30 AM",
       })
     );
 
