@@ -272,45 +272,51 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
 
 # Phase 3: Fitting Details Sheet
 
-- [ ] **FIT-FE-030 — Build the Fitting Details Sheet shell**
+- [x] **FIT-FE-030 — Build the Fitting Details Sheet shell**
   - **Acceptance:**
-    - [ ] Same interaction language as Reservation/Calendar sheets.
-    - [ ] Accessible title/description.
-    - [ ] Appointment status separate from payment state.
-    - [ ] Date/time period is easy to scan.
-    - [ ] Supports direct opening from a fitting row.
-    - [ ] Mobile/full-width treatment is usable.
+    - [x] Same interaction language as Reservation/Calendar sheets.
+    - [x] Accessible title/description.
+    - [x] Appointment status separate from payment state.
+    - [x] Date/time period is easy to scan.
+    - [x] Supports direct opening from a fitting row.
+    - [x] Mobile/full-width treatment is usable.
+  - **Evidence:** `FittingDetailsPreviewSheet` now uses the shared Sheet primitive, opens directly from appointment rows, and uses a full-width mobile sheet with `sm:max-w-lg` desktop sizing.
 
-- [ ] **FIT-FE-031 — Add customer section**
+- [x] **FIT-FE-031 — Add customer section**
   - **Acceptance:**
-    - [ ] Customer name.
-    - [ ] Only mock contact fields needed by staff.
-    - [ ] No identity documents/excess PII.
-    - [ ] No customer account requirement implied.
+    - [x] Customer name.
+    - [x] Only mock contact fields needed by staff.
+    - [x] No identity documents/excess PII.
+    - [x] No customer account requirement implied.
+  - **Evidence:** Customer name, synthetic email, and synthetic phone are shown; no account or identity-document fields are introduced.
 
-- [ ] **FIT-FE-032 — Add garment section with preference/guarantee distinction**
+- [x] **FIT-FE-032 — Add garment section with preference/guarantee distinction**
   - **Acceptance:**
-    - [ ] Show style/variant information.
-    - [ ] `Preference only` and `Guaranteed garment` are distinct.
-    - [ ] Guaranteed fixture may display a synthetic asset code.
-    - [ ] Preference-only never says `Reserved`, `Held`, or `Guaranteed`.
-    - [ ] Multiple garment lines remain readable.
+    - [x] Show style/variant information.
+    - [x] `Preference only` and `Guaranteed garment` are distinct.
+    - [x] Guaranteed fixture may display a synthetic asset code.
+    - [x] Preference-only never says `Reserved`, `Held`, or `Guaranteed`.
+    - [x] Multiple garment lines remain readable.
+  - **Evidence:** Guaranteed garments show a synthetic `PROTO-*` asset code; preference-only garments never show an asset code or reserved/held wording.
 
-- [ ] **FIT-FE-034 — Add fitting fee/payment presentation**
+- [x] **FIT-FE-034 — Add fitting fee/payment presentation**
   - **Acceptance:**
-    - [ ] Show fitting fee only when present.
-    - [ ] Payment state remains separate from appointment status.
-    - [ ] Use presentation-only payment labels.
-    - [ ] No receipt bytes or fake automatic verification.
-    - [ ] Payment state does not automatically mutate appointment status.
+    - [x] Show fitting fee only when present.
+    - [x] Payment state remains separate from appointment status.
+    - [x] Use presentation-only payment labels.
+    - [x] No receipt bytes or fake automatic verification.
+    - [x] Payment state does not automatically mutate appointment status.
+  - **Evidence:** Fee and payment state are grouped separately with an explicit prototype note that payment does not drive appointment status.
 
-- [ ] **FIT-FE-035 — Add prototype appointment actions**
+- [x] **FIT-FE-035 — Add prototype appointment actions**
   - **Acceptance:**
-    - [ ] Actions are disabled, mock-only, or local-state-only.
-    - [ ] Use only useful actions such as Confirm, Complete, Cancel, Reject, or Mark no-show.
-    - [ ] Destructive local actions require confirmation.
-    - [ ] Local mock mutations use an in-flight guard.
-    - [ ] No network request occurs.
+    - [x] Actions are disabled, mock-only, or local-state-only.
+    - [x] Use only useful actions such as Confirm, Complete, Cancel, Reject, or Mark no-show.
+    - [x] Destructive local actions require confirmation.
+    - [x] Local mock mutations use an in-flight guard.
+    - [x] No network request occurs.
+  - **Evidence:** Pending fittings expose Confirm/Reject; Confirmed fittings expose Complete/Cancel/Mark no-show. Reject, Cancel, and No-show require an inline confirmation step. Local status overrides update only page memory and use an action-in-flight ref guard; no API client is called.
+  - **Validation:** Prettier, TypeScript transpile, and `git diff --check` pass. Targeted Vitest still fails before test collection because the repository root cannot resolve `vitest` from `@testing-library/jest-dom/dist/vitest.mjs`; the suite reports `0 test` before that existing dependency-resolution failure.
 
 ---
 

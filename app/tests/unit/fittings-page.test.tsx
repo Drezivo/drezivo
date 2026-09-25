@@ -75,7 +75,7 @@ describe("FittingsPage", () => {
     expect(screen.queryByText(/Fitting Staff/i)).not.toBeInTheDocument();
   });
 
-  it("opens the fitting details preview sheet from an appointment row", () => {
+  it("opens the fitting details sheet with customer, garment, payment, and guarantee details", () => {
     render(<FittingsPage />);
 
     fireEvent.click(
@@ -86,11 +86,38 @@ describe("FittingsPage", () => {
 
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("Fitting Details")).toBeVisible();
-    expect(within(dialog).getByText(/Ari dela Rosa · Sep 26, 2026/)).toBeVisible();
     expect(within(dialog).getByText("Ari dela Rosa")).toBeVisible();
+    expect(within(dialog).getByText("ari@example.test")).toBeVisible();
+    expect(within(dialog).getByText("0917 000 0001")).toBeVisible();
     expect(within(dialog).getByText("Emerald Evening Gown")).toBeVisible();
-    expect(within(dialog).getByText("Confirmed")).toBeVisible();
-    expect(within(dialog).getByText("Verified")).toBeVisible();
+    expect(within(dialog).getByText("Guaranteed garment")).toBeVisible();
+    expect(within(dialog).getByText("Asset PROTO-GWN-0042")).toBeVisible();
+    expect(within(dialog).getAllByText("Verified").length).toBeGreaterThan(0);
+    expect(
+      within(dialog).getByText(/does not change the appointment status automatically/i)
+    ).toBeVisible();
+  });
+
+  it("keeps preference-only garments distinct and supports guarded local prototype actions", () => {
+    render(<FittingsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Open fitting for Bianca Flores/ }));
+    let dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Preference only")).toBeVisible();
+    expect(within(dialog).queryByText(/Asset PROTO-/)).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Confirm fitting" }));
+    expect(within(dialog).getAllByText("Confirmed").length).toBeGreaterThan(0);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Mark no-show" }));
+    expect(within(dialog).getByText(/Mark this fitting as no-show\?/i)).toBeVisible();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep current status" }));
+    expect(within(dialog).queryByText(/Mark this fitting as no-show\?/i)).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Mark no-show" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Confirm change" }));
+    dialog = screen.getByRole("dialog");
+    expect(within(dialog).getAllByText("No-show").length).toBeGreaterThan(0);
   });
 
   it("distinguishes first-use empty, loading, and retryable error states", () => {

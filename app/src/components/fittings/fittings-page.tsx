@@ -2,18 +2,22 @@
 
 import {
   CalendarClock,
+  CheckCircle2,
   ChevronDown,
   CircleAlert,
   Clock3,
   Info,
+  Mail,
+  Phone,
   Plus,
   Search,
   Shirt,
   UserCheck,
   X,
+  XCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -110,26 +114,43 @@ export function FittingsPage({
   const [status, setStatus] = useState<FittingPrototypeStatus | null>(null);
   const [dateFilter, setDateFilter] = useState<FittingDateFilter>("all");
   const [viewState, setViewState] = useState<FittingPrototypeViewState>(initialViewState);
-  const [selectedAppointment, setSelectedAppointment] =
-    useState<FittingPrototypeAppointment | null>(null);
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, FittingPrototypeStatus>>(
+    {}
+  );
+
+  const effectiveAppointments = useMemo(
+    () =>
+      appointments.map((appointment) => ({
+        ...appointment,
+        status: statusOverrides[appointment.id] ?? appointment.status,
+      })),
+    [appointments, statusOverrides]
+  );
+
+  const selectedAppointment = selectedAppointmentId
+    ? (effectiveAppointments.find((appointment) => appointment.id === selectedAppointmentId) ??
+      null)
+    : null;
 
   const summary = useMemo(
     () => ({
-      today: appointments.filter(
+      today: effectiveAppointments.filter(
         (appointment) => appointmentDate(appointment) === FITTING_PROTOTYPE_TODAY
       ).length,
-      upcoming: appointments.filter(
+      upcoming: effectiveAppointments.filter(
         (appointment) => appointmentDate(appointment) > FITTING_PROTOTYPE_TODAY
       ).length,
-      pending: appointments.filter((appointment) => appointment.status === "Pending").length,
+      pending: effectiveAppointments.filter((appointment) => appointment.status === "Pending")
+        .length,
     }),
-    [appointments]
+    [effectiveAppointments]
   );
 
   const visibleAppointments = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
 
-    return appointments.filter((appointment) => {
+    return effectiveAppointments.filter((appointment) => {
       if (normalizedQuery && !matchesSearch(appointment, normalizedQuery)) return false;
       if (status && appointment.status !== status) return false;
 
@@ -139,7 +160,7 @@ export function FittingsPage({
 
       return true;
     });
-  }, [appointments, dateFilter, query, status]);
+  }, [dateFilter, effectiveAppointments, query, status]);
 
   const hasActiveFilters = Boolean(query.trim() || status || dateFilter !== "all");
 
@@ -193,7 +214,7 @@ export function FittingsPage({
             ) : (
               <AppointmentList
                 appointments={visibleAppointments}
-                onSelect={setSelectedAppointment}
+                onSelect={(appointment) => setSelectedAppointmentId(appointment.id)}
               />
             )}
 
@@ -202,7 +223,7 @@ export function FittingsPage({
                 className="border-t border-dashboard-border px-4 py-3 text-sm text-dashboard-muted"
                 aria-live="polite"
               >
-                Showing {visibleAppointments.length} of {appointments.length} appointments
+                Showing {visibleAppointments.length} of {effectiveAppointments.length} appointments
               </div>
             ) : null}
           </CardContent>
@@ -211,8 +232,11 @@ export function FittingsPage({
 
       <FittingDetailsPreviewSheet
         appointment={selectedAppointment}
+        onStatusChange={(appointmentId, nextStatus) => {
+          setStatusOverrides((current) => ({ ...current, [appointmentId]: nextStatus }));
+        }}
         onOpenChange={(open) => {
-          if (!open) setSelectedAppointment(null);
+          if (!open) setSelectedAppointmentId(null);
         }}
       />
     </div>
@@ -581,25 +605,39 @@ function AppointmentState({
 function FittingDetailsPreviewSheet({
   appointment,
   onOpenChange,
+  onStatusChange,
 }: {
   appointment: FittingPrototypeAppointment | null;
   onOpenChange: (open: boolean) => void;
+  onStatusChange: (appointmentId: string, status: FittingPrototypeStatus) => void;
 }) {
+  const [confirmationStatus, setConfirmationStatus] = useState<FittingPrototypeStatus | null>(null);
+  const [isApplyingAction, setIsApplyingAction] = useState(false);
+  const actionInFlightRef = useRef(false);
+
+  useEffect(() => {
+    setConfirmationStatus(null);
+    setIsApplyingAction(false);
+    actionInFlightRef.current = false;
+  }, [appointment?.id]);
+
+  const applyStatus = (nextStatus: FittingPrototypeStatus) => {
+    if (!appointment || actionInFlightRef.current) return;
+    actionInFlightRef.current = true;
+    setIsApplyingAction(true);
+    onStatusChange(appointment.id, nextStatus);
+    setConfirmationStatus(null);
+    setIsApplyingAction(false);
+    actionInFlightRef.current = false;
+  };
+
   return (
     <Sheet open={Boolean(appointment)} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-md">
+      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         {appointment ? (
           <>
-            <header className="border-b border-dashboard-border px-6 py-5 pr-14">
-              <SheetTitle>Fitting Details</SheetTitle>
-              <SheetDescription className="mt-1">
-                {appointment.customer.name} · {formatAppointmentDate(appointment.startsAt)} ·{" "}
-                {formatAppointmentTimeRange(appointment)}
-              </SheetDescription>
-            </header>
-
-            <div className="space-y-5 px-6 pb-6">
-              <div className="flex flex-wrap items-center gap-2">
+            <header className="border-b border-dashboard-border px-5 py-5 pr-14 sm:px-6">
+              <div className="flex flex-wrap items-center gap-2 pr-2">
                 <Badge variant="outline" className={STATUS_CLASSES[appointment.status]}>
                   {appointment.status}
                 </Badge>
@@ -607,43 +645,247 @@ function FittingDetailsPreviewSheet({
                   {appointment.paymentState}
                 </Badge>
               </div>
+              <SheetTitle className="mt-3 text-lg">Fitting Details</SheetTitle>
+              <SheetDescription className="mt-1">
+                {formatAppointmentDate(appointment.startsAt)} ·{" "}
+                {formatAppointmentTimeRange(appointment)}
+              </SheetDescription>
+            </header>
 
-              <section>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-dashboard-muted">
-                  Customer
-                </h3>
-                <p className="mt-2 font-medium text-dashboard-navy">{appointment.customer.name}</p>
+            <div className="space-y-6 px-5 pb-6 sm:px-6">
+              <section aria-labelledby="fitting-customer-heading">
+                <SectionHeading id="fitting-customer-heading">Customer</SectionHeading>
+                <div className="mt-3 rounded-lg border border-dashboard-border p-4">
+                  <p className="font-semibold text-dashboard-navy">{appointment.customer.name}</p>
+                  <div className="mt-3 grid gap-2 text-sm text-dashboard-muted">
+                    <span className="flex items-center gap-2">
+                      <Mail className="h-4 w-4" aria-hidden="true" />
+                      {appointment.customer.email}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <Phone className="h-4 w-4" aria-hidden="true" />
+                      {appointment.customer.phone}
+                    </span>
+                  </div>
+                </div>
               </section>
 
-              <section>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-dashboard-muted">
-                  Garments
-                </h3>
-                <div className="mt-2 space-y-2">
+              <section aria-labelledby="fitting-appointment-heading">
+                <SectionHeading id="fitting-appointment-heading">Appointment</SectionHeading>
+                <div className="mt-3 grid grid-cols-2 gap-3 rounded-lg border border-dashboard-border p-4 text-sm">
+                  <DetailValue label="Date" value={formatAppointmentDate(appointment.startsAt)} />
+                  <DetailValue label="Time" value={formatAppointmentTimeRange(appointment)} />
+                  <DetailValue label="Status" value={appointment.status} />
+                  <DetailValue label="Payment" value={appointment.paymentState} />
+                </div>
+              </section>
+
+              <section aria-labelledby="fitting-garments-heading">
+                <SectionHeading id="fitting-garments-heading">Garments</SectionHeading>
+                <div className="mt-3 space-y-2">
                   {appointment.garments.map((garment) => (
-                    <div key={garment.id} className="rounded-lg border border-dashboard-border p-3">
-                      <p className="font-medium text-dashboard-navy">{garment.productName}</p>
-                      <p className="mt-1 text-xs text-dashboard-muted">{garment.variantLabel}</p>
+                    <div key={garment.id} className="rounded-lg border border-dashboard-border p-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="font-medium text-dashboard-navy">{garment.productName}</p>
+                          <p className="mt-1 text-xs text-dashboard-muted">
+                            {garment.variantLabel}
+                          </p>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className={
+                            garment.guarantee === "Guaranteed"
+                              ? "reservation-status-confirmed"
+                              : "dashboard-event-fitting"
+                          }
+                        >
+                          {garment.guarantee === "Guaranteed"
+                            ? "Guaranteed garment"
+                            : "Preference only"}
+                        </Badge>
+                      </div>
+                      {garment.guarantee === "Guaranteed" && garment.assetCode ? (
+                        <p className="mt-3 text-xs text-dashboard-muted">
+                          Asset {garment.assetCode}
+                        </p>
+                      ) : null}
                     </div>
                   ))}
                 </div>
               </section>
 
-              <section>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-dashboard-muted">
-                  Fee
-                </h3>
-                <p className="mt-2 font-medium text-dashboard-navy">
-                  {appointment.feeMinor === null
-                    ? "No fitting fee"
-                    : formatPhpMoney(appointment.feeMinor)}
+              <section aria-labelledby="fitting-payment-heading">
+                <SectionHeading id="fitting-payment-heading">Fee & payment</SectionHeading>
+                <div className="mt-3 rounded-lg border border-dashboard-border p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs text-dashboard-muted">Fitting fee</p>
+                      <p className="mt-1 font-semibold text-dashboard-navy">
+                        {appointment.feeMinor === null
+                          ? "No fitting fee"
+                          : formatPhpMoney(appointment.feeMinor)}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className={PAYMENT_CLASSES[appointment.paymentState]}>
+                      {appointment.paymentState}
+                    </Badge>
+                  </div>
+                  <p className="mt-3 text-xs text-dashboard-muted">
+                    Payment state is presentation-only in this prototype and does not change the
+                    appointment status automatically.
+                  </p>
+                </div>
+              </section>
+
+              <section aria-labelledby="fitting-actions-heading">
+                <SectionHeading id="fitting-actions-heading">Actions</SectionHeading>
+                <p className="mt-2 text-xs text-dashboard-muted">
+                  Prototype only. These actions update local page state and do not send a network
+                  request.
                 </p>
+                <PrototypeActions
+                  status={appointment.status}
+                  confirmationStatus={confirmationStatus}
+                  isApplying={isApplyingAction}
+                  onAction={(nextStatus, destructive) => {
+                    if (destructive) {
+                      setConfirmationStatus(nextStatus);
+                      return;
+                    }
+                    applyStatus(nextStatus);
+                  }}
+                  onConfirm={() => {
+                    if (confirmationStatus) applyStatus(confirmationStatus);
+                  }}
+                  onCancelConfirmation={() => setConfirmationStatus(null)}
+                />
               </section>
             </div>
           </>
         ) : null}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function SectionHeading({ children, id }: { children: React.ReactNode; id: string }) {
+  return (
+    <h3 id={id} className="text-xs font-semibold uppercase tracking-wide text-dashboard-muted">
+      {children}
+    </h3>
+  );
+}
+
+function DetailValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs text-dashboard-muted">{label}</p>
+      <p className="mt-1 font-medium text-dashboard-navy">{value}</p>
+    </div>
+  );
+}
+
+function PrototypeActions({
+  confirmationStatus,
+  isApplying,
+  onAction,
+  onCancelConfirmation,
+  onConfirm,
+  status,
+}: {
+  confirmationStatus: FittingPrototypeStatus | null;
+  isApplying: boolean;
+  onAction: (status: FittingPrototypeStatus, destructive: boolean) => void;
+  onCancelConfirmation: () => void;
+  onConfirm: () => void;
+  status: FittingPrototypeStatus;
+}) {
+  if (confirmationStatus) {
+    return (
+      <div className="mt-3 rounded-lg border border-dashboard-border bg-dashboard-canvas p-4">
+        <p className="text-sm font-medium text-dashboard-navy">
+          Mark this fitting as {confirmationStatus.toLowerCase()}?
+        </p>
+        <p className="mt-1 text-xs text-dashboard-muted">
+          This changes local prototype state only.
+        </p>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={isApplying}
+            onClick={onCancelConfirmation}
+          >
+            Keep current status
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            isPending={isApplying}
+            pendingLabel="Applying…"
+            onClick={onConfirm}
+          >
+            Confirm change
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const actions =
+    status === "Pending"
+      ? [
+          {
+            label: "Confirm fitting",
+            status: "Confirmed" as const,
+            destructive: false,
+            icon: CheckCircle2,
+          },
+          { label: "Reject", status: "Rejected" as const, destructive: true, icon: XCircle },
+        ]
+      : status === "Confirmed"
+        ? [
+            {
+              label: "Complete",
+              status: "Completed" as const,
+              destructive: false,
+              icon: CheckCircle2,
+            },
+            {
+              label: "Mark no-show",
+              status: "No-show" as const,
+              destructive: true,
+              icon: CircleAlert,
+            },
+            { label: "Cancel", status: "Cancelled" as const, destructive: true, icon: XCircle },
+          ]
+        : [];
+
+  if (actions.length === 0) {
+    return (
+      <p className="mt-3 text-sm text-dashboard-muted">No prototype actions for this status.</p>
+    );
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {actions.map((action) => {
+        const Icon = action.icon;
+        return (
+          <Button
+            key={action.status}
+            type="button"
+            variant={action.destructive ? "secondary" : "default"}
+            disabled={isApplying}
+            onClick={() => onAction(action.status, action.destructive)}
+          >
+            <Icon className="h-4 w-4" aria-hidden="true" />
+            {action.label}
+          </Button>
+        );
+      })}
+    </div>
   );
 }
 
