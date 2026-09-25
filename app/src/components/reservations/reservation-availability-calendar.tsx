@@ -69,7 +69,7 @@ export function ReservationAvailabilityCalendar({
         type="button"
         aria-label={`${buttonProps["aria-label"] ?? isoDate}. ${label}`}
         className={cn(
-          "flex min-h-16 w-full flex-col items-center justify-center gap-1 rounded-md border border-transparent px-1 py-2 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30",
+          "flex min-h-11 min-w-0 w-full flex-col items-center justify-center gap-0.5 overflow-hidden rounded-md border border-transparent px-0.5 py-1 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30 sm:min-h-16 sm:gap-1 sm:px-1 sm:py-2",
           dayAvailability?.state === "available" &&
             "bg-transparent text-dashboard-navy hover:bg-dashboard-active/40",
           dayAvailability?.state === "limited" &&
@@ -83,15 +83,24 @@ export function ReservationAvailabilityCalendar({
           className
         )}
       >
-        <span className="text-sm font-semibold">{day.date.getDate()}</span>
-        <span className="min-h-4 text-xs leading-tight">{label}</span>
+        <span className="text-xs font-semibold sm:text-sm">{day.date.getDate()}</span>
+        <span
+          aria-hidden="true"
+          className={cn(
+            "h-1.5 w-1.5 rounded-full sm:hidden",
+            dayAvailability?.state === "limited" && "bg-dashboard-accent",
+            dayAvailability?.state === "unavailable" && "bg-red-400",
+            (!dayAvailability || dayAvailability?.state === "available") && "bg-dashboard-muted/50"
+          )}
+        />
+        <span className="hidden min-h-4 truncate text-xs leading-tight sm:block">{label}</span>
       </button>
     );
   };
 
   return (
     <div className="space-y-3">
-      <div className="rounded-lg border border-dashboard-border bg-dashboard-surface p-3">
+      <div className="overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-surface p-2 sm:p-3">
         <Calendar
           mode="range"
           month={month}
@@ -122,8 +131,12 @@ export function ReservationAvailabilityCalendar({
           }}
           components={{ DayButton: AvailabilityDayButton }}
           classNames={{
-            day_button: "h-auto min-h-16 w-full",
-            day: "relative flex-1 p-0.5 text-center",
+            month_grid: "w-full min-w-0 border-collapse",
+            weekdays: "flex w-full min-w-0",
+            weekday: "min-w-0 flex-1 py-1.5 text-center text-[10px] font-medium text-dashboard-muted sm:py-2 sm:text-xs",
+            week: "mt-0.5 flex w-full min-w-0 sm:mt-1",
+            day_button: "h-auto min-h-11 min-w-0 w-full sm:min-h-16",
+            day: "relative min-w-0 flex-1 p-px text-center sm:p-0.5",
             range_start: "rounded-l-md",
             range_middle: "rounded-none",
             range_end: "rounded-r-md",
@@ -132,7 +145,7 @@ export function ReservationAvailabilityCalendar({
       </div>
 
       <div
-        className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-dashboard-muted"
+        className="flex flex-wrap gap-x-3 gap-y-2 text-[11px] text-dashboard-muted sm:gap-x-4 sm:text-xs"
         aria-label="Availability legend"
       >
         <LegendSwatch className="border border-dashboard-border bg-transparent" label="Available" />

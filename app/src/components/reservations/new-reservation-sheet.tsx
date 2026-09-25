@@ -677,16 +677,17 @@ export function NewReservationSheet({
           <SheetDescription className="mt-1">
             Check availability, reserve the garment, then finish the customer details.
           </SheetDescription>
-          <div className="mt-4 flex items-center gap-2 text-xs">
+          <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 text-xs sm:flex sm:gap-2">
             <StepBadge
               active={step === "select"}
               done={step !== "select"}
-              label="1. Check availability"
+              number="1"
+              label="Check availability"
             />
-            <span className="text-dashboard-muted">→</span>
-            <StepBadge active={step === "held"} done={step === "done"} label="2. Reserve" />
-            <span className="text-dashboard-muted">→</span>
-            <StepBadge active={step === "done"} done={false} label="3. Complete" />
+            <span className="text-center text-dashboard-muted">→</span>
+            <StepBadge active={step === "held"} done={step === "done"} number="2" label="Reserve" />
+            <span className="text-center text-dashboard-muted">→</span>
+            <StepBadge active={step === "done"} done={false} number="3" label="Complete" />
           </div>
           {notice ? <Notice tone={notice.tone} text={notice.text} /> : null}
         </header>
@@ -1609,17 +1610,30 @@ function SummaryValue({ label, value }: { label: string; value: string }) {
   );
 }
 
-function StepBadge({ active, done, label }: { active: boolean; done: boolean; label: string }) {
+function StepBadge({
+  active,
+  done,
+  number,
+  label,
+}: {
+  active: boolean;
+  done: boolean;
+  number: string;
+  label: string;
+}) {
   return (
     <span
       className={cn(
-        "rounded-full border px-2.5 py-1",
+        "flex min-w-0 items-center justify-center rounded-full border px-2 py-1.5 text-center leading-tight sm:px-2.5 sm:py-1",
         active || done
           ? "border-dashboard-accent bg-dashboard-active text-dashboard-accent"
           : "border-dashboard-border text-dashboard-muted"
       )}
     >
-      {label}
+      <span className="sm:hidden" aria-label={`${number}. ${label}`}>
+        {number}
+      </span>
+      <span className="hidden sm:inline">{number}. {label}</span>
     </span>
   );
 }
