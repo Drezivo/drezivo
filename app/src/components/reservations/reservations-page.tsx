@@ -25,7 +25,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { DatePickerField } from "@/components/ui/date-picker-field";
+import { DateRangePickerField } from "@/components/ui/date-range-picker-field";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -246,8 +246,8 @@ export function ReservationsPage() {
     resetPagination();
   };
 
-  const updateDate = (field: keyof DateRange, value: string) => {
-    setDateRange((current) => ({ ...current, [field]: value }));
+  const updateDateRange = (value: DateRange) => {
+    setDateRange(value);
     resetPagination();
   };
 
@@ -289,7 +289,7 @@ export function ReservationsPage() {
               dateRangeError={dateRangeError}
               hasActiveFilters={hasActiveFilters}
               onClearFilters={clearFilters}
-              onDateChange={updateDate}
+              onDateRangeChange={updateDateRange}
               onQueryChange={updateSearch}
             />
             <ReservationStatusTabs activeStatus={status} onChange={updateStatus} />
@@ -438,7 +438,7 @@ function ReservationToolbar({
   dateRangeError,
   hasActiveFilters,
   onClearFilters,
-  onDateChange,
+  onDateRangeChange,
   onQueryChange,
   query,
 }: {
@@ -446,7 +446,7 @@ function ReservationToolbar({
   dateRangeError: string | null;
   hasActiveFilters: boolean;
   onClearFilters: () => void;
-  onDateChange: (field: keyof DateRange, value: string) => void;
+  onDateRangeChange: (value: DateRange) => void;
   onQueryChange: (value: string) => void;
   query: string;
 }) {
@@ -468,29 +468,15 @@ function ReservationToolbar({
         />
       </label>
 
-      <div className="grid gap-2 sm:grid-cols-2 xl:w-auto">
-        <div>
-          <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">Pickup from</span>
-          <DatePickerField
-            ariaLabel="Pickup from"
-            value={dateRange.from}
-            placeholder="Select start date"
-            invalid={Boolean(dateRangeError)}
-            onChange={(value) => onDateChange("from", value)}
-          />
-        </div>
-        <div>
-          <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
-            Pickup through
-          </span>
-          <DatePickerField
-            ariaLabel="Pickup through"
-            value={dateRange.to}
-            placeholder="Select end date"
-            invalid={Boolean(dateRangeError)}
-            onChange={(value) => onDateChange("to", value)}
-          />
-        </div>
+      <div className="xl:w-[19rem]">
+        <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">Pickup date</span>
+        <DateRangePickerField
+          ariaLabel="Pickup date"
+          value={dateRange}
+          placeholder="Select date or range"
+          invalid={Boolean(dateRangeError)}
+          onChange={onDateRangeChange}
+        />
       </div>
 
       {hasActiveFilters ? (
@@ -825,7 +811,7 @@ function parseDate(value: string | null): string {
 
 function validateDateRange(range: DateRange): string | null {
   if (!range.from && !range.to) return null;
-  if (!range.from || !range.to) return "Choose both the start and end pickup dates.";
+  if (!range.from || !range.to) return "Choose a valid pickup date or date range.";
 
   const start = parseCalendarDate(range.from);
   const end = parseCalendarDate(range.to);
