@@ -84,7 +84,7 @@ export function DatePickerField({
       </button>
 
       {open ? (
-        <div className="absolute left-0 top-[calc(100%+0.5rem)] z-50 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-dashboard-border bg-dashboard-surface p-3 shadow-xl">
+        <div className="absolute left-1/2 top-[calc(100%+0.5rem)] z-50 w-[calc(100vw-2rem)] max-w-[22rem] -translate-x-1/2 rounded-lg border border-dashboard-border bg-dashboard-surface p-2 shadow-xl sm:left-0 sm:w-[22rem] sm:translate-x-0 sm:p-3">
           <Calendar
             mode="single"
             selected={selected}
@@ -104,6 +104,7 @@ export function DatePickerField({
               type="button"
               size="sm"
               variant="ghost"
+              className="text-zinc-200 hover:text-white disabled:text-dashboard-muted"
               disabled={!todayAllowed}
               onClick={() => {
                 onChange(formatIsoDate(today));
