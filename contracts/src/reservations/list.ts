@@ -42,7 +42,7 @@ export const reservationListQuery = paginationRequest
     status: reservationState.optional(),
     pickup_start: isoInstant.optional(),
     pickup_end: isoInstant.optional(),
-    sort: reservationListSort.default('pickup_asc'),
+    sort: reservationListSort.default('created_desc'),
   })
   .strict()
   .superRefine((value, ctx) => {

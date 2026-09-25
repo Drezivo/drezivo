@@ -25,6 +25,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { DatePickerField } from "@/components/ui/date-picker-field";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -188,7 +189,7 @@ export function ReservationsPage() {
     void createDrezivoApiClient(getToken)
       .getReservations({
         limit: PAGE_SIZE,
-        sort: "pickup_asc",
+        sort: "created_desc",
         ...(currentCursor ? { cursor: currentCursor } : {}),
         ...(deferredQuery ? { search: deferredQuery } : {}),
         ...(status ? { status } : {}),
@@ -280,7 +281,7 @@ export function ReservationsPage() {
           onNewReservation={() => setIsNewReservationOpen(true)}
         />
 
-        <Card className="gap-0 py-0">
+        <Card className="gap-0 overflow-visible py-0">
           <CardContent className="p-0">
             <ReservationToolbar
               query={query}
@@ -468,26 +469,28 @@ function ReservationToolbar({
       </label>
 
       <div className="grid gap-2 sm:grid-cols-2 xl:w-auto">
-        <label>
+        <div>
           <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">Pickup from</span>
-          <Input
-            type="date"
+          <DatePickerField
+            ariaLabel="Pickup from"
             value={dateRange.from}
-            onChange={(event) => onDateChange("from", event.target.value)}
-            aria-invalid={Boolean(dateRangeError)}
+            placeholder="Select start date"
+            invalid={Boolean(dateRangeError)}
+            onChange={(value) => onDateChange("from", value)}
           />
-        </label>
-        <label>
+        </div>
+        <div>
           <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
             Pickup through
           </span>
-          <Input
-            type="date"
+          <DatePickerField
+            ariaLabel="Pickup through"
             value={dateRange.to}
-            onChange={(event) => onDateChange("to", event.target.value)}
-            aria-invalid={Boolean(dateRangeError)}
+            placeholder="Select end date"
+            invalid={Boolean(dateRangeError)}
+            onChange={(value) => onDateChange("to", value)}
           />
-        </label>
+        </div>
       </div>
 
       {hasActiveFilters ? (

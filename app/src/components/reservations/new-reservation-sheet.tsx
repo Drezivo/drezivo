@@ -28,7 +28,9 @@ import {
 } from "@/components/reservations/reservation-availability-calendar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DatePickerField } from "@/components/ui/date-picker-field";
 import { Input } from "@/components/ui/input";
+import { TimePickerField } from "@/components/ui/time-picker-field";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
@@ -734,31 +736,32 @@ export function NewReservationSheet({
                     <div className="mt-4 space-y-3">
                       <div className="grid gap-3 sm:grid-cols-2">
                         <Field label={`Pickup time · ${formatIsoDateForDisplay(pickupDate)}`}>
-                          <Input
-                            type="time"
-                            aria-label="Pickup time"
+                          <TimePickerField
+                            ariaLabel="Pickup time"
                             value={pickupTime}
-                            onChange={(event) => {
-                              setPickupTime(event.target.value);
+                            onChange={(value) => {
+                              setPickupTime(value);
                               setExactAvailability(null);
                               reserveGuard.resetIntent();
                             }}
                           />
                         </Field>
                         <Field label={`Return time · ${formatIsoDateForDisplay(dueDate)}`}>
-                          <Input
-                            type="time"
-                            aria-label="Return time"
+                          <TimePickerField
+                            ariaLabel="Return time"
                             value={dueTime}
-                            min={minimumReturnTime(
-                              selectedVariant,
-                              pickupDate,
-                              dueDate,
-                              pickupTime,
-                              timeZone
-                            )}
-                            onChange={(event) => {
-                              setDueTime(event.target.value);
+                            {...(() => {
+                              const minTime = minimumReturnTime(
+                                selectedVariant,
+                                pickupDate,
+                                dueDate,
+                                pickupTime,
+                                timeZone
+                              );
+                              return minTime ? { min: minTime } : {};
+                            })()}
+                            onChange={(value) => {
+                              setDueTime(value);
                               setExactAvailability(null);
                               reserveGuard.resetIntent();
                             }}
@@ -768,13 +771,14 @@ export function NewReservationSheet({
 
                       <div className="grid gap-3 sm:grid-cols-2">
                         <Field label="Event date (optional)">
-                          <Input
-                            type="date"
+                          <DatePickerField
+                            ariaLabel="Event date (optional)"
                             value={eventDate}
                             min={pickupDate}
                             max={dueDate}
-                            onChange={(event) => {
-                              setEventDate(event.target.value);
+                            placeholder="Select event date"
+                            onChange={(value) => {
+                              setEventDate(value);
                               reserveGuard.resetIntent();
                             }}
                           />

@@ -306,12 +306,19 @@ async function selectProductVariantAndRentalPeriod() {
   const variant = await screen.findByRole("button", { name: /M · Emerald/i });
   fireEvent.click(variant);
   fireEvent.click(await screen.findByRole("button", { name: "Select Oct 10 to Oct 13" }));
-  fireEvent.change(screen.getByLabelText("Pickup time"), { target: { value: "10:00" } });
-  fireEvent.change(screen.getByLabelText("Return time"), { target: { value: "10:00" } });
-  fireEvent.change(screen.getByLabelText("Event date (optional)"), {
-    target: { value: "2026-10-11" },
-  });
+  setPickerTime("Pickup time", "10", "00", "AM");
+  setPickerTime("Return time", "10", "00", "AM");
+  fireEvent.click(screen.getByRole("button", { name: "Event date (optional)" }));
+  fireEvent.click(screen.getByRole("button", { name: /October 11/i }));
   await waitFor(() => expect(api.getStaffReservationAvailabilityCheck).toHaveBeenCalled());
+}
+
+function setPickerTime(label: string, hour: string, minute: string, period: "AM" | "PM") {
+  fireEvent.click(screen.getByRole("button", { name: label }));
+  fireEvent.change(screen.getByLabelText(`${label} hour`), { target: { value: hour } });
+  fireEvent.change(screen.getByLabelText(`${label} minute`), { target: { value: minute } });
+  fireEvent.change(screen.getByLabelText(`${label} period`), { target: { value: period } });
+  fireEvent.click(screen.getByRole("button", { name: "Set time" }));
 }
 
 const fillDatesAndSelectProduct = selectProductVariantAndRentalPeriod;
@@ -376,8 +383,8 @@ describe("NewReservationSheet", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Emerald Gown/i }));
     fireEvent.click(await screen.findByRole("button", { name: /M · Emerald/i }));
     fireEvent.click(screen.getByRole("button", { name: "Select short range" }));
-    fireEvent.change(screen.getByLabelText("Pickup time"), { target: { value: "10:00" } });
-    fireEvent.change(screen.getByLabelText("Return time"), { target: { value: "10:00" } });
+    setPickerTime("Pickup time", "10", "00", "AM");
+    setPickerTime("Return time", "10", "00", "AM");
 
     expect(await screen.findByText(/this is a 3 days fixed rental/i)).toBeVisible();
     expect(screen.getByText(/stays unavailable for 1 day of recovery/i)).toBeVisible();
@@ -390,15 +397,16 @@ describe("NewReservationSheet", () => {
     renderSheet();
     await fillDatesAndSelectProduct();
 
-    const eventDate = screen.getByLabelText("Event date (optional)");
-    expect(eventDate).toHaveAttribute("min", "2026-10-10");
-    expect(eventDate).toHaveAttribute("max", "2026-10-13");
-    expect(eventDate).toHaveValue("2026-10-11");
+    expect(screen.getByRole("button", { name: "Event date (optional)" })).toHaveTextContent(
+      "Oct 11, 2026"
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Select later range" }));
-    await waitFor(() => expect(screen.getByLabelText("Event date (optional)")).toHaveValue(""));
-    expect(screen.getByLabelText("Event date (optional)")).toHaveAttribute("min", "2026-10-20");
-    expect(screen.getByLabelText("Event date (optional)")).toHaveAttribute("max", "2026-10-23");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Event date (optional)" })).toHaveTextContent(
+        "Select event date"
+      )
+    );
   });
 
   it("runs the staff fast path from advisory availability through hold and truthful pending completion", async () => {

@@ -423,6 +423,16 @@ Before marking a task complete:
     - [x] A review deadline may extend toward pickup/24 hours, but never below the original 15-minute hold promised to staff.
     - [x] The frontend distinguishes an expired merchant-review deadline from an expired initial garment hold instead of showing the same misleading message.
 
+- [x] **RSV-069 — Improve staff reservation date/time controls and list ordering**
+  - **Outcome:** Reservation date/time entry uses consistent Drezivo controls instead of browser-native date/time widgets, and the Reservations table shows the newest reservation first.
+  - **Acceptance:**
+    - [x] Reservations list requests `created_desc`, with the reservation-list contract defaulting to newest-first for stable cursor pagination.
+    - [x] Pickup-from and Pickup-through filters use reusable calendar popovers with readable dates, Today/Clear actions, keyboard Escape, and outside-click dismissal.
+    - [x] New Reservation Event Date uses the same reusable calendar control and preserves pickup/return min/max bounds.
+    - [x] Pickup and Return times use a reusable 12-hour time picker with explicit hour, minute, and AM/PM controls rather than the browser-native time widget.
+    - [x] Return-time picker preserves the fixed-duration minimum by preventing a time earlier than the calculated same-day minimum.
+    - [x] Production Next build compiles the new controls and prerenders `/reservations`; the known unrelated Next/ESLint parser mismatch remains after compilation.
+
 ## Phase 8: Security and completion evidence
 
 - [ ] **RSV-070 — Complete reservation authorization/RLS suite**

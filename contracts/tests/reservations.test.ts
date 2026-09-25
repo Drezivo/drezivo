@@ -285,6 +285,8 @@ describe('reservation contracts', () => {
   });
 
   it('bounds reservation list queries and rejects tenant or branch selectors', () => {
+    expect(reservationListQuery.parse({}).sort).toBe('created_desc');
+
     expect(
       reservationListQuery.safeParse({
         status: 'confirmed',
