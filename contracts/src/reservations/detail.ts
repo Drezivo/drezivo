@@ -31,6 +31,13 @@ export const reservationLineDetail = z
   .object({
     id: reservationLineId,
     variant_id: productVariantId,
+    variant: z
+      .object({
+        sku: z.string().trim().min(1).max(120),
+        size_label: z.string().trim().min(1).max(40),
+        color_label: z.string().trim().min(1).max(80).nullable(),
+      })
+      .strict(),
     line_number: z.number().int().positive(),
     name_snapshot: z.string().trim().min(1).max(300),
     measurements_snapshot: z.record(z.string(), z.number().finite().nonnegative()),

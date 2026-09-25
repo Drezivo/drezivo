@@ -455,6 +455,7 @@ describe('RSV Phase 1 reservation read model', async () => {
       lines: [
         {
           name_snapshot: 'Emerald Gown Snapshot',
+          variant: { sku: seed.variantSku, size_label: 'M', color_label: null },
           measurements_snapshot: { bust: 91.5, waist: 72 },
           pricing_snapshot: { rental_minor: '10000', deposit_minor: '2000', currency: 'PHP' },
         },

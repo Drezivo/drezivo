@@ -112,6 +112,9 @@ export interface ReservationDetailHeaderRow {
 export interface ReservationDetailLineRow {
   id: string;
   variant_id: string;
+  variant_sku: string;
+  variant_size_label: string;
+  variant_color_label: string | null;
   line_number: number;
   name_snapshot: string;
   measurements_snapshot: unknown;
@@ -460,6 +463,9 @@ export async function readReservationDetailModel(
     `SELECT
        rl.id,
        rl.variant_id,
+       pv.sku AS variant_sku,
+       pv.size_label AS variant_size_label,
+       pv.color_label AS variant_color_label,
        rl.line_number,
        rl.name_snapshot,
        rl.measurements_snapshot,
@@ -467,6 +473,9 @@ export async function readReservationDetailModel(
        rl.deposit_minor,
        rl.currency
      FROM reservation_line rl
+     JOIN product_variant pv
+       ON pv.tenant_id = rl.tenant_id
+      AND pv.id = rl.variant_id
      WHERE rl.tenant_id = $1
        AND rl.reservation_id = $2::uuid
      ORDER BY rl.line_number ASC, rl.id ASC`,
