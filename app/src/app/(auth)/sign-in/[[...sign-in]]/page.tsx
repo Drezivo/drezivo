@@ -6,7 +6,7 @@ import { StaffAuthPage } from "@/components/auth/staff-auth-page";
 export default async function SignInPage() {
   const { userId } = await auth();
   if (userId) {
-    redirect("/");
+    redirect("/calendar");
   }
 
   return <StaffAuthPage />;
