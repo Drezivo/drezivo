@@ -1,10 +1,16 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Check, CheckCircle2, Loader2 } from "lucide-react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
-import type { PermissionCode, ReservationDetail } from "@drezivo/contracts";
+import type {
+  CustomerId,
+  PermissionCode,
+  ReservationDetail,
+  StaffReservationCustomerInput,
+  StaffReservationCustomerOption,
+} from "@drezivo/contracts";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -43,6 +49,7 @@ const READINESS_OPTIONS = [
 ] as const;
 
 type InspectionReadiness = (typeof READINESS_OPTIONS)[number]["value"];
+type CustomerMode = "new" | "existing";
 
 export function ReservationMutationActions({
   detail,
@@ -69,6 +76,15 @@ export function ReservationMutationActions({
   );
   const [cashReceived, setCashReceived] = useState(false);
   const [merchantReference, setMerchantReference] = useState("");
+  const [customerMode, setCustomerMode] = useState<CustomerMode>("new");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const deferredCustomerSearch = useDeferredValue(customerSearch.trim());
+  const [customerOptions, setCustomerOptions] = useState<StaffReservationCustomerOption[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<CustomerId | "">("");
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [notes, setNotes] = useState("");
   const [mutationError, setMutationError] = useState<DrezivoApiError | null>(null);
 
   const actions = useMemo(
@@ -85,9 +101,43 @@ export function ReservationMutationActions({
     setAmountReceived(detail.payment ? minorUnitsToMajorInput(detail.payment.amount_minor) : "");
     setCashReceived(false);
     setMerchantReference("");
+    setCustomerMode("new");
+    setCustomerSearch("");
+    setCustomerOptions([]);
+    setSelectedCustomerId("");
+    setFullName("");
+    setPhone("");
+    setEmail("");
+    setNotes("");
     setMutationError(null);
     submitGuard.resetIntent();
   }, [detail.id, detail.status, detail.version, detail.terms_accepted_at, submitGuard.resetIntent]);
+
+  useEffect(() => {
+    if (
+      selectedAction !== "complete_reservation" ||
+      detail.customer.snapshot ||
+      customerMode !== "existing" ||
+      deferredCustomerSearch.length < 2
+    ) {
+      setCustomerOptions([]);
+      return;
+    }
+
+    let cancelled = false;
+    void createDrezivoApiClient(getToken)
+      .getStaffReservationIntakeOptions({ customer_search: deferredCustomerSearch })
+      .then((result) => {
+        if (!cancelled) setCustomerOptions(result.data.customers);
+      })
+      .catch((error) => {
+        if (!cancelled) setMutationError(toDrezivoApiError(error));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customerMode, deferredCustomerSearch, detail.customer.snapshot, getToken, selectedAction]);
 
   if (actions.length === 0) return null;
 
@@ -102,6 +152,14 @@ export function ReservationMutationActions({
     setAmountReceived(detail.payment ? minorUnitsToMajorInput(detail.payment.amount_minor) : "");
     setCashReceived(false);
     setMerchantReference("");
+    setCustomerMode("new");
+    setCustomerSearch("");
+    setCustomerOptions([]);
+    setSelectedCustomerId("");
+    setFullName("");
+    setPhone("");
+    setEmail("");
+    setNotes("");
     setMutationError(null);
     onNotice(null);
   };
@@ -120,6 +178,23 @@ export function ReservationMutationActions({
     setMutationError(null);
   };
 
+  const needsCustomerEntry =
+    selectedAction === "complete_reservation" &&
+    detail.status === "held" &&
+    !detail.customer.snapshot;
+  const customerInput = needsCustomerEntry
+    ? buildCustomerInput({
+        customerMode,
+        selectedCustomerId,
+        fullName,
+        phone,
+        email,
+        notes,
+      })
+    : null;
+  const selectedCustomer =
+    customerOptions.find((customer) => customer.id === selectedCustomerId) ?? null;
+
   const submitAction = async () => {
     if (!selectedAction || submitGuard.isSubmitting) return;
     setMutationError(null);
@@ -132,7 +207,11 @@ export function ReservationMutationActions({
           case "complete_reservation":
             return api.completeStaffReservation(
               detail.id,
-              { version: detail.version, terms_accepted: true },
+              {
+                version: detail.version,
+                terms_accepted: true,
+                ...(customerInput ? { customer: customerInput } : {}),
+              },
               idempotencyKey
             );
           case "record_cash": {
@@ -256,10 +335,7 @@ export function ReservationMutationActions({
     }
   };
 
-  const completionNeedsCustomer =
-    selectedAction === "complete_reservation" &&
-    detail.status === "held" &&
-    !detail.customer.snapshot;
+  const completionNeedsCustomer = needsCustomerEntry && customerInput === null;
   const completionNeedsTerms =
     selectedAction === "complete_reservation" &&
     detail.terms_accepted_at === null &&
@@ -334,11 +410,187 @@ export function ReservationMutationActions({
               </label>
             ) : null}
 
-            {completionNeedsCustomer ? (
-              <ActionMessage>
-                Add the customer details before completing this short hold. Customer entry is part
-                of the New Reservation flow in RSV-063.
-              </ActionMessage>
+            {needsCustomerEntry ? (
+              <div className="space-y-3 rounded-lg border border-dashboard-border bg-dashboard-surface p-3">
+                <div>
+                  <p className="text-xs font-semibold text-dashboard-navy">Customer</p>
+                  <p className="mt-1 text-xs text-dashboard-muted">
+                    Add a new customer or select an existing customer before completing this hold.
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={customerMode === "new" ? "default" : "secondary"}
+                    disabled={submitGuard.isSubmitting}
+                    onClick={() =>
+                      updateIntentField(() => {
+                        setCustomerMode("new");
+                        setSelectedCustomerId("");
+                      })
+                    }
+                  >
+                    New customer
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={customerMode === "existing" ? "default" : "secondary"}
+                    disabled={submitGuard.isSubmitting}
+                    onClick={() =>
+                      updateIntentField(() => {
+                        setCustomerMode("existing");
+                        setFullName("");
+                        setPhone("");
+                        setEmail("");
+                        setNotes("");
+                      })
+                    }
+                  >
+                    Existing customer
+                  </Button>
+                </div>
+
+                {customerMode === "new" ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
+                        Full name
+                      </span>
+                      <Input
+                        value={fullName}
+                        disabled={submitGuard.isSubmitting}
+                        maxLength={200}
+                        onChange={(event) =>
+                          updateIntentField(() => setFullName(event.target.value))
+                        }
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
+                        Phone
+                      </span>
+                      <Input
+                        inputMode="numeric"
+                        autoComplete="tel"
+                        maxLength={11}
+                        placeholder="09XXXXXXXXX"
+                        value={phone}
+                        disabled={submitGuard.isSubmitting}
+                        onChange={(event) =>
+                          updateIntentField(() =>
+                            setPhone(event.target.value.replace(/\D/g, "").slice(0, 11))
+                          )
+                        }
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
+                        Email
+                      </span>
+                      <Input
+                        type="email"
+                        autoComplete="email"
+                        value={email}
+                        disabled={submitGuard.isSubmitting}
+                        onChange={(event) => updateIntentField(() => setEmail(event.target.value))}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
+                        Customer notes (optional)
+                      </span>
+                      <Input
+                        value={notes}
+                        disabled={submitGuard.isSubmitting}
+                        maxLength={2000}
+                        onChange={(event) => updateIntentField(() => setNotes(event.target.value))}
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <div>
+                    <Input
+                      aria-label="Search existing customer"
+                      placeholder="Search name, phone, or email..."
+                      value={customerSearch}
+                      disabled={submitGuard.isSubmitting}
+                      onChange={(event) =>
+                        updateIntentField(() => {
+                          setCustomerSearch(event.target.value);
+                          setSelectedCustomerId("");
+                        })
+                      }
+                    />
+                    {deferredCustomerSearch.length < 2 ? (
+                      <p className="mt-2 text-xs text-dashboard-muted">
+                        Type at least 2 characters to find an existing customer.
+                      </p>
+                    ) : null}
+                    <div className="mt-2 grid gap-2">
+                      {customerOptions.map((customer) => {
+                        const isSelected = selectedCustomerId === customer.id;
+                        return (
+                          <button
+                            key={customer.id}
+                            type="button"
+                            aria-pressed={isSelected}
+                            disabled={submitGuard.isSubmitting}
+                            onClick={() =>
+                              updateIntentField(() => setSelectedCustomerId(customer.id))
+                            }
+                            className={`flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition-colors ${
+                              isSelected
+                                ? "border-dashboard-accent bg-dashboard-active"
+                                : "border-dashboard-border hover:bg-dashboard-active/40"
+                            }`}
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-medium text-dashboard-navy">
+                                {customer.full_name}
+                              </span>
+                              <span className="mt-1 block truncate text-xs text-dashboard-muted">
+                                {customer.phone ?? customer.email ?? "No contact shown"}
+                              </span>
+                            </span>
+                            <span
+                              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
+                                isSelected
+                                  ? "border-dashboard-accent bg-dashboard-accent text-white"
+                                  : "border-dashboard-border text-transparent"
+                              }`}
+                              aria-hidden="true"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {selectedCustomer ? (
+                      <div className="mt-3 rounded-lg border border-dashboard-accent/50 bg-dashboard-active/60 p-3">
+                        <p className="text-xs font-medium uppercase tracking-wide text-dashboard-muted">
+                          Selected customer
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-dashboard-navy">
+                          {selectedCustomer.full_name}
+                        </p>
+                        <p className="mt-1 text-xs text-dashboard-muted">
+                          {selectedCustomer.phone ?? selectedCustomer.email ?? "No contact shown"}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
+                {completionNeedsCustomer ? (
+                  <p className="text-xs text-dashboard-muted">
+                    Choose a customer before completing the reservation.
+                  </p>
+                ) : null}
+              </div>
             ) : null}
 
             {selectedAction === "record_cash" && detail.payment ? (
@@ -812,6 +1064,40 @@ function isStaffCompletionResult(value: unknown): value is {
       record["next_action"] === "merchant_review" ||
       record["next_action"] === "payment_verification")
   );
+}
+
+function buildCustomerInput(input: {
+  customerMode: CustomerMode;
+  selectedCustomerId: CustomerId | "";
+  fullName: string;
+  phone: string;
+  email: string;
+  notes: string;
+}): StaffReservationCustomerInput | null {
+  if (input.customerMode === "existing") {
+    return input.selectedCustomerId
+      ? { source: "existing", customer_id: input.selectedCustomerId }
+      : null;
+  }
+
+  const fullName = input.fullName.trim();
+  const phone = input.phone.trim();
+  const email = input.email.trim();
+  const notes = input.notes.trim();
+  if (!fullName) return null;
+  if (phone && !/^\d{11}$/.test(phone)) return null;
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  if (!phone && !email) return null;
+
+  return {
+    source: "new",
+    customer: {
+      full_name: fullName,
+      ...(phone ? { phone } : {}),
+      ...(email ? { email } : {}),
+      ...(notes ? { notes } : {}),
+    },
+  };
 }
 
 function minorUnitsToMajorInput(value: string): string {

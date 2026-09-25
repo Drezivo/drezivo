@@ -292,9 +292,13 @@ function assertPickupPaymentPrerequisites(
     throw new PaymentPrerequisiteFailedError('A verified merchant decision is required before pickup.');
   }
   if (payment.rail === 'cash') return;
-  if (!receipt || receipt.evidence_status !== 'verified' || !isImmutableAcceptedReceipt(receipt)) {
+  // Staff manual verification is the authoritative proof of collection for manual-payment rails.
+  // Uploaded evidence is optional for staff-created reservations, but when it exists it must still
+  // be accepted, immutable, and verified before physical handover.
+  if (!receipt) return;
+  if (receipt.evidence_status !== 'verified' || !isImmutableAcceptedReceipt(receipt)) {
     throw new PaymentPrerequisiteFailedError(
-      'Verified merchant payment evidence is required before pickup.',
+      'Uploaded payment evidence must be verified before pickup.',
     );
   }
 }

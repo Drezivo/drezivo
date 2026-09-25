@@ -1231,6 +1231,44 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     });
   });
 
+  it('allows pickup after staff manually verifies a manual payment without uploaded receipt evidence', async () => {
+    const seed = await seedWorkspace('org_rsv050_manual_pickup', 'user_rsv050_manual_pickup', 'manual_qr');
+    const held = await createHold(seed, 'pickup-manual-no-receipt');
+    const submitted = await submitReservation(
+      reviewContext(seed, 'req-pickup-manual-submit', 'idem-pickup-manual-submit'),
+      held.id,
+      { version: 1, terms_accepted: true },
+    );
+    if (submitted.status !== 200 || submitted.body.success !== true) {
+      throw new Error('Expected manual-payment reservation submission to succeed.');
+    }
+
+    await verifyMerchantCollection(seed, held, false);
+    const confirmed = await confirmReservation(
+      reviewContext(seed, 'req-pickup-manual-confirm', 'idem-pickup-manual-confirm'),
+      held.id,
+      { version: submitted.body.data.reservation.version },
+    );
+    if (confirmed.status !== 200 || confirmed.body.success !== true) {
+      throw new Error('Expected manually verified reservation confirmation to succeed.');
+    }
+
+    const pickedUp = await pickupReservation(
+      reviewContext(seed, 'req-pickup-manual', 'idem-pickup-manual'),
+      held.id,
+      { version: confirmed.body.data.reservation.version },
+    );
+
+    expect(pickedUp.status).toBe(200);
+    expect(pickedUp.body).toMatchObject({
+      success: true,
+      data: { reservation: { id: held.id, status: 'picked_up' } },
+    });
+    const state = await pickupState(seed, held.id);
+    expect(state.reservation_status).toBe('picked_up');
+    expect(state.asset.custody_kind).toBe('with_customer');
+  });
+
   it('blocks pickup when the garment is unready or payment truth no longer satisfies handover prerequisites', async () => {
     const unreadySeed = await seedWorkspace('org_rsv050_unready', 'user_rsv050_unready', 'cash');
     const unready = await createConfirmedReservation(unreadySeed, 'pickup-unready');

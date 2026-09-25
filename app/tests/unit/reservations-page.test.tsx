@@ -131,6 +131,7 @@ const reservationDetailRecord = reservationDetail.parse({
     {
       id: reservation.line.id,
       variant_id: reservation.line.variant_id,
+      variant: { sku: "EMERALD-M", size_label: "Medium", color_label: "Emerald" },
       line_number: 1,
       name_snapshot: reservation.line.name_snapshot,
       measurements_snapshot: { bust_cm: 91, waist_cm: 72 },
@@ -420,6 +421,8 @@ describe("ReservationsPage", () => {
     await waitFor(() => expect(api.getReservationDetail).toHaveBeenCalledWith(reservation.id));
     expect(await screen.findByRole("heading", { name: "Reservation RSV-REAL-001" })).toBeVisible();
     expect(screen.getAllByText("Real Customer").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Medium · Emerald")).toBeVisible();
+    expect(screen.getByText("EMERALD-M")).toBeVisible();
     expect(screen.getByText("Bust Cm: 91")).toBeVisible();
     expect(screen.getByText("Waist Cm: 72")).toBeVisible();
     expect(screen.getAllByText("Verified").length).toBeGreaterThanOrEqual(1);

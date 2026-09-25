@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   completeRentalReservation: vi.fn(),
   completeStaffReservation: vi.fn(),
   confirmReservation: vi.fn(),
+  getStaffReservationIntakeOptions: vi.fn(),
   verifyReservationPayment: vi.fn(),
   inspectReservationReturn: vi.fn(),
   pickupReservation: vi.fn(),
@@ -66,6 +67,7 @@ const confirmedDetail = reservationDetail.parse({
     {
       id: "00000000-0000-4000-8000-000000000103",
       variant_id: "00000000-0000-4000-8000-000000000104",
+      variant: { sku: "ACTION-M-EMERALD", size_label: "Medium", color_label: "Emerald" },
       line_number: 1,
       name_snapshot: "Action Gown",
       measurements_snapshot: {},
@@ -327,7 +329,7 @@ describe("ReservationMutationActions", () => {
     );
   });
 
-  it("requires customer/terms before completing a customer-less held reservation", () => {
+  it("collects a new customer before completing a customer-less held reservation", async () => {
     const heldDetail = reservationDetail.parse({
       ...confirmedDetail,
       status: "held",
@@ -338,13 +340,83 @@ describe("ReservationMutationActions", () => {
       hold_expires_at: "2026-10-10T02:15:00.000Z",
       version: 1,
     });
+    api.completeStaffReservation.mockResolvedValueOnce(mutationResult("confirmed", 2));
     renderActions(heldDetail, ["reservations.manage"]);
 
     fireEvent.click(screen.getByRole("button", { name: "Complete Reservation" }));
-    expect(
-      screen.getByText(/Add the customer details before completing this short hold/i)
-    ).toBeVisible();
-    expect(screen.getAllByRole("button", { name: "Complete Reservation" })[1]).toBeDisabled();
-    expect(api.completeStaffReservation).not.toHaveBeenCalled();
+    const confirm = screen.getAllByRole("button", { name: "Complete Reservation" })[1]!;
+    expect(confirm).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Maria Walk-in" } });
+    fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Customer accepted the rental terms." }));
+    expect(confirm).toBeEnabled();
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(api.completeStaffReservation).toHaveBeenCalledTimes(1));
+    expect(api.completeStaffReservation).toHaveBeenCalledWith(
+      heldDetail.id,
+      {
+        version: 1,
+        terms_accepted: true,
+        customer: {
+          source: "new",
+          customer: { full_name: "Maria Walk-in", phone: "09171234567" },
+        },
+      },
+      expect.any(String)
+    );
+  });
+
+  it("lets staff search and attach an existing customer to a held reservation", async () => {
+    const heldDetail = reservationDetail.parse({
+      ...confirmedDetail,
+      status: "held",
+      customer: { customer_id: null, snapshot: null },
+      terms_accepted_at: null,
+      submitted_at: null,
+      confirmed_at: null,
+      hold_expires_at: "2026-10-10T02:15:00.000Z",
+      version: 1,
+    });
+    const customerId = "00000000-0000-4000-8000-000000000777";
+    api.getStaffReservationIntakeOptions.mockResolvedValueOnce({
+      data: {
+        payment_methods: [],
+        customers: [
+          {
+            id: customerId,
+            full_name: "Maria Existing",
+            phone: "09170000000",
+            email: "maria@example.test",
+          },
+        ],
+      },
+      requestId: "req-intake",
+    });
+    api.completeStaffReservation.mockResolvedValueOnce(mutationResult("confirmed", 2));
+    renderActions(heldDetail, ["reservations.manage"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Complete Reservation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Existing customer" }));
+    fireEvent.change(screen.getByLabelText("Search existing customer"), {
+      target: { value: "Maria" },
+    });
+    const customer = await screen.findByRole("button", { name: /Maria Existing/i });
+    fireEvent.click(customer);
+    expect(customer).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Customer accepted the rental terms." }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Complete Reservation" })[1]!);
+
+    await waitFor(() => expect(api.completeStaffReservation).toHaveBeenCalledTimes(1));
+    expect(api.completeStaffReservation).toHaveBeenCalledWith(
+      heldDetail.id,
+      {
+        version: 1,
+        terms_accepted: true,
+        customer: { source: "existing", customer_id: customerId },
+      },
+      expect.any(String)
+    );
   });
 });

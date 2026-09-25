@@ -524,6 +524,11 @@ export async function getReservationDetail(
       lines: model.lines.map((line) => ({
         id: line.id,
         variant_id: line.variant_id,
+        variant: {
+          sku: line.variant_sku,
+          size_label: line.variant_size_label,
+          color_label: line.variant_color_label,
+        },
         line_number: line.line_number,
         name_snapshot: line.name_snapshot,
         measurements_snapshot: line.measurements_snapshot,
