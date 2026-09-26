@@ -67,7 +67,14 @@ export const refundStatusEnum = pgEnum('refund_status', [
   'failed',
   'cancelled',
 ]);
-export const refundPurposeEnum = pgEnum('refund_purpose', ['rental', 'security_deposit']);
+export const refundPurposeEnum = pgEnum('refund_purpose', [
+  'rental',
+  'security_deposit',
+  'rental_refund',
+  'security_deposit_release',
+  'goodwill_adjustment',
+  'fitting_fee_refund',
+]);
 export const depositEntryKindEnum = pgEnum('deposit_entry_kind', [
   'receive',
   'apply',

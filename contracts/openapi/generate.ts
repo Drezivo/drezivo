@@ -66,6 +66,12 @@ import {
   fittingListQuery,
   fittingListResponse,
   fittingNoShowRequest,
+  fittingPaymentIntentCreateRequest,
+  fittingPaymentIntentCreateResponse,
+  fittingPaymentReceiptAttachRequest,
+  fittingPaymentReceiptAttachResponse,
+  fittingPaymentVerifyRequest,
+  fittingPaymentVerifyResponse,
   fittingNoteUpdateRequest,
   fittingNoteUpdateResponse,
   fittingParams,
@@ -883,6 +889,74 @@ for (const action of ['confirm', 'reject', 'cancel', 'complete', 'no-show'] as c
     },
   });
 }
+
+registry.registerPath({
+  method: 'post',
+  path: '/fittings/{id}/payment',
+  tags: ['fittings', 'payments'],
+  summary: 'Create the canonical pending payment intent for a positive fitting-fee obligation.',
+  request: {
+    params: fittingParams,
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: fittingPaymentIntentCreateRequest } } },
+  },
+  responses: {
+    201: {
+      description: 'Pending fitting-fee payment intent created; no money is implied collected.',
+      content: { 'application/json': { schema: successEnvelope(fittingPaymentIntentCreateResponse) } },
+    },
+    403: jsonError('Fitting operation permission is required.'),
+    404: jsonError('The fitting or payment method was not found for the active tenant/branch.'),
+    409: jsonError('STATE_CONFLICT or IDEMPOTENCY_KEY_REUSED.'),
+    422: jsonError('The fitting payment request is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/fittings/{id}/payment-receipt',
+  tags: ['fittings', 'payments'],
+  summary: 'Attach immutable payment evidence to the fitting payment without marking funds verified.',
+  request: {
+    params: fittingParams,
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: fittingPaymentReceiptAttachRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Evidence attached; payment collection state remains independent.',
+      content: { 'application/json': { schema: successEnvelope(fittingPaymentReceiptAttachResponse) } },
+    },
+    403: jsonError('Fitting operation permission is required.'),
+    404: jsonError('The fitting was not found for the active tenant/branch.'),
+    409: jsonError('STATE_CONFLICT, PAYMENT_PREREQUISITE_FAILED, or IDEMPOTENCY_KEY_REUSED.'),
+    422: jsonError('The fitting payment receipt request is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/fittings/{id}/verify-payment',
+  tags: ['fittings', 'payments'],
+  summary: 'Explicitly verify actual fitting-fee collection without changing fitting lifecycle state.',
+  request: {
+    params: fittingParams,
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: fittingPaymentVerifyRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Payment verified and allocated to the immutable fitting-fee charge.',
+      content: { 'application/json': { schema: successEnvelope(fittingPaymentVerifyResponse) } },
+    },
+    403: jsonError(
+      'payments.manage and evidence.verify are required in addition to fitting operation access.',
+    ),
+    404: jsonError('The fitting was not found for the active tenant/branch.'),
+    409: jsonError('STATE_CONFLICT, PAYMENT_PREREQUISITE_FAILED, or IDEMPOTENCY_KEY_REUSED.'),
+    422: jsonError('The fitting payment verification request is invalid.'),
+  },
+});
 
 registry.registerPath({
   method: 'get',

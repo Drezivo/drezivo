@@ -813,7 +813,11 @@ function toFittingDetail(
         assigned_asset: guaranteed ? { id: line.asset_id, asset_code: line.asset_code } : null,
       };
     }),
-    fee: { fee_minor: String(row.fee_minor), currency: row.currency, payment: null },
+    fee: {
+      fee_minor: String(row.fee_minor),
+      currency: row.currency,
+      payment: normalizeFittingPayment(row.payment),
+    },
     internal_note: row.internal_note,
     terminal_reason: row.terminal_reason,
     attention:
@@ -839,6 +843,26 @@ async function claimMutationIdempotency(
     intentKey: context.idempotencyKey,
     payloadHash,
   });
+}
+
+function normalizeFittingPayment(value: unknown): FittingDetail['fee']['payment'] {
+  if (!value || typeof value !== 'object') return null;
+  const payment = value as Record<string, unknown>;
+  return {
+    id: String(payment.id) as NonNullable<FittingDetail['fee']['payment']>['id'],
+    status: payment.status as NonNullable<FittingDetail['fee']['payment']>['status'],
+    evidence_status: payment.evidence_status as NonNullable<
+      FittingDetail['fee']['payment']
+    >['evidence_status'],
+    amount_minor: String(payment.amount_minor),
+    currency: String(payment.currency),
+    verified_at:
+      payment.verified_at instanceof Date
+        ? payment.verified_at.toISOString()
+        : typeof payment.verified_at === 'string'
+          ? payment.verified_at
+          : null,
+  };
 }
 
 function replayOrThrow<T extends { status: number; body: unknown }>(

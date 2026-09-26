@@ -3,13 +3,13 @@ title: Fittings V1.1 Implementation Checklist
 type: implementation-checklist
 status: in-progress
 owner: Drezivo team
-updated: 2026-09-26
+updated: 2026-09-27
 tags: [drezivo, v1.1, fittings, frontend, backend, implementation, checklist]
 ---
 
 # Fittings V1.1 Implementation Checklist
 
-**Status:** Frontend prototype approved. Backend Phases BE-0 through BE-5 are implemented, with the isolated Neon-branch rehearsal for FIT-BE-025 still outstanding. BE-6 backend schedule behavior is implemented through FIT-BE-063; FIT-BE-061 remains open only for the frontend session-storage cutover intentionally deferred to FIT-BE-101.
+**Status:** Frontend prototype approved. Backend Phases BE-0 through BE-5 are implemented, with the isolated Neon-branch rehearsal for FIT-BE-025 still outstanding. BE-6 backend schedule behavior is implemented through FIT-BE-063; FIT-BE-061 remains open only for the frontend session-storage cutover intentionally deferred to FIT-BE-101. BE-7 fitting finance integration is complete through FIT-BE-074, including explicit refund/correction behavior and its PostgreSQL falsification matrix.
 
 This file is the feature-wide implementation checklist for `/fittings` and `/fittings/schedule`. The original frontend prototype phases are retained below as implementation history; the backend phases are appended after the frontend section.
 
@@ -1016,37 +1016,46 @@ The fitting frontend prototype is complete when:
 
 **Approved phase:** FIT-BE-004 approved an optional fixed branch fitting fee. Positive snapshotted fees create immutable `fitting_fee` charges; payment/refund behavior reuses the existing finance domain.
 
-- [ ] **FIT-BE-070 — Add canonical fitting finance relationships**
+- [x] **FIT-BE-070 — Add canonical fitting finance relationships**
   - **Acceptance:**
-    - [ ] Add approved `fitting_id` links to existing finance entities through reviewed migrations.
-    - [ ] Reuse existing payment/charge/allocation/reversal rules instead of creating a parallel fitting-payment system.
-    - [ ] Same booking and currency invariants apply.
+    - [x] Add approved `fitting_id` links to existing finance entities through reviewed migrations.
+    - [x] Reuse existing payment/charge/allocation/reversal rules instead of creating a parallel fitting-payment system.
+    - [x] Same booking and currency invariants apply.
+  - **Evidence:** Existing reviewed migrations `0041_fittings_persistence.sql` and `0042_fittings_integrity.sql` already attach canonical `payment`/`charge` rows to `fitting_appointment`, constrain booking-source exclusivity, and enforce fitting snapshot currency/fee agreement. `0048_fitting_finance_integrity.sql` completes the shared posting relationship by deferrably requiring each `payment_allocation` to connect the same tenant, exact reservation-or-fitting source, and matching payment/charge currency; reversal postings must target an `apply` posting for that same payment and charge. Fitting finance uses the existing `payment`, `payment_receipt`, `payment_verification`, `charge`, and `payment_allocation` tables rather than introducing parallel fitting-payment tables. The new allocation guard is regression-tested against cross-fitting misuse, while the existing reservation review suite remains green 40/40.
 
-- [ ] **FIT-BE-071 — Implement fitting fee charge/payment creation**
+- [x] **FIT-BE-071 — Implement fitting fee charge/payment creation**
   - **Acceptance:**
-    - [ ] Fee amount is snapshotted from the approved source.
-    - [ ] No-fee fitting creates no unnecessary payment obligation.
-    - [ ] Payment evidence does not imply verified funds.
-    - [ ] Cash/manual evidence follows existing verification permission rules.
+    - [x] Fee amount is snapshotted from the approved source.
+    - [x] No-fee fitting creates no unnecessary payment obligation.
+    - [x] Payment evidence does not imply verified funds.
+    - [x] Cash/manual evidence follows existing verification permission rules.
+  - **Evidence:** Fitting creation continues to atomically create exactly one immutable `fitting_fee` charge only when the branch fee snapshot is positive. `fittings.finance.{service,repository}.ts` adds an explicit idempotent payment-intent command using an active tenant payment method and the exact snapshotted fee/currency; zero-fee fittings cannot create a payment obligation. Receipt attachment accepts only finalized immutable private `payment_receipt` files and leaves payment collection `pending`. Explicit verification requires fitting operational access plus `payments.manage` and `evidence.verify`; cash needs no receipt and records tender/change separately, while manual rails can use verified immutable evidence or authorized staff merchant verification. Successful verification records canonical `payment_verification` and one append-only `payment_allocation` against the fitting-fee charge. Concurrent identical payment-intent and verification deliveries coalesce to one business effect.
 
-- [ ] **FIT-BE-072 — Keep payment state independent from fitting lifecycle**
+- [x] **FIT-BE-072 — Keep payment state independent from fitting lifecycle**
   - **Acceptance:**
-    - [ ] Appointment status changes never automatically fabricate a payment result.
-    - [ ] Payment verification never silently confirms a fitting unless an explicit approved domain command does so.
-    - [ ] API exposes both states separately as the frontend prototype expects.
+    - [x] Appointment status changes never automatically fabricate a payment result.
+    - [x] Payment verification never silently confirms a fitting unless an explicit approved domain command does so.
+    - [x] API exposes both states separately as the frontend prototype expects.
+  - **Evidence:** Fitting confirmation still succeeds without any payment intent, and fitting lifecycle commands do not create, verify, allocate, or refund money. Conversely, fitting-fee payment creation/evidence/verification never mutates appointment `status` or `version`; tests verify finance can be recorded after an appointment is already confirmed while the fitting remains confirmed. Lifecycle response mapping now preserves the authoritative payment/evidence projection instead of forcing `payment: null`, and `contracts/src/fittings/finance.ts` plus the OpenAPI generator define separate payment-intent, receipt-evidence, and verification responses that include the fitting lifecycle state alongside finance state. `api/tests/integration/fittings-phase7-finance.test.ts` passes 9/9 PostgreSQL tests; the complete 10-file fitting integration regression passes 65/65, Contracts pass 122/122, API non-integration tests pass 83/83, and the shared reservation-review finance regression passes 40/40.
 
-- [ ] **FIT-BE-073 — Implement explicit fitting finance correction/refund behavior**
-  - **Acceptance:**
-    - [ ] Appointment rejection/cancellation/no-show never automatically creates a refund or finance reversal.
-    - [ ] Any fitting-fee refund/reversal is an explicit existing-finance command with existing authorization.
-    - [ ] Concurrent refund/reversal totals cannot exceed the refundable balance.
-    - [ ] Failed/manual refunds preserve accurate state and require explicit operator resolution.
+**FIT-BE-070/071/072 gate: PASSED 2026-09-27.** Canonical fitting finance relationships, positive-fee charge/payment/evidence/verification behavior, and lifecycle/payment independence are implemented and regression-tested.
 
-- [ ] **FIT-BE-074 — Add fitting-finance tests**
+- [x] **FIT-BE-073 — Implement explicit fitting finance correction/refund behavior**
   - **Acceptance:**
-    - [ ] No-fee, pending evidence, verified payment, rejected evidence, cancellation, and refund cases are covered as applicable.
-    - [ ] Cross-tenant finance links reject.
-    - [ ] Appointment/payment independence has explicit regression tests.
+    - [x] Appointment rejection/cancellation/no-show never automatically creates a refund or finance reversal.
+    - [x] Any fitting-fee refund/reversal is an explicit existing-finance command with existing authorization.
+    - [x] Concurrent refund/reversal totals cannot exceed the refundable balance.
+    - [x] Failed/manual refunds preserve accurate state and require explicit operator resolution.
+  - **Evidence:** `fittings.finance.service.ts` now exposes explicit Owner-authorized fitting-fee refund request and manual-resolution commands on the shared Finance tables; fitting lifecycle commands remain finance-neutral. Refund creation requires the canonical verified fitting payment, immutable verification authority, exact fitting currency and `fitting_fee_refund` purpose, then reserves the amount with one or more append-only `payment_allocation` reversal postings. The payment row is the service serialization point, while migration `0049_fitting_refund_integrity.sql` independently adds same-tenant/currency refund linkage plus advisory-serialized aggregate caps for active refund instructions and linked allocation reversals. Failed/cancelled manual refunds remain historical terminal instructions and append a compensating allocation that restores refundable/allocated balance; completed refunds retain the reversal and mark the payment `refunded` only after completed fitting refunds equal the full verified payment. No external bank refund is fabricated by Drezivo.
+
+- [x] **FIT-BE-074 — Add fitting-finance tests**
+  - **Acceptance:**
+    - [x] No-fee, pending evidence, verified payment, rejected evidence, cancellation, and refund cases are covered as applicable.
+    - [x] Cross-tenant finance links reject.
+    - [x] Appointment/payment independence has explicit regression tests.
+  - **Evidence:** `api/tests/integration/fittings-phase7-finance.test.ts` now passes 15/15 PostgreSQL tests. Coverage includes positive/no-fee creation, pending and rejected evidence, verified manual/cash payment, lifecycle/payment independence, reject/cancel/no-show with zero automatic refund effects, Owner-only refund authority, concurrent partial over-refund contention with one capped loser, failed manual refund balance restoration plus explicit retry, full manual completion with duplicate-delivery replay, fitting lifecycle preservation, and both service/database cross-tenant rejection. The complete 10-file fitting integration regression passes 71/71; shared reservation-review finance regression passes 40/40; Contracts pass 124/124; API non-integration tests pass 83/83; Contracts/API lint, typecheck and build are green.
+
+**BE-7 exit gate: PASSED 2026-09-27.** Fitting fees now use the shared Finance charge/payment/evidence/allocation/refund model end-to-end, payment remains independent from appointment lifecycle, refund/correction is explicit and Owner-authorized, aggregate refund/reversal caps hold under contention, and failed manual outcomes preserve recoverable financial truth.
 
 ---
 
