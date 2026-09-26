@@ -19,6 +19,7 @@ export interface ScheduleEvent {
   customer: string;
   clothing: string;
   status: ScheduleStatus;
+  prototype?: boolean;
 }
 
 export interface UpcomingRental {
@@ -40,7 +41,13 @@ export const DASHBOARD_METRICS: readonly DashboardMetric[] = [
   },
   { label: "Pickups Today", value: "4", description: "Scheduled", icon: Truck, tone: "mint" },
   { label: "Returns Today", value: "3", description: "Due today", icon: Undo2, tone: "blue" },
-  { label: "Fittings Today", value: "5", description: "Appointments", icon: Shirt, tone: "orange" },
+  {
+    label: "Fittings Today",
+    value: "5",
+    description: "Prototype appointments",
+    icon: Shirt,
+    tone: "orange",
+  },
   {
     label: "Pending Payments",
     value: "2",
@@ -57,6 +64,7 @@ export const TODAY_SCHEDULE: readonly ScheduleEvent[] = [
     customer: "Maria Santos",
     clothing: "Wedding Gown #24",
     status: "Confirmed",
+    prototype: true,
   },
   {
     time: "10:30",
@@ -78,6 +86,7 @@ export const TODAY_SCHEDULE: readonly ScheduleEvent[] = [
     customer: "Jamie Cruz",
     clothing: "Debut Gown",
     status: "Confirmed",
+    prototype: true,
   },
   {
     time: "16:30",

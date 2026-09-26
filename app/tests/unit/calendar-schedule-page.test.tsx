@@ -13,7 +13,7 @@ describe("CalendarSchedulePage", () => {
       "href",
       "/calendar/availability"
     );
-    expect(screen.getByLabelText(/Fitting: Maria Santos, Emerald Gown/)).toBeVisible();
+    expect(screen.getByLabelText(/Fitting prototype: Maria Santos, Emerald Gown/)).toBeVisible();
     expect(screen.getByLabelText("Schedule hours 7:00 AM to 9:00 PM")).toBeVisible();
   });
 
@@ -29,6 +29,28 @@ describe("CalendarSchedulePage", () => {
     expect(screen.getByRole("button", { name: "Return" })).toBeVisible();
     expect(screen.getByLabelText(/Return: Daniel Lopez/)).toBeVisible();
     expect(screen.queryByLabelText(/Pickup: Maria Santos/)).not.toBeInTheDocument();
+  });
+
+  it("keeps calendar fitting entries explicitly prototype-only", () => {
+    render(<CalendarSchedulePage />);
+
+    expect(screen.getByText("Fittings (prototype)")).toBeVisible();
+    const fitting = screen.getByLabelText(
+      "Fitting prototype: Maria Santos, Emerald Gown, 9:00 AM–10:00 AM"
+    );
+    expect(within(fitting).getByText("Fitting · Prototype")).toBeVisible();
+
+    fireEvent.click(fitting);
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Prototype fitting activity")).toBeVisible();
+    expect(
+      within(dialog).getByText("Calendar mock only · not linked to /fittings tenant data")
+    ).toBeVisible();
+    expect(
+      within(dialog).getByText(/Reservation and payment lifecycle steps are intentionally not shown/i)
+    ).toBeVisible();
+    expect(within(dialog).queryByText("Payment Method")).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /View Full Reservation/ })).not.toBeInTheDocument();
   });
 
   it("opens the full day agenda when a day header is clicked", () => {
@@ -82,11 +104,11 @@ describe("CalendarSchedulePage", () => {
     render(<CalendarSchedulePage />);
 
     const overlapping = [
-      screen.getByLabelText(/Fitting: Maria Santos, Emerald Gown/),
-      screen.getByLabelText(/Fitting: Carla Reyes, Blue Dress/),
-      screen.getByLabelText(/Fitting: Ana Lim, Wedding Gown/),
-      screen.getByLabelText(/Fitting: Jamie Cruz, Filipiniana Dress/),
-      screen.getByLabelText(/Fitting: Bea Tan, Red Gown/),
+      screen.getByLabelText(/Fitting prototype: Maria Santos, Emerald Gown/),
+      screen.getByLabelText(/Fitting prototype: Carla Reyes, Blue Dress/),
+      screen.getByLabelText(/Fitting prototype: Ana Lim, Wedding Gown/),
+      screen.getByLabelText(/Fitting prototype: Jamie Cruz, Filipiniana Dress/),
+      screen.getByLabelText(/Fitting prototype: Bea Tan, Red Gown/),
     ];
 
     overlapping.forEach((activity) => {
@@ -96,19 +118,22 @@ describe("CalendarSchedulePage", () => {
     expect(screen.queryByText(/\+ \d+ more/)).not.toBeInTheDocument();
   });
 
-  it("opens reservation details directly from an individual agenda block", () => {
+  it("opens prototype fitting details directly from an individual calendar block", () => {
     render(<CalendarSchedulePage />);
 
     fireEvent.click(
-      screen.getByLabelText("Fitting: Maria Santos, Emerald Gown, 9:00 AM–10:00 AM")
+      screen.getByLabelText(
+        "Fitting prototype: Maria Santos, Emerald Gown, 9:00 AM–10:00 AM"
+      )
     );
 
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(/Reservation #R-/)).toBeVisible();
+    expect(within(dialog).getByText("Prototype fitting activity")).toBeVisible();
     expect(within(dialog).getByText("Emerald Gown")).toBeVisible();
     expect(within(dialog).getByText("Customer Details")).toBeVisible();
     expect(within(dialog).getByText("Rental Period")).toBeVisible();
     expect(within(dialog).getByText("Status Timeline")).toBeVisible();
+    expect(within(dialog).queryByText("Payment Method")).not.toBeInTheDocument();
   });
 
   it("opens reservation details from the day agenda list", () => {

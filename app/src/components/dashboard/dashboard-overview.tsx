@@ -43,10 +43,10 @@ const statusToneClasses: Record<ScheduleStatus, string> = {
   Pending: "dashboard-status-pending",
 };
 
-function EventBadge({ type }: { type: ScheduleEventType }) {
+function EventBadge({ type, prototype }: { type: ScheduleEventType; prototype?: boolean }) {
   return (
     <Badge variant="outline" className={eventToneClasses[type]}>
-      {type}
+      {prototype ? `${type} · Prototype` : type}
     </Badge>
   );
 }
@@ -140,7 +140,7 @@ export function DashboardOverview() {
                         />
                         <span>{event.time}</span>
                       </div>
-                      <EventBadge type={event.type} />
+                      <EventBadge type={event.type} prototype={event.prototype} />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-dashboard-navy">
                           {event.customer}

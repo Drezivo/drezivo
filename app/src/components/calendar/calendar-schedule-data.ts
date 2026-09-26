@@ -201,7 +201,7 @@ export const CALENDAR_METRICS = [
     tone: "mint",
   },
   {
-    label: "Fittings",
+    label: "Fittings (prototype)",
     value: CALENDAR_ACTIVITIES.filter((item) => item.type === "Fitting").length,
     tone: "purple",
   },
