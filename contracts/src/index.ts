@@ -10,6 +10,7 @@ export * from './catalogue';
 export * from './storefront';
 export * from './availability';
 export * from './reservations';
+export * from './fittings';
 export * from './finance';
 export * from './files';
 export * from './tenancy';
@@ -23,4 +24,3 @@ export * from './operator';
  * needing to inspect `package-lock.json`.
  */
 export const contractVersion: string = version;
-

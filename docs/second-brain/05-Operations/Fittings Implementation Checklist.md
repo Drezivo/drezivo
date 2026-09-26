@@ -9,7 +9,7 @@ tags: [drezivo, v1.1, fittings, frontend, backend, implementation, checklist]
 
 # Fittings V1.1 Implementation Checklist
 
-**Status:** Frontend prototype approved. Backend Phase BE-0 is complete; BE-1 contracts/API-surface work is the next implementation phase.
+**Status:** Frontend prototype approved. Backend Phases BE-0 and BE-1 are complete; BE-2 database schema, migration, and invariants is the next implementation phase.
 
 This file is the feature-wide implementation checklist for `/fittings` and `/fittings/schedule`. The original frontend prototype phases are retained below as implementation history; the backend phases are appended after the frontend section.
 
@@ -718,49 +718,60 @@ The fitting frontend prototype is complete when:
 
 # Backend Phase BE-1: Contracts and API surface
 
-- [ ] **FIT-BE-010 — Create the fittings contract module**
+**Implementation status:** Complete. The fittings contract surface, generated OpenAPI paths, stable error semantics, and contract tests are implemented and validated. The contracts package is pinned to the Zod-3-compatible `@asteasolutions/zod-to-openapi@7.3.x` line and TypeScript 6.0.3 so OpenAPI generation, `typescript-eslint`, build, and typecheck use a compatible toolchain.
+
+- [x] **FIT-BE-010 — Create the fittings contract module**
   - **Depends on:** BE-0 complete.
   - **Acceptance:**
-    - [ ] Add `contracts/src/fittings/` with explicit exports from the contracts package index.
-    - [ ] Define canonical fitting IDs, appointment state, garment-line semantics, fee/payment summary, and schedule-setting DTOs.
-    - [ ] Reuse common money, pagination, time, error, and idempotency contracts.
-    - [ ] Do not copy `FittingPrototypeAppointment` or frontend fixture types into contracts.
-    - [ ] Do not use `Guaranteed intent` as a wire value unless deliberately approved as a domain concept.
+    - [x] Add `contracts/src/fittings/` with explicit exports from the contracts package index.
+    - [x] Define canonical fitting IDs, appointment state, garment-line semantics, fee/payment summary, and schedule-setting DTOs.
+    - [x] Reuse common money, pagination, time, error, and idempotency contracts.
+    - [x] Do not copy `FittingPrototypeAppointment` or frontend fixture types into contracts.
+    - [x] Do not use `Guaranteed intent` as a wire value unless deliberately approved as a domain concept.
+  - **Evidence:** `contracts/src/fittings/{state,fitting,intake,list,create,actions,schedule,index}.ts`, shared fitting IDs in `common/ids.ts`, package barrel export in `src/index.ts`.
 
-- [ ] **FIT-BE-011 — Define fitting list and detail contracts**
+- [x] **FIT-BE-011 — Define fitting list and detail contracts**
   - **Acceptance:**
-    - [ ] List response supports bounded pagination using existing API conventions.
-    - [ ] Filters cover only approved operational needs: customer/garment search, status, and date window.
-    - [ ] Detail response contains customer, period, garment lines, fee/payment summary, status, and approved actions/state metadata.
-    - [ ] No hidden capacity-slot identifiers or room/staff/resource fields leak into staff/public fitting contracts.
+    - [x] List response supports bounded pagination using existing API conventions.
+    - [x] Filters cover only approved operational needs: customer/garment search, status, and date window.
+    - [x] Detail response contains customer, period, garment lines, fee/payment summary, status, and approved actions/state metadata.
+    - [x] No hidden capacity-slot identifiers or room/staff/resource fields leak into staff/public fitting contracts.
+  - **Evidence:** `fittingListQuery`, `fittingListResponse`, `fittingDetail`, strict schemas and tests in `contracts/tests/fittings.test.ts`.
 
-- [ ] **FIT-BE-012 — Define create/update/action contracts**
+- [x] **FIT-BE-012 — Define create/update/action contracts**
   - **Acceptance:**
-    - [ ] Existing-customer and approved walk-in creation paths are explicit.
-    - [ ] Appointment period/duration is validated server-side.
-    - [ ] Garment lines distinguish preference-only from guaranteed physical-asset intent using canonical semantics.
-    - [ ] Status changes use explicit commands/actions rather than arbitrary client state replacement.
-    - [ ] Mutating contracts require the standard idempotency key behavior.
+    - [x] Existing-customer and approved walk-in creation paths are explicit.
+    - [x] Appointment start is accepted as an ISO instant while strict duration/end-time and the branch-local 30-minute grid remain server-derived/validated.
+    - [x] Garment lines distinguish preference-only from guaranteed physical-asset intent using canonical semantics; clients never choose the physical asset.
+    - [x] Status changes use explicit confirm/reject/cancel/complete/no-show/reschedule commands rather than arbitrary client state replacement.
+    - [x] Mutating API paths require the standard `Idempotency-Key` header contract.
+    - [x] Existing-customer lookup is bounded/advisory and does not auto-merge a possible duplicate.
+  - **Evidence:** `create.ts`, `actions.ts`, `intake.ts`, and fitting OpenAPI path registrations in `contracts/openapi/generate.ts`.
 
-- [ ] **FIT-BE-013 — Define schedule-setting contracts**
+- [x] **FIT-BE-013 — Define schedule-setting contracts**
   - **Acceptance:**
-    - [ ] Read/update contract covers approved weekly fitting hours.
-    - [ ] Strict branch duration, enabled state, simultaneous capacity, and fixed optional fee are included using the canonical BE-0 representation.
-    - [ ] Weekly-window update and date-specific closure create/edit/remove contracts are explicit; recurring breaks are represented by window gaps.
-    - [ ] There is no separate weekly availability-preview API solely to recreate the removed frontend section.
+    - [x] Read/update contract covers approved weekly fitting hours.
+    - [x] Strict branch duration, enabled state, simultaneous capacity, and fixed optional fee are included using the canonical BE-0 representation.
+    - [x] Weekly-window update and date-specific closure create/edit/remove contracts are explicit; recurring breaks are represented by window gaps.
+    - [x] There is no separate weekly availability-preview API solely to recreate the removed frontend section.
+  - **Evidence:** `schedule.ts` plus `/fittings/settings`, `/fittings/settings/hours`, and `/fittings/closures*` registrations in the OpenAPI generator.
 
-- [ ] **FIT-BE-014 — Define stable fitting error semantics**
+- [x] **FIT-BE-014 — Define stable fitting error semantics**
   - **Acceptance:**
-    - [ ] Validation, not-found, forbidden, state-conflict, schedule-conflict, capacity-conflict, and garment-conflict cases map to stable existing error-envelope conventions.
-    - [ ] Conflict responses are safe and do not expose cross-tenant identifiers or private customer data.
-    - [ ] Same idempotency key with different validated payload returns the platform-standard conflict behavior.
+    - [x] Validation, not-found, forbidden, state-conflict, schedule-conflict, capacity-conflict, and garment-conflict cases map to stable existing error-envelope conventions (`ASSET_UNAVAILABLE` is the existing safe garment-conflict code).
+    - [x] Conflict responses are safe and do not expose cross-tenant identifiers or private customer data.
+    - [x] Same idempotency key with different validated payload remains the platform-standard `IDEMPOTENCY_KEY_REUSED` conflict.
+  - **Evidence:** shared `SCHEDULE_CONFLICT` addition in `common/errors.ts` and fitting path response registrations using the existing `errorEnvelope`.
 
-- [ ] **FIT-BE-015 — Add contract tests and package build coverage**
+- [x] **FIT-BE-015 — Add contract tests and package build coverage**
   - **Acceptance:**
-    - [ ] Contract schemas reject invalid dates, durations, money, state values, and malformed lines.
-    - [ ] Valid list/detail/create/action/schedule examples parse.
-    - [ ] Package typecheck/build passes.
-    - [ ] API and app can consume the new package exports without circular dependencies.
+    - [x] Contract schemas reject invalid dates, durations, money, state values, malformed lines, browser-owned fee/duration/status/asset authority, and invalid guarantee/asset combinations.
+    - [x] Valid list/detail/create/action/intake/schedule examples parse.
+    - [x] Package build, lint, and full contract/OpenAPI/test TypeScript checking pass with the compatible contracts toolchain.
+    - [x] API and app can load the new `@drezivo/contracts` fitting exports without circular dependencies.
+  - **Evidence:** `contracts/tests/fittings.test.ts` plus the full contracts suite (`119/119`), `npm run lint --workspace @drezivo/contracts`, `npm run build --workspace @drezivo/contracts`, `npm run typecheck --workspace @drezivo/contracts`, generated `contracts/openapi/drezivo.v1.yaml` with deterministic regeneration, API typecheck, and App runtime import smoke checks. The App workspace's broader typecheck still has pre-existing `@testing-library/jest-dom` matcher-typing failures unrelated to fittings/contracts.
+
+**BE-1 exit gate:** **PASSED 2026-09-26.** BE-2 database-schema/migration work may begin from the approved fitting contracts and canonical model.
 
 ---
 
