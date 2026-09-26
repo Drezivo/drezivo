@@ -166,10 +166,8 @@ function attention(status: FittingListReadRow['status'], startsAt: Date, endsAt:
 function allowedActions(status: FittingListReadRow['status'], startsAt: Date, endsAt: Date): FittingAction[] {
   const now = Date.now();
   if (status === 'pending') {
-    const actions: FittingAction[] = ['update_note'];
-    if (now < startsAt.getTime()) actions.push('confirm', 'reject', 'cancel', 'reschedule', 'update_garments');
-    if (now >= endsAt.getTime()) actions.push('complete');
-    if (now >= startsAt.getTime()) actions.push('mark_no_show');
+    const actions: FittingAction[] = ['update_note', 'confirm'];
+    if (now < startsAt.getTime()) actions.push('reject', 'cancel', 'reschedule', 'update_garments');
     return actions;
   }
   if (status === 'confirmed') {

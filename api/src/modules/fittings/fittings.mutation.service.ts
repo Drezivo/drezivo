@@ -2,20 +2,32 @@ import { randomUUID } from 'node:crypto';
 
 import {
   fittingActionResponse,
+  fittingCancelRequest,
+  fittingCompleteRequest,
+  fittingConfirmRequest,
   fittingGarmentPlanUpdateRequest,
   fittingGarmentPlanUpdateResponse,
+  fittingNoShowRequest,
+  fittingRejectRequest,
   fittingRescheduleRequest,
   type FittingActionResponse,
+  type FittingCancelRequest,
+  type FittingCompleteRequest,
+  type FittingConfirmRequest,
   type FittingDetail,
   type FittingGarmentPlanUpdateRequest,
   type FittingGarmentPlanUpdateResponse,
+  type FittingNoShowRequest,
+  type FittingRejectRequest,
   type FittingRescheduleRequest,
+  type PermissionCode,
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
 import {
   AssetUnavailableError,
   CapacityConflictError,
+  ForbiddenError,
   IdempotencyKeyReusedError,
   NotFoundError,
   ScheduleConflictError,
@@ -45,16 +57,81 @@ import {
   moveFittingCapacityClaim,
   readBlockingFittingAssetAllocation,
   readFittingVariantsForCreate,
+  releaseFittingBlockingClaims,
   retireFittingLine,
+  transitionFittingLifecycle,
   updateFittingPeriodAndVersion,
   validateFittingScheduleForCreate,
+  verifyFittingRequiredClaims,
   type ActiveFittingLineRow,
+  type FittingLifecycleTimingGuard,
+  type LockedFittingAppointmentRow,
 } from './fittings.command.repository.js';
 import { readFittingDetailModel } from './fittings.repository.js';
 
 const RESCHEDULE_OPERATION = 'fitting.reschedule';
 const GARMENT_PLAN_OPERATION = 'fitting.garment-plan.update';
 const MUTATION_SAVEPOINT = 'fitting_mutation_effects';
+
+type ScheduledFittingStatus = 'pending' | 'confirmed';
+type TerminalFittingStatus = 'completed' | 'rejected' | 'cancelled' | 'no_show';
+type LifecycleTargetStatus = 'confirmed' | TerminalFittingStatus;
+type LifecycleAuditAction =
+  | 'fitting.confirmed'
+  | 'fitting.rejected'
+  | 'fitting.cancelled'
+  | 'fitting.completed'
+  | 'fitting.marked_no_show';
+
+interface FittingLifecycleSpec {
+  operation: string;
+  allowedStatuses: readonly ScheduledFittingStatus[];
+  nextStatus: LifecycleTargetStatus;
+  timingGuard: FittingLifecycleTimingGuard;
+  releaseClaims: boolean;
+  auditAction: LifecycleAuditAction;
+}
+
+const CONFIRM_SPEC: FittingLifecycleSpec = {
+  operation: 'fitting.confirm',
+  allowedStatuses: ['pending'],
+  nextStatus: 'confirmed',
+  timingGuard: 'none',
+  releaseClaims: false,
+  auditAction: 'fitting.confirmed',
+};
+const REJECT_SPEC: FittingLifecycleSpec = {
+  operation: 'fitting.reject',
+  allowedStatuses: ['pending'],
+  nextStatus: 'rejected',
+  timingGuard: 'before_start',
+  releaseClaims: true,
+  auditAction: 'fitting.rejected',
+};
+const CANCEL_SPEC: FittingLifecycleSpec = {
+  operation: 'fitting.cancel',
+  allowedStatuses: ['pending', 'confirmed'],
+  nextStatus: 'cancelled',
+  timingGuard: 'before_start',
+  releaseClaims: true,
+  auditAction: 'fitting.cancelled',
+};
+const COMPLETE_SPEC: FittingLifecycleSpec = {
+  operation: 'fitting.complete',
+  allowedStatuses: ['confirmed'],
+  nextStatus: 'completed',
+  timingGuard: 'at_or_after_end',
+  releaseClaims: true,
+  auditAction: 'fitting.completed',
+};
+const NO_SHOW_SPEC: FittingLifecycleSpec = {
+  operation: 'fitting.mark-no-show',
+  allowedStatuses: ['confirmed'],
+  nextStatus: 'no_show',
+  timingGuard: 'at_or_after_start',
+  releaseClaims: true,
+  auditAction: 'fitting.marked_no_show',
+};
 
 export interface FittingMutationContext {
   tenantId: string;
@@ -66,6 +143,10 @@ export interface FittingMutationContext {
   fittingId: string;
 }
 
+export interface FittingLifecycleContext extends FittingMutationContext {
+  permissionCodes: PermissionCode[];
+}
+
 export interface FittingActionCommandResponse {
   status: number;
   body: SuccessEnvelope<FittingActionResponse> | FailureEnvelope;
@@ -74,6 +155,51 @@ export interface FittingActionCommandResponse {
 export interface FittingGarmentPlanCommandResponse {
   status: number;
   body: SuccessEnvelope<FittingGarmentPlanUpdateResponse> | FailureEnvelope;
+}
+
+export async function confirmFittingCommand(
+  context: FittingLifecycleContext,
+  requestInput: FittingConfirmRequest,
+): Promise<FittingActionCommandResponse> {
+  const parsed = fittingConfirmRequest.safeParse(requestInput);
+  if (!parsed.success) throw new ValidationError('Fitting confirmation request is invalid.');
+  return runFittingLifecycleCommand(context, parsed.data, CONFIRM_SPEC);
+}
+
+export async function rejectFittingCommand(
+  context: FittingLifecycleContext,
+  requestInput: FittingRejectRequest,
+): Promise<FittingActionCommandResponse> {
+  const parsed = fittingRejectRequest.safeParse(requestInput);
+  if (!parsed.success) throw new ValidationError('Fitting rejection request is invalid.');
+  return runFittingLifecycleCommand(context, parsed.data, REJECT_SPEC);
+}
+
+export async function cancelFittingCommand(
+  context: FittingLifecycleContext,
+  requestInput: FittingCancelRequest,
+): Promise<FittingActionCommandResponse> {
+  const parsed = fittingCancelRequest.safeParse(requestInput);
+  if (!parsed.success) throw new ValidationError('Fitting cancellation request is invalid.');
+  return runFittingLifecycleCommand(context, parsed.data, CANCEL_SPEC);
+}
+
+export async function completeFittingCommand(
+  context: FittingLifecycleContext,
+  requestInput: FittingCompleteRequest,
+): Promise<FittingActionCommandResponse> {
+  const parsed = fittingCompleteRequest.safeParse(requestInput);
+  if (!parsed.success) throw new ValidationError('Fitting completion request is invalid.');
+  return runFittingLifecycleCommand(context, parsed.data, COMPLETE_SPEC);
+}
+
+export async function markFittingNoShowCommand(
+  context: FittingLifecycleContext,
+  requestInput: FittingNoShowRequest,
+): Promise<FittingActionCommandResponse> {
+  const parsed = fittingNoShowRequest.safeParse(requestInput);
+  if (!parsed.success) throw new ValidationError('Fitting no-show request is invalid.');
+  return runFittingLifecycleCommand(context, parsed.data, NO_SHOW_SPEC);
 }
 
 /** Atomic period replacement: replacement slot/assets are acquired by in-place protected claims. */
@@ -445,6 +571,123 @@ export async function updateFittingGarmentPlanCommand(
   });
 }
 
+async function runFittingLifecycleCommand(
+  context: FittingLifecycleContext,
+  request: { version: number; reason?: string },
+  spec: FittingLifecycleSpec,
+): Promise<FittingActionCommandResponse> {
+  if (!context.permissionCodes.includes('reservations.manage')) {
+    throw new ForbiddenError('This branch does not grant fitting management access.');
+  }
+  const payloadHash = canonicalRequestHash(request);
+
+  return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+    const claim = await claimMutationIdempotency(client, context, spec.operation, payloadHash);
+    const replay = replayOrThrow<FittingActionCommandResponse>(claim);
+    if (replay) return replay;
+
+    let savepointOpen = false;
+    try {
+      const appointment = await lockFittingAppointmentForMutation(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+        fittingId: context.fittingId,
+      });
+      assertLifecycleCommandAllowed(appointment, request.version, spec);
+
+      const claimsValid = await verifyFittingRequiredClaims(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+        fittingId: context.fittingId,
+      });
+      if (!claimsValid) {
+        throw new StateConflictError(
+          'Fitting no longer owns the capacity or guaranteed garment claims required by its schedule.',
+        );
+      }
+
+      await client.query(`SAVEPOINT ${MUTATION_SAVEPOINT}`);
+      savepointOpen = true;
+
+      if (spec.releaseClaims) {
+        const released = await releaseFittingBlockingClaims(client, {
+          tenantId: context.tenantId,
+          fittingId: context.fittingId,
+        });
+        if (released.capacityReleased !== 1) {
+          throw new StateConflictError(
+            'Fitting capacity claim could not be released exactly once.',
+          );
+        }
+      }
+
+      const version = await transitionFittingLifecycle(client, {
+        tenantId: context.tenantId,
+        fittingId: context.fittingId,
+        version: request.version,
+        expectedStatus: appointment.status,
+        nextStatus: spec.nextStatus,
+        reason: request.reason ?? null,
+        timingGuard: spec.timingGuard,
+      });
+      if (!version) {
+        throw new StateConflictError(
+          'Fitting changed or crossed its lifecycle timing boundary before this action could complete.',
+        );
+      }
+
+      await appendFittingMutationAudit(client, {
+        tenantId: context.tenantId,
+        actorKey: context.principalId,
+        action: spec.auditAction,
+        fittingId: context.fittingId,
+        branchId: context.branchId,
+        requestId: context.requestId,
+        version,
+        status: spec.nextStatus,
+      });
+
+      const body = await buildActionSuccess(client, context);
+      await finalizeMutationSuccess(client, context, spec.operation, payloadHash, body);
+      await client.query(`RELEASE SAVEPOINT ${MUTATION_SAVEPOINT}`);
+      savepointOpen = false;
+      return { status: 200, body };
+    } catch (error) {
+      if (savepointOpen) {
+        await client.query(`ROLLBACK TO SAVEPOINT ${MUTATION_SAVEPOINT}`);
+        await client.query(`RELEASE SAVEPOINT ${MUTATION_SAVEPOINT}`);
+      }
+      return finalizeMutationFailure(client, context, spec.operation, payloadHash, error);
+    }
+  });
+}
+
+function assertLifecycleCommandAllowed(
+  appointment: LockedFittingAppointmentRow | null,
+  version: number,
+  spec: FittingLifecycleSpec,
+): asserts appointment is LockedFittingAppointmentRow & { status: ScheduledFittingStatus } {
+  if (!appointment) throw new NotFoundError('Fitting could not be found.');
+  if (Number(appointment.version) !== version)
+    throw new StateConflictError('Fitting version is stale.');
+  if (!spec.allowedStatuses.includes(appointment.status as ScheduledFittingStatus)) {
+    throw new StateConflictError(
+      `Fitting cannot transition from ${appointment.status} to ${spec.nextStatus}.`,
+    );
+  }
+  if (spec.timingGuard === 'before_start' && !appointment.before_start) {
+    throw new StateConflictError(
+      'This fitting action is unavailable once scheduled start is reached.',
+    );
+  }
+  if (spec.timingGuard === 'at_or_after_start' && !appointment.at_or_after_start) {
+    throw new StateConflictError('A fitting can be marked no-show only after scheduled start.');
+  }
+  if (spec.timingGuard === 'at_or_after_end' && !appointment.at_or_after_end) {
+    throw new StateConflictError('A fitting can be completed only at or after scheduled end.');
+  }
+}
+
 function assertFutureMutableAppointment(
   appointment: Awaited<ReturnType<typeof lockFittingAppointmentForMutation>>,
   version: number,
@@ -526,11 +769,16 @@ function toFittingDetail(
 ): FittingDetail {
   const now = Date.now();
   const allowedActions: FittingDetail['allowed_actions'] = [];
-  if (row.status === 'pending' || row.status === 'confirmed') {
+  if (row.status === 'pending') {
+    allowedActions.push('update_note', 'confirm');
+    if (now < row.starts_at.getTime()) {
+      allowedActions.push('reject', 'cancel', 'reschedule', 'update_garments');
+    }
+  }
+  if (row.status === 'confirmed') {
     allowedActions.push('update_note');
     if (now < row.starts_at.getTime()) {
       allowedActions.push('cancel', 'reschedule', 'update_garments');
-      if (row.status === 'pending') allowedActions.push('confirm', 'reject');
     }
     if (now >= row.starts_at.getTime()) allowedActions.push('mark_no_show');
     if (now >= row.ends_at.getTime()) allowedActions.push('complete');

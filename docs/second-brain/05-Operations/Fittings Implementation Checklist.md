@@ -930,40 +930,47 @@ The fitting frontend prototype is complete when:
 
 # Backend Phase BE-5: Appointment lifecycle commands
 
-- [ ] **FIT-BE-050 — Implement explicit status action services**
+- [x] **FIT-BE-050 — Implement explicit status action services**
   - **Acceptance:**
-    - [ ] Implement only `confirm`, `reject`, `cancel`, `complete`, and `mark-no-show` according to FIT-BE-001.
-    - [ ] `reject` is pending-only and `reject`/`cancel` require a bounded internal reason.
-    - [ ] Normal `cancel` is allowed only before scheduled start; `no_show` only after start; `complete` only at/after end.
-    - [ ] Each action checks current state/version inside the transaction; no automatic clock-driven transition exists.
-    - [ ] Arbitrary client-provided status replacement is not allowed.
-    - [ ] Owner and Front Desk may perform operational actions subject to timing/state guards; finance permissions remain separate.
+    - [x] Implement only `confirm`, `reject`, `cancel`, `complete`, and `mark-no-show` according to FIT-BE-001.
+    - [x] `reject` is pending-only and `reject`/`cancel` require a bounded internal reason.
+    - [x] Normal `cancel` is allowed only before scheduled start; `no_show` only after start; `complete` only at/after end.
+    - [x] Each action checks current state/version inside the transaction; no automatic clock-driven transition exists.
+    - [x] Arbitrary client-provided status replacement is not allowed.
+    - [x] Owner and Front Desk may perform operational actions subject to timing/state guards; finance permissions remain separate.
+  - **Evidence:** `api/src/modules/fittings/fittings.mutation.service.ts` now exports the five explicit lifecycle commands and deliberately has no generic status setter. Each command validates the existing BE-1 action contract, requires the shared `reservations.manage` operational grant already assigned to Owner and Front Desk, claims tenant-scoped idempotency, locks the appointment, validates optimistic version/current state, and finishes through a conditional database-time transition. Reject/cancel reasons remain bounded by the contract/database constraints. The lifecycle service never asks for `payments.manage`/`evidence.verify`, so fitting operational authority does not become finance authority.
 
-- [ ] **FIT-BE-051 — Implement confirmation semantics**
+- [x] **FIT-BE-051 — Implement confirmation semantics**
   - **Acceptance:**
-    - [ ] Confirmation verifies the pending fitting still owns its required hidden capacity slot and guaranteed garment claims; it does not allocate them for the first time.
-    - [ ] Payment/evidence never gates confirmation and is never inferred from appointment state.
-    - [ ] Confirmation is idempotent and race-safe.
+    - [x] Confirmation verifies the pending fitting still owns its required hidden capacity slot and guaranteed garment claims; it does not allocate them for the first time.
+    - [x] Payment/evidence never gates confirmation and is never inferred from appointment state.
+    - [x] Confirmation is idempotent and race-safe.
+  - **Evidence:** `verifyFittingRequiredClaims` in `fittings.command.repository.ts` requires the existing exact-period active capacity claim plus every active guaranteed garment allocation before `pending -> confirmed`; confirmation creates no capacity/asset allocation and leaves them blocking. `fittings-phase5-lifecycle.test.ts` confirms a positive-fee fitting with no payment row, proves claims are retained, and fires concurrent identical confirmation retries under one idempotency key with one version/audit effect.
 
-- [ ] **FIT-BE-052 — Implement reject/cancel/no-show allocation behavior**
+- [x] **FIT-BE-052 — Implement reject/cancel/no-show allocation behavior**
   - **Acceptance:**
-    - [ ] Reject/cancel release hidden capacity and guaranteed asset allocations immediately.
-    - [ ] No-show is available only after scheduled start and releases remaining active capacity/asset blocks immediately.
-    - [ ] None of these appointment actions automatically refunds, verifies, voids, or otherwise fabricates a payment outcome.
-    - [ ] Repeated terminal action requests are duplicate-safe.
+    - [x] Reject/cancel release hidden capacity and guaranteed asset allocations immediately.
+    - [x] No-show is available only after scheduled start and releases remaining active capacity/asset blocks immediately.
+    - [x] None of these appointment actions automatically refunds, verifies, voids, or otherwise fabricates a payment outcome.
+    - [x] Repeated terminal action requests are duplicate-safe.
+  - **Evidence:** `releaseFittingBlockingClaims` turns current capacity/garment allocations into retained released history by setting `is_blocking=false` plus `released_at`; rows are never deleted. Lifecycle release and terminal transition share one savepoint/transaction, so a lost state/time race restores the claims before the conflict outcome is committed. Focused PostgreSQL tests cover reject, confirmed cancellation, no-show after start, too-early no-show, same-key replay, unchanged fitting-fee charge/payment state, and exact one-time release history.
 
-- [ ] **FIT-BE-053 — Implement completion semantics**
+- [x] **FIT-BE-053 — Implement completion semantics**
   - **Acceptance:**
-    - [ ] Completion is accepted only for `confirmed` fittings at/after scheduled end and records the winning terminal transition once.
-    - [ ] Capacity/guaranteed asset allocations are closed/released without deleting allocation history.
-    - [ ] Completion does not create rental history unless a separately approved conversion workflow exists.
+    - [x] Completion is accepted only for `confirmed` fittings at/after scheduled end and records the winning terminal transition once.
+    - [x] Capacity/guaranteed asset allocations are closed/released without deleting allocation history.
+    - [x] Completion does not create rental history unless a separately approved conversion workflow exists.
+  - **Evidence:** `completeFittingCommand` permits only `confirmed -> completed` with a final `statement_timestamp()` end-time guard, releases active fitting claims as history, increments the winning version once, and writes `fitting.completed` audit metadata. The lifecycle suite proves pre-end completion leaves claims intact, post-end completion releases exactly once, and completion creates no custody/rental event.
 
-- [ ] **FIT-BE-054 — Add lifecycle race tests**
+- [x] **FIT-BE-054 — Add lifecycle race tests**
   - **Acceptance:**
-    - [ ] Confirm versus cancel/reject race yields one valid state.
-    - [ ] Complete versus no-show race yields one valid state.
-    - [ ] Stale version/status commands return conflict.
-    - [ ] Allocation release is not duplicated or leaked after races.
+    - [x] Confirm versus cancel/reject race yields one valid state.
+    - [x] Complete versus no-show race yields one valid state.
+    - [x] Stale version/status commands return conflict.
+    - [x] Allocation release is not duplicated or leaked after races.
+  - **Evidence:** `api/tests/integration/fittings-phase5-lifecycle.test.ts` has 10 PostgreSQL tests covering permission boundaries, confirmation replay, reject/cancel/no-show/completion timing and finance separation, explicit stale-version/wrong-state conflicts, `confirm` versus `reject`, and `complete` versus `no_show`. The races assert exactly one HTTP-domain success, one winning version/audit transition, and either one retained blocking claim set or one released-history set with no duplicate/leaked release. BE-3/BE-4 fitting regression suites also pass sequentially (14/14), alongside BE-5 (10/10), API lint/typecheck/build, 83/83 non-integration tests, and `git diff --check`.
+
+**BE-5 exit gate: PASSED 2026-09-26.** Explicit appointment lifecycle commands, claim-preserving confirmation, terminal release semantics, operational permission separation, idempotency, and required race/stale-version behavior are implemented and regression-tested. BE-6 fitting schedule-setting command work may begin.
 
 ---
 
