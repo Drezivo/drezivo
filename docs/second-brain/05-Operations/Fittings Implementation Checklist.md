@@ -879,14 +879,15 @@ The fitting frontend prototype is complete when:
     - [x] Garment lines are validated against tenant catalogue/variant ownership.
     - [x] Fee/currency snapshot comes from branch fitting settings; positive fee creates the immutable `fitting_fee` charge.
     - [ ] Appointment, one hidden capacity-slot allocation, all lines/guaranteed asset allocations, finance charge when applicable, audit metadata and approved outbox intent commit as one idempotent transaction.
-  - **Progress:** `api/src/modules/fittings/fittings.command.{service,repository}.ts` now implements the staff create orchestration, existing/new customer handling, branch-local 30-minute grid check, strict-duration period derivation, tenant catalogue validation, pending-only appointment insertion, fitting fee charge snapshot, audit event, and tenant idempotency replay/conflict semantics. Guaranteed requests fail closed rather than creating a fake guarantee. The final acceptance item remains intentionally open until FIT-BE-041/FIT-BE-043 provide the atomic hidden capacity-slot and guaranteed-asset claim seams; first-slice fitting notifications/outbox are explicitly deferred by the decision record. Typecheck, lint, and 83 non-integration API tests pass.
+  - **Progress:** `api/src/modules/fittings/fittings.command.{service,repository}.ts` now implements the staff create orchestration, existing/new customer handling, branch-local 30-minute grid check, strict-duration period derivation, tenant catalogue validation, pending-only appointment insertion, fitting fee charge snapshot, hidden capacity-slot claim, audit event, and tenant idempotency replay/conflict semantics. Guaranteed requests still fail closed rather than creating a fake guarantee. The final acceptance item remains intentionally open only until FIT-BE-043 provides the guaranteed-asset claim seam; first-slice fitting notifications/outbox are explicitly deferred by the decision record. Typecheck, lint, build, Prettier, and 83 non-integration API tests pass.
 
-- [ ] **FIT-BE-041 — Implement schedule/capacity validation**
+- [x] **FIT-BE-041 — Implement schedule/capacity validation**
   - **Acceptance:**
-    - [ ] Appointment falls fully inside one approved operating window; there is no first-slice schedule override.
-    - [ ] Weekly-window gaps and date-specific closures are enforced.
-    - [ ] One hidden capacity-slot claim follows the approved atomic concurrency model.
-    - [ ] Simultaneous requests cannot overbook a hidden capacity slot or exceed branch capacity.
+    - [x] Appointment falls fully inside one approved operating window; there is no first-slice schedule override.
+    - [x] Weekly-window gaps and date-specific closures are enforced.
+    - [x] One hidden capacity-slot claim follows the approved atomic concurrency model.
+    - [x] Simultaneous requests cannot overbook a hidden capacity slot or exceed branch capacity.
+  - **Evidence:** `api/src/modules/fittings/fittings.command.repository.ts` validates the server-derived interval against database time, the branch timezone, one persisted weekly window, and date-specific closures; materializes only the configured hidden capacity slots under the locked settings row; and atomically inserts one exact-period `fitting_slot_allocation` after choosing a non-overlapping active slot. `fittings.command.service.ts` maps schedule failures to canonical `SCHEDULE_CONFLICT`, capacity exhaustion/races to `CAPACITY_CONFLICT`, and keeps the settings-row serialization plus PostgreSQL GiST exclusion as the final concurrency authority. `api/tests/integration/fittings-phase4-schedule-capacity.test.ts` passes 2/2 on disposable PostgreSQL 17.11 and proves hours/closure validation plus capacity-one overlap refusal. FIT-BE-021 through FIT-BE-033 fitting integration regressions pass sequentially (22/22); API typecheck, lint, Prettier, build, and 83/83 non-integration tests pass.
 
 - [ ] **FIT-BE-042 — Implement preference-only garment lines**
   - **Acceptance:**
