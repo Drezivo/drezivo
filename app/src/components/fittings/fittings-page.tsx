@@ -40,9 +40,16 @@ import {
   FITTING_PROTOTYPE_TODAY,
   type FittingPrototypeAppointment,
   type FittingPrototypeAttentionKind,
-  type FittingPrototypePaymentState,
   type FittingPrototypeStatus,
 } from "./fitting-prototype-data";
+import {
+  FITTING_PAYMENT_CLASSES,
+  FITTING_STATUS_CLASSES,
+  fittingGarmentIntentLabel,
+  formatFittingDate,
+  formatFittingMoney,
+  formatFittingTimeRange,
+} from "./fitting-prototype-presentation";
 import { NewFittingSheet } from "./new-fitting-sheet";
 
 type FittingDateFilter = "all" | "today" | "upcoming";
@@ -74,42 +81,9 @@ const SUMMARY_ITEMS = [
   { key: "pending", label: "Pending review", icon: UserCheck, tone: "dashboard-tone-purple" },
 ] as const;
 
-const STATUS_CLASSES: Record<FittingPrototypeStatus, string> = {
-  Pending: "reservation-status-pending",
-  Confirmed: "reservation-status-confirmed",
-  Completed: "reservation-status-completed",
-  Cancelled: "reservation-status-cancelled",
-  Rejected: "reservation-status-danger",
-  "No-show": "reservation-status-danger",
-};
-
-const PAYMENT_CLASSES: Record<FittingPrototypePaymentState, string> = {
-  "Not required": "reservation-status-completed",
-  "Pending review": "reservation-status-pending",
-  Verified: "reservation-status-confirmed",
-};
-
-const APPOINTMENT_DATE_FORMATTER = new Intl.DateTimeFormat("en-PH", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  timeZone: "Asia/Manila",
-});
-
-const APPOINTMENT_TIME_FORMATTER = new Intl.DateTimeFormat("en-PH", {
-  hour: "numeric",
-  minute: "2-digit",
-  timeZone: "Asia/Manila",
-});
-
+const STATUS_CLASSES = FITTING_STATUS_CLASSES;
+const PAYMENT_CLASSES = FITTING_PAYMENT_CLASSES;
 const FITTINGS_PAGE_SIZE = 10;
-
-const PHP_FORMATTER = new Intl.NumberFormat("en-PH", {
-  style: "currency",
-  currency: "PHP",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
 
 export function FittingsPage({
   appointments = FITTING_PROTOTYPE_APPOINTMENTS,
@@ -770,11 +744,7 @@ export function FittingDetailsPreviewSheet({
                               : "reservation-status-confirmed"
                           }
                         >
-                          {garment.guarantee === "Guaranteed"
-                            ? "Guaranteed garment"
-                            : garment.guarantee === "Guaranteed intent"
-                              ? "Guaranteed intent"
-                              : "Preference only"}
+                          {fittingGarmentIntentLabel(garment.guarantee)}
                         </Badge>
                       </div>
                       {garment.guarantee === "Guaranteed" && garment.assetCode ? (
@@ -1012,13 +982,13 @@ function matchesSearch(appointment: FittingPrototypeAppointment, query: string):
 }
 
 function formatAppointmentDate(value: string): string {
-  return APPOINTMENT_DATE_FORMATTER.format(new Date(value));
+  return formatFittingDate(value);
 }
 
 function formatAppointmentTimeRange(appointment: FittingPrototypeAppointment): string {
-  return `${APPOINTMENT_TIME_FORMATTER.format(new Date(appointment.startsAt))}–${APPOINTMENT_TIME_FORMATTER.format(new Date(appointment.endsAt))}`;
+  return formatFittingTimeRange(appointment.startsAt, appointment.endsAt);
 }
 
 function formatPhpMoney(minor: number): string {
-  return PHP_FORMATTER.format(minor / 100);
+  return formatFittingMoney(minor);
 }

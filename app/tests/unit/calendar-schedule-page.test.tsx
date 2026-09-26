@@ -31,6 +31,28 @@ describe("CalendarSchedulePage", () => {
     expect(screen.queryByLabelText(/Pickup: Maria Santos/)).not.toBeInTheDocument();
   });
 
+  it("keeps calendar fitting entries explicitly prototype-only", () => {
+    render(<CalendarSchedulePage />);
+
+    expect(screen.getByText("Fittings (prototype)")).toBeVisible();
+    const fitting = screen.getByLabelText(
+      "Fitting prototype: Leanne Cruz, Wedding Gown, 11:00 AM"
+    );
+    expect(within(fitting).getByText("Fitting · Prototype")).toBeVisible();
+
+    fireEvent.click(fitting);
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Prototype fitting activity")).toBeVisible();
+    expect(
+      within(dialog).getByText("Calendar mock only · not linked to /fittings tenant data")
+    ).toBeVisible();
+    expect(
+      within(dialog).getByText(/Reservation and payment lifecycle steps are intentionally not shown/i)
+    ).toBeVisible();
+    expect(within(dialog).queryByText("Payment Method")).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /View Full Reservation/ })).not.toBeInTheDocument();
+  });
+
   it("opens the full day agenda when a day header is clicked", () => {
     render(<CalendarSchedulePage />);
 

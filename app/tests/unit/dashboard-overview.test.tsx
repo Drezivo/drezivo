@@ -24,6 +24,7 @@ describe("DashboardOverview", () => {
     }
 
     expect(screen.getByText("Active rentals")).toBeVisible();
+    expect(screen.getByText("Prototype appointments")).toBeVisible();
     expect(screen.getByText("Need confirmation")).toBeVisible();
   });
 
@@ -36,6 +37,7 @@ describe("DashboardOverview", () => {
     expect(schedule.parentElement).toHaveClass("overflow-x-auto");
     expect(screen.getByText("Maria Santos")).toBeVisible();
     expect(screen.getByText("Wedding Gown #24")).toBeVisible();
+    expect(screen.getAllByText("Fitting · Prototype").length).toBeGreaterThan(0);
     expect(screen.getByText("Anna Reyes")).toBeVisible();
     expect(screen.getByText("Carla Dela Cruz")).toBeVisible();
     expect(screen.getByText("Jamie Cruz")).toBeVisible();

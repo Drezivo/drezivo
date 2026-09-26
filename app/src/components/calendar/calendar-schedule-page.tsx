@@ -404,14 +404,14 @@ function ActivityCard({
         activityTone[activity.type]
       )}
       style={{ gridRow: `${activity.rowStart} / span ${activity.rowSpan ?? 2}` }}
-      aria-label={`${activity.type}: ${activity.customer}, ${activity.clothing}, ${activity.time}`}
+      aria-label={`${activity.type}${activity.type === "Fitting" ? " prototype" : ""}: ${activity.customer}, ${activity.clothing}, ${activity.time}`}
     >
       <span className="flex items-center gap-1.5 text-xs font-semibold">
         {activity.type === "Pickup" ? <Truck className="h-3 w-3" aria-hidden="true" /> : null}
         {activity.type === "Return" ? <RotateCcw className="h-3 w-3" aria-hidden="true" /> : null}
         {activity.type === "Fitting" ? <Ruler className="h-3 w-3" aria-hidden="true" /> : null}
         {activity.type === "Reservation" ? <CalendarDays className="h-3 w-3" aria-hidden="true" /> : null}
-        {activity.type}
+        {activity.type === "Fitting" ? "Fitting · Prototype" : activity.type}
       </span>
       <span className="mt-1 block truncate text-[0.72rem] font-medium">{activity.customer}</span>
       <span className="block truncate text-[0.68rem] opacity-80">{activity.clothing}</span>
@@ -506,7 +506,11 @@ function ReservationDetailsSheet({
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <SheetTitle className="text-lg">Reservation #{details.reservationNumber}</SheetTitle>
+                    <SheetTitle className="text-lg">
+                      {activity.type === "Fitting"
+                        ? "Prototype fitting activity"
+                        : `Reservation #${details.reservationNumber}`}
+                    </SheetTitle>
                     <Badge
                       variant="outline"
                       className={cn("px-2 py-1 text-xs", reservationStatusTone[details.status])}
@@ -514,7 +518,11 @@ function ReservationDetailsSheet({
                       {details.status}
                     </Badge>
                   </div>
-                  <SheetDescription className="mt-1">Created {details.createdAt}</SheetDescription>
+                  <SheetDescription className="mt-1">
+                    {activity.type === "Fitting"
+                      ? "Calendar mock only · not linked to /fittings tenant data"
+                      : `Created ${details.createdAt}`}
+                  </SheetDescription>
                 </div>
               </div>
             </header>
@@ -595,12 +603,19 @@ function ReservationDetailsSheet({
               <Card className="gap-0 py-0">
                 <CardContent className="p-4">
                   <h3 className="text-sm font-semibold text-dashboard-navy">Status Timeline</h3>
-                  <div className="mt-4 space-y-0">
-                    <TimelineStep label="Reservation Created" note={`${details.rentalStart.replace(", 2025", "")}, 11:24 AM`} complete />
-                    <TimelineStep label="Payment Confirmed" note={`${details.rentalStart.replace(", 2025", "")}, 11:35 AM`} complete />
-                    <TimelineStep label="Pickup Completed" note={`${details.rentalStart.replace(", 2025", "")}, 9:52 AM`} complete={activity.type !== "Fitting"} />
-                    <TimelineStep label="Return Pending" note={`${details.rentalEnd.replace(", 2025", "")}, ${details.returnTime}`} complete={false} last />
-                  </div>
+                  {activity.type === "Fitting" ? (
+                    <p className="mt-3 text-xs text-dashboard-muted">
+                      Prototype calendar fitting only. Reservation and payment lifecycle steps are
+                      intentionally not shown here.
+                    </p>
+                  ) : (
+                    <div className="mt-4 space-y-0">
+                      <TimelineStep label="Reservation Created" note={`${details.rentalStart.replace(", 2025", "")}, 11:24 AM`} complete />
+                      <TimelineStep label="Payment Confirmed" note={`${details.rentalStart.replace(", 2025", "")}, 11:35 AM`} complete />
+                      <TimelineStep label="Pickup Completed" note={`${details.rentalStart.replace(", 2025", "")}, 9:52 AM`} complete />
+                      <TimelineStep label="Return Pending" note={`${details.rentalEnd.replace(", 2025", "")}, ${details.returnTime}`} complete={false} last />
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -609,23 +624,27 @@ function ReservationDetailsSheet({
                   <h3 className="text-sm font-semibold text-dashboard-navy">Additional Information</h3>
                   <div className="mt-4 space-y-4">
                     <InfoRow icon={Truck} label="Pickup Method" value="Pick up (Store)" />
-                    <InfoRow icon={WalletCards} label="Payment Method" value="Cash" />
+                    {activity.type !== "Fitting" ? (
+                      <InfoRow icon={WalletCards} label="Payment Method" value="Cash" />
+                    ) : null}
                     <InfoRow icon={FileText} label="Notes" value="Customer requested a size check before pickup." />
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            <footer className="sticky bottom-0 mt-auto grid grid-cols-1 gap-2 border-t border-dashboard-border bg-dashboard-surface/95 p-4 backdrop-blur sm:grid-cols-2">
-              <Button variant="ghost" className="border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active">
-                <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                View Full Reservation
-              </Button>
-              <Button className="bg-dashboard-accent text-dashboard-canvas hover:bg-dashboard-accent/90">
-                <Pencil className="h-4 w-4" aria-hidden="true" />
-                Edit Reservation
-              </Button>
-            </footer>
+            {activity.type !== "Fitting" ? (
+              <footer className="sticky bottom-0 mt-auto grid grid-cols-1 gap-2 border-t border-dashboard-border bg-dashboard-surface/95 p-4 backdrop-blur sm:grid-cols-2">
+                <Button variant="ghost" className="border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active">
+                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                  View Full Reservation
+                </Button>
+                <Button className="bg-dashboard-accent text-dashboard-canvas hover:bg-dashboard-accent/90">
+                  <Pencil className="h-4 w-4" aria-hidden="true" />
+                  Edit Reservation
+                </Button>
+              </footer>
+            ) : null}
           </div>
         ) : null}
       </SheetContent>
@@ -839,7 +858,7 @@ function DayAgendaSheet({
                   <button
                     key={activity.id}
                     type="button"
-                    aria-label={`Agenda ${activity.type}: ${activity.customer}, ${activity.clothing}, ${activity.time}`}
+                    aria-label={`Agenda ${activity.type}${activity.type === "Fitting" ? " prototype" : ""}: ${activity.customer}, ${activity.clothing}, ${activity.time}`}
                     onClick={() => onViewDetails(activity)}
                     className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3 rounded-xl border border-dashboard-border bg-dashboard-surface p-3 text-left transition-colors hover:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30 sm:grid-cols-[5rem_minmax(0,1fr)_auto] sm:items-center sm:p-4"
                   >
@@ -849,7 +868,7 @@ function DayAgendaSheet({
                         variant="outline"
                         className={cn("mb-2 px-2 py-1 text-[0.68rem]", activityTone[activity.type])}
                       >
-                        {activity.type}
+                        {activity.type === "Fitting" ? "Fitting · Prototype" : activity.type}
                       </Badge>
                       <span className="block truncate text-sm font-semibold text-dashboard-navy">
                         {activity.customer}

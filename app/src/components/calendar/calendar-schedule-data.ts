@@ -76,7 +76,7 @@ export const CALENDAR_HOURS = [
 export const CALENDAR_METRICS = [
   { label: "Pickups", value: 12, tone: "blue" },
   { label: "Returns", value: 8, tone: "mint" },
-  { label: "Fittings", value: 14, tone: "purple" },
+  { label: "Fittings (prototype)", value: 14, tone: "purple" },
   { label: "Issues", value: 3, tone: "danger" },
 ] as const;
 

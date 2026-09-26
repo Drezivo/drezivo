@@ -18,6 +18,7 @@ import {
   type FittingPrototypeGarment,
   type FittingPrototypePaymentState,
 } from "./fitting-prototype-data";
+import { fittingGarmentIntentLabel } from "./fitting-prototype-presentation";
 
 type CustomerMode = "existing" | "walk-in";
 type Step = 1 | 2 | 3;
@@ -800,7 +801,7 @@ function StepReview({
                   : "dashboard-event-fitting"
               }
             >
-              {garment.guarantee === "Guaranteed intent" ? "Guaranteed intent" : "Preference only"}
+              {fittingGarmentIntentLabel(garment.guarantee)}
             </Badge>
           </div>
         ))}

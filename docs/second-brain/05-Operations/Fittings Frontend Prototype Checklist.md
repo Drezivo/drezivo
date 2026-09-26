@@ -424,29 +424,33 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
 
 # Phase 6: Cross-page prototype consistency
 
-- [ ] **FIT-FE-060 — Keep fitting fixture identities consistent across screens**
+- [x] **FIT-FE-060 — Keep fitting fixture identities consistent across screens**
   - **Acceptance:**
-    - [ ] `/fittings` row and Details Sheet share the same fixture source.
-    - [ ] `/fittings/schedule` appointment blocks resolve the same fixture.
-    - [ ] Customer/garment/status/payment labels remain consistent.
-    - [ ] No duplicate fitting objects are maintained across components.
+    - [x] `/fittings` row and Details Sheet share the same fixture source.
+    - [x] `/fittings/schedule` appointment blocks resolve the same fixture.
+    - [x] Customer/garment/status/payment labels remain consistent.
+    - [x] No duplicate fitting objects are maintained across components.
+  - **Evidence:** `/fittings`, its Details Sheet, New Fitting fixture catalogues, and `/fittings/schedule` all resolve `FITTING_PROTOTYPE_APPOINTMENTS` / `FittingPrototypeAppointment` from `fitting-prototype-data.ts`; no second appointment fixture collection was introduced. `fitting-prototype-presentation.ts` centralizes fitting status/payment badge classes, garment-intent labels, date/time formatting, and PHP formatting so list, review, and details wording cannot drift independently.
 
-- [ ] **FIT-FE-061 — Prevent prototype fittings from becoming V1 Calendar authority**
+- [x] **FIT-FE-061 — Prevent prototype fittings from becoming V1 Calendar authority**
   - **Acceptance:**
-    - [ ] No production Calendar contract changes.
-    - [ ] `/calendar` does not imply fitting events are tenant production data.
-    - [ ] Future integration remains deferred backend work.
+    - [x] No production Calendar contract changes.
+    - [x] `/calendar` does not imply fitting events are tenant production data.
+    - [x] Future integration remains deferred backend work.
+  - **Evidence:** Calendar continues using its existing standalone mock activity data and does not import the fitting fixture, fitting route state, or fitting API/client contracts. Calendar fitting metrics/cards are now visibly labeled `Fittings (prototype)` / `Fitting · Prototype`, and opening one states `Calendar mock only · not linked to /fittings tenant data`. No Calendar API or shared contract was changed to make fittings production data.
 
-- [ ] **FIT-FE-062 — Prevent prototype fittings from becoming V1 Dashboard authority**
+- [x] **FIT-FE-062 — Prevent prototype fittings from becoming V1 Dashboard authority**
   - **Acceptance:**
-    - [ ] No real Dashboard fitting query/API work.
-    - [ ] Existing fitting metrics remain clearly mock/future-facing.
+    - [x] No real Dashboard fitting query/API work.
+    - [x] Existing fitting metrics remain clearly mock/future-facing.
+  - **Evidence:** Dashboard still renders its existing static fixture data only. `Fittings Today` now describes `Prototype appointments`, and fitting schedule badges render `Fitting · Prototype`; no dashboard query, API client, backend contract, or fitting endpoint was added.
 
-- [ ] **FIT-FE-063 — Keep fitting payment presentation separate from Payments production behavior**
+- [x] **FIT-FE-063 — Keep fitting payment presentation separate from Payments production behavior**
   - **Acceptance:**
-    - [ ] No Payments API/client contract changes.
-    - [ ] Fitting fee/payment fixtures stay inside the prototype.
-    - [ ] Appointment status never mirrors payment automatically.
+    - [x] No Payments API/client contract changes.
+    - [x] Fitting fee/payment fixtures stay inside the prototype.
+    - [x] Appointment status never mirrors payment automatically.
+  - **Evidence:** Fitting fee/payment values remain fields on the frontend-only fitting fixture/New Fitting local record and no fitting component imports reservation/payment production clients. The Details Sheet continues to state that payment presentation does not change appointment status automatically. `fitting-prototype-data.test.ts` now explicitly checks that the same appointment status can coexist with different fitting payment states, guarding the two axes from being coupled.
 
 ---
 

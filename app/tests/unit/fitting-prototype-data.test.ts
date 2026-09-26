@@ -38,6 +38,24 @@ describe("fitting prototype data", () => {
     expect(attentionKinds).toEqual(new Set(["Payment review", "Preference only"]));
   });
 
+  it("keeps appointment status independent from fitting payment presentation", () => {
+    const pendingPaymentStates = new Set(
+      FITTING_PROTOTYPE_APPOINTMENTS.filter((appointment) => appointment.status === "Pending").map(
+        (appointment) => appointment.paymentState
+      )
+    );
+    const confirmedPaymentStates = new Set(
+      FITTING_PROTOTYPE_APPOINTMENTS.filter(
+        (appointment) => appointment.status === "Confirmed"
+      ).map((appointment) => appointment.paymentState)
+    );
+
+    expect(pendingPaymentStates.has("Pending review")).toBe(true);
+    expect(pendingPaymentStates.has("Verified")).toBe(true);
+    expect(confirmedPaymentStates.has("Not required")).toBe(true);
+    expect(confirmedPaymentStates.has("Verified")).toBe(true);
+  });
+
   it("uses synthetic customer contact details only", () => {
     for (const appointment of FITTING_PROTOTYPE_APPOINTMENTS) {
       expect(appointment.customer.email).toMatch(/@example\.test$/);
