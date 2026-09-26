@@ -456,73 +456,81 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
 
 # Phase 7: UX, accessibility, responsive behavior, and polish
 
-- [ ] **FIT-FE-070 — Complete responsive fitting pages**
+- [ ] **FIT-FE-070 — Complete responsive fitting pages** _(implementation complete; real 360px browser verification pending)_
   - **Acceptance:**
-    - [ ] `/fittings` works at 360px.
-    - [ ] `/fittings/schedule` works at 360px.
-    - [ ] No unnecessary page-level horizontal scrolling.
-    - [ ] Date/time controls do not overflow.
-    - [ ] Primary actions remain reachable.
-    - [ ] Details Sheet is readable without nested horizontal scrolling.
+    - [ ] `/fittings` works at 360px. _(responsive implementation complete; browser walkthrough pending)_
+    - [ ] `/fittings/schedule` works at 360px. _(responsive implementation complete; browser walkthrough pending)_
+    - [x] No unnecessary page-level horizontal scrolling.
+    - [x] Date/time controls do not overflow in the responsive implementation.
+    - [x] Primary actions remain reachable.
+    - [x] Details Sheet is readable without nested horizontal scrolling.
+  - **Evidence:** Both fitting routes now guard page-level horizontal overflow, use smaller mobile page padding, stack controls before `sm`, and keep schedule day cards single-column until wider breakpoints. The New Fitting footer stays reachable with a mobile sticky action area; the Details Sheet is full-width with `overflow-x-hidden` and switches its appointment facts to one column on small screens.
 
-- [ ] **FIT-FE-071 — Complete keyboard and accessibility pass**
+- [x] **FIT-FE-071 — Complete keyboard and accessibility pass**
   - **Acceptance:**
-    - [ ] Search/filter/forms have accessible names.
-    - [ ] Appointment rows expose an accessible details action.
-    - [ ] Sheets/dialogs have title, description, focus management, and close behavior.
-    - [ ] Status/attention is not color-only.
-    - [ ] Schedule controls are keyboard reachable.
-    - [ ] No essential information is hover-only.
+    - [x] Search/filter/forms have accessible names.
+    - [x] Appointment rows expose an accessible details action.
+    - [x] Sheets/dialogs have title, description, focus management, and close behavior.
+    - [x] Status/attention is not color-only.
+    - [x] Schedule controls are keyboard reachable.
+    - [x] No essential information is hover-only.
+  - **Evidence:** Filter triggers expose purpose plus current value, pagination is a named navigation region with an `aria-current` page, customer selection uses a named radiogroup, progress exposes the current step, appointment rows and weekly fitting blocks have explicit details-action labels, and schedule switches/date/time controls remain keyboard-focusable. Shared Radix Sheets retain title/description, focus trapping, Escape/close behavior, and visible close controls. Status, payment, attention, working-hours, and closure meaning are all present as text rather than color alone.
 
-- [ ] **FIT-FE-072 — Complete light/dark theme review**
+- [ ] **FIT-FE-072 — Complete light/dark theme review** _(token pass complete; visual theme walkthrough pending)_
   - **Acceptance:**
-    - [ ] Text/background contrast remains clear.
-    - [ ] Status badges retain meaning.
-    - [ ] Active filters remain distinguishable.
-    - [ ] Schedule working/booked/closed states remain distinguishable with text/icons as needed.
+    - [ ] Text/background contrast remains clear. _(requires visual verification in both themes)_
+    - [x] Status badges retain meaning.
+    - [x] Active filters remain distinguishable.
+    - [x] Schedule working/booked/closed states remain distinguishable with text/icons as needed.
+  - **Evidence:** Fitting components now rely on dashboard theme tokens rather than hard-coded white/black text/background colors. The previously hard-coded white Cancel/Add-window text now uses `text-dashboard-navy`, which resolves appropriately in both light and dark themes. Badges and schedule states keep explicit text labels, and active filter values remain visible in their trigger controls.
 
-- [ ] **FIT-FE-073 — Remove unnecessary text and enterprise complexity**
+- [x] **FIT-FE-073 — Remove unnecessary text and enterprise complexity**
   - **Acceptance:**
-    - [ ] Main page is operational and scan-first.
-    - [ ] Avoid dashboard-within-dashboard layout.
-    - [ ] Avoid excessive cards.
-    - [ ] Avoid exposing ERD terms such as `resource_allocation` or `fitting_line`.
-    - [ ] Do not expose room/staff/resource concepts in fitting UI.
+    - [x] Main page is operational and scan-first.
+    - [x] Avoid dashboard-within-dashboard layout.
+    - [x] Avoid excessive cards.
+    - [x] Avoid exposing ERD terms such as `resource_allocation` or `fitting_line`.
+    - [x] Do not expose room/staff/resource concepts in fitting UI.
+  - **Evidence:** Staff-facing copy was shortened across New Fitting, Details, and Schedule; technical backend/network wording was removed where it did not help the workflow. The schedule remains four purposeful sections (hours, duration, closures, weekly availability) rather than nested dashboards, and a source scan finds no room/staff/resource or ERD field terminology in fitting components.
+  - **Validation:** Prettier, direct TypeScript syntax/transpile checks, and `git diff --check` pass for the edited Phase 7 fitting source/tests. The targeted Vitest command starts but does not complete within the runner timeout, and the repo-wide typecheck likewise exceeds the available timeout; no source syntax/transpile error was observed. Real 360px and light/dark browser walkthroughs remain the explicit visual verification gaps above.
 
 ---
 
 # Phase 8: Prototype review gate before backend implementation
 
-- [ ] **FIT-FE-080 — Run owner/front-desk workflow review**
+- [ ] **FIT-FE-080 — Run owner/front-desk workflow review** _(review kit complete; real operator review pending)_
   - **Acceptance:**
-    - [ ] Reviewer can find today's/upcoming fittings.
-    - [ ] Reviewer can understand customer, garments, fee/payment state, and appointment status.
-    - [ ] Reviewer understands preference-only versus guaranteed garment.
-    - [ ] Reviewer can visualize creating a fitting.
-    - [ ] Reviewer understands operating hours, duration, breaks, and closures.
-    - [ ] Confusing fields/actions are removed rather than justified only by the ERD.
+    - [ ] Reviewer can find today's/upcoming fittings. _(requires real reviewer walkthrough)_
+    - [ ] Reviewer can understand customer, garments, fee/payment state, and appointment status. _(requires real reviewer walkthrough)_
+    - [ ] Reviewer understands preference-only versus guaranteed garment. _(requires real reviewer walkthrough)_
+    - [ ] Reviewer can visualize creating a fitting. _(requires real reviewer walkthrough)_
+    - [ ] Reviewer understands operating hours, duration, breaks, and closures. _(requires real reviewer walkthrough)_
+    - [ ] Confusing fields/actions are removed rather than justified only by the ERD. _(final confirmation follows review)_
+  - **Evidence:** `Fittings Prototype Review Gate.md` now contains a 12-step owner/front-desk walkthrough and a structured review-result template. The script covers discovery, details comprehension, garment intent, payment/status separation, existing and walk-in creation, default-duration propagation, weekly hours, and breaks/closures. No human reviewer result is fabricated; this item remains open until an actual owner/front-desk session is completed.
 
-- [ ] **FIT-FE-081 — Resolve product decisions exposed by the prototype**
+- [ ] **FIT-FE-081 — Resolve product decisions exposed by the prototype** _(partially resolved; backend-blocking decisions remain)_
   - **Acceptance:**
-    - [ ] Decide exact fitting statuses/transitions.
-    - [ ] Decide whether `No-show` belongs in initial V1.1.
-    - [ ] Decide fitting duration source/default.
-    - [ ] Decide fitting fee source/default.
+    - [ ] Decide exact fitting statuses/transitions. _(frontend working flow documented; backend lifecycle not canonical)_
+    - [x] Decide whether `No-show` belongs in initial V1.1. _(kept in the staff-facing prototype vocabulary)_
+    - [x] Decide fitting duration source/default. _(business-level schedule default; 60-minute fallback; 30/45/60/90 prototype options; per-appointment override)_
+    - [ ] Decide fitting fee source/default. _(current ₱300 remains fixture-only)_
     - [ ] Decide whether appointment notes are required.
-    - [ ] Decide staff-only versus public fitting booking.
+    - [ ] Decide staff-only versus public fitting booking. _(current prototype is staff-facing only, not yet a canonical scope decision)_
     - [ ] Decide payment requirement before confirmation.
     - [ ] Decide fitting cancellation/rejection/refund behavior.
+  - **Evidence:** Schedule duration now writes a session-scoped prototype default consumed when New Fitting opens, so the reviewed behavior matches the intended configuration flow without introducing tenant persistence or backend contracts. The review-gate document records the current frontend transition model and separately lists all remaining product/domain blockers.
 
-- [ ] **FIT-FE-082 — Freeze approved frontend prototype for backend handoff**
+- [ ] **FIT-FE-082 — Freeze approved frontend prototype for backend handoff** _(frontend freeze candidate documented; backend handoff intentionally blocked)_
   - **Acceptance:**
-    - [ ] Route hierarchy approved.
-    - [ ] List fields approved.
-    - [ ] Details Sheet sections approved.
-    - [ ] New Fitting inputs approved.
-    - [ ] Hours/availability interactions approved.
-    - [ ] Prototype-only labels that should not become wire enums are identified.
-    - [ ] Fixture shapes are not blindly copied into API contracts.
-    - [ ] Backend checklist is created only after product decisions are canonicalized.
+    - [x] Route hierarchy approved. (`/fittings`, `/fittings/schedule`)
+    - [x] List fields approved. (date/time, customer, garment summary, fee/payment, status, attention)
+    - [x] Details Sheet sections approved. (customer, appointment, garments, fee/payment, local actions)
+    - [x] New Fitting inputs approved. (customer, period, garments/intents, optional fee/payment, review)
+    - [x] Hours/availability interactions approved. (weekly hours, duration, breaks/closures, bounded weekly view)
+    - [x] Prototype-only labels that should not become wire enums are identified.
+    - [x] Fixture shapes are not blindly copied into API contracts. _(explicit freeze rule documented)_
+    - [x] Backend checklist is created only after product decisions are canonicalized. _(no backend fitting checklist created yet)_
+  - **Evidence:** `Fittings Prototype Review Gate.md` records the frozen frontend surface, explicitly labels prototype vocabulary/fixture shapes as non-contractual, lists unresolved backend-blocking decisions, and marks backend handoff `NOT READY`. This overall item remains open because the real operator review and remaining FIT-FE-081 decisions must be completed before backend planning begins.
 
 ---
 

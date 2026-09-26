@@ -165,7 +165,7 @@ export function FittingsPage({
   };
 
   return (
-    <div className="min-h-[calc(100svh-4.5rem)] bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-[calc(100svh-4.5rem)] overflow-x-hidden bg-dashboard-canvas px-3 py-5 sm:px-6 sm:py-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-5">
         <FittingsHeading onNewFitting={() => setIsNewFittingOpen(true)} />
 
@@ -189,7 +189,7 @@ export function FittingsPage({
             ) : viewState === "error" ? (
               <AppointmentState
                 title="Could not load fitting appointments"
-                message="The fitting prototype could not be displayed. Try loading the local data again."
+                message="Fittings could not be displayed. Try loading the local data again."
                 actionLabel="Try again"
                 onAction={() => setViewState("ready")}
               />
@@ -340,7 +340,7 @@ function FittingsToolbar({
   status: FittingPrototypeStatus | null;
 }) {
   return (
-    <div className="flex flex-col gap-3 border-b border-dashboard-border p-4 xl:flex-row xl:items-end">
+    <div className="flex flex-col gap-3 border-b border-dashboard-border p-3 sm:p-4 xl:flex-row xl:items-end">
       <label className="relative min-w-0 flex-1 xl:max-w-xl">
         <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
           Search fittings
@@ -411,12 +411,15 @@ function AppointmentsPagination({
   const loadedCount = Math.min(pageSize, Math.max(0, totalItems - (currentPage - 1) * pageSize));
 
   return (
-    <div className="flex items-center justify-between border-t border-dashboard-border px-4 py-3 text-sm text-dashboard-muted">
+    <nav
+      aria-label="Fittings pagination"
+      className="flex flex-wrap items-center justify-between gap-2 border-t border-dashboard-border px-3 py-3 text-sm text-dashboard-muted sm:px-4"
+    >
       <span aria-live="polite">
         Page {currentPage} · {loadedCount} fittings loaded
       </span>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <button
           type="button"
           aria-label="Previous page"
@@ -426,7 +429,11 @@ function AppointmentsPagination({
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </button>
-        <span className="min-w-5 text-center text-sm font-medium text-dashboard-navy">
+        <span
+          aria-current="page"
+          aria-label={`Page ${currentPage} of ${totalPages}`}
+          className="min-w-5 text-center text-sm font-medium text-dashboard-navy"
+        >
           {currentPage}
         </span>
         <button
@@ -439,7 +446,7 @@ function AppointmentsPagination({
           <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
-    </div>
+    </nav>
   );
 }
 
@@ -677,10 +684,10 @@ export function FittingDetailsPreviewSheet({
 
   return (
     <Sheet open={Boolean(appointment)} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+      <SheetContent className="w-full max-w-full overflow-x-hidden overflow-y-auto sm:max-w-lg">
         {appointment ? (
           <>
-            <header className="border-b border-dashboard-border px-5 py-5 pr-14 sm:px-6">
+            <header className="border-b border-dashboard-border px-4 py-5 pr-14 sm:px-6">
               <div className="flex flex-wrap items-center gap-2 pr-2">
                 <Badge variant="outline" className={STATUS_CLASSES[appointment.status]}>
                   {appointment.status}
@@ -696,15 +703,15 @@ export function FittingDetailsPreviewSheet({
               </SheetDescription>
             </header>
 
-            <div className="space-y-6 px-5 pb-6 sm:px-6">
+            <div className="space-y-5 px-4 pb-6 sm:space-y-6 sm:px-6">
               <section aria-labelledby="fitting-customer-heading">
                 <SectionHeading id="fitting-customer-heading">Customer</SectionHeading>
                 <div className="mt-3 rounded-lg border border-dashboard-border p-4">
                   <p className="font-semibold text-dashboard-navy">{appointment.customer.name}</p>
                   <div className="mt-3 grid gap-2 text-sm text-dashboard-muted">
-                    <span className="flex items-center gap-2">
-                      <Mail className="h-4 w-4" aria-hidden="true" />
-                      {appointment.customer.email}
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Mail className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span className="min-w-0 break-all">{appointment.customer.email}</span>
                     </span>
                     <span className="flex items-center gap-2">
                       <Phone className="h-4 w-4" aria-hidden="true" />
@@ -716,7 +723,7 @@ export function FittingDetailsPreviewSheet({
 
               <section aria-labelledby="fitting-appointment-heading">
                 <SectionHeading id="fitting-appointment-heading">Appointment</SectionHeading>
-                <div className="mt-3 grid grid-cols-2 gap-3 rounded-lg border border-dashboard-border p-4 text-sm">
+                <div className="mt-3 grid grid-cols-1 gap-3 rounded-lg border border-dashboard-border p-4 text-sm sm:grid-cols-2">
                   <DetailValue label="Date" value={formatAppointmentDate(appointment.startsAt)} />
                   <DetailValue label="Time" value={formatAppointmentTimeRange(appointment)} />
                   <DetailValue label="Status" value={appointment.status} />
@@ -774,18 +781,14 @@ export function FittingDetailsPreviewSheet({
                     </Badge>
                   </div>
                   <p className="mt-3 text-xs text-dashboard-muted">
-                    Payment state is presentation-only in this prototype and does not change the
-                    appointment status automatically.
+                    Payment is tracked separately from the appointment status.
                   </p>
                 </div>
               </section>
 
               <section aria-labelledby="fitting-actions-heading">
                 <SectionHeading id="fitting-actions-heading">Actions</SectionHeading>
-                <p className="mt-2 text-xs text-dashboard-muted">
-                  Prototype only. These actions update local page state and do not send a network
-                  request.
-                </p>
+                <p className="mt-2 text-xs text-dashboard-muted">Local prototype only.</p>
                 <PrototypeActions
                   status={appointment.status}
                   confirmationStatus={confirmationStatus}
@@ -858,6 +861,7 @@ function PrototypeActions({
             variant="ghost"
             disabled={isApplying}
             onClick={onCancelConfirmation}
+            className="w-full sm:w-auto"
           >
             Keep current status
           </Button>
@@ -867,6 +871,7 @@ function PrototypeActions({
             isPending={isApplying}
             pendingLabel="Applying…"
             onClick={onConfirm}
+            className="w-full sm:w-auto"
           >
             Confirm change
           </Button>
@@ -905,9 +910,7 @@ function PrototypeActions({
         : [];
 
   if (actions.length === 0) {
-    return (
-      <p className="mt-3 text-sm text-dashboard-muted">No prototype actions for this status.</p>
-    );
+    return <p className="mt-3 text-sm text-dashboard-muted">No actions for this status.</p>;
   }
 
   return (
@@ -921,6 +924,7 @@ function PrototypeActions({
             variant={action.destructive ? "secondary" : "default"}
             disabled={isApplying}
             onClick={() => onAction(action.status, action.destructive)}
+            className="w-full sm:w-auto"
           >
             <Icon className="h-4 w-4" aria-hidden="true" />
             {action.label}
@@ -949,6 +953,7 @@ function FilterMenu({
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
+            aria-label={`${label}: ${value}`}
             className="w-full justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active sm:min-w-36"
           >
             <span className="truncate">{value}</span>

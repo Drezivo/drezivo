@@ -1,9 +1,13 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { FittingsPage } from "@/components/fittings/fittings-page";
 
 describe("FittingsPage", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
   it("renders the operational hierarchy with fixture-derived summaries", () => {
     render(<FittingsPage />);
 
@@ -51,14 +55,14 @@ describe("FittingsPage", () => {
   it("supports status and date filters with a distinct empty filtered state", async () => {
     render(<FittingsPage />);
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "All statuses" }), {
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Status: All statuses" }), {
       button: 0,
       ctrlKey: false,
     });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Completed" }));
     expect(screen.getByText("Page 1 · 3 fittings loaded")).toBeVisible();
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "All dates" }), {
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Date: All dates" }), {
       button: 0,
       ctrlKey: false,
     });
@@ -133,19 +137,26 @@ describe("FittingsPage", () => {
     expect(within(dialog).getAllByText("No-show").length).toBeGreaterThan(0);
   });
 
+  it("uses the schedule default duration when opening New Fitting", () => {
+    window.sessionStorage.setItem("drezivo:fittings:prototype-default-duration", "45");
+    render(<FittingsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "New Fitting" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByLabelText("Fitting duration")).toHaveValue("45");
+  });
+
   it("creates one local fitting through the three-step prototype flow", () => {
     render(<FittingsPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "New Fitting" }));
     let dialog = screen.getByRole("dialog");
-    expect(
-      within(dialog).getByText("Local prototype only. Nothing here is saved to the backend.")
-    ).toBeVisible();
+    expect(within(dialog).getByText("Local prototype only. Changes are not saved.")).toBeVisible();
 
     fireEvent.change(within(dialog).getByPlaceholderText("Name, email, or phone..."), {
       target: { value: "Bianca" },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: /Bianca Flores/ }));
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Bianca Flores/ }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
 
     dialog = screen.getByRole("dialog");
@@ -191,6 +202,22 @@ describe("FittingsPage", () => {
     expect(within(dialog).getByText("Local Walk-in")).toBeVisible();
     expect(within(dialog).getByText("No fee")).toBeVisible();
     expect(within(dialog).getByText("Not required")).toBeVisible();
+  });
+
+  it("exposes keyboard-friendly names for filters, pagination, and the new fitting flow", () => {
+    render(<FittingsPage />);
+
+    expect(screen.getByRole("textbox", { name: "Search fittings" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Status: All statuses" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Date: All dates" })).toBeVisible();
+    expect(screen.getByRole("navigation", { name: "Fittings pagination" })).toBeVisible();
+    expect(screen.getByLabelText("Page 1 of 2")).toHaveAttribute("aria-current", "page");
+
+    fireEvent.click(screen.getByRole("button", { name: "New Fitting" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("group", { name: "Customer type" })).toBeVisible();
+    expect(within(dialog).getByRole("radiogroup", { name: "Existing customers" })).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "Close" })).toBeVisible();
   });
 
   it("distinguishes first-use empty, loading, and retryable error states", () => {

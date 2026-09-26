@@ -33,6 +33,12 @@ import {
   type FittingPrototypeStatus,
 } from "./fitting-prototype-data";
 import { FittingDetailsPreviewSheet } from "./fittings-page";
+import {
+  FITTING_DURATION_OPTIONS,
+  readFittingPrototypeDefaultDuration,
+  writeFittingPrototypeDefaultDuration,
+  type FittingPrototypeDuration,
+} from "./fitting-prototype-settings";
 
 type Weekday = "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday";
 
@@ -71,7 +77,7 @@ const AVAILABILITY_DATES = [
   "2026-10-02",
 ] as const;
 
-const DURATION_OPTIONS = [30, 45, 60, 90] as const;
+const DURATION_OPTIONS = FITTING_DURATION_OPTIONS;
 
 const INITIAL_HOURS: DayHours[] = [
   {
@@ -139,7 +145,9 @@ const TIME_FORMATTER = new Intl.DateTimeFormat("en-PH", {
 
 export function FittingSchedulePage() {
   const [hours, setHours] = useState<DayHours[]>(INITIAL_HOURS);
-  const [durationMinutes, setDurationMinutes] = useState<(typeof DURATION_OPTIONS)[number]>(60);
+  const [durationMinutes, setDurationMinutes] = useState<FittingPrototypeDuration>(() =>
+    readFittingPrototypeDefaultDuration()
+  );
   const [closures, setClosures] = useState<FittingClosure[]>(INITIAL_CLOSURES);
   const [closureDraft, setClosureDraft] = useState<ClosureDraft>(EMPTY_CLOSURE_DRAFT);
   const [editingClosureId, setEditingClosureId] = useState<string | null>(null);
@@ -224,7 +232,7 @@ export function FittingSchedulePage() {
   };
 
   return (
-    <div className="min-h-[calc(100svh-4.5rem)] bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-[calc(100svh-4.5rem)] overflow-x-hidden bg-dashboard-canvas px-3 py-5 sm:px-6 sm:py-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-5">
         <ScheduleHeading />
 
@@ -232,7 +240,13 @@ export function FittingSchedulePage() {
           <WeeklyHoursCard hours={hours} onUpdateDay={updateDay} />
 
           <div className="space-y-5">
-            <DurationCard value={durationMinutes} onChange={setDurationMinutes} />
+            <DurationCard
+              value={durationMinutes}
+              onChange={(value) => {
+                setDurationMinutes(value);
+                writeFittingPrototypeDefaultDuration(value);
+              }}
+            />
             <ClosuresCard
               closures={closures}
               draft={closureDraft}
@@ -296,7 +310,7 @@ function ScheduleHeading() {
           Schedule & Availability
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-dashboard-muted">
-          Configure prototype fitting hours, duration, breaks, and a bounded weekly schedule.
+          Set fitting hours, duration, breaks, and closures.
         </p>
       </div>
 
@@ -387,6 +401,7 @@ function WeeklyHoursCard({
                       type="button"
                       variant="ghost"
                       size="sm"
+                      className="w-full justify-center sm:w-auto"
                       onClick={() =>
                         onUpdateDay(entry.day, (current) => ({
                           ...current,
@@ -401,8 +416,8 @@ function WeeklyHoursCard({
                         }))
                       }
                     >
-                      <Plus className="h-4 w-4 text-white" aria-hidden="true" />
-                      <span className="text-white">Add window</span>
+                      <Plus className="h-4 w-4 text-dashboard-navy" aria-hidden="true" />
+                      <span className="text-dashboard-navy">Add window</span>
                     </Button>
                   ) : null}
                 </div>
@@ -488,8 +503,8 @@ function DurationCard({
   value,
   onChange,
 }: {
-  value: (typeof DURATION_OPTIONS)[number];
-  onChange: (value: (typeof DURATION_OPTIONS)[number]) => void;
+  value: FittingPrototypeDuration;
+  onChange: (value: FittingPrototypeDuration) => void;
 }) {
   return (
     <Card className="gap-0 py-0">
@@ -497,7 +512,7 @@ function DurationCard({
         <SectionHeader
           icon={Timer}
           title="Appointment duration"
-          description="Prototype configuration only; this does not establish backend capacity."
+          description="Local setting only; availability is still a preview."
         />
         <div className="p-4">
           <label className="block">
@@ -508,7 +523,9 @@ function DurationCard({
               <select
                 aria-label="Default fitting duration"
                 value={value}
-                onChange={(event) => onChange(Number(event.target.value) as typeof value)}
+                onChange={(event) =>
+                  onChange(Number(event.target.value) as FittingPrototypeDuration)
+                }
                 className="h-10 w-full appearance-none rounded-md border border-dashboard-border bg-dashboard-surface pl-3 pr-10 text-sm text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
               >
                 {DURATION_OPTIONS.map((minutes) => (
@@ -560,7 +577,7 @@ function ClosuresCard({
         <SectionHeader
           icon={Ban}
           title="Breaks & closures"
-          description="Local prototype exceptions such as lunch breaks, holidays, or private events."
+          description="Add lunch breaks, holidays, or other unavailable periods."
           action={
             !formOpen ? (
               <Button type="button" variant="secondary" size="sm" onClick={onOpenForm}>
@@ -575,17 +592,23 @@ function ClosuresCard({
           <div className="border-b border-dashboard-border p-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <FieldLabel label="Type">
-                <select
-                  aria-label="Closure type"
-                  value={draft.kind}
-                  onChange={(event) =>
-                    onDraftChange({ ...draft, kind: event.target.value as ClosureKind })
-                  }
-                  className="h-10 w-full rounded-md border border-dashboard-border bg-dashboard-surface px-3 text-sm text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
-                >
-                  <option value="Break">Break</option>
-                  <option value="Closure">Closure</option>
-                </select>
+                <div className="relative">
+                  <select
+                    aria-label="Closure type"
+                    value={draft.kind}
+                    onChange={(event) =>
+                      onDraftChange({ ...draft, kind: event.target.value as ClosureKind })
+                    }
+                    className="h-10 w-full appearance-none rounded-md border border-dashboard-border bg-dashboard-surface pl-3 pr-10 text-sm text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
+                  >
+                    <option value="Break">Break</option>
+                    <option value="Closure">Closure</option>
+                  </select>
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-dashboard-muted"
+                  />
+                </div>
               </FieldLabel>
 
               <FieldLabel label="Date">
@@ -657,7 +680,9 @@ function ClosuresCard({
                   >
                     {closure.kind}
                   </Badge>
-                  <p className="font-medium text-dashboard-navy">{closure.reason}</p>
+                  <p className="min-w-0 break-words font-medium text-dashboard-navy">
+                    {closure.reason}
+                  </p>
                 </div>
                 <p className="mt-1 text-xs text-dashboard-muted">
                   {formatDate(closure.date)} · {formatClock(closure.start)}–
@@ -711,16 +736,16 @@ function AvailabilityWeek({
       <CardContent className="p-0">
         <SectionHeader
           icon={CalendarDays}
-          title="Prototype availability view"
-          description={`Sep 26 – Oct 2 · ${durationMinutes}-minute default · local visualization only`}
+          title="Weekly availability"
+          description={`Sep 26 – Oct 2 · ${durationMinutes}-minute default`}
         />
 
         <div className="border-b border-dashboard-border bg-dashboard-active/40 px-4 py-3 text-xs text-dashboard-muted">
           <div className="flex items-start gap-2">
             <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             <p>
-              This view combines local business hours, fixture appointments, and local closures. It
-              does not enforce or certify backend capacity or garment availability.
+              Preview only. Hours, fittings, and closures here do not confirm actual capacity or
+              garment availability.
             </p>
           </div>
         </div>
@@ -770,6 +795,7 @@ function AvailabilityWeek({
                             key={appointment.id}
                             type="button"
                             onClick={() => onOpenAppointment(appointment)}
+                            aria-label={`Open fitting for ${appointment.customer.name}, ${formatAppointmentTime(appointment)}, ${appointment.status}`}
                             className="w-full rounded-md border border-dashboard-border bg-dashboard-canvas px-2.5 py-2 text-left transition-colors hover:border-dashboard-accent/50 hover:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
                           >
                             <span className="block text-xs font-medium text-dashboard-navy">
@@ -787,7 +813,7 @@ function AvailabilityWeek({
                         ) : null}
                       </div>
                     ) : (
-                      <p className="text-xs text-dashboard-muted">No fixture appointments</p>
+                      <p className="text-xs text-dashboard-muted">No scheduled fittings</p>
                     )}
                   </ScheduleDaySection>
 
@@ -851,11 +877,11 @@ function SectionHeader({
 }) {
   return (
     <div className="flex flex-col gap-3 border-b border-dashboard-border p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-3">
+      <div className="flex min-w-0 items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-dashboard-active text-dashboard-accent">
           <Icon className="h-4 w-4" aria-hidden="true" />
         </span>
-        <div>
+        <div className="min-w-0">
           <h2 className="font-semibold text-dashboard-navy">{title}</h2>
           <p className="mt-1 text-xs text-dashboard-muted">{description}</p>
         </div>

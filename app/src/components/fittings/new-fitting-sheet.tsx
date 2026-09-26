@@ -19,6 +19,11 @@ import {
   type FittingPrototypePaymentState,
 } from "./fitting-prototype-data";
 import { fittingGarmentIntentLabel } from "./fitting-prototype-presentation";
+import {
+  FITTING_DURATION_OPTIONS,
+  readFittingPrototypeDefaultDuration,
+  type FittingPrototypeDuration,
+} from "./fitting-prototype-settings";
 
 type CustomerMode = "existing" | "walk-in";
 type Step = 1 | 2 | 3;
@@ -36,7 +41,7 @@ type NewFittingSheetProps = {
   onCreate: (appointment: FittingPrototypeAppointment) => void;
 };
 
-const DURATION_OPTIONS = [30, 60, 90] as const;
+const DURATION_OPTIONS = FITTING_DURATION_OPTIONS;
 const PAYMENT_OPTIONS: readonly FittingPrototypePaymentState[] = [
   "Not required",
   "Pending review",
@@ -69,7 +74,9 @@ export function NewFittingSheet({ open, onCreate, onOpenChange }: NewFittingShee
   const [walkInPhone, setWalkInPhone] = useState("");
   const [date, setDate] = useState(FITTING_PROTOTYPE_TODAY);
   const [startTime, setStartTime] = useState("10:00");
-  const [durationMinutes, setDurationMinutes] = useState<(typeof DURATION_OPTIONS)[number]>(60);
+  const [durationMinutes, setDurationMinutes] = useState<FittingPrototypeDuration>(() =>
+    readFittingPrototypeDefaultDuration()
+  );
   const [garmentQuery, setGarmentQuery] = useState("");
   const [garments, setGarments] = useState<GarmentSelection[]>([]);
   const [hasFee, setHasFee] = useState(true);
@@ -84,6 +91,7 @@ export function NewFittingSheet({ open, onCreate, onOpenChange }: NewFittingShee
     if (!open) return;
     submitInFlightRef.current = false;
     setIsSubmitting(false);
+    setDurationMinutes(readFittingPrototypeDefaultDuration());
   }, [open]);
 
   const visibleCustomers = useMemo(() => {
@@ -127,7 +135,7 @@ export function NewFittingSheet({ open, onCreate, onOpenChange }: NewFittingShee
     setWalkInPhone("");
     setDate(FITTING_PROTOTYPE_TODAY);
     setStartTime("10:00");
-    setDurationMinutes(60);
+    setDurationMinutes(readFittingPrototypeDefaultDuration());
     setGarmentQuery("");
     setGarments([]);
     setHasFee(true);
@@ -247,15 +255,24 @@ export function NewFittingSheet({ open, onCreate, onOpenChange }: NewFittingShee
         else onOpenChange(true);
       }}
     >
-      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
-        <header className="border-b border-dashboard-border px-5 py-5 pr-14 sm:px-6">
+      <SheetContent className="w-full max-w-full overflow-x-hidden overflow-y-auto sm:max-w-2xl">
+        <header className="border-b border-dashboard-border px-4 py-5 pr-14 sm:px-6">
           <SheetTitle className="text-lg">New Fitting</SheetTitle>
           <SheetDescription className="mt-1">
-            Local prototype only. Nothing here is saved to the backend.
+            Local prototype only. Changes are not saved.
           </SheetDescription>
-          <div className="mt-4 grid grid-cols-3 gap-2" aria-label="New fitting progress">
+          <div
+            className="mt-4 grid grid-cols-3 gap-2"
+            aria-label="New fitting progress"
+            role="list"
+          >
             {([1, 2, 3] as const).map((item) => (
-              <div key={item} className="min-w-0">
+              <div
+                key={item}
+                className="min-w-0"
+                role="listitem"
+                aria-current={item === step ? "step" : undefined}
+              >
                 <div
                   className={cn(
                     "h-1.5 rounded-full",
@@ -270,7 +287,7 @@ export function NewFittingSheet({ open, onCreate, onOpenChange }: NewFittingShee
           </div>
         </header>
 
-        <div className="space-y-6 px-5 pb-6 sm:px-6">
+        <div className="min-w-0 space-y-6 px-4 pb-6 sm:px-6">
           {step === 1 ? (
             <StepAppointment
               customerMode={customerMode}
@@ -329,11 +346,11 @@ export function NewFittingSheet({ open, onCreate, onOpenChange }: NewFittingShee
             </p>
           ) : null}
 
-          <div className="flex flex-col-reverse gap-2 border-t border-dashboard-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="sticky bottom-0 z-10 -mx-4 flex flex-col-reverse gap-2 border-t border-dashboard-border bg-dashboard-surface/95 px-4 pb-4 pt-4 backdrop-blur sm:static sm:-mx-6 sm:flex-row sm:items-center sm:justify-between sm:bg-transparent sm:px-6 sm:pb-0 sm:backdrop-blur-none">
             <Button
               type="button"
               variant="ghost"
-              className="text-white hover:text-white"
+              className="w-full text-dashboard-navy hover:text-dashboard-navy sm:w-auto"
               onClick={() => {
                 if (step === 1) closeAndReset();
                 else {
@@ -352,7 +369,7 @@ export function NewFittingSheet({ open, onCreate, onOpenChange }: NewFittingShee
             </Button>
 
             {step < 3 ? (
-              <Button type="button" onClick={goNext}>
+              <Button type="button" onClick={goNext} className="w-full sm:w-auto">
                 Continue
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -362,6 +379,7 @@ export function NewFittingSheet({ open, onCreate, onOpenChange }: NewFittingShee
                 onClick={createPrototypeAppointment}
                 isPending={isSubmitting}
                 pendingLabel="Creating…"
+                className="w-full sm:w-auto"
               >
                 <Plus className="h-4 w-4" />
                 Create local fitting
@@ -404,7 +422,7 @@ function StepAppointment({
   walkInPhone: string;
   date: string;
   startTime: string;
-  durationMinutes: (typeof DURATION_OPTIONS)[number];
+  durationMinutes: FittingPrototypeDuration;
   onCustomerModeChange: (value: CustomerMode) => void;
   onCustomerQueryChange: (value: string) => void;
   onExistingCustomerChange: (value: string) => void;
@@ -413,7 +431,7 @@ function StepAppointment({
   onWalkInPhoneChange: (value: string) => void;
   onDateChange: (value: string) => void;
   onStartTimeChange: (value: string) => void;
-  onDurationChange: (value: (typeof DURATION_OPTIONS)[number]) => void;
+  onDurationChange: (value: FittingPrototypeDuration) => void;
 }) {
   return (
     <section aria-labelledby="new-fitting-appointment-heading">
@@ -425,7 +443,11 @@ function StepAppointment({
       </h3>
       <p className="mt-1 text-xs text-dashboard-muted">Choose the customer and fitting time.</p>
 
-      <div className="mt-4 flex rounded-lg border border-dashboard-border bg-dashboard-surface p-1">
+      <div
+        className="mt-4 flex rounded-lg border border-dashboard-border bg-dashboard-surface p-1"
+        role="group"
+        aria-label="Customer type"
+      >
         {(["existing", "walk-in"] as const).map((mode) => (
           <button
             key={mode}
@@ -462,10 +484,14 @@ function StepAppointment({
             />
           </label>
 
-          <div className="h-60 space-y-2 overflow-y-auto pr-1" aria-label="Existing customers">
+          <div
+            className="h-60 space-y-2 overflow-y-auto pr-1"
+            role="radiogroup"
+            aria-label="Existing customers"
+          >
             {visibleCustomers.length === 0 ? (
               <p className="rounded-lg border border-dashed border-dashboard-border px-3 py-4 text-sm text-dashboard-muted">
-                No synthetic customers match this search.
+                No customers match this search.
               </p>
             ) : (
               visibleCustomers.map((customer) => {
@@ -474,7 +500,8 @@ function StepAppointment({
                   <button
                     key={customer.id}
                     type="button"
-                    aria-pressed={selected}
+                    role="radio"
+                    aria-checked={selected}
                     onClick={() => onExistingCustomerChange(customer.id)}
                     className={cn(
                       "flex w-full items-start justify-between gap-3 rounded-lg border px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30",
@@ -490,7 +517,10 @@ function StepAppointment({
                       </span>
                     </span>
                     {selected ? (
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-dashboard-accent" />
+                      <Check
+                        className="mt-0.5 h-4 w-4 shrink-0 text-dashboard-accent"
+                        aria-hidden="true"
+                      />
                     ) : null}
                   </button>
                 );
@@ -548,7 +578,7 @@ function StepAppointment({
               aria-label="Fitting duration"
               value={durationMinutes}
               onChange={(event) =>
-                onDurationChange(Number(event.target.value) as (typeof DURATION_OPTIONS)[number])
+                onDurationChange(Number(event.target.value) as FittingPrototypeDuration)
               }
               className="h-10 w-full appearance-none rounded-md border border-dashboard-border bg-dashboard-surface pl-3 pr-10 text-sm text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
             >
@@ -567,8 +597,7 @@ function StepAppointment({
       </div>
 
       <p className="mt-3 text-xs text-dashboard-muted">
-        Duration is prototype configuration only. This screen does not confirm backend slot
-        availability.
+        Local preview only; this screen does not confirm slot availability.
       </p>
     </section>
   );
@@ -620,7 +649,7 @@ function StepGarments({
           <Input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Search prototype garments..."
+            placeholder="Search garments..."
             className="pl-9"
           />
         </label>
@@ -637,13 +666,17 @@ function StepGarments({
                     aria-label={`${selected ? "Remove" : "Add"} ${option.productName}`}
                     onClick={() => onToggleGarment(option)}
                     className={cn(
-                      "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors",
+                      "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30",
                       selected
                         ? "border-dashboard-accent bg-dashboard-active text-dashboard-accent"
                         : "border-dashboard-border text-dashboard-muted"
                     )}
                   >
-                    {selected ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                    {selected ? (
+                      <Check className="h-4 w-4" aria-hidden="true" />
+                    ) : (
+                      <Plus className="h-4 w-4" aria-hidden="true" />
+                    )}
                   </button>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start gap-2">
@@ -664,24 +697,30 @@ function StepGarments({
                         >
                           Garment intent
                         </label>
-                        <select
-                          id={`guarantee-${option.key}`}
-                          value={selected.guarantee}
-                          onChange={(event) =>
-                            onGuaranteeChange(
-                              option.key,
-                              event.target.value as FittingPrototypeGarment["guarantee"]
-                            )
-                          }
-                          className="mt-1 h-9 w-full rounded-md border border-dashboard-border bg-dashboard-surface px-3 text-sm text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
-                        >
-                          <option value="Preference only">Preference only</option>
-                          <option value="Guaranteed intent">Guaranteed intent</option>
-                        </select>
+                        <div className="relative mt-1">
+                          <select
+                            id={`guarantee-${option.key}`}
+                            value={selected.guarantee}
+                            onChange={(event) =>
+                              onGuaranteeChange(
+                                option.key,
+                                event.target.value as FittingPrototypeGarment["guarantee"]
+                              )
+                            }
+                            className="h-9 w-full appearance-none rounded-md border border-dashboard-border bg-dashboard-surface pl-3 pr-10 text-sm text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
+                          >
+                            <option value="Preference only">Preference only</option>
+                            <option value="Guaranteed intent">Guaranteed intent</option>
+                          </select>
+                          <ChevronDown
+                            aria-hidden="true"
+                            className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-dashboard-muted"
+                          />
+                        </div>
                         {selected.guarantee === "Guaranteed intent" ? (
                           <p className="mt-1 text-xs text-dashboard-muted">
-                            Prototype intent only. A future backend must validate and claim the
-                            physical garment.
+                            Intent only; availability must be confirmed before the garment is
+                            guaranteed.
                           </p>
                         ) : null}
                       </div>
@@ -698,14 +737,14 @@ function StepGarments({
         <h3 id="new-fitting-fee-heading" className="text-sm font-semibold text-dashboard-navy">
           Fee & payment
         </h3>
-        <p className="mt-1 text-xs text-dashboard-muted">Optional prototype values only.</p>
+        <p className="mt-1 text-xs text-dashboard-muted">Optional for this fitting.</p>
 
         <label className="mt-4 flex items-center gap-2 text-sm text-dashboard-navy">
           <input
             type="checkbox"
             checked={hasFee}
             onChange={(event) => onHasFeeChange(event.target.checked)}
-            className="h-4 w-4 rounded border-dashboard-border"
+            className="h-4 w-4 rounded border-dashboard-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
           />
           This fitting has a fee
         </label>
@@ -772,9 +811,7 @@ function StepReview({
       <h3 id="new-fitting-review-heading" className="text-sm font-semibold text-dashboard-navy">
         Review
       </h3>
-      <p className="mt-1 text-xs text-dashboard-muted">
-        Review this local prototype fitting before adding it to the page.
-      </p>
+      <p className="mt-1 text-xs text-dashboard-muted">Review this fitting before adding it.</p>
 
       <div className="mt-4 grid gap-3 rounded-lg border border-dashboard-border p-4 sm:grid-cols-2">
         <ReviewItem label="Customer" value={customerName} />
@@ -808,8 +845,7 @@ function StepReview({
       </div>
 
       <p className="mt-4 rounded-lg bg-dashboard-active px-3 py-2 text-xs text-dashboard-muted">
-        Creating this fitting only adds one record to the current browser session. Refreshing the
-        page will remove it.
+        Local only. Refreshing the page removes this fitting.
       </p>
     </section>
   );

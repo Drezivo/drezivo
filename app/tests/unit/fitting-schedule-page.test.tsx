@@ -1,9 +1,13 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { FittingSchedulePage } from "@/components/fittings/fitting-schedule-page";
 
 describe("FittingSchedulePage", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
   it("renders the business-level schedule shell without resource concepts", () => {
     render(<FittingSchedulePage />);
 
@@ -15,7 +19,7 @@ describe("FittingSchedulePage", () => {
     expect(screen.getByText("Weekly fitting hours")).toBeVisible();
     expect(screen.getByText("Appointment duration")).toBeVisible();
     expect(screen.getByText("Breaks & closures")).toBeVisible();
-    expect(screen.getByText("Prototype availability view")).toBeVisible();
+    expect(screen.getByText("Weekly availability")).toBeVisible();
     expect(screen.queryByText(/Fitting Room/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Fitting Staff/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Capacity Slot/i)).not.toBeInTheDocument();
@@ -49,8 +53,9 @@ describe("FittingSchedulePage", () => {
     expect(duration).toHaveValue("60");
     fireEvent.change(duration, { target: { value: "45" } });
     expect(duration).toHaveValue("45");
+    expect(window.sessionStorage.getItem("drezivo:fittings:prototype-default-duration")).toBe("45");
     expect(screen.getByText(/45-minute default/i)).toBeVisible();
-    expect(screen.getByText(/does not establish backend capacity/i)).toBeVisible();
+    expect(screen.getByText(/availability is still a preview/i)).toBeVisible();
   });
 
   it("adds and removes a local closure without a backend request", () => {
@@ -67,11 +72,28 @@ describe("FittingSchedulePage", () => {
     expect(screen.queryByText("Team meeting")).not.toBeInTheDocument();
   });
 
+  it("keeps schedule controls explicitly named and keyboard reachable", () => {
+    render(<FittingSchedulePage />);
+
+    expect(screen.getByRole("switch", { name: "Monday fitting hours" })).toBeVisible();
+    expect(screen.getByRole("combobox", { name: "Default fitting duration" })).toBeVisible();
+    expect(screen.getAllByRole("button", { name: "Add window" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "Back to Fittings" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByRole("combobox", { name: "Closure type" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Closure date" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Closure start time" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Closure end time" })).toBeVisible();
+  });
+
   it("shows bounded weekly context and opens a fixture appointment in the shared details sheet", () => {
     render(<FittingSchedulePage />);
 
     expect(screen.getAllByText("Working hours")).toHaveLength(7);
-    expect(screen.getByText(/does not enforce or certify backend capacity/i)).toBeVisible();
+    expect(
+      screen.getByText(/do not confirm actual capacity or garment availability/i)
+    ).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: /Ari dela Rosa/ }));
     const dialog = screen.getByRole("dialog");
