@@ -38,6 +38,11 @@
   --color-storefront-footer: #0b493f;
   --color-storefront-footer-muted: #d6e5df;
   --color-storefront-accent: #215f53;
+  --color-storefront-selected: #f3dfac;
+  --color-storefront-selected-ink: #7b5a14;
+  --color-storefront-unavailable: #fde6e4;
+  --color-storefront-unavailable-ink: #b23a32;
+  --color-storefront-overlay: rgb(10 24 31 / 0.66);
   --shadow-storefront-card: 0 6px 18px rgb(23 50 77 / 0.06);
 
   /* Marketing-only palette. Storefronts continue to use the semantic tokens above. */
