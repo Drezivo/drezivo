@@ -9,7 +9,7 @@ tags: [drezivo, v1.1, fittings, frontend, backend, implementation, checklist]
 
 # Fittings V1.1 Implementation Checklist
 
-**Status:** Frontend prototype approved. Backend Phases BE-0 through BE-5 are implemented, with the isolated Neon-branch rehearsal for FIT-BE-025 still outstanding. BE-6 is in progress: FIT-BE-060 is complete and FIT-BE-061's backend command behavior is implemented; the frontend session-storage cutover remains intentionally deferred to FIT-BE-101.
+**Status:** Frontend prototype approved. Backend Phases BE-0 through BE-5 are implemented, with the isolated Neon-branch rehearsal for FIT-BE-025 still outstanding. BE-6 backend schedule behavior is implemented through FIT-BE-063; FIT-BE-061 remains open only for the frontend session-storage cutover intentionally deferred to FIT-BE-101.
 
 This file is the feature-wide implementation checklist for `/fittings` and `/fittings/schedule`. The original frontend prototype phases are retained below as implementation history; the backend phases are appended after the frontend section.
 
@@ -994,19 +994,21 @@ The fitting frontend prototype is complete when:
     - [x] Capacity reduction is rejected when existing future fittings require more simultaneous slots.
   - **Evidence:** `updateFittingSettingsCommand` updates only the branch-owned enabled/capacity/duration/fixed-fee fields while preserving server-owned currency/timezone, requires Owner + active tenant state, checks optimistic settings version, and uses tenant idempotency. Create/reschedule already read these settings transactionally, so disabling immediately blocks new intake/reschedule while BE-5 lifecycle commands remain available. Duration/fee changes do not rewrite appointment snapshots; PostgreSQL tests prove an existing fitting retains its old period/fee while a later fitting uses the new values. Capacity increases materialize hidden slots; safe reductions lock scheduled fittings, reject when maximum simultaneous demand exceeds the new capacity, otherwise release/repack only hidden capacity claims into slots `1..N`, retain released allocation history, and leave garment guarantees untouched. The BE-6 integration suite passes 10/10 including stale-version handling and sequential/concurrent double-fire coverage for scalar settings.
 
-- [ ] **FIT-BE-062 — Implement weekly-window and date-specific closure persistence**
+- [x] **FIT-BE-062 — Implement weekly-window and date-specific closure persistence**
   - **Acceptance:**
-    - [ ] Weekly window replacement and closure create/edit/remove are tenant/branch scoped and idempotent where applicable.
-    - [ ] Weekly windows validate weekday/start/end/non-overlap; their gaps represent recurring breaks.
-    - [ ] Closure period and bounded reason are validated server-side in branch timezone.
-    - [ ] Hours/closure changes that would invalidate existing future fittings are rejected.
-    - [ ] Closures participate in appointment schedule validation using the approved BE-0 model.
+    - [x] Weekly window replacement and closure create/edit/remove are tenant/branch scoped and idempotent where applicable.
+    - [x] Weekly windows validate weekday/start/end/non-overlap; their gaps represent recurring breaks.
+    - [x] Closure period and bounded reason are validated server-side in branch timezone.
+    - [x] Hours/closure changes that would invalidate existing future fittings are rejected.
+    - [x] Closures participate in appointment schedule validation using the approved BE-0 model.
+  - **Evidence:** `api/src/modules/fittings/fittings.schedule.command.{service,repository}.ts` now implements Owner-only closure create/update/remove commands on the same locked `fitting_settings` serialization row used by weekly-hours/create/reschedule. Closure mutations are tenant/branch scoped, use optimistic settings versions plus tenant idempotency, snapshot the authoritative branch timezone, and persist canonical half-open `tstzrange` periods with bounded reasons enforced by the BE-1 contracts and BE-2 database constraints. New or edited closures lock/check accepted future fittings and return `SCHEDULE_CONFLICT` when the proposed range would invalidate one; removal preserves normal schedule availability. Existing create/reschedule schedule validation already queries `fitting_closure`, and the shared read mapping now returns the canonical `{ start, end }` interval shape. Closure mutations emit redacted audit events without exposing customer data.
 
-- [ ] **FIT-BE-063 — Add schedule-setting tests**
+- [x] **FIT-BE-063 — Add schedule-setting tests**
   - **Acceptance:**
-    - [ ] Seven-day schedule, split windows, unavailable days, and date exceptions are covered.
-    - [ ] Timezone and date-boundary cases are covered.
-    - [ ] Capacity reductions, shortened hours, and new closures that would invalidate future fittings are rejected; duration/fee changes do not rewrite existing appointment snapshots.
+    - [x] Seven-day schedule, split windows, unavailable days, and date exceptions are covered.
+    - [x] Timezone and date-boundary cases are covered.
+    - [x] Capacity reductions, shortened hours, and new closures that would invalidate future fittings are rejected; duration/fee changes do not rewrite existing appointment snapshots.
+  - **Evidence:** `api/tests/integration/fittings-phase6-settings-hours.test.ts` now passes 15/15 PostgreSQL integration tests. Coverage includes all seven weekdays, normalized split windows, recurring-break gaps, disabled weekdays, overlap rejection, shortened-hours conflict protection, scalar settings/idempotency, unsafe and safe capacity reductions, immutable existing duration/fee snapshots, Owner-only closure mutation, closure create/read/update/remove replay behavior, tenant/branch scoping, future-fitting closure conflicts, closure-aware create/reschedule validation, removal restoring schedulability, and an `America/New_York` DST/date-boundary case proving authoritative timezone snapshots and half-open overlap semantics. Sequential BE-2→BE-6 fitting regressions pass 44/44, alongside API lint/typecheck/build, 83/83 non-integration tests, focused Prettier checks, and `git diff --check`.
 
 ---
 

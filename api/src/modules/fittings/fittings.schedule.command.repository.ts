@@ -22,6 +22,15 @@ export interface ScheduledFittingCapacityRow {
   ends_at: Date;
 }
 
+export interface FittingClosureCommandRow {
+  id: string;
+  starts_at: Date;
+  ends_at: Date;
+  timezone_snapshot: string;
+  reason: string;
+  created_at: Date;
+}
+
 /**
  * The settings row is the serialization point shared by create/reschedule and configuration writes.
  * Keeping that lock first prevents a winning configuration change from racing a new appointment.
@@ -102,6 +111,115 @@ export async function proposedWeeklyHoursInvalidateFutureFittings(
   return result.rows[0]?.invalidates ?? false;
 }
 
+export async function proposedClosureInvalidatesFutureFittings(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    startsAt: string;
+    endsAt: string;
+  },
+): Promise<boolean> {
+  const result = await client.query<{ invalidates: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+         FROM fitting_appointment fa
+        WHERE fa.tenant_id = $1
+          AND fa.branch_id = $2
+          AND fa.status IN ('pending','confirmed')
+          AND lower(fa.period) > statement_timestamp()
+          AND fa.period && tstzrange($3::timestamptz, $4::timestamptz, '[)')
+     ) AS invalidates`,
+    [input.tenantId, input.branchId, input.startsAt, input.endsAt],
+  );
+  return result.rows[0]?.invalidates ?? false;
+}
+
+export async function lockFittingClosureForCommand(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; closureId: string },
+): Promise<FittingClosureCommandRow | null> {
+  const result = await client.query<FittingClosureCommandRow>(
+    `SELECT fc.id, lower(fc.period) AS starts_at, upper(fc.period) AS ends_at,
+            fc.timezone_snapshot, fc.reason, fc.created_at
+       FROM fitting_closure fc
+      WHERE fc.tenant_id = $1 AND fc.branch_id = $2 AND fc.id = $3
+      LIMIT 1
+      FOR UPDATE OF fc`,
+    [input.tenantId, input.branchId, input.closureId],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function createFittingClosure(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    startsAt: string;
+    endsAt: string;
+    timezone: string;
+    reason: string;
+  },
+): Promise<FittingClosureCommandRow> {
+  const result = await client.query<FittingClosureCommandRow>(
+    `INSERT INTO fitting_closure
+       (tenant_id, branch_id, period, timezone_snapshot, reason)
+     VALUES ($1, $2, tstzrange($3::timestamptz, $4::timestamptz, '[)'), $5, $6)
+     RETURNING id, lower(period) AS starts_at, upper(period) AS ends_at,
+               timezone_snapshot, reason, created_at`,
+    [input.tenantId, input.branchId, input.startsAt, input.endsAt, input.timezone, input.reason],
+  );
+  const row = result.rows[0];
+  if (!row) throw new Error('Fitting closure insert returned no row.');
+  return row;
+}
+
+export async function updateFittingClosure(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    closureId: string;
+    startsAt: string;
+    endsAt: string;
+    timezone: string;
+    reason: string;
+  },
+): Promise<FittingClosureCommandRow | null> {
+  const result = await client.query<FittingClosureCommandRow>(
+    `UPDATE fitting_closure
+        SET period = tstzrange($4::timestamptz, $5::timestamptz, '[)'),
+            timezone_snapshot = $6,
+            reason = $7
+      WHERE tenant_id = $1 AND branch_id = $2 AND id = $3
+      RETURNING id, lower(period) AS starts_at, upper(period) AS ends_at,
+                timezone_snapshot, reason, created_at`,
+    [
+      input.tenantId,
+      input.branchId,
+      input.closureId,
+      input.startsAt,
+      input.endsAt,
+      input.timezone,
+      input.reason,
+    ],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function removeFittingClosure(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; closureId: string },
+): Promise<boolean> {
+  const result = await client.query(
+    `DELETE FROM fitting_closure
+      WHERE tenant_id = $1 AND branch_id = $2 AND id = $3`,
+    [input.tenantId, input.branchId, input.closureId],
+  );
+  return (result.rowCount ?? 0) === 1;
+}
+
 export async function replaceFittingWeeklyHours(
   client: PoolClient,
   input: {
@@ -140,7 +258,8 @@ export async function bumpFittingSettingsVersion(
       RETURNING version`,
     [input.tenantId, input.branchId, input.version],
   );
-  return result.rows[0]?.version ?? null;
+  const version = result.rows[0]?.version;
+  return version === undefined ? null : Number(version);
 }
 
 /** Locks all still-scheduled fittings before a capacity reduction/repack. */
@@ -226,7 +345,8 @@ export async function updateFittingSettingsScalars(
       input.feeMinor,
     ],
   );
-  return result.rows[0]?.version ?? null;
+  const version = result.rows[0]?.version;
+  return version === undefined ? null : Number(version);
 }
 
 export async function appendFittingConfigurationAudit(
@@ -251,6 +371,35 @@ export async function appendFittingConfigurationAudit(
       input.actorKey,
       input.action,
       input.branchId,
+      JSON.stringify({ branch_id: input.branchId, version: input.version, ...input.summary }),
+      input.requestId,
+    ],
+  );
+}
+
+export async function appendFittingClosureAudit(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    actorKey: string;
+    action: 'fitting.closure_created' | 'fitting.closure_updated' | 'fitting.closure_removed';
+    branchId: string;
+    closureId: string;
+    requestId: string;
+    version: number;
+    summary: Record<string, unknown>;
+  },
+): Promise<void> {
+  await client.query(
+    `INSERT INTO audit_event
+       (tenant_id, actor_kind, actor_key, action, entity_type, entity_id,
+        redacted_summary, request_id, occurred_at, outcome)
+     VALUES ($1,'staff',$2,$3,'fitting_closure',$4::uuid,$5::jsonb,$6,statement_timestamp(),'succeeded')`,
+    [
+      input.tenantId,
+      input.actorKey,
+      input.action,
+      input.closureId,
       JSON.stringify({ branch_id: input.branchId, version: input.version, ...input.summary }),
       input.requestId,
     ],

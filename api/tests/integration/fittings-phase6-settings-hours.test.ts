@@ -54,7 +54,12 @@ async function withAdmin<T>(fn: (client: Client) => Promise<T>): Promise<T> {
 
 async function seedTenant(
   label: string,
-  options: { capacity?: number; durationMinutes?: number; feeMinor?: number } = {},
+  options: {
+    capacity?: number;
+    durationMinutes?: number;
+    feeMinor?: number;
+    timezone?: string;
+  } = {},
 ): Promise<Seed> {
   return withAdmin(async (client) => {
     const suffix = `${label}-${randomUUID().slice(0, 8)}`;
@@ -62,8 +67,8 @@ async function seedTenant(
       (
         await client.query<{ id: string }>(
           `INSERT INTO tenant (clerk_org_id,name,slug,currency,timezone)
-           VALUES ($1,$2,$3,'PHP','Asia/Manila') RETURNING id`,
-          [`org_${suffix}`, suffix, `fit6-${suffix}`],
+           VALUES ($1,$2,$3,'PHP',$4) RETURNING id`,
+          [`org_${suffix}`, suffix, `fit6-${suffix}`, options.timezone ?? 'Asia/Manila'],
         )
       ).rows,
       'tenant',
@@ -72,8 +77,8 @@ async function seedTenant(
       (
         await client.query<{ id: string }>(
           `INSERT INTO branch (tenant_id,name,code,is_default,timezone)
-           VALUES ($1,'Main','MAIN',true,'Asia/Manila') RETURNING id`,
-          [tenantId],
+           VALUES ($1,'Main','MAIN',true,$2) RETURNING id`,
+          [tenantId, options.timezone ?? 'Asia/Manila'],
         )
       ).rows,
       'branch',
@@ -194,9 +199,14 @@ describe('FIT-BE-060..061 fitting weekly-hours and branch settings commands', as
     await import('../../src/modules/fittings/fittings.command.service.js');
   const { cancelFittingCommand, confirmFittingCommand, rescheduleFittingCommand } =
     await import('../../src/modules/fittings/fittings.mutation.service.js');
-  const { updateFittingSettingsCommand, updateFittingWeeklyHoursCommand } =
-    await import('../../src/modules/fittings/fittings.schedule.command.service.js');
-  const { getFittingDetail, getFittingSettings } =
+  const {
+    createFittingClosureCommand,
+    removeFittingClosureCommand,
+    updateFittingClosureCommand,
+    updateFittingSettingsCommand,
+    updateFittingWeeklyHoursCommand,
+  } = await import('../../src/modules/fittings/fittings.schedule.command.service.js');
+  const { getFittingClosures, getFittingDetail, getFittingSettings } =
     await import('../../src/modules/fittings/fittings.service.js');
 
   beforeAll(async () => {
@@ -634,5 +644,312 @@ describe('FIT-BE-060..061 fitting weekly-hours and branch settings commands', as
       fee_minor: '500',
       version: 1,
     });
+  });
+
+  it('uses split-window gaps and disabled weekdays as real scheduling constraints', async () => {
+    const seed = await seedTenant('weekly-schedule-validation');
+    const hours = weeklyHours();
+    hours[0] = {
+      weekday: 'monday',
+      windows: [
+        { starts_local: '09:00', ends_local: '12:00' },
+        { starts_local: '13:00', ends_local: '17:00' },
+      ],
+    };
+    hours[1] = { weekday: 'tuesday', windows: [] };
+
+    const updated = await updateFittingWeeklyHoursCommand(ownerContext(seed), {
+      version: 1,
+      weekly_hours: hours as never,
+    });
+    expect(updated.status).toBe(200);
+
+    const gapAttempt = await createStaffFittingCommand(ownerContext(seed), {
+      customer: { source: 'existing', customer_id: seed.customerId as never },
+      starts_at: '2099-01-12T04:00:00.000Z',
+      garments: [{ variant_id: seed.variantId as never, garment_mode: 'preference' }],
+    });
+    expect(gapAttempt.status).toBe(409);
+    expect(gapAttempt.body).toMatchObject({
+      success: false,
+      error: { code: 'SCHEDULE_CONFLICT' },
+    });
+
+    const disabledDayAttempt = await createStaffFittingCommand(ownerContext(seed), {
+      customer: { source: 'existing', customer_id: seed.customerId as never },
+      starts_at: '2099-01-13T02:00:00.000Z',
+      garments: [{ variant_id: seed.variantId as never, garment_mode: 'preference' }],
+    });
+    expect(disabledDayAttempt.status).toBe(409);
+    expect(disabledDayAttempt.body).toMatchObject({
+      success: false,
+      error: { code: 'SCHEDULE_CONFLICT' },
+    });
+
+    const afternoon = await createPreference(seed, '2099-01-12T05:00:00.000Z');
+    expect(afternoon.period).toEqual({
+      start: '2099-01-12T05:00:00.000Z',
+      end: '2099-01-12T06:00:00.000Z',
+    });
+  });
+
+  it('creates, reads, updates, and removes tenant/branch-scoped closures idempotently with canonical period shape', async () => {
+    const seed = await seedTenant('closure-crud');
+    const otherSeed = await seedTenant('closure-other-tenant');
+    const createContext = ownerContext(seed, randomUUID());
+    const createRequest = {
+      settings_version: 1,
+      period: { start: '2099-01-15T01:00:00.000Z', end: '2099-01-15T03:00:00.000Z' },
+      reason: '  Private event  ',
+    } as const;
+
+    await expect(
+      createFittingClosureCommand(frontdeskContext(seed), createRequest),
+    ).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    await expect(
+      createFittingClosureCommand(ownerContext(seed), {
+        ...createRequest,
+        reason: '   ',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+
+    const created = await createFittingClosureCommand(createContext, createRequest);
+    const createReplay = await createFittingClosureCommand(
+      { ...createContext, requestId: randomUUID() },
+      createRequest,
+    );
+    expect([created.status, createReplay.status]).toEqual([201, 201]);
+    if (!created.body.success || !createReplay.body.success)
+      throw new Error('Expected closure creation and replay success.');
+    const closureId = created.body.data.closure.id;
+    expect(createReplay.body.data.closure.id).toBe(closureId);
+    expect(created.body.data).toMatchObject({
+      settings_version: 2,
+      closure: {
+        period: { start: createRequest.period.start, end: createRequest.period.end },
+        timezone_snapshot: 'Asia/Manila',
+        reason: 'Private event',
+      },
+    });
+
+    const listed = await getFittingClosures(readContext(seed), {
+      period_start: '2099-01-15T00:00:00.000Z',
+      period_end: '2099-01-16T00:00:00.000Z',
+      limit: 20,
+    });
+    expect(listed.items).toHaveLength(1);
+    expect(listed.items[0]).toMatchObject({
+      id: closureId,
+      period: createRequest.period,
+      timezone_snapshot: 'Asia/Manila',
+      reason: 'Private event',
+    });
+
+    const crossTenantUpdate = await updateFittingClosureCommand(
+      { ...ownerContext(otherSeed), closureId },
+      {
+        settings_version: 1,
+        period: { start: '2099-01-15T04:00:00.000Z', end: '2099-01-15T05:00:00.000Z' },
+        reason: 'Wrong tenant',
+      },
+    );
+    expect(crossTenantUpdate.status).toBe(404);
+
+    const updateContext = { ...ownerContext(seed, randomUUID()), closureId };
+    const updateRequest = {
+      settings_version: 2,
+      period: { start: '2099-01-15T04:00:00.000Z', end: '2099-01-15T05:00:00.000Z' },
+      reason: 'Maintenance block',
+    } as const;
+    const concurrentUpdates = await Promise.all([
+      updateFittingClosureCommand(updateContext, updateRequest),
+      updateFittingClosureCommand({ ...updateContext, requestId: randomUUID() }, updateRequest),
+    ]);
+    expect(concurrentUpdates.map((result) => result.status)).toEqual([200, 200]);
+    for (const result of concurrentUpdates) {
+      if (!result.body.success) throw new Error('Expected closure update replay success.');
+      expect(result.body.data.settings_version).toBe(3);
+      expect(result.body.data.closure).toMatchObject({
+        id: closureId,
+        period: updateRequest.period,
+        reason: updateRequest.reason,
+      });
+    }
+
+    const removeContext = { ...ownerContext(seed, randomUUID()), closureId };
+    const removeRequest = { settings_version: 3 } as const;
+    const removed = await removeFittingClosureCommand(removeContext, removeRequest);
+    const removeReplay = await removeFittingClosureCommand(
+      { ...removeContext, requestId: randomUUID() },
+      removeRequest,
+    );
+    expect([removed.status, removeReplay.status]).toEqual([200, 200]);
+    if (!removed.body.success || !removeReplay.body.success)
+      throw new Error('Expected closure remove replay success.');
+    expect(removed.body.data).toEqual({ closure_id: closureId, settings_version: 4 });
+    expect(removeReplay.body.data).toEqual(removed.body.data);
+
+    const afterRemove = await getFittingClosures(readContext(seed), {
+      period_start: '2099-01-15T00:00:00.000Z',
+      period_end: '2099-01-16T00:00:00.000Z',
+      limit: 20,
+    });
+    expect(afterRemove.items).toEqual([]);
+
+    await withAdmin(async (client) => {
+      const audits = await client.query<{ action: string }>(
+        `SELECT action
+           FROM audit_event
+          WHERE tenant_id=$1 AND entity_id=$2
+          ORDER BY occurred_at, id`,
+        [seed.tenantId, closureId],
+      );
+      expect(audits.rows.map((row) => row.action)).toEqual([
+        'fitting.closure_created',
+        'fitting.closure_updated',
+        'fitting.closure_removed',
+      ]);
+    });
+  });
+
+  it('rejects new or edited closures that would invalidate accepted future fittings', async () => {
+    const seed = await seedTenant('closure-future-conflict');
+    const fitting = await createPreference(seed, '2099-01-09T02:00:00.000Z');
+
+    const conflictingCreate = await createFittingClosureCommand(ownerContext(seed), {
+      settings_version: 1,
+      period: { start: '2099-01-09T01:30:00.000Z', end: '2099-01-09T03:30:00.000Z' },
+      reason: 'Would cover accepted fitting',
+    });
+    expect(conflictingCreate.status).toBe(409);
+    expect(conflictingCreate.body).toMatchObject({
+      success: false,
+      error: { code: 'SCHEDULE_CONFLICT' },
+    });
+
+    const safeCreate = await createFittingClosureCommand(ownerContext(seed), {
+      settings_version: 1,
+      period: { start: '2099-01-09T04:00:00.000Z', end: '2099-01-09T05:00:00.000Z' },
+      reason: 'Safe block',
+    });
+    expect(safeCreate.status).toBe(201);
+    if (!safeCreate.body.success) throw new Error('Expected safe closure creation.');
+
+    const conflictingUpdate = await updateFittingClosureCommand(
+      { ...ownerContext(seed), closureId: safeCreate.body.data.closure.id },
+      {
+        settings_version: 2,
+        period: { start: '2099-01-09T01:30:00.000Z', end: '2099-01-09T03:30:00.000Z' },
+        reason: 'Unsafe edit',
+      },
+    );
+    expect(conflictingUpdate.status).toBe(409);
+    expect(conflictingUpdate.body).toMatchObject({
+      success: false,
+      error: { code: 'SCHEDULE_CONFLICT' },
+    });
+
+    const settings = await getFittingSettings(readContext(seed));
+    expect(settings.version).toBe(2);
+    expect((await getFittingDetail(readContext(seed), fitting.id)).status).toBe('pending');
+    const closures = await getFittingClosures(readContext(seed), {
+      period_start: '2099-01-09T00:00:00.000Z',
+      period_end: '2099-01-10T00:00:00.000Z',
+      limit: 20,
+    });
+    expect(closures.items[0]?.period).toEqual({
+      start: '2099-01-09T04:00:00.000Z',
+      end: '2099-01-09T05:00:00.000Z',
+    });
+  });
+
+  it('uses date-specific closures in create and reschedule validation and stops blocking after removal', async () => {
+    const seed = await seedTenant('closure-schedule-validation');
+    const createdClosure = await createFittingClosureCommand(ownerContext(seed), {
+      settings_version: 1,
+      period: { start: '2099-01-09T01:00:00.000Z', end: '2099-01-09T03:00:00.000Z' },
+      reason: 'Private event',
+    });
+    if (!createdClosure.body.success) throw new Error('Expected closure creation.');
+
+    const blockedCreate = await createStaffFittingCommand(ownerContext(seed), {
+      customer: { source: 'existing', customer_id: seed.customerId as never },
+      starts_at: '2099-01-09T02:00:00.000Z',
+      garments: [{ variant_id: seed.variantId as never, garment_mode: 'preference' }],
+    });
+    expect(blockedCreate.status).toBe(409);
+    expect(blockedCreate.body).toMatchObject({
+      success: false,
+      error: { code: 'SCHEDULE_CONFLICT' },
+    });
+
+    const existing = await createPreference(seed, '2099-01-09T04:00:00.000Z');
+    const blockedReschedule = await rescheduleFittingCommand(
+      { ...ownerContext(seed), fittingId: existing.id },
+      { version: existing.version, starts_at: '2099-01-09T02:00:00.000Z' },
+    );
+    expect(blockedReschedule.status).toBe(409);
+    expect(blockedReschedule.body).toMatchObject({
+      success: false,
+      error: { code: 'SCHEDULE_CONFLICT' },
+    });
+
+    const removed = await removeFittingClosureCommand(
+      { ...ownerContext(seed), closureId: createdClosure.body.data.closure.id },
+      { settings_version: 2 },
+    );
+    expect(removed.status).toBe(200);
+
+    const rescheduled = await rescheduleFittingCommand(
+      { ...ownerContext(seed), fittingId: existing.id },
+      { version: existing.version, starts_at: '2099-01-09T02:00:00.000Z' },
+    );
+    expect(rescheduled.status).toBe(200);
+    if (!rescheduled.body.success) throw new Error('Expected reschedule after closure removal.');
+    expect(rescheduled.body.data.fitting.period.start).toBe('2099-01-09T02:00:00.000Z');
+  });
+
+  it('preserves authoritative branch timezone across a DST boundary and uses half-open closure overlap', async () => {
+    const seed = await seedTenant('closure-dst', { timezone: 'America/New_York' });
+    const hours = weeklyHours([{ starts_local: '00:00', ends_local: '04:00' }]);
+    const hoursUpdated = await updateFittingWeeklyHoursCommand(ownerContext(seed), {
+      version: 1,
+      weekly_hours: hours as never,
+    });
+    expect(hoursUpdated.status).toBe(200);
+
+    const closure = await createFittingClosureCommand(ownerContext(seed), {
+      settings_version: 2,
+      period: { start: '2099-11-01T05:00:00.000Z', end: '2099-11-01T07:00:00.000Z' },
+      reason: 'DST fallback maintenance',
+    });
+    expect(closure.status).toBe(201);
+    if (!closure.body.success) throw new Error('Expected DST closure creation.');
+    expect(closure.body.data.closure).toMatchObject({
+      timezone_snapshot: 'America/New_York',
+      period: { start: '2099-11-01T05:00:00.000Z', end: '2099-11-01T07:00:00.000Z' },
+    });
+
+    const repeatedHourAttempt = await createStaffFittingCommand(ownerContext(seed), {
+      customer: { source: 'existing', customer_id: seed.customerId as never },
+      starts_at: '2099-11-01T05:30:00.000Z',
+      garments: [{ variant_id: seed.variantId as never, garment_mode: 'preference' }],
+    });
+    expect(repeatedHourAttempt.status).toBe(409);
+    expect(repeatedHourAttempt.body).toMatchObject({
+      success: false,
+      error: { code: 'SCHEDULE_CONFLICT' },
+    });
+
+    const boundaryStart = await createStaffFittingCommand(ownerContext(seed), {
+      customer: { source: 'existing', customer_id: seed.customerId as never },
+      starts_at: '2099-11-01T07:00:00.000Z',
+      garments: [{ variant_id: seed.variantId as never, garment_mode: 'preference' }],
+    });
+    expect(boundaryStart.status).toBe(201);
+    if (!boundaryStart.body.success) throw new Error('Expected half-open boundary creation.');
+    expect(boundaryStart.body.data.fitting.period.start).toBe('2099-11-01T07:00:00.000Z');
   });
 });

@@ -23,6 +23,7 @@ import {
 import { withTenantTransaction } from '../../db/client.js';
 import { ForbiddenError, NotFoundError, TenantCancelledError, TenantRestrictedError } from '../../shared/errors.js';
 import { listFittingsReadModel, readFittingDetailModel, type FittingListReadRow } from './fittings.repository.js';
+import { toFittingClosure } from './fittings.schedule.mapper.js';
 import { listFittingClosuresReadModel, readFittingSettingsModel } from './fittings.schedule.repository.js';
 
 export interface FittingReadContext {
@@ -89,7 +90,7 @@ export async function getFittingClosures(input: FittingReadContext, query: Fitti
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
     const page = await listFittingClosuresReadModel(client, { tenantId: input.tenantId, branchId: input.branchId, query });
     return fittingClosureListResponse.parse({
-      items: page.rows.map((row) => ({ id: row.id, period: { starts_at: row.starts_at.toISOString(), ends_at: row.ends_at.toISOString() }, timezone_snapshot: row.timezone_snapshot, reason: row.reason, created_at: row.created_at.toISOString() })),
+      items: page.rows.map(toFittingClosure),
       page_meta: { next_cursor: page.nextCursor, has_more: page.hasMore },
     });
   });

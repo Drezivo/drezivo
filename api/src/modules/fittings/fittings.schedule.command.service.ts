@@ -1,10 +1,20 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  fittingClosureCreateRequest,
+  fittingClosureMutationResponse,
+  fittingClosureRemoveRequest,
+  fittingClosureRemoveResponse,
+  fittingClosureUpdateRequest,
   fittingSettingsUpdateRequest,
   fittingSettingsUpdateResponse,
   fittingWeeklyHoursUpdateRequest,
   fittingWeeklyHoursUpdateResponse,
+  type FittingClosureCreateRequest,
+  type FittingClosureMutationResponse,
+  type FittingClosureRemoveRequest,
+  type FittingClosureRemoveResponse,
+  type FittingClosureUpdateRequest,
   type FittingSettingsUpdateRequest,
   type FittingSettingsUpdateResponse,
   type FittingWeeklyHours,
@@ -38,24 +48,33 @@ import {
   ensureFittingCapacitySlots,
 } from './fittings.command.repository.js';
 import {
+  appendFittingClosureAudit,
   appendFittingConfigurationAudit,
   bumpFittingSettingsVersion,
+  createFittingClosure,
   deactivateFittingCapacitySlotsAbove,
+  lockFittingClosureForCommand,
   lockFittingSettingsForCommand,
   lockFutureFittingsForScheduleConfiguration,
   lockScheduledFittingsForCapacityConfiguration,
+  proposedClosureInvalidatesFutureFittings,
   proposedWeeklyHoursInvalidateFutureFittings,
   releaseScheduledFittingCapacityClaims,
+  removeFittingClosure,
   replaceFittingWeeklyHours,
+  updateFittingClosure,
   updateFittingSettingsScalars,
   type FittingWeeklyWindowRow,
   type ScheduledFittingCapacityRow,
 } from './fittings.schedule.command.repository.js';
-import { toFittingSettings } from './fittings.schedule.mapper.js';
+import { toFittingClosure, toFittingSettings } from './fittings.schedule.mapper.js';
 import { readFittingSettingsModel } from './fittings.schedule.repository.js';
 
 const SETTINGS_UPDATE_OPERATION = 'fitting.settings.update';
 const HOURS_REPLACE_OPERATION = 'fitting.hours.replace';
+const CLOSURE_CREATE_OPERATION = 'fitting.closure.create';
+const CLOSURE_UPDATE_OPERATION = 'fitting.closure.update';
+const CLOSURE_REMOVE_OPERATION = 'fitting.closure.remove';
 const CONFIGURATION_SAVEPOINT = 'fitting_configuration_effects';
 const POSTGRES_BIGINT_MAX = 9_223_372_036_854_775_807n;
 
@@ -80,6 +99,20 @@ export interface FittingWeeklyHoursCommandResponse {
   body: SuccessEnvelope<FittingWeeklyHoursUpdateResponse> | FailureEnvelope;
 }
 
+export interface FittingClosureMutationCommandResponse {
+  status: number;
+  body: SuccessEnvelope<FittingClosureMutationResponse> | FailureEnvelope;
+}
+
+export interface FittingClosureRemoveCommandResponse {
+  status: number;
+  body: SuccessEnvelope<FittingClosureRemoveResponse> | FailureEnvelope;
+}
+
+export interface FittingClosureCommandContext extends FittingConfigurationCommandContext {
+  closureId: string;
+}
+
 export async function updateFittingWeeklyHoursCommand(
   context: FittingConfigurationCommandContext,
   requestInput: FittingWeeklyHoursUpdateRequest,
@@ -90,7 +123,7 @@ export async function updateFittingWeeklyHoursCommand(
 
   const request = parsed.data;
   const windows = normalizeWeeklyHours(request.weekly_hours);
-  const payloadHash = canonicalRequestHash(request);
+  const payloadHash = canonicalRequestHash({ branch_id: context.branchId, ...request });
 
   return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
     const claim = await claimConfigurationIdempotency(
@@ -178,6 +211,347 @@ export async function updateFittingWeeklyHoursCommand(
   });
 }
 
+export async function createFittingClosureCommand(
+  context: FittingConfigurationCommandContext,
+  requestInput: FittingClosureCreateRequest,
+): Promise<FittingClosureMutationCommandResponse> {
+  const parsed = fittingClosureCreateRequest.safeParse(requestInput);
+  if (!parsed.success) throw new ValidationError('Fitting closure request is invalid.');
+  assertConfigurationMutationContext(context);
+
+  const request = parsed.data;
+  const payloadHash = canonicalRequestHash({ branch_id: context.branchId, ...request });
+
+  return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+    const claim = await claimConfigurationIdempotency(
+      client,
+      context,
+      CLOSURE_CREATE_OPERATION,
+      payloadHash,
+    );
+    const replay = replayOrThrow<FittingClosureMutationCommandResponse>(claim);
+    if (replay) return replay;
+
+    let savepointOpen = false;
+    try {
+      const settings = await lockFittingSettingsForCommand(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+      });
+      if (!settings) throw new NotFoundError('Fitting settings could not be found.');
+      assertCurrentSettingsVersion(settings.version, request.settings_version);
+
+      await lockFutureFittingsForScheduleConfiguration(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+      });
+      if (
+        await proposedClosureInvalidatesFutureFittings(client, {
+          tenantId: context.tenantId,
+          branchId: context.branchId,
+          startsAt: request.period.start,
+          endsAt: request.period.end,
+        })
+      ) {
+        throw new ScheduleConflictError(
+          'Fitting closure cannot invalidate an accepted future fitting.',
+        );
+      }
+
+      await client.query(`SAVEPOINT ${CONFIGURATION_SAVEPOINT}`);
+      savepointOpen = true;
+      const closure = await createFittingClosure(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+        startsAt: request.period.start,
+        endsAt: request.period.end,
+        timezone: settings.timezone,
+        reason: request.reason,
+      });
+      const version = await bumpFittingSettingsVersion(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+        version: request.settings_version,
+      });
+      if (!version) throw new StaleVersionError('Fitting settings version is stale.');
+
+      await appendFittingClosureAudit(client, {
+        tenantId: context.tenantId,
+        actorKey: context.principalId,
+        action: 'fitting.closure_created',
+        branchId: context.branchId,
+        closureId: closure.id,
+        requestId: context.requestId,
+        version,
+        summary: {
+          period_start: closure.starts_at.toISOString(),
+          period_end: closure.ends_at.toISOString(),
+          timezone_snapshot: closure.timezone_snapshot,
+        },
+      });
+
+      const body: SuccessEnvelope<FittingClosureMutationResponse> = {
+        success: true,
+        data: fittingClosureMutationResponse.parse({
+          closure: toFittingClosure(closure),
+          settings_version: version,
+        }),
+        request_id: context.requestId,
+      };
+      await finalizeConfigurationSuccess(
+        client,
+        context,
+        CLOSURE_CREATE_OPERATION,
+        payloadHash,
+        body,
+        201,
+      );
+      await client.query(`RELEASE SAVEPOINT ${CONFIGURATION_SAVEPOINT}`);
+      savepointOpen = false;
+      return { status: 201, body };
+    } catch (error) {
+      if (savepointOpen) {
+        await client.query(`ROLLBACK TO SAVEPOINT ${CONFIGURATION_SAVEPOINT}`);
+        await client.query(`RELEASE SAVEPOINT ${CONFIGURATION_SAVEPOINT}`);
+      }
+      return finalizeConfigurationFailure(
+        client,
+        context,
+        CLOSURE_CREATE_OPERATION,
+        payloadHash,
+        mapConfigurationConflict(error),
+      );
+    }
+  });
+}
+
+export async function updateFittingClosureCommand(
+  context: FittingClosureCommandContext,
+  requestInput: FittingClosureUpdateRequest,
+): Promise<FittingClosureMutationCommandResponse> {
+  const parsed = fittingClosureUpdateRequest.safeParse(requestInput);
+  if (!parsed.success) throw new ValidationError('Fitting closure request is invalid.');
+  assertConfigurationMutationContext(context);
+
+  const request = parsed.data;
+  const payloadHash = canonicalRequestHash({
+    branch_id: context.branchId,
+    closure_id: context.closureId,
+    ...request,
+  });
+
+  return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+    const claim = await claimConfigurationIdempotency(
+      client,
+      context,
+      CLOSURE_UPDATE_OPERATION,
+      payloadHash,
+    );
+    const replay = replayOrThrow<FittingClosureMutationCommandResponse>(claim);
+    if (replay) return replay;
+
+    let savepointOpen = false;
+    try {
+      const settings = await lockFittingSettingsForCommand(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+      });
+      if (!settings) throw new NotFoundError('Fitting settings could not be found.');
+      assertCurrentSettingsVersion(settings.version, request.settings_version);
+
+      const existing = await lockFittingClosureForCommand(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+        closureId: context.closureId,
+      });
+      if (!existing) throw new NotFoundError('Fitting closure could not be found.');
+
+      await lockFutureFittingsForScheduleConfiguration(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+      });
+      if (
+        await proposedClosureInvalidatesFutureFittings(client, {
+          tenantId: context.tenantId,
+          branchId: context.branchId,
+          startsAt: request.period.start,
+          endsAt: request.period.end,
+        })
+      ) {
+        throw new ScheduleConflictError(
+          'Fitting closure cannot invalidate an accepted future fitting.',
+        );
+      }
+
+      await client.query(`SAVEPOINT ${CONFIGURATION_SAVEPOINT}`);
+      savepointOpen = true;
+      const closure = await updateFittingClosure(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+        closureId: context.closureId,
+        startsAt: request.period.start,
+        endsAt: request.period.end,
+        timezone: settings.timezone,
+        reason: request.reason,
+      });
+      if (!closure) throw new NotFoundError('Fitting closure could not be found.');
+      const version = await bumpFittingSettingsVersion(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+        version: request.settings_version,
+      });
+      if (!version) throw new StaleVersionError('Fitting settings version is stale.');
+
+      await appendFittingClosureAudit(client, {
+        tenantId: context.tenantId,
+        actorKey: context.principalId,
+        action: 'fitting.closure_updated',
+        branchId: context.branchId,
+        closureId: closure.id,
+        requestId: context.requestId,
+        version,
+        summary: {
+          period_start: closure.starts_at.toISOString(),
+          period_end: closure.ends_at.toISOString(),
+          timezone_snapshot: closure.timezone_snapshot,
+        },
+      });
+
+      const body: SuccessEnvelope<FittingClosureMutationResponse> = {
+        success: true,
+        data: fittingClosureMutationResponse.parse({
+          closure: toFittingClosure(closure),
+          settings_version: version,
+        }),
+        request_id: context.requestId,
+      };
+      await finalizeConfigurationSuccess(
+        client,
+        context,
+        CLOSURE_UPDATE_OPERATION,
+        payloadHash,
+        body,
+      );
+      await client.query(`RELEASE SAVEPOINT ${CONFIGURATION_SAVEPOINT}`);
+      savepointOpen = false;
+      return { status: 200, body };
+    } catch (error) {
+      if (savepointOpen) {
+        await client.query(`ROLLBACK TO SAVEPOINT ${CONFIGURATION_SAVEPOINT}`);
+        await client.query(`RELEASE SAVEPOINT ${CONFIGURATION_SAVEPOINT}`);
+      }
+      return finalizeConfigurationFailure(
+        client,
+        context,
+        CLOSURE_UPDATE_OPERATION,
+        payloadHash,
+        mapConfigurationConflict(error),
+      );
+    }
+  });
+}
+
+export async function removeFittingClosureCommand(
+  context: FittingClosureCommandContext,
+  requestInput: FittingClosureRemoveRequest,
+): Promise<FittingClosureRemoveCommandResponse> {
+  const parsed = fittingClosureRemoveRequest.safeParse(requestInput);
+  if (!parsed.success) throw new ValidationError('Fitting closure remove request is invalid.');
+  assertConfigurationMutationContext(context);
+
+  const request = parsed.data;
+  const payloadHash = canonicalRequestHash({
+    branch_id: context.branchId,
+    closure_id: context.closureId,
+    ...request,
+  });
+
+  return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+    const claim = await claimConfigurationIdempotency(
+      client,
+      context,
+      CLOSURE_REMOVE_OPERATION,
+      payloadHash,
+    );
+    const replay = replayOrThrow<FittingClosureRemoveCommandResponse>(claim);
+    if (replay) return replay;
+
+    let savepointOpen = false;
+    try {
+      const settings = await lockFittingSettingsForCommand(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+      });
+      if (!settings) throw new NotFoundError('Fitting settings could not be found.');
+      assertCurrentSettingsVersion(settings.version, request.settings_version);
+
+      const existing = await lockFittingClosureForCommand(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+        closureId: context.closureId,
+      });
+      if (!existing) throw new NotFoundError('Fitting closure could not be found.');
+
+      await client.query(`SAVEPOINT ${CONFIGURATION_SAVEPOINT}`);
+      savepointOpen = true;
+      const removed = await removeFittingClosure(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+        closureId: context.closureId,
+      });
+      if (!removed) throw new NotFoundError('Fitting closure could not be found.');
+      const version = await bumpFittingSettingsVersion(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+        version: request.settings_version,
+      });
+      if (!version) throw new StaleVersionError('Fitting settings version is stale.');
+
+      await appendFittingClosureAudit(client, {
+        tenantId: context.tenantId,
+        actorKey: context.principalId,
+        action: 'fitting.closure_removed',
+        branchId: context.branchId,
+        closureId: context.closureId,
+        requestId: context.requestId,
+        version,
+        summary: {},
+      });
+
+      const body: SuccessEnvelope<FittingClosureRemoveResponse> = {
+        success: true,
+        data: fittingClosureRemoveResponse.parse({
+          closure_id: context.closureId,
+          settings_version: version,
+        }),
+        request_id: context.requestId,
+      };
+      await finalizeConfigurationSuccess(
+        client,
+        context,
+        CLOSURE_REMOVE_OPERATION,
+        payloadHash,
+        body,
+      );
+      await client.query(`RELEASE SAVEPOINT ${CONFIGURATION_SAVEPOINT}`);
+      savepointOpen = false;
+      return { status: 200, body };
+    } catch (error) {
+      if (savepointOpen) {
+        await client.query(`ROLLBACK TO SAVEPOINT ${CONFIGURATION_SAVEPOINT}`);
+        await client.query(`RELEASE SAVEPOINT ${CONFIGURATION_SAVEPOINT}`);
+      }
+      return finalizeConfigurationFailure(
+        client,
+        context,
+        CLOSURE_REMOVE_OPERATION,
+        payloadHash,
+        mapConfigurationConflict(error),
+      );
+    }
+  });
+}
+
 export async function updateFittingSettingsCommand(
   context: FittingConfigurationCommandContext,
   requestInput: FittingSettingsUpdateRequest,
@@ -187,7 +561,7 @@ export async function updateFittingSettingsCommand(
   assertConfigurationMutationContext(context);
 
   const request = parsed.data;
-  const payloadHash = canonicalRequestHash(request);
+  const payloadHash = canonicalRequestHash({ branch_id: context.branchId, ...request });
 
   return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
     const claim = await claimConfigurationIdempotency(
@@ -465,6 +839,7 @@ async function finalizeConfigurationSuccess(
   operation: string,
   payloadHash: string,
   body: unknown,
+  responseCode = 200,
 ): Promise<void> {
   await finalizeTenantIdempotency(client, {
     tenantId: context.tenantId,
@@ -473,7 +848,7 @@ async function finalizeConfigurationSuccess(
     intentKey: context.idempotencyKey,
     payloadHash,
     status: 'succeeded',
-    responseCode: 200,
+    responseCode,
     safeResponse: body,
   });
 }
