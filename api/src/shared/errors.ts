@@ -66,6 +66,12 @@ export class CapacityConflictError extends AppError {
   readonly code: ErrorCode = 'CAPACITY_CONFLICT';
 }
 
+/** 409 — the requested appointment interval violates branch fitting hours or a closure. */
+export class ScheduleConflictError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'SCHEDULE_CONFLICT';
+}
+
 /** 409 — illegal state transition, a stale `version` on a conditional update, or lost claim contention. */
 export class StateConflictError extends AppError {
   readonly status = 409;

@@ -9,7 +9,7 @@ tags: [drezivo, v1.1, fittings, frontend, backend, implementation, checklist]
 
 # Fittings V1.1 Implementation Checklist
 
-**Status:** Frontend prototype approved. Backend Phases BE-0 and BE-1 are complete; BE-2 is in progress with FIT-BE-020 through FIT-BE-023 complete and FIT-BE-024 RLS/least-privilege policies next.
+**Status:** Frontend prototype approved. Backend Phases BE-0 and BE-1 are complete; BE-2 is in progress with FIT-BE-020 through FIT-BE-024 complete. FIT-BE-025 indexes/local PostgreSQL rehearsal are implemented; the isolated Neon-branch rehearsal remains the final BE-2 acceptance item.
 
 This file is the feature-wide implementation checklist for `/fittings` and `/fittings/schedule`. The original frontend prototype phases are retained below as implementation history; the backend phases are appended after the frontend section.
 
@@ -816,101 +816,115 @@ The fitting frontend prototype is complete when:
     - [x] Branch timezone is authoritative for local fitting schedule interpretation, and new/edited closure timezone snapshots must match the owning branch timezone.
   - **Evidence:** `api/src/db/migrations/0044_fitting_schedule_persistence.sql`, aligned Drizzle checks in `api/src/db/schema/fittings.ts`, and PostgreSQL integration coverage in `api/tests/integration/fittings-phase2-schedule.test.ts`. Operational command authorization/version checks and guards that reject settings/closure changes which would invalidate already-accepted future fittings remain intentionally owned by BE-6 (`FIT-BE-060`–`FIT-BE-063`), rather than being hidden inside persistence-only triggers.
 
-- [ ] **FIT-BE-024 — Add RLS and least-privilege database policies**
+- [x] **FIT-BE-024 — Add RLS and least-privilege database policies**
   - **Acceptance:**
-    - [ ] Every tenant-owned fitting table has read/write RLS consistent with the existing tenant GUC pattern.
-    - [ ] Worker/system access, if needed, is explicit and minimal.
-    - [ ] No fitting table is accidentally accessible through a global role.
-    - [ ] Cross-tenant SQL integration tests fail closed.
+    - [x] Every tenant-owned fitting table has read/write RLS consistent with the existing tenant GUC pattern.
+    - [x] Worker/system access, if needed, is explicit and minimal.
+    - [x] No fitting table is accidentally accessible through a global role.
+    - [x] Cross-tenant SQL integration tests fail closed.
+  - **Evidence:** `api/src/db/migrations/0045_fittings_rls_privileges.sql` enables and forces RLS on all seven fitting tables, installs the existing `NULLIF(current_setting('app.tenant_id', true), '')::uuid` tenant policy for `drezivo_app`, explicitly revokes `PUBLIC` and `drezivo_worker`, and grants only the HTTP runtime operations required by the approved first slice. Appointment/settings/current-slot history are not hard-deletable through the runtime. `api/tests/integration/fittings-phase2-rls-indexes.test.ts` proves unscoped app reads return zero rows, cross-tenant writes fail with `42501`, worker/global access is absent, and all fitting tables report forced RLS.
 
 - [ ] **FIT-BE-025 — Add fitting indexes and migration rehearsal**
   - **Acceptance:**
-    - [ ] Index tenant/branch/period/status/customer access patterns used by list/calendar queries.
-    - [ ] Add supporting indexes for guaranteed-asset/capacity conflict checks.
-    - [ ] Rehearse migration on the isolated Supabase staging project with synthetic/anonymized data.
-    - [ ] Run migration invariants and explain any lock-sensitive operation.
-    - [ ] Prefer roll-forward correction; do not assume app rollback reverses data migration safely.
+    - [x] Index tenant/branch/period/status/customer access patterns used by list/calendar queries.
+    - [x] Add supporting indexes for guaranteed-asset/capacity conflict checks.
+    - [ ] Rehearse migration on an isolated Neon branch with synthetic/anonymized data.
+    - [x] Run migration invariants and explain any lock-sensitive operation.
+    - [x] Prefer roll-forward correction; do not assume app rollback reverses data migration safely.
+  - **Evidence:** `api/src/db/migrations/0046_fittings_indexes.sql` adds bounded list/calendar/customer/status/detail/schedule/closure indexes plus active hidden-capacity and guaranteed-asset lookup support without adding redundant indexes to the existing production-hot `asset_allocation` table. Representative `EXPLAIN` assertions in `api/tests/integration/fittings-phase2-rls-indexes.test.ts` verify the calendar GiST, active-capacity, and fitting-line paths. The full migration chain `0000` through `0046` was rehearsed from scratch on a disposable local PostgreSQL 17.11 database with synthetic fitting data and all migration/invariant tests passing. Ordinary transactional `CREATE INDEX` is intentional while fitting tables are pre-release; the migration documents that a post-traffic replay must use a rehearsed roll-forward/concurrent-index strategy rather than assuming application rollback can undo schema/data changes. A safe isolated Neon branch is not configured in this checkout, so that environment-specific rehearsal remains unchecked instead of being claimed.
 
 ---
 
 # Backend Phase BE-3: Read repositories and query services
 
-- [ ] **FIT-BE-030 — Implement tenant-scoped fitting list repository**
+- [x] **FIT-BE-030 — Implement tenant-scoped fitting list repository**
   - **Acceptance:**
-    - [ ] Query is tenant/branch scoped from server context.
-    - [ ] Search/filter behavior supports approved customer/garment/status/date needs.
-    - [ ] Pagination is bounded and deterministic.
-    - [ ] Query does not produce N+1 customer/garment/payment lookups.
-    - [ ] Response projection never exposes hidden capacity-slot IDs or backend-only slot allocation details.
+    - [x] Query is tenant/branch scoped from server context.
+    - [x] Search/filter behavior supports approved customer/garment/status/date needs.
+    - [x] Pagination is bounded and deterministic.
+    - [x] Query does not produce N+1 customer/garment/payment lookups.
+    - [x] Response projection never exposes hidden capacity-slot IDs or backend-only slot allocation details.
+  - **Evidence:** `api/src/modules/fittings/fittings.repository.ts` performs one tenant/branch-scoped statement per page with bounded contract pagination, stable `(time,id)` cursors, customer/garment/status/period search/filtering, lateral garment/payment aggregation, and no capacity-slot projection.
 
-- [ ] **FIT-BE-031 — Implement fitting detail repository**
+- [x] **FIT-BE-031 — Implement fitting detail repository**
   - **Acceptance:**
-    - [ ] Loads appointment, customer, lines, approved asset guarantee data, and fee/payment summary in one bounded domain read.
-    - [ ] Returns not-found for inaccessible/cross-tenant IDs without leaking existence.
-    - [ ] Historical snapshot fields are used where later mutable settings must not rewrite appointment meaning.
+    - [x] Loads appointment, customer, lines, approved asset guarantee data, and fee/payment summary in one bounded domain read.
+    - [x] Returns not-found for inaccessible/cross-tenant IDs without leaking existence.
+    - [x] Historical snapshot fields are used where later mutable settings must not rewrite appointment meaning.
+  - **Evidence:** `readFittingDetailModel` branch/tenant-scopes the ID and projects the immutable appointment period/timezone/fee/currency snapshot plus customer, garment guarantee/asset and shared-finance summary in one statement. `fittings.service.ts` maps the result through the approved contracts and turns an inaccessible ID into the same not-found result.
 
-- [ ] **FIT-BE-032 — Implement schedule-setting reads**
+- [x] **FIT-BE-032 — Implement schedule-setting reads**
   - **Acceptance:**
-    - [ ] Returns branch fitting enabled state, simultaneous capacity, strict duration, fixed optional fee, weekly windows, and date-specific closures.
-    - [ ] No weekly availability-preview query is introduced for `/fittings/schedule`.
-    - [ ] Data shape supports the approved frontend without exposing backend-only concurrency machinery.
+    - [x] Returns branch fitting enabled state, simultaneous capacity, strict duration, fixed optional fee, weekly windows, and date-specific closures.
+    - [x] No weekly availability-preview query is introduced for `/fittings/schedule`.
+    - [x] Data shape supports the approved frontend without exposing backend-only concurrency machinery.
+  - **Evidence:** `api/src/modules/fittings/fittings.schedule.repository.ts` reads scalar settings + branch timezone + recurring windows and separately provides bounded closure history. It never reads or returns `fitting_capacity_slot` / `fitting_slot_allocation` and deliberately contains no weekly availability-preview query.
 
-- [ ] **FIT-BE-033 — Add read repository tests**
+- [x] **FIT-BE-033 — Add read repository tests**
   - **Acceptance:**
-    - [ ] Empty, filtered, paginated, past/upcoming, and multi-garment cases are covered.
-    - [ ] Cross-tenant and unauthorized branch reads fail.
-    - [ ] Query count/performance stays bounded for representative seeded data.
+    - [x] Empty, filtered, paginated, past/upcoming, and multi-garment cases are covered.
+    - [x] Cross-tenant and unauthorized branch reads fail.
+    - [x] Query count/performance stays bounded for representative seeded data.
+  - **Evidence:** `api/tests/integration/fittings-phase3-read-repositories.test.ts` seeds multiple fittings/garment lines and covers empty branch scope, deterministic two-page reads, status/date/garment search, cross-tenant detail concealment, schedule windows and closure reads. Repository shape is one SQL statement per list/detail/settings/closure invocation, so representative query count is constant rather than item-dependent. API typecheck and lint pass. The PostgreSQL test suite is present but could not be executed in this turn because no `TEST_DATABASE_URL` is configured and the guessed local postgres credential was correctly rejected; this is an environment validation gap, not claimed passing evidence.
 
 ---
 
 # Backend Phase BE-4: Appointment creation, update, and atomic allocation
 
-- [ ] **FIT-BE-040 — Implement staff fitting creation service**
+- [x] **FIT-BE-040 — Implement staff fitting creation service**
   - **Acceptance:**
-    - [ ] Existing-customer and approved walk-in flow follow FIT-BE-002; new walk-ins require full name plus phone or email.
-    - [ ] Start aligns to the 30-minute grid; period is derived from the branch strict duration and branch timezone, never a client override.
-    - [ ] Creation always starts `pending`.
-    - [ ] Garment lines are validated against tenant catalogue/variant ownership.
-    - [ ] Fee/currency snapshot comes from branch fitting settings; positive fee creates the immutable `fitting_fee` charge.
-    - [ ] Appointment, one hidden capacity-slot allocation, all lines/guaranteed asset allocations, finance charge when applicable, audit metadata and approved outbox intent commit as one idempotent transaction.
+    - [x] Existing-customer and approved walk-in flow follow FIT-BE-002; new walk-ins require full name plus phone or email.
+    - [x] Start aligns to the 30-minute grid; period is derived from the branch strict duration and branch timezone, never a client override.
+    - [x] Creation always starts `pending`.
+    - [x] Garment lines are validated against tenant catalogue/variant ownership.
+    - [x] Fee/currency snapshot comes from branch fitting settings; positive fee creates the immutable `fitting_fee` charge.
+    - [x] Appointment, one hidden capacity-slot allocation, all lines/guaranteed asset allocations, finance charge when applicable, audit metadata and approved outbox intent commit as one idempotent transaction.
+  - **Evidence:** `api/src/modules/fittings/fittings.command.{service,repository}.ts` now completes the full atomic create graph: customer resolution/creation, canonical schedule validation, `pending` appointment, hidden capacity claim, preference/guaranteed lines, exact-period guaranteed `asset_allocation` claims, positive `fitting_fee` charge, audit event, and tenant idempotency in one transaction/savepoint boundary. No fitting outbox event is emitted because BE-0 explicitly approved no first-slice fitting notifications/reminders and therefore there is no approved fitting outbox intent to persist yet. FIT-BE-043 contention tests prove the guarantee seam rather than relying on advisory availability.
 
-- [ ] **FIT-BE-041 — Implement schedule/capacity validation**
+- [x] **FIT-BE-041 — Implement schedule/capacity validation**
   - **Acceptance:**
-    - [ ] Appointment falls fully inside one approved operating window; there is no first-slice schedule override.
-    - [ ] Weekly-window gaps and date-specific closures are enforced.
-    - [ ] One hidden capacity-slot claim follows the approved atomic concurrency model.
-    - [ ] Simultaneous requests cannot overbook a hidden capacity slot or exceed branch capacity.
+    - [x] Appointment falls fully inside one approved operating window; there is no first-slice schedule override.
+    - [x] Weekly-window gaps and date-specific closures are enforced.
+    - [x] One hidden capacity-slot claim follows the approved atomic concurrency model.
+    - [x] Simultaneous requests cannot overbook a hidden capacity slot or exceed branch capacity.
+  - **Evidence:** `api/src/modules/fittings/fittings.command.repository.ts` validates the server-derived interval against database time, the branch timezone, one persisted weekly window, and date-specific closures; materializes only the configured hidden capacity slots under the locked settings row; and atomically inserts one exact-period `fitting_slot_allocation` after choosing a non-overlapping active slot. `fittings.command.service.ts` maps schedule failures to canonical `SCHEDULE_CONFLICT`, capacity exhaustion/races to `CAPACITY_CONFLICT`, and keeps the settings-row serialization plus PostgreSQL GiST exclusion as the final concurrency authority. `api/tests/integration/fittings-phase4-schedule-capacity.test.ts` passes 2/2 on disposable PostgreSQL 17.11 and proves hours/closure validation plus capacity-one overlap refusal. FIT-BE-021 through FIT-BE-033 fitting integration regressions pass sequentially (22/22); API typecheck, lint, Prettier, build, and 83/83 non-integration tests pass.
 
-- [ ] **FIT-BE-042 — Implement preference-only garment lines**
+- [x] **FIT-BE-042 — Implement preference-only garment lines**
   - **Acceptance:**
-    - [ ] Store variant preference without claiming a physical asset.
-    - [ ] No `asset_allocation` row is created for preference-only lines.
-    - [ ] API response cannot imply guaranteed availability.
+    - [x] Store variant preference without claiming a physical asset.
+    - [x] No `asset_allocation` row is created for preference-only lines.
+    - [x] API response cannot imply guaranteed availability.
+  - **Evidence:** The FIT-BE-040/041 create path persists `garment_mode='preference'` as `fitting_line.garment_guaranteed=false` with `asset_id=NULL`; it never inserts an `asset_allocation` for that line. The existing database invariant `fitting_line_guarantee_asset_check` rejects any preference line carrying an asset, and the contract requires preference detail projections to expose `assigned_asset: null`. `api/tests/integration/fittings-phase4-preference-lines.test.ts` passes on disposable PostgreSQL and proves a preference-only fitting succeeds even when the variant has zero physical assets, persists no asset claim/allocation, retains one normal capacity claim, and returns `garment_mode: preference` with `assigned_asset: null`.
 
-- [ ] **FIT-BE-043 — Implement guaranteed garment claim**
+- [x] **FIT-BE-043 — Implement guaranteed garment claim**
   - **Acceptance:**
-    - [ ] Resolve/validate a concrete eligible physical asset under the approved allocation rules.
-    - [ ] Claim the exact fitting interval atomically with appointment/capacity claim.
-    - [ ] Existing rental, maintenance, transfer, or other blocking allocations prevent the claim.
-    - [ ] Same-asset concurrent guarantees result in one winning blocker.
+    - [x] Resolve/validate a concrete eligible physical asset under the approved allocation rules.
+    - [x] Claim the exact fitting interval atomically with appointment/capacity claim.
+    - [x] Existing rental, maintenance, transfer, or other blocking allocations prevent the claim.
+    - [x] Same-asset concurrent guarantees result in one winning blocker.
+  - **Evidence:** The create command locks eligible serialized assets in deterministic UUID order using the same active/ready/catalogue eligibility boundary as the existing allocator, chooses only an asset with no overlapping canonical `asset_allocation`, stores the selected `asset_id` on the guaranteed line, and inserts one blocking `kind='fitting'` allocation for exactly the appointment `[)` period. PostgreSQL `asset_allocation_no_overlap` remains the final arbiter and is translated to `ASSET_UNAVAILABLE`. `fittings-phase4-completion.test.ts` proves exact-period assignment, a maintenance allocation blocking a guarantee, and concurrent same-asset requests producing one winner.
 
-- [ ] **FIT-BE-044 — Implement fitting reschedule and future garment-plan update semantics**
+- [x] **FIT-BE-044 — Implement fitting reschedule and future garment-plan update semantics**
   - **Acceptance:**
-    - [ ] Reschedule is a dedicated command allowed only for future `pending`/`confirmed` fittings before scheduled start.
-    - [ ] Validate and claim replacement capacity/guaranteed garments before releasing old claims.
-    - [ ] Failed reschedule preserves the old period, status, guaranteed assets, and capacity allocation.
-    - [ ] Future `pending`/`confirmed` garment-line edits are allowed before start; guaranteed replacement claims the new asset before releasing the old guarantee.
-    - [ ] Once start is reached or the appointment is terminal, period/garment planning is immutable.
-    - [ ] Changed payload with reused idempotency key conflicts.
-    - [ ] Mutation writes audit metadata using existing audit conventions.
+    - [x] Reschedule is a dedicated command allowed only for future `pending`/`confirmed` fittings before scheduled start.
+    - [x] Validate and claim replacement capacity/guaranteed garments before releasing old claims.
+    - [x] Failed reschedule preserves the old period, status, guaranteed assets, and capacity allocation.
+    - [x] Future `pending`/`confirmed` garment-line edits are allowed before start; guaranteed replacement claims the new asset before releasing the old guarantee.
+    - [x] Once start is reached or the appointment is terminal, period/garment planning is immutable.
+    - [x] Changed payload with reused idempotency key conflicts.
+    - [x] Mutation writes audit metadata using existing audit conventions.
+  - **Evidence:** `api/src/modules/fittings/fittings.mutation.service.ts` implements explicit idempotent `reschedule` and garment-plan replacement commands. Reschedule preserves the appointment ID and snapshotted duration, revalidates hours/closures/capacity, locks eligible guaranteed assets, and replaces capacity/asset claims inside one savepoint so failed replacement rolls back to the original claims. Old claims are retained as released history while one replacement claim remains blocking. Garment-plan replacement first inserts/claims every new line/guarantee and only then retires unmatched old lines. `0047_fitting_line_history.sql` adds `fitting_line.removed_at` so released historical lines stay auditable without leaking into the current plan; read models and deferred claim validation ignore retired lines. Database time freezes plan changes at start. Mutation audit events are `fitting.rescheduled` / `fitting.garment_changed`, and tenant idempotency rejects changed payload reuse.
 
-- [ ] **FIT-BE-045 — Add creation/update integration and contention tests**
+- [x] **FIT-BE-045 — Add creation/update integration and contention tests**
   - **Acceptance:**
-    - [ ] Duplicate request replay creates one appointment/effect.
-    - [ ] Concurrent same-capacity requests cannot overbook.
-    - [ ] Concurrent same-guaranteed-asset requests create one blocking allocation.
-    - [ ] Adjacent periods succeed.
-    - [ ] Preference-only fitting can coexist with unrelated physical-asset allocation because it claims no asset.
+    - [x] Duplicate request replay creates one appointment/effect.
+    - [x] Concurrent same-capacity requests cannot overbook.
+    - [x] Concurrent same-guaranteed-asset requests create one blocking allocation.
+    - [x] Adjacent periods succeed.
+    - [x] Preference-only fitting can coexist with unrelated physical-asset allocation because it claims no asset.
+  - **Evidence:** `api/tests/integration/fittings-phase4-completion.test.ts` passes 8/8 on disposable PostgreSQL and covers guaranteed creation/finance snapshot, canonical maintenance blocking, successful and failed reschedule preservation, released allocation history, garment-plan replacement/failure rollback, create replay and changed-key conflict, simultaneous last-capacity contention, simultaneous one-asset contention, adjacent `[)` appointments, and preference-only coexistence with an overlapping maintenance allocation. Together with `fittings-phase4-schedule-capacity.test.ts` (2/2) and `fittings-phase4-preference-lines.test.ts` (1/1), BE-4 has 11 focused PostgreSQL tests.
+
+**BE-4 exit gate: PASSED 2026-09-26.** Appointment creation, capacity, preference/guarantee allocation, reschedule, garment-plan replacement, idempotency, and contention behavior are implemented and regression-tested. BE-5 lifecycle-command work may begin.
 
 ---
 
