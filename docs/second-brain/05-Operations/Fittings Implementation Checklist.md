@@ -9,7 +9,7 @@ tags: [drezivo, v1.1, fittings, frontend, backend, implementation, checklist]
 
 # Fittings V1.1 Implementation Checklist
 
-**Status:** Frontend prototype approved. Backend Phases BE-0 and BE-1 are complete; BE-2 is in progress with FIT-BE-020 through FIT-BE-024 complete. FIT-BE-025 indexes/local PostgreSQL rehearsal are implemented; the isolated Neon-branch rehearsal remains the final BE-2 acceptance item.
+**Status:** Frontend prototype approved. Backend Phases BE-0 through BE-5 are implemented, with the isolated Neon-branch rehearsal for FIT-BE-025 still outstanding. BE-6 is in progress: FIT-BE-060 is complete and FIT-BE-061's backend command behavior is implemented; the frontend session-storage cutover remains intentionally deferred to FIT-BE-101.
 
 This file is the feature-wide implementation checklist for `/fittings` and `/fittings/schedule`. The original frontend prototype phases are retained below as implementation history; the backend phases are appended after the frontend section.
 
@@ -976,21 +976,23 @@ The fitting frontend prototype is complete when:
 
 # Backend Phase BE-6: Fitting schedule settings
 
-- [ ] **FIT-BE-060 — Implement weekly fitting-hours commands**
+- [x] **FIT-BE-060 — Implement weekly fitting-hours commands**
   - **Acceptance:**
-    - [ ] Owner-only mutation and Owner/Front Desk read permissions match the approved policy.
-    - [ ] Enable/disable weekday behavior is explicit.
-    - [ ] Multiple windows per day are validated and normalized.
-    - [ ] Invalid or disallowed overlapping windows are rejected.
+    - [x] Owner-only mutation and Owner/Front Desk read permissions match the approved policy.
+    - [x] Enable/disable weekday behavior is explicit.
+    - [x] Multiple windows per day are validated and normalized.
+    - [x] Invalid or disallowed overlapping windows are rejected.
+  - **Evidence:** `api/src/modules/fittings/fittings.schedule.command.{service,repository}.ts` implements an Owner-only, tenant/branch-scoped, idempotent full seven-day replacement command using the existing `fitting_settings` row as the serialization point shared with create/reschedule. Zero windows means the weekday is disabled; multiple windows are normalized by ISO weekday and local start time before persistence. Existing BE-1 Zod contracts reject malformed/overlapping windows and PostgreSQL `fitting_hours_no_overlap` remains the final persistence guard. Accepted future fittings are locked and checked in the authoritative branch timezone before replacement, so a shortened schedule cannot invalidate a committed fitting. `api/tests/integration/fittings-phase6-settings-hours.test.ts` covers Owner/Front Desk read access, Front Desk mutation denial, split-window normalization, disabled weekdays, contract overlap rejection, future-fitting schedule conflict, sequential replay, concurrent same-key delivery, and one audit/version effect per intent.
 
-- [ ] **FIT-BE-061 — Implement branch fitting settings**
+- [ ] **FIT-BE-061 — Implement branch fitting settings** _(backend command complete; frontend prototype cutover remains FIT-BE-101)_
   - **Acceptance:**
-    - [ ] Replace the frontend session-storage prototype setting with one branch-scoped settings source.
-    - [ ] Persist `fittings_enabled`, maximum simultaneous capacity, strict duration, optional fixed fee/currency, and version.
-    - [ ] New fittings always use the configured strict duration and fee; no per-appointment override exists.
-    - [ ] Duration/fee changes affect new fittings only; existing appointments retain stored period/fee snapshots.
-    - [ ] Disabling fittings blocks new create/reschedule while preserving existing lifecycle actions.
-    - [ ] Capacity reduction is rejected when existing future fittings require more simultaneous slots.
+    - [ ] Replace the frontend session-storage prototype setting with one branch-scoped settings source. _(Backend authoritative source is implemented; frontend removal remains FIT-BE-101.)_
+    - [x] Persist `fittings_enabled`, maximum simultaneous capacity, strict duration, optional fixed fee/currency, and version.
+    - [x] New fittings always use the configured strict duration and fee; no per-appointment override exists.
+    - [x] Duration/fee changes affect new fittings only; existing appointments retain stored period/fee snapshots.
+    - [x] Disabling fittings blocks new create/reschedule while preserving existing lifecycle actions.
+    - [x] Capacity reduction is rejected when existing future fittings require more simultaneous slots.
+  - **Evidence:** `updateFittingSettingsCommand` updates only the branch-owned enabled/capacity/duration/fixed-fee fields while preserving server-owned currency/timezone, requires Owner + active tenant state, checks optimistic settings version, and uses tenant idempotency. Create/reschedule already read these settings transactionally, so disabling immediately blocks new intake/reschedule while BE-5 lifecycle commands remain available. Duration/fee changes do not rewrite appointment snapshots; PostgreSQL tests prove an existing fitting retains its old period/fee while a later fitting uses the new values. Capacity increases materialize hidden slots; safe reductions lock scheduled fittings, reject when maximum simultaneous demand exceeds the new capacity, otherwise release/repack only hidden capacity claims into slots `1..N`, retain released allocation history, and leave garment guarantees untouched. The BE-6 integration suite passes 10/10 including stale-version handling and sequential/concurrent double-fire coverage for scalar settings.
 
 - [ ] **FIT-BE-062 — Implement weekly-window and date-specific closure persistence**
   - **Acceptance:**
