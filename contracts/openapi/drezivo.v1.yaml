@@ -16045,6 +16045,7 @@ paths:
                     - rental_refund
                     - security_deposit_release
                     - goodwill_adjustment
+                    - fitting_fee_refund
                 reason:
                   type: string
                   minLength: 1

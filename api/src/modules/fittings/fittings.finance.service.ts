@@ -8,6 +8,10 @@ import {
   fittingPaymentReceiptAttachResponse,
   fittingPaymentVerifyRequest,
   fittingPaymentVerifyResponse,
+  refundCreateRequest,
+  refundCreateResponse,
+  refundResolveRequest,
+  refundResolveResponse,
   type FittingDetail,
   type FittingPaymentIntentCreateRequest,
   type FittingPaymentIntentCreateResponse,
@@ -15,12 +19,18 @@ import {
   type FittingPaymentReceiptAttachResponse,
   type FittingPaymentVerifyRequest,
   type FittingPaymentVerifyResponse,
+  type RefundCreateRequest,
+  type RefundCreateResponse,
+  type RefundResolveRequest,
+  type RefundResolveResponse,
+  type RefundSummary,
   type PermissionCode,
   type TenantStatus,
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
 import {
+  CapacityConflictError,
   ForbiddenError,
   IdempotencyKeyReusedError,
   NotFoundError,
@@ -39,18 +49,28 @@ import {
 } from '../../shared/tenant-idempotency.js';
 import {
   appendFittingFinanceAudit,
+  appendFittingRefundAudit,
   attachAcceptedFittingReceipt,
   createFittingFeePayment,
+  createFittingRefundInstruction,
   insertFittingFeePaymentAllocation,
   insertFittingPaymentVerification,
+  insertFittingRefundAllocationRestore,
+  insertFittingRefundAllocationReversal,
   lockCanonicalFittingPayment,
   lockFittingFeeCharge,
   lockFittingForFinance,
+  lockFittingRefund,
   lockLatestFittingReceipt,
   markFittingReceiptVerified,
   readActiveFittingPaymentMethod,
+  readActiveFittingRefundTotal,
+  readCompletedFittingRefundTotal,
+  readFittingAllocationApplyCapacity,
   readFittingFeePaymentAllocation,
   readLatestFittingPaymentVerification,
+  resolveFittingRefundStatus,
+  markFittingPaymentRefunded,
   verifyFittingPaymentCollection,
   type LockedFittingReceiptRow,
 } from './fittings.finance.repository.js';
@@ -59,6 +79,8 @@ import { readFittingDetailModel } from './fittings.repository.js';
 const CREATE_PAYMENT_OPERATION = 'fitting.payment.create';
 const ATTACH_RECEIPT_OPERATION = 'fitting.payment_receipt.attach';
 const VERIFY_PAYMENT_OPERATION = 'fitting.payment.verify';
+const REQUEST_REFUND_OPERATION = 'fitting.refund.request';
+const RESOLVE_REFUND_OPERATION = 'fitting.refund.resolve';
 const FINANCE_EFFECTS_SAVEPOINT = 'fitting_finance_effects';
 const POSTGRES_INTEGER_MAX = 2_147_483_647n;
 
@@ -71,6 +93,7 @@ export interface FittingFinanceContext {
   requestId: string;
   idempotencyKey: string;
   permissionCodes: PermissionCode[];
+  role: 'owner' | 'frontdesk';
   effectiveTenantStatus: TenantStatus;
 }
 
@@ -87,6 +110,20 @@ export interface FittingPaymentReceiptCommandResponse {
 export interface FittingPaymentVerifyCommandResponse {
   status: number;
   body: SuccessEnvelope<FittingPaymentVerifyResponse> | FailureEnvelope;
+}
+
+export interface FittingRefundCreateCommandResponse {
+  status: number;
+  body: SuccessEnvelope<RefundCreateResponse> | FailureEnvelope;
+}
+
+export interface FittingRefundResolveCommandResponse {
+  status: number;
+  body: SuccessEnvelope<RefundResolveResponse> | FailureEnvelope;
+}
+
+export interface FittingRefundResolveContext extends FittingFinanceContext {
+  refundId: string;
 }
 
 export async function createFittingPaymentIntentCommand(
@@ -449,6 +486,339 @@ export async function verifyFittingPaymentCommand(
       return finalizeFinanceFailure(client, context, VERIFY_PAYMENT_OPERATION, payloadHash, error);
     }
   });
+}
+
+export async function requestFittingFeeRefundCommand(
+  context: FittingFinanceContext,
+  requestInput: RefundCreateRequest,
+): Promise<FittingRefundCreateCommandResponse> {
+  const parsed = refundCreateRequest.safeParse(requestInput);
+  if (!parsed.success) throw new ValidationError('Fitting refund request is invalid.');
+  assertFittingRefundPermission(context);
+  const request = parsed.data;
+  if (request.purpose !== 'fitting_fee_refund') {
+    throw new ValidationError('Fitting refunds must use the fitting_fee_refund purpose.');
+  }
+  const amount = BigInt(request.amount_minor);
+  if (amount > POSTGRES_INTEGER_MAX) {
+    throw new ValidationError('Refund amount exceeds the supported money range.');
+  }
+  const payloadHash = canonicalRequestHash({ fitting_id: context.fittingId, ...request });
+
+  return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+    const claim = await claimFinanceIdempotency(
+      client,
+      context,
+      REQUEST_REFUND_OPERATION,
+      payloadHash,
+    );
+    const replay = replayOrThrow<FittingRefundCreateCommandResponse>(claim);
+    if (replay) return replay;
+
+    let savepointOpen = false;
+    try {
+      const fitting = await requireLockedFitting(client, context);
+      const payment = await lockCanonicalFittingPayment(client, {
+        tenantId: context.tenantId,
+        fittingId: context.fittingId,
+      });
+      if (!payment || payment.payment_id !== request.payment_id) {
+        throw new NotFoundError('Payment could not be found for this fitting.');
+      }
+      if (payment.status !== 'paid' || payment.verified_at === null) {
+        throw new PaymentPrerequisiteFailedError(
+          'Only verified fitting-fee payments can be refunded.',
+        );
+      }
+      if (request.currency !== payment.currency || request.currency !== fitting.currency) {
+        throw new PaymentPrerequisiteFailedError(
+          'Refund currency must match the verified fitting payment.',
+        );
+      }
+      const verification = await readLatestFittingPaymentVerification(client, {
+        tenantId: context.tenantId,
+        paymentId: payment.payment_id,
+      });
+      if (
+        verification?.decision !== 'verified' ||
+        verification.verified_amount_minor !== payment.amount_minor
+      ) {
+        throw new PaymentPrerequisiteFailedError(
+          'Verified fitting payment authority is incomplete.',
+        );
+      }
+
+      const charge = await lockFittingFeeCharge(client, {
+        tenantId: context.tenantId,
+        fittingId: context.fittingId,
+      });
+      assertCanonicalFeeCharge(fitting, charge);
+      if (!charge) throw new Error('Canonical fitting fee charge is missing.');
+
+      const activeRefunds = BigInt(
+        await readActiveFittingRefundTotal(client, {
+          tenantId: context.tenantId,
+          paymentId: payment.payment_id,
+        }),
+      );
+      const refundableByPayment = BigInt(payment.amount_minor) - activeRefunds;
+      if (amount > refundableByPayment) {
+        throw new CapacityConflictError('Refund amount exceeds the remaining refundable balance.');
+      }
+
+      const applyCapacity = await readFittingAllocationApplyCapacity(client, {
+        tenantId: context.tenantId,
+        paymentId: payment.payment_id,
+        chargeId: charge.charge_id,
+      });
+      const availableAllocation = applyCapacity.reduce(
+        (sum, row) => sum + BigInt(row.amount_minor) - BigInt(row.reversed_minor),
+        0n,
+      );
+      if (amount > availableAllocation) {
+        throw new CapacityConflictError(
+          'Refund amount exceeds the remaining allocated fitting fee.',
+        );
+      }
+
+      await client.query(`SAVEPOINT ${FINANCE_EFFECTS_SAVEPOINT}`);
+      savepointOpen = true;
+      const refundId = randomUUID();
+      const refund = await createFittingRefundInstruction(client, {
+        refundId,
+        tenantId: context.tenantId,
+        paymentId: payment.payment_id,
+        membershipId: context.membershipId,
+        amountMinor: Number(amount),
+        currency: request.currency,
+        businessKey: `fitting:${context.fittingId}:fee-refund:${context.idempotencyKey}`,
+      });
+
+      let remaining = amount;
+      let sequence = 0;
+      for (const apply of applyCapacity) {
+        if (remaining === 0n) break;
+        const available = BigInt(apply.amount_minor) - BigInt(apply.reversed_minor);
+        if (available <= 0n) continue;
+        const reversalAmount = available < remaining ? available : remaining;
+        sequence += 1;
+        await insertFittingRefundAllocationReversal(client, {
+          allocationId: randomUUID(),
+          tenantId: context.tenantId,
+          paymentId: payment.payment_id,
+          chargeId: charge.charge_id,
+          amountMinor: Number(reversalAmount),
+          reversesId: apply.allocation_id,
+          businessKey: `refund:${refundId}:allocation-reverse:${sequence}`,
+        });
+        remaining -= reversalAmount;
+      }
+      if (remaining !== 0n) {
+        throw new StateConflictError('Fitting payment allocation changed during refund creation.');
+      }
+
+      await appendFittingRefundAudit(client, {
+        tenantId: context.tenantId,
+        actorKey: context.principalId,
+        action: 'refund.requested',
+        refundId,
+        paymentId: payment.payment_id,
+        fittingId: context.fittingId,
+        amountMinor: Number(amount),
+        requestId: context.requestId,
+        summary: { reason: request.reason },
+      });
+
+      const body: SuccessEnvelope<RefundCreateResponse> = {
+        success: true,
+        data: refundCreateResponse.parse({ refund: toRefundSummaryInput(refund) }),
+        request_id: context.requestId,
+      };
+      await finalizeFinanceSuccess(
+        client,
+        context,
+        REQUEST_REFUND_OPERATION,
+        payloadHash,
+        body,
+        201,
+      );
+      await client.query(`RELEASE SAVEPOINT ${FINANCE_EFFECTS_SAVEPOINT}`);
+      savepointOpen = false;
+      return { status: 201, body };
+    } catch (error) {
+      if (savepointOpen) {
+        await client.query(`ROLLBACK TO SAVEPOINT ${FINANCE_EFFECTS_SAVEPOINT}`);
+        await client.query(`RELEASE SAVEPOINT ${FINANCE_EFFECTS_SAVEPOINT}`);
+      }
+      if (isRefundBalanceConstraint(error)) {
+        return finalizeFinanceFailure(
+          client,
+          context,
+          REQUEST_REFUND_OPERATION,
+          payloadHash,
+          new CapacityConflictError('Refund amount exceeds the remaining refundable balance.'),
+        );
+      }
+      return finalizeFinanceFailure(client, context, REQUEST_REFUND_OPERATION, payloadHash, error);
+    }
+  });
+}
+
+export async function resolveFittingFeeRefundCommand(
+  context: FittingRefundResolveContext,
+  requestInput: RefundResolveRequest,
+): Promise<FittingRefundResolveCommandResponse> {
+  const parsed = refundResolveRequest.safeParse(requestInput);
+  if (!parsed.success) throw new ValidationError('Fitting refund resolution request is invalid.');
+  assertFittingRefundPermission(context);
+  const request = parsed.data;
+  const payloadHash = canonicalRequestHash({
+    fitting_id: context.fittingId,
+    refund_id: context.refundId,
+    ...request,
+  });
+
+  return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+    const claim = await claimFinanceIdempotency(
+      client,
+      context,
+      RESOLVE_REFUND_OPERATION,
+      payloadHash,
+    );
+    const replay = replayOrThrow<FittingRefundResolveCommandResponse>(claim);
+    if (replay) return replay;
+
+    let savepointOpen = false;
+    try {
+      const fitting = await requireLockedFitting(client, context);
+      const payment = await lockCanonicalFittingPayment(client, {
+        tenantId: context.tenantId,
+        fittingId: context.fittingId,
+      });
+      if (!payment) throw new NotFoundError('Payment could not be found for this fitting.');
+      const refund = await lockFittingRefund(client, {
+        tenantId: context.tenantId,
+        paymentId: payment.payment_id,
+        refundId: context.refundId,
+      });
+      if (!refund) throw new NotFoundError('Refund could not be found for this fitting payment.');
+      if (refund.status !== 'requested' && refund.status !== 'processing') {
+        throw new StateConflictError('This refund instruction has already been resolved.');
+      }
+      const charge = await lockFittingFeeCharge(client, {
+        tenantId: context.tenantId,
+        fittingId: context.fittingId,
+      });
+      assertCanonicalFeeCharge(fitting, charge);
+      if (!charge) throw new Error('Canonical fitting fee charge is missing.');
+
+      await client.query(`SAVEPOINT ${FINANCE_EFFECTS_SAVEPOINT}`);
+      savepointOpen = true;
+      const resolved = await resolveFittingRefundStatus(client, {
+        tenantId: context.tenantId,
+        refundId: context.refundId,
+        status: request.status,
+        merchantReference: request.merchant_reference ?? null,
+      });
+      if (!resolved)
+        throw new StateConflictError('Refund resolution lost a concurrent state change.');
+
+      if (request.status === 'failed' || request.status === 'cancelled') {
+        await insertFittingRefundAllocationRestore(client, {
+          allocationId: randomUUID(),
+          tenantId: context.tenantId,
+          paymentId: payment.payment_id,
+          chargeId: charge.charge_id,
+          amountMinor: refund.amount_minor,
+          refundId: refund.refund_id,
+        });
+      } else {
+        const completed = BigInt(
+          await readCompletedFittingRefundTotal(client, {
+            tenantId: context.tenantId,
+            paymentId: payment.payment_id,
+          }),
+        );
+        if (completed === BigInt(payment.amount_minor)) {
+          await markFittingPaymentRefunded(client, {
+            tenantId: context.tenantId,
+            paymentId: payment.payment_id,
+          });
+        }
+      }
+
+      await appendFittingRefundAudit(client, {
+        tenantId: context.tenantId,
+        actorKey: context.principalId,
+        action: `refund.${request.status}`,
+        refundId: refund.refund_id,
+        paymentId: payment.payment_id,
+        fittingId: context.fittingId,
+        amountMinor: refund.amount_minor,
+        requestId: context.requestId,
+        summary: {
+          resolution_note: request.resolution_note,
+          has_merchant_reference: request.merchant_reference !== undefined,
+        },
+      });
+
+      const body: SuccessEnvelope<RefundResolveResponse> = {
+        success: true,
+        data: refundResolveResponse.parse({ refund: toRefundSummaryInput(resolved) }),
+        request_id: context.requestId,
+      };
+      await finalizeFinanceSuccess(client, context, RESOLVE_REFUND_OPERATION, payloadHash, body);
+      await client.query(`RELEASE SAVEPOINT ${FINANCE_EFFECTS_SAVEPOINT}`);
+      savepointOpen = false;
+      return { status: 200, body };
+    } catch (error) {
+      if (savepointOpen) {
+        await client.query(`ROLLBACK TO SAVEPOINT ${FINANCE_EFFECTS_SAVEPOINT}`);
+        await client.query(`RELEASE SAVEPOINT ${FINANCE_EFFECTS_SAVEPOINT}`);
+      }
+      return finalizeFinanceFailure(client, context, RESOLVE_REFUND_OPERATION, payloadHash, error);
+    }
+  });
+}
+
+function assertFittingRefundPermission(context: FittingFinanceContext): void {
+  if (context.effectiveTenantStatus === 'cancelled') {
+    throw new TenantCancelledError('This workspace is closed.');
+  }
+  if (context.role !== 'owner' || !context.permissionCodes.includes('payments.manage')) {
+    throw new ForbiddenError('Owner payment authority is required for refunds.');
+  }
+}
+
+function toRefundSummaryInput(refund: {
+  refund_id: string;
+  payment_id: string;
+  amount_minor: number;
+  currency: string;
+  purpose: 'fitting_fee_refund';
+  status: 'requested' | 'processing' | 'completed' | 'failed' | 'cancelled';
+  merchant_reference: string | null;
+  completed_at: Date | null;
+}): RefundSummary {
+  return {
+    id: refund.refund_id as RefundSummary['id'],
+    payment_id: refund.payment_id as RefundSummary['payment_id'],
+    amount_minor: String(refund.amount_minor),
+    currency: refund.currency,
+    purpose: refund.purpose,
+    status: refund.status,
+    merchant_reference: refund.merchant_reference,
+    completed_at: refund.completed_at?.toISOString() ?? null,
+  };
+}
+
+function isRefundBalanceConstraint(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('constraint' in error)) return false;
+  const constraint = (error as { constraint?: unknown }).constraint;
+  return (
+    constraint === 'refund_active_balance_cap' ||
+    constraint === 'payment_allocation_reverse_amount_cap'
+  );
 }
 
 function assertFittingFinanceOperationalPermission(context: FittingFinanceContext): void {

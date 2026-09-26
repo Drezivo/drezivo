@@ -28,6 +28,8 @@ import {
   fittingWeeklyHours,
   fittingWeeklyHoursUpdateRequest,
   idempotentRequestHeaders,
+  refundCreateRequest,
+  refundResolveRequest,
 } from '../src';
 
 const ids = {
@@ -44,6 +46,7 @@ const ids = {
   paymentMethod: '00000000-0000-4000-8000-000000000111',
   paymentReceipt: '00000000-0000-4000-8000-000000000112',
   file: '00000000-0000-4000-8000-000000000113',
+  refund: '00000000-0000-4000-8000-000000000114',
 };
 
 const period = {
@@ -386,6 +389,52 @@ describe('fitting contracts', () => {
     ];
 
     expect(results).toEqual([true, false, false]);
+  });
+
+  it('keeps fitting-fee refund creation explicit, positive, and purpose-specific', () => {
+    const results = [
+      refundCreateRequest.safeParse({
+        payment_id: ids.payment,
+        amount_minor: '30000',
+        currency: 'PHP',
+        purpose: 'fitting_fee_refund',
+        reason: 'Approved fitting-fee refund.',
+      }).success,
+      refundCreateRequest.safeParse({
+        payment_id: ids.payment,
+        amount_minor: '0',
+        currency: 'PHP',
+        purpose: 'fitting_fee_refund',
+        reason: 'Zero should fail.',
+      }).success,
+    ];
+
+    expect(results).toEqual([true, false]);
+  });
+
+  it('models manual refund resolution separately from fitting lifecycle state', () => {
+    const results = [
+      refundResolveRequest.safeParse({
+        status: 'completed',
+        merchant_reference: 'REFUND-123',
+        resolution_note: 'Owner verified external refund completion.',
+      }).success,
+      refundResolveRequest.safeParse({
+        status: 'failed',
+        resolution_note: 'External refund failed and needs operator follow-up.',
+      }).success,
+      refundResolveRequest.safeParse({
+        status: 'processing',
+        resolution_note: 'Client cannot set processing through this V1 resolution command.',
+      }).success,
+      refundResolveRequest.safeParse({
+        refund_id: ids.refund,
+        status: 'completed',
+        resolution_note: 'Refund id belongs in the route/context, not the body.',
+      }).success,
+    ];
+
+    expect(results).toEqual([true, true, false, false]);
   });
 
   it('can expose a paid fitting payment while the appointment remains independently confirmed', () => {

@@ -51,6 +51,23 @@ export interface FittingPaymentVerificationRow {
   decided_at: Date;
 }
 
+export interface FittingAllocationApplyCapacityRow {
+  allocation_id: string;
+  amount_minor: number;
+  reversed_minor: string;
+}
+
+export interface LockedFittingRefundRow {
+  refund_id: string;
+  payment_id: string;
+  amount_minor: number;
+  currency: string;
+  purpose: 'fitting_fee_refund';
+  status: 'requested' | 'processing' | 'completed' | 'failed' | 'cancelled';
+  merchant_reference: string | null;
+  completed_at: Date | null;
+}
+
 export async function lockFittingForFinance(
   client: PoolClient,
   input: { tenantId: string; branchId: string; fittingId: string },
@@ -340,6 +357,241 @@ export async function readFittingFeePaymentAllocation(
     [input.tenantId, input.fittingId],
   );
   return result.rows[0] ?? null;
+}
+
+export async function readFittingAllocationApplyCapacity(
+  client: PoolClient,
+  input: { tenantId: string; paymentId: string; chargeId: string },
+): Promise<FittingAllocationApplyCapacityRow[]> {
+  const result = await client.query<FittingAllocationApplyCapacityRow>(
+    `SELECT apply.id AS allocation_id,
+            apply.amount_minor,
+            COALESCE(sum(reverse.amount_minor), 0)::text AS reversed_minor
+       FROM payment_allocation apply
+       LEFT JOIN payment_allocation reverse
+         ON reverse.tenant_id = apply.tenant_id
+        AND reverse.reverses_id = apply.id
+        AND reverse.direction = 'reverse'
+      WHERE apply.tenant_id = $1
+        AND apply.payment_id = $2::uuid
+        AND apply.charge_id = $3::uuid
+        AND apply.direction = 'apply'
+      GROUP BY apply.id, apply.amount_minor, apply.created_at
+      ORDER BY apply.created_at ASC, apply.id ASC`,
+    [input.tenantId, input.paymentId, input.chargeId],
+  );
+  return result.rows;
+}
+
+export async function readActiveFittingRefundTotal(
+  client: PoolClient,
+  input: { tenantId: string; paymentId: string },
+): Promise<string> {
+  const result = await client.query<{ amount_minor: string }>(
+    `SELECT COALESCE(sum(r.amount_minor::bigint), 0)::text AS amount_minor
+       FROM refund r
+      WHERE r.tenant_id = $1
+        AND r.payment_id = $2::uuid
+        AND r.status IN ('requested','processing','completed')`,
+    [input.tenantId, input.paymentId],
+  );
+  return result.rows[0]?.amount_minor ?? '0';
+}
+
+export async function readCompletedFittingRefundTotal(
+  client: PoolClient,
+  input: { tenantId: string; paymentId: string },
+): Promise<string> {
+  const result = await client.query<{ amount_minor: string }>(
+    `SELECT COALESCE(sum(r.amount_minor::bigint), 0)::text AS amount_minor
+       FROM refund r
+      WHERE r.tenant_id = $1
+        AND r.payment_id = $2::uuid
+        AND r.status = 'completed'`,
+    [input.tenantId, input.paymentId],
+  );
+  return result.rows[0]?.amount_minor ?? '0';
+}
+
+export async function createFittingRefundInstruction(
+  client: PoolClient,
+  input: {
+    refundId: string;
+    tenantId: string;
+    paymentId: string;
+    membershipId: string;
+    amountMinor: number;
+    currency: string;
+    businessKey: string;
+  },
+): Promise<LockedFittingRefundRow> {
+  const result = await client.query<LockedFittingRefundRow>(
+    `INSERT INTO refund
+       (id, tenant_id, payment_id, amount_minor, currency, purpose, status,
+        requested_by, business_key)
+     VALUES ($1,$2,$3::uuid,$4,$5,'fitting_fee_refund','requested',$6::uuid,$7)
+     RETURNING id AS refund_id, payment_id, amount_minor, currency, purpose, status,
+               merchant_reference, completed_at`,
+    [
+      input.refundId,
+      input.tenantId,
+      input.paymentId,
+      input.amountMinor,
+      input.currency,
+      input.membershipId,
+      input.businessKey,
+    ],
+  );
+  const row = result.rows[0];
+  if (!row) throw new Error('Fitting refund insert returned no row.');
+  return row;
+}
+
+export async function insertFittingRefundAllocationReversal(
+  client: PoolClient,
+  input: {
+    allocationId: string;
+    tenantId: string;
+    paymentId: string;
+    chargeId: string;
+    amountMinor: number;
+    reversesId: string;
+    businessKey: string;
+  },
+): Promise<void> {
+  await client.query(
+    `INSERT INTO payment_allocation
+       (id, tenant_id, payment_id, charge_id, amount_minor, direction, reverses_id, business_key)
+     VALUES ($1,$2,$3::uuid,$4::uuid,$5,'reverse',$6::uuid,$7)`,
+    [
+      input.allocationId,
+      input.tenantId,
+      input.paymentId,
+      input.chargeId,
+      input.amountMinor,
+      input.reversesId,
+      input.businessKey,
+    ],
+  );
+}
+
+export async function lockFittingRefund(
+  client: PoolClient,
+  input: { tenantId: string; paymentId: string; refundId: string },
+): Promise<LockedFittingRefundRow | null> {
+  const result = await client.query<LockedFittingRefundRow>(
+    `SELECT r.id AS refund_id, r.payment_id, r.amount_minor, r.currency, r.purpose,
+            r.status, r.merchant_reference, r.completed_at
+       FROM refund r
+      WHERE r.tenant_id = $1
+        AND r.payment_id = $2::uuid
+        AND r.id = $3::uuid
+        AND r.purpose = 'fitting_fee_refund'
+      LIMIT 1
+      FOR UPDATE OF r`,
+    [input.tenantId, input.paymentId, input.refundId],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function resolveFittingRefundStatus(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    refundId: string;
+    status: 'completed' | 'failed' | 'cancelled';
+    merchantReference: string | null;
+  },
+): Promise<LockedFittingRefundRow | null> {
+  const result = await client.query<LockedFittingRefundRow>(
+    `UPDATE refund
+        SET status = $3,
+            merchant_reference = COALESCE($4, merchant_reference),
+            completed_at = CASE WHEN $3 = 'completed' THEN statement_timestamp() ELSE NULL END
+      WHERE tenant_id = $1
+        AND id = $2::uuid
+        AND status IN ('requested','processing')
+      RETURNING id AS refund_id, payment_id, amount_minor, currency, purpose, status,
+                merchant_reference, completed_at`,
+    [input.tenantId, input.refundId, input.status, input.merchantReference],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function insertFittingRefundAllocationRestore(
+  client: PoolClient,
+  input: {
+    allocationId: string;
+    tenantId: string;
+    paymentId: string;
+    chargeId: string;
+    amountMinor: number;
+    refundId: string;
+  },
+): Promise<void> {
+  await client.query(
+    `INSERT INTO payment_allocation
+       (id, tenant_id, payment_id, charge_id, amount_minor, direction, business_key)
+     VALUES ($1,$2,$3::uuid,$4::uuid,$5,'apply',$6)`,
+    [
+      input.allocationId,
+      input.tenantId,
+      input.paymentId,
+      input.chargeId,
+      input.amountMinor,
+      `refund:${input.refundId}:allocation-restore`,
+    ],
+  );
+}
+
+export async function markFittingPaymentRefunded(
+  client: PoolClient,
+  input: { tenantId: string; paymentId: string },
+): Promise<void> {
+  await client.query(
+    `UPDATE payment
+        SET status = 'refunded'
+      WHERE tenant_id = $1
+        AND id = $2::uuid
+        AND status = 'paid'
+        AND verified_at IS NOT NULL`,
+    [input.tenantId, input.paymentId],
+  );
+}
+
+export async function appendFittingRefundAudit(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    actorKey: string;
+    action: 'refund.requested' | 'refund.completed' | 'refund.failed' | 'refund.cancelled';
+    refundId: string;
+    paymentId: string;
+    fittingId: string;
+    amountMinor: number;
+    requestId: string;
+    summary?: Record<string, unknown>;
+  },
+): Promise<void> {
+  await client.query(
+    `INSERT INTO audit_event
+       (tenant_id, actor_kind, actor_key, action, entity_type, entity_id,
+        redacted_summary, request_id, occurred_at, outcome)
+     VALUES ($1,'staff',$2,$3,'refund',$4::uuid,$5::jsonb,$6,statement_timestamp(),'succeeded')`,
+    [
+      input.tenantId,
+      input.actorKey,
+      input.action,
+      input.refundId,
+      JSON.stringify({
+        fitting_id: input.fittingId,
+        payment_id: input.paymentId,
+        amount_minor: input.amountMinor,
+        ...input.summary,
+      }),
+      input.requestId,
+    ],
+  );
 }
 
 export async function appendFittingFinanceAudit(

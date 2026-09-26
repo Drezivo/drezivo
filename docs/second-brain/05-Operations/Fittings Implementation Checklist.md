@@ -9,7 +9,7 @@ tags: [drezivo, v1.1, fittings, frontend, backend, implementation, checklist]
 
 # Fittings V1.1 Implementation Checklist
 
-**Status:** Frontend prototype approved. Backend Phases BE-0 through BE-5 are implemented, with the isolated Neon-branch rehearsal for FIT-BE-025 still outstanding. BE-6 backend schedule behavior is implemented through FIT-BE-063; FIT-BE-061 remains open only for the frontend session-storage cutover intentionally deferred to FIT-BE-101. BE-7 finance integration is implemented through FIT-BE-072; explicit refund/correction behavior and its full test matrix remain FIT-BE-073/074.
+**Status:** Frontend prototype approved. Backend Phases BE-0 through BE-5 are implemented, with the isolated Neon-branch rehearsal for FIT-BE-025 still outstanding. BE-6 backend schedule behavior is implemented through FIT-BE-063; FIT-BE-061 remains open only for the frontend session-storage cutover intentionally deferred to FIT-BE-101. BE-7 fitting finance integration is complete through FIT-BE-074, including explicit refund/correction behavior and its PostgreSQL falsification matrix.
 
 This file is the feature-wide implementation checklist for `/fittings` and `/fittings/schedule`. The original frontend prototype phases are retained below as implementation history; the backend phases are appended after the frontend section.
 
@@ -1038,20 +1038,24 @@ The fitting frontend prototype is complete when:
     - [x] API exposes both states separately as the frontend prototype expects.
   - **Evidence:** Fitting confirmation still succeeds without any payment intent, and fitting lifecycle commands do not create, verify, allocate, or refund money. Conversely, fitting-fee payment creation/evidence/verification never mutates appointment `status` or `version`; tests verify finance can be recorded after an appointment is already confirmed while the fitting remains confirmed. Lifecycle response mapping now preserves the authoritative payment/evidence projection instead of forcing `payment: null`, and `contracts/src/fittings/finance.ts` plus the OpenAPI generator define separate payment-intent, receipt-evidence, and verification responses that include the fitting lifecycle state alongside finance state. `api/tests/integration/fittings-phase7-finance.test.ts` passes 9/9 PostgreSQL tests; the complete 10-file fitting integration regression passes 65/65, Contracts pass 122/122, API non-integration tests pass 83/83, and the shared reservation-review finance regression passes 40/40.
 
-**FIT-BE-070/071/072 gate: PASSED 2026-09-27.** Canonical fitting finance relationships, positive-fee charge/payment/evidence/verification behavior, and lifecycle/payment independence are implemented and regression-tested. FIT-BE-073/074 remain intentionally open for explicit refund/correction semantics and their dedicated matrix.
+**FIT-BE-070/071/072 gate: PASSED 2026-09-27.** Canonical fitting finance relationships, positive-fee charge/payment/evidence/verification behavior, and lifecycle/payment independence are implemented and regression-tested.
 
-- [ ] **FIT-BE-073 — Implement explicit fitting finance correction/refund behavior**
+- [x] **FIT-BE-073 — Implement explicit fitting finance correction/refund behavior**
   - **Acceptance:**
-    - [ ] Appointment rejection/cancellation/no-show never automatically creates a refund or finance reversal.
-    - [ ] Any fitting-fee refund/reversal is an explicit existing-finance command with existing authorization.
-    - [ ] Concurrent refund/reversal totals cannot exceed the refundable balance.
-    - [ ] Failed/manual refunds preserve accurate state and require explicit operator resolution.
+    - [x] Appointment rejection/cancellation/no-show never automatically creates a refund or finance reversal.
+    - [x] Any fitting-fee refund/reversal is an explicit existing-finance command with existing authorization.
+    - [x] Concurrent refund/reversal totals cannot exceed the refundable balance.
+    - [x] Failed/manual refunds preserve accurate state and require explicit operator resolution.
+  - **Evidence:** `fittings.finance.service.ts` now exposes explicit Owner-authorized fitting-fee refund request and manual-resolution commands on the shared Finance tables; fitting lifecycle commands remain finance-neutral. Refund creation requires the canonical verified fitting payment, immutable verification authority, exact fitting currency and `fitting_fee_refund` purpose, then reserves the amount with one or more append-only `payment_allocation` reversal postings. The payment row is the service serialization point, while migration `0049_fitting_refund_integrity.sql` independently adds same-tenant/currency refund linkage plus advisory-serialized aggregate caps for active refund instructions and linked allocation reversals. Failed/cancelled manual refunds remain historical terminal instructions and append a compensating allocation that restores refundable/allocated balance; completed refunds retain the reversal and mark the payment `refunded` only after completed fitting refunds equal the full verified payment. No external bank refund is fabricated by Drezivo.
 
-- [ ] **FIT-BE-074 — Add fitting-finance tests**
+- [x] **FIT-BE-074 — Add fitting-finance tests**
   - **Acceptance:**
-    - [ ] No-fee, pending evidence, verified payment, rejected evidence, cancellation, and refund cases are covered as applicable.
-    - [ ] Cross-tenant finance links reject.
-    - [ ] Appointment/payment independence has explicit regression tests.
+    - [x] No-fee, pending evidence, verified payment, rejected evidence, cancellation, and refund cases are covered as applicable.
+    - [x] Cross-tenant finance links reject.
+    - [x] Appointment/payment independence has explicit regression tests.
+  - **Evidence:** `api/tests/integration/fittings-phase7-finance.test.ts` now passes 15/15 PostgreSQL tests. Coverage includes positive/no-fee creation, pending and rejected evidence, verified manual/cash payment, lifecycle/payment independence, reject/cancel/no-show with zero automatic refund effects, Owner-only refund authority, concurrent partial over-refund contention with one capped loser, failed manual refund balance restoration plus explicit retry, full manual completion with duplicate-delivery replay, fitting lifecycle preservation, and both service/database cross-tenant rejection. The complete 10-file fitting integration regression passes 71/71; shared reservation-review finance regression passes 40/40; Contracts pass 124/124; API non-integration tests pass 83/83; Contracts/API lint, typecheck and build are green.
+
+**BE-7 exit gate: PASSED 2026-09-27.** Fitting fees now use the shared Finance charge/payment/evidence/allocation/refund model end-to-end, payment remains independent from appointment lifecycle, refund/correction is explicit and Owner-authorized, aggregate refund/reversal caps hold under contention, and failed manual outcomes preserve recoverable financial truth.
 
 ---
 

@@ -195,6 +195,7 @@ function financeContext(
     ...createContext(seed),
     fittingId,
     permissionCodes: permissions,
+    role: 'owner' as const,
     effectiveTenantStatus: 'active' as const,
   };
 }
@@ -222,11 +223,17 @@ describe('FIT-BE-070..072 fitting finance integration', async () => {
   const { closePool } = await import('../../src/db/client.js');
   const { createStaffFittingCommand } =
     await import('../../src/modules/fittings/fittings.command.service.js');
-  const { confirmFittingCommand } =
-    await import('../../src/modules/fittings/fittings.mutation.service.js');
+  const {
+    cancelFittingCommand,
+    confirmFittingCommand,
+    markFittingNoShowCommand,
+    rejectFittingCommand,
+  } = await import('../../src/modules/fittings/fittings.mutation.service.js');
   const {
     attachFittingPaymentReceiptCommand,
     createFittingPaymentIntentCommand,
+    requestFittingFeeRefundCommand,
+    resolveFittingFeeRefundCommand,
     verifyFittingPaymentCommand,
   } = await import('../../src/modules/fittings/fittings.finance.service.js');
   const { getFittingDetail } = await import('../../src/modules/fittings/fittings.service.js');
@@ -252,6 +259,25 @@ describe('FIT-BE-070..072 fitting finance integration', async () => {
     });
     if (!response.body.success) throw new Error('Expected fitting create success.');
     return response.body.data.fitting;
+  }
+
+  async function verifyCashFittingFee(seed: Seed, fittingId: string): Promise<string> {
+    const intent = await createFittingPaymentIntentCommand(financeContext(seed, fittingId), {
+      payment_method_id: seed.cashMethodId as never,
+    });
+    if (!intent.body.success) throw new Error('Expected fitting payment intent success.');
+    const paymentId = intent.body.data.fitting.fee.payment?.id;
+    if (!paymentId) throw new Error('Expected fitting payment id.');
+    const verified = await verifyFittingPaymentCommand(
+      financeContext(seed, fittingId, [
+        'reservations.manage',
+        'payments.manage',
+        'evidence.verify',
+      ]),
+      { verified_amount_minor: '500', cash_tendered_minor: '500' },
+    );
+    if (!verified.body.success) throw new Error('Expected fitting payment verification success.');
+    return paymentId;
   }
 
   it('creates an immutable fitting_fee charge for a positive snapshot and no payment until an explicit intent is created', async () => {
@@ -653,5 +679,391 @@ describe('FIT-BE-070..072 fitting finance integration', async () => {
     );
     expect(readback.status).toBe('confirmed');
     expect(readback.fee.payment?.status).toBe('pending');
+  });
+
+  it('reject, cancel, and no-show never auto-create refunds or allocation reversals', async () => {
+    const seed = await seedTenant('terminal-no-auto-refund');
+
+    const rejectedFitting = await createFitting(seed, '2099-01-10T02:00:00.000Z');
+    await verifyCashFittingFee(seed, rejectedFitting.id);
+    const rejected = await rejectFittingCommand(
+      {
+        ...createContext(seed),
+        fittingId: rejectedFitting.id,
+        permissionCodes: ['reservations.manage'],
+      },
+      { version: rejectedFitting.version, reason: 'Unable to accommodate fitting.' },
+    );
+    expect(rejected.status).toBe(200);
+
+    const cancelledFitting = await createFitting(seed, '2099-01-10T04:00:00.000Z');
+    await verifyCashFittingFee(seed, cancelledFitting.id);
+    const confirmedForCancel = await confirmFittingCommand(
+      {
+        ...createContext(seed),
+        fittingId: cancelledFitting.id,
+        permissionCodes: ['reservations.manage'],
+      },
+      { version: cancelledFitting.version },
+    );
+    if (!confirmedForCancel.body.success) throw new Error('Expected fitting confirmation success.');
+    const cancelled = await cancelFittingCommand(
+      {
+        ...createContext(seed),
+        fittingId: cancelledFitting.id,
+        permissionCodes: ['reservations.manage'],
+      },
+      { version: confirmedForCancel.body.data.fitting.version, reason: 'Customer cancelled.' },
+    );
+    expect(cancelled.status).toBe(200);
+
+    const noShowFitting = await createFitting(seed, '2099-01-10T06:00:00.000Z');
+    await verifyCashFittingFee(seed, noShowFitting.id);
+    await withAdmin(async (client) => {
+      await client.query('BEGIN');
+      try {
+        await client.query(
+          `UPDATE fitting_appointment
+              SET period=tstzrange('2000-01-01T02:00:00Z','2000-01-01T03:00:00Z','[)')
+            WHERE tenant_id=$1 AND id=$2::uuid`,
+          [seed.tenantId, noShowFitting.id],
+        );
+        await client.query(
+          `UPDATE fitting_slot_allocation
+              SET period=tstzrange('2000-01-01T02:00:00Z','2000-01-01T03:00:00Z','[)')
+            WHERE tenant_id=$1 AND fitting_id=$2::uuid AND is_blocking`,
+          [seed.tenantId, noShowFitting.id],
+        );
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      }
+    });
+    const confirmedForNoShow = await confirmFittingCommand(
+      {
+        ...createContext(seed),
+        fittingId: noShowFitting.id,
+        permissionCodes: ['reservations.manage'],
+      },
+      { version: noShowFitting.version },
+    );
+    if (!confirmedForNoShow.body.success) throw new Error('Expected late fitting confirmation.');
+    const noShow = await markFittingNoShowCommand(
+      {
+        ...createContext(seed),
+        fittingId: noShowFitting.id,
+        permissionCodes: ['reservations.manage'],
+      },
+      { version: confirmedForNoShow.body.data.fitting.version },
+    );
+    expect(noShow.status).toBe(200);
+
+    await withAdmin(async (client) => {
+      const state = await client.query<{ refunds: string; reversals: string }>(
+        `SELECT
+           (SELECT count(*)::text FROM refund WHERE tenant_id=$1) AS refunds,
+           (SELECT count(*)::text
+              FROM payment_allocation pa
+              JOIN payment p ON p.tenant_id=pa.tenant_id AND p.id=pa.payment_id
+             WHERE p.tenant_id=$1 AND p.fitting_id IS NOT NULL AND pa.direction='reverse') AS reversals`,
+        [seed.tenantId],
+      );
+      expect(state.rows[0]).toEqual({ refunds: '0', reversals: '0' });
+    });
+  });
+
+  it('denies refund creation for pending/rejected evidence and keeps finance state unchanged', async () => {
+    const seed = await seedTenant('refund-unverified');
+    const fitting = await createFitting(seed);
+    const intent = await createFittingPaymentIntentCommand(financeContext(seed, fitting.id), {
+      payment_method_id: seed.manualMethodId as never,
+    });
+    if (!intent.body.success) throw new Error('Expected payment intent success.');
+    const paymentId = intent.body.data.fitting.fee.payment?.id;
+    if (!paymentId) throw new Error('Expected payment id.');
+    const fileId = await acceptedReceiptFile(seed, 'rejected-refund.png');
+    await attachFittingPaymentReceiptCommand(financeContext(seed, fitting.id), {
+      file_id: fileId as never,
+    });
+    await withAdmin(async (client) => {
+      await client.query(
+        `UPDATE payment_receipt SET evidence_status='rejected'
+          WHERE tenant_id=$1 AND payment_id=$2::uuid`,
+        [seed.tenantId, paymentId],
+      );
+    });
+
+    const denied = await requestFittingFeeRefundCommand(
+      financeContext(seed, fitting.id, ['reservations.manage', 'payments.manage']),
+      {
+        payment_id: paymentId,
+        amount_minor: '500',
+        currency: 'PHP',
+        purpose: 'fitting_fee_refund',
+        reason: 'Customer requested refund.',
+      },
+    );
+    expect(denied.status).toBe(409);
+    expect(denied.body).toMatchObject({
+      success: false,
+      error: { code: 'PAYMENT_PREREQUISITE_FAILED' },
+    });
+
+    await withAdmin(async (client) => {
+      const state = await client.query<{
+        refunds: string;
+        reversals: string;
+        payment_status: string;
+      }>(
+        `SELECT
+           (SELECT count(*)::text FROM refund WHERE tenant_id=$1 AND payment_id=$2::uuid) AS refunds,
+           (SELECT count(*)::text FROM payment_allocation WHERE tenant_id=$1 AND payment_id=$2::uuid AND direction='reverse') AS reversals,
+           (SELECT status FROM payment WHERE tenant_id=$1 AND id=$2::uuid) AS payment_status`,
+        [seed.tenantId, paymentId],
+      );
+      expect(state.rows[0]).toEqual({ refunds: '0', reversals: '0', payment_status: 'pending' });
+    });
+  });
+
+  it('requires Owner finance authority and caps concurrent fitting refunds at the remaining balance', async () => {
+    const seed = await seedTenant('refund-race');
+    const fitting = await createFitting(seed);
+    const paymentId = await verifyCashFittingFee(seed, fitting.id);
+    const request = {
+      payment_id: paymentId as never,
+      amount_minor: '300',
+      currency: 'PHP',
+      purpose: 'fitting_fee_refund' as const,
+      reason: 'Approved partial fitting-fee refund.',
+    };
+
+    await expect(
+      requestFittingFeeRefundCommand(
+        {
+          ...financeContext(seed, fitting.id, ['reservations.manage', 'payments.manage']),
+          role: 'frontdesk',
+        },
+        request,
+      ),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    const firstContext = {
+      ...financeContext(seed, fitting.id, ['reservations.manage', 'payments.manage']),
+      idempotencyKey: randomUUID(),
+    };
+    const secondContext = {
+      ...financeContext(seed, fitting.id, ['reservations.manage', 'payments.manage']),
+      idempotencyKey: randomUUID(),
+    };
+    const results = await Promise.all([
+      requestFittingFeeRefundCommand(firstContext, request),
+      requestFittingFeeRefundCommand(secondContext, request),
+    ]);
+    expect(results.map((result) => result.status).sort()).toEqual([201, 409]);
+    expect(results.find((result) => result.status === 409)?.body).toMatchObject({
+      success: false,
+      error: { code: 'CAPACITY_CONFLICT' },
+    });
+
+    await withAdmin(async (client) => {
+      const state = await client.query<{
+        active_refunds: string;
+        reversed: string;
+        net_allocated: string;
+      }>(
+        `SELECT
+           (SELECT COALESCE(sum(amount_minor),0)::text FROM refund WHERE tenant_id=$1 AND payment_id=$2::uuid AND status IN ('requested','processing','completed')) AS active_refunds,
+           (SELECT COALESCE(sum(amount_minor),0)::text FROM payment_allocation WHERE tenant_id=$1 AND payment_id=$2::uuid AND direction='reverse') AS reversed,
+           (SELECT COALESCE(sum(CASE WHEN direction='apply' THEN amount_minor ELSE -amount_minor END),0)::text FROM payment_allocation WHERE tenant_id=$1 AND payment_id=$2::uuid) AS net_allocated`,
+        [seed.tenantId, paymentId],
+      );
+      expect(state.rows[0]).toEqual({
+        active_refunds: '300',
+        reversed: '300',
+        net_allocated: '200',
+      });
+    });
+  });
+
+  it('failed manual refund restores allocation balance and permits an explicit new refund instruction', async () => {
+    const seed = await seedTenant('refund-failed');
+    const fitting = await createFitting(seed);
+    const paymentId = await verifyCashFittingFee(seed, fitting.id);
+    const requested = await requestFittingFeeRefundCommand(
+      financeContext(seed, fitting.id, ['reservations.manage', 'payments.manage']),
+      {
+        payment_id: paymentId as never,
+        amount_minor: '200',
+        currency: 'PHP',
+        purpose: 'fitting_fee_refund',
+        reason: 'Approved partial refund.',
+      },
+    );
+    if (!requested.body.success) throw new Error('Expected refund request success.');
+    const refundId = requested.body.data.refund.id;
+
+    const failed = await resolveFittingFeeRefundCommand(
+      {
+        ...financeContext(seed, fitting.id, ['reservations.manage', 'payments.manage']),
+        refundId,
+      },
+      { status: 'failed', resolution_note: 'External cash handoff did not complete.' },
+    );
+    expect(failed.status).toBe(200);
+    if (!failed.body.success) throw new Error('Expected refund failure resolution success.');
+    expect(failed.body.data.refund.status).toBe('failed');
+
+    await withAdmin(async (client) => {
+      const state = await client.query<{ payment_status: string; net_allocated: string }>(
+        `SELECT
+           (SELECT status FROM payment WHERE tenant_id=$1 AND id=$2::uuid) AS payment_status,
+           (SELECT COALESCE(sum(CASE WHEN direction='apply' THEN amount_minor ELSE -amount_minor END),0)::text FROM payment_allocation WHERE tenant_id=$1 AND payment_id=$2::uuid) AS net_allocated`,
+        [seed.tenantId, paymentId],
+      );
+      expect(state.rows[0]).toEqual({ payment_status: 'paid', net_allocated: '500' });
+    });
+
+    const retried = await requestFittingFeeRefundCommand(
+      {
+        ...financeContext(seed, fitting.id, ['reservations.manage', 'payments.manage']),
+        idempotencyKey: randomUUID(),
+      },
+      {
+        payment_id: paymentId as never,
+        amount_minor: '500',
+        currency: 'PHP',
+        purpose: 'fitting_fee_refund',
+        reason: 'New explicit refund attempt after failure.',
+      },
+    );
+    expect(retried.status).toBe(201);
+  });
+
+  it('manual completion records the refund once, fully refunds payment only after completion, and leaves fitting lifecycle unchanged', async () => {
+    const seed = await seedTenant('refund-complete');
+    const fitting = await createFitting(seed);
+    const paymentId = await verifyCashFittingFee(seed, fitting.id);
+    const refundContext = {
+      ...financeContext(seed, fitting.id, ['reservations.manage', 'payments.manage']),
+      idempotencyKey: randomUUID(),
+    };
+    const refundRequest = {
+      payment_id: paymentId as never,
+      amount_minor: '500',
+      currency: 'PHP',
+      purpose: 'fitting_fee_refund' as const,
+      reason: 'Full fitting-fee refund approved.',
+    };
+    const requestedResults = await Promise.all([
+      requestFittingFeeRefundCommand(refundContext, refundRequest),
+      requestFittingFeeRefundCommand({ ...refundContext, requestId: randomUUID() }, refundRequest),
+    ]);
+    expect(requestedResults.map((result) => result.status)).toEqual([201, 201]);
+    const requested = requestedResults[0];
+    if (!requested?.body.success) throw new Error('Expected refund request success.');
+    const refundId = requested.body.data.refund.id;
+    expect(requestedResults[1]?.body).toMatchObject({
+      success: true,
+      data: { refund: { id: refundId } },
+    });
+
+    await withAdmin(async (client) => {
+      const payment = await client.query<{ status: string }>(
+        `SELECT status FROM payment WHERE tenant_id=$1 AND id=$2::uuid`,
+        [seed.tenantId, paymentId],
+      );
+      expect(payment.rows[0]?.status).toBe('paid');
+    });
+
+    const resolutionContext = {
+      ...financeContext(seed, fitting.id, ['reservations.manage', 'payments.manage']),
+      refundId,
+      idempotencyKey: randomUUID(),
+    };
+    const resolutionRequest = {
+      status: 'completed' as const,
+      merchant_reference: 'manual-refund-001',
+      resolution_note: 'Owner verified that the refund was returned to the customer.',
+    };
+    const completed = await Promise.all([
+      resolveFittingFeeRefundCommand(resolutionContext, resolutionRequest),
+      resolveFittingFeeRefundCommand(
+        { ...resolutionContext, requestId: randomUUID() },
+        resolutionRequest,
+      ),
+    ]);
+    expect(completed.map((result) => result.status)).toEqual([200, 200]);
+
+    await withAdmin(async (client) => {
+      const state = await client.query<{
+        payment_status: string;
+        refund_status: string;
+        completed_at: Date | null;
+        refund_audits: string;
+        net_allocated: string;
+        fitting_status: string;
+      }>(
+        `SELECT
+           (SELECT status FROM payment WHERE tenant_id=$1 AND id=$2::uuid) AS payment_status,
+           (SELECT status FROM refund WHERE tenant_id=$1 AND id=$3::uuid) AS refund_status,
+           (SELECT completed_at FROM refund WHERE tenant_id=$1 AND id=$3::uuid) AS completed_at,
+           (SELECT count(*)::text FROM audit_event WHERE tenant_id=$1 AND entity_type='refund' AND entity_id=$3::uuid AND action='refund.completed') AS refund_audits,
+           (SELECT COALESCE(sum(CASE WHEN direction='apply' THEN amount_minor ELSE -amount_minor END),0)::text FROM payment_allocation WHERE tenant_id=$1 AND payment_id=$2::uuid) AS net_allocated,
+           (SELECT status FROM fitting_appointment WHERE tenant_id=$1 AND id=$4::uuid) AS fitting_status`,
+        [seed.tenantId, paymentId, refundId, fitting.id],
+      );
+      expect(state.rows[0]).toMatchObject({
+        payment_status: 'refunded',
+        refund_status: 'completed',
+        refund_audits: '1',
+        net_allocated: '0',
+        fitting_status: 'pending',
+      });
+      expect(state.rows[0]?.completed_at).toBeInstanceOf(Date);
+    });
+  });
+
+  it('conceals foreign-tenant fitting payments and database constraints reject cross-tenant refund links', async () => {
+    const tenantA = await seedTenant('refund-tenant-a');
+    const tenantB = await seedTenant('refund-tenant-b');
+    const fittingA = await createFitting(tenantA);
+    const fittingB = await createFitting(tenantB);
+    const paymentA = await verifyCashFittingFee(tenantA, fittingA.id);
+    await verifyCashFittingFee(tenantB, fittingB.id);
+
+    const concealed = await requestFittingFeeRefundCommand(
+      financeContext(tenantB, fittingB.id, ['reservations.manage', 'payments.manage']),
+      {
+        payment_id: paymentA as never,
+        amount_minor: '100',
+        currency: 'PHP',
+        purpose: 'fitting_fee_refund',
+        reason: 'Foreign payment must stay concealed.',
+      },
+    );
+    expect(concealed.status).toBe(404);
+
+    const violation = await withAdmin(async (client) => {
+      try {
+        await client.query('BEGIN');
+        await client.query(
+          `INSERT INTO refund
+             (tenant_id,payment_id,amount_minor,currency,purpose,status,requested_by,business_key)
+           VALUES ($1,$2::uuid,100,'PHP','fitting_fee_refund','requested',$3::uuid,$4)`,
+          [tenantB.tenantId, paymentA, tenantB.membershipId, `cross-tenant:${randomUUID()}`],
+        );
+        await client.query('COMMIT');
+        return { code: 'inserted', constraint: undefined };
+      } catch (error) {
+        await client.query('ROLLBACK');
+        const pgError = error as { code?: string; constraint?: string };
+        return { code: pgError.code, constraint: pgError.constraint };
+      }
+    });
+    expect(violation).toMatchObject({
+      code: '23503',
+      constraint: 'refund_payment_same_tenant_fk',
+    });
   });
 });
