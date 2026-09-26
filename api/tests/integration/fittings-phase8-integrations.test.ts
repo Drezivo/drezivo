@@ -1,0 +1,558 @@
+import { randomUUID } from 'node:crypto';
+
+import { Client } from 'pg';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+
+import type { PermissionCode } from '@drezivo/contracts';
+
+import '../../src/config/load-env.js';
+import {
+  buildAppRoleDatabaseUrl,
+  ensureAppRoleLogin,
+  migrateTestDatabase,
+  requireTestDatabaseUrl,
+  resetTestDatabase,
+} from './helpers/test-db.js';
+
+const adminUrl = requireTestDatabaseUrl();
+process.env.NODE_ENV = 'test';
+process.env.DATABASE_URL = buildAppRoleDatabaseUrl(adminUrl);
+process.env.DATABASE_POOL_MAX ??= '12';
+process.env.CLERK_SECRET_KEY ??= 'test';
+process.env.CLERK_PUBLISHABLE_KEY ??= 'test';
+process.env.CLERK_WEBHOOK_SIGNING_SECRET ??= 'test';
+process.env.CORS_ALLOWED_ORIGINS ??= 'http://localhost:3000';
+process.env.INVITATION_EMAIL_ENCRYPTION_KEY ??= Buffer.alloc(32, 1).toString('base64url');
+process.env.INVITATION_EMAIL_DIGEST_KEY ??= Buffer.alloc(32, 2).toString('base64url');
+process.env.AWS_REGION ??= 'test';
+process.env.S3_BUCKET_PRIVATE ??= 'private';
+process.env.S3_BUCKET_PUBLIC ??= 'public';
+process.env.S3_ACCESS_KEY_ID ??= 'test';
+process.env.S3_SECRET_ACCESS_KEY ??= 'test';
+
+interface Seed {
+  tenantId: string;
+  branchId: string;
+  customerId: string;
+  variantId: string;
+  assetId: string;
+  slotId: string;
+  storefrontId: string;
+  storefrontSlug: string;
+  policySnapshotId: string;
+  paymentMethodId: string;
+  principalId: string;
+  membershipId: string;
+  todayStart: Date;
+}
+
+function requireId(rows: Array<{ id: string }>, label: string): string {
+  const row = rows[0];
+  if (!row) throw new Error(`${label} insert returned no row`);
+  return row.id;
+}
+
+async function withAdmin<T>(fn: (client: Client) => Promise<T>): Promise<T> {
+  const client = new Client({ connectionString: adminUrl });
+  await client.connect();
+  try {
+    return await fn(client);
+  } finally {
+    await client.end();
+  }
+}
+
+async function seedWorkspace(label: string): Promise<Seed> {
+  return withAdmin(async (client) => {
+    const suffix = `${label}-${randomUUID().slice(0, 8)}`;
+    const today = await client.query<{ today_start: Date }>(
+      `SELECT date_trunc('day', statement_timestamp()) AS today_start`,
+    );
+    const tenantId = requireId(
+      (
+        await client.query<{ id: string }>(
+          `INSERT INTO tenant (clerk_org_id,name,slug,currency,timezone)
+           VALUES ($1,$2,$3,'PHP','UTC') RETURNING id`,
+          [`org_${suffix}`, suffix, `be8-${suffix}`],
+        )
+      ).rows,
+      'tenant',
+    );
+    const branchId = requireId(
+      (
+        await client.query<{ id: string }>(
+          `INSERT INTO branch (tenant_id,name,code,is_default,timezone,status)
+           VALUES ($1,'Main','MAIN',true,'UTC','active') RETURNING id`,
+          [tenantId],
+        )
+      ).rows,
+      'branch',
+    );
+    const principalId = `user_${suffix}`;
+    const membershipId = requireId(
+      (
+        await client.query<{ id: string }>(
+          `INSERT INTO membership (tenant_id,clerk_user_id,role,status)
+           VALUES ($1,$2,'owner','active') RETURNING id`,
+          [tenantId, principalId],
+        )
+      ).rows,
+      'membership',
+    );
+    await client.query(
+      `INSERT INTO branch_membership (tenant_id,branch_id,membership_id,permission_codes)
+       VALUES ($1,$2,$3,$4::jsonb)`,
+      [
+        tenantId,
+        branchId,
+        membershipId,
+        JSON.stringify(['reservations.manage', 'payments.view', 'payments.manage']),
+      ],
+    );
+    const customerId = requireId(
+      (
+        await client.query<{ id: string }>(
+          `INSERT INTO customer (tenant_id,full_name,email)
+           VALUES ($1,'BE8 Customer',$2) RETURNING id`,
+          [tenantId, `${suffix}@example.test`],
+        )
+      ).rows,
+      'customer',
+    );
+    const productId = requireId(
+      (
+        await client.query<{ id: string }>(
+          `INSERT INTO product (tenant_id,code,name,status)
+           VALUES ($1,$2,'BE8 Gown','active') RETURNING id`,
+          [tenantId, `P-${suffix}`],
+        )
+      ).rows,
+      'product',
+    );
+    const variantId = requireId(
+      (
+        await client.query<{ id: string }>(
+          `INSERT INTO product_variant
+             (tenant_id,product_id,sku,size_label,color_label,measurements,measurement_unit,
+              measurement_mode,rental_price_minor,security_deposit_minor,currency,pricing_mode,
+              included_duration_minutes,extra_day_price_minor,prep_minutes,turnaround_minutes,status)
+           VALUES ($1,$2,$3,'M','Ivory','{}','cm','none',1000,0,'PHP','fixed_duration',1440,0,0,0,'active')
+           RETURNING id`,
+          [tenantId, productId, `SKU-${suffix}`],
+        )
+      ).rows,
+      'variant',
+    );
+    const assetId = requireId(
+      (
+        await client.query<{ id: string }>(
+          `INSERT INTO physical_asset (tenant_id,branch_id,variant_id,asset_code)
+           VALUES ($1,$2,$3,$4) RETURNING id`,
+          [tenantId, branchId, variantId, `ASSET-${suffix}`],
+        )
+      ).rows,
+      'asset',
+    );
+    const storefrontSlug = `be8-store-${suffix}`;
+    const storefrontId = requireId(
+      (
+        await client.query<{ id: string }>(
+          `INSERT INTO storefront (tenant_id,branch_id,slug,status,branding,contact,published_at)
+           VALUES ($1,$2,$3,'published','{}'::jsonb,'{}'::jsonb,statement_timestamp()) RETURNING id`,
+          [tenantId, branchId, storefrontSlug],
+        )
+      ).rows,
+      'storefront',
+    );
+    const policySnapshotId = requireId(
+      (
+        await client.query<{ id: string }>(
+          `INSERT INTO policy_snapshot
+             (tenant_id,storefront_id,version,rental_rules,deposit_rules,cancellation_rules,
+              delivery_rules,privacy_notice,effective_at)
+           VALUES ($1,$2,1,'{}','{}','{}','{}','BE8 policy',statement_timestamp()) RETURNING id`,
+          [tenantId, storefrontId],
+        )
+      ).rows,
+      'policy',
+    );
+    const paymentMethodId = requireId(
+      (
+        await client.query<{ id: string }>(
+          `INSERT INTO payment_method
+             (tenant_id,name,rail,destination_snapshot,active,storefront_enabled,version)
+           VALUES ($1,'Cash','cash','{}'::jsonb,true,false,1) RETURNING id`,
+          [tenantId],
+        )
+      ).rows,
+      'payment method',
+    );
+    await client.query(
+      `INSERT INTO fitting_settings
+         (tenant_id,branch_id,enabled,capacity,duration_minutes,fee_minor,currency,version)
+       VALUES ($1,$2,true,2,60,0,'PHP',1)`,
+      [tenantId, branchId],
+    );
+    await client.query(
+      `INSERT INTO fitting_hours (tenant_id,branch_id,weekday,starts_local,ends_local)
+       SELECT $1,$2,weekday,'00:00'::time,'23:59'::time FROM generate_series(1,7) AS weekday`,
+      [tenantId, branchId],
+    );
+    const slotId = requireId(
+      (
+        await client.query<{ id: string }>(
+          `INSERT INTO fitting_capacity_slot (tenant_id,branch_id,slot_number,active)
+           VALUES ($1,$2,1,true) RETURNING id`,
+          [tenantId, branchId],
+        )
+      ).rows,
+      'capacity slot',
+    );
+
+    return {
+      tenantId,
+      branchId,
+      customerId,
+      variantId,
+      assetId,
+      slotId,
+      storefrontId,
+      storefrontSlug,
+      policySnapshotId,
+      paymentMethodId,
+      principalId,
+      membershipId,
+      todayStart: today.rows[0]?.today_start ?? new Date(),
+    };
+  });
+}
+
+function plus(base: Date, hours: number): string {
+  return new Date(base.getTime() + hours * 60 * 60 * 1_000).toISOString();
+}
+
+async function insertFitting(
+  seed: Seed,
+  input: { startsAt: string; endsAt: string; guaranteed?: boolean; feeMinor?: number },
+): Promise<string> {
+  return withAdmin(async (client) => {
+    await client.query('BEGIN');
+    try {
+      const fittingId = requireId(
+        (
+          await client.query<{ id: string }>(
+            `INSERT INTO fitting_appointment
+               (tenant_id,branch_id,customer_id,booking_channel,status,period,timezone_snapshot,
+                currency,fee_minor,business_key,version)
+             VALUES ($1,$2,$3,'staff','pending',tstzrange($4::timestamptz,$5::timestamptz,'[)'),
+                     'UTC','PHP',$6,$7,1) RETURNING id`,
+            [
+              seed.tenantId,
+              seed.branchId,
+              seed.customerId,
+              input.startsAt,
+              input.endsAt,
+              input.feeMinor ?? 0,
+              `be8-fitting:${randomUUID()}`,
+            ],
+          )
+        ).rows,
+        'fitting',
+      );
+      const lineId = requireId(
+        (
+          await client.query<{ id: string }>(
+            `INSERT INTO fitting_line
+               (tenant_id,fitting_id,variant_id,asset_id,garment_guaranteed)
+             VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+            [
+              seed.tenantId,
+              fittingId,
+              seed.variantId,
+              input.guaranteed ? seed.assetId : null,
+              input.guaranteed ?? false,
+            ],
+          )
+        ).rows,
+        'fitting line',
+      );
+      await client.query(
+        `INSERT INTO fitting_slot_allocation
+           (tenant_id,slot_id,fitting_id,period,is_blocking)
+         VALUES ($1,$2,$3,tstzrange($4::timestamptz,$5::timestamptz,'[)'),true)`,
+        [seed.tenantId, seed.slotId, fittingId, input.startsAt, input.endsAt],
+      );
+      if (input.guaranteed) {
+        await client.query(
+          `INSERT INTO asset_allocation
+             (tenant_id,branch_id,asset_id,fitting_line_id,kind,period,is_blocking)
+           VALUES ($1,$2,$3,$4,'fitting',tstzrange($5::timestamptz,$6::timestamptz,'[)'),true)`,
+          [seed.tenantId, seed.branchId, seed.assetId, lineId, input.startsAt, input.endsAt],
+        );
+      }
+      if ((input.feeMinor ?? 0) > 0) {
+        await client.query(
+          `INSERT INTO charge (tenant_id,fitting_id,kind,amount_minor,currency,business_key)
+           VALUES ($1,$2,'fitting_fee',$3,'PHP',$4)`,
+          [seed.tenantId, fittingId, input.feeMinor, `be8-charge:${fittingId}`],
+        );
+      }
+      await client.query('COMMIT');
+      return fittingId;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+  });
+}
+
+async function insertReservation(
+  seed: Seed,
+  input: { pickupAt: string; dueAt: string; withPayment?: boolean },
+): Promise<{ reservationId: string; paymentId: string | null }> {
+  return withAdmin(async (client) => {
+    const reservationId = requireId(
+      (
+        await client.query<{ id: string }>(
+          `INSERT INTO reservation
+             (tenant_id,branch_id,customer_id,storefront_id,policy_snapshot_id,payment_method_id,
+              reference_code,status,pickup_at,due_at,timezone_snapshot,customer_snapshot,
+              delivery_snapshot,price_snapshot,currency,rental_total_minor,security_required_minor,due_now_minor)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'confirmed',$8::timestamptz,$9::timestamptz,'UTC',
+                   $10::jsonb,'{"fulfillment_method":"pickup"}'::jsonb,
+                   '{"rental_total_minor":"1000","security_required_minor":"0","due_now_minor":"1000","currency":"PHP"}'::jsonb,
+                   'PHP',1000,0,1000) RETURNING id`,
+          [
+            seed.tenantId,
+            seed.branchId,
+            seed.customerId,
+            seed.storefrontId,
+            seed.policySnapshotId,
+            seed.paymentMethodId,
+            `BE8-${randomUUID().slice(0, 8)}`,
+            input.pickupAt,
+            input.dueAt,
+            JSON.stringify({ full_name: 'BE8 Customer', email: 'be8@example.test', phone: null }),
+          ],
+        )
+      ).rows,
+      'reservation',
+    );
+    await client.query(
+      `INSERT INTO reservation_line
+         (tenant_id,reservation_id,variant_id,line_number,name_snapshot,measurements_snapshot,
+          pricing_snapshot,rental_minor,deposit_minor,currency)
+       VALUES ($1,$2,$3,1,'BE8 Gown','{}','{"rental_minor":"1000","deposit_minor":"0","currency":"PHP"}',1000,0,'PHP')`,
+      [seed.tenantId, reservationId, seed.variantId],
+    );
+    let paymentId: string | null = null;
+    if (input.withPayment) {
+      paymentId = requireId(
+        (
+          await client.query<{ id: string }>(
+            `INSERT INTO payment
+               (tenant_id,reservation_id,payment_method_id,amount_minor,currency,status,business_key)
+             VALUES ($1,$2,$3,1000,'PHP','pending',$4) RETURNING id`,
+            [
+              seed.tenantId,
+              reservationId,
+              seed.paymentMethodId,
+              `be8-rsv-payment:${reservationId}`,
+            ],
+          )
+        ).rows,
+        'reservation payment',
+      );
+    }
+    return { reservationId, paymentId };
+  });
+}
+
+describe('FIT-BE-080..083 cross-product integration', async () => {
+  const { closePool } = await import('../../src/db/client.js');
+  const { getOperationalCalendar, getDashboardFittingSummary } =
+    await import('../../src/modules/operations/operations.service.js');
+  const { getCentralPayments } = await import('../../src/modules/payments/payments.service.js');
+  const { computeAvailability } =
+    await import('../../src/modules/storefront/storefront.repository.js');
+
+  beforeAll(async () => {
+    await migrateTestDatabase(adminUrl);
+    await ensureAppRoleLogin(adminUrl);
+  });
+
+  afterEach(async () => {
+    await resetTestDatabase(adminUrl);
+  });
+
+  afterAll(async () => {
+    await closePool();
+  });
+
+  function operationsContext(seed: Seed) {
+    return {
+      tenantId: seed.tenantId,
+      branchId: seed.branchId,
+      principalId: seed.principalId,
+      permissionCodes: ['reservations.manage'] as PermissionCode[],
+    };
+  }
+
+  it('returns reservation pickup/return and persisted fitting events from one bounded Calendar projection', async () => {
+    const seed = await seedWorkspace('calendar');
+    const fittingId = await insertFitting(seed, {
+      startsAt: plus(seed.todayStart, 10),
+      endsAt: plus(seed.todayStart, 11),
+    });
+    const reservation = await insertReservation(seed, {
+      pickupAt: plus(seed.todayStart, 12),
+      dueAt: plus(seed.todayStart, 36),
+    });
+
+    const calendar = await getOperationalCalendar(operationsContext(seed), {
+      start: seed.todayStart.toISOString(),
+      end: plus(seed.todayStart, 48),
+    });
+    expect(calendar.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: 'fitting', source_id: fittingId, event_type: 'fitting' }),
+        expect.objectContaining({
+          source: 'reservation',
+          source_id: reservation.reservationId,
+          event_type: 'pickup',
+        }),
+        expect.objectContaining({
+          source: 'reservation',
+          source_id: reservation.reservationId,
+          event_type: 'return',
+        }),
+      ]),
+    );
+    expect(calendar.events.every((event) => event.customer_name === 'BE8 Customer')).toBe(true);
+
+    await expect(
+      getOperationalCalendar(operationsContext(seed), {
+        start: seed.todayStart.toISOString(),
+        end: plus(seed.todayStart, 63 * 24),
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+
+  it('derives bounded Dashboard fitting today/upcoming/pending-review counts from authoritative appointments', async () => {
+    const seed = await seedWorkspace('dashboard');
+    await insertFitting(seed, {
+      startsAt: plus(seed.todayStart, 10),
+      endsAt: plus(seed.todayStart, 11),
+    });
+    await insertFitting(seed, {
+      startsAt: plus(seed.todayStart, 34),
+      endsAt: plus(seed.todayStart, 35),
+    });
+
+    const summary = await getDashboardFittingSummary(operationsContext(seed));
+    expect(summary.fittings_today).toBe(1);
+    expect(summary.fittings_upcoming).toBe(1);
+    expect(summary.fittings_pending_review).toBeGreaterThanOrEqual(1);
+    expect(Date.parse(summary.window.upcoming_end) - Date.parse(summary.window.today_start)).toBe(
+      8 * 24 * 60 * 60 * 1_000,
+    );
+  });
+
+  it('keeps preference-only fittings out of garment availability while guaranteed allocations block with a public-safe fitting reason', async () => {
+    const seed = await seedWorkspace('availability');
+    await insertFitting(seed, {
+      startsAt: plus(seed.todayStart, 10),
+      endsAt: plus(seed.todayStart, 11),
+      guaranteed: false,
+    });
+    await insertFitting(seed, {
+      startsAt: plus(seed.todayStart, 34),
+      endsAt: plus(seed.todayStart, 35),
+      guaranteed: true,
+    });
+
+    const slots = await computeAvailability(
+      seed.storefrontSlug,
+      seed.variantId,
+      seed.todayStart.toISOString(),
+      plus(seed.todayStart, 48),
+    );
+    expect(slots).not.toBeNull();
+    if (!slots) throw new Error('Expected public availability slots.');
+    expect(slots[0]).toMatchObject({ available_units: 1, blocking_reasons: [] });
+    expect(slots[1]).toMatchObject({ available_units: 0 });
+    expect(slots[1]?.blocking_reasons).toContain('fitting');
+    expect(JSON.stringify(slots)).not.toContain('BE8 Customer');
+  });
+
+  it('central Payments distinguishes reservation and fitting finance without exposing evidence objects', async () => {
+    const seed = await seedWorkspace('payments');
+    const reservation = await insertReservation(seed, {
+      pickupAt: plus(seed.todayStart, 12),
+      dueAt: plus(seed.todayStart, 36),
+      withPayment: true,
+    });
+    const fittingId = await insertFitting(seed, {
+      startsAt: plus(seed.todayStart, 58),
+      endsAt: plus(seed.todayStart, 59),
+      feeMinor: 500,
+    });
+    const fittingPaymentId = await withAdmin(async (client) =>
+      requireId(
+        (
+          await client.query<{ id: string }>(
+            `INSERT INTO payment
+               (tenant_id,fitting_id,payment_method_id,amount_minor,currency,status,business_key)
+             VALUES ($1,$2,$3,500,'PHP','pending',$4) RETURNING id`,
+            [seed.tenantId, fittingId, seed.paymentMethodId, `be8-fit-payment:${fittingId}`],
+          )
+        ).rows,
+        'fitting payment',
+      ),
+    );
+
+    const payments = await getCentralPayments(
+      {
+        tenantId: seed.tenantId,
+        branchId: seed.branchId,
+        principalId: seed.principalId,
+        permissionCodes: ['payments.view'],
+      },
+      {
+        start: plus(seed.todayStart, -24),
+        end: plus(seed.todayStart, 24),
+        limit: 50,
+      },
+    );
+    expect(payments.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: reservation.paymentId,
+          source: 'reservation',
+          reservation_id: reservation.reservationId,
+          fitting_id: null,
+        }),
+        expect.objectContaining({
+          id: fittingPaymentId,
+          source: 'fitting',
+          reservation_id: null,
+          fitting_id: fittingId,
+        }),
+      ]),
+    );
+    expect(JSON.stringify(payments)).not.toContain('file_id');
+    expect(JSON.stringify(payments)).not.toContain('storage_key');
+
+    await expect(
+      getCentralPayments(
+        {
+          tenantId: seed.tenantId,
+          branchId: seed.branchId,
+          principalId: seed.principalId,
+          permissionCodes: [],
+        },
+        { start: plus(seed.todayStart, -24), end: plus(seed.todayStart, 24), limit: 50 },
+      ),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
