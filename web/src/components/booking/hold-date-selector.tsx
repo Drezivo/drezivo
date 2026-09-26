@@ -1,14 +1,17 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import type { CatalogItemDetail } from '@drezivo/contracts';
-import { publicApiClient } from '@/lib/api-client';
+
+import { BookingSteps } from '@/components/booking/booking-steps';
 import { exchangeGuestCapability } from '@/lib/capability';
+import { publicApiClient } from '@/lib/api-client';
+import { formatPhp, formatPhpPerUnit } from '@/lib/money';
 import { useSubmitGuard } from '@/lib/use-submit-guard';
-import { Button } from '@/components/ui/button';
-import { formatPhp } from '@/lib/money';
+
+type CatalogItemDetail = NonNullable<Awaited<ReturnType<typeof publicApiClient.getCatalogItem>>>;
 
 function formatMonthParam(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -47,6 +50,14 @@ function buildMonthGrid(visibleMonth: Date): (Date | null)[] {
   return cells;
 }
 
+function formatDisplayDate(date: Date): string {
+  return new Intl.DateTimeFormat('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date);
+}
+
 const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat('en-PH', {
   month: 'long',
   year: 'numeric',
@@ -60,16 +71,10 @@ interface HoldDateSelectorProps {
 }
 
 /**
- * THE reference booking step: availability + date selection, ending in a
- * hold POST. Every later step in this flow (details, review) is copied from
- * this component's pattern — same `useSubmitGuard` usage, same "server is
- * the only source of truth for price" discipline, same capability-exchange
- * handoff.
- *
- * Availability here is advisory only (Drezivo-TRD.md §5): a day shown green
- * can still lose a capacity race to another customer between this render and
- * the hold POST. The hold response — not this calendar — is the actual
- * capacity claim, enforced by a database exclusion constraint server-side.
+ * Availability remains advisory. Neutral dates are intentionally transparent,
+ * selected dates use the storefront's light-gold selection token, and blocked
+ * dates use the public not-available treatment. The hold request remains the
+ * authoritative capacity claim.
  */
 export function HoldDateSelector({ storeSlug, item, size }: HoldDateSelectorProps) {
   const router = useRouter();
@@ -98,10 +103,6 @@ export function HoldDateSelector({ storeSlug, item, size }: HoldDateSelectorProp
       throw new Error('Select a rental start date first.');
     }
 
-    // Step 1 of the guest hold transaction (Drezivo-TRD.md §5 "Hold
-    // transaction"): this call locks the physical asset for these dates and
-    // starts the 15-minute hold window. The server recomputes price and
-    // validates the dates — this component never sends a total.
     const hold = await publicApiClient.createHold(
       storeSlug,
       {
@@ -114,140 +115,225 @@ export function HoldDateSelector({ storeSlug, item, size }: HoldDateSelectorProp
       idempotencyKey,
     );
 
-    // Exchange the one-time capability secret for an HttpOnly cookie right
-    // away. It is never stored in component state, a URL, or localStorage
-    // beyond this single call — see src/lib/capability.ts for why.
     await exchangeGuestCapability(hold.capabilityToken);
-
     return hold;
   });
 
   async function handleContinue() {
     const hold = await submit();
-    if (!hold) return; // Guard dropped a duplicate tap, or the attempt threw and was surfaced via `error`.
+    if (!hold) return;
     router.push(`/s/${storeSlug}/book/${item.id}/details?rid=${hold.reservationId}`);
   }
 
   function handleSelectDate(date: Date) {
     setPickupDate(date);
-    // The user changed the underlying intent (a different start date), so
-    // the next hold attempt must use a fresh idempotency key — reusing the
-    // old key here could make the server treat this new selection as a
-    // retry of the previous one.
     resetIntent();
+  }
+
+  function handleClose() {
+    router.push(`/s/${storeSlug}/items/${item.id}`);
   }
 
   const monthCells = buildMonthGrid(visibleMonth);
 
   return (
-    <div className="rounded-lg border border-border bg-surface p-6">
-      <h2 className="font-display text-lg font-semibold text-foreground">Select Rental Dates</h2>
-      <p className="mt-1 text-sm text-muted">
-        Choose your preferred start date. Only available dates can be selected.
-      </p>
+    <div className="fixed inset-0 z-50 flex justify-end bg-storefront-overlay backdrop-blur-[1px]">
+      <button
+        type="button"
+        aria-label="Close date selection"
+        className="absolute inset-0 cursor-default"
+        onClick={handleClose}
+      />
 
-      <div className="mt-5 flex items-center justify-between">
-        <button
-          type="button"
-          aria-label="Previous month"
-          onClick={() =>
-            setVisibleMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))
-          }
-          className="rounded-md border border-border px-3 py-1.5 text-sm"
-        >
-          ‹
-        </button>
-        <p className="font-medium text-foreground">{MONTH_LABEL_FORMATTER.format(visibleMonth)}</p>
-        <button
-          type="button"
-          aria-label="Next month"
-          onClick={() =>
-            setVisibleMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1))
-          }
-          className="rounded-md border border-border px-3 py-1.5 text-sm"
-        >
-          ›
-        </button>
-      </div>
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label="Select rental dates"
+        className="relative z-10 flex h-full w-full max-w-lg flex-col overflow-y-auto bg-storefront-paper shadow-2xl"
+      >
+        <div className="border-b border-storefront-line px-6 py-6 sm:px-8">
+          <div className="flex items-start justify-between gap-5">
+            <div className="flex min-w-0 items-center gap-4">
+              <div className="relative h-16 w-14 shrink-0 overflow-hidden rounded-md bg-storefront-soft">
+                {item.images[0] ? (
+                  <Image src={item.images[0]} alt="" fill sizes="56px" className="object-cover" />
+                ) : null}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate font-display text-xl font-semibold text-storefront-ink">
+                  {item.name}
+                </p>
+                <p className="mt-1 text-sm text-storefront-muted">
+                  {item.categoryName} · {formatPhpPerUnit(item.priceDecimal, item.rentalUnitLabel)}
+                </p>
+                <p className="mt-1 text-xs text-storefront-muted">
+                  Security Deposit: {formatPhp(item.securityDepositDecimal)} refundable
+                </p>
+              </div>
+            </div>
 
-      <div className="mt-4 grid grid-cols-7 gap-1 text-center text-xs text-muted">
-        {WEEKDAY_LABELS.map((label) => (
-          <span key={label}>{label}</span>
-        ))}
-      </div>
-      <div className="mt-1 grid grid-cols-7 gap-1">
-        {monthCells.map((date, index) => {
-          if (!date) return <span key={`blank-${index}`} />;
-
-          const iso = toIsoDate(date);
-          const isPast = date < today;
-          const isUnavailable = unavailableDates.has(iso);
-          const isSelected = pickupDate ? toIsoDate(pickupDate) === iso : false;
-          const isInRange =
-            pickupDate && returnDate ? date > pickupDate && date < returnDate : false;
-          const isDisabled = isPast || isUnavailable;
-
-          return (
             <button
-              key={iso}
               type="button"
-              disabled={isDisabled}
-              onClick={() => handleSelectDate(date)}
-              aria-pressed={isSelected}
-              className={`aspect-square rounded-full text-sm ${
-                isSelected
-                  ? 'bg-primary text-primary-foreground'
-                  : isInRange
-                    ? 'bg-primary/10 text-foreground'
-                    : isDisabled
-                      ? 'text-muted/40 line-through'
-                      : 'text-foreground hover:bg-border'
-              }`}
+              onClick={handleClose}
+              aria-label="Close"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-2xl text-storefront-ink transition hover:bg-storefront-soft"
             >
-              {date.getDate()}
+              ×
             </button>
-          );
-        })}
-      </div>
+          </div>
 
-      <div className="mt-4 flex items-center gap-4 text-xs text-muted">
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-primary" aria-hidden="true" /> Selected
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-muted/30" aria-hidden="true" /> Not available
-        </span>
-      </div>
+          <div className="mt-6">
+            <BookingSteps current={1} />
+          </div>
+        </div>
 
-      {pickupDate && returnDate ? (
-        <div className="mt-5 rounded-md border border-border bg-background p-4 text-sm">
-          <p className="font-medium text-foreground">
-            {toIsoDate(pickupDate)} → {toIsoDate(returnDate)}
+        <div className="flex-1 px-6 py-7 sm:px-8">
+          <h1 className="font-display text-3xl font-semibold text-storefront-ink">
+            Select Rental Dates
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-storefront-muted">
+            Choose your preferred rental period. Dates without a color are currently open for
+            selection.
           </p>
-          <p className="mt-1 text-muted">
-            {item.rentalDurationDays} day{item.rentalDurationDays === 1 ? '' : 's'} · Rental fee{' '}
-            {formatPhp(item.priceDecimal)} · Security deposit {formatPhp(item.securityDepositDecimal)}
+
+          <div className="mt-6 rounded-md border border-storefront-line bg-storefront-paper p-4">
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                aria-label="Previous month"
+                onClick={() =>
+                  setVisibleMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))
+                }
+                className="grid h-11 w-11 place-items-center rounded-md text-2xl text-storefront-ink transition hover:bg-storefront-soft"
+              >
+                ‹
+              </button>
+              <p className="font-semibold text-storefront-ink">
+                {MONTH_LABEL_FORMATTER.format(visibleMonth)}
+              </p>
+              <button
+                type="button"
+                aria-label="Next month"
+                onClick={() =>
+                  setVisibleMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1))
+                }
+                className="grid h-11 w-11 place-items-center rounded-md text-2xl text-storefront-ink transition hover:bg-storefront-soft"
+              >
+                ›
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-7 gap-2 text-center text-xs font-medium text-storefront-muted">
+              {WEEKDAY_LABELS.map((label) => (
+                <span key={label} className="py-1">
+                  {label}
+                </span>
+              ))}
+            </div>
+
+            <div className="mt-1 grid grid-cols-7 gap-2">
+              {monthCells.map((date, index) => {
+                if (!date) return <span key={`blank-${index}`} className="aspect-square" />;
+
+                const iso = toIsoDate(date);
+                const isPast = date < today;
+                const isUnavailable = unavailableDates.has(iso);
+                const isSelected =
+                  pickupDate && returnDate ? date >= pickupDate && date <= returnDate : false;
+                const isDisabled = isPast || isUnavailable;
+
+                return (
+                  <button
+                    key={iso}
+                    type="button"
+                    disabled={isDisabled}
+                    onClick={() => handleSelectDate(date)}
+                    aria-pressed={Boolean(isSelected)}
+                    aria-label={`${formatDisplayDate(date)}${
+                      isUnavailable ? ', not available' : isSelected ? ', selected' : ''
+                    }`}
+                    className={`aspect-square rounded-full border text-sm transition ${
+                      isUnavailable
+                        ? 'border-storefront-unavailable bg-storefront-unavailable text-storefront-unavailable-ink'
+                        : isSelected
+                          ? 'border-storefront-selected bg-storefront-selected text-storefront-selected-ink'
+                          : isPast
+                            ? 'border-transparent bg-transparent text-storefront-muted/35'
+                            : 'border-transparent bg-transparent text-storefront-ink hover:border-storefront-line hover:bg-storefront-soft'
+                    }`}
+                  >
+                    {date.getDate()}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-5 flex flex-wrap items-center gap-5 border-t border-storefront-line pt-4 text-xs text-storefront-muted">
+              <span className="flex items-center gap-2">
+                <span
+                  className="h-3 w-3 rounded-full border border-storefront-selected bg-storefront-selected"
+                  aria-hidden="true"
+                />
+                Selected
+              </span>
+              <span className="flex items-center gap-2">
+                <span
+                  className="h-3 w-3 rounded-full border border-storefront-unavailable bg-storefront-unavailable"
+                  aria-hidden="true"
+                />
+                Not Available
+              </span>
+            </div>
+          </div>
+
+          {pickupDate && returnDate ? (
+            <div className="mt-4 rounded-md border border-storefront-line bg-storefront-soft p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-storefront-ink">Selected Dates</p>
+                  <p className="mt-1 text-sm text-storefront-ink">
+                    {formatDisplayDate(pickupDate)} → {formatDisplayDate(returnDate)}
+                  </p>
+                  <p className="mt-1 text-xs text-storefront-muted">
+                    {item.rentalDurationDays} day{item.rentalDurationDays === 1 ? '' : 's'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPickupDate(null);
+                    resetIntent();
+                  }}
+                  className="inline-flex min-h-11 items-center text-sm font-semibold text-storefront-brand hover:underline"
+                >
+                  Edit
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {error ? (
+            <p role="alert" className="mt-4 text-sm text-danger">
+              {error.message}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="sticky bottom-0 border-t border-storefront-line bg-storefront-paper px-6 py-5 sm:px-8">
+          <button
+            type="button"
+            disabled={!pickupDate || isPending}
+            onClick={handleContinue}
+            className="inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-md bg-storefront-brand px-5 text-sm font-semibold text-storefront-paper transition hover:bg-storefront-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isPending ? 'Reserving…' : 'Continue'}
+            {!isPending ? <span aria-hidden="true">→</span> : null}
+          </button>
+          <p className="mt-3 text-center text-xs text-storefront-muted">
+            Availability can change until your reservation hold is created.
           </p>
         </div>
-      ) : null}
-
-      {error ? (
-        <p role="alert" className="mt-4 text-sm text-danger">
-          {error.message}
-        </p>
-      ) : null}
-
-      <Button
-        className="mt-6 w-full"
-        disabled={!pickupDate || isPending}
-        isLoading={isPending}
-        onClick={handleContinue}
-      >
-        Continue
-      </Button>
-      <p className="mt-3 text-center text-xs text-muted">
-        This reserves the item for 15 minutes while you complete your details.
-      </p>
+      </aside>
     </div>
   );
 }

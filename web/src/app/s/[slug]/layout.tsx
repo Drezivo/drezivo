@@ -33,7 +33,7 @@ export default async function StorefrontLayout({ children, params }: StorefrontL
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="storefront-shell flex min-h-screen flex-col">
       <StoreHeader store={store} />
       <main className="flex-1">{children}</main>
       <StoreFooter store={store} />
