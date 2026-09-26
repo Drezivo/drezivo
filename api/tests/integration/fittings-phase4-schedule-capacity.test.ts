@@ -115,7 +115,9 @@ async function insertPreferenceFitting(
     feeMinor: 0,
     internalNote: null,
     businessKey: `test:${fittingId}`,
-    garments: [{ lineId: randomUUID(), variantId: seed.variantId, guaranteed: false }],
+    garments: [
+      { lineId: randomUUID(), variantId: seed.variantId, guaranteed: false, assetId: null },
+    ],
     chargeId: randomUUID(),
   });
   return fittingId;

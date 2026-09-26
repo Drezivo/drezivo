@@ -156,11 +156,15 @@ export const fittingLine = pgTable(
     variantId: uuid('variant_id').notNull(),
     assetId: uuid('asset_id'),
     garmentGuaranteed: boolean('garment_guaranteed').notNull(),
+    removedAt: timestamp('removed_at', { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
     unique('fitting_line_tenant_id_id_key').on(table.tenantId, table.id),
     index('fitting_line_tenant_fitting_id_idx').on(table.tenantId, table.fittingId, table.id),
+    index('fitting_line_tenant_fitting_active_idx')
+      .on(table.tenantId, table.fittingId, table.id)
+      .where(sql`${table.removedAt} IS NULL`),
     index('fitting_line_tenant_variant_fitting_idx').on(
       table.tenantId,
       table.variantId,

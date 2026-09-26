@@ -94,6 +94,399 @@ export async function readFittingVariantsForCreate(
   return result.rows;
 }
 
+export interface LockedFittingAssetRow {
+  id: string;
+  variant_id: string;
+}
+
+export interface LockedFittingAppointmentRow {
+  id: string;
+  status: 'pending' | 'confirmed' | 'completed' | 'rejected' | 'cancelled' | 'no_show';
+  starts_at: Date;
+  ends_at: Date;
+  timezone_snapshot: string;
+  version: string | number;
+  before_start: boolean;
+}
+
+export interface ActiveFittingLineRow {
+  id: string;
+  variant_id: string;
+  asset_id: string | null;
+  garment_guaranteed: boolean;
+}
+
+/** Locks all eligible serialized garments for the requested variants in deterministic order. */
+export async function lockEligibleFittingAssets(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; variantIds: string[] },
+): Promise<LockedFittingAssetRow[]> {
+  if (input.variantIds.length === 0) return [];
+  const result = await client.query<LockedFittingAssetRow>(
+    `SELECT pa.id, pa.variant_id
+       FROM physical_asset pa
+       JOIN product_variant pv
+         ON pv.tenant_id = pa.tenant_id AND pv.id = pa.variant_id
+       JOIN product p
+         ON p.tenant_id = pv.tenant_id AND p.id = pv.product_id
+       LEFT JOIN category c
+         ON c.tenant_id = p.tenant_id AND c.id = p.category_id
+      WHERE pa.tenant_id = $1
+        AND pa.branch_id = $2
+        AND pa.variant_id = ANY($3::uuid[])
+        AND pa.lifecycle_status = 'active'
+        AND pa.readiness = 'ready'
+        AND pv.status = 'active'
+        AND p.status = 'active'
+        AND (p.category_id IS NULL OR c.status = 'active')
+      ORDER BY pa.id ASC
+      FOR UPDATE OF pa`,
+    [input.tenantId, input.branchId, input.variantIds],
+  );
+  return result.rows;
+}
+
+/** Chooses a locked asset that has no overlapping blocking allocation, optionally ignoring one old claim. */
+export async function chooseAvailableFittingAsset(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    variantId: string;
+    candidateAssetIds: string[];
+    startsAt: string;
+    endsAt: string;
+    excludedAssetIds: string[];
+    ignoredAllocationId?: string;
+    preferredAssetId?: string | null;
+  },
+): Promise<string | null> {
+  if (input.candidateAssetIds.length === 0) return null;
+  const result = await client.query<{ id: string }>(
+    `SELECT pa.id
+       FROM physical_asset pa
+      WHERE pa.tenant_id = $1
+        AND pa.branch_id = $2
+        AND pa.variant_id = $3
+        AND pa.id = ANY($4::uuid[])
+        AND NOT (pa.id = ANY($7::uuid[]))
+        AND pa.lifecycle_status = 'active'
+        AND pa.readiness = 'ready'
+        AND NOT EXISTS (
+          SELECT 1
+            FROM asset_allocation aa
+           WHERE aa.tenant_id = pa.tenant_id
+             AND aa.branch_id = pa.branch_id
+             AND aa.asset_id = pa.id
+             AND aa.is_blocking
+             AND ($8::uuid IS NULL OR aa.id <> $8::uuid)
+             AND aa.period && tstzrange($5::timestamptz, $6::timestamptz, '[)')
+        )
+      ORDER BY (pa.id = $9::uuid) DESC, pa.id ASC
+      LIMIT 1`,
+    [
+      input.tenantId,
+      input.branchId,
+      input.variantId,
+      input.candidateAssetIds,
+      input.startsAt,
+      input.endsAt,
+      input.excludedAssetIds,
+      input.ignoredAllocationId ?? null,
+      input.preferredAssetId ?? null,
+    ],
+  );
+  return result.rows[0]?.id ?? null;
+}
+
+export async function insertFittingAssetAllocation(
+  client: PoolClient,
+  input: {
+    allocationId: string;
+    tenantId: string;
+    branchId: string;
+    assetId: string;
+    fittingLineId: string;
+    startsAt: string;
+    endsAt: string;
+  },
+): Promise<void> {
+  await client.query(
+    `INSERT INTO asset_allocation
+       (id, tenant_id, branch_id, asset_id, fitting_line_id, kind, period, is_blocking)
+     VALUES ($1,$2,$3,$4,$5,'fitting',tstzrange($6::timestamptz,$7::timestamptz,'[)'),true)`,
+    [
+      input.allocationId,
+      input.tenantId,
+      input.branchId,
+      input.assetId,
+      input.fittingLineId,
+      input.startsAt,
+      input.endsAt,
+    ],
+  );
+}
+
+export async function lockFittingAppointmentForMutation(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; fittingId: string },
+): Promise<LockedFittingAppointmentRow | null> {
+  const result = await client.query<LockedFittingAppointmentRow>(
+    `SELECT id, status, lower(period) AS starts_at, upper(period) AS ends_at,
+            timezone_snapshot, version, lower(period) > statement_timestamp() AS before_start
+       FROM fitting_appointment
+      WHERE tenant_id = $1 AND branch_id = $2 AND id = $3::uuid
+      LIMIT 1
+      FOR UPDATE`,
+    [input.tenantId, input.branchId, input.fittingId],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function lockActiveFittingLines(
+  client: PoolClient,
+  input: { tenantId: string; fittingId: string },
+): Promise<ActiveFittingLineRow[]> {
+  const result = await client.query<ActiveFittingLineRow>(
+    `SELECT id, variant_id, asset_id, garment_guaranteed
+       FROM fitting_line
+      WHERE tenant_id = $1 AND fitting_id = $2::uuid AND removed_at IS NULL
+      ORDER BY created_at ASC, id ASC
+      FOR UPDATE`,
+    [input.tenantId, input.fittingId],
+  );
+  return result.rows;
+}
+
+export async function readBlockingFittingAssetAllocation(
+  client: PoolClient,
+  input: { tenantId: string; fittingLineId: string },
+): Promise<{ id: string; asset_id: string } | null> {
+  const result = await client.query<{ id: string; asset_id: string }>(
+    `SELECT id, asset_id
+       FROM asset_allocation
+      WHERE tenant_id = $1 AND fitting_line_id = $2::uuid AND is_blocking
+      LIMIT 1
+      FOR UPDATE`,
+    [input.tenantId, input.fittingLineId],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function moveFittingCapacityClaim(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    fittingId: string;
+    newAllocationId: string;
+    startsAt: string;
+    endsAt: string;
+  },
+): Promise<string | null> {
+  const current = await client.query<{ id: string }>(
+    `SELECT id
+       FROM fitting_slot_allocation
+      WHERE tenant_id = $1 AND fitting_id = $2::uuid AND is_blocking
+      LIMIT 1
+      FOR UPDATE`,
+    [input.tenantId, input.fittingId],
+  );
+  const allocationId = current.rows[0]?.id;
+  if (!allocationId) return null;
+
+  const candidate = await client.query<{ id: string }>(
+    `SELECT fcs.id
+       FROM fitting_capacity_slot fcs
+      WHERE fcs.tenant_id = $1
+        AND fcs.branch_id = $2
+        AND fcs.active
+        AND NOT EXISTS (
+          SELECT 1
+            FROM fitting_slot_allocation other
+           WHERE other.tenant_id = fcs.tenant_id
+             AND other.slot_id = fcs.id
+             AND other.is_blocking
+             AND other.id <> $3::uuid
+             AND other.period && tstzrange($4::timestamptz,$5::timestamptz,'[)')
+        )
+      ORDER BY fcs.slot_number ASC, fcs.id ASC
+      LIMIT 1
+      FOR UPDATE OF fcs`,
+    [input.tenantId, input.branchId, allocationId, input.startsAt, input.endsAt],
+  );
+  const slotId = candidate.rows[0]?.id;
+  if (!slotId) return null;
+
+  await client.query(
+    `UPDATE fitting_slot_allocation
+        SET is_blocking = false, released_at = statement_timestamp()
+      WHERE tenant_id = $1 AND fitting_id = $2::uuid AND id = $3::uuid AND is_blocking`,
+    [input.tenantId, input.fittingId, allocationId],
+  );
+  await client.query(
+    `INSERT INTO fitting_slot_allocation
+       (id, tenant_id, slot_id, fitting_id, period, is_blocking)
+     VALUES ($1,$2,$3,$4,tstzrange($5::timestamptz,$6::timestamptz,'[)'),true)`,
+    [input.newAllocationId, input.tenantId, slotId, input.fittingId, input.startsAt, input.endsAt],
+  );
+  return slotId;
+}
+
+export async function moveFittingAssetClaim(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    fittingLineId: string;
+    allocationId: string;
+    newAllocationId: string;
+    assetId: string;
+    startsAt: string;
+    endsAt: string;
+  },
+): Promise<void> {
+  await client.query(
+    `UPDATE asset_allocation
+        SET is_blocking = false, released_at = statement_timestamp()
+      WHERE tenant_id = $1 AND fitting_line_id = $2::uuid AND id = $3::uuid AND is_blocking`,
+    [input.tenantId, input.fittingLineId, input.allocationId],
+  );
+  await client.query(
+    `UPDATE fitting_line
+        SET asset_id = $3::uuid
+      WHERE tenant_id = $1 AND id = $2::uuid AND removed_at IS NULL`,
+    [input.tenantId, input.fittingLineId, input.assetId],
+  );
+  await insertFittingAssetAllocation(client, {
+    allocationId: input.newAllocationId,
+    tenantId: input.tenantId,
+    branchId: input.branchId,
+    assetId: input.assetId,
+    fittingLineId: input.fittingLineId,
+    startsAt: input.startsAt,
+    endsAt: input.endsAt,
+  });
+}
+
+export async function updateFittingPeriodAndVersion(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    fittingId: string;
+    version: number;
+    startsAt: string;
+    endsAt: string;
+    timezoneSnapshot: string;
+  },
+): Promise<number | null> {
+  const result = await client.query<{ version: number }>(
+    `UPDATE fitting_appointment
+        SET period = tstzrange($4::timestamptz,$5::timestamptz,'[)'),
+            timezone_snapshot = $6,
+            version = version + 1
+      WHERE tenant_id = $1 AND id = $2::uuid AND version = $3
+        AND status IN ('pending','confirmed')
+      RETURNING version`,
+    [
+      input.tenantId,
+      input.fittingId,
+      input.version,
+      input.startsAt,
+      input.endsAt,
+      input.timezoneSnapshot,
+    ],
+  );
+  return result.rows[0]?.version ?? null;
+}
+
+export async function insertFittingLine(
+  client: PoolClient,
+  input: {
+    lineId: string;
+    tenantId: string;
+    fittingId: string;
+    variantId: string;
+    guaranteed: boolean;
+    assetId: string | null;
+  },
+): Promise<void> {
+  await client.query(
+    `INSERT INTO fitting_line
+       (id, tenant_id, fitting_id, variant_id, asset_id, garment_guaranteed)
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [
+      input.lineId,
+      input.tenantId,
+      input.fittingId,
+      input.variantId,
+      input.assetId,
+      input.guaranteed,
+    ],
+  );
+}
+
+export async function retireFittingLine(
+  client: PoolClient,
+  input: { tenantId: string; fittingLineId: string },
+): Promise<void> {
+  await client.query(
+    `UPDATE asset_allocation
+        SET is_blocking = false, released_at = statement_timestamp()
+      WHERE tenant_id = $1 AND fitting_line_id = $2::uuid AND is_blocking`,
+    [input.tenantId, input.fittingLineId],
+  );
+  await client.query(
+    `UPDATE fitting_line
+        SET removed_at = statement_timestamp()
+      WHERE tenant_id = $1 AND id = $2::uuid AND removed_at IS NULL`,
+    [input.tenantId, input.fittingLineId],
+  );
+}
+
+export async function bumpFittingVersion(
+  client: PoolClient,
+  input: { tenantId: string; fittingId: string; version: number },
+): Promise<number | null> {
+  const result = await client.query<{ version: number }>(
+    `UPDATE fitting_appointment
+        SET version = version + 1
+      WHERE tenant_id = $1 AND id = $2::uuid AND version = $3
+        AND status IN ('pending','confirmed')
+      RETURNING version`,
+    [input.tenantId, input.fittingId, input.version],
+  );
+  return result.rows[0]?.version ?? null;
+}
+
+export async function appendFittingMutationAudit(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    actorKey: string;
+    action: 'fitting.rescheduled' | 'fitting.garment_changed';
+    fittingId: string;
+    branchId: string;
+    requestId: string;
+    version: number;
+  },
+): Promise<void> {
+  await client.query(
+    `INSERT INTO audit_event
+       (tenant_id, actor_kind, actor_key, action, entity_type, entity_id,
+        redacted_summary, request_id, occurred_at, outcome)
+     VALUES ($1,'staff',$2,$3,'fitting',$4::uuid,$5::jsonb,$6,statement_timestamp(),'succeeded')`,
+    [
+      input.tenantId,
+      input.actorKey,
+      input.action,
+      input.fittingId,
+      JSON.stringify({ branch_id: input.branchId, version: input.version }),
+      input.requestId,
+    ],
+  );
+}
+
 export async function validateFittingScheduleForCreate(
   client: PoolClient,
   input: { tenantId: string; branchId: string; startsAt: string; endsAt: string },
@@ -215,7 +608,12 @@ export async function createFittingAppointmentBase(
     feeMinor: number;
     internalNote: string | null;
     businessKey: string;
-    garments: Array<{ lineId: string; variantId: string; guaranteed: boolean }>;
+    garments: Array<{
+      lineId: string;
+      variantId: string;
+      guaranteed: boolean;
+      assetId: string | null;
+    }>;
     chargeId: string;
   },
 ): Promise<void> {
@@ -242,8 +640,8 @@ export async function createFittingAppointmentBase(
   for (const line of input.garments) {
     await client.query(
       `INSERT INTO fitting_line (id, tenant_id, fitting_id, variant_id, asset_id, garment_guaranteed)
-       VALUES ($1,$2,$3,$4,NULL,$5)`,
-      [line.lineId, input.tenantId, input.fittingId, line.variantId, line.guaranteed],
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [line.lineId, input.tenantId, input.fittingId, line.variantId, line.assetId, line.guaranteed],
     );
   }
 

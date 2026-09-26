@@ -71,6 +71,7 @@ export async function listFittingsReadModel(
           LEFT JOIN physical_asset pa_search ON pa_search.tenant_id = fl_search.tenant_id AND pa_search.id = fl_search.asset_id
          WHERE fl_search.tenant_id = fa.tenant_id
            AND fl_search.fitting_id = fa.id
+           AND fl_search.removed_at IS NULL
            AND (
              lower(p_search.name) LIKE lower(${search}) ESCAPE '\\'
              OR lower(p_search.code) LIKE lower(${search}) ESCAPE '\\'
@@ -161,7 +162,9 @@ function baseSelect(extra = ''): string {
        JOIN product_variant pv ON pv.tenant_id = fl.tenant_id AND pv.id = fl.variant_id
        JOIN product p ON p.tenant_id = pv.tenant_id AND p.id = pv.product_id
        LEFT JOIN physical_asset pa ON pa.tenant_id = fl.tenant_id AND pa.id = fl.asset_id
-       WHERE fl.tenant_id = fa.tenant_id AND fl.fitting_id = fa.id
+       WHERE fl.tenant_id = fa.tenant_id
+         AND fl.fitting_id = fa.id
+         AND fl.removed_at IS NULL
      ) garments ON true
      LEFT JOIN LATERAL (
        SELECT jsonb_build_object(
@@ -202,21 +205,36 @@ function orderBy(sort: FittingListSort): string {
 }
 
 function cursorPredicate(sort: FittingListSort, key: string, id: string): string {
-  if (sort === 'starts_at_desc') return `(lower(fa.period), fa.id) < (${key}::timestamptz, ${id}::uuid)`;
+  if (sort === 'starts_at_desc')
+    return `(lower(fa.period), fa.id) < (${key}::timestamptz, ${id}::uuid)`;
   if (sort === 'created_desc') return `(fa.created_at, fa.id) < (${key}::timestamptz, ${id}::uuid)`;
   return `(lower(fa.period), fa.id) > (${key}::timestamptz, ${id}::uuid)`;
 }
 
 function encodeCursor(row: FittingListReadRow, sort: FittingListSort): string {
   const key = sort === 'created_desc' ? row.created_at : row.starts_at;
-  return Buffer.from(JSON.stringify({ sort, key: key.toISOString(), fittingId: row.fitting_id }), 'utf8').toString('base64url');
+  return Buffer.from(
+    JSON.stringify({ sort, key: key.toISOString(), fittingId: row.fitting_id }),
+    'utf8',
+  ).toString('base64url');
 }
 
-function decodeCursor(cursor: string | undefined, expectedSort: FittingListSort): FittingListCursor | null {
+function decodeCursor(
+  cursor: string | undefined,
+  expectedSort: FittingListSort,
+): FittingListCursor | null {
   if (!cursor) return null;
   try {
-    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<FittingListCursor>;
-    if (parsed.sort !== expectedSort || typeof parsed.key !== 'string' || typeof parsed.fittingId !== 'string' || Number.isNaN(new Date(parsed.key).getTime())) throw new Error();
+    const parsed = JSON.parse(
+      Buffer.from(cursor, 'base64url').toString('utf8'),
+    ) as Partial<FittingListCursor>;
+    if (
+      parsed.sort !== expectedSort ||
+      typeof parsed.key !== 'string' ||
+      typeof parsed.fittingId !== 'string' ||
+      Number.isNaN(new Date(parsed.key).getTime())
+    )
+      throw new Error();
     return parsed as FittingListCursor;
   } catch {
     throw new ValidationError('Fitting list cursor is invalid.');

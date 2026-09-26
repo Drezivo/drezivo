@@ -12,6 +12,7 @@ import {
 import type { FailureEnvelope, SuccessEnvelope } from '../../shared/response.js';
 import { withTenantTransaction } from '../../db/client.js';
 import {
+  AssetUnavailableError,
   CapacityConflictError,
   IdempotencyKeyReusedError,
   NotFoundError,
@@ -29,9 +30,12 @@ import {
 import {
   appendFittingCreateAudit,
   claimFittingCapacitySlot,
+  chooseAvailableFittingAsset,
   createFittingAppointmentBase,
   createFittingCustomer,
   ensureFittingCapacitySlots,
+  insertFittingAssetAllocation,
+  lockEligibleFittingAssets,
   lockFittingCreateSettings,
   readFittingCustomerForCreate,
   readFittingVariantsForCreate,
@@ -129,10 +133,54 @@ export async function createStaffFittingCommand(
           'One or more fitting garments are unavailable in this catalogue.',
         );
       }
-      if (request.garments.some((line) => line.garment_mode === 'guaranteed')) {
-        throw new StateConflictError(
-          'Guaranteed fitting garments require the FIT-BE-043 atomic asset claimant.',
-        );
+      const guaranteedVariantIds = [
+        ...new Set(
+          request.garments
+            .filter((line) => line.garment_mode === 'guaranteed')
+            .map((line) => line.variant_id),
+        ),
+      ];
+      const lockedAssets = await lockEligibleFittingAssets(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+        variantIds: guaranteedVariantIds,
+      });
+      const lockedAssetIds = lockedAssets.map((asset) => asset.id);
+      const selectedAssetIds: string[] = [];
+      const resolvedGarments: Array<{
+        variantId: string;
+        guaranteed: boolean;
+        assetId: string | null;
+      }> = [];
+      for (const garment of request.garments) {
+        if (garment.garment_mode === 'preference') {
+          resolvedGarments.push({
+            variantId: garment.variant_id,
+            guaranteed: false,
+            assetId: null,
+          });
+          continue;
+        }
+        const assetId = await chooseAvailableFittingAsset(client, {
+          tenantId: context.tenantId,
+          branchId: context.branchId,
+          variantId: garment.variant_id,
+          candidateAssetIds: lockedAssetIds,
+          startsAt: startsAt.toISOString(),
+          endsAt,
+          excludedAssetIds: selectedAssetIds,
+        });
+        if (!assetId) {
+          throw new AssetUnavailableError(
+            'No eligible physical garment is available to guarantee this fitting.',
+          );
+        }
+        selectedAssetIds.push(assetId);
+        resolvedGarments.push({
+          variantId: garment.variant_id,
+          guaranteed: true,
+          assetId,
+        });
       }
 
       await client.query(`SAVEPOINT ${CREATE_EFFECTS_SAVEPOINT}`);
@@ -141,10 +189,12 @@ export async function createStaffFittingCommand(
       const fittingId = randomUUID();
       const chargeId = randomUUID();
       const capacityAllocationId = randomUUID();
-      const lines = request.garments.map((line) => ({
+      const lines = resolvedGarments.map((line) => ({
         lineId: randomUUID(),
-        variantId: line.variant_id,
-        guaranteed: line.garment_mode === 'guaranteed',
+        allocationId: line.guaranteed ? randomUUID() : null,
+        variantId: line.variantId,
+        guaranteed: line.guaranteed,
+        assetId: line.assetId,
       }));
       await ensureFittingCapacitySlots(client, {
         tenantId: context.tenantId,
@@ -176,6 +226,18 @@ export async function createStaffFittingCommand(
       });
       if (!capacitySlotId) {
         throw new CapacityConflictError('No fitting capacity remains for the requested time.');
+      }
+      for (const line of lines) {
+        if (!line.guaranteed || !line.assetId || !line.allocationId) continue;
+        await insertFittingAssetAllocation(client, {
+          allocationId: line.allocationId,
+          tenantId: context.tenantId,
+          branchId: context.branchId,
+          assetId: line.assetId,
+          fittingLineId: line.lineId,
+          startsAt: startsAt.toISOString(),
+          endsAt,
+        });
       }
       await appendFittingCreateAudit(client, {
         tenantId: context.tenantId,
@@ -221,6 +283,14 @@ export async function createStaffFittingCommand(
           context,
           payloadHash,
           new CapacityConflictError('Fitting capacity was claimed by another appointment.'),
+        );
+      }
+      if (isAssetOverlapViolation(error)) {
+        return finalizeKnownFailure(
+          client,
+          context,
+          payloadHash,
+          new AssetUnavailableError('A guaranteed garment was claimed by another booking.'),
         );
       }
       return finalizeKnownFailure(client, context, payloadHash, error);
@@ -303,7 +373,9 @@ function toCreatedDetail(row: Awaited<ReturnType<typeof readFittingDetailModel>>
           color_label: line.color_label,
         },
         garment_mode: line.garment_guaranteed ? 'guaranteed' : 'preference',
-        assigned_asset: null,
+        assigned_asset: line.garment_guaranteed
+          ? { id: line.asset_id, asset_code: line.asset_code }
+          : null,
       };
     }),
     fee: { fee_minor: String(row.fee_minor), currency: row.currency, payment: null },
@@ -341,13 +413,21 @@ function replayOrThrow(claim: TenantIdempotencyClaim): FittingCreateCommandRespo
 }
 
 function isCapacityOverlapViolation(error: unknown): boolean {
+  return isExclusionViolation(error, 'fitting_slot_allocation_no_overlap');
+}
+
+function isAssetOverlapViolation(error: unknown): boolean {
+  return isExclusionViolation(error, 'asset_allocation_no_overlap');
+}
+
+function isExclusionViolation(error: unknown, constraint: string): boolean {
   return (
     typeof error === 'object' &&
     error !== null &&
     'code' in error &&
     (error as { code?: unknown }).code === '23P01' &&
     'constraint' in error &&
-    (error as { constraint?: unknown }).constraint === 'fitting_slot_allocation_no_overlap'
+    (error as { constraint?: unknown }).constraint === constraint
   );
 }
 
