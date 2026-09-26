@@ -13,12 +13,25 @@ describe("FittingsPage", () => {
       "href",
       "/fittings/schedule"
     );
-    expect(screen.getByRole("button", { name: /New Fitting/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /New Fitting/ })).toBeEnabled();
 
     expect(screen.getByText("Today")).toBeVisible();
     expect(screen.getByText("Upcoming")).toBeVisible();
     expect(screen.getByText("Pending review")).toBeVisible();
-    expect(screen.getByText("Showing 6 of 6 appointments")).toBeVisible();
+    expect(screen.getByText("Page 1 · 10 fittings loaded")).toBeVisible();
+  });
+
+  it("paginates fitting appointments at 10 rows per page", () => {
+    render(<FittingsPage />);
+
+    expect(screen.getAllByRole("button", { name: /Open fitting for/ })).toHaveLength(10);
+    expect(screen.getByRole("button", { name: "Previous page" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+
+    expect(screen.getByText("Page 2 · 10 fittings loaded")).toBeVisible();
+    expect(screen.getAllByRole("button", { name: /Open fitting for/ })).toHaveLength(10);
+    expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
   });
 
   it("filters appointments by customer or garment search and clears the filter", () => {
@@ -28,11 +41,11 @@ describe("FittingsPage", () => {
       target: { value: "Ivory Wedding Gown" },
     });
 
-    expect(screen.getByText("Showing 1 of 6 appointments")).toBeVisible();
+    expect(screen.getByText("Page 1 · 1 fittings loaded")).toBeVisible();
     expect(screen.getByRole("button", { name: /Open fitting for Bianca Flores/ })).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
-    expect(screen.getByText("Showing 6 of 6 appointments")).toBeVisible();
+    expect(screen.getByText("Page 1 · 10 fittings loaded")).toBeVisible();
   });
 
   it("supports status and date filters with a distinct empty filtered state", async () => {
@@ -43,7 +56,7 @@ describe("FittingsPage", () => {
       ctrlKey: false,
     });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Completed" }));
-    expect(screen.getByText("Showing 1 of 6 appointments")).toBeVisible();
+    expect(screen.getByText("Page 1 · 3 fittings loaded")).toBeVisible();
 
     fireEvent.pointerDown(screen.getByRole("button", { name: "All dates" }), {
       button: 0,
@@ -53,7 +66,7 @@ describe("FittingsPage", () => {
     expect(screen.getByRole("heading", { name: "No fittings match these filters" })).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
-    expect(screen.getByText("Showing 6 of 6 appointments")).toBeVisible();
+    expect(screen.getByText("Page 1 · 10 fittings loaded")).toBeVisible();
   });
 
   it("shows date, customer, garment, payment, status, and attention without resource fields", () => {
@@ -120,6 +133,66 @@ describe("FittingsPage", () => {
     expect(within(dialog).getAllByText("No-show").length).toBeGreaterThan(0);
   });
 
+  it("creates one local fitting through the three-step prototype flow", () => {
+    render(<FittingsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "New Fitting" }));
+    let dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText("Local prototype only. Nothing here is saved to the backend.")
+    ).toBeVisible();
+
+    fireEvent.change(within(dialog).getByPlaceholderText("Name, email, or phone..."), {
+      target: { value: "Bianca" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /Bianca Flores/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+
+    dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add Ivory Wedding Gown" }));
+    fireEvent.change(within(dialog).getByLabelText("Garment intent"), {
+      target: { value: "Guaranteed intent" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+
+    dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Bianca Flores")).toBeVisible();
+    expect(within(dialog).getByText("Ivory Wedding Gown")).toBeVisible();
+    expect(within(dialog).getByText("Guaranteed intent")).toBeVisible();
+    expect(within(dialog).getByText("₱300")).toBeVisible();
+
+    const createButton = within(dialog).getByRole("button", { name: "Create local fitting" });
+    fireEvent.click(createButton);
+    fireEvent.click(createButton);
+
+    expect(screen.getByText("Page 1 · 10 fittings loaded")).toBeVisible();
+    const details = screen.getByRole("dialog");
+    expect(within(details).getByText("Guaranteed intent")).toBeVisible();
+    expect(within(details).queryByText(/Asset PROTO-LOCAL/)).not.toBeInTheDocument();
+  });
+
+  it("supports a minimal walk-in customer and no-fee fitting", () => {
+    render(<FittingsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "New Fitting" }));
+    let dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Walk-in customer" }));
+    fireEvent.change(within(dialog).getByPlaceholderText("Full name"), {
+      target: { value: "Local Walk-in" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+
+    dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add Classic Barong" }));
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "This fitting has a fee" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+
+    dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Local Walk-in")).toBeVisible();
+    expect(within(dialog).getByText("No fee")).toBeVisible();
+    expect(within(dialog).getByText("Not required")).toBeVisible();
+  });
+
   it("distinguishes first-use empty, loading, and retryable error states", () => {
     const emptyView = render(<FittingsPage appointments={[]} />);
     expect(screen.getByRole("heading", { name: "No fitting appointments yet" })).toBeVisible();
@@ -127,7 +200,7 @@ describe("FittingsPage", () => {
 
     const loadingView = render(<FittingsPage initialViewState="loading" />);
     expect(screen.getByRole("status", { name: "Loading fittings" })).toBeVisible();
-    expect(screen.queryByText(/Showing \d+ of \d+ appointments/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Page \d+ · \d+ fittings loaded/)).not.toBeInTheDocument();
     loadingView.unmount();
 
     render(<FittingsPage initialViewState="error" />);

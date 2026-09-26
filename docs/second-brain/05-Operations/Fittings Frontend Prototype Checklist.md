@@ -236,12 +236,15 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
     - [x] Row opens Fitting Details Sheet.
     - [x] Desktop rows remain scan-friendly in the responsive implementation.
     - [x] Mobile becomes a compact stacked list in the responsive implementation.
+    - [x] Paginate the filtered appointment list at 15 appointments per page.
   - **Evidence:**
     - `app/src/components/fittings/fittings-page.tsx` renders one responsive appointment list source: stacked two-column appointment rows below `lg`, and a six-column operational row layout at `lg` and above.
     - Visible list fields are limited to date/time, customer, garment summary, fee/payment, appointment status, and attention. Phone, email, payment evidence, measurements, long notes, and all room/staff/resource concepts stay out of the list.
     - Appointment status and payment state use separate badges and separate fixture fields; no payment state mutates appointment state in the frontend.
     - Clicking or keyboard-activating an appointment row opens a minimal `Fitting Details` Sheet preview. Phase 3 remains responsible for the richer details layout.
-    - `app/tests/unit/fittings-page.test.tsx` defines coverage for the list fields, absence of fitting room/staff labels, and row-to-sheet opening.
+    - The frontend fixture now contains 20 synthetic appointments so pagination is visible during review. The filtered result set is paginated at 10 rows per page using the same compact footer language as Reservations: `Page N · X fittings loaded`, with previous/current-page/next controls aligned on the right.
+    - Search/status/date filters apply before pagination and reset the current page to page 1.
+    - `app/tests/unit/fittings-page.test.tsx` defines coverage for the list fields, absence of fitting room/staff labels, row-to-sheet opening, and the 15-row pagination boundary.
     - A real authenticated desktop/360px browser walkthrough is still required before the Phase 2 visual acceptance is considered fully verified.
 
 - [x] **FIT-FE-021 — Add meaningful attention states**
@@ -322,48 +325,55 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
 
 # Phase 4: New Fitting prototype flow
 
-- [ ] **FIT-FE-040 — Define the New Fitting interaction pattern**
+- [x] **FIT-FE-040 — Define the New Fitting interaction pattern**
   - **Acceptance:**
-    - [ ] Choose a route or large Sheet/Dialog based on existing dashboard patterns.
-    - [ ] Keep grouping clear and mobile-friendly.
-    - [ ] Draft reset/restore behavior is intentional.
+    - [x] Choose a route or large Sheet/Dialog based on existing dashboard patterns.
+    - [x] Keep grouping clear and mobile-friendly.
+    - [x] Draft reset/restore behavior is intentional.
+  - **Evidence:** `New Fitting` opens a large right-side Sheet using the existing dashboard overlay language. The flow is split into Appointment → Garments → Review and uses stacked controls below `sm`. Closing or cancelling resets the local draft; refreshing intentionally loses local-only records.
 
-- [ ] **FIT-FE-041 — Add customer selection/input prototype**
+- [x] **FIT-FE-041 — Add customer selection/input prototype**
   - **Acceptance:**
-    - [ ] Existing-customer search uses synthetic fixtures only.
-    - [ ] New customer input stays minimal.
-    - [ ] No customer account required.
-    - [ ] No real create-customer request.
+    - [x] Existing-customer search uses synthetic fixtures only.
+    - [x] New customer input stays minimal.
+    - [x] No customer account required.
+    - [x] No real create-customer request.
+  - **Evidence:** Existing customer search is derived only from `FITTING_PROTOTYPE_APPOINTMENTS` synthetic contacts and supports name/email/phone filtering. Walk-ins require only a name, with optional email/phone. No API client or customer mutation is called.
 
-- [ ] **FIT-FE-042 — Add date/time selection prototype**
+- [x] **FIT-FE-042 — Add date/time selection prototype**
   - **Acceptance:**
-    - [ ] Select date and start time.
-    - [ ] Show prototype duration/end time where useful.
-    - [ ] Past/invalid selections are handled locally.
-    - [ ] Do not display authoritative `Available` from local calculations.
+    - [x] Select date and start time.
+    - [x] Show prototype duration/end time where useful.
+    - [x] Past/invalid selections are handled locally.
+    - [x] Do not display authoritative `Available` from local calculations.
+  - **Evidence:** The flow reuses `DatePickerField` and `TimePickerField`, limits dates before the prototype review date, exposes 30/60/90-minute prototype durations, and derives the review/end period locally. No `Available` guarantee or slot claim is shown.
 
-- [ ] **FIT-FE-043 — Add garment preference/guarantee selection prototype**
+- [x] **FIT-FE-043 — Add garment preference/guarantee selection prototype**
   - **Acceptance:**
-    - [ ] Search/select synthetic clothing.
-    - [ ] Allow multiple garment lines.
-    - [ ] Each line can be preference-only or guaranteed intent.
-    - [ ] Guaranteed intent explains future backend validation.
-    - [ ] Frontend does not claim a physical garment.
+    - [x] Search/select synthetic clothing.
+    - [x] Allow multiple garment lines.
+    - [x] Each line can be preference-only or guaranteed intent.
+    - [x] Guaranteed intent explains future backend validation.
+    - [x] Frontend does not claim a physical garment.
+  - **Evidence:** Garment search is derived from the fitting fixture catalogue and supports multiple selected lines. New local records use `Guaranteed intent` rather than `Guaranteed garment`, never synthesize an asset code, and explicitly explain that a future backend must validate/claim a physical garment.
 
-- [ ] **FIT-FE-045 — Add optional fee/payment section prototype**
+- [x] **FIT-FE-045 — Add optional fee/payment section prototype**
   - **Acceptance:**
-    - [ ] Fee is a mock configured value, not canonical price.
-    - [ ] No real payment intake.
-    - [ ] No-fee fitting remains representable.
-    - [ ] PHP formatting matches existing conventions.
+    - [x] Fee is a mock configured value, not canonical price.
+    - [x] No real payment intake.
+    - [x] No-fee fitting remains representable.
+    - [x] PHP formatting matches existing conventions.
+  - **Evidence:** The prototype defaults to a configurable ₱300 fixture value, validates non-negative local input, supports disabling the fee entirely, and stores only the existing mock payment-state label. No payment method, receipt upload, verification, or Payments API behavior is introduced.
 
-- [ ] **FIT-FE-046 — Add review/create prototype state**
+- [x] **FIT-FE-046 — Add review/create prototype state**
   - **Depends on:** FIT-FE-041, FIT-FE-042, FIT-FE-043, FIT-FE-045.
   - **Acceptance:**
-    - [ ] Review shows customer, period, garments, guarantee labels, and fee if present.
-    - [ ] Final CTA is explicitly prototype/local-only.
-    - [ ] Double-click cannot create duplicate mock records.
-    - [ ] Refresh may lose prototype-only state unless intentionally documented.
+    - [x] Review shows customer, period, garments, guarantee labels, and fee if present.
+    - [x] Final CTA is explicitly prototype/local-only.
+    - [x] Double-click cannot create duplicate mock records.
+    - [x] Refresh may lose prototype-only state unless intentionally documented.
+  - **Evidence:** Review shows customer, date/start/duration, selected garments, intent labels, fee, and payment state. `Create local fitting` appends one appointment to in-memory page state, immediately opens that appointment in the Details Sheet, and uses a submit-in-flight ref that remains locked through sheet close. The UI explicitly states that refresh removes the created record.
+  - **Validation:** Prettier, source transpile checks, and `git diff --check` pass. Typecheck reports no `src/components/fittings/*` source errors after the Phase 4 fixes; the remaining fitting-test diagnostics are the repository-wide missing jest-dom matcher typings. Targeted Vitest still fails before test collection because the repository root cannot resolve `vitest` from `@testing-library/jest-dom/dist/vitest.mjs`.
 
 ---
 

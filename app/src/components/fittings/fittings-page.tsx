@@ -4,6 +4,8 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CircleAlert,
   Clock3,
   Info,
@@ -41,6 +43,7 @@ import {
   type FittingPrototypePaymentState,
   type FittingPrototypeStatus,
 } from "./fitting-prototype-data";
+import { NewFittingSheet } from "./new-fitting-sheet";
 
 type FittingDateFilter = "all" | "today" | "upcoming";
 type FittingPrototypeViewState = "ready" | "loading" | "error";
@@ -99,6 +102,8 @@ const APPOINTMENT_TIME_FORMATTER = new Intl.DateTimeFormat("en-PH", {
   timeZone: "Asia/Manila",
 });
 
+const FITTINGS_PAGE_SIZE = 10;
+
 const PHP_FORMATTER = new Intl.NumberFormat("en-PH", {
   style: "currency",
   currency: "PHP",
@@ -113,7 +118,10 @@ export function FittingsPage({
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<FittingPrototypeStatus | null>(null);
   const [dateFilter, setDateFilter] = useState<FittingDateFilter>("all");
+  const [currentPage, setCurrentPage] = useState(1);
   const [viewState, setViewState] = useState<FittingPrototypeViewState>(initialViewState);
+  const [isNewFittingOpen, setIsNewFittingOpen] = useState(false);
+  const [createdAppointments, setCreatedAppointments] = useState<FittingPrototypeAppointment[]>([]);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
   const [statusOverrides, setStatusOverrides] = useState<Record<string, FittingPrototypeStatus>>(
     {}
@@ -121,11 +129,11 @@ export function FittingsPage({
 
   const effectiveAppointments = useMemo(
     () =>
-      appointments.map((appointment) => ({
+      [...appointments, ...createdAppointments].map((appointment) => ({
         ...appointment,
         status: statusOverrides[appointment.id] ?? appointment.status,
       })),
-    [appointments, statusOverrides]
+    [appointments, createdAppointments, statusOverrides]
   );
 
   const selectedAppointment = selectedAppointmentId
@@ -162,6 +170,18 @@ export function FittingsPage({
     });
   }, [dateFilter, effectiveAppointments, query, status]);
 
+  const totalPages = Math.max(1, Math.ceil(visibleAppointments.length / FITTINGS_PAGE_SIZE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pageStartIndex = (safeCurrentPage - 1) * FITTINGS_PAGE_SIZE;
+  const paginatedAppointments = visibleAppointments.slice(
+    pageStartIndex,
+    pageStartIndex + FITTINGS_PAGE_SIZE
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [query, status, dateFilter]);
+
   const hasActiveFilters = Boolean(query.trim() || status || dateFilter !== "all");
 
   const clearFilters = () => {
@@ -173,7 +193,7 @@ export function FittingsPage({
   return (
     <div className="min-h-[calc(100svh-4.5rem)] bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-5">
-        <FittingsHeading />
+        <FittingsHeading onNewFitting={() => setIsNewFittingOpen(true)} />
 
         <SummarySection summary={summary} viewState={viewState} />
 
@@ -199,7 +219,7 @@ export function FittingsPage({
                 actionLabel="Try again"
                 onAction={() => setViewState("ready")}
               />
-            ) : appointments.length === 0 && !hasActiveFilters ? (
+            ) : effectiveAppointments.length === 0 && !hasActiveFilters ? (
               <AppointmentState
                 title="No fitting appointments yet"
                 message="New fittings will appear here once the appointment workflow is in use."
@@ -213,22 +233,32 @@ export function FittingsPage({
               />
             ) : (
               <AppointmentList
-                appointments={visibleAppointments}
+                appointments={paginatedAppointments}
                 onSelect={(appointment) => setSelectedAppointmentId(appointment.id)}
               />
             )}
 
             {viewState === "ready" && visibleAppointments.length > 0 ? (
-              <div
-                className="border-t border-dashboard-border px-4 py-3 text-sm text-dashboard-muted"
-                aria-live="polite"
-              >
-                Showing {visibleAppointments.length} of {effectiveAppointments.length} appointments
-              </div>
+              <AppointmentsPagination
+                currentPage={safeCurrentPage}
+                pageSize={FITTINGS_PAGE_SIZE}
+                totalItems={visibleAppointments.length}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+              />
             ) : null}
           </CardContent>
         </Card>
       </div>
+
+      <NewFittingSheet
+        open={isNewFittingOpen}
+        onOpenChange={setIsNewFittingOpen}
+        onCreate={(appointment) => {
+          setCreatedAppointments((current) => [...current, appointment]);
+          setSelectedAppointmentId(appointment.id);
+        }}
+      />
 
       <FittingDetailsPreviewSheet
         appointment={selectedAppointment}
@@ -243,7 +273,7 @@ export function FittingsPage({
   );
 }
 
-function FittingsHeading() {
+function FittingsHeading({ onNewFitting }: { onNewFitting: () => void }) {
   return (
     <section
       aria-labelledby="fittings-heading"
@@ -266,18 +296,10 @@ function FittingsHeading() {
           <CalendarClock className="h-4 w-4" aria-hidden="true" />
           Schedule &amp; Availability
         </Link>
-        <Button
-          type="button"
-          disabled
-          aria-describedby="new-fitting-phase-note"
-          className="w-full sm:w-auto"
-        >
+        <Button type="button" onClick={onNewFitting} className="w-full sm:w-auto">
           <Plus className="h-4 w-4" aria-hidden="true" />
           New Fitting
         </Button>
-        <span id="new-fitting-phase-note" className="sr-only">
-          The New Fitting interaction is added in a later frontend prototype phase.
-        </span>
       </div>
     </section>
   );
@@ -395,6 +417,54 @@ function FittingsToolbar({
           Clear filters
         </Button>
       ) : null}
+    </div>
+  );
+}
+
+function AppointmentsPagination({
+  currentPage,
+  onPageChange,
+  pageSize,
+  totalItems,
+  totalPages,
+}: {
+  currentPage: number;
+  onPageChange: (page: number) => void;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}) {
+  const loadedCount = Math.min(pageSize, Math.max(0, totalItems - (currentPage - 1) * pageSize));
+
+  return (
+    <div className="flex items-center justify-between border-t border-dashboard-border px-4 py-3 text-sm text-dashboard-muted">
+      <span aria-live="polite">
+        Page {currentPage} · {loadedCount} fittings loaded
+      </span>
+
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          aria-label="Previous page"
+          disabled={currentPage === 1}
+          onClick={() => onPageChange(currentPage - 1)}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-dashboard-muted transition-colors hover:bg-dashboard-active hover:text-dashboard-navy disabled:pointer-events-none disabled:opacity-30"
+        >
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+        </button>
+        <span className="min-w-5 text-center text-sm font-medium text-dashboard-navy">
+          {currentPage}
+        </span>
+        <button
+          type="button"
+          aria-label="Next page"
+          disabled={currentPage === totalPages}
+          onClick={() => onPageChange(currentPage + 1)}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-dashboard-muted transition-colors hover:bg-dashboard-active hover:text-dashboard-navy disabled:pointer-events-none disabled:opacity-30"
+        >
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -695,14 +765,16 @@ function FittingDetailsPreviewSheet({
                         <Badge
                           variant="outline"
                           className={
-                            garment.guarantee === "Guaranteed"
-                              ? "reservation-status-confirmed"
-                              : "dashboard-event-fitting"
+                            garment.guarantee === "Preference only"
+                              ? "dashboard-event-fitting"
+                              : "reservation-status-confirmed"
                           }
                         >
                           {garment.guarantee === "Guaranteed"
                             ? "Guaranteed garment"
-                            : "Preference only"}
+                            : garment.guarantee === "Guaranteed intent"
+                              ? "Guaranteed intent"
+                              : "Preference only"}
                         </Badge>
                       </div>
                       {garment.guarantee === "Guaranteed" && garment.assetCode ? (

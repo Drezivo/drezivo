@@ -22,7 +22,7 @@ export interface FittingPrototypeGarment {
   id: string;
   productName: string;
   variantLabel: string;
-  guarantee: "Preference only" | "Guaranteed";
+  guarantee: "Preference only" | "Guaranteed" | "Guaranteed intent";
   assetCode?: string;
 }
 
@@ -198,4 +198,85 @@ export const FITTING_PROTOTYPE_APPOINTMENTS: readonly FittingPrototypeAppointmen
     paymentState: "Verified",
     attention: ["Preference only"],
   },
+  ...Array.from({ length: 14 }, (_, index): FittingPrototypeAppointment => {
+    const names = [
+      "Gina Reyes",
+      "Hazel Lim",
+      "Ivy Santos",
+      "Jessa Cruz",
+      "Kara Bautista",
+      "Lia Ramos",
+      "Mika Torres",
+      "Nina Gomez",
+      "Olivia Tan",
+      "Paula Garcia",
+      "Queenie Lopez",
+      "Rina Castillo",
+      "Sofia Velasco",
+      "Tina Aquino",
+    ] as const;
+    const garments = [
+      ["Sage Bridesmaid Dress", "Medium / Sage"],
+      ["Navy Formal Gown", "Large / Navy"],
+      ["Pearl Filipiniana", "Small / Pearl"],
+      ["Black Cocktail Dress", "Medium / Black"],
+      ["Traditional Barong", "Medium / Ecru"],
+      ["Blush Debut Gown", "Small / Blush"],
+      ["Royal Blue Ball Gown", "Large / Royal Blue"],
+    ] as const;
+    const statuses: readonly FittingPrototypeStatus[] = [
+      "Pending",
+      "Confirmed",
+      "Confirmed",
+      "Pending",
+      "Completed",
+      "Confirmed",
+      "Pending",
+      "Confirmed",
+      "Completed",
+      "Pending",
+      "Confirmed",
+      "Cancelled",
+      "Pending",
+      "Confirmed",
+    ];
+    const name = names[index]!;
+    const [productName, variantLabel] = garments[index % garments.length]!;
+    const day = 27 + Math.floor(index / 3);
+    const datePart =
+      day <= 30
+        ? `2026-09-${String(day).padStart(2, "0")}`
+        : `2026-10-${String(day - 30).padStart(2, "0")}`;
+    const hour = 9 + (index % 3) * 2;
+    const paymentState: FittingPrototypePaymentState =
+      index % 4 === 0 ? "Pending review" : index % 5 === 0 ? "Not required" : "Verified";
+
+    return {
+      id: `fit-proto-${String(index + 7).padStart(3, "0")}`,
+      customer: {
+        id: `fit-customer-${String(index + 7).padStart(3, "0")}`,
+        name,
+        email: `${name.toLocaleLowerCase().replace(/\s+/g, ".")}@example.test`,
+        phone: `0917 000 ${String(index + 7).padStart(4, "0")}`,
+      },
+      startsAt: `${datePart}T${String(hour).padStart(2, "0")}:00:00+08:00`,
+      endsAt: `${datePart}T${String(hour + 1).padStart(2, "0")}:00:00+08:00`,
+      status: statuses[index]!,
+      garments: [
+        {
+          id: `fit-line-${String(index + 8).padStart(3, "0")}`,
+          productName,
+          variantLabel,
+          guarantee: "Preference only",
+        },
+      ],
+      feeMinor: index % 5 === 0 ? null : 30000,
+      currency: "PHP",
+      paymentState,
+      attention: [
+        ...(paymentState === "Pending review" ? (["Payment review"] as const) : []),
+        "Preference only",
+      ],
+    };
+  }),
 ] as const;

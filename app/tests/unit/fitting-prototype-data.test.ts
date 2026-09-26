@@ -16,6 +16,7 @@ describe("fitting prototype data", () => {
   it("uses stable unique synthetic appointment identifiers", () => {
     const appointmentIds = FITTING_PROTOTYPE_APPOINTMENTS.map((appointment) => appointment.id);
 
+    expect(FITTING_PROTOTYPE_APPOINTMENTS).toHaveLength(20);
     expect(new Set(appointmentIds).size).toBe(appointmentIds.length);
     expect(appointmentIds.every((id) => id.startsWith("fit-proto-"))).toBe(true);
   });
@@ -40,7 +41,7 @@ describe("fitting prototype data", () => {
   it("uses synthetic customer contact details only", () => {
     for (const appointment of FITTING_PROTOTYPE_APPOINTMENTS) {
       expect(appointment.customer.email).toMatch(/@example\.test$/);
-      expect(appointment.customer.phone).toMatch(/^0917 000 000\d$/);
+      expect(appointment.customer.phone).toMatch(/^0917 000 \d{4}$/);
     }
   });
 });
