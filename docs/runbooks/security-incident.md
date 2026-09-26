@@ -22,7 +22,7 @@ exposure time.
 For each credential type, rotating means:
 
 - **Clerk secret key** — regenerate in the Clerk dashboard, redeploy `api` with the new value.
-- **Neon database credential** — rotate the role's password (or create a new role and cut over,
+- **Supabase PostgreSQL credential** — rotate the role's password (or create a new role and cut over,
   if the current tooling supports it more safely), redeploy `api` with the new
   `DATABASE_URL`/`DATABASE_URL_DIRECT`.
 - **AWS/S3 credential** — deactivate the leaked access key immediately in IAM, issue a new one
@@ -42,7 +42,7 @@ happened while it was:
 
 - Check access/audit logs for the exposed credential's actual usage during the exposure window,
   if the credential type provides one (AWS CloudTrail for an IAM key, Clerk's own audit log,
-  Neon's connection logs). Look specifically for activity that does not match Drezivo's own
+  Supabase's Postgres and pooler logs). Look specifically for activity that does not match Drezivo's own
   known traffic pattern (unfamiliar IP ranges, unusual query patterns, access at unusual hours).
 - If the credential could have been used to read or write tenant data, treat this as a potential
   tenant-isolation incident as well — escalate to SEV1 per `docs/runbooks/incident.md` regardless

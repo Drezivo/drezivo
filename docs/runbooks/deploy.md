@@ -14,7 +14,7 @@ disagrees with it.
 | `web` (marketing + storefront) | Managed Next.js host (same candidate) | One Next.js build |
 | `api` server | Managed container host | One container image, HTTP server entrypoint |
 | worker | Same managed container host | Same container image, worker entrypoint (`docs/decisions/0004-worker-in-api-repository.md`) |
-| Database | Neon PostgreSQL | N/A — managed |
+| Database | Supabase PostgreSQL, Data API disabled | N/A — managed |
 | Files | S3 (private evidence bucket + public derivatives bucket) | N/A — managed |
 
 DECISION NEEDED: confirm the specific managed container host and finalize the Next.js host
@@ -23,6 +23,11 @@ and pricing before selecting paid plans — TRD §1: "Prefer API, worker, databa
 storage in a nearby compatible region such as Singapore if all chosen services support the
 required configuration. Measure latency from Philippine mobile networks; geographical proximity
 is not a benchmark." Do not assume Singapore is confirmed without that measurement.
+
+The API and worker deploy as ordinary PostgreSQL clients. They do not use Supabase Auth, Storage,
+Realtime, REST, GraphQL, or service-role keys. Before the first application deploy, apply migrations
+through `DATABASE_URL_DIRECT`, assign deployment-managed passwords to `drezivo_app` and
+`drezivo_worker`, and verify each process connects with only its own restricted role.
 
 ## Before every deploy
 

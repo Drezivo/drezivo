@@ -15,18 +15,18 @@ Three environments, each with its own secrets/accounts or projects, least privil
 §1:
 
 - **Development** — a developer's own machine, using the loopback-only PostgreSQL and MinIO
-  services in [local development](local-development.md), or an ephemeral preview backed by a
-  non-production Neon branch. Seed only synthetic data, never a clone of live personal data.
+  services in [local development](local-development.md), or an isolated non-production Supabase
+  project/preview environment. Seed only synthetic data, never a clone of live personal data.
 - **Staging** — a persistent pre-production environment that mirrors production configuration
-  (same Node LTS, same Neon major version, same region where practical) so a migration or a
-  deploy is rehearsed under realistic conditions before it reaches production.
-- **Production** — serves real tenants. Separate Clerk project, separate Neon project, separate
+  (same Node LTS, same Supabase PostgreSQL major and connection mode, same region where practical)
+  so a migration or a deploy is rehearsed under realistic conditions before it reaches production.
+- **Production** — serves real tenants. Separate Clerk project, separate Supabase project, separate
   S3 buckets, separate everything-with-a-credential from staging and development. Nothing in
   production is a "free tier" resource (TRD §1: "Do not use a free-tier suspension/retention
   assumption as a production recovery plan").
 
 DECISION NEEDED: name the specific hosting accounts/projects for each environment (Vercel
-team/project per environment, container host project per environment, Neon project/branch
+team/project per environment, container host project per environment, Supabase project/environment
 naming convention) once TRD §12's "remaining selection" of hosting plans/region is made.
 
 ## `api` (Express API server + worker, two entrypoints from one image)
@@ -34,12 +34,16 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 - `NODE_ENV` — `development` | `staging` | `production`. Gates verbose logging and
   dev-only conveniences; never gates a security control on its own.
 - `PORT` — the port the HTTP server binds. The worker entrypoint does not need this.
-- `DATABASE_URL` — the pooled Neon connection string used for ordinary request-time queries, or
-  the loopback PostgreSQL URL during local compose development. TRD §9: Neon pooling is
-  transaction-based; session-level state must not be assumed to survive checkout.
-- `DATABASE_URL_DIRECT` — the direct (non-pooled) Neon connection string, used first by
-  migration and admin tooling when supplied. Local compose uses its direct loopback PostgreSQL
-  endpoint for both variables.
+- `DATABASE_URL` — the runtime PostgreSQL connection string, or the loopback PostgreSQL URL during
+  local Compose development. The API deployment authenticates as `drezivo_app`; the worker
+  deployment uses the same variable name but authenticates as `drezivo_worker`. A persistent
+  process uses the Supabase direct endpoint when IPv6/direct networking is available, otherwise
+  the shared session pooler. A serverless deployment may use transaction pooling only after its
+  client behavior and per-instance pool size have been verified. Production URLs require encrypted
+  transport through `sslmode=require`, or preferably certificate-backed `verify-full`.
+- `DATABASE_URL_DIRECT` — the privileged direct Supabase PostgreSQL connection used first by
+  migration, backup, restore, and administrative tooling. It must never be supplied to the API or
+  worker runtime. Local Compose uses its direct loopback PostgreSQL endpoint for both variables.
 - `TEST_DATABASE_URL` — test-only; the integration suite (`api` `npm run test:integration`)
   connects exclusively through this, never `DATABASE_URL`. The harness refuses any value that is
   not localhost or whose database name does not contain "test", because tests truncate their
@@ -51,6 +55,20 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   have no ownership, DDL, `BYPASSRLS`, or blanket administrative grant (TRD §3). Name the actual
   role via the connection string's credentials, not a separate variable that could drift from
   it.
+
+### Supabase database boundary
+
+- Disable the Supabase Data API. Drezivo uses Clerk plus the Express API and does not authorize
+  database access with Supabase Auth claims.
+- Do not configure Supabase publishable, anonymous, secret, or service-role keys in `app`, `web`,
+  or `api`; none is required for the selected PostgreSQL-only integration.
+- Provision separate deployment-managed passwords for `drezivo_app` and `drezivo_worker` after
+  the migration creates those roles. Reapply them after a restore when the backup does not preserve
+  custom-role passwords.
+- Copy every hostname and username from the Supabase Connect dialog. Shared-pooler custom-role
+  usernames include the project reference and must not be constructed from memory.
+- Audit privileges for Supabase's `anon`, `authenticated`, and `service_role` roles before loading
+  business data, even when the Data API is disabled.
 - `CLERK_SECRET_KEY` — server-side Clerk SDK credential, used to verify JWTs (signature,
   issuer, expiry, audience/authorized-party) per TRD §3.
 - `CLERK_WEBHOOK_SIGNING_SECRET` — verifies the signature on Clerk's membership-change webhooks

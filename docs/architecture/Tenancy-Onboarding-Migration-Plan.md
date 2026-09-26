@@ -206,7 +206,7 @@ Backfill is bounded and resumable:
 ## Rollout and rollback
 
 Apply the expand migration before code that requires the new tables. Backfill and validate on a
-rehearsed local stack, staging, and a representative Neon branch. Deploy the service switch only
+rehearsed local stack and the isolated Supabase staging project. Deploy the service switch only
 after constraints and reports are clean. A rollback reverts application code to the compatible
 pre-switch version; it never drops these records. Any data or policy defect is corrected by a new
 forward-only migration and an audited repair action.

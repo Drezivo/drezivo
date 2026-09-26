@@ -14,9 +14,9 @@ import '../src/config/load-env.js';
  * migrations/README.md the hand-written files in this directory are the source of truth here
  * (GiST exclusion constraints and RLS policies are outside what drizzle-kit can generate).
  *
- * Uses a direct (non-pooled) connection, per TRD §9: "Use the direct connection for
- * migration/admin tools that require it" — Neon's pooled endpoint is unsuitable for the
- * DDL-heavy, single-shot nature of a migration run.
+ * Uses a direct (non-pooled) connection, per TRD §9. Supabase recommends its direct endpoint for
+ * migrations and other single-session administrative work; runtime pooler settings must not
+ * weaken the guarantees required by a DDL-heavy migration run.
  */
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

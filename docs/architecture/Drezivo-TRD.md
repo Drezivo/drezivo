@@ -1,11 +1,13 @@
 # Drezivo — Technical Requirements Document
 
-**Revision:** 1.3 · **Date:** 26 September 2026
+**Revision:** 1.4 · **Date:** 26 September 2026
 **Status:** Monorepo scaffold and architecture contract. Infrastructure remains unprovisioned; scaffold checks do not prove production performance, isolation or recovery.
 
 **Changes in 1.2.** The five former checkouts are now workspaces in one root Git repository. The root lockfile, license, review boundary, and release evidence are authoritative. Workspace ownership remains explicit: `contracts` provides shared schemas, `api` owns business transactions and the worker, `app` and `web` render user journeys, and `docs` owns specifications. The former polyrepo decision remains as a superseded ADR. Automatic CI is deferred until the scaffold gate is green, as recorded in `docs/runbooks/ci-baseline.md`. Security controls, tenant context, and migration windows now apply across workspaces in one pull request.
 
 **Changes in 1.3.** The V1.1 fitting backend boundary is frozen: staff-created fittings first; branch-scoped hidden capacity slots; 30-minute scheduling grid with one strict branch duration; hard hours/closure enforcement; canonical appointment state machine; atomic creation/reschedule; immediate guaranteed-garment allocation; branch-scoped optional fixed fee using the existing finance domain; Owner-only fitting configuration; existing audit/idempotency/outbox conventions; and staged cross-product rollout. Rooms/staff/named fitting resources and customer-facing reminders are not part of the first production fitting slice.
+
+**Changes in 1.4.** Supabase replaces Neon as the managed PostgreSQL provider. The API continues to use Drizzle and `node-postgres` with restricted runtime roles, reviewed SQL migrations, transaction-local tenant context, and S3/MinIO for objects. Supabase Auth, Storage, Realtime, and Data API are not application dependencies. See `docs/decisions/0009-supabase-managed-postgresql.md`.
 
 Read with [PRD](../product/Drezivo-PRD.md), [market research](../product/Drezivo-Market-Research.md), and [logical data model](Drezivo-Data-Model.md). Product release V1 is distinct from document revision numbers. The DBML describes relationships; SQL migrations must implement constraints it cannot express.
 
@@ -17,7 +19,7 @@ Retain the team's familiar stack. Use a **modular monolith**: one Express busine
 | ------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Frontend            | Next.js + TypeScript, App Router                                                  | Server-render public catalogue; interactive booking/calendar. Do not duplicate business writes in Next.js route handlers.                                                                                                                                                       |
 | Business API        | Express + TypeScript on a supported Node LTS                                      | REST JSON endpoints and transaction boundaries. Long-running containers suit explicit database transactions and predictable worker operation.                                                                                                                                   |
-| Database            | Neon PostgreSQL                                                                   | Shared schema with tenant keys, constraints, row-level security, transaction locks. One production project initially; separate nonproduction environment.                                                                                                                       |
+| Database            | Supabase PostgreSQL                                                               | Managed PostgreSQL only: shared schema with tenant keys, constraints, row-level security, and transaction locks. Separate staging and production projects; Data API disabled.                                                                                                   |
 | Authentication      | Clerk                                                                             | Staff authentication and organization identity. Drezivo owns domain permissions, branch grants and subscription entitlements.                                                                                                                                                   |
 | Files               | Private S3 buckets; separate public catalogue derivatives                         | Original evidence is private; controlled upload, quarantine, short-lived downloads.                                                                                                                                                                                             |
 | Query/migrations    | **Decided: Drizzle + node-postgres (`pg`)**                                       | Confirmed 15 September 2026. TypeScript queries with reviewed SQL migrations for exclusion constraints/RLS. See `docs/decisions/0002-drizzle-and-node-postgres.md`. Custom SQL and real transaction tests remain mandatory.                                                     |
@@ -43,7 +45,7 @@ Each deployable workspace (§2.1) is one release boundary. The `api` repository 
 
 All three browser-facing surfaces sit under one registrable parent domain. That is a deliberate isolation choice, not a cosmetic one: it lets the guest capability exchange in §3 set a host-scoped `__Host-` cookie, keeps the CORS allowlist an explicit three-entry list rather than a wildcard, and prevents a tenant slug from ever becoming a DNS-level identifier. **Tenant slugs are path segments under `/s/`, never subdomains.** A subdomain-per-tenant scheme would put tenant identity into the cookie origin, where a misconfiguration leaks one tenant's session to another; a path segment cannot.
 
-For the first paid pilot, use a managed Next.js host (Vercel is a candidate), a managed container host for Express and the worker, Neon, and S3. Confirm region compatibility and prices before selecting paid plans. Prefer API, worker, database, and private storage in a nearby compatible region such as Singapore **if all chosen services support the required configuration**. Measure latency from Philippine mobile networks; geographical proximity is not a benchmark.
+For the first paid pilot, use a managed Next.js host (Vercel is a candidate), a managed container host for Express and the worker, Supabase PostgreSQL, and S3. Confirm region compatibility and prices before selecting paid plans. Prefer API, worker, database, and private storage in a nearby compatible region such as Singapore **if all chosen services support the required configuration**. Measure latency from Philippine mobile networks; geographical proximity is not a benchmark.
 
 Use separate development, staging, and production secrets/accounts or projects, with least privilege. Do not use a free-tier suspension/retention assumption as a production recovery plan. Provide readiness checks, graceful shutdown and connection draining, dependency timeouts, and two API instances where required to meet the availability target. A single worker can restart safely because work and leases persist.
 
@@ -57,7 +59,7 @@ flowchart LR
   W --> A[api · api.drezivo.com]
   B --> A
   C[Clerk identity] --> A
-  A --> D[(Neon PostgreSQL)]
+  A --> D[(Supabase PostgreSQL)]
   A --> S[Private S3 upload authorization]
   J[Durable worker] --> D
   J --> E[Email provider]
@@ -97,7 +99,7 @@ workspace still has a clear owner and deploy artifact.
 | ------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | `contracts/` | Zod schemas, OpenAPI, error envelopes, money and idempotency types              | Database access, provider credentials, or authorization decisions       |
 | `api/`       | Domain modules, Clerk verification, authorization, database, migrations, worker | Presentation logic or duplicate contract types                          |
-| `app/`       | Staff dashboard and authenticated workflows                                     | Direct Neon access, authoritative roles, or client-side money decisions |
+| `app/`       | Staff dashboard and authenticated workflows                                     | Direct database access, authoritative roles, or client money decisions  |
 | `web/`       | Marketing, public storefront, and guest booking                                 | Staff-only data, private records, or server authorization logic         |
 | `docs/`      | PRD, TRD, data model, ADRs, research, legal drafts, and runbooks                | Runtime business behavior and secrets                                   |
 
@@ -168,7 +170,7 @@ belongs in the root gate when automatic CI is enabled.
 
 **The worker carries tenant context per job, not per process.** The worker runs outside any HTTP request, so nothing sets its tenant context for it. Every outbox and job row stores the owning `tenant_id`; the worker sets the context transaction-locally for each claimed job and fails the job closed if the row has no resolvable tenant. A worker process must never hold a long-lived session-level tenant setting — a leaked setting across jobs is a cross-tenant write.
 
-**`SET LOCAL`, never `SET`.** Neon fronts connections with a pooler, so a session-level setting can outlive the work that set it and be observed by an unrelated request on the same physical connection. Tenant context is therefore set transaction-locally, inside the same transaction as the queries it governs, on the same checked-out connection, and released by commit or rollback. Any code path that opens a connection without establishing tenant context must be unable to read tenant-owned tables at all; that is what `FORCE ROW LEVEL SECURITY` and the absence of `BYPASSRLS` on the runtime role are for.
+**`SET LOCAL`, never `SET`.** Supabase transaction pooling does not preserve session state across transactions, and session-scoped state is unsafe under any shared pool. Tenant context is therefore set transaction-locally, inside the same transaction as the queries it governs, on the same checked-out connection, and released by commit or rollback. Any code path that opens a connection without establishing tenant context must be unable to read tenant-owned tables at all; that is what `FORCE ROW LEVEL SECURITY` and the absence of `BYPASSRLS` on the runtime role are for.
 
 **Test the boundary in `api`, because nowhere else can.** The required adversarial tests in §11 include a cross-tenant read attempt, a cross-tenant write attempt, and a job whose tenant context was not set — each asserting failure against the real restricted role on real PostgreSQL. No frontend test and no contract test can prove tenant isolation; only these can.
 
@@ -242,7 +244,7 @@ Use `[blocked_start, blocked_end)` where `blocked_start = pickup_at` and `blocke
 
 The scheduled expiry worker is cleanup; correctness must not depend on it running on time. An availability response can lag; a hold cannot bypass the database constraint. Exclusion predicates use stored deterministic values such as `is_blocking`, not `now()`.
 
-PostgreSQL supports range overlap exclusion, and Neon documents `btree_gist`, which allows scalar IDs to participate in the same GiST constraint. These are capabilities to use, not evidence that the proposed model has been tested on a deployed Neon instance. [PostgreSQL ranges](https://www.postgresql.org/docs/current/rangetypes.html), [Neon btree_gist](https://neon.com/docs/extensions/btree_gist).
+PostgreSQL supports range overlap exclusion, and Supabase provides `btree_gist`, which allows scalar IDs to participate in the same GiST constraint. These are capabilities to use, not evidence that the model has been tested on a deployed Supabase project. [PostgreSQL ranges](https://www.postgresql.org/docs/current/rangetypes.html), [Supabase extensions](https://supabase.com/docs/guides/database/extensions).
 
 ### Receipt and confirmation
 
@@ -293,15 +295,17 @@ Exactly-once email delivery cannot be promised with an external provider. Use pr
 
 Webhook endpoints verify signatures over raw bytes and insert unique provider event IDs before processing. A duplicate event returns success without another effect. Events received out of order are reconciled to authoritative provider state or rejected from an invalid transition. Do not rely on arrival order.
 
-## 9. Neon operations and schema evolution
+## 9. Supabase PostgreSQL operations and schema evolution
 
-Use bounded application pools and short interactive transactions. Neon pooling is transaction-based; session-level state must not be assumed to survive checkout. Apply tenant context transaction-locally on the same connection and test connection reuse across tenants. Use the direct connection for migration/admin tools that require it. Pooler client capacity is not a requests-per-second or workload guarantee. [Neon pooling](https://neon.com/docs/connect/connection-pooling).
+Use bounded application pools and short interactive transactions. Persistent API and worker processes use Supabase's direct endpoint when their network supports it, otherwise the shared session pooler. Serverless deployments may use transaction pooling only after disabling incompatible prepared/session behavior and reducing each warm instance's application pool deliberately. Apply tenant context transaction-locally on the same connection and test connection reuse across tenants. Use the direct connection for migrations, backup, restore, and other administrative tools. Pooler client capacity is not a requests-per-second or workload guarantee. [Supabase connections](https://supabase.com/docs/guides/database/connecting-to-postgres), [pooling and limits](https://supabase.com/docs/guides/database/connecting-to-postgres/pooling-and-limits).
 
-Apply version-controlled, reviewed migrations once through CI/CD using a migration role. Never run schema synchronization on each API startup. Test raw constraints and RLS on the selected supported Postgres major and Neon configuration. Pin that version; schedule upgrades and rehearse them.
+Apply version-controlled, reviewed migrations once through CI/CD using a migration role over `DATABASE_URL_DIRECT`. Never run schema synchronization on each API startup. Test raw constraints and RLS on the selected supported PostgreSQL major and Supabase connection mode. Pin that version; schedule upgrades and rehearse them. Runtime traffic connects through separate `drezivo_app` and `drezivo_worker` credentials, never through the migration role.
 
 For rolling changes use expand/backfill/validate/switch/contract. Add nullable fields, backfill in bounded batches with progress, validate invariants, then enforce non-null/unique constraints. Keep old/new application compatibility through deployment. Large indexes and constraint changes require lock budgets and appropriate migration options. Roll forward data fixes; do not assume an application rollback reverses a data migration safely.
 
-Use Neon branches for isolated rehearsals, but production data remains sensitive when cloned. Prefer synthetic or anonymized seeds; forbid arbitrary preview access to live personal data. Neon recovery depends on its configured history window, so confirm purchased retention and run restores. A branch is not an independent archival backup. [Neon branching and recovery window](https://neon.com/docs/introduction/branching).
+Use a separate Supabase staging project for migration and deployment rehearsal. Preview branches may be added later, but they do not replace staging or an independent recovery plan. Prefer synthetic or anonymized seeds and forbid arbitrary preview access to live personal data. Confirm the purchased backup retention and point-in-time recovery configuration, then rehearse restores. Supabase notes that custom-role passwords may need to be reset after restore. [Supabase deployment environments](https://supabase.com/docs/guides/deployment), [Supabase backups](https://supabase.com/docs/guides/platform/backups).
+
+The Supabase Data API remains disabled. Drezivo clients authenticate with Clerk and call the Express API; Drezivo RLS policies depend on transaction-local `app.tenant_id`, `app.principal_id`, and `app.actor_kind`, not Supabase Auth claims. Audit default privileges for `anon`, `authenticated`, and `service_role` before loading business data. [Supabase Data API security](https://supabase.com/docs/guides/api/securing-your-api).
 
 ### Scaling triggers
 

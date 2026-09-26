@@ -14,7 +14,7 @@
 
 - Prices/month PHP: Starter 300; Professional 499; Business 1299. Screenshot 999/1999/3999 outdated.
 - Subagents: GPT-5.5, medium reasoning. Applies to future delegated work unless changed.
-- Stack: Next.js/TypeScript; Express/TypeScript; Neon PostgreSQL; Clerk; S3; REST.
+- Stack: Next.js/TypeScript; Express/TypeScript; Supabase PostgreSQL; Clerk; S3; REST.
 - Source: archived original PRD; source images unchanged. Revised PRD/TRD/model authoritative for proposed implementation.
 - V1 single branch/single garment UI; default branch + multi-line schema. V1.1 fittings/multi-item; V2 branches/transfers; V3 demand-led governance.
 - Plan quotas, trial/grace/hold defaults proposed; owner prices confirmed. Research interviews and benchmarks not performed.

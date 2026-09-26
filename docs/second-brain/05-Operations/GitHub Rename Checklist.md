@@ -14,7 +14,7 @@ steps when the new Drezivo GitHub organization and monorepo are ready:
 1. Create the new organization and one private repository for the root monorepo.
 2. Push the root `main` branch and verify the root `LICENSE.md`, `.github`, and CODEOWNERS.
 3. Configure Actions secrets, environments, branch protection, and deploy hooks once at root scope.
-4. Update Clerk, S3, Neon, DNS, webhook, and monitoring allowlists that contain repository URLs.
+4. Update Clerk, S3, Supabase, DNS, webhook, and monitoring allowlists that contain repository URLs.
 5. Run root CI and a staging smoke test for each deployable workspace before production release.
 6. Record the completed date and URLs in this note; preserve the old URL only in change history.
 

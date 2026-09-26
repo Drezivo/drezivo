@@ -42,7 +42,7 @@ docs       → defines intent, decisions, runbooks, and evidence for all of them
 - Side effects that must survive a crash go through the outbox/queue with lease, bounded retry,
   and terminal failure state. Never use fire-and-forget work.
 - Never log or return secrets, tokens, payment evidence, or personally identifiable information.
-- Keep Clerk secret keys, Neon URLs, S3 credentials, and environment values out of Git and the
+- Keep Clerk secret keys, Supabase database URLs, S3 credentials, and environment values out of Git and the
   Obsidian vault.
 
 ## 4. How to trace a feature
@@ -68,7 +68,7 @@ Use branches named `<type>/<short-kebab-slug>` and Conventional Commits such as
 `feat(api): add storefront availability` or `fix(web): guard duplicate hold submission`.
 
 Do not merge, deploy, change GitHub settings, create remotes, or publish packages without explicit
-authorization. A green scaffold build is evidence of compilation only; it is not proof of Neon
+authorization. A green scaffold build is evidence of compilation only; it is not proof of Supabase PostgreSQL
 isolation, production recovery, payment correctness, or availability concurrency.
 
 ## 6. Shared Obsidian second brain

@@ -238,7 +238,7 @@ startup with a clear message, never at the first request that needs it.
 ## 8. Repo specifics — api
 
 **Running Postgres locally.** This service targets Postgres 16+ with `btree_gist` available
-(the pinned production target is Neon Postgres). Run a local instance with Docker —
+(the managed production target is Supabase PostgreSQL). Run a local instance with Docker —
 `docker run -d --name drezivo-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=drezivo -p 5432:5432 postgres:16`
 — or point `DATABASE_URL` at any Postgres 16 instance you control. `btree_gist` and row-level
 security are exercised by the migrations in `src/db/migrations/`; a stripped-down or managed
