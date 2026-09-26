@@ -243,16 +243,16 @@ Use the current prototype and complete this in one session with a real operator 
 
 ## Freeze rules
 
-Before backend planning begins:
+Before backend implementation begins:
 
 - Route hierarchy must remain `/fittings` and `/fittings/schedule` unless review feedback requires a change.
 - List fields, Details Sheet sections, New Fitting inputs, and schedule interactions must be explicitly accepted after review.
 - Prototype fixture types must not be copied into Prisma, SQL, API contracts, or shared domain types.
 - Prototype statuses/payment labels must be translated into an approved domain lifecycle first.
-- No fitting backend checklist should be created until the open decisions in this document are resolved.
+- A backend planning checklist may exist, but contracts, migrations, and production fitting routes must remain blocked until the open decisions in this document are resolved.
 
 ## Backend handoff readiness
 
 Current state: **NOT READY**.
 
-The frontend is ready for workflow review, but backend implementation remains intentionally blocked by unresolved domain decisions and the pending real owner/front-desk review.
+The frontend is ready for workflow review and the backend implementation checklist now exists as a planning artifact. Production backend implementation remains intentionally blocked by unresolved domain decisions and the pending real owner/front-desk review.
