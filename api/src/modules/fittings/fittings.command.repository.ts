@@ -569,6 +569,31 @@ export async function retireFittingLine(
   );
 }
 
+export async function updateFittingInternalNote(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    fittingId: string;
+    version: number;
+    internalNote: string | null;
+  },
+): Promise<number | null> {
+  const result = await client.query<{ version: number }>(
+    `UPDATE fitting_appointment
+        SET internal_note = $5,
+            version = version + 1
+      WHERE tenant_id = $1
+        AND branch_id = $2
+        AND id = $3::uuid
+        AND version = $4
+        AND status IN ('pending','confirmed')
+      RETURNING version`,
+    [input.tenantId, input.branchId, input.fittingId, input.version, input.internalNote],
+  );
+  return result.rows[0]?.version ?? null;
+}
+
 export async function bumpFittingVersion(
   client: PoolClient,
   input: { tenantId: string; fittingId: string; version: number },
@@ -591,6 +616,7 @@ export async function appendFittingMutationAudit(
     actorKey: string;
     action:
       | 'fitting.rescheduled'
+      | 'fitting.note_updated'
       | 'fitting.garment_changed'
       | 'fitting.confirmed'
       | 'fitting.rejected'

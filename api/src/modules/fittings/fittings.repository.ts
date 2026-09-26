@@ -35,6 +35,13 @@ export interface FittingDetailReadRow extends FittingListReadRow {
   terminal_reason: string | null;
 }
 
+export interface FittingIntakeCustomerRow {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+}
+
 interface FittingListCursor {
   sort: FittingListSort;
   key: string;
@@ -105,6 +112,31 @@ export async function listFittingsReadModel(
     hasMore,
     nextCursor: hasMore && last ? encodeCursor(last, input.query.sort) : null,
   };
+}
+
+/** Bounded advisory customer lookup for deliberate staff fitting intake selection. */
+export async function searchFittingIntakeCustomers(
+  client: PoolClient,
+  input: { tenantId: string; search?: string },
+): Promise<FittingIntakeCustomerRow[]> {
+  if (!input.search) return [];
+  const escaped = `%${escapeLikePattern(input.search)}%`;
+  const result = await client.query<FittingIntakeCustomerRow>(
+    `SELECT id, full_name, phone, lower(email) AS email
+       FROM customer
+      WHERE tenant_id = $1
+        AND anonymized_at IS NULL
+        AND (phone IS NOT NULL OR email IS NOT NULL)
+        AND (
+          lower(full_name) LIKE lower($2) ESCAPE '\\'
+          OR lower(coalesce(phone, '')) LIKE lower($2) ESCAPE '\\'
+          OR lower(coalesce(email, '')) LIKE lower($2) ESCAPE '\\'
+        )
+      ORDER BY lower(full_name), id
+      LIMIT 10`,
+    [input.tenantId, escaped],
+  );
+  return result.rows;
 }
 
 /** Detail remains branch scoped so a foreign/unauthorized ID is indistinguishable from missing. */

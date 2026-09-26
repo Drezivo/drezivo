@@ -413,6 +413,11 @@ describe('FIT-BE-024/025 fitting RLS, privileges, and indexes', () => {
 
       await admin.query('BEGIN');
       await admin.query('SET LOCAL enable_seqscan = off');
+      // This tiny one-row fixture can make PostgreSQL prefer a tenant/branch B-tree and filter
+      // the range predicate even though the GiST index is healthy. Disable plain index scans for
+      // this one eligibility check so the planner must demonstrate the overlap-capable GiST path;
+      // FIT-BE-094 separately verifies the GiST is naturally selected under representative load.
+      await admin.query('SET LOCAL enable_indexscan = off');
 
       const calendarPlan = await admin.query<{ 'QUERY PLAN': string }>(
         `EXPLAIN (COSTS OFF)
@@ -426,6 +431,7 @@ describe('FIT-BE-024/025 fitting RLS, privileges, and indexes', () => {
       expect(calendarPlan.rows.map((row) => row['QUERY PLAN']).join('\n')).toContain(
         'fitting_appointment_tenant_branch_period_gist_idx',
       );
+      await admin.query('SET LOCAL enable_indexscan = on');
 
       const capacityPlan = await admin.query<{ 'QUERY PLAN': string }>(
         `EXPLAIN (COSTS OFF)

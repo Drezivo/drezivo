@@ -74,6 +74,7 @@ import {
   verifyFittingPaymentCollection,
   type LockedFittingReceiptRow,
 } from './fittings.finance.repository.js';
+import { recordFittingCommandFailure } from './fittings.observability.js';
 import { readFittingDetailModel } from './fittings.repository.js';
 
 const CREATE_PAYMENT_OPERATION = 'fitting.payment.create';
@@ -1071,6 +1072,14 @@ async function finalizeFinanceFailure<T extends { status: number; body: unknown 
   error: unknown,
 ): Promise<T> {
   if (!isAppError(error)) throw error;
+  recordFittingCommandFailure({
+    operation,
+    tenantId: context.tenantId,
+    branchId: context.branchId,
+    fittingId: context.fittingId,
+    requestId: context.requestId,
+    error,
+  });
   const body: FailureEnvelope = {
     success: false,
     error: { code: error.code, message: error.message },
