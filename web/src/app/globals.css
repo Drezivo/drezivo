@@ -26,6 +26,20 @@
   --color-danger: #b3311f;
   --color-danger-foreground: #fdeeec;
 
+  /* Tenant storefront reference palette, independent from the semantic dark-mode tokens below. */
+  --color-storefront-background: #fbfaf7;
+  --color-storefront-paper: #ffffff;
+  --color-storefront-soft: #f4eee8;
+  --color-storefront-hero: #efe5dd;
+  --color-storefront-brand: #123f37;
+  --color-storefront-ink: #17324d;
+  --color-storefront-muted: #64748b;
+  --color-storefront-line: #e8e4df;
+  --color-storefront-footer: #0b493f;
+  --color-storefront-footer-muted: #d6e5df;
+  --color-storefront-accent: #215f53;
+  --shadow-storefront-card: 0 6px 18px rgb(23 50 77 / 0.06);
+
   /* Marketing-only palette. Storefronts continue to use the semantic tokens above. */
   --color-marketing-cream: #f6f0e7;
   --color-marketing-ivory: #fbf8f2;
@@ -70,6 +84,22 @@ body {
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-body);
+}
+
+.storefront-shell {
+  --storefront-header-height: 3.5rem;
+
+  color-scheme: light;
+  background: var(--color-storefront-background);
+  color: var(--color-storefront-ink);
+}
+
+.storefront-shell [id] {
+  scroll-margin-top: calc(var(--storefront-header-height) + 1rem);
+}
+
+.storefront-shell :focus-visible {
+  outline-color: var(--color-storefront-brand);
 }
 
 :focus-visible {
