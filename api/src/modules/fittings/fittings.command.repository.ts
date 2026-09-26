@@ -99,14 +99,19 @@ export interface LockedFittingAssetRow {
   variant_id: string;
 }
 
+export type FittingAppointmentStatus =
+  'pending' | 'confirmed' | 'completed' | 'rejected' | 'cancelled' | 'no_show';
+
 export interface LockedFittingAppointmentRow {
   id: string;
-  status: 'pending' | 'confirmed' | 'completed' | 'rejected' | 'cancelled' | 'no_show';
+  status: FittingAppointmentStatus;
   starts_at: Date;
   ends_at: Date;
   timezone_snapshot: string;
   version: string | number;
   before_start: boolean;
+  at_or_after_start: boolean;
+  at_or_after_end: boolean;
 }
 
 export interface ActiveFittingLineRow {
@@ -233,7 +238,10 @@ export async function lockFittingAppointmentForMutation(
 ): Promise<LockedFittingAppointmentRow | null> {
   const result = await client.query<LockedFittingAppointmentRow>(
     `SELECT id, status, lower(period) AS starts_at, upper(period) AS ends_at,
-            timezone_snapshot, version, lower(period) > statement_timestamp() AS before_start
+            timezone_snapshot, version,
+            lower(period) > statement_timestamp() AS before_start,
+            lower(period) <= statement_timestamp() AS at_or_after_start,
+            upper(period) <= statement_timestamp() AS at_or_after_end
        FROM fitting_appointment
       WHERE tenant_id = $1 AND branch_id = $2 AND id = $3::uuid
       LIMIT 1
@@ -241,6 +249,123 @@ export async function lockFittingAppointmentForMutation(
     [input.tenantId, input.branchId, input.fittingId],
   );
   return result.rows[0] ?? null;
+}
+
+export async function verifyFittingRequiredClaims(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; fittingId: string },
+): Promise<boolean> {
+  const result = await client.query<{ claims_valid: boolean }>(
+    `SELECT
+       (
+         SELECT count(*) = 1
+           FROM fitting_slot_allocation fsa
+           JOIN fitting_capacity_slot fcs
+             ON fcs.tenant_id = fsa.tenant_id AND fcs.id = fsa.slot_id
+          WHERE fsa.tenant_id = $1
+            AND fsa.fitting_id = $3::uuid
+            AND fsa.is_blocking
+            AND fcs.active
+            AND fcs.branch_id = $2
+            AND fsa.period = fa.period
+       )
+       AND NOT EXISTS (
+         SELECT 1
+           FROM fitting_line fl
+          WHERE fl.tenant_id = $1
+            AND fl.fitting_id = $3::uuid
+            AND fl.removed_at IS NULL
+            AND fl.garment_guaranteed
+            AND NOT EXISTS (
+              SELECT 1
+                FROM asset_allocation aa
+               WHERE aa.tenant_id = fl.tenant_id
+                 AND aa.fitting_line_id = fl.id
+                 AND aa.is_blocking
+                 AND aa.kind = 'fitting'
+                 AND aa.asset_id = fl.asset_id
+                 AND aa.branch_id = $2
+                 AND aa.period = fa.period
+            )
+       ) AS claims_valid
+       FROM fitting_appointment fa
+      WHERE fa.tenant_id = $1 AND fa.branch_id = $2 AND fa.id = $3::uuid
+      LIMIT 1`,
+    [input.tenantId, input.branchId, input.fittingId],
+  );
+  return result.rows[0]?.claims_valid ?? false;
+}
+
+export async function releaseFittingBlockingClaims(
+  client: PoolClient,
+  input: { tenantId: string; fittingId: string },
+): Promise<{ capacityReleased: number; assetClaimsReleased: number }> {
+  const capacity = await client.query(
+    `UPDATE fitting_slot_allocation
+        SET is_blocking = false, released_at = statement_timestamp()
+      WHERE tenant_id = $1 AND fitting_id = $2::uuid AND is_blocking`,
+    [input.tenantId, input.fittingId],
+  );
+  const assets = await client.query(
+    `UPDATE asset_allocation aa
+        SET is_blocking = false, released_at = statement_timestamp()
+       FROM fitting_line fl
+      WHERE fl.tenant_id = $1
+        AND fl.fitting_id = $2::uuid
+        AND aa.tenant_id = fl.tenant_id
+        AND aa.fitting_line_id = fl.id
+        AND aa.is_blocking`,
+    [input.tenantId, input.fittingId],
+  );
+  return {
+    capacityReleased: capacity.rowCount ?? 0,
+    assetClaimsReleased: assets.rowCount ?? 0,
+  };
+}
+
+export type FittingLifecycleTimingGuard =
+  'none' | 'before_start' | 'at_or_after_start' | 'at_or_after_end';
+
+export async function transitionFittingLifecycle(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    fittingId: string;
+    version: number;
+    expectedStatus: 'pending' | 'confirmed';
+    nextStatus: 'confirmed' | 'completed' | 'rejected' | 'cancelled' | 'no_show';
+    reason: string | null;
+    timingGuard: FittingLifecycleTimingGuard;
+  },
+): Promise<number | null> {
+  const result = await client.query<{ version: number }>(
+    `UPDATE fitting_appointment
+        SET status = $5,
+            terminal_reason = $6,
+            version = version + 1
+      WHERE tenant_id = $1
+        AND id = $2::uuid
+        AND version = $3
+        AND status = $4
+        AND CASE $7::text
+              WHEN 'none' THEN true
+              WHEN 'before_start' THEN lower(period) > statement_timestamp()
+              WHEN 'at_or_after_start' THEN lower(period) <= statement_timestamp()
+              WHEN 'at_or_after_end' THEN upper(period) <= statement_timestamp()
+              ELSE false
+            END
+      RETURNING version`,
+    [
+      input.tenantId,
+      input.fittingId,
+      input.version,
+      input.expectedStatus,
+      input.nextStatus,
+      input.reason,
+      input.timingGuard,
+    ],
+  );
+  return result.rows[0]?.version ?? null;
 }
 
 export async function lockActiveFittingLines(
@@ -464,11 +589,19 @@ export async function appendFittingMutationAudit(
   input: {
     tenantId: string;
     actorKey: string;
-    action: 'fitting.rescheduled' | 'fitting.garment_changed';
+    action:
+      | 'fitting.rescheduled'
+      | 'fitting.garment_changed'
+      | 'fitting.confirmed'
+      | 'fitting.rejected'
+      | 'fitting.cancelled'
+      | 'fitting.completed'
+      | 'fitting.marked_no_show';
     fittingId: string;
     branchId: string;
     requestId: string;
     version: number;
+    status?: FittingAppointmentStatus;
   },
 ): Promise<void> {
   await client.query(
@@ -481,7 +614,11 @@ export async function appendFittingMutationAudit(
       input.actorKey,
       input.action,
       input.fittingId,
-      JSON.stringify({ branch_id: input.branchId, version: input.version }),
+      JSON.stringify({
+        branch_id: input.branchId,
+        version: input.version,
+        ...(input.status ? { status: input.status } : {}),
+      }),
       input.requestId,
     ],
   );
