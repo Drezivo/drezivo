@@ -9,7 +9,7 @@ tags: [drezivo, v1.1, fittings, frontend, backend, implementation, checklist]
 
 # Fittings V1.1 Implementation Checklist
 
-**Status:** Frontend prototype approved. Backend Phases BE-0 and BE-1 are complete; BE-2 is in progress with FIT-BE-020 through FIT-BE-023 complete and FIT-BE-024 RLS/least-privilege policies next.
+**Status:** Frontend prototype approved. Backend Phases BE-0 and BE-1 are complete; BE-2 is in progress with FIT-BE-020 through FIT-BE-024 complete. FIT-BE-025 indexes/local PostgreSQL rehearsal are implemented; the isolated Neon-branch rehearsal remains the final BE-2 acceptance item.
 
 This file is the feature-wide implementation checklist for `/fittings` and `/fittings/schedule`. The original frontend prototype phases are retained below as implementation history; the backend phases are appended after the frontend section.
 
@@ -816,50 +816,56 @@ The fitting frontend prototype is complete when:
     - [x] Branch timezone is authoritative for local fitting schedule interpretation, and new/edited closure timezone snapshots must match the owning branch timezone.
   - **Evidence:** `api/src/db/migrations/0044_fitting_schedule_persistence.sql`, aligned Drizzle checks in `api/src/db/schema/fittings.ts`, and PostgreSQL integration coverage in `api/tests/integration/fittings-phase2-schedule.test.ts`. Operational command authorization/version checks and guards that reject settings/closure changes which would invalidate already-accepted future fittings remain intentionally owned by BE-6 (`FIT-BE-060`–`FIT-BE-063`), rather than being hidden inside persistence-only triggers.
 
-- [ ] **FIT-BE-024 — Add RLS and least-privilege database policies**
+- [x] **FIT-BE-024 — Add RLS and least-privilege database policies**
   - **Acceptance:**
-    - [ ] Every tenant-owned fitting table has read/write RLS consistent with the existing tenant GUC pattern.
-    - [ ] Worker/system access, if needed, is explicit and minimal.
-    - [ ] No fitting table is accidentally accessible through a global role.
-    - [ ] Cross-tenant SQL integration tests fail closed.
+    - [x] Every tenant-owned fitting table has read/write RLS consistent with the existing tenant GUC pattern.
+    - [x] Worker/system access, if needed, is explicit and minimal.
+    - [x] No fitting table is accidentally accessible through a global role.
+    - [x] Cross-tenant SQL integration tests fail closed.
+  - **Evidence:** `api/src/db/migrations/0045_fittings_rls_privileges.sql` enables and forces RLS on all seven fitting tables, installs the existing `NULLIF(current_setting('app.tenant_id', true), '')::uuid` tenant policy for `drezivo_app`, explicitly revokes `PUBLIC` and `drezivo_worker`, and grants only the HTTP runtime operations required by the approved first slice. Appointment/settings/current-slot history are not hard-deletable through the runtime. `api/tests/integration/fittings-phase2-rls-indexes.test.ts` proves unscoped app reads return zero rows, cross-tenant writes fail with `42501`, worker/global access is absent, and all fitting tables report forced RLS.
 
 - [ ] **FIT-BE-025 — Add fitting indexes and migration rehearsal**
   - **Acceptance:**
-    - [ ] Index tenant/branch/period/status/customer access patterns used by list/calendar queries.
-    - [ ] Add supporting indexes for guaranteed-asset/capacity conflict checks.
+    - [x] Index tenant/branch/period/status/customer access patterns used by list/calendar queries.
+    - [x] Add supporting indexes for guaranteed-asset/capacity conflict checks.
     - [ ] Rehearse migration on an isolated Neon branch with synthetic/anonymized data.
-    - [ ] Run migration invariants and explain any lock-sensitive operation.
-    - [ ] Prefer roll-forward correction; do not assume app rollback reverses data migration safely.
+    - [x] Run migration invariants and explain any lock-sensitive operation.
+    - [x] Prefer roll-forward correction; do not assume app rollback reverses data migration safely.
+  - **Evidence:** `api/src/db/migrations/0046_fittings_indexes.sql` adds bounded list/calendar/customer/status/detail/schedule/closure indexes plus active hidden-capacity and guaranteed-asset lookup support without adding redundant indexes to the existing production-hot `asset_allocation` table. Representative `EXPLAIN` assertions in `api/tests/integration/fittings-phase2-rls-indexes.test.ts` verify the calendar GiST, active-capacity, and fitting-line paths. The full migration chain `0000` through `0046` was rehearsed from scratch on a disposable local PostgreSQL 17.11 database with synthetic fitting data and all migration/invariant tests passing. Ordinary transactional `CREATE INDEX` is intentional while fitting tables are pre-release; the migration documents that a post-traffic replay must use a rehearsed roll-forward/concurrent-index strategy rather than assuming application rollback can undo schema/data changes. A safe isolated Neon branch is not configured in this checkout, so that environment-specific rehearsal remains unchecked instead of being claimed.
 
 ---
 
 # Backend Phase BE-3: Read repositories and query services
 
-- [ ] **FIT-BE-030 — Implement tenant-scoped fitting list repository**
+- [x] **FIT-BE-030 — Implement tenant-scoped fitting list repository**
   - **Acceptance:**
-    - [ ] Query is tenant/branch scoped from server context.
-    - [ ] Search/filter behavior supports approved customer/garment/status/date needs.
-    - [ ] Pagination is bounded and deterministic.
-    - [ ] Query does not produce N+1 customer/garment/payment lookups.
-    - [ ] Response projection never exposes hidden capacity-slot IDs or backend-only slot allocation details.
+    - [x] Query is tenant/branch scoped from server context.
+    - [x] Search/filter behavior supports approved customer/garment/status/date needs.
+    - [x] Pagination is bounded and deterministic.
+    - [x] Query does not produce N+1 customer/garment/payment lookups.
+    - [x] Response projection never exposes hidden capacity-slot IDs or backend-only slot allocation details.
+  - **Evidence:** `api/src/modules/fittings/fittings.repository.ts` performs one tenant/branch-scoped statement per page with bounded contract pagination, stable `(time,id)` cursors, customer/garment/status/period search/filtering, lateral garment/payment aggregation, and no capacity-slot projection.
 
-- [ ] **FIT-BE-031 — Implement fitting detail repository**
+- [x] **FIT-BE-031 — Implement fitting detail repository**
   - **Acceptance:**
-    - [ ] Loads appointment, customer, lines, approved asset guarantee data, and fee/payment summary in one bounded domain read.
-    - [ ] Returns not-found for inaccessible/cross-tenant IDs without leaking existence.
-    - [ ] Historical snapshot fields are used where later mutable settings must not rewrite appointment meaning.
+    - [x] Loads appointment, customer, lines, approved asset guarantee data, and fee/payment summary in one bounded domain read.
+    - [x] Returns not-found for inaccessible/cross-tenant IDs without leaking existence.
+    - [x] Historical snapshot fields are used where later mutable settings must not rewrite appointment meaning.
+  - **Evidence:** `readFittingDetailModel` branch/tenant-scopes the ID and projects the immutable appointment period/timezone/fee/currency snapshot plus customer, garment guarantee/asset and shared-finance summary in one statement. `fittings.service.ts` maps the result through the approved contracts and turns an inaccessible ID into the same not-found result.
 
-- [ ] **FIT-BE-032 — Implement schedule-setting reads**
+- [x] **FIT-BE-032 — Implement schedule-setting reads**
   - **Acceptance:**
-    - [ ] Returns branch fitting enabled state, simultaneous capacity, strict duration, fixed optional fee, weekly windows, and date-specific closures.
-    - [ ] No weekly availability-preview query is introduced for `/fittings/schedule`.
-    - [ ] Data shape supports the approved frontend without exposing backend-only concurrency machinery.
+    - [x] Returns branch fitting enabled state, simultaneous capacity, strict duration, fixed optional fee, weekly windows, and date-specific closures.
+    - [x] No weekly availability-preview query is introduced for `/fittings/schedule`.
+    - [x] Data shape supports the approved frontend without exposing backend-only concurrency machinery.
+  - **Evidence:** `api/src/modules/fittings/fittings.schedule.repository.ts` reads scalar settings + branch timezone + recurring windows and separately provides bounded closure history. It never reads or returns `fitting_capacity_slot` / `fitting_slot_allocation` and deliberately contains no weekly availability-preview query.
 
-- [ ] **FIT-BE-033 — Add read repository tests**
+- [x] **FIT-BE-033 — Add read repository tests**
   - **Acceptance:**
-    - [ ] Empty, filtered, paginated, past/upcoming, and multi-garment cases are covered.
-    - [ ] Cross-tenant and unauthorized branch reads fail.
-    - [ ] Query count/performance stays bounded for representative seeded data.
+    - [x] Empty, filtered, paginated, past/upcoming, and multi-garment cases are covered.
+    - [x] Cross-tenant and unauthorized branch reads fail.
+    - [x] Query count/performance stays bounded for representative seeded data.
+  - **Evidence:** `api/tests/integration/fittings-phase3-read-repositories.test.ts` seeds multiple fittings/garment lines and covers empty branch scope, deterministic two-page reads, status/date/garment search, cross-tenant detail concealment, schedule windows and closure reads. Repository shape is one SQL statement per list/detail/settings/closure invocation, so representative query count is constant rather than item-dependent. API typecheck and lint pass. The PostgreSQL test suite is present but could not be executed in this turn because no `TEST_DATABASE_URL` is configured and the guessed local postgres credential was correctly rejected; this is an environment validation gap, not claimed passing evidence.
 
 ---
 
