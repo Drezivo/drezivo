@@ -12739,6 +12739,1392 @@ paths:
                   - success
                   - error
                   - request_id
+  /fittings/{id}/payment:
+    post:
+      tags:
+        - fittings
+        - payments
+      summary: Create the canonical pending payment intent for a positive fitting-fee
+        obligation.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: id
+          in: path
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                payment_method_id:
+                  type: string
+                  format: uuid
+              required:
+                - payment_method_id
+              additionalProperties: false
+      responses:
+        "201":
+          description: Pending fitting-fee payment intent created; no money is implied
+            collected.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      fitting:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          branch_id:
+                            type: string
+                            format: uuid
+                          booking_channel:
+                            type: string
+                            enum: *a23
+                          status:
+                            type: string
+                            enum: *a1
+                          period:
+                            type: object
+                            properties:
+                              start:
+                                type: string
+                                format: date-time
+                              end:
+                                type: string
+                                format: date-time
+                            required:
+                              - start
+                              - end
+                          timezone_snapshot:
+                            type: string
+                            pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
+                          customer:
+                            type: object
+                            properties:
+                              id:
+                                type: string
+                                format: uuid
+                              full_name:
+                                type: string
+                                minLength: 1
+                                maxLength: 300
+                              phone:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 80
+                              email:
+                                type:
+                                  - string
+                                  - "null"
+                                maxLength: 320
+                                format: email
+                            required:
+                              - id
+                              - full_name
+                              - phone
+                              - email
+                            additionalProperties: false
+                          garments:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id:
+                                  type: string
+                                  format: uuid
+                                variant:
+                                  type: object
+                                  properties:
+                                    variant_id:
+                                      type: string
+                                      format: uuid
+                                    product_name:
+                                      type: string
+                                      minLength: 1
+                                      maxLength: 300
+                                    sku:
+                                      type: string
+                                      minLength: 1
+                                      maxLength: 120
+                                    size_label:
+                                      type: string
+                                      minLength: 1
+                                      maxLength: 40
+                                    color_label:
+                                      type:
+                                        - string
+                                        - "null"
+                                      minLength: 1
+                                      maxLength: 80
+                                  required:
+                                    - variant_id
+                                    - product_name
+                                    - sku
+                                    - size_label
+                                    - color_label
+                                  additionalProperties: false
+                                garment_mode:
+                                  type: string
+                                  enum: *a2
+                                assigned_asset:
+                                  type:
+                                    - object
+                                    - "null"
+                                  properties:
+                                    id:
+                                      type: string
+                                      format: uuid
+                                    asset_code:
+                                      type: string
+                                      minLength: 1
+                                      maxLength: 120
+                                  required:
+                                    - id
+                                    - asset_code
+                                  additionalProperties: false
+                              required:
+                                - id
+                                - variant
+                                - garment_mode
+                                - assigned_asset
+                              additionalProperties: false
+                            minItems: 1
+                            maxItems: 20
+                          fee:
+                            type: object
+                            properties:
+                              fee_minor:
+                                type: string
+                                pattern: ^-?(0|[1-9]\d*)$
+                              currency:
+                                type: string
+                                pattern: ^[A-Z]{3}$
+                              payment:
+                                type:
+                                  - object
+                                  - "null"
+                                properties:
+                                  id:
+                                    type: string
+                                    format: uuid
+                                  status:
+                                    type: string
+                                    enum: *a3
+                                  evidence_status:
+                                    type: string
+                                    enum: *a4
+                                  amount_minor:
+                                    type: string
+                                    pattern: ^-?(0|[1-9]\d*)$
+                                  currency:
+                                    type: string
+                                    pattern: ^[A-Z]{3}$
+                                  verified_at:
+                                    type:
+                                      - string
+                                      - "null"
+                                    format: date-time
+                                required:
+                                  - id
+                                  - status
+                                  - evidence_status
+                                  - amount_minor
+                                  - currency
+                                  - verified_at
+                                additionalProperties: false
+                            required:
+                              - fee_minor
+                              - currency
+                              - payment
+                            additionalProperties: false
+                          internal_note:
+                            type:
+                              - string
+                              - "null"
+                            maxLength: 2000
+                          terminal_reason:
+                            type:
+                              - string
+                              - "null"
+                            minLength: 1
+                            maxLength: 500
+                          attention:
+                            type: string
+                            enum: *a5
+                          allowed_actions:
+                            type: array
+                            items:
+                              type: string
+                              enum: *a24
+                            maxItems: 8
+                          version:
+                            type: integer
+                            exclusiveMinimum: 0
+                          created_at:
+                            type: string
+                            format: date-time
+                        required:
+                          - id
+                          - branch_id
+                          - booking_channel
+                          - status
+                          - period
+                          - timezone_snapshot
+                          - customer
+                          - garments
+                          - fee
+                          - internal_note
+                          - terminal_reason
+                          - attention
+                          - allowed_actions
+                          - version
+                          - created_at
+                        additionalProperties: false
+                    required:
+                      - fitting
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Fitting operation permission is required.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "404":
+          description: The fitting or payment method was not found for the active
+            tenant/branch.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "409":
+          description: STATE_CONFLICT or IDEMPOTENCY_KEY_REUSED.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "422":
+          description: The fitting payment request is invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /fittings/{id}/payment-receipt:
+    post:
+      tags:
+        - fittings
+        - payments
+      summary: Attach immutable payment evidence to the fitting payment without
+        marking funds verified.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: id
+          in: path
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                file_id:
+                  type: string
+                  format: uuid
+              required:
+                - file_id
+              additionalProperties: false
+      responses:
+        "200":
+          description: Evidence attached; payment collection state remains independent.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      fitting:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          branch_id:
+                            type: string
+                            format: uuid
+                          booking_channel:
+                            type: string
+                            enum: *a23
+                          status:
+                            type: string
+                            enum: *a1
+                          period:
+                            type: object
+                            properties:
+                              start:
+                                type: string
+                                format: date-time
+                              end:
+                                type: string
+                                format: date-time
+                            required:
+                              - start
+                              - end
+                          timezone_snapshot:
+                            type: string
+                            pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
+                          customer:
+                            type: object
+                            properties:
+                              id:
+                                type: string
+                                format: uuid
+                              full_name:
+                                type: string
+                                minLength: 1
+                                maxLength: 300
+                              phone:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 80
+                              email:
+                                type:
+                                  - string
+                                  - "null"
+                                maxLength: 320
+                                format: email
+                            required:
+                              - id
+                              - full_name
+                              - phone
+                              - email
+                            additionalProperties: false
+                          garments:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id:
+                                  type: string
+                                  format: uuid
+                                variant:
+                                  type: object
+                                  properties:
+                                    variant_id:
+                                      type: string
+                                      format: uuid
+                                    product_name:
+                                      type: string
+                                      minLength: 1
+                                      maxLength: 300
+                                    sku:
+                                      type: string
+                                      minLength: 1
+                                      maxLength: 120
+                                    size_label:
+                                      type: string
+                                      minLength: 1
+                                      maxLength: 40
+                                    color_label:
+                                      type:
+                                        - string
+                                        - "null"
+                                      minLength: 1
+                                      maxLength: 80
+                                  required:
+                                    - variant_id
+                                    - product_name
+                                    - sku
+                                    - size_label
+                                    - color_label
+                                  additionalProperties: false
+                                garment_mode:
+                                  type: string
+                                  enum: *a2
+                                assigned_asset:
+                                  type:
+                                    - object
+                                    - "null"
+                                  properties:
+                                    id:
+                                      type: string
+                                      format: uuid
+                                    asset_code:
+                                      type: string
+                                      minLength: 1
+                                      maxLength: 120
+                                  required:
+                                    - id
+                                    - asset_code
+                                  additionalProperties: false
+                              required:
+                                - id
+                                - variant
+                                - garment_mode
+                                - assigned_asset
+                              additionalProperties: false
+                            minItems: 1
+                            maxItems: 20
+                          fee:
+                            type: object
+                            properties:
+                              fee_minor:
+                                type: string
+                                pattern: ^-?(0|[1-9]\d*)$
+                              currency:
+                                type: string
+                                pattern: ^[A-Z]{3}$
+                              payment:
+                                type:
+                                  - object
+                                  - "null"
+                                properties:
+                                  id:
+                                    type: string
+                                    format: uuid
+                                  status:
+                                    type: string
+                                    enum: *a3
+                                  evidence_status:
+                                    type: string
+                                    enum: *a4
+                                  amount_minor:
+                                    type: string
+                                    pattern: ^-?(0|[1-9]\d*)$
+                                  currency:
+                                    type: string
+                                    pattern: ^[A-Z]{3}$
+                                  verified_at:
+                                    type:
+                                      - string
+                                      - "null"
+                                    format: date-time
+                                required:
+                                  - id
+                                  - status
+                                  - evidence_status
+                                  - amount_minor
+                                  - currency
+                                  - verified_at
+                                additionalProperties: false
+                            required:
+                              - fee_minor
+                              - currency
+                              - payment
+                            additionalProperties: false
+                          internal_note:
+                            type:
+                              - string
+                              - "null"
+                            maxLength: 2000
+                          terminal_reason:
+                            type:
+                              - string
+                              - "null"
+                            minLength: 1
+                            maxLength: 500
+                          attention:
+                            type: string
+                            enum: *a5
+                          allowed_actions:
+                            type: array
+                            items:
+                              type: string
+                              enum: *a24
+                            maxItems: 8
+                          version:
+                            type: integer
+                            exclusiveMinimum: 0
+                          created_at:
+                            type: string
+                            format: date-time
+                        required:
+                          - id
+                          - branch_id
+                          - booking_channel
+                          - status
+                          - period
+                          - timezone_snapshot
+                          - customer
+                          - garments
+                          - fee
+                          - internal_note
+                          - terminal_reason
+                          - attention
+                          - allowed_actions
+                          - version
+                          - created_at
+                        additionalProperties: false
+                      receipt_id:
+                        type: string
+                        format: uuid
+                      payment_id:
+                        type: string
+                        format: uuid
+                      evidence_status:
+                        type: string
+                        enum:
+                          - uploaded
+                    required:
+                      - fitting
+                      - receipt_id
+                      - payment_id
+                      - evidence_status
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Fitting operation permission is required.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "404":
+          description: The fitting was not found for the active tenant/branch.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "409":
+          description: STATE_CONFLICT, PAYMENT_PREREQUISITE_FAILED, or
+            IDEMPOTENCY_KEY_REUSED.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "422":
+          description: The fitting payment receipt request is invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /fittings/{id}/verify-payment:
+    post:
+      tags:
+        - fittings
+        - payments
+      summary: Explicitly verify actual fitting-fee collection without changing
+        fitting lifecycle state.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: id
+          in: path
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                verified_amount_minor:
+                  type: string
+                  pattern: ^-?(0|[1-9]\d*)$
+                merchant_reference:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                cash_tendered_minor:
+                  type: string
+                  pattern: ^-?(0|[1-9]\d*)$
+              required:
+                - verified_amount_minor
+              additionalProperties: false
+      responses:
+        "200":
+          description: Payment verified and allocated to the immutable fitting-fee charge.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      fitting:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          branch_id:
+                            type: string
+                            format: uuid
+                          booking_channel:
+                            type: string
+                            enum: *a23
+                          status:
+                            type: string
+                            enum: *a1
+                          period:
+                            type: object
+                            properties:
+                              start:
+                                type: string
+                                format: date-time
+                              end:
+                                type: string
+                                format: date-time
+                            required:
+                              - start
+                              - end
+                          timezone_snapshot:
+                            type: string
+                            pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
+                          customer:
+                            type: object
+                            properties:
+                              id:
+                                type: string
+                                format: uuid
+                              full_name:
+                                type: string
+                                minLength: 1
+                                maxLength: 300
+                              phone:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 80
+                              email:
+                                type:
+                                  - string
+                                  - "null"
+                                maxLength: 320
+                                format: email
+                            required:
+                              - id
+                              - full_name
+                              - phone
+                              - email
+                            additionalProperties: false
+                          garments:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id:
+                                  type: string
+                                  format: uuid
+                                variant:
+                                  type: object
+                                  properties:
+                                    variant_id:
+                                      type: string
+                                      format: uuid
+                                    product_name:
+                                      type: string
+                                      minLength: 1
+                                      maxLength: 300
+                                    sku:
+                                      type: string
+                                      minLength: 1
+                                      maxLength: 120
+                                    size_label:
+                                      type: string
+                                      minLength: 1
+                                      maxLength: 40
+                                    color_label:
+                                      type:
+                                        - string
+                                        - "null"
+                                      minLength: 1
+                                      maxLength: 80
+                                  required:
+                                    - variant_id
+                                    - product_name
+                                    - sku
+                                    - size_label
+                                    - color_label
+                                  additionalProperties: false
+                                garment_mode:
+                                  type: string
+                                  enum: *a2
+                                assigned_asset:
+                                  type:
+                                    - object
+                                    - "null"
+                                  properties:
+                                    id:
+                                      type: string
+                                      format: uuid
+                                    asset_code:
+                                      type: string
+                                      minLength: 1
+                                      maxLength: 120
+                                  required:
+                                    - id
+                                    - asset_code
+                                  additionalProperties: false
+                              required:
+                                - id
+                                - variant
+                                - garment_mode
+                                - assigned_asset
+                              additionalProperties: false
+                            minItems: 1
+                            maxItems: 20
+                          fee:
+                            type: object
+                            properties:
+                              fee_minor:
+                                type: string
+                                pattern: ^-?(0|[1-9]\d*)$
+                              currency:
+                                type: string
+                                pattern: ^[A-Z]{3}$
+                              payment:
+                                type:
+                                  - object
+                                  - "null"
+                                properties:
+                                  id:
+                                    type: string
+                                    format: uuid
+                                  status:
+                                    type: string
+                                    enum: *a3
+                                  evidence_status:
+                                    type: string
+                                    enum: *a4
+                                  amount_minor:
+                                    type: string
+                                    pattern: ^-?(0|[1-9]\d*)$
+                                  currency:
+                                    type: string
+                                    pattern: ^[A-Z]{3}$
+                                  verified_at:
+                                    type:
+                                      - string
+                                      - "null"
+                                    format: date-time
+                                required:
+                                  - id
+                                  - status
+                                  - evidence_status
+                                  - amount_minor
+                                  - currency
+                                  - verified_at
+                                additionalProperties: false
+                            required:
+                              - fee_minor
+                              - currency
+                              - payment
+                            additionalProperties: false
+                          internal_note:
+                            type:
+                              - string
+                              - "null"
+                            maxLength: 2000
+                          terminal_reason:
+                            type:
+                              - string
+                              - "null"
+                            minLength: 1
+                            maxLength: 500
+                          attention:
+                            type: string
+                            enum: *a5
+                          allowed_actions:
+                            type: array
+                            items:
+                              type: string
+                              enum: *a24
+                            maxItems: 8
+                          version:
+                            type: integer
+                            exclusiveMinimum: 0
+                          created_at:
+                            type: string
+                            format: date-time
+                        required:
+                          - id
+                          - branch_id
+                          - booking_channel
+                          - status
+                          - period
+                          - timezone_snapshot
+                          - customer
+                          - garments
+                          - fee
+                          - internal_note
+                          - terminal_reason
+                          - attention
+                          - allowed_actions
+                          - version
+                          - created_at
+                        additionalProperties: false
+                      payment_id:
+                        type: string
+                        format: uuid
+                      payment_status:
+                        type: string
+                        enum:
+                          - paid
+                      verified_amount_minor:
+                        type: string
+                        pattern: ^-?(0|[1-9]\d*)$
+                      verified_at:
+                        type: string
+                        format: date-time
+                    required:
+                      - fitting
+                      - payment_id
+                      - payment_status
+                      - verified_amount_minor
+                      - verified_at
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: payments.manage and evidence.verify are required in addition to
+            fitting operation access.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "404":
+          description: The fitting was not found for the active tenant/branch.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "409":
+          description: STATE_CONFLICT, PAYMENT_PREREQUISITE_FAILED, or
+            IDEMPOTENCY_KEY_REUSED.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "422":
+          description: The fitting payment verification request is invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
   /fittings/settings:
     get:
       tags:

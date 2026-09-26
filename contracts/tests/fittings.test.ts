@@ -16,6 +16,10 @@ import {
   fittingListQuery,
   fittingListResponse,
   fittingNoShowRequest,
+  fittingPaymentIntentCreateRequest,
+  fittingPaymentReceiptAttachRequest,
+  fittingPaymentVerifyRequest,
+  fittingPaymentVerifyResponse,
   fittingRejectRequest,
   fittingRescheduleRequest,
   fittingSettings,
@@ -37,6 +41,9 @@ const ids = {
   asset: '00000000-0000-4000-8000-000000000108',
   payment: '00000000-0000-4000-8000-000000000109',
   closure: '00000000-0000-4000-8000-000000000110',
+  paymentMethod: '00000000-0000-4000-8000-000000000111',
+  paymentReceipt: '00000000-0000-4000-8000-000000000112',
+  file: '00000000-0000-4000-8000-000000000113',
 };
 
 const period = {
@@ -343,6 +350,71 @@ describe('fitting contracts', () => {
     ];
 
     expect(results).toEqual([false, false, false]);
+  });
+
+  it('keeps fitting payment intent and evidence commands narrow and finance-owned', () => {
+    const results = [
+      fittingPaymentIntentCreateRequest.safeParse({ payment_method_id: ids.paymentMethod }).success,
+      fittingPaymentIntentCreateRequest.safeParse({
+        payment_method_id: ids.paymentMethod,
+        amount_minor: '30000',
+      }).success,
+      fittingPaymentReceiptAttachRequest.safeParse({ file_id: ids.file }).success,
+      fittingPaymentReceiptAttachRequest.safeParse({
+        file_id: ids.file,
+        payment_status: 'paid',
+      }).success,
+    ];
+
+    expect(results).toEqual([true, false, true, false]);
+  });
+
+  it('keeps fitting payment verification independent from appointment version/state intent', () => {
+    const results = [
+      fittingPaymentVerifyRequest.safeParse({
+        verified_amount_minor: '30000',
+        merchant_reference: 'GCASH-123',
+      }).success,
+      fittingPaymentVerifyRequest.safeParse({
+        verified_amount_minor: '30000',
+        version: 2,
+        status: 'confirmed',
+      }).success,
+      fittingPaymentVerifyRequest.safeParse({
+        verified_amount_minor: '0',
+      }).success,
+    ];
+
+    expect(results).toEqual([true, false, false]);
+  });
+
+  it('can expose a paid fitting payment while the appointment remains independently confirmed', () => {
+    const paidDetail = {
+      ...baseDetail,
+      status: 'confirmed' as const,
+      fee: {
+        fee_minor: '30000',
+        currency: 'PHP',
+        payment: {
+          id: ids.payment,
+          status: 'paid' as const,
+          evidence_status: 'verified' as const,
+          amount_minor: '30000',
+          currency: 'PHP',
+          verified_at: '2026-10-01T02:00:00.000Z',
+        },
+      },
+      allowed_actions: ['cancel', 'reschedule', 'update_garments', 'update_note'] as const,
+    };
+    const response = fittingPaymentVerifyResponse.safeParse({
+      fitting: paidDetail,
+      payment_id: ids.payment,
+      payment_status: 'paid',
+      verified_amount_minor: '30000',
+      verified_at: '2026-10-01T02:00:00.000Z',
+    });
+
+    expect(response.success).toBe(true);
   });
 
   it('rejects a fitting payment projection whose currency disagrees with the fee snapshot', () => {
