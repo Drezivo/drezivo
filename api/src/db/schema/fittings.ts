@@ -5,6 +5,7 @@ import {
   check,
   customType,
   foreignKey,
+  index,
   integer,
   pgTable,
   text,
@@ -95,6 +96,26 @@ export const fittingAppointment = pgTable(
       table.tenantId,
       table.businessKey,
     ),
+    index('fitting_appointment_tenant_branch_start_id_idx').on(
+      table.tenantId,
+      table.branchId,
+      sql`lower(${table.period})`,
+      table.id,
+    ),
+    index('fitting_appointment_tenant_branch_status_start_id_idx').on(
+      table.tenantId,
+      table.branchId,
+      table.status,
+      sql`lower(${table.period})`,
+      table.id,
+    ),
+    index('fitting_appointment_tenant_branch_customer_start_id_idx').on(
+      table.tenantId,
+      table.branchId,
+      table.customerId,
+      sql`lower(${table.period})`,
+      table.id,
+    ),
     foreignKey({
       columns: [table.tenantId, table.branchId],
       foreignColumns: [branch.tenantId, branch.id],
@@ -135,10 +156,23 @@ export const fittingLine = pgTable(
     variantId: uuid('variant_id').notNull(),
     assetId: uuid('asset_id'),
     garmentGuaranteed: boolean('garment_guaranteed').notNull(),
+    removedAt: timestamp('removed_at', { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
     unique('fitting_line_tenant_id_id_key').on(table.tenantId, table.id),
+    index('fitting_line_tenant_fitting_id_idx').on(table.tenantId, table.fittingId, table.id),
+    index('fitting_line_tenant_fitting_active_idx')
+      .on(table.tenantId, table.fittingId, table.id)
+      .where(sql`${table.removedAt} IS NULL`),
+    index('fitting_line_tenant_variant_fitting_idx').on(
+      table.tenantId,
+      table.variantId,
+      table.fittingId,
+    ),
+    index('fitting_line_tenant_guaranteed_asset_idx')
+      .on(table.tenantId, table.assetId, table.fittingId)
+      .where(sql`${table.garmentGuaranteed} AND ${table.assetId} IS NOT NULL`),
     foreignKey({
       columns: [table.tenantId, table.fittingId],
       foreignColumns: [fittingAppointment.tenantId, fittingAppointment.id],
@@ -180,6 +214,9 @@ export const fittingCapacitySlot = pgTable(
       table.branchId,
       table.slotNumber,
     ),
+    index('fitting_capacity_slot_active_lookup_idx')
+      .on(table.tenantId, table.branchId, table.slotNumber, table.id)
+      .where(sql`${table.active}`),
     foreignKey({
       columns: [table.tenantId, table.branchId],
       foreignColumns: [branch.tenantId, branch.id],
@@ -208,6 +245,12 @@ export const fittingSlotAllocation = pgTable(
     uniqueIndex('fitting_slot_allocation_one_blocking_per_fitting')
       .on(table.tenantId, table.fittingId)
       .where(sql`${table.isBlocking}`),
+    index('fitting_slot_allocation_tenant_fitting_history_idx').on(
+      table.tenantId,
+      table.fittingId,
+      table.createdAt,
+      table.id,
+    ),
     foreignKey({
       columns: [table.tenantId, table.slotId],
       foreignColumns: [fittingCapacitySlot.tenantId, fittingCapacitySlot.id],
@@ -244,6 +287,13 @@ export const fittingHours = pgTable(
   },
   (table) => [
     unique('fitting_hours_tenant_id_id_key').on(table.tenantId, table.id),
+    index('fitting_hours_tenant_branch_weekday_start_idx').on(
+      table.tenantId,
+      table.branchId,
+      table.weekday,
+      table.startsLocal,
+      table.id,
+    ),
     foreignKey({
       columns: [table.tenantId, table.branchId],
       foreignColumns: [branch.tenantId, branch.id],
@@ -273,6 +323,12 @@ export const fittingClosure = pgTable(
   },
   (table) => [
     unique('fitting_closure_tenant_id_id_key').on(table.tenantId, table.id),
+    index('fitting_closure_tenant_branch_start_id_idx').on(
+      table.tenantId,
+      table.branchId,
+      sql`lower(${table.period})`,
+      table.id,
+    ),
     foreignKey({
       columns: [table.tenantId, table.branchId],
       foreignColumns: [branch.tenantId, branch.id],
