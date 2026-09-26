@@ -873,12 +873,13 @@ The fitting frontend prototype is complete when:
 
 - [ ] **FIT-BE-040 — Implement staff fitting creation service**
   - **Acceptance:**
-    - [ ] Existing-customer and approved walk-in flow follow FIT-BE-002; new walk-ins require full name plus phone or email.
-    - [ ] Start aligns to the 30-minute grid; period is derived from the branch strict duration and branch timezone, never a client override.
-    - [ ] Creation always starts `pending`.
-    - [ ] Garment lines are validated against tenant catalogue/variant ownership.
-    - [ ] Fee/currency snapshot comes from branch fitting settings; positive fee creates the immutable `fitting_fee` charge.
+    - [x] Existing-customer and approved walk-in flow follow FIT-BE-002; new walk-ins require full name plus phone or email.
+    - [x] Start aligns to the 30-minute grid; period is derived from the branch strict duration and branch timezone, never a client override.
+    - [x] Creation always starts `pending`.
+    - [x] Garment lines are validated against tenant catalogue/variant ownership.
+    - [x] Fee/currency snapshot comes from branch fitting settings; positive fee creates the immutable `fitting_fee` charge.
     - [ ] Appointment, one hidden capacity-slot allocation, all lines/guaranteed asset allocations, finance charge when applicable, audit metadata and approved outbox intent commit as one idempotent transaction.
+  - **Progress:** `api/src/modules/fittings/fittings.command.{service,repository}.ts` now implements the staff create orchestration, existing/new customer handling, branch-local 30-minute grid check, strict-duration period derivation, tenant catalogue validation, pending-only appointment insertion, fitting fee charge snapshot, audit event, and tenant idempotency replay/conflict semantics. Guaranteed requests fail closed rather than creating a fake guarantee. The final acceptance item remains intentionally open until FIT-BE-041/FIT-BE-043 provide the atomic hidden capacity-slot and guaranteed-asset claim seams; first-slice fitting notifications/outbox are explicitly deferred by the decision record. Typecheck, lint, and 83 non-integration API tests pass.
 
 - [ ] **FIT-BE-041 — Implement schedule/capacity validation**
   - **Acceptance:**
