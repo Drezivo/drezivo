@@ -218,7 +218,7 @@ Before marking a task complete:
 
 ## Deferred from Schedule V1
 
-- Real fitting appointments/resources/capacity and Fitting agenda events — V1.1.
+- Real fitting appointments and hidden branch-capacity-backed Fitting agenda events — V1.1, staged after the core fitting backend is production-ready per [[Fittings Backend Decision Record]].
 - Drag-and-drop rescheduling unless it can preserve the full atomic reschedule contract.
 - Multi-branch calendars — V2.
 - Predictive workload/analytics.
