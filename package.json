@@ -5,6 +5,9 @@
   "description": "Drezivo clothing-rental SaaS monorepo",
   "workspaces": ["contracts", "api", "app", "web", "docs"],
   "engines": {"node": ">=22 <25"},
+  "devDependencies": {
+    "eslint": "^10.11.0"
+  },
   "scripts": {
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
