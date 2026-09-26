@@ -13,11 +13,11 @@ against Data-Model §6 (reservation states) and §7 (operational finance).
 
 This workspace package is imported by every Drezivo consumer:
 
-| Workspace | What it does with this package |
-|---|---|
-| `api` | Validates every request/response against these schemas at the HTTP boundary. |
-| `app` | The business dashboard — staff-facing reservation, finance, and tenancy flows. |
-| `web` | The public marketing site and tenant storefront — storefront, catalogue, availability, guest checkout. |
+| Workspace | What it does with this package                                                                         |
+| --------- | ------------------------------------------------------------------------------------------------------ |
+| `api`     | Validates every request/response against these schemas at the HTTP boundary.                           |
+| `app`     | The business dashboard — staff-facing reservation, finance, and tenancy flows.                         |
+| `web`     | The public marketing site and tenant storefront — storefront, catalogue, availability, guest checkout. |
 
 None of the three hand-writes a duplicate type for anything this package already defines. If a
 shape this package doesn't cover is needed, it is added here first.
@@ -41,11 +41,11 @@ Then install and pin an exact version — nothing here auto-upgrades a consumer:
 
 ```bash
 npm install @drezivo/contracts@0.1.0
+```
 
 For local development, run `npm ci` from the monorepo root. npm links this workspace package into
 the API and both Next.js applications. A tarball is only for an explicitly approved external
 integration and must never replace the root workspace dependency during normal development.
-```
 
 `zod` is a peer dependency (see `package.json`), not bundled, so a consumer's own `zod` install is
 the one actually used at runtime — this package never ships a second copy that a branded type
@@ -65,8 +65,8 @@ console.log(`built against @drezivo/contracts@${contractVersion}`);
 - `src/common/` — wire primitives every module builds on: money (decimal-string minor units),
   opaque branded IDs, ISO time/intervals, the one pagination shape, the error envelope, the
   idempotency header contract, the success envelope.
-- `src/storefront/`, `src/availability/`, `src/reservations/`, `src/finance/`, `src/files/`,
-  `src/tenancy/`, `src/guest/` — one module per TRD §2 domain boundary this contract covers.
+- `src/storefront/`, `src/availability/`, `src/reservations/`, `src/fittings/`, `src/finance/`,
+  `src/files/`, `src/tenancy/`, `src/guest/` — one module per TRD §2 domain boundary this contract covers.
 - `openapi/generate.ts` — builds `openapi/drezivo.v1.yaml` from the registered schemas.
   `openapi/drezivo.v1.yaml` is **generated, never hand-edited** — CI fails a release if
   regenerating it produces a diff against the committed file.
@@ -89,14 +89,14 @@ API that doesn't match the schemas.
 
 ## Scripts
 
-| Script | Purpose |
-|---|---|
-| `npm run build` | Dual ESM/CJS build with `.d.ts`, via tsup. |
-| `npm run dev` | `build` in watch mode. |
-| `npm run typecheck` | `tsc --noEmit`, strict mode. |
-| `npm run lint` / `lint:fix` | ESLint. |
-| `npm test` | Vitest. |
-| `npm run openapi:generate` | Regenerate `openapi/drezivo.v1.yaml` from `src/`. |
+| Script                      | Purpose                                           |
+| --------------------------- | ------------------------------------------------- |
+| `npm run build`             | Dual ESM/CJS build with `.d.ts`, via tsup.        |
+| `npm run dev`               | `build` in watch mode.                            |
+| `npm run typecheck`         | `tsc --noEmit`, strict mode.                      |
+| `npm run lint` / `lint:fix` | ESLint.                                           |
+| `npm test`                  | Vitest.                                           |
+| `npm run openapi:generate`  | Regenerate `openapi/drezivo.v1.yaml` from `src/`. |
 
 ## The release rule for a breaking change
 
@@ -130,5 +130,3 @@ published for external integrations only through an approved release decision.
 ## License
 
 This repository is proprietary Drezivo software. Use is limited to the permission in [LICENSE.md](LICENSE.md); third-party dependencies retain their own licenses.
-
-

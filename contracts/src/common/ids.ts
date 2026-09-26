@@ -77,6 +77,15 @@ export type ReservationId = z.infer<typeof reservationId>;
 export const reservationLineId = idSchema('ReservationLineId');
 export type ReservationLineId = z.infer<typeof reservationLineId>;
 
+export const fittingId = idSchema('FittingId');
+export type FittingId = z.infer<typeof fittingId>;
+
+export const fittingLineId = idSchema('FittingLineId');
+export type FittingLineId = z.infer<typeof fittingLineId>;
+
+export const fittingClosureId = idSchema('FittingClosureId');
+export type FittingClosureId = z.infer<typeof fittingClosureId>;
+
 export const paymentId = idSchema('PaymentId');
 export type PaymentId = z.infer<typeof paymentId>;
 

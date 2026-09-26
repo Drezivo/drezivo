@@ -44,6 +44,39 @@ import {
   organizationOnboarding,
   errorEnvelope,
   filePurpose,
+  fittingActionResponse,
+  fittingCancelRequest,
+  fittingClosureCreateRequest,
+  fittingClosureListQuery,
+  fittingClosureListResponse,
+  fittingClosureMutationResponse,
+  fittingClosureParams,
+  fittingClosureRemoveRequest,
+  fittingClosureRemoveResponse,
+  fittingClosureUpdateRequest,
+  fittingCompleteRequest,
+  fittingConfirmRequest,
+  fittingCreateRequest,
+  fittingCreateResponse,
+  fittingDetail,
+  fittingGarmentPlanUpdateRequest,
+  fittingGarmentPlanUpdateResponse,
+  fittingIntakeQuery,
+  fittingIntakeResponse,
+  fittingListQuery,
+  fittingListResponse,
+  fittingNoShowRequest,
+  fittingNoteUpdateRequest,
+  fittingNoteUpdateResponse,
+  fittingParams,
+  fittingRejectRequest,
+  fittingRescheduleRequest,
+  fittingSettings,
+  fittingSettingsUpdateRequest,
+  fittingSettingsUpdateResponse,
+  fittingState,
+  fittingWeeklyHoursUpdateRequest,
+  fittingWeeklyHoursUpdateResponse,
   guestReservationView,
   holdIntentRequest,
   holdIntentResponse,
@@ -97,6 +130,10 @@ const registry = new OpenAPIRegistry();
 
 // ---- Shared components -----------------------------------------------
 registry.register('ErrorEnvelope', errorEnvelope);
+registry.register('FittingState', fittingState);
+registry.register('FittingDetail', fittingDetail);
+registry.register('FittingListResponse', fittingListResponse);
+registry.register('FittingSettings', fittingSettings);
 // These are public contract components for Phase 1 onboarding routes. Register
 // the boundary now without advertising paths that the API has not implemented.
 registry.register('OnboardingStatus', onboardingStatus);
@@ -202,7 +239,9 @@ registry.registerPath({
       content: { 'application/json': { schema: successEnvelope(tenantBootstrapResponse) } },
     },
     404: jsonError('The onboarding was not found for this account.'),
-    409: jsonError('The onboarding is not eligible for bootstrap or a unique storefront URL could not be created.'),
+    409: jsonError(
+      'The onboarding is not eligible for bootstrap or a unique storefront URL could not be created.',
+    ),
     429: jsonError('Owner tenant bootstrap rate limit exceeded.'),
   },
 });
@@ -326,7 +365,8 @@ for (const action of ['resend', 'cancel'] as const) {
       body: {
         content: {
           'application/json': {
-            schema: action === 'resend' ? resendMembershipInvitationRequest : cancelMembershipInvitationRequest,
+            schema:
+              action === 'resend' ? resendMembershipInvitationRequest : cancelMembershipInvitationRequest,
           },
         },
       },
@@ -665,6 +705,315 @@ registry.registerPath({
       content: { 'application/json': { schema: successEnvelope(reservationCancelResponse) } },
     },
     409: jsonError('STATE_CONFLICT — already picked up, cannot cancel into available.'),
+  },
+});
+
+// ---- fittings --------------------------------------------------------
+registry.registerPath({
+  method: 'get',
+  path: '/fittings',
+  tags: ['fittings'],
+  summary: 'List staff fittings for the active branch with bounded operational filters.',
+  request: { query: fittingListQuery },
+  responses: {
+    200: {
+      description: 'Paginated fitting appointments for the active branch.',
+      content: { 'application/json': { schema: successEnvelope(fittingListResponse) } },
+    },
+    403: jsonError('Fitting read permission is required.'),
+    422: jsonError('The fitting list query is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/fittings/{id}',
+  tags: ['fittings'],
+  summary: 'Read one authoritative staff fitting projection.',
+  request: { params: fittingParams },
+  responses: {
+    200: {
+      description: 'Fitting detail with customer, garments, fee/payment summary and allowed actions.',
+      content: { 'application/json': { schema: successEnvelope(fittingDetail) } },
+    },
+    403: jsonError('Fitting read permission is required.'),
+    404: jsonError('The fitting was not found for the active tenant/branch.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/fittings/intake-options',
+  tags: ['fittings'],
+  summary: 'Search bounded existing-customer options for staff fitting intake.',
+  request: { query: fittingIntakeQuery },
+  responses: {
+    200: {
+      description:
+        'Safe existing-customer options for deliberate staff selection; matches are advisory only.',
+      content: { 'application/json': { schema: successEnvelope(fittingIntakeResponse) } },
+    },
+    403: jsonError('Fitting create permission is required.'),
+    422: jsonError('The fitting intake query is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/fittings',
+  tags: ['fittings'],
+  summary: 'Create one pending staff fitting and atomically claim capacity/guaranteed garments.',
+  request: {
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: fittingCreateRequest } } },
+  },
+  responses: {
+    201: {
+      description: 'Pending fitting created with authoritative fee and guarantee results.',
+      content: { 'application/json': { schema: successEnvelope(fittingCreateResponse) } },
+    },
+    403: jsonError('Fitting create permission is required.'),
+    409: jsonError(
+      'STATE_CONFLICT, SCHEDULE_CONFLICT, CAPACITY_CONFLICT, ASSET_UNAVAILABLE, or IDEMPOTENCY_KEY_REUSED.',
+    ),
+    422: jsonError('The fitting create request is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'patch',
+  path: '/fittings/{id}/note',
+  tags: ['fittings'],
+  summary: 'Update the bounded internal staff note without changing scheduling or lifecycle state.',
+  request: {
+    params: fittingParams,
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: fittingNoteUpdateRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Internal note updated.',
+      content: { 'application/json': { schema: successEnvelope(fittingNoteUpdateResponse) } },
+    },
+    403: jsonError('Fitting update permission is required.'),
+    404: jsonError('The fitting was not found for the active tenant/branch.'),
+    409: jsonError('STATE_CONFLICT or IDEMPOTENCY_KEY_REUSED.'),
+  },
+});
+
+registry.registerPath({
+  method: 'put',
+  path: '/fittings/{id}/garments',
+  tags: ['fittings'],
+  summary: 'Atomically replace the future fitting garment preference/guarantee plan.',
+  request: {
+    params: fittingParams,
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: fittingGarmentPlanUpdateRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Garment plan replaced without exposing asset-selection authority to the client.',
+      content: { 'application/json': { schema: successEnvelope(fittingGarmentPlanUpdateResponse) } },
+    },
+    403: jsonError('Fitting update permission is required.'),
+    404: jsonError('The fitting was not found for the active tenant/branch.'),
+    409: jsonError('STATE_CONFLICT, ASSET_UNAVAILABLE, or IDEMPOTENCY_KEY_REUSED.'),
+    422: jsonError('The garment plan is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/fittings/{id}/reschedule',
+  tags: ['fittings'],
+  summary: 'Atomically claim a replacement fitting period before releasing the current one.',
+  request: {
+    params: fittingParams,
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: fittingRescheduleRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Fitting rescheduled; the original remains unchanged if this command cannot win.',
+      content: { 'application/json': { schema: successEnvelope(fittingActionResponse) } },
+    },
+    403: jsonError('Fitting reschedule permission is required.'),
+    404: jsonError('The fitting was not found for the active tenant/branch.'),
+    409: jsonError(
+      'STATE_CONFLICT, SCHEDULE_CONFLICT, CAPACITY_CONFLICT, ASSET_UNAVAILABLE, or IDEMPOTENCY_KEY_REUSED.',
+    ),
+    422: jsonError('The replacement start time is invalid.'),
+  },
+});
+
+for (const action of ['confirm', 'reject', 'cancel', 'complete', 'no-show'] as const) {
+  const requestSchema =
+    action === 'confirm'
+      ? fittingConfirmRequest
+      : action === 'reject'
+        ? fittingRejectRequest
+        : action === 'cancel'
+          ? fittingCancelRequest
+          : action === 'complete'
+            ? fittingCompleteRequest
+            : fittingNoShowRequest;
+  registry.registerPath({
+    method: 'post',
+    path: `/fittings/{id}/${action}`,
+    tags: ['fittings'],
+    summary:
+      action === 'no-show'
+        ? 'Mark a confirmed fitting no-show after scheduled start.'
+        : `${action.charAt(0).toUpperCase() + action.slice(1)} one fitting through its guarded lifecycle command.`,
+    request: {
+      params: fittingParams,
+      headers: idempotencyKeyHeader,
+      body: { content: { 'application/json': { schema: requestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Fitting lifecycle state updated.',
+        content: { 'application/json': { schema: successEnvelope(fittingActionResponse) } },
+      },
+      403: jsonError('The authenticated staff actor cannot perform this fitting action.'),
+      404: jsonError('The fitting was not found for the active tenant/branch.'),
+      409: jsonError('STATE_CONFLICT, STALE_VERSION, or IDEMPOTENCY_KEY_REUSED.'),
+      422: jsonError('The fitting action request is invalid.'),
+    },
+  });
+}
+
+registry.registerPath({
+  method: 'get',
+  path: '/fittings/settings',
+  tags: ['fittings'],
+  summary: 'Read branch fitting enabled state, simultaneous capacity, strict duration, fee and weekly hours.',
+  responses: {
+    200: {
+      description: 'Current branch fitting settings without hidden capacity-slot identities.',
+      content: { 'application/json': { schema: successEnvelope(fittingSettings) } },
+    },
+    403: jsonError('Fitting settings read permission is required.'),
+  },
+});
+
+registry.registerPath({
+  method: 'put',
+  path: '/fittings/settings',
+  tags: ['fittings'],
+  summary: 'Owner-only update of branch fitting enabled state, capacity, strict duration and fixed fee.',
+  request: {
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: fittingSettingsUpdateRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Scalar fitting settings updated.',
+      content: { 'application/json': { schema: successEnvelope(fittingSettingsUpdateResponse) } },
+    },
+    403: jsonError('Only Owner may mutate fitting configuration.'),
+    409: jsonError('STATE_CONFLICT, SCHEDULE_CONFLICT, STALE_VERSION, or IDEMPOTENCY_KEY_REUSED.'),
+    422: jsonError('The fitting settings request is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'put',
+  path: '/fittings/settings/hours',
+  tags: ['fittings'],
+  summary: 'Owner-only full replacement of recurring branch fitting windows.',
+  request: {
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: fittingWeeklyHoursUpdateRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Weekly fitting windows updated; gaps represent recurring breaks.',
+      content: { 'application/json': { schema: successEnvelope(fittingWeeklyHoursUpdateResponse) } },
+    },
+    403: jsonError('Only Owner may mutate fitting configuration.'),
+    409: jsonError('SCHEDULE_CONFLICT, STALE_VERSION, or IDEMPOTENCY_KEY_REUSED.'),
+    422: jsonError('The weekly fitting-hours request is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/fittings/closures',
+  tags: ['fittings'],
+  summary: 'List date-specific fitting closures in one bounded period window.',
+  request: { query: fittingClosureListQuery },
+  responses: {
+    200: {
+      description: 'Paginated date-specific fitting closures.',
+      content: { 'application/json': { schema: successEnvelope(fittingClosureListResponse) } },
+    },
+    403: jsonError('Fitting settings read permission is required.'),
+    422: jsonError('The closure list window is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/fittings/closures',
+  tags: ['fittings'],
+  summary: 'Owner-only creation of a date-specific fitting closure.',
+  request: {
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: fittingClosureCreateRequest } } },
+  },
+  responses: {
+    201: {
+      description: 'Fitting closure created.',
+      content: { 'application/json': { schema: successEnvelope(fittingClosureMutationResponse) } },
+    },
+    403: jsonError('Only Owner may mutate fitting configuration.'),
+    409: jsonError('SCHEDULE_CONFLICT, STALE_VERSION, or IDEMPOTENCY_KEY_REUSED.'),
+    422: jsonError('The fitting closure request is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'put',
+  path: '/fittings/closures/{closureId}',
+  tags: ['fittings'],
+  summary: 'Owner-only update of one date-specific fitting closure.',
+  request: {
+    params: fittingClosureParams,
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: fittingClosureUpdateRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Fitting closure updated.',
+      content: { 'application/json': { schema: successEnvelope(fittingClosureMutationResponse) } },
+    },
+    403: jsonError('Only Owner may mutate fitting configuration.'),
+    404: jsonError('The fitting closure was not found for the active tenant/branch.'),
+    409: jsonError('SCHEDULE_CONFLICT, STALE_VERSION, or IDEMPOTENCY_KEY_REUSED.'),
+    422: jsonError('The fitting closure request is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/fittings/closures/{closureId}/remove',
+  tags: ['fittings'],
+  summary: 'Owner-only removal of one date-specific fitting closure.',
+  request: {
+    params: fittingClosureParams,
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: fittingClosureRemoveRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Fitting closure removed.',
+      content: { 'application/json': { schema: successEnvelope(fittingClosureRemoveResponse) } },
+    },
+    403: jsonError('Only Owner may mutate fitting configuration.'),
+    404: jsonError('The fitting closure was not found for the active tenant/branch.'),
+    409: jsonError('STALE_VERSION or IDEMPOTENCY_KEY_REUSED.'),
   },
 });
 

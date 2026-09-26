@@ -24,9 +24,10 @@ export const errorCode = z.enum([
   'FORBIDDEN',
   // 404 — resource missing or concealed cross-tenant (never distinguished on the wire)
   'NOT_FOUND',
-  // 409 — a concurrent conflict, one of three business-distinct reasons
+  // 409 — state/capacity/schedule/idempotency and other business conflicts
   'CONFLICT',
   'CAPACITY_CONFLICT',
+  'SCHEDULE_CONFLICT',
   'STATE_CONFLICT',
   'HOLD_EXPIRED',
   'INVALID_RESERVATION_TRANSITION',
