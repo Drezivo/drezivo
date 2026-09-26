@@ -9,7 +9,7 @@ tags: [drezivo, v1.1, fittings, frontend, backend, implementation, checklist]
 
 # Fittings V1.1 Implementation Checklist
 
-**Status:** Frontend prototype approved. Backend Phases BE-0 and BE-1 are complete; BE-2 database schema, migration, and invariants is the next implementation phase.
+**Status:** Frontend prototype approved. Backend Phases BE-0 and BE-1 are complete; BE-2 is in progress with FIT-BE-020 through FIT-BE-023 complete and FIT-BE-024 RLS/least-privilege policies next.
 
 This file is the feature-wide implementation checklist for `/fittings` and `/fittings/schedule`. The original frontend prototype phases are retained below as implementation history; the backend phases are appended after the frontend section.
 
@@ -777,38 +777,44 @@ The fitting frontend prototype is complete when:
 
 # Backend Phase BE-2: Database schema, migration, and invariants
 
-- [ ] **FIT-BE-020 — Design the fitting persistence migration from the approved model**
+**Implementation status:** FIT-BE-020 persistence expansion, FIT-BE-021 tenant/branch/FK/state integrity, and FIT-BE-022 concurrency/exclusion protection are complete. FIT-BE-023 through FIT-BE-025 still own schedule/closure integrity, RLS/runtime grants, operational indexes, and migration rehearsal required before fitting routes may rely on this schema.
+
+- [x] **FIT-BE-020 — Design the fitting persistence migration from the approved model**
   - **Depends on:** BE-1 contracts approved.
   - **Acceptance:**
-    - [ ] Add `fitting_appointment` with tenant/branch/customer, canonical status, bounded period, timezone snapshot, currency, fee snapshot if approved, business key, timestamps, and optimistic/version fields as required.
-    - [ ] Add `fitting_line` with variant reference, optional physical asset reference, and canonical guarantee semantics.
-    - [ ] Add `fitting_settings`, `fitting_capacity_slot`, `fitting_slot_allocation`, branch-scoped `fitting_hours`, and `fitting_closure` from the approved ERD; do not deploy obsolete `fitting_resource`/`resource_allocation` entities.
-    - [ ] Add release-boundary extension FKs such as fitting links in `asset_allocation`, `payment`, and `charge` only when their owning fitting tables exist and the finance scope is approved.
+    - [x] Add `fitting_appointment` with tenant/branch/customer, canonical status column, bounded-period storage shape, timezone snapshot, currency, fee snapshot, business key, timestamps, and optimistic/version field. Canonical state/range CHECKs are deliberately deferred to FIT-BE-021 rather than being implied by table creation.
+    - [x] Add `fitting_line` with variant reference, optional physical asset reference, and canonical guarantee flag. Guarantee/asset/allocation integrity is tightened in FIT-BE-021/FIT-BE-022.
+    - [x] Add `fitting_settings`, `fitting_capacity_slot`, `fitting_slot_allocation`, branch-scoped `fitting_hours`, and `fitting_closure` from the approved ERD; no obsolete `fitting_resource`/`resource_allocation` entities are deployed.
+    - [x] Activate release-boundary fitting links in canonical `asset_allocation`, `payment`, and `charge`; expand charge kind with `fitting_fee` without introducing a fitting-specific payment-status table.
+  - **Evidence:** `api/src/db/migrations/0041_fittings_persistence.sql`, typed Drizzle mappings in `api/src/db/schema/fittings.ts`, schema barrel export, and finance mapping alignment. The complete migration chain through `0041` applied successfully on a disposable PostgreSQL 17.11 database and introspection confirmed all seven fitting tables, `tstzrange` appointment/closure/allocation periods, bigint fitting fee/version columns, and the activated same-tenant fitting FKs.
 
-- [ ] **FIT-BE-021 — Add tenant, branch, FK, and state integrity constraints**
+- [x] **FIT-BE-021 — Add tenant, branch, FK, and state integrity constraints**
   - **Acceptance:**
-    - [ ] Appointment/customer/variant/asset/capacity references cannot cross tenants.
-    - [ ] Branch relationships match the appointment branch where required.
-    - [ ] Period is finite, non-empty, and normalized to canonical `[)` semantics.
-    - [ ] Guaranteed line constraints require the approved physical-asset relationship.
-    - [ ] Preference-only lines cannot accidentally carry a blocking physical-asset promise.
-    - [ ] Amount/currency constraints follow existing finance rules.
+    - [x] Appointment/customer/variant/asset/capacity references cannot cross tenants.
+    - [x] Branch relationships match the appointment branch where required.
+    - [x] Period is finite, non-empty, and normalized to canonical `[)` semantics.
+    - [x] Guaranteed line constraints require the approved physical-asset relationship.
+    - [x] Preference-only lines cannot accidentally carry a blocking physical-asset promise.
+    - [x] Amount/currency constraints follow existing finance rules.
+  - **Evidence:** `api/src/db/migrations/0042_fittings_integrity.sql` adds canonical state/channel/range/fee/version/reason checks, guarantee/asset semantics, immutable fitting snapshot guards, same-branch slot and guaranteed-asset checks, active-guarantee asset-move protection, and fitting-linked finance currency/fee guards. Existing tenant-paired FKs from `0041` remain the tenant boundary. `api/tests/integration/fittings-phase2-integrity.test.ts` verifies cross-tenant references, same-tenant cross-branch relationships, malformed state/range/guarantee cases, illegal lifecycle edges, and fitting-linked finance snapshot mismatches against PostgreSQL.
 
-- [ ] **FIT-BE-022 — Add concurrency/exclusion constraints**
+- [x] **FIT-BE-022 — Add concurrency/exclusion constraints**
   - **Acceptance:**
-    - [ ] Guaranteed fitting garments participate in canonical `asset_allocation` overlap exclusion.
-    - [ ] Hidden capacity-slot overlap protection follows the approved FIT-BE-000 model.
-    - [ ] Adjacent non-overlapping intervals are allowed.
-    - [ ] Blocking versus released/non-blocking semantics are explicit.
-    - [ ] Constraint behavior is verified in PostgreSQL integration tests, not only TypeScript unit tests.
+    - [x] Guaranteed fitting garments participate in canonical `asset_allocation` overlap exclusion.
+    - [x] Hidden capacity-slot overlap protection follows the approved FIT-BE-000 model.
+    - [x] Adjacent non-overlapping intervals are allowed.
+    - [x] Blocking versus released/non-blocking semantics are explicit.
+    - [x] Constraint behavior is verified in PostgreSQL integration tests, not only TypeScript unit tests.
+  - **Evidence:** `api/src/db/migrations/0043_fittings_exclusion.sql` adds GiST overlap exclusion for hidden capacity slots, one-current-blocking-claim partial uniqueness for capacity and guaranteed fitting lines, released/history semantics, and deferred final-state validation requiring scheduled fittings to own exactly one active same-branch slot plus one matching canonical asset allocation for each guaranteed line. PostgreSQL integration tests race two transactions for the same final capacity slot and the same physical garment, verify one valid winner, verify adjacent `[)` periods succeed, and verify released allocation history remains while the slot/asset becomes reusable.
 
-- [ ] **FIT-BE-023 — Add fitting schedule and closure persistence**
+- [x] **FIT-BE-023 — Add fitting schedule and closure persistence**
   - **Acceptance:**
-    - [ ] Weekly hours support all seven weekdays and multiple windows where approved.
-    - [ ] Strict duration, capacity, enabled state, fee and currency persist at branch scope.
-    - [ ] Recurring breaks are represented by weekly-window gaps; date-specific closures use `fitting_closure`.
-    - [ ] Invalid/overlapping configuration is rejected according to BE-0 rules.
-    - [ ] Branch timezone determines local schedule interpretation.
+    - [x] Weekly hours support ISO weekdays Monday=1 through Sunday=7 and multiple local windows per day, with an eight-window technical safety bound aligned to BE-1 contracts.
+    - [x] Strict duration, maximum simultaneous capacity, enabled state, fixed fee/currency and optimistic version persist in the branch-scoped `fitting_settings` row; tenant currency mismatch is rejected.
+    - [x] Recurring breaks are represented only by gaps between weekly windows; date-specific partial/full-day closures persist in `fitting_closure` as finite `[)` instants plus a bounded reason/timezone snapshot.
+    - [x] Invalid weekday/order/second-precision windows and true same-day overlaps are rejected in PostgreSQL while adjacent half-open windows remain valid; active hidden slots cannot exceed configured branch capacity.
+    - [x] Branch timezone is authoritative for local fitting schedule interpretation, and new/edited closure timezone snapshots must match the owning branch timezone.
+  - **Evidence:** `api/src/db/migrations/0044_fitting_schedule_persistence.sql`, aligned Drizzle checks in `api/src/db/schema/fittings.ts`, and PostgreSQL integration coverage in `api/tests/integration/fittings-phase2-schedule.test.ts`. Operational command authorization/version checks and guards that reject settings/closure changes which would invalidate already-accepted future fittings remain intentionally owned by BE-6 (`FIT-BE-060`–`FIT-BE-063`), rather than being hidden inside persistence-only triggers.
 
 - [ ] **FIT-BE-024 — Add RLS and least-privilege database policies**
   - **Acceptance:**

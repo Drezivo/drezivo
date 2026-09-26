@@ -12,6 +12,7 @@ export * from './files.js';
 export * from './storefront.js';
 export * from './availability.js';
 export * from './reservations.js';
+export * from './fittings.js';
 export * from './finance.js';
 export * from './billing.js';
 export * from './jobs.js';

@@ -1,6 +1,18 @@
-import { integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import {
+  check,
+  foreignKey,
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 import { file } from './files.js';
+import { fittingAppointment } from './fittings.js';
 import { reservation } from './reservations.js';
 import { paymentMethod } from './storefront.js';
 import { membership } from './tenancy.js';
@@ -39,7 +51,14 @@ export const verificationDecisionEnum = pgEnum('payment_verification_decision', 
   'rejected',
   'ask_info',
 ]);
-export const chargeKindEnum = pgEnum('charge_kind', ['rental', 'delivery', 'late_fee', 'damage_fee', 'credit']);
+export const chargeKindEnum = pgEnum('charge_kind', [
+  'rental',
+  'delivery',
+  'late_fee',
+  'damage_fee',
+  'fitting_fee',
+  'credit',
+]);
 export const allocationDirectionEnum = pgEnum('payment_allocation_direction', ['apply', 'reverse']);
 export const refundStatusEnum = pgEnum('refund_status', [
   'requested',
@@ -49,23 +68,44 @@ export const refundStatusEnum = pgEnum('refund_status', [
   'cancelled',
 ]);
 export const refundPurposeEnum = pgEnum('refund_purpose', ['rental', 'security_deposit']);
-export const depositEntryKindEnum = pgEnum('deposit_entry_kind', ['receive', 'apply', 'release', 'reverse']);
+export const depositEntryKindEnum = pgEnum('deposit_entry_kind', [
+  'receive',
+  'apply',
+  'release',
+  'reverse',
+]);
 
 /** Pending intent is guarded-mutable; once `verifiedAt` is set, amount/currency/reference are immutable — corrections are reversals elsewhere, never an edit here. */
-export const payment = pgTable('payment', {
-  ...idColumn,
-  tenantId: uuid('tenant_id').notNull(),
-  reservationId: uuid('reservation_id').references(() => reservation.id),
-  paymentMethodId: uuid('payment_method_id')
-    .notNull()
-    .references(() => paymentMethod.id),
-  amountMinor: integer('amount_minor').notNull(),
-  currency: text('currency').notNull().default('PHP'),
-  status: paymentStatusEnum('status').notNull().default('pending'),
-  merchantReference: text('merchant_reference'),
-  verifiedAt: timestamp('verified_at', { withTimezone: true }),
-  businessKey: text('business_key').notNull(),
-}, (table) => [uniqueIndex('payment_tenant_business_key_key').on(table.tenantId, table.businessKey)]);
+export const payment = pgTable(
+  'payment',
+  {
+    ...idColumn,
+    tenantId: uuid('tenant_id').notNull(),
+    reservationId: uuid('reservation_id').references(() => reservation.id),
+    fittingId: uuid('fitting_id'),
+    paymentMethodId: uuid('payment_method_id')
+      .notNull()
+      .references(() => paymentMethod.id),
+    amountMinor: integer('amount_minor').notNull(),
+    currency: text('currency').notNull().default('PHP'),
+    status: paymentStatusEnum('status').notNull().default('pending'),
+    merchantReference: text('merchant_reference'),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    businessKey: text('business_key').notNull(),
+  },
+  (table) => [
+    uniqueIndex('payment_tenant_business_key_key').on(table.tenantId, table.businessKey),
+    foreignKey({
+      columns: [table.tenantId, table.fittingId],
+      foreignColumns: [fittingAppointment.tenantId, fittingAppointment.id],
+      name: 'payment_fitting_same_tenant_fk',
+    }).onDelete('restrict'),
+    check(
+      'payment_booking_source_at_most_one',
+      sql`num_nonnulls(${table.reservationId}, ${table.fittingId}) <= 1`,
+    ),
+  ],
+);
 
 export const paymentReceipt = pgTable('payment_receipt', {
   ...idColumn,
@@ -100,7 +140,12 @@ export const paymentVerification = pgTable(
     decidedAt: timestamp('decided_at', { withTimezone: true }).notNull().defaultNow(),
     businessKey: text('business_key').notNull(),
   },
-  (table) => [uniqueIndex('payment_verification_tenant_business_key_key').on(table.tenantId, table.businessKey)],
+  (table) => [
+    uniqueIndex('payment_verification_tenant_business_key_key').on(
+      table.tenantId,
+      table.businessKey,
+    ),
+  ],
 );
 
 export const charge = pgTable(
@@ -109,6 +154,7 @@ export const charge = pgTable(
     ...idColumn,
     tenantId: uuid('tenant_id').notNull(),
     reservationId: uuid('reservation_id').references(() => reservation.id),
+    fittingId: uuid('fitting_id'),
     kind: chargeKindEnum('kind').notNull(),
     amountMinor: integer('amount_minor').notNull(),
     currency: text('currency').notNull().default('PHP'),
@@ -116,7 +162,22 @@ export const charge = pgTable(
     businessKey: text('business_key').notNull(),
     ...timestamps,
   },
-  (table) => [uniqueIndex('charge_tenant_business_key_key').on(table.tenantId, table.businessKey)],
+  (table) => [
+    uniqueIndex('charge_tenant_business_key_key').on(table.tenantId, table.businessKey),
+    foreignKey({
+      columns: [table.tenantId, table.fittingId],
+      foreignColumns: [fittingAppointment.tenantId, fittingAppointment.id],
+      name: 'charge_fitting_same_tenant_fk',
+    }).onDelete('restrict'),
+    check(
+      'charge_booking_source_exactly_one',
+      sql`num_nonnulls(${table.reservationId}, ${table.fittingId}) = 1`,
+    ),
+    check(
+      'charge_fitting_kind_source_check',
+      sql`(${table.kind} <> 'fitting_fee' OR ${table.fittingId} IS NOT NULL) AND (${table.fittingId} IS NULL OR ${table.kind} IN ('fitting_fee', 'credit'))`,
+    ),
+  ],
 );
 
 export const paymentAllocation = pgTable(
@@ -136,7 +197,9 @@ export const paymentAllocation = pgTable(
     businessKey: text('business_key').notNull(),
     ...timestamps,
   },
-  (table) => [uniqueIndex('payment_allocation_tenant_business_key_key').on(table.tenantId, table.businessKey)],
+  (table) => [
+    uniqueIndex('payment_allocation_tenant_business_key_key').on(table.tenantId, table.businessKey),
+  ],
 );
 
 export const refund = pgTable(
@@ -182,5 +245,7 @@ export const depositEntry = pgTable(
     businessKey: text('business_key').notNull(),
     ...timestamps,
   },
-  (table) => [uniqueIndex('deposit_entry_tenant_business_key_key').on(table.tenantId, table.businessKey)],
+  (table) => [
+    uniqueIndex('deposit_entry_tenant_business_key_key').on(table.tenantId, table.businessKey),
+  ],
 );
