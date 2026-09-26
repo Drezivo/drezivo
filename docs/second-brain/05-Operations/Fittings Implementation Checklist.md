@@ -9,11 +9,11 @@ tags: [drezivo, v1.1, fittings, frontend, backend, implementation, checklist]
 
 # Fittings V1.1 Implementation Checklist
 
-**Status:** Frontend prototype implemented and approved as the staff-facing direction. Backend implementation is the next workstream, subject to the backend decision gates in this checklist.
+**Status:** Frontend prototype approved. Backend Phase BE-0 is complete; BE-1 contracts/API-surface work is the next implementation phase.
 
 This file is the feature-wide implementation checklist for `/fittings` and `/fittings/schedule`. The original frontend prototype phases are retained below as implementation history; the backend phases are appended after the frontend section.
 
-**Canonical specifications:** [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
+**Canonical specifications:** [[Fittings Backend Decision Record]], [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
 
 **Related operational checklists:** [[Schedule Calendar Checklist]], [[Dashboard Checklist]], [[Availability Checklist]], [[Reservations Checklist]], and [[Core Rental Operations Checklist]].
 
@@ -23,22 +23,13 @@ Use the frontend phases to preserve the approved staff workflow and UI constrain
 
 The frontend prototype remains the interaction reference. The PRD, TRD, Data Model, migrations, contracts, and API conventions remain authoritative for production behavior. Where the prototype and canonical backend documents disagree, resolve the product/domain decision explicitly before implementing the affected backend phase.
 
-Before marking a task complete:
-
-- No fitting API route is added.
-- No fitting database migration/table is added.
-- No fitting contract/schema is added to `@drezivo/contracts`.
-- No fitting payment, slot, or garment mutation is presented as authoritative.
-- Mock data is isolated from production API clients and easy to delete later.
-- The UI follows the current Drezivo dashboard visual language and reuses existing shared components where practical.
-- Any fitting status, fee, duration, note field, or public-booking behavior that is not canonical is marked as a **prototype assumption**.
-- Existing V1 rental pages continue to behave as V1 surfaces; this prototype must not make Fittings appear production-ready in Dashboard, Schedule, Payments, or Availability.
+For the retained frontend-history phases, the original prototype boundary still applies: mock data stays isolated and no production behavior should be inferred from fixture shapes. For backend phases, implementation must follow [[Fittings Backend Decision Record]], the canonical architecture docs, existing tenant/idempotency/audit conventions, and the phase dependencies below. Cross-product fitting mocks remain non-authoritative until their staged BE-8/BE-10 cutover.
 
 ## Frontend product decision: no fitting resources
 
 The fitting frontend will **not** expose rooms, staff assignment, capacity-slot resources, resource filters, resource management, or resource-specific availability.
 
-This is a frontend/product-surface decision for the prototype. It does not rewrite the current ERD or future backend concurrency model. If backend capacity controls are later required, they remain an implementation concern until a separate product decision intentionally exposes them to staff.
+This frontend decision is now matched by the approved backend model: capacity is enforced with hidden branch capacity slots that are never exposed as room/staff/resource management. Reintroducing named resources requires a new coordinated product/architecture decision.
 
 The staff-facing schedule should stay simple:
 
@@ -59,7 +50,7 @@ The staff-facing schedule should stay simple:
 - Garment preference versus guaranteed-garment presentation.
 - Fitting fee/payment-state presentation where useful.
 - `/fittings/schedule` staff page.
-- Business-level fitting hours, breaks, closures, and default duration.
+- Branch-scoped fitting settings: enabled state, maximum simultaneous capacity, strict duration, optional fixed fee, weekly hours, and date-specific closures.
 - Loading, empty, error, disabled, responsive, keyboard, and dark-mode states.
 
 ### Explicitly out of scope
@@ -97,18 +88,20 @@ Garment preference ≠ Guaranteed garment
 
 A preferred garment with no physical asset assignment must never be presented as guaranteed.
 
-## Prototype assumptions that remain non-canonical
+## Prototype-to-production decisions
 
-- Exact fitting appointment persisted status enum/state machine.
-- Whether the approved frontend `No-show` label maps directly to a persisted backend state or another canonical representation.
-- Backend persistence and validation rules for the approved business-level default-duration behavior.
-- Default fitting fee source.
-- Whether appointment notes persist directly on the fitting appointment.
-- Whether V1.1 starts staff-only or includes customer self-booking.
-- Exact payment requirement for a fitting.
-- Exact cancellation/rejection/refund policy for fitting fees.
+The backend behavior is now frozen in [[Fittings Backend Decision Record]]. Important production differences from the local prototype are intentional:
 
-For prototype presentation, labels such as **Pending**, **Confirmed**, **Completed**, **Cancelled**, **Rejected**, and **No-show** remain presentation vocabulary until the backend state machine is approved.
+- Canonical persisted states are `pending`, `confirmed`, `completed`, `rejected`, `cancelled`, and `no_show`.
+- Fitting duration is a strict branch setting, not a per-appointment override; start times and durations use 30-minute multiples.
+- Branch fitting capacity is maximum simultaneous overlap and is enforced with hidden internal capacity slots.
+- New production walk-ins require full name plus phone or email.
+- Fitting fee is an optional fixed branch setting; staff cannot override it per appointment.
+- Payment does not gate appointment confirmation and remains in the existing finance domain.
+- Rejection/cancellation require an internal reason; no-show and completion have timing guards.
+- Public fitting booking and customer-facing fitting reminders are deferred from the first backend slice.
+
+Prototype-only strings such as `Guaranteed intent` and fixture payment labels still must not be copied blindly into wire contracts.
 
 ---
 
@@ -311,109 +304,151 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
     - [x] Payment state does not automatically mutate appointment status.
   - **Evidence:** Fee and payment state are grouped separately with an explicit prototype note that payment does not drive appointment status.
 
-- [x] **FIT-FE-035 — Add prototype appointment actions**
+- [ ] **FIT-FE-035 — Align appointment actions with canonical backend lifecycle** _(reopened after BE-0; production wiring verification pending)_
   - **Acceptance:**
     - [x] Actions are disabled, mock-only, or local-state-only.
     - [x] Use only useful actions such as Confirm, Complete, Cancel, Reject, or Mark no-show.
     - [x] Destructive local actions require confirmation.
     - [x] Local mock mutations use an in-flight guard.
-    - [x] No network request occurs.
-  - **Evidence:** Pending fittings expose Confirm/Reject; Confirmed fittings expose Complete/Cancel/Mark no-show. Reject, Cancel, and No-show require an inline confirmation step. Local status overrides update only page memory and use an action-in-flight ref guard; no API client is called.
+    - [x] No network request occurs in the original prototype.
+    - [ ] Production actions use explicit backend commands rather than local status replacement.
+    - [ ] Reject and Cancel require a bounded internal reason.
+    - [ ] No-show is unavailable before scheduled start; Complete is unavailable before scheduled end.
+    - [ ] Once scheduled start is reached, reschedule, garment-plan edits, Reject, and normal Cancel are unavailable.
+    - [ ] Future `pending`/`confirmed` fittings expose the approved Reschedule and garment-plan edit paths where applicable.
+    - [ ] Optional internal staff note is readable/editable through the production fitting contract.
+  - **Evidence:** The original prototype correctly demonstrated the basic status vocabulary and local confirmation pattern. BE-0 later tightened timing guards, terminal reasons, reschedule/edit boundaries, and the internal-note contract; this item is reopened until the production UI is aligned and wired.
   - **Validation:** Prettier, TypeScript transpile, and `git diff --check` pass. Targeted Vitest still fails before test collection because the repository root cannot resolve `vitest` from `@testing-library/jest-dom/dist/vitest.mjs`; the suite reports `0 test` before that existing dependency-resolution failure.
 
 ---
 
 # Phase 4: New Fitting prototype flow
 
-- [x] **FIT-FE-040 — Define the New Fitting interaction pattern**
+- [ ] **FIT-FE-040 — Define the New Fitting interaction pattern** _(reopened for production wiring verification)_
   - **Acceptance:**
     - [x] Choose a route or large Sheet/Dialog based on existing dashboard patterns.
     - [x] Keep grouping clear and mobile-friendly.
     - [x] Draft reset/restore behavior is intentional.
-  - **Evidence:** `New Fitting` opens a large right-side Sheet using the existing dashboard overlay language. The flow is split into Appointment → Garments → Review and uses stacked controls below `sm`. Closing or cancelling resets the local draft; refreshing intentionally loses local-only records.
+    - [ ] Production submit uses the canonical fitting create contract and authoritative server result; local-only record creation is removed as authority.
+  - **Evidence:** `New Fitting` opens a large right-side Sheet using the existing dashboard overlay language. The flow is split into Appointment → Garments → Review and uses stacked controls below `sm`. The interaction pattern remains approved, but the item is reopened until the local prototype mutation is replaced by the production backend flow.
 
-- [x] **FIT-FE-041 — Add customer selection/input prototype**
+- [ ] **FIT-FE-041 — Align customer selection/input with production customer rules** _(reopened after BE-0)_
   - **Acceptance:**
     - [x] Existing-customer search uses synthetic fixtures only.
     - [x] New customer input stays minimal.
     - [x] No customer account required.
-    - [x] No real create-customer request.
-  - **Evidence:** Existing customer search is derived only from `FITTING_PROTOTYPE_APPOINTMENTS` synthetic contacts and supports name/email/phone filtering. Walk-ins require only a name, with optional email/phone. No API client or customer mutation is called.
+    - [x] No real create-customer request in the original prototype.
+    - [ ] New walk-in requires full name plus at least one usable contact method: phone or email.
+    - [ ] Possible duplicate customer matches are advisory; staff can choose the existing customer or deliberately create a new customer.
+    - [ ] No automatic merge/reuse occurs from phone/email similarity alone.
+    - [ ] Production flow creates/reuses a real customer through the approved backend path.
+  - **Evidence:** Existing customer search already supports name/email/phone, but the original prototype allowed name-only walk-ins. BE-0 now requires a real customer with full name plus phone or email and advisory duplicate handling, so this item is reopened.
 
-- [x] **FIT-FE-042 — Add date/time selection prototype**
+- [ ] **FIT-FE-042 — Align date/time selection with canonical fitting schedule** _(reopened after BE-0)_
   - **Acceptance:**
     - [x] Select date and start time.
     - [x] Show prototype duration/end time where useful.
     - [x] Past/invalid selections are handled locally.
     - [x] Do not display authoritative `Available` from local calculations.
-  - **Evidence:** The flow reuses `DatePickerField` and `TimePickerField`, limits dates before the prototype review date, exposes 30/60/90-minute prototype durations, and derives the review/end period locally. No `Available` guarantee or slot claim is shown.
+    - [ ] Start-time choices align to the 30-minute scheduling grid.
+    - [ ] Duration is inherited from the strict branch fitting setting and is not editable per appointment.
+    - [ ] End time is derived from the authoritative configured duration.
+    - [ ] Production availability/conflict result comes from the backend schedule/capacity validation path.
+  - **Evidence:** The original prototype already uses date/time controls and 30/60/90 examples, but it still exposes a per-appointment duration choice. BE-0 makes branch duration strict and server-authoritative, so this item is reopened.
 
-- [x] **FIT-FE-043 — Add garment preference/guarantee selection prototype**
+- [ ] **FIT-FE-043 — Align garment preference/guarantee selection with real allocation semantics** _(reopened after BE-0)_
   - **Acceptance:**
     - [x] Search/select synthetic clothing.
     - [x] Allow multiple garment lines.
     - [x] Each line can be preference-only or guaranteed intent.
     - [x] Guaranteed intent explains future backend validation.
-    - [x] Frontend does not claim a physical garment.
-  - **Evidence:** Garment search is derived from the fitting fixture catalogue and supports multiple selected lines. New local records use `Guaranteed intent` rather than `Guaranteed garment`, never synthesize an asset code, and explicitly explain that a future backend must validate/claim a physical garment.
+    - [x] Frontend does not locally claim a physical garment.
+    - [ ] `Preference only` remains a variant preference with no physical-asset block.
+    - [ ] Selecting `Guaranteed garment` requests a real backend guarantee at create/edit time.
+    - [ ] UI handles garment-allocation conflict without presenting a false guarantee or losing the previous winning guarantee during an edit/reschedule.
+    - [ ] Staff still chooses the variant/garment, not a hidden physical asset or capacity slot.
+  - **Evidence:** The original prototype intentionally used `Guaranteed intent` because no backend claim existed. BE-0 now defines a real guaranteed garment as an atomically claimed physical asset, so this item is reopened for production semantics and conflict handling.
 
-- [x] **FIT-FE-045 — Add optional fee/payment section prototype**
+- [ ] **FIT-FE-045 — Align fitting fee/payment presentation with branch finance settings** _(reopened after BE-0)_
   - **Acceptance:**
     - [x] Fee is a mock configured value, not canonical price.
     - [x] No real payment intake.
     - [x] No-fee fitting remains representable.
     - [x] PHP formatting matches existing conventions.
-  - **Evidence:** The prototype defaults to a configurable ₱300 fixture value, validates non-negative local input, supports disabling the fee entirely, and stores only the existing mock payment-state label. No payment method, receipt upload, verification, or Payments API behavior is introduced.
+    - [ ] New Fitting does not allow staff to toggle or edit the fee per appointment.
+    - [ ] Fee/no-fee state is read from the current branch fitting settings and shown read-only in the creation/review flow.
+    - [ ] Payment/evidence state remains separate from appointment status and does not gate confirmation.
+    - [ ] Positive fitting fee is represented through the existing finance domain after backend wiring; the UI does not create a parallel fitting payment source of truth.
+  - **Evidence:** The original prototype intentionally used editable ₱300 fixture data. BE-0 now makes the fee an optional fixed branch setting snapshotted at creation, so this item is reopened.
 
-- [x] **FIT-FE-046 — Add review/create prototype state**
+- [ ] **FIT-FE-046 — Align review/create state with canonical production create** _(reopened after BE-0)_
   - **Depends on:** FIT-FE-041, FIT-FE-042, FIT-FE-043, FIT-FE-045.
   - **Acceptance:**
     - [x] Review shows customer, period, garments, guarantee labels, and fee if present.
     - [x] Final CTA is explicitly prototype/local-only.
     - [x] Double-click cannot create duplicate mock records.
     - [x] Refresh may lose prototype-only state unless intentionally documented.
-  - **Evidence:** Review shows customer, date/start/duration, selected garments, intent labels, fee, and payment state. `Create local fitting` appends one appointment to in-memory page state, immediately opens that appointment in the Details Sheet, and uses a submit-in-flight ref that remains locked through sheet close. The UI explicitly states that refresh removes the created record.
+    - [ ] Review reflects strict configured duration and read-only branch fee.
+    - [ ] Create always produces canonical initial status `pending` from the server.
+    - [ ] Server conflict responses for schedule capacity or guaranteed garments are surfaced without creating a partial local appointment.
+    - [ ] Successful create uses the authoritative returned fitting/customer/fee/guarantee state.
+  - **Evidence:** The original local review/create behavior is preserved as interaction history, but BE-0 now defines atomic production creation and canonical initial `pending` state. This item is reopened until backend wiring replaces the local-only authority.
   - **Validation:** Prettier, source transpile checks, and `git diff --check` pass. Typecheck reports no `src/components/fittings/*` source errors after the Phase 4 fixes; the remaining fitting-test diagnostics are the repository-wide missing jest-dom matcher typings. Targeted Vitest still fails before test collection because the repository root cannot resolve `vitest` from `@testing-library/jest-dom/dist/vitest.mjs`.
 
 ---
 
 # Phase 5: `/fittings/schedule` hours and schedule-settings prototype
 
-- [x] **FIT-FE-050 — Create Fitting Schedule & Availability page shell**
+- [ ] **FIT-FE-050 — Align Fitting Schedule & Availability page with canonical branch settings** _(reopened after BE-0)_
   - **Acceptance:**
     - [x] Route is `/fittings/schedule`.
     - [x] Navigation back to `/fittings` exists.
-    - [x] Page stays business-level and does not expose rooms/staff/resources.
+    - [x] Page stays simple and does not expose rooms/staff/resources; the current single/default-branch UI does not need a branch selector.
     - [x] Hours, duration, and breaks/closures are visually separated.
-  - **Evidence:** `app/src/app/(dashboard)/fittings/schedule/page.tsx` mounts the `FittingSchedulePage`. The page uses the existing dashboard canvas/cards, has a `Back to Fittings` link, and keeps the V1 schedule surface focused on weekly hours, default duration, and breaks/closures without any room/staff/capacity-slot fields.
+    - [ ] Add Owner-only `Fittings enabled` configuration.
+    - [ ] Add Owner-only `Maximum simultaneous fittings` configuration without exposing hidden slot identities.
+    - [ ] Add Owner-only fixed fitting-fee/no-fee configuration.
+    - [ ] Keep room/staff/named-resource and hidden capacity-slot management out of the UI.
+    - [ ] Production settings load/save through the canonical branch fitting-settings contract.
+  - **Evidence:** The current page shell remains the approved route/layout, but BE-0 added canonical branch settings for enabled state, simultaneous capacity, strict duration, and fixed fee. The item is reopened until those settings are represented and wired.
 
-- [x] **FIT-FE-051 — Build weekly fitting operating-hours editor/visualizer**
+- [ ] **FIT-FE-051 — Build weekly fitting operating-hours editor/visualizer** _(reopened for backend wiring verification)_
   - **Acceptance:**
     - [x] Monday–Sunday schedule.
     - [x] Multiple windows per day can be visualized if useful.
     - [x] A day can be unavailable.
     - [x] Validate start < end locally.
     - [x] Mobile editing avoids horizontal overflow.
-  - **Evidence:** The local hours editor renders all seven weekdays, supports enabling/disabling a day, adding/removing split windows, and shows inline validation when `start >= end`. Time controls stack below `sm` instead of requiring a horizontal table.
+    - [ ] Persisted weekly windows load/save through the branch fitting-settings API.
+    - [ ] Recurring breaks remain represented as gaps between multiple windows rather than a second recurring-break model.
+    - [ ] Backend rejection is handled if an hours change would invalidate an existing future fitting.
+  - **Evidence:** The local weekly-hours UX remains approved. This item is reopened only for production persistence and backend conflict verification.
 
-- [x] **FIT-FE-052 — Add appointment-duration setting prototype**
+- [ ] **FIT-FE-052 — Align strict fitting-duration setting with canonical rules** _(reopened after BE-0)_
   - **Acceptance:**
     - [x] Duration is clearly labeled as prototype/configuration-driven.
     - [x] Use a small bounded set of sensible options or one validated numeric control.
-    - [x] No duration value is promoted to canonical product truth yet.
-  - **Evidence:** The duration control uses bounded 30/45/60/90-minute options. The selected business-level default is session-scoped for the prototype and becomes the initial duration in New Fitting; staff can still override an individual appointment.
+    - [x] No duration value was promoted to canonical product truth during prototyping.
+    - [ ] Production label communicates that this is the strict duration for every new fitting, not merely a default.
+    - [ ] `45` minutes is removed; allowed values are multiples of 30 with a minimum of 30 minutes.
+    - [ ] New Fitting cannot override the configured duration.
+    - [ ] Duration loads/saves from the branch fitting-settings backend instead of session storage.
+  - **Evidence:** BE-0 supersedes the prototype behavior: duration is now a strict branch setting, so the original default/override behavior must be replaced.
 
-- [x] **FIT-FE-053 — Visualize breaks and date-specific closures**
+- [ ] **FIT-FE-053 — Visualize breaks and date-specific closures** _(reopened for canonical model/backend wiring verification)_
   - **Acceptance:**
     - [x] Show examples such as lunch break, holiday closure, or private event.
     - [x] Closure includes date/time and short reason.
-    - [x] Create/edit/remove remains local-state-only.
-  - **Evidence:** Seed examples include `Lunch break`, `Private event`, and `Holiday closure`. Each displays type, date, start/end time, and reason. Add/edit/remove operations mutate component state only, validate reason/date/time locally, and do not import or call any API client.
+    - [x] Create/edit/remove remains local-state-only in the original prototype.
+    - [ ] Recurring lunch/break behavior is represented through gaps between weekly operating windows rather than persisted recurring closure records.
+    - [ ] Date-specific partial/full-day closures load/save through the canonical closure API.
+    - [ ] Backend rejection is surfaced if a closure would invalidate an existing future fitting.
+  - **Evidence:** The current closure UX remains useful for one-off exceptions, but BE-0 clarified that recurring breaks belong in weekly-window gaps and date-specific closures are the persisted exception model. This item is reopened for that alignment and backend wiring.
 
 - [x] **FIT-FE-054 — De-scope duplicate fitting availability visualization**
   - **Acceptance:**
     - [x] Do not duplicate the main Calendar page inside `/fittings/schedule`.
-    - [x] Keep `/fittings/schedule` focused on configuration: hours, default duration, and breaks/closures.
+    - [x] Keep `/fittings/schedule` focused on fitting configuration and do not duplicate Calendar scheduling visualization.
     - [x] Scheduled fitting visualization remains a Calendar responsibility for V1.
   - **Evidence:** The earlier bounded weekly availability section was removed after review because it duplicated Calendar behavior and added another scheduling surface to maintain for V1.
   - **Validation:** Prettier, direct TypeScript transpilation, and `git diff --check` pass for the Phase 5 route/component/test. Typecheck reports no `src/components/fittings/*` or route source diagnostics; only the existing missing jest-dom matcher typings appear in the test file. Targeted Vitest still fails before test collection because the repository root cannot resolve `vitest` from `@testing-library/jest-dom/dist/vitest.mjs`.
@@ -453,7 +488,7 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
 
 # Phase 7: UX, accessibility, responsive behavior, and polish
 
-- [x] **FIT-FE-070 — Complete responsive fitting pages**
+- [ ] **FIT-FE-070 — Complete responsive fitting pages** _(reopened for regression verification after BE-0 UI alignment)_
   - **Acceptance:**
     - [x] `/fittings` works at 360px.
     - [x] `/fittings/schedule` works at 360px.
@@ -461,7 +496,8 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
     - [x] Date/time controls do not overflow in the responsive implementation.
     - [x] Primary actions remain reachable.
     - [x] Details Sheet is readable without nested horizontal scrolling.
-  - **Evidence:** Both fitting routes now guard page-level horizontal overflow, use smaller mobile page padding, stack controls before `sm`, and keep schedule day cards single-column until wider breakpoints. The New Fitting footer stays reachable with a mobile sticky action area; the Details Sheet is full-width with `overflow-x-hidden` and switches its appointment facts to one column on small screens.
+    - [ ] Re-verify 360px behavior after adding branch capacity/enabled/fee settings and production-aligned New Fitting fields/actions.
+  - **Evidence:** The original responsive pass remains valid for the prototype. This item is reopened only because the BE-0 alignment adds/removes controls that must be regression-checked after implementation.
 
 - [x] **FIT-FE-071 — Complete keyboard and accessibility pass**
   - **Acceptance:**
@@ -473,13 +509,14 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
     - [x] No essential information is hover-only.
   - **Evidence:** Filter triggers expose purpose plus current value, pagination is a named navigation region with an `aria-current` page, customer selection uses a named radiogroup, progress exposes the current step, appointment rows and weekly fitting blocks have explicit details-action labels, and schedule switches/date/time controls remain keyboard-focusable. Shared Radix Sheets retain title/description, focus trapping, Escape/close behavior, and visible close controls. Status, payment, attention, working-hours, and closure meaning are all present as text rather than color alone.
 
-- [x] **FIT-FE-072 — Complete light/dark theme review**
+- [ ] **FIT-FE-072 — Complete light/dark theme review** _(reopened for regression verification after BE-0 UI alignment)_
   - **Acceptance:**
     - [x] Text/background contrast remains clear.
     - [x] Status badges retain meaning.
     - [x] Active filters remain distinguishable.
     - [x] Schedule working/booked/closed states remain distinguishable with text/icons as needed.
-  - **Evidence:** Fitting components now rely on dashboard theme tokens rather than hard-coded white/black text/background colors. The previously hard-coded white Cancel/Add-window text now uses `text-dashboard-navy`, which resolves appropriately in both light and dark themes. Badges and schedule states keep explicit text labels, and active filter values remain visible in their trigger controls.
+    - [ ] Re-run light/dark visual review after the reopened Phase 3–5 controls and backend states are wired.
+  - **Evidence:** The original theme-token pass remains valid. This item is reopened for regression verification of newly aligned controls, conflict/error states, and settings.
 
 - [x] **FIT-FE-073 — Remove unnecessary text and enterprise complexity**
   - **Acceptance:**
@@ -495,7 +532,7 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
 
 # Phase 8: Prototype review gate before backend implementation
 
-- [x] **FIT-FE-080 — Run owner/front-desk workflow review**
+- [ ] **FIT-FE-080 — Run owner/front-desk workflow review** _(reopened for production-aligned regression review after backend wiring)_
   - **Acceptance:**
     - [x] Reviewer can find today's/upcoming fittings.
     - [x] Reviewer can understand customer, garments, fee/payment state, and appointment status.
@@ -503,31 +540,36 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
     - [x] Reviewer can visualize creating a fitting.
     - [x] Reviewer understands operating hours, duration, breaks, and closures.
     - [x] Confusing fields/actions are removed rather than justified only by the ERD.
-  - **Evidence:** `Fittings Prototype Review Gate.md` contains the owner/front-desk walkthrough and review-result structure. The frontend workflow has now been reviewed and accepted for discovery, details comprehension, garment intent, payment/status separation, existing and walk-in creation, default-duration propagation, weekly hours, and breaks/closures.
+    - [ ] Regression review verifies the production-aligned walk-in requirement (name + phone/email).
+    - [ ] Regression review verifies strict configured duration with no per-appointment override and 30-minute start grid.
+    - [ ] Regression review verifies branch-configured enabled/capacity/fee settings and no hidden-slot/resource leakage.
+    - [ ] Regression review verifies guaranteed-garment conflict handling, required cancel/reject reasons, and lifecycle timing guards.
+    - [ ] Regression review verifies the wired backend remains understandable without reintroducing prototype-only controls.
+  - **Evidence:** The original workflow review remains historical evidence. This item is reopened for a focused production-aligned regression review after the reopened frontend work is wired to the backend.
 
-- [ ] **FIT-FE-081 — Resolve product decisions exposed by the prototype** _(partially resolved; backend-blocking decisions remain)_
+- [x] **FIT-FE-081 — Resolve product decisions exposed by the prototype**
   - **Acceptance:**
-    - [ ] Decide exact fitting statuses/transitions. _(frontend working flow documented; backend lifecycle not canonical)_
-    - [x] Decide whether `No-show` belongs in initial V1.1. _(kept in the staff-facing prototype vocabulary)_
-    - [x] Decide fitting duration source/default. _(business-level schedule default; 60-minute fallback; 30/45/60/90 prototype options; per-appointment override)_
-    - [ ] Decide fitting fee source/default. _(current ₱300 remains fixture-only)_
-    - [ ] Decide whether appointment notes are required.
-    - [ ] Decide staff-only versus public fitting booking. _(current prototype is staff-facing only, not yet a canonical scope decision)_
-    - [ ] Decide payment requirement before confirmation.
-    - [ ] Decide fitting cancellation/rejection/refund behavior.
-  - **Evidence:** Schedule duration now writes a session-scoped prototype default consumed when New Fitting opens, so the reviewed behavior matches the intended configuration flow without introducing tenant persistence or backend contracts. The review-gate document records the current frontend transition model and separately lists all remaining product/domain blockers.
+    - [x] Decide exact fitting statuses/transitions. (`pending`, `confirmed`, `completed`, `rejected`, `cancelled`, `no_show`; strict transition/timing guards)
+    - [x] Decide whether `No-show` belongs in initial V1.1. (yes, persisted as `no_show`)
+    - [x] Decide fitting duration source/default. (strict branch setting; >=30 and divisible by 30; no per-appointment override)
+    - [x] Decide fitting fee source/default. (optional fixed branch setting; ₱300 fixture is not canonical)
+    - [x] Decide whether appointment notes are required. (one optional bounded internal staff note)
+    - [x] Decide staff-only versus public fitting booking. (staff-created first; domain remains channel-neutral)
+    - [x] Decide payment requirement before confirmation. (payment never gates confirmation)
+    - [x] Decide fitting cancellation/rejection/refund behavior. (cancel/reject require reason; no automatic refunds; timing guards apply)
+  - **Evidence:** [[Fittings Backend Decision Record]] records the approved production behavior and canonical PRD/TRD/Data Model/ERD have been aligned.
 
-- [ ] **FIT-FE-082 — Freeze approved frontend prototype for backend handoff** _(frontend freeze candidate documented; backend handoff intentionally blocked)_
+- [x] **FIT-FE-082 — Freeze approved frontend prototype for backend handoff**
   - **Acceptance:**
     - [x] Route hierarchy approved. (`/fittings`, `/fittings/schedule`)
     - [x] List fields approved. (date/time, customer, garment summary, fee/payment, status, attention)
     - [x] Details Sheet sections approved. (customer, appointment, garments, fee/payment, local actions)
     - [x] New Fitting inputs approved. (customer, period, garments/intents, optional fee/payment, review)
-    - [x] Schedule interactions approved. (weekly hours, default duration, breaks/closures; duplicate weekly availability view removed)
+    - [x] Original schedule interaction pattern approved; production-alignment deltas are explicitly reopened in FIT-FE-050 through FIT-FE-053 and the duplicate weekly availability view remains removed.
     - [x] Prototype-only labels that should not become wire enums are identified.
     - [x] Fixture shapes are not blindly copied into API contracts. _(explicit freeze rule documented)_
-    - [x] Backend implementation remains blocked until product decisions are canonicalized; the phased backend planning checklist may exist in this file before implementation begins.
-  - **Evidence:** `Fittings Prototype Review Gate.md` records the frozen frontend surface, explicitly labels prototype vocabulary/fixture shapes as non-contractual, and lists unresolved backend-blocking decisions. The backend checklist below is a planning artifact only; BE-1+ implementation remains gated by BE-0 until those decisions are canonicalized.
+    - [x] Backend implementation remains blocked until product decisions are canonicalized; BE-0 now satisfies that gate.
+  - **Evidence:** `Fittings Prototype Review Gate.md` and [[Fittings Backend Decision Record]] distinguish the frozen frontend UX from the approved production backend behavior. BE-1 may begin after BE-0 documentation validation.
 
 ---
 
@@ -554,7 +596,7 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
 
 5. **Cancelled/rejected/no-show example**
    - Include only the minimum needed to compare terminal-state presentation.
-   - Exact lifecycle remains a product decision until FIT-FE-081.
+   - Production lifecycle semantics are frozen in [[Fittings Backend Decision Record]].
 
 # Frontend completion definition
 
@@ -564,7 +606,7 @@ The fitting frontend prototype is complete when:
 - `/fittings/schedule` is visually complete using isolated mock data.
 - Fitting Details Sheet communicates customer, appointment, garment guarantee/preference, and optional fee/payment clearly.
 - New Fitting can be walked through locally without a network request.
-- Business-level fitting hours, default duration, and breaks/closures can be understood visually.
+- The fitting settings surface remains understandable as branch-scoped configuration without exposing hidden capacity-slot implementation details.
 - No room/staff/resource management appears in the fitting frontend.
 - The prototype works at 360px and with keyboard navigation.
 - No real fitting backend/contract/database behavior has been introduced.
@@ -575,7 +617,7 @@ The fitting frontend prototype is complete when:
 
 # Backend implementation checklist
 
-**Backend status:** Planned. Do not begin schema or API implementation until Phase BE-0 closes the domain decisions that affect persistence and concurrency.
+**Backend status:** BE-0 complete. Contracts/API work may begin from BE-1 using the approved decision record; no migration or route should invent behavior outside that record.
 
 **Backend target:** Production V1.1 staff fitting operations that support the approved `/fittings` and `/fittings/schedule` frontend without copying prototype fixtures directly into contracts.
 
@@ -598,80 +640,79 @@ The fitting frontend prototype is complete when:
 - No room/staff/resource management is exposed in the approved fitting UI.
 - No duplicate weekly availability visualization is added to `/fittings/schedule`; Calendar remains the operational schedule visualization.
 - Prototype strings such as `Guaranteed intent`, `Pending review`, and fixture object shapes are not automatically wire enums or database schema.
-- Public fitting booking, notifications, analytics, entitlement gating, and automated reminders stay out until explicitly approved.
-
-## Canonical backend discrepancy to resolve first
-
-The approved frontend intentionally exposes only business-level fitting hours, duration, and breaks/closures. The current V1.1 PRD/TRD/Data Model still describe fitting room/staff/resource capacity and resource-level exclusion.
-
-Before migrations are written, choose and document one backend direction:
-
-1. **Internal capacity/resource model remains canonical:** backend resources/capacity exist for correctness but are hidden from the current staff UI; or
-2. **Business-level capacity model replaces the resource model:** PRD, TRD, Data Model, ERD, invariants, and concurrency design are revised before implementation.
-
-Do not silently implement one interpretation while leaving the canonical documents describing the other.
+- Public fitting booking, analytics, entitlement gating, and customer-facing automated reminders stay out of the first fitting backend slice.
+- Backend capacity uses hidden branch capacity slots only; room/staff/named fitting resources are not canonical for this slice.
+- [[Fittings Backend Decision Record]] is the approved BE-0 behavior source. PRD, TRD, Data Model and ERD have been aligned to it.
 
 ---
 
 # Backend Phase BE-0: Freeze product and domain behavior
 
-- [ ] **FIT-BE-000 — Resolve the fitting capacity/resource backend model**
+- [x] **FIT-BE-000 — Resolve the fitting capacity/resource backend model**
   - **Acceptance:**
-    - [ ] Choose internal resource/capacity enforcement versus a revised business-level capacity model.
-    - [ ] Keep room/staff/resource concepts out of the current frontend unless a later product decision reintroduces them.
-    - [ ] Update PRD, TRD, Data Model, and ERD together if the canonical model changes.
-    - [ ] Define how hours, breaks, closures, and capacity are represented by the chosen model.
-    - [ ] Define the concurrency primitive used to prevent overbooking; no unguarded `count then insert` flow.
+    - [x] Choose hidden internal branch capacity slots; no room/staff/named-resource product model.
+    - [x] Keep room/staff/resource concepts out of the current frontend unless a later product decision reintroduces them.
+    - [x] Update PRD, TRD, Data Model, and ERD together with the canonical model.
+    - [x] Define branch settings, weekly windows, recurring-break gaps, date-specific closures, and maximum simultaneous capacity.
+    - [x] Define concurrency: one slot allocation per fitting with PostgreSQL overlap exclusion plus serialized branch fitting-setting/booking mutation; no unguarded `count then insert`.
+  - **Evidence:** [[Fittings Backend Decision Record]] §Capacity and concurrency model; PRD FR11; TRD release evolution; Data Model §9; fitting tables in the ERD.
 
-- [ ] **FIT-BE-001 — Freeze canonical fitting appointment states and transitions**
+- [x] **FIT-BE-001 — Freeze canonical fitting appointment states and transitions**
   - **Acceptance:**
-    - [ ] Define the exact persisted status enum.
-    - [ ] Define allowed transitions and actor permissions for each transition.
-    - [ ] Decide whether the frontend labels `Pending`, `Confirmed`, `Completed`, `Rejected`, `Cancelled`, and `No-show` map directly to persisted states or presentation labels.
-    - [ ] Keep payment/evidence status independent from appointment status.
-    - [ ] Define terminal states and which transitions release garment/capacity allocations.
-    - [ ] Define optimistic-version or locked conditional-transition behavior for concurrent status updates.
+    - [x] Persist `pending`, `confirmed`, `completed`, `rejected`, `cancelled`, `no_show`.
+    - [x] Allowed transitions: `pending -> confirmed|rejected|cancelled`; `confirmed -> completed|cancelled|no_show` with the approved time guards.
+    - [x] Frontend labels map to those canonical states; wire value for No-show is `no_show`.
+    - [x] Payment/evidence status remains independent from appointment status and never gates confirmation.
+    - [x] Completed/rejected/cancelled/no_show are terminal; release semantics are state-specific and documented.
+    - [x] Use conditional/locked transition guards plus appointment versioning; arbitrary status replacement is forbidden.
+  - **Evidence:** [[Fittings Backend Decision Record]] §Appointment lifecycle and §Allocation release rules.
 
-- [ ] **FIT-BE-002 — Freeze staff creation and customer rules**
+- [x] **FIT-BE-002 — Freeze staff creation and customer rules**
   - **Acceptance:**
-    - [ ] Confirm the first production slice is staff-created fittings only or intentionally include public booking.
-    - [ ] Define existing-customer selection behavior.
-    - [ ] Define the minimum allowed walk-in identity/contact fields; reconcile the name-only frontend path with canonical customer contact/privacy rules.
-    - [ ] Define whether a walk-in creates/reuses a `customer` record or uses another approved representation.
-    - [ ] Define deduplication rules; do not merge customers by phone alone.
+    - [x] First production slice is staff-created only; domain remains channel-neutral for future public booking.
+    - [x] Staff may select an existing customer.
+    - [x] New walk-in requires full name plus phone or email; name-only prototype intake is tightened for production.
+    - [x] New walk-in creates a normal `customer` record; no fitting-only identity model.
+    - [x] Duplicate detection is advisory; staff chooses existing or deliberately creates new; no automatic merge/reuse by contact alone.
+  - **Evidence:** [[Fittings Backend Decision Record]] §Release boundary and §Customers and walk-ins.
 
-- [ ] **FIT-BE-003 — Freeze duration and schedule-setting semantics**
+- [x] **FIT-BE-003 — Freeze duration and schedule-setting semantics**
   - **Acceptance:**
-    - [ ] Persist one business/branch fitting default duration source.
-    - [ ] Keep the approved bounded prototype options only if product confirms them; do not treat `30/45/60/90` as canonical merely because the prototype used them.
-    - [ ] Snapshot the effective duration/period on each appointment so future setting changes do not rewrite history.
-    - [ ] Define weekly operating-hour behavior, multiple windows, unavailable days, and date-specific breaks/closures.
-    - [ ] Define timezone behavior from branch/tenant configuration.
+    - [x] Persist one strict branch fitting duration; no per-appointment override.
+    - [x] Start grid is 30 minutes; duration is >=30 and divisible by 30. Prototype `45` is not canonical.
+    - [x] Appointment stores the actual bounded period and timezone snapshot; later duration changes do not rewrite history.
+    - [x] Weekly hours allow multiple windows; gaps are recurring breaks; date-specific closures handle exceptions; fitting must fit fully within one window and outside closures.
+    - [x] Branch timezone is authoritative.
+    - [x] Configuration changes cannot invalidate existing future fittings; enabled=false blocks new create/reschedule but preserves existing lifecycle.
+  - **Evidence:** [[Fittings Backend Decision Record]] §Branch fitting configuration and §Time, duration, hours, and closures.
 
-- [ ] **FIT-BE-004 — Freeze fitting fee, payment, cancellation, and refund rules**
+- [x] **FIT-BE-004 — Freeze fitting fee, payment, cancellation, and refund rules**
   - **Acceptance:**
-    - [ ] Decide whether a fitting fee is optional, required, or disabled in the first backend slice.
-    - [ ] Define the fee source/default; current `₱300` fixture value is not canonical.
-    - [ ] Decide whether payment is required before confirmation.
-    - [ ] Define supported payment/evidence states by reusing the finance domain where possible.
-    - [ ] Define cancellation/rejection/no-show fee behavior.
-    - [ ] Define refund/reversal behavior before adding fitting finance links.
+    - [x] Fitting fee is optional per branch and fixed for all new fittings in that branch.
+    - [x] Current `₱300` fixture is not canonical; configured branch fee is snapshotted with currency.
+    - [x] Payment is not required before confirmation.
+    - [x] Reuse existing finance charge/payment/evidence/refund domain; no duplicate fitting payment-status source of truth.
+    - [x] Positive fee creates immutable `fitting_fee` charge at fitting creation; rejection/cancellation/no-show never infer payment outcome.
+    - [x] No automatic refunds; refund/reversal remains an explicit finance action.
+  - **Evidence:** [[Fittings Backend Decision Record]] §Fee and finance rules.
 
-- [ ] **FIT-BE-005 — Freeze garment preference versus guarantee semantics**
+- [x] **FIT-BE-005 — Freeze garment preference versus guarantee semantics**
   - **Acceptance:**
-    - [ ] Preference-only line requires a variant but no physical asset block.
-    - [ ] Guaranteed line requires an eligible physical asset and blocking allocation.
-    - [ ] Define when the asset is chosen: create, confirm, or another approved transition.
-    - [ ] Define how a failed guaranteed-asset claim is returned to the caller.
-    - [ ] Define release behavior for reschedule, rejection, cancellation, no-show, and completion.
+    - [x] Preference-only requires a variant but no physical asset assignment/block.
+    - [x] Guaranteed requires an eligible concrete physical asset and canonical blocking allocation for exactly the fitting period.
+    - [x] Backend deterministically chooses/claims the asset at fitting creation; pending already represents a real guarantee.
+    - [x] Guaranteed-asset claim is part of atomic creation/change; conflict fails the command without a partial/fake guarantee.
+    - [x] Reschedule/replacement claims new capacity/assets before releasing old. Reject/cancel release immediately; no-show after start; complete at/after end.
+  - **Evidence:** [[Fittings Backend Decision Record]] §Garment preference and guarantee, §Atomic creation and reschedule, and §Allocation release rules.
 
-- [ ] **FIT-BE-006 — Produce the backend decision record**
+- [x] **FIT-BE-006 — Produce the backend decision record**
   - **Acceptance:**
-    - [ ] Every BE-0 decision above is written into the canonical product/architecture docs.
-    - [ ] `Fittings Prototype Review Gate.md` is updated from frontend review artifact to reference the approved backend decisions.
-    - [ ] No unresolved item required for schema design is left as an implicit code assumption.
+    - [x] Every BE-0 decision is recorded in [[Fittings Backend Decision Record]] and reflected in canonical PRD/TRD/Data Model/ERD.
+    - [x] `Fittings Prototype Review Gate.md` is updated to point to the approved backend decisions and production deltas.
+    - [x] No unresolved behavior required for BE-1/BE-2 schema and contract design remains implicit.
+  - **Evidence:** `docs/second-brain/05-Operations/Fittings Backend Decision Record.md`, plus the aligned canonical documents.
 
-**BE-0 exit gate:** No contracts, migrations, or production fitting routes until FIT-BE-000 through FIT-BE-006 are complete.
+**BE-0 exit gate:** **PASSED 2026-09-26.** BE-1 contract/API-surface work may begin. Database migrations still wait for the BE-1 contracts to be approved as required by BE-2.
 
 ---
 
@@ -691,7 +732,7 @@ Do not silently implement one interpretation while leaving the canonical documen
     - [ ] List response supports bounded pagination using existing API conventions.
     - [ ] Filters cover only approved operational needs: customer/garment search, status, and date window.
     - [ ] Detail response contains customer, period, garment lines, fee/payment summary, status, and approved actions/state metadata.
-    - [ ] No room/staff/resource fields leak into the public contract if the backend model is intentionally internal.
+    - [ ] No hidden capacity-slot identifiers or room/staff/resource fields leak into staff/public fitting contracts.
 
 - [ ] **FIT-BE-012 — Define create/update/action contracts**
   - **Acceptance:**
@@ -704,8 +745,8 @@ Do not silently implement one interpretation while leaving the canonical documen
 - [ ] **FIT-BE-013 — Define schedule-setting contracts**
   - **Acceptance:**
     - [ ] Read/update contract covers approved weekly fitting hours.
-    - [ ] Default duration is included using the canonical BE-0 representation.
-    - [ ] Break/closure create/edit/remove contracts are explicit.
+    - [ ] Strict branch duration, enabled state, simultaneous capacity, and fixed optional fee are included using the canonical BE-0 representation.
+    - [ ] Weekly-window update and date-specific closure create/edit/remove contracts are explicit; recurring breaks are represented by window gaps.
     - [ ] There is no separate weekly availability-preview API solely to recreate the removed frontend section.
 
 - [ ] **FIT-BE-014 — Define stable fitting error semantics**
@@ -730,7 +771,7 @@ Do not silently implement one interpretation while leaving the canonical documen
   - **Acceptance:**
     - [ ] Add `fitting_appointment` with tenant/branch/customer, canonical status, bounded period, timezone snapshot, currency, fee snapshot if approved, business key, timestamps, and optimistic/version fields as required.
     - [ ] Add `fitting_line` with variant reference, optional physical asset reference, and canonical guarantee semantics.
-    - [ ] Add the approved schedule/capacity tables from FIT-BE-000; do not mechanically deploy obsolete ERD entities.
+    - [ ] Add `fitting_settings`, `fitting_capacity_slot`, `fitting_slot_allocation`, branch-scoped `fitting_hours`, and `fitting_closure` from the approved ERD; do not deploy obsolete `fitting_resource`/`resource_allocation` entities.
     - [ ] Add release-boundary extension FKs such as fitting links in `asset_allocation`, `payment`, and `charge` only when their owning fitting tables exist and the finance scope is approved.
 
 - [ ] **FIT-BE-021 — Add tenant, branch, FK, and state integrity constraints**
@@ -745,7 +786,7 @@ Do not silently implement one interpretation while leaving the canonical documen
 - [ ] **FIT-BE-022 — Add concurrency/exclusion constraints**
   - **Acceptance:**
     - [ ] Guaranteed fitting garments participate in canonical `asset_allocation` overlap exclusion.
-    - [ ] Capacity/resource overlap protection follows the approved FIT-BE-000 model.
+    - [ ] Hidden capacity-slot overlap protection follows the approved FIT-BE-000 model.
     - [ ] Adjacent non-overlapping intervals are allowed.
     - [ ] Blocking versus released/non-blocking semantics are explicit.
     - [ ] Constraint behavior is verified in PostgreSQL integration tests, not only TypeScript unit tests.
@@ -753,8 +794,8 @@ Do not silently implement one interpretation while leaving the canonical documen
 - [ ] **FIT-BE-023 — Add fitting schedule and closure persistence**
   - **Acceptance:**
     - [ ] Weekly hours support all seven weekdays and multiple windows where approved.
-    - [ ] Default duration persists at the correct tenant/branch scope.
-    - [ ] Date-specific breaks/closures use the approved canonical representation.
+    - [ ] Strict duration, capacity, enabled state, fee and currency persist at branch scope.
+    - [ ] Recurring breaks are represented by weekly-window gaps; date-specific closures use `fitting_closure`.
     - [ ] Invalid/overlapping configuration is rejected according to BE-0 rules.
     - [ ] Branch timezone determines local schedule interpretation.
 
@@ -783,7 +824,7 @@ Do not silently implement one interpretation while leaving the canonical documen
     - [ ] Search/filter behavior supports approved customer/garment/status/date needs.
     - [ ] Pagination is bounded and deterministic.
     - [ ] Query does not produce N+1 customer/garment/payment lookups.
-    - [ ] Response projection does not expose internal capacity/resource fields unless intentionally part of contract.
+    - [ ] Response projection never exposes hidden capacity-slot IDs or backend-only slot allocation details.
 
 - [ ] **FIT-BE-031 — Implement fitting detail repository**
   - **Acceptance:**
@@ -793,7 +834,7 @@ Do not silently implement one interpretation while leaving the canonical documen
 
 - [ ] **FIT-BE-032 — Implement schedule-setting reads**
   - **Acceptance:**
-    - [ ] Returns weekly hours, default duration, and breaks/closures for the correct branch/business scope.
+    - [ ] Returns branch fitting enabled state, simultaneous capacity, strict duration, fixed optional fee, weekly windows, and date-specific closures.
     - [ ] No weekly availability-preview query is introduced for `/fittings/schedule`.
     - [ ] Data shape supports the approved frontend without exposing backend-only concurrency machinery.
 
@@ -809,18 +850,19 @@ Do not silently implement one interpretation while leaving the canonical documen
 
 - [ ] **FIT-BE-040 — Implement staff fitting creation service**
   - **Acceptance:**
-    - [ ] Existing-customer and approved walk-in flow follow FIT-BE-002.
-    - [ ] Period, timezone snapshot, branch, and duration are derived/validated server-side.
+    - [ ] Existing-customer and approved walk-in flow follow FIT-BE-002; new walk-ins require full name plus phone or email.
+    - [ ] Start aligns to the 30-minute grid; period is derived from the branch strict duration and branch timezone, never a client override.
+    - [ ] Creation always starts `pending`.
     - [ ] Garment lines are validated against tenant catalogue/variant ownership.
-    - [ ] Optional fee snapshot follows FIT-BE-004.
-    - [ ] Creation is one transaction and one idempotent business effect.
+    - [ ] Fee/currency snapshot comes from branch fitting settings; positive fee creates the immutable `fitting_fee` charge.
+    - [ ] Appointment, one hidden capacity-slot allocation, all lines/guaranteed asset allocations, finance charge when applicable, audit metadata and approved outbox intent commit as one idempotent transaction.
 
 - [ ] **FIT-BE-041 — Implement schedule/capacity validation**
   - **Acceptance:**
-    - [ ] Appointment falls inside approved operating hours unless an explicitly authorized override exists.
-    - [ ] Breaks/closures are enforced.
-    - [ ] Capacity/resource claim follows the approved atomic concurrency model.
-    - [ ] Simultaneous requests cannot overbook one capacity slot/resource.
+    - [ ] Appointment falls fully inside one approved operating window; there is no first-slice schedule override.
+    - [ ] Weekly-window gaps and date-specific closures are enforced.
+    - [ ] One hidden capacity-slot claim follows the approved atomic concurrency model.
+    - [ ] Simultaneous requests cannot overbook a hidden capacity slot or exceed branch capacity.
 
 - [ ] **FIT-BE-042 — Implement preference-only garment lines**
   - **Acceptance:**
@@ -835,11 +877,13 @@ Do not silently implement one interpretation while leaving the canonical documen
     - [ ] Existing rental, maintenance, transfer, or other blocking allocations prevent the claim.
     - [ ] Same-asset concurrent guarantees result in one winning blocker.
 
-- [ ] **FIT-BE-044 — Implement fitting reschedule/update semantics**
+- [ ] **FIT-BE-044 — Implement fitting reschedule and future garment-plan update semantics**
   - **Acceptance:**
-    - [ ] Validate and claim replacement capacity/garments first.
-    - [ ] Release old allocations only after the replacement transaction can win.
-    - [ ] Failed reschedule preserves the old period, status, and allocations.
+    - [ ] Reschedule is a dedicated command allowed only for future `pending`/`confirmed` fittings before scheduled start.
+    - [ ] Validate and claim replacement capacity/guaranteed garments before releasing old claims.
+    - [ ] Failed reschedule preserves the old period, status, guaranteed assets, and capacity allocation.
+    - [ ] Future `pending`/`confirmed` garment-line edits are allowed before start; guaranteed replacement claims the new asset before releasing the old guarantee.
+    - [ ] Once start is reached or the appointment is terminal, period/garment planning is immutable.
     - [ ] Changed payload with reused idempotency key conflicts.
     - [ ] Mutation writes audit metadata using existing audit conventions.
 
@@ -857,27 +901,30 @@ Do not silently implement one interpretation while leaving the canonical documen
 
 - [ ] **FIT-BE-050 — Implement explicit status action services**
   - **Acceptance:**
-    - [ ] Implement only the canonical actions approved in FIT-BE-001.
-    - [ ] Each action checks current state/version inside the transaction.
+    - [ ] Implement only `confirm`, `reject`, `cancel`, `complete`, and `mark-no-show` according to FIT-BE-001.
+    - [ ] `reject` is pending-only and `reject`/`cancel` require a bounded internal reason.
+    - [ ] Normal `cancel` is allowed only before scheduled start; `no_show` only after start; `complete` only at/after end.
+    - [ ] Each action checks current state/version inside the transaction; no automatic clock-driven transition exists.
     - [ ] Arbitrary client-provided status replacement is not allowed.
-    - [ ] Unauthorized actors receive the standard permission failure.
+    - [ ] Owner and Front Desk may perform operational actions subject to timing/state guards; finance permissions remain separate.
 
 - [ ] **FIT-BE-051 — Implement confirmation semantics**
   - **Acceptance:**
-    - [ ] Confirmation verifies all required capacity and guaranteed garment claims are still valid.
-    - [ ] Payment prerequisites, if any, follow FIT-BE-004 and do not infer payment from appointment state.
+    - [ ] Confirmation verifies the pending fitting still owns its required hidden capacity slot and guaranteed garment claims; it does not allocate them for the first time.
+    - [ ] Payment/evidence never gates confirmation and is never inferred from appointment state.
     - [ ] Confirmation is idempotent and race-safe.
 
 - [ ] **FIT-BE-052 — Implement reject/cancel/no-show allocation behavior**
   - **Acceptance:**
-    - [ ] Release or retain capacity/asset blocks exactly according to the canonical state machine.
-    - [ ] Fee/payment/refund side effects follow the approved financial policy rather than UI assumptions.
+    - [ ] Reject/cancel release hidden capacity and guaranteed asset allocations immediately.
+    - [ ] No-show is available only after scheduled start and releases remaining active capacity/asset blocks immediately.
+    - [ ] None of these appointment actions automatically refunds, verifies, voids, or otherwise fabricates a payment outcome.
     - [ ] Repeated terminal action requests are duplicate-safe.
 
 - [ ] **FIT-BE-053 — Implement completion semantics**
   - **Acceptance:**
-    - [ ] Completion records the winning terminal transition once.
-    - [ ] No future blocking fitting allocation remains accidentally active.
+    - [ ] Completion is accepted only for `confirmed` fittings at/after scheduled end and records the winning terminal transition once.
+    - [ ] Capacity/guaranteed asset allocations are closed/released without deleting allocation history.
     - [ ] Completion does not create rental history unless a separately approved conversion workflow exists.
 
 - [ ] **FIT-BE-054 — Add lifecycle race tests**
@@ -893,34 +940,39 @@ Do not silently implement one interpretation while leaving the canonical documen
 
 - [ ] **FIT-BE-060 — Implement weekly fitting-hours commands**
   - **Acceptance:**
-    - [ ] Owner/front-desk permissions match the approved policy.
+    - [ ] Owner-only mutation and Owner/Front Desk read permissions match the approved policy.
     - [ ] Enable/disable weekday behavior is explicit.
     - [ ] Multiple windows per day are validated and normalized.
     - [ ] Invalid or disallowed overlapping windows are rejected.
 
-- [ ] **FIT-BE-061 — Implement persistent default fitting duration**
+- [ ] **FIT-BE-061 — Implement branch fitting settings**
   - **Acceptance:**
-    - [ ] Replace the frontend session-storage prototype setting with a tenant/branch backend source.
-    - [ ] New fitting create responses/flows use the current default unless an allowed per-appointment override is supplied.
-    - [ ] Existing appointments retain their stored period/duration when the default changes.
+    - [ ] Replace the frontend session-storage prototype setting with one branch-scoped settings source.
+    - [ ] Persist `fittings_enabled`, maximum simultaneous capacity, strict duration, optional fixed fee/currency, and version.
+    - [ ] New fittings always use the configured strict duration and fee; no per-appointment override exists.
+    - [ ] Duration/fee changes affect new fittings only; existing appointments retain stored period/fee snapshots.
+    - [ ] Disabling fittings blocks new create/reschedule while preserving existing lifecycle actions.
+    - [ ] Capacity reduction is rejected when existing future fittings require more simultaneous slots.
 
-- [ ] **FIT-BE-062 — Implement breaks and closures CRUD**
+- [ ] **FIT-BE-062 — Implement weekly-window and date-specific closure persistence**
   - **Acceptance:**
-    - [ ] Create/edit/remove is tenant/branch scoped and idempotent where applicable.
-    - [ ] Date, time, reason, and type constraints are validated server-side.
-    - [ ] Closures participate in appointment-capacity validation using the approved BE-0 model.
+    - [ ] Weekly window replacement and closure create/edit/remove are tenant/branch scoped and idempotent where applicable.
+    - [ ] Weekly windows validate weekday/start/end/non-overlap; their gaps represent recurring breaks.
+    - [ ] Closure period and bounded reason are validated server-side in branch timezone.
+    - [ ] Hours/closure changes that would invalidate existing future fittings are rejected.
+    - [ ] Closures participate in appointment schedule validation using the approved BE-0 model.
 
 - [ ] **FIT-BE-063 — Add schedule-setting tests**
   - **Acceptance:**
     - [ ] Seven-day schedule, split windows, unavailable days, and date exceptions are covered.
     - [ ] Timezone and date-boundary cases are covered.
-    - [ ] Updating settings cannot silently invalidate or rewrite historical appointments.
+    - [ ] Capacity reductions, shortened hours, and new closures that would invalidate future fittings are rejected; duration/fee changes do not rewrite existing appointment snapshots.
 
 ---
 
 # Backend Phase BE-7: Fitting fee and finance integration
 
-**Conditional phase:** Implement only if FIT-BE-004 approves a fitting fee/payment flow for the first backend slice.
+**Approved phase:** FIT-BE-004 approved an optional fixed branch fitting fee. Positive snapshotted fees create immutable `fitting_fee` charges; payment/refund behavior reuses the existing finance domain.
 
 - [ ] **FIT-BE-070 — Add canonical fitting finance relationships**
   - **Acceptance:**
@@ -941,9 +993,10 @@ Do not silently implement one interpretation while leaving the canonical documen
     - [ ] Payment verification never silently confirms a fitting unless an explicit approved domain command does so.
     - [ ] API exposes both states separately as the frontend prototype expects.
 
-- [ ] **FIT-BE-073 — Implement cancellation/refund/reversal rules**
+- [ ] **FIT-BE-073 — Implement explicit fitting finance correction/refund behavior**
   - **Acceptance:**
-    - [ ] Refundability follows FIT-BE-004.
+    - [ ] Appointment rejection/cancellation/no-show never automatically creates a refund or finance reversal.
+    - [ ] Any fitting-fee refund/reversal is an explicit existing-finance command with existing authorization.
     - [ ] Concurrent refund/reversal totals cannot exceed the refundable balance.
     - [ ] Failed/manual refunds preserve accurate state and require explicit operator resolution.
 
@@ -988,7 +1041,8 @@ Do not silently implement one interpretation while leaving the canonical documen
 
 - [ ] **FIT-BE-090 — Complete fitting authorization matrix**
   - **Acceptance:**
-    - [ ] Owner and Front desk capabilities are explicit for create/read/update/status/schedule/finance actions.
+    - [ ] Owner and Front Desk may perform approved operational fitting actions; Owner alone may mutate enabled/capacity/duration/fee/hours/closures.
+    - [ ] Fitting permissions do not grant payment verification/refund authority beyond the existing finance policy.
     - [ ] Every route checks active membership and tenant/branch scope.
     - [ ] Cross-tenant IDs fail without leaking object existence.
 
@@ -1000,8 +1054,9 @@ Do not silently implement one interpretation while leaving the canonical documen
 
 - [ ] **FIT-BE-092 — Complete concurrency falsification suite**
   - **Acceptance:**
-    - [ ] Same capacity/resource contention has one winner.
+    - [ ] With branch capacity `N`, `N + 1` truly overlapping create/reschedule attempts cannot produce more than `N` winners; slot exclusion remains authoritative under races.
     - [ ] Same guaranteed garment contention has one winner.
+    - [ ] Capacity/hour/closure configuration racing a booking cannot commit a booking that violates the winning configuration.
     - [ ] Adjacent intervals succeed; true overlaps fail.
     - [ ] Failed replacement/reschedule preserves the old winning state.
     - [ ] Duplicate idempotent retries produce one business effect.
@@ -1026,15 +1081,20 @@ Do not silently implement one interpretation while leaving the canonical documen
   - **Acceptance:**
     - [ ] Replace fixture list/detail/create/status data with API client calls.
     - [ ] Preserve approved loading, empty, error, filters, pagination, Details Sheet, and New Fitting UX.
+    - [ ] Tighten walk-in creation to require full name plus phone or email.
+    - [ ] Remove per-appointment duration/fee overrides; New Fitting reads the active branch strict duration and fee.
+    - [ ] Replace prototype `Guaranteed intent` with the canonical guarantee request/result presentation without exposing physical capacity slots.
     - [ ] Remove local status mutation as production authority.
 
 - [ ] **FIT-BE-101 — Wire `/fittings/schedule` to persisted settings**
   - **Acceptance:**
-    - [ ] Weekly hours, default duration, and breaks/closures load/save through backend contracts.
-    - [ ] Remove session-storage duration as production authority.
+    - [ ] Add simple branch-level controls for fittings enabled, maximum simultaneous fittings, strict duration, and optional fixed fee without exposing hidden slot/resource identities.
+    - [ ] Weekly windows and date-specific closures load/save through backend contracts; recurring breaks are represented by split windows.
+    - [ ] Remove session-storage duration and local-only fee/schedule state as production authority.
+    - [ ] Surface server rejection when a settings change would invalidate existing future fittings.
     - [ ] Do not reintroduce the removed weekly availability section.
 
-- [ ] **FIT-BE-102 — Replace fitting prototype data in Calendar/Dashboard/Payments**
+- [ ] **FIT-BE-102 — Replace fitting prototype data in Calendar/Dashboard/Availability/Payments**
   - **Acceptance:**
     - [ ] Production surfaces read authoritative fitting data only after the release flag/gate is enabled.
     - [ ] Prototype labels and mock records are removed in the same controlled cutover.
@@ -1049,8 +1109,8 @@ Do not silently implement one interpretation while leaving the canonical documen
     - [ ] Create guaranteed garment fitting and verify physical asset block.
     - [ ] Reschedule successfully and verify old allocation release.
     - [ ] Exercise approved status transitions.
-    - [ ] Update hours/default duration/break/closure and verify create validation.
-    - [ ] Exercise fitting payment flow if enabled.
+    - [ ] Update enabled/capacity/duration/fee/weekly windows/closure and verify configuration guards plus create validation.
+    - [ ] Exercise approved fitting-fee charge/payment flow.
 
 - [ ] **FIT-BE-104 — Complete rollout documentation and release gate**
   - **Acceptance:**
@@ -1072,8 +1132,8 @@ The fitting backend is complete when:
 - Guaranteed garment fittings atomically claim a real eligible asset and cannot double-book under concurrency.
 - Capacity/closure conflicts are enforced by database-safe or otherwise approved atomic concurrency primitives.
 - Reschedule failure preserves the previous winning appointment/allocation.
-- Schedule hours/default duration/breaks/closures are persisted and enforced server-side.
-- Payment state remains separate from appointment state, with finance behavior reused rather than duplicated when fees are enabled.
+- Branch enabled/capacity/strict duration/fixed fee/weekly windows/date-specific closures are persisted and enforced server-side.
+- Payment state remains separate from appointment state, with existing finance behavior reused rather than duplicated.
 - Calendar/Dashboard/Availability/Payments integration uses authoritative fitting data without duplicating the schedule-settings feature.
 - Cross-tenant, RLS, idempotency, race, timezone, and migration tests pass.
 - The frontend no longer depends on fitting fixture data or session storage for production behavior.

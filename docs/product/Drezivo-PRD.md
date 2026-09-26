@@ -1,6 +1,6 @@
 # Drezivo Product Requirements Document
 
-**Version:** 2.0 (revised) · **Status:** V1 product definition · **Updated:** 15 September 2026
+**Version:** 2.1 (revised) · **Status:** V1 product definition with approved V1.1 fitting boundary · **Updated:** 26 September 2026
 
 ## 1. Product decision and release contract
 
@@ -12,7 +12,7 @@ This is incremental, not feature-complete interpretation of every supplied scree
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | V0 discovery/pilot | 12–15 discovery interviews proposed; concierge onboarding and observed single-garment lifecycle using one default branch                                                                                                                           | Evidence of actual workflow and failure modes |
 | V1                 | Single branch; Owner and Front desk; styles/variants/assets; single-garment guest checkout; reservations, holds, manual cash/QR review, pickup, return, inspection, cleaning-ready state, deposits, exports, audit, minimal Drezivo operator admin | Release gates in §9                           |
-| V1.1               | Fittings with room/staff/resource capacity, multi-item booking UI, automated no-show/late reminders and partial physical returns                                                                                                                   | Promote only if pilot evidence supports it    |
+| V1.1               | Fittings with guarded branch capacity and multi-item booking UI; automated reminders and partial physical returns remain later V1.1 increments pending evidence                                                                                   | Promote only if pilot evidence supports it    |
 | V2                 | Branches, branch permissions, transfers and custody                                                                                                                                                                                                | Separate migration/security gate              |
 | V3 conditional     | Enterprise governance, SSO, advanced audit/reporting                                                                                                                                                                                               | Demand/readiness gate                         |
 
@@ -58,11 +58,23 @@ Review is read-only with snapshots, timezone dates, expiry, separate money lines
 
 Dashboard queues pickups, returns, pending evidence, expiring holds, overdue/late flags, cleaning/maintenance, and review work. Calendar shows assets and buffers with conflict reasons. Walk-in booking uses the same allocator and follows clothing → variant → advisory availability calendar → date range → pickup/return times → event date → fulfillment/payment. Staff selects a variant rather than a physical asset; Drezivo resolves one eligible serialized garment and revalidates the exact buffered timestamp interval under lock. Cash remains under_review until authorized verification confirms cash received.
 
-Pickup records actor/time/condition and transitions confirmed → picked_up only if the garment is physically present, ready, and meets payment/policy prerequisites. Return records actual time, condition and notes, transitions picked_up → returned; inspection marks cleaning required or ready; completion follows the settlement checklist. V1 includes manual handling for no-shows, late return, payment exceptions and disrupted next bookings. Automated reminders and partial physical returns are V1.1. Deposit settlement is itemized: full release, partial refund less approved charge, or retention with reason and snapshot; refund cannot exceed the remaining refundable balance under concurrent requests. Async CSV exports show progress and require authorization.
+Pickup records actor/time/condition and transitions confirmed → picked_up only if the garment is physically present, ready, and meets payment/policy prerequisites. Return records actual time, condition and notes, transitions picked_up → returned; inspection marks cleaning required or ready; completion follows the settlement checklist. V1 includes manual handling for no-shows, late return, payment exceptions and disrupted next bookings. Automated reminders and partial physical returns remain later V1.1 increments and are not required by the first production fitting backend slice. Deposit settlement is itemized: full release, partial refund less approved charge, or retention with reason and snapshot; refund cannot exceed the remaining refundable balance under concurrent requests. Async CSV exports show progress and require authorization.
 
 ### Fittings (FR11)
 
-Fitting scheduling is V1.1 pending validation. V1 may store a note only and must not promise capacity or accept a fitting fee without resource controls. V1.1 models room/staff/resource, hours, breaks, duration, capacity, customer, garment, fee, status, and conflict checks.
+Fitting scheduling is V1.1. The first production slice is staff-created only; public/customer self-booking is deferred, but the appointment model must remain channel-neutral enough to add it later without redesign. Owner and Front Desk may run fitting operations; Owner alone changes fitting configuration.
+
+Fitting configuration is branch-scoped and includes an enabled flag, maximum simultaneous fittings, one strict duration, one optional fixed fitting fee, weekly operating windows and date-specific closures. The product does not expose rooms, staff assignment, named fitting resources or capacity slots. Backend capacity is enforced with hidden internal branch capacity slots: capacity means the maximum number of overlapping appointment periods, not appointments per day. Correctness uses database overlap protection and serialized configuration/booking mutation; never an unguarded `count then insert`.
+
+Start times align to 30-minute boundaries. Configured duration is at least 30 minutes, is a multiple of 30 minutes, and is mandatory for every new fitting; staff cannot override it per appointment. The whole appointment must fit inside one weekly operating window, must not overlap a date-specific closure, and must use the appointment branch timezone. Gaps between weekly windows represent recurring breaks. Configuration changes that would invalidate already scheduled future fittings are rejected; duration and fee changes affect new fittings only because appointments snapshot period, timezone, fee and currency.
+
+Canonical fitting states are `pending`, `confirmed`, `completed`, `rejected`, `cancelled`, and `no_show`. Creation always starts `pending`, and both `pending` and `confirmed` already hold one hidden capacity slot and every guaranteed garment. Allowed transitions are `pending → confirmed|rejected|cancelled` and `confirmed → completed|cancelled|no_show`; terminal states are completed/rejected/cancelled/no_show. `rejected` and `cancelled` require a bounded internal reason. Status never changes automatically because time passed. Once start time is reached, reschedule, garment-plan edits, rejection and normal cancellation are frozen; no-show is allowed after start and completion only at/after end.
+
+Every fitting links to a real customer. A new walk-in requires full name plus phone or email; possible duplicates are advisory and never auto-merged by contact alone. A fitting line is either preference-only or guaranteed. Preference-only references a variant and creates no physical asset block. Guaranteed requests a variant; Drezivo deterministically selects and atomically claims one eligible physical asset for exactly the fitting period. Creation atomically commits the pending appointment, one hidden capacity slot, all lines, guaranteed asset blocks, the fitting-fee charge when applicable, audit metadata and approved outbox intent; failure leaves no partial fitting. Reschedule is a dedicated atomic action that secures replacement capacity/garments before old claims are released, so failure preserves the original appointment.
+
+The branch fitting fee is optional and fixed. Staff cannot override it per appointment. The appointment snapshots fee/currency; a positive fee creates an immutable `fitting_fee` charge in the existing finance domain. Payment/evidence status remains independent and never gates confirmation. Cancellation, rejection and no-show never trigger an automatic refund; refunds/reversals stay explicit finance actions. One optional bounded internal staff note is allowed. Normal staff operations never hard-delete fittings; meaningful mutations use the existing append-only audit infrastructure.
+
+No customer-facing fitting notifications, SMS or automated reminders ship in the first backend slice. Services remain outbox-ready. Production integration is staged: `/fittings` and `/fittings/schedule` first, then Calendar, Dashboard, Availability and Payments.
 
 ## 5. Permissions and privacy
 
@@ -70,6 +82,8 @@ Fitting scheduling is V1.1 pending validation. V1 may store a note only and must
 | ----------------------------------- | ------------------ | ------------------------------------------------ |
 | Assets/conditions/blocks            | Full               | Operational edits; no archive                    |
 | Reservations/pickup/return/cleaning | Full               | Create/update/custody                            |
+| Fitting operations                   | Full               | Create/view/confirm/reject/reschedule/cancel/complete/no-show before/after the approved timing guards |
+| Fitting configuration                | Full               | Read-only                                        |
 | QR/payment instructions/refunds     | Full               | View; no edit/refund                             |
 | Evidence                            | View/verify/reject | Operational view; no verify by default           |
 | Private ID/receipt documents        | Audited full       | Receipt only when assigned; ID denied by default |
@@ -88,7 +102,7 @@ Collect minimum name/contact/booking data. Social handles, DOB and IDs are opt-i
 | Active physical assets                                |                                                  Up to 75 |              Up to 250 | Up to 1,000 (recommended bounded cap; confirm capacity budget before launch) |
 | Owner + Front desk roles                              |                                                  Included |               Included |                                                                     Included |
 | Core reliability, isolation, exports, returns/refunds |                                                  Included |               Included |                                                                     Included |
-| Fittings with resource capacity                       | Not available until V1.1 ships; then plan entitlement TBD |                   Same |                                                                         Same |
+| Fittings with guarded branch capacity                 | Not available until V1.1 ships; then plan entitlement TBD |                   Same |                                                                         Same |
 | Multi-item booking UI                                 |                                      V1.1 entitlement TBD |   V1.1 entitlement TBD |                                                         V1.1 entitlement TBD |
 | Branches/transfers                                    |                                    Not available; V2 only | Not available; V2 only |                                                       Not available; V2 only |
 | Advanced reporting/governance                         |                                              Not promised |           Not promised |                                                           Future V3 decision |

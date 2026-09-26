@@ -606,7 +606,7 @@ Table charge {
     (tenant_id, id) [pk]
     (tenant_id, business_key) [unique]
   }
-  Note: 'V1. Immutable nonnegative charge or linked credit/reversal. Exactly one rental/fitting. Security deposit liability is not a revenue charge.'
+  Note: 'V1. Immutable nonnegative charge or linked credit/reversal. Exactly one reservation/fitting. V1.1 fitting fees use kind fitting_fee when fitting_id is present. Security deposit liability is not a revenue charge.'
 }
 
 Table payment_allocation {
@@ -939,23 +939,46 @@ Table operator_command {
   Note: 'V2 proposal. Durable authorization and idempotency record for retry/support commands. Status is accepted/completed/failed/rejected; transitions are conditional.'
 }
 
+Table fitting_settings {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  branch_id uuid [not null]
+  enabled boolean [not null]
+  capacity integer [not null]
+  duration_minutes integer [not null]
+  fee_minor bigint [not null]
+  currency char(3) [not null]
+  version bigint [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+    (tenant_id, branch_id) [unique]
+  }
+  Note: 'V1.1. One branch row. Capacity is maximum simultaneous fittings; duration >=30 and divisible by 30; fee is fixed for new fittings and may be zero. Owner-only mutation.'
+}
+
 Table fitting_appointment {
   tenant_id uuid [not null]
   id uuid [not null]
   branch_id uuid [not null]
   customer_id uuid [not null]
+  booking_channel varchar(20) [not null]
   status varchar(20) [not null]
   period tstzrange [not null]
   timezone_snapshot varchar(64) [not null]
   currency char(3) [not null]
   fee_minor bigint [not null]
+  internal_note text
+  terminal_reason text
   business_key varchar(160) [not null]
+  version bigint [not null]
   created_at timestamptz [not null]
   indexes {
     (tenant_id, id) [pk]
     (tenant_id, business_key) [unique]
   }
-  Note: 'V1.1. Appointment confirmed only after all required resources and promised garment blocks claim atomically.'
+  Note: 'V1.1. Staff slice creates pending. pending/confirmed hold one hidden capacity slot and all guarantees. Canonical states: pending/confirmed/completed/rejected/cancelled/no_show; terminal reason required for rejected/cancelled; no hard delete.'
 }
 
 Table fitting_line {
@@ -969,53 +992,65 @@ Table fitting_line {
   indexes {
     (tenant_id, id) [pk]
   }
-  Note: 'V1.1. Guaranteed garment requires asset plus asset_allocation; unassigned preference must not claim guarantee.'
+  Note: 'V1.1. Preference has no asset/block. Guaranteed requires one eligible asset plus exact-period asset_allocation; replacement is atomic.'
 }
 
-Table fitting_resource {
+Table fitting_capacity_slot {
   tenant_id uuid [not null]
   id uuid [not null]
   branch_id uuid [not null]
-  membership_id uuid
-  name varchar(100) [not null]
-  kind varchar(20) [not null]
+  slot_number integer [not null]
   active boolean [not null]
   created_at timestamptz [not null]
   indexes {
     (tenant_id, id) [pk]
+    (tenant_id, branch_id, slot_number) [unique]
   }
-  Note: 'V1.1. Individual room/staff/capacity slot, capacity one per resource. Model N capacity as N identifiable slots.'
+  Note: 'V1.1. Hidden concurrency primitive only; never a room/staff/public resource. Branch capacity N materializes N active slots.'
 }
 
-Table resource_allocation {
+Table fitting_slot_allocation {
   tenant_id uuid [not null]
   id uuid [not null]
-  resource_id uuid [not null]
-  fitting_id uuid
-  reason varchar(30) [not null]
+  slot_id uuid [not null]
+  fitting_id uuid [not null]
   period tstzrange [not null]
   is_blocking boolean [not null]
+  released_at timestamptz
   created_at timestamptz [not null]
   indexes {
     (tenant_id, id) [pk]
+    (tenant_id, fitting_id) [unique]
   }
-  Note: 'V1.1. EXCLUDE same tenant/resource overlapping period WHERE is_blocking. Appointment or closure/break; explicit source check.'
+  Note: 'V1.1. One slot per scheduled fitting. SQL EXCLUDE same tenant/slot overlapping period while blocking; released rows remain history.'
 }
 
 Table fitting_hours {
   tenant_id uuid [not null]
   id uuid [not null]
-  resource_id uuid [not null]
+  branch_id uuid [not null]
   weekday integer [not null]
   starts_local time [not null]
   ends_local time [not null]
-  valid_from date [not null]
-  valid_to date
   created_at timestamptz [not null]
   indexes {
     (tenant_id, id) [pk]
   }
-  Note: 'V1.1. Allow multiple windows per day; date exceptions become resource_allocation closures. Timezone from branch.'
+  Note: 'V1.1. Multiple local windows per weekday; gaps are recurring breaks. A fitting must fit fully within one window.'
+}
+
+Table fitting_closure {
+  tenant_id uuid [not null]
+  id uuid [not null]
+  branch_id uuid [not null]
+  period tstzrange [not null]
+  timezone_snapshot varchar(64) [not null]
+  reason varchar(240) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [pk]
+  }
+  Note: 'V1.1. Date-specific partial/full-day closure. Configuration mutation must reject a closure that would invalidate an existing future fitting.'
 }
 
 Table location {
@@ -1132,11 +1167,13 @@ Ref: subscription_event.tenant_id > tenant.id [delete: restrict, update: no acti
 Ref: subscription_payment.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: support_grant.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: operator_command.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: fitting_settings.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: fitting_appointment.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: fitting_line.tenant_id > tenant.id [delete: restrict, update: no action]
-Ref: fitting_resource.tenant_id > tenant.id [delete: restrict, update: no action]
-Ref: resource_allocation.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: fitting_capacity_slot.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: fitting_slot_allocation.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: fitting_hours.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: fitting_closure.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: location.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: transfer_order.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: transfer_line.tenant_id > tenant.id [delete: restrict, update: no action]
@@ -1208,16 +1245,17 @@ Ref: export_job.(tenant_id, requested_by) > membership.(tenant_id, id) [delete: 
 Ref: export_job.(tenant_id, result_file_id) > file_object.(tenant_id, id) [delete: restrict, update: no action]
 Ref: subscription_event.(tenant_id, subscription_id) > subscription.(tenant_id, id) [delete: restrict, update: no action]
 Ref: subscription_payment.(tenant_id, subscription_id) > subscription.(tenant_id, id) [delete: restrict, update: no action]
+Ref: fitting_settings.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
 Ref: fitting_appointment.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
 Ref: fitting_appointment.(tenant_id, customer_id) > customer.(tenant_id, id) [delete: restrict, update: no action]
 Ref: fitting_line.(tenant_id, fitting_id) > fitting_appointment.(tenant_id, id) [delete: restrict, update: no action]
 Ref: fitting_line.(tenant_id, variant_id) > product_variant.(tenant_id, id) [delete: restrict, update: no action]
 Ref: fitting_line.(tenant_id, asset_id) > physical_asset.(tenant_id, id) [delete: restrict, update: no action]
-Ref: fitting_resource.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
-Ref: fitting_resource.(tenant_id, membership_id) > membership.(tenant_id, id) [delete: restrict, update: no action]
-Ref: resource_allocation.(tenant_id, resource_id) > fitting_resource.(tenant_id, id) [delete: restrict, update: no action]
-Ref: resource_allocation.(tenant_id, fitting_id) > fitting_appointment.(tenant_id, id) [delete: restrict, update: no action]
-Ref: fitting_hours.(tenant_id, resource_id) > fitting_resource.(tenant_id, id) [delete: restrict, update: no action]
+Ref: fitting_capacity_slot.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
+Ref: fitting_slot_allocation.(tenant_id, slot_id) > fitting_capacity_slot.(tenant_id, id) [delete: restrict, update: no action]
+Ref: fitting_slot_allocation.(tenant_id, fitting_id) > fitting_appointment.(tenant_id, id) [delete: restrict, update: no action]
+Ref: fitting_hours.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
+Ref: fitting_closure.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
 Ref: location.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
 Ref: transfer_order.(tenant_id, from_branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
 Ref: transfer_order.(tenant_id, to_branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
@@ -1284,11 +1322,13 @@ TableGroup V1_Core {
 }
 
 TableGroup V1_1_Fittings {
+  fitting_settings
   fitting_appointment
   fitting_line
-  fitting_resource
-  resource_allocation
+  fitting_capacity_slot
+  fitting_slot_allocation
   fitting_hours
+  fitting_closure
 }
 
 TableGroup V2_Branches {
