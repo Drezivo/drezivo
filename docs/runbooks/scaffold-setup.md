@@ -51,7 +51,7 @@ Codex capabilities.
 ## Scope and release gate
 
 This is a development scaffold. Unimplemented business endpoints must return explicit errors. SQL
-migrations require a disposable Neon rehearsal, row-level security and concurrency tests, and review.
-Worker delivery, session lifecycle controls, Clerk, Neon, S3, monitoring, and recovery need dedicated
+migrations require an isolated Supabase staging rehearsal, row-level security and concurrency tests, and review.
+Worker delivery, session lifecycle controls, Clerk, Supabase PostgreSQL, S3, monitoring, and recovery need dedicated
 implementation and integration evidence before serving business traffic. A green build is not a
 production-readiness claim.

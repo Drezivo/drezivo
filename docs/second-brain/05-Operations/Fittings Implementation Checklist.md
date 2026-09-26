@@ -827,7 +827,7 @@ The fitting frontend prototype is complete when:
   - **Acceptance:**
     - [ ] Index tenant/branch/period/status/customer access patterns used by list/calendar queries.
     - [ ] Add supporting indexes for guaranteed-asset/capacity conflict checks.
-    - [ ] Rehearse migration on an isolated Neon branch with synthetic/anonymized data.
+    - [ ] Rehearse migration on the isolated Supabase staging project with synthetic/anonymized data.
     - [ ] Run migration invariants and explain any lock-sensitive operation.
     - [ ] Prefer roll-forward correction; do not assume app rollback reverses data migration safely.
 

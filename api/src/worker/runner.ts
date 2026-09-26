@@ -29,8 +29,8 @@ export class PermanentOutboxError extends Error {
 
 /**
  * Lease-claim polling loop with bounded retry to a terminal state (TRD §8). Polling, not
- * `LISTEN`/`NOTIFY`, per TRD §9: "Polling, not session LISTEN, is the initial design" — Neon's
- * pooled connections make holding a `LISTEN` session impractical, and polling is simple enough
+ * `LISTEN`/`NOTIFY`, per TRD §9: "Polling, not session LISTEN, is the initial design" — pooled
+ * runtime connections make holding a `LISTEN` session impractical, and polling is simple enough
  * to reason about under worker-outage tests (TRD §5 adversarial test 3).
  *
  * One claim transaction per batch: `FOR UPDATE SKIP LOCKED` lets multiple worker replicas poll

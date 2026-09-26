@@ -1,7 +1,7 @@
 # Drezivo — Logical Database Specification
 
 **Revision:** 1.1 · **Date:** 26 September 2026
-**Target:** Neon PostgreSQL. This is an ERD-ready logical specification, not a deployed database or production migration.
+**Target:** Supabase PostgreSQL. This is an ERD-ready logical specification, not a deployed database or production migration.
 
 The [DBML](Drezivo-ERD.dbml) defines exact types, nullability, keys, indexes and foreign-key relationships. This document specifies business meaning and constraints a diagram cannot enforce. Read with the [PRD](../product/Drezivo-PRD.md) and [TRD](Drezivo-TRD.md).
 
@@ -240,7 +240,7 @@ Delayed/lost transfers create disruptions instead of phantom destination stock. 
 - Worker crashes before/after provider acceptance recover leases and preserve financial deduplication.
 - Fitting slot/garment contention: simultaneous creates/reschedules never exceed branch capacity or double-allocate a garment; failed replacement preserves the original fitting. Duplicate dispatch, partial and delayed transfer receipt preserve physical truth.
 
-These are implementation acceptance tests. Parser validation proves diagram syntax/relationships only; Neon migrations and concurrency still require real integration tests.
+These are implementation acceptance tests. Parser validation proves diagram syntax/relationships only; Supabase PostgreSQL migrations and concurrency still require real integration tests.
 
 ## 12. Entity dictionary
 

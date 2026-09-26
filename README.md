@@ -1,6 +1,6 @@
 # Drezivo — Product and Architecture Pack
 
-**Updated:** 15 September 2026. Planning documents; no application/database deployed.
+**Updated:** 26 September 2026. Planning documents; no production application/database deployed.
 
 ## Root operating guide
 
@@ -16,7 +16,7 @@ contains the same orientation in a visual Word document.
 
 1. [Enhanced PRD](docs/product/Drezivo-PRD.md) — V1 scope, V1.1/V2/V3 progression, workflows, permissions, prices and release gates.
 2. [Market research](docs/product/Drezivo-Market-Research.md) — competitor/Philippine evidence, original gaps, assumptions and validation plan.
-3. [TRD](docs/architecture/Drezivo-TRD.md) — recommended implementation using Next.js/TypeScript, Express/TypeScript, Neon, Clerk, S3 and REST.
+3. [TRD](docs/architecture/Drezivo-TRD.md) — recommended implementation using Next.js/TypeScript, Express/TypeScript, Supabase PostgreSQL, Clerk, S3 and REST.
 4. [Logical data model](docs/architecture/Drezivo-Data-Model.md) — entity dictionary, invariants, state transitions and transaction rules.
 5. [ERD input](docs/architecture/Drezivo-ERD.dbml) — 50 entities and 132 relationships, grouped by release. Import into a DBML-compatible diagram tool. Do not treat exported SQL as complete production migrations.
 6. [Legal drafts](docs/product/legal/) — Philippines-first Terms of Service and Privacy Policy for counsel and Data Protection Officer review.
@@ -28,14 +28,15 @@ contains the same orientation in a visual Word document.
 - Clothing rental operations, Philippines first; one branch at launch with branch-aware ownership from day one.
 - Monthly prices: **Starter ₱300 · Professional ₱499 · Business ₱1,299**.
 - Familiar stack retained. A modular Express API plus durable worker is recommended.
+- Supabase hosts PostgreSQL only; Clerk, the Express authorization boundary, and S3/MinIO remain separate.
 - Receipt evidence is not payment confirmation. Exclusive expiring holds precede payment instructions.
 - Separate catalogue variants, physical garments, planned allocation, actual custody and refundable deposits.
 
 ## Verification and limitations
 
-The DBML was successfully converted by `@dbml/cli` to a PostgreSQL SQL dump for syntax/reference validation. SQL was generated in a temporary directory only. No Neon database was created or modified. RLS, interval exclusion, financial invariants, concurrency, performance and recovery still require implementation tests; they are specified, not claimed as proven.
+The DBML was successfully converted by `@dbml/cli` to a PostgreSQL SQL dump for syntax/reference validation. SQL was generated in a temporary directory only. No Supabase production database was created or modified. RLS, interval exclusion, financial invariants, concurrency, performance and recovery still require implementation tests; they are specified, not claimed as proven.
 
-The original PRD is preserved [here](docs/archive/Rentivo-PRD-v1.0-original.md), with SHA-256 matching the frozen graph input. All source images remain unchanged. Research is desk research with first-party sources, not customer interviews or evidence of product–market fit.
+The [archived original PRD](docs/archive/Rentivo-PRD-v1.0-original.md) is preserved with SHA-256 matching the frozen graph input. All source images remain unchanged. Research is desk research with first-party sources, not customer interviews or evidence of product–market fit.
 
 ## Baseline knowledge graph
 

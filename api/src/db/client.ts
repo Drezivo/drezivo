@@ -9,8 +9,8 @@ import * as schema from './schema/index.js';
  * One shared pg Pool and Drizzle instance serve the whole process. Never construct a second
  * `Pool` inside a feature module.
  *
- * TRD §9 (Neon operations): Neon's pooler is transaction-based, so session-level state must
- * not be assumed to survive a checkout — `app.tenant_id` is therefore set with `SET LOCAL`
+ * TRD §9 (Supabase PostgreSQL operations): transaction-pooled connections do not preserve
+ * session-level state across checkouts, so `app.tenant_id` is set with `SET LOCAL`
  * (transaction-scoped, auto-reset on commit/rollback) on the SAME checked-out connection as
  * the queries that follow it, never as a separate `SET` on the pool.
  */

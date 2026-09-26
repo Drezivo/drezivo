@@ -2,7 +2,7 @@
 
 **Status:** canonical operating guide for the Drezivo monorepo
 **Audience:** engineers, coding agents, reviewers, operators, and maintainers
-**Updated:** 16 September 2026
+**Updated:** 26 September 2026
 
 This file is the root source of truth for the Drezivo workspace. Git is initialized at this root,
 and the root `package.json` and `package-lock.json` govern all workspaces. The former `api`, `app`,
@@ -29,7 +29,7 @@ flowchart LR
   STAFF[Staff browser] --> APP[apps/app: staff dashboard]
   WEB --> API[services/api: Express REST and worker]
   APP --> API
-  API --> DB[(Neon PostgreSQL)]
+  API --> DB[(Supabase PostgreSQL)]
   API --> CLERK[Clerk identity]
   API --> S3[S3 private object storage]
   WORKER[API worker process] --> DB
@@ -42,13 +42,13 @@ flowchart LR
 
 The architecture is a modular monolith. One Express service owns business transactions and a
 separately running worker consumes durable Postgres outbox jobs. Two Next.js applications render
-public and staff surfaces. Neon PostgreSQL is the source of truth for tenant data, inventory,
+public and staff surfaces. Supabase PostgreSQL is the source of truth for tenant data, inventory,
 availability, reservations, money, and workflow state. Clerk proves identity; the API resolves
 membership, branch scope, permissions, and entitlements. S3 stores objects while the database stores
 metadata and lifecycle.
 
 The scaffold is incomplete. A route may return an explicit HTTP 501 until its transaction is built.
-No live Neon database, provider integration, production recovery, or payment correctness is implied
+No live Supabase database, provider integration, production recovery, or payment correctness is implied
 by a passing build.
 
 ## Root layout
@@ -106,7 +106,7 @@ never trusted.
 Owns the authenticated staff experience: reservations, inventory, fittings, calendar, payment
 evidence review, settings, and branch selection. It calls the API and workspace contracts package.
 It may disable a button and show pending UI, but only the API and database decide whether a mutation
-wins. It never holds Neon, S3, or Clerk secret credentials.
+wins. It never holds Supabase database, S3, or Clerk secret credentials.
 
 ### `web/` application
 

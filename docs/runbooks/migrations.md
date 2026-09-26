@@ -1,9 +1,9 @@
 # Migrations
 
-The procedure for changing the Neon PostgreSQL schema without breaking the application that is
-currently running against it. This runbook implements TRD §9 ("Neon operations and schema
-evolution") directly — read that section if you need the reasoning behind a step here, not just
-the step.
+The procedure for changing the Supabase PostgreSQL schema without breaking the application that is
+currently running against it. This runbook implements TRD §9 ("Supabase PostgreSQL operations and
+schema evolution") directly — read that section if you need the reasoning behind a step here, not
+just the step.
 
 For the additive account, onboarding, membership, and subscription rollout, also follow the
 [Tenancy and onboarding migration plan](../architecture/Tenancy-Onboarding-Migration-Plan.md).
@@ -74,12 +74,12 @@ options." Concretely:
   validated, over a single blocking `SET NOT NULL` on a large table.
 - Adding the `EXCLUDE USING gist` constraint this system depends on for availability correctness
   (`docs/decisions/0002-drizzle-and-node-postgres.md`) is exactly the kind of change this budget
-  applies to — test its lock behavior and duration against a realistic data volume (a Neon
-  branch seeded with representative row counts, TRD §9) before running it against production.
+  applies to — test its lock behavior and duration against realistic data in the isolated Supabase
+  staging project (TRD §9) before running it against production.
 - DECISION NEEDED: set an explicit maximum acceptable lock duration (e.g., "no migration step
   may hold an exclusive lock for more than N seconds against the production database") once a
   representative production data volume exists to measure against. Until then, treat any
-  migration whose lock duration has not been measured on a realistic Neon branch as unverified,
+  migration whose lock duration has not been measured in a realistic staging project as unverified,
   not safe.
 
 ## Roll forward, not back
@@ -96,22 +96,23 @@ worst leaves the schema in a state neither the old nor the new application code 
 See `docs/runbooks/rollback.md` for what rollback _can_ and cannot undo across the whole system,
 not just migrations.
 
-## Neon-specific operational notes
+## Supabase-specific operational notes
 
-- **Pooled vs. direct connections**: ordinary application queries use the pooled connection
-  string; migration and admin tooling that needs session-level guarantees uses the direct
-  connection (TRD §9, `docs/runbooks/environments.md`'s `DATABASE_URL` vs.
-  `DATABASE_URL_DIRECT`). Running a migration over the pooled connection risks session-state
-  assumptions the pooler does not guarantee.
-- **Branches are rehearsal environments, not backups.** Use a Neon branch to rehearse a
-  migration against realistic data before running it against production — but "production data
-  remains sensitive when cloned" (TRD §9): prefer synthetic or anonymized seeds on branches used
-  for anything beyond a single trusted operator's own rehearsal, and never grant arbitrary
-  preview access to a branch holding live personal data.
-- **A branch is not an independent archival backup** (TRD §9). Recovery planning depends on
-  Neon's configured history window and purchased retention — confirm what is actually purchased
-  before relying on it, and see `docs/runbooks/rollback.md` and `docs/runbooks/incident.md` for
-  what a restore can and cannot promise.
+- **Use the direct endpoint for migrations.** `DATABASE_URL_DIRECT` authenticates the migration
+  role over Supabase's direct connection. The API and worker use restricted runtime URLs. Do not
+  run DDL through the shared transaction pooler.
+- **Rehearsal environments are not backups.** Use the separate Supabase staging project, seeded
+  with synthetic or anonymized data, for migration rehearsal. Do not clone live personal data into
+  an environment with broader preview access.
+- **Backups are plan- and configuration-dependent.** Confirm purchased daily-backup or
+  point-in-time recovery retention, then run a restore drill. Supabase backups may not preserve
+  custom-role passwords; reapply the `drezivo_app` and `drezivo_worker` credentials out of band.
+- **Keep the Data API disabled.** A migration that creates objects in `public` must not silently
+  create a second browser-accessible API. Audit default grants to `anon`, `authenticated`, and
+  `service_role` as part of migration review.
+- **Direct networking must be available to the migration runner.** Supabase direct connections are
+  IPv6 unless the project has the IPv4 add-on. Use an IPv6-capable approved runner or provision the
+  add-on; do not substitute a pooled runtime URL silently.
 - Pin the supported Postgres major version; schedule and rehearse upgrades rather than letting
   them happen implicitly (TRD §9).
 
@@ -119,8 +120,11 @@ not just migrations.
 
 - [ ] The migration is version-controlled and has been reviewed like any other change
       (`CONTRIBUTING.md`).
-- [ ] It ran successfully against a staging environment or a Neon branch seeded with
+- [ ] It ran successfully against the Supabase staging project seeded with
       representative data first.
+- [ ] The migration used `DATABASE_URL_DIRECT`, and runtime smoke tests used only the restricted
+      `drezivo_app` / `drezivo_worker` roles.
+- [ ] Data API exposure and default Supabase role grants were checked for every new object.
 - [ ] Its lock behavior and duration were measured, not assumed, for any index/constraint change
       against a large table.
 - [ ] It is additive/backward-compatible with the application version currently running in
