@@ -20,6 +20,8 @@ import {
   availabilityResult,
   catalogueItem,
   catalogueQuery,
+  centralPaymentsQuery,
+  centralPaymentsResponse,
   changeSubscriptionPlanRequest,
   claimMembershipInvitationRequest,
   clerkWebhookInboxRecord,
@@ -35,6 +37,8 @@ import {
   onboardingActorContext,
   onboardingStatus,
   operatorActionResponse,
+  operationalCalendarQuery,
+  operationalCalendarResponse,
   planCode,
   resendMembershipInvitationRequest,
   cancelMembershipInvitationRequest,
@@ -84,6 +88,7 @@ import {
   fittingWeeklyHoursUpdateRequest,
   fittingWeeklyHoursUpdateResponse,
   guestReservationView,
+  dashboardFittingSummaryResponse,
   holdIntentRequest,
   holdIntentResponse,
   itemDetail,
@@ -714,6 +719,38 @@ registry.registerPath({
   },
 });
 
+// ---- operations ------------------------------------------------------
+registry.registerPath({
+  method: 'get',
+  path: '/calendar',
+  tags: ['operations'],
+  summary: 'Read one bounded operational calendar projection from authoritative reservations and fittings.',
+  request: { query: operationalCalendarQuery },
+  responses: {
+    200: {
+      description: 'Reservation pickup/return and fitting events for the active branch.',
+      content: { 'application/json': { schema: successEnvelope(operationalCalendarResponse) } },
+    },
+    403: jsonError('Operational schedule access is required.'),
+    422: jsonError('The calendar query is invalid or exceeds the bounded window.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/dashboard/fittings-summary',
+  tags: ['operations'],
+  summary: 'Read branch-local fitting operational counts for today and the next seven days.',
+  responses: {
+    200: {
+      description: 'Authoritative fitting counts only; no utilization or revenue analytics.',
+      content: { 'application/json': { schema: successEnvelope(dashboardFittingSummaryResponse) } },
+    },
+    403: jsonError('Operational schedule access is required.'),
+    404: jsonError('The active branch could not be found.'),
+  },
+});
+
 // ---- fittings --------------------------------------------------------
 registry.registerPath({
   method: 'get',
@@ -1107,6 +1144,22 @@ registry.registerPath({
 });
 
 // ---- finance ---------------------------------------------------------
+registry.registerPath({
+  method: 'get',
+  path: '/payments',
+  tags: ['finance'],
+  summary: 'List a bounded central payment projection across reservation and fitting sources.',
+  request: { query: centralPaymentsQuery },
+  responses: {
+    200: {
+      description: 'Payments for the active branch with source identity and safe evidence/refund status.',
+      content: { 'application/json': { schema: successEnvelope(centralPaymentsResponse) } },
+    },
+    403: jsonError('payments.view permission is required.'),
+    422: jsonError('The payments query is invalid or exceeds the bounded window.'),
+  },
+});
+
 registry.registerPath({
   method: 'post',
   path: '/guest/reservations/{id}/receipts',

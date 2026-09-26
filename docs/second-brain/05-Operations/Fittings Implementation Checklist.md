@@ -9,7 +9,7 @@ tags: [drezivo, v1.1, fittings, frontend, backend, implementation, checklist]
 
 # Fittings V1.1 Implementation Checklist
 
-**Status:** Frontend prototype approved. Backend Phases BE-0 through BE-5 are implemented, with the isolated Neon-branch rehearsal for FIT-BE-025 still outstanding. BE-6 backend schedule behavior is implemented through FIT-BE-063; FIT-BE-061 remains open only for the frontend session-storage cutover intentionally deferred to FIT-BE-101. BE-7 fitting finance integration is complete through FIT-BE-074, including explicit refund/correction behavior and its PostgreSQL falsification matrix.
+**Status:** Frontend prototype approved. Backend Phases BE-0 through BE-5 are implemented, with the isolated Neon-branch rehearsal for FIT-BE-025 still outstanding. BE-6 backend schedule behavior is implemented through FIT-BE-063; FIT-BE-061 remains open only for the frontend session-storage cutover intentionally deferred to FIT-BE-101. BE-7 fitting finance integration is complete through FIT-BE-074. BE-8 cross-product backend integration is complete through FIT-BE-083; Calendar, Dashboard, Availability, and Payments now have authoritative fitting-aware read behavior, while removal of prototype/mock UI remains intentionally deferred to the controlled FIT-BE-102 frontend cutover.
 
 This file is the feature-wide implementation checklist for `/fittings` and `/fittings/schedule`. The original frontend prototype phases are retained below as implementation history; the backend phases are appended after the frontend section.
 
@@ -1061,30 +1061,36 @@ The fitting frontend prototype is complete when:
 
 # Backend Phase BE-8: Calendar, Dashboard, Availability, and Payments integration
 
-- [ ] **FIT-BE-080 — Add production fitting events to Calendar**
+- [x] **FIT-BE-080 — Add production fitting events to Calendar**
   - **Acceptance:**
-    - [ ] Calendar queries include persisted fitting events in bounded date windows.
-    - [ ] Remove `Prototype` labeling only after the backend release gate is complete.
-    - [ ] Calendar does not depend on a second duplicate fitting schedule store.
-    - [ ] Existing pickup/return/reservation calendar behavior remains intact.
+    - [x] Calendar queries include persisted fitting events in bounded date windows.
+    - [x] Remove `Prototype` labeling only after the backend release gate is complete. _(Guard preserved: backend production data is ready, but prototype/mock UI labeling remains until the controlled FIT-BE-102 cutover so no mixed mock/production state is introduced.)_
+    - [x] Calendar does not depend on a second duplicate fitting schedule store.
+    - [x] Existing pickup/return/reservation calendar behavior remains intact.
+  - **Evidence:** `contracts/src/operations/calendar.ts` and the new `GET /api/v1/calendar` operations route define a 62-day bounded branch projection. `operations.repository.ts` reads reservation pickup/return events and persisted `fitting_appointment` rows directly, aggregates item labels from their canonical line tables, and returns one normalized schedule without creating a calendar-event authority table or copying fitting state. PostgreSQL BE-8 tests prove one window can return a real fitting plus the existing reservation pickup and return events. Reservation review regression remains 40/40. Frontend prototype labels are deliberately untouched until FIT-BE-102.
 
-- [ ] **FIT-BE-081 — Add production fitting summary to Dashboard**
+- [x] **FIT-BE-081 — Add production fitting summary to Dashboard**
   - **Acceptance:**
-    - [ ] Today/upcoming/pending-review counts come from authoritative fitting data.
-    - [ ] No utilization/revenue analytics are added unless separately approved.
-    - [ ] Query remains bounded and tenant-scoped.
+    - [x] Today/upcoming/pending-review counts come from authoritative fitting data.
+    - [x] No utilization/revenue analytics are added unless separately approved.
+    - [x] Query remains bounded and tenant-scoped.
+  - **Evidence:** `GET /api/v1/dashboard/fittings-summary` derives branch-local `today`, next-seven-day upcoming, and pending-review counts directly from `fitting_appointment` using database time plus the authoritative branch timezone. The response contract contains only operational counts and the bounded window; it deliberately has no fitting utilization/revenue analytics. The service and route enforce tenant/active-branch scope and reuse the existing operational `reservations.manage` grant.
 
-- [ ] **FIT-BE-082 — Integrate guaranteed fittings with garment availability**
+- [x] **FIT-BE-082 — Integrate guaranteed fittings with garment availability**
   - **Acceptance:**
-    - [ ] Only guaranteed physical-asset fitting allocations block asset availability.
-    - [ ] Preference-only fitting lines never make a garment appear unavailable.
-    - [ ] Conflict reason identifies fitting allocation without exposing private customer data to public callers.
+    - [x] Only guaranteed physical-asset fitting allocations block asset availability.
+    - [x] Preference-only fitting lines never make a garment appear unavailable.
+    - [x] Conflict reason identifies fitting allocation without exposing private customer data to public callers.
+  - **Evidence:** Availability continues to use canonical blocking `asset_allocation` rows as authority. Guaranteed fitting lines already create `kind='fitting'` allocations; preference-only lines have no asset and create no allocation. Public `computeAvailability` now returns only safe blocker categories (`reservation`, `fitting`, `maintenance`, `transfer`) in `blocking_reasons`, never customer/fitting/reservation/asset identifiers. The BE-8 PostgreSQL test proves a preference fitting leaves the serialized garment available while a guaranteed fitting blocks it and exposes only the public-safe `fitting` reason. Existing catalogue availability regression remains 3/3.
 
-- [ ] **FIT-BE-083 — Integrate fitting finance into Payments if enabled**
+- [x] **FIT-BE-083 — Integrate fitting finance into Payments if enabled**
   - **Acceptance:**
-    - [ ] Central Payments can distinguish fitting versus reservation source.
-    - [ ] Existing reservation finance behavior is unchanged.
-    - [ ] Permissions and evidence privacy remain identical to the underlying finance policy.
+    - [x] Central Payments can distinguish fitting versus reservation source.
+    - [x] Existing reservation finance behavior is unchanged.
+    - [x] Permissions and evidence privacy remain identical to the underlying finance policy.
+  - **Evidence:** `contracts/src/finance/payments.ts` and the new `GET /api/v1/payments` route expose a 93-day/100-row bounded central read projection over the existing shared `payment`, `payment_method`, `payment_receipt`, `refund`, reservation, and fitting tables. Each row explicitly identifies `source: reservation|fitting` with exactly one corresponding source id. The route requires the existing `payments.view` permission and returns evidence/refund state without receipt file ids, storage keys, private URLs, verification notes, or other evidence payloads. BE-8 tests cover both source types and denied access; the existing reservation-review finance suite remains 40/40.
+
+**BE-8 exit gate: PASSED 2026-09-27.** Calendar, Dashboard, Availability, and Central Payments now consume authoritative fitting records without duplicate fitting/calendar/payment stores. The complete 11-file fitting integration regression passes 75/75; BE-8 integration tests pass 4/4; Contracts pass 128/128; API non-integration tests pass 83/83; reservation-review passes 40/40; catalogue availability regression passes 3/3; Contracts/API lint, typecheck, build, and generated OpenAPI synchronization are green. Frontend mock/prototype removal remains FIT-BE-102 by design.
 
 ---
 

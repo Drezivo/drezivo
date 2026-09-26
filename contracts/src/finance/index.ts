@@ -2,3 +2,4 @@
 export * from './payment-status';
 export * from './receipts';
 export * from './refunds';
+export * from './payments';

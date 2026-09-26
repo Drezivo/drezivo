@@ -191,7 +191,11 @@ export async function computeAvailability(
     // variant that have NO blocking allocation overlapping that day. This is intentionally a
     // coarse read-model, not the authoritative check — the hold transaction re-validates and
     // locks candidate assets itself (TRD §5 step 2-4) regardless of what this query returns.
-    const result = await client.query<{ day: string; available_units: string }>(
+    const result = await client.query<{
+      day: string;
+      available_units: string;
+      blocking_reasons: Array<'reservation' | 'fitting' | 'maintenance' | 'transfer'>;
+    }>(
       `WITH days AS (
          SELECT generate_series($2::timestamptz, $3::timestamptz - interval '1 day', interval '1 day') AS day
        ),
@@ -231,7 +235,24 @@ export async function computeAvailability(
                AND aa.is_blocking
                AND aa.period && tstzrange(d.day, d.day + interval '1 day', '[)')
            )
-         ) AS available_units
+         ) AS available_units,
+         ARRAY(
+           SELECT DISTINCT CASE
+             WHEN aa.kind IN ('reservation_hold', 'reservation_confirmed') THEN 'reservation'
+             WHEN aa.kind = 'fitting' THEN 'fitting'
+             WHEN aa.kind = 'maintenance' THEN 'maintenance'
+             WHEN aa.kind = 'transfer' THEN 'transfer'
+             ELSE NULL
+           END
+           FROM variant_assets va
+           JOIN asset_allocation aa
+             ON aa.tenant_id = $1
+            AND aa.asset_id = va.id
+            AND aa.is_blocking
+            AND aa.period && tstzrange(d.day, d.day + interval '1 day', '[)')
+          WHERE aa.kind IN ('reservation_hold','reservation_confirmed','fitting','maintenance','transfer')
+          ORDER BY 1
+         )::text[] AS blocking_reasons
        FROM days d
        ORDER BY d.day`,
       [publicRow.tenantId, fromIso, toIso, variantId, publicRow.branchId],
@@ -241,6 +262,7 @@ export async function computeAvailability(
       start: row.day,
       end: row.day,
       available_units: Number(row.available_units),
+      blocking_reasons: row.blocking_reasons,
     }));
   });
 }

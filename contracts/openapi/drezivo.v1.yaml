@@ -7884,6 +7884,414 @@ paths:
                   - success
                   - error
                   - request_id
+  /calendar:
+    get:
+      tags:
+        - operations
+      summary: Read one bounded operational calendar projection from authoritative
+        reservations and fittings.
+      parameters:
+        - schema:
+            type: string
+            format: date-time
+          required: true
+          name: start
+          in: query
+        - schema:
+            type: string
+            format: date-time
+          required: true
+          name: end
+          in: query
+      responses:
+        "200":
+          description: Reservation pickup/return and fitting events for the active branch.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      window:
+                        type: object
+                        properties:
+                          start:
+                            type: string
+                            format: date-time
+                          end:
+                            type: string
+                            format: date-time
+                        required:
+                          - start
+                          - end
+                      events:
+                        type: array
+                        items:
+                          oneOf:
+                            - type: object
+                              properties:
+                                id:
+                                  type: string
+                                  minLength: 1
+                                source:
+                                  type: string
+                                  enum:
+                                    - reservation
+                                source_id:
+                                  type: string
+                                  format: uuid
+                                event_type:
+                                  type: string
+                                  enum:
+                                    - pickup
+                                    - return
+                                branch_id:
+                                  type: string
+                                  format: uuid
+                                period:
+                                  type: object
+                                  properties:
+                                    start:
+                                      type: string
+                                      format: date-time
+                                    end:
+                                      type: string
+                                      format: date-time
+                                  required:
+                                    - start
+                                    - end
+                                customer_name:
+                                  type: string
+                                  minLength: 1
+                                item_names:
+                                  type: array
+                                  items:
+                                    type: string
+                                    minLength: 1
+                                  maxItems: 20
+                                status:
+                                  type: string
+                                  enum: *a21
+                              required:
+                                - id
+                                - source
+                                - source_id
+                                - event_type
+                                - branch_id
+                                - period
+                                - customer_name
+                                - item_names
+                                - status
+                              additionalProperties: false
+                            - type: object
+                              properties:
+                                id:
+                                  type: string
+                                  minLength: 1
+                                source:
+                                  type: string
+                                  enum:
+                                    - fitting
+                                source_id:
+                                  type: string
+                                  format: uuid
+                                event_type:
+                                  type: string
+                                  enum:
+                                    - fitting
+                                branch_id:
+                                  type: string
+                                  format: uuid
+                                period:
+                                  type: object
+                                  properties:
+                                    start:
+                                      type: string
+                                      format: date-time
+                                    end:
+                                      type: string
+                                      format: date-time
+                                  required:
+                                    - start
+                                    - end
+                                customer_name:
+                                  type: string
+                                  minLength: 1
+                                item_names:
+                                  type: array
+                                  items:
+                                    type: string
+                                    minLength: 1
+                                  maxItems: 20
+                                status:
+                                  type: string
+                                  enum: *a1
+                              required:
+                                - id
+                                - source
+                                - source_id
+                                - event_type
+                                - branch_id
+                                - period
+                                - customer_name
+                                - item_names
+                                - status
+                              additionalProperties: false
+                        maxItems: 2000
+                    required:
+                      - window
+                      - events
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Operational schedule access is required.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "422":
+          description: The calendar query is invalid or exceeds the bounded window.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /dashboard/fittings-summary:
+    get:
+      tags:
+        - operations
+      summary: Read branch-local fitting operational counts for today and the next
+        seven days.
+      responses:
+        "200":
+          description: Authoritative fitting counts only; no utilization or revenue
+            analytics.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      window:
+                        type: object
+                        properties:
+                          today_start:
+                            type: string
+                            format: date-time
+                          today_end:
+                            type: string
+                            format: date-time
+                          upcoming_end:
+                            type: string
+                            format: date-time
+                        required:
+                          - today_start
+                          - today_end
+                          - upcoming_end
+                        additionalProperties: false
+                      fittings_today:
+                        type: integer
+                        minimum: 0
+                      fittings_upcoming:
+                        type: integer
+                        minimum: 0
+                      fittings_pending_review:
+                        type: integer
+                        minimum: 0
+                    required:
+                      - window
+                      - fittings_today
+                      - fittings_upcoming
+                      - fittings_pending_review
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Operational schedule access is required.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "404":
+          description: The active branch could not be found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
   /fittings:
     get:
       tags:
@@ -15888,6 +16296,262 @@ paths:
                   - success
                   - error
                   - request_id
+  /payments:
+    get:
+      tags:
+        - finance
+      summary: List a bounded central payment projection across reservation and
+        fitting sources.
+      parameters:
+        - schema:
+            type: string
+            format: date-time
+          required: true
+          name: start
+          in: query
+        - schema:
+            type: string
+            format: date-time
+          required: true
+          name: end
+          in: query
+        - schema:
+            type: string
+            enum:
+              - reservation
+              - fitting
+          required: false
+          name: source
+          in: query
+        - schema:
+            type: string
+            enum: *a3
+          required: false
+          name: status
+          in: query
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+          required: false
+          name: limit
+          in: query
+      responses:
+        "200":
+          description: Payments for the active branch with source identity and safe
+            evidence/refund status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      window:
+                        type: object
+                        properties:
+                          start:
+                            type: string
+                            format: date-time
+                          end:
+                            type: string
+                            format: date-time
+                        required:
+                          - start
+                          - end
+                        additionalProperties: false
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              format: uuid
+                            source:
+                              type: string
+                              enum:
+                                - reservation
+                                - fitting
+                            reservation_id:
+                              type:
+                                - string
+                                - "null"
+                              format: uuid
+                            fitting_id:
+                              type:
+                                - string
+                                - "null"
+                              format: uuid
+                            customer_name:
+                              type: string
+                              minLength: 1
+                            payment_method_name:
+                              type: string
+                              minLength: 1
+                            rail:
+                              type: string
+                              enum: *a16
+                            amount_minor:
+                              type: string
+                              pattern: ^-?(0|[1-9]\d*)$
+                            currency:
+                              type: string
+                              pattern: ^[A-Z]{3}$
+                            status:
+                              type: string
+                              enum: *a3
+                            evidence_status:
+                              type: string
+                              enum: *a4
+                            latest_refund_status:
+                              type:
+                                - string
+                                - "null"
+                              enum: &a27
+                                - requested
+                                - processing
+                                - completed
+                                - failed
+                                - cancelled
+                            active_refund_minor:
+                              type: string
+                              pattern: ^-?(0|[1-9]\d*)$
+                            completed_refund_minor:
+                              type: string
+                              pattern: ^-?(0|[1-9]\d*)$
+                            verified_at:
+                              type:
+                                - string
+                                - "null"
+                              format: date-time
+                            created_at:
+                              type: string
+                              format: date-time
+                          required:
+                            - id
+                            - source
+                            - reservation_id
+                            - fitting_id
+                            - customer_name
+                            - payment_method_name
+                            - rail
+                            - amount_minor
+                            - currency
+                            - status
+                            - evidence_status
+                            - latest_refund_status
+                            - active_refund_minor
+                            - completed_refund_minor
+                            - verified_at
+                            - created_at
+                          additionalProperties: false
+                        maxItems: 100
+                    required:
+                      - window
+                      - items
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: payments.view permission is required.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "422":
+          description: The payments query is invalid or exceeds the bounded window.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a17
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
   /guest/reservations/{id}/receipts:
     post:
       tags:
@@ -16091,12 +16755,7 @@ paths:
                             enum: *a26
                           status:
                             type: string
-                            enum:
-                              - requested
-                              - processing
-                              - completed
-                              - failed
-                              - cancelled
+                            enum: *a27
                           merchant_reference:
                             type:
                               - string

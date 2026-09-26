@@ -62,6 +62,8 @@ export interface AvailabilitySlotDTO {
   end: string;
   /** Count of ready, unallocated physical assets for this variant during the slot — never an asset id/code (that would leak inventory-tracking detail to the public). */
   available_units: number;
+  /** Safe allocation categories only. Never customer, fitting, reservation, or physical-asset identifiers. */
+  blocking_reasons: Array<'reservation' | 'fitting' | 'maintenance' | 'transfer'>;
 }
 
 export interface StorefrontRowSource {
