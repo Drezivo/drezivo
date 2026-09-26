@@ -97,8 +97,8 @@ export function CalendarAvailabilityPage() {
     selectedItem && selectedAgenda ? selectedItem.blocks[selectedAgenda.blockIndex] ?? null : null;
 
   return (
-    <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-4">
+    <div className="min-h-full bg-dashboard-canvas px-3 py-5 sm:px-4 lg:px-5">
+      <div className="flex w-full max-w-none flex-col gap-4">
         <AvailabilityHeading />
         <AvailabilityControls
           categoryFilter={categoryFilter}
