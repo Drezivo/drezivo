@@ -3,10 +3,8 @@
 import {
   ArrowLeft,
   Ban,
-  CalendarDays,
   ChevronDown,
   Clock3,
-  Info,
   Pencil,
   Plus,
   Save,
@@ -15,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -25,14 +23,7 @@ import { Input } from "@/components/ui/input";
 import { TimePickerField } from "@/components/ui/time-picker-field";
 import { cn } from "@/lib/utils";
 
-import {
-  FITTING_PROTOTYPE_APPOINTMENTS,
-  FITTING_PROTOTYPE_ROUTES,
-  FITTING_PROTOTYPE_TODAY,
-  type FittingPrototypeAppointment,
-  type FittingPrototypeStatus,
-} from "./fitting-prototype-data";
-import { FittingDetailsPreviewSheet } from "./fittings-page";
+import { FITTING_PROTOTYPE_ROUTES, FITTING_PROTOTYPE_TODAY } from "./fitting-prototype-data";
 import {
   FITTING_DURATION_OPTIONS,
   readFittingPrototypeDefaultDuration,
@@ -66,16 +57,6 @@ type FittingClosure = {
 };
 
 type ClosureDraft = Omit<FittingClosure, "id">;
-
-const AVAILABILITY_DATES = [
-  "2026-09-26",
-  "2026-09-27",
-  "2026-09-28",
-  "2026-09-29",
-  "2026-09-30",
-  "2026-10-01",
-  "2026-10-02",
-] as const;
 
 const DURATION_OPTIONS = FITTING_DURATION_OPTIONS;
 
@@ -153,24 +134,6 @@ export function FittingSchedulePage() {
   const [editingClosureId, setEditingClosureId] = useState<string | null>(null);
   const [closureFormOpen, setClosureFormOpen] = useState(false);
   const [closureError, setClosureError] = useState<string | null>(null);
-  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
-  const [statusOverrides, setStatusOverrides] = useState<Record<string, FittingPrototypeStatus>>(
-    {}
-  );
-
-  const appointments = useMemo(
-    () =>
-      FITTING_PROTOTYPE_APPOINTMENTS.map((appointment) => ({
-        ...appointment,
-        status: statusOverrides[appointment.id] ?? appointment.status,
-      })),
-    [statusOverrides]
-  );
-
-  const selectedAppointment = selectedAppointmentId
-    ? (appointments.find((appointment) => appointment.id === selectedAppointmentId) ?? null)
-    : null;
-
   const updateDay = (day: Weekday, updater: (current: DayHours) => DayHours) => {
     setHours((current) => current.map((entry) => (entry.day === day ? updater(entry) : entry)));
   };
@@ -269,25 +232,7 @@ export function FittingSchedulePage() {
             />
           </div>
         </div>
-
-        <AvailabilityWeek
-          appointments={appointments}
-          closures={closures}
-          hours={hours}
-          durationMinutes={durationMinutes}
-          onOpenAppointment={(appointment) => setSelectedAppointmentId(appointment.id)}
-        />
       </div>
-
-      <FittingDetailsPreviewSheet
-        appointment={selectedAppointment}
-        onStatusChange={(appointmentId, nextStatus) =>
-          setStatusOverrides((current) => ({ ...current, [appointmentId]: nextStatus }))
-        }
-        onOpenChange={(open) => {
-          if (!open) setSelectedAppointmentId(null);
-        }}
-      />
     </div>
   );
 }
@@ -299,8 +244,7 @@ function ScheduleHeading() {
       className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
     >
       <div>
-        <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.12em] text-dashboard-muted">
-          <CalendarDays className="h-4 w-4" aria-hidden="true" />
+        <div className="text-xs font-medium uppercase tracking-[0.12em] text-dashboard-muted">
           Fittings
         </div>
         <h1
@@ -512,7 +456,7 @@ function DurationCard({
         <SectionHeader
           icon={Timer}
           title="Appointment duration"
-          description="Local setting only; availability is still a preview."
+          description="Used as the default when creating a fitting; staff can still override it."
         />
         <div className="p-4">
           <label className="block">
@@ -718,152 +662,6 @@ function ClosuresCard({
   );
 }
 
-function AvailabilityWeek({
-  appointments,
-  closures,
-  hours,
-  durationMinutes,
-  onOpenAppointment,
-}: {
-  appointments: readonly FittingPrototypeAppointment[];
-  closures: readonly FittingClosure[];
-  hours: readonly DayHours[];
-  durationMinutes: number;
-  onOpenAppointment: (appointment: FittingPrototypeAppointment) => void;
-}) {
-  return (
-    <Card className="gap-0 py-0">
-      <CardContent className="p-0">
-        <SectionHeader
-          icon={CalendarDays}
-          title="Weekly availability"
-          description={`Sep 26 – Oct 2 · ${durationMinutes}-minute default`}
-        />
-
-        <div className="border-b border-dashboard-border bg-dashboard-active/40 px-4 py-3 text-xs text-dashboard-muted">
-          <div className="flex items-start gap-2">
-            <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-            <p>
-              Preview only. Hours, fittings, and closures here do not confirm actual capacity or
-              garment availability.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
-          {AVAILABILITY_DATES.map((date) => {
-            const weekday = weekdayForDate(date);
-            const dayHours = hours.find((entry) => entry.day === weekday);
-            const dayAppointments = appointments.filter(
-              (appointment) =>
-                appointment.startsAt.slice(0, 10) === date &&
-                !["Cancelled", "Rejected", "No-show"].includes(appointment.status)
-            );
-            const dayClosures = closures.filter((closure) => closure.date === date);
-            const visibleAppointments = dayAppointments.slice(0, 3);
-
-            return (
-              <section
-                key={date}
-                className="rounded-lg border border-dashboard-border bg-dashboard-surface p-3"
-              >
-                <div className="border-b border-dashboard-border pb-3">
-                  <p className="text-xs font-medium text-dashboard-muted">{weekday}</p>
-                  <p className="mt-1 font-semibold text-dashboard-navy">{formatDate(date)}</p>
-                </div>
-
-                <div className="mt-3 space-y-3">
-                  <ScheduleDaySection label="Working hours">
-                    {dayHours?.enabled ? (
-                      <div className="space-y-1">
-                        {dayHours.windows.map((window) => (
-                          <p key={window.id} className="text-xs text-dashboard-navy">
-                            {formatClock(window.start)}–{formatClock(window.end)}
-                          </p>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-dashboard-muted">Unavailable</p>
-                    )}
-                  </ScheduleDaySection>
-
-                  <ScheduleDaySection label="Scheduled fittings">
-                    {visibleAppointments.length > 0 ? (
-                      <div className="space-y-2">
-                        {visibleAppointments.map((appointment) => (
-                          <button
-                            key={appointment.id}
-                            type="button"
-                            onClick={() => onOpenAppointment(appointment)}
-                            aria-label={`Open fitting for ${appointment.customer.name}, ${formatAppointmentTime(appointment)}, ${appointment.status}`}
-                            className="w-full rounded-md border border-dashboard-border bg-dashboard-canvas px-2.5 py-2 text-left transition-colors hover:border-dashboard-accent/50 hover:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
-                          >
-                            <span className="block text-xs font-medium text-dashboard-navy">
-                              {appointment.customer.name}
-                            </span>
-                            <span className="mt-1 block text-[0.7rem] text-dashboard-muted">
-                              {formatAppointmentTime(appointment)} · {appointment.status}
-                            </span>
-                          </button>
-                        ))}
-                        {dayAppointments.length > visibleAppointments.length ? (
-                          <p className="text-[0.7rem] text-dashboard-muted">
-                            +{dayAppointments.length - visibleAppointments.length} more fittings
-                          </p>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-dashboard-muted">No scheduled fittings</p>
-                    )}
-                  </ScheduleDaySection>
-
-                  <ScheduleDaySection label="Breaks / closures">
-                    {dayClosures.length > 0 ? (
-                      <div className="space-y-2">
-                        {dayClosures.map((closure) => (
-                          <div
-                            key={closure.id}
-                            className={cn(
-                              "rounded-md border px-2.5 py-2",
-                              closure.kind === "Break"
-                                ? "border-dashboard-attention/30 bg-dashboard-attention/10"
-                                : "border-dashboard-danger/30 bg-dashboard-danger/10"
-                            )}
-                          >
-                            <p className="text-xs font-medium text-dashboard-navy">
-                              {closure.reason}
-                            </p>
-                            <p className="mt-1 text-[0.7rem] text-dashboard-muted">
-                              {formatClock(closure.start)}–{formatClock(closure.end)}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-dashboard-muted">None</p>
-                    )}
-                  </ScheduleDaySection>
-                </div>
-              </section>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ScheduleDaySection({ children, label }: { children: React.ReactNode; label: string }) {
-  return (
-    <div>
-      <p className="mb-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-dashboard-muted">
-        {label}
-      </p>
-      {children}
-    </div>
-  );
-}
-
 function SectionHeader({
   action,
   description,
@@ -908,21 +706,10 @@ function FieldLabel({
   );
 }
 
-function weekdayForDate(date: string): Weekday {
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
-    timeZone: "Asia/Manila",
-  }).format(new Date(`${date}T12:00:00+08:00`)) as Weekday;
-}
-
 function formatDate(date: string): string {
   return DATE_FORMATTER.format(new Date(`${date}T12:00:00+08:00`));
 }
 
 function formatClock(value: string): string {
   return TIME_FORMATTER.format(new Date(`2026-09-26T${value}:00+08:00`));
-}
-
-function formatAppointmentTime(appointment: FittingPrototypeAppointment): string {
-  return `${TIME_FORMATTER.format(new Date(appointment.startsAt))}–${TIME_FORMATTER.format(new Date(appointment.endsAt))}`;
 }

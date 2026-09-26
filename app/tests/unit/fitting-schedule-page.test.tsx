@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { FittingSchedulePage } from "@/components/fittings/fitting-schedule-page";
@@ -19,7 +19,7 @@ describe("FittingSchedulePage", () => {
     expect(screen.getByText("Weekly fitting hours")).toBeVisible();
     expect(screen.getByText("Appointment duration")).toBeVisible();
     expect(screen.getByText("Breaks & closures")).toBeVisible();
-    expect(screen.getByText("Weekly availability")).toBeVisible();
+    expect(screen.queryByText("Weekly availability")).not.toBeInTheDocument();
     expect(screen.queryByText(/Fitting Room/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Fitting Staff/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Capacity Slot/i)).not.toBeInTheDocument();
@@ -54,8 +54,7 @@ describe("FittingSchedulePage", () => {
     fireEvent.change(duration, { target: { value: "45" } });
     expect(duration).toHaveValue("45");
     expect(window.sessionStorage.getItem("drezivo:fittings:prototype-default-duration")).toBe("45");
-    expect(screen.getByText(/45-minute default/i)).toBeVisible();
-    expect(screen.getByText(/availability is still a preview/i)).toBeVisible();
+    expect(screen.getByText(/used as the default when creating a fitting/i)).toBeVisible();
   });
 
   it("adds and removes a local closure without a backend request", () => {
@@ -85,20 +84,5 @@ describe("FittingSchedulePage", () => {
     expect(screen.getByRole("button", { name: "Closure date" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Closure start time" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Closure end time" })).toBeVisible();
-  });
-
-  it("shows bounded weekly context and opens a fixture appointment in the shared details sheet", () => {
-    render(<FittingSchedulePage />);
-
-    expect(screen.getAllByText("Working hours")).toHaveLength(7);
-    expect(
-      screen.getByText(/do not confirm actual capacity or garment availability/i)
-    ).toBeVisible();
-
-    fireEvent.click(screen.getByRole("button", { name: /Ari dela Rosa/ }));
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("Fitting Details")).toBeVisible();
-    expect(within(dialog).getByText("Ari dela Rosa")).toBeVisible();
-    expect(within(dialog).getByText("Emerald Evening Gown")).toBeVisible();
   });
 });

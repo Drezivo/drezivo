@@ -78,7 +78,6 @@ Approved prototype interactions:
 - Multiple working windows per day
 - Business-level default appointment duration
 - Local breaks and date-specific closures
-- Bounded weekly availability visualization
 - Fixture appointment blocks that open the same Fitting Details Sheet
 
 No room, staff, resource, or capacity-slot management belongs in this frontend prototype.
@@ -226,8 +225,8 @@ Use the current prototype and complete this in one session with a real operator 
 7. Create a walk-in, no-fee fitting.
 8. Change the default duration in Schedule & Availability, return to New Fitting, and confirm the new default appears.
 9. Disable one fitting day and add a break/closure.
-10. Explain whether the weekly availability view feels operationally clear.
-11. Ask which fields/actions feel unnecessary or missing.
+10. Ask which fields/actions feel unnecessary or missing.
+11. Confirm that scheduled fitting visualization belongs in the existing Calendar rather than this settings page.
 12. Record any terminology the reviewer does not naturally understand.
 
 ### Review result template

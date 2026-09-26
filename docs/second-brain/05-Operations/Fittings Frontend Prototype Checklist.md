@@ -43,7 +43,6 @@ The staff-facing schedule should stay simple:
 - fitting operating days/hours;
 - appointment duration;
 - breaks/closures;
-- bounded fitting availability preview.
 
 ## Frontend-only boundary
 
@@ -58,7 +57,7 @@ The staff-facing schedule should stay simple:
 - Garment preference versus guaranteed-garment presentation.
 - Fitting fee/payment-state presentation where useful.
 - `/fittings/schedule` staff page.
-- Business-level fitting hours, breaks, closures, duration, and availability visualization.
+- Business-level fitting hours, breaks, closures, and default duration.
 - Loading, empty, error, disabled, responsive, keyboard, and dark-mode states.
 
 ### Explicitly out of scope
@@ -128,7 +127,7 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
     - Dashboard, Calendar, and Availability already contain future-facing fitting mock data; none is production fitting authority.
     - Existing Availability mocks treat `Fitting` as garment unavailability too broadly. Only an explicitly guaranteed physical garment may eventually justify a fitting-linked allocation.
     - Historical screenshots remain visual references only.
-    - **Retain:** operational appointment list, date/time/customer/status scanning, details sheet, visible fee/payment state, schedule/availability entry point, operating hours, duration, and breaks.
+    - **Retain:** operational appointment list, date/time/customer/status scanning, details sheet, visible fee/payment state, schedule entry point, operating hours, duration, and breaks.
     - **Reject/redesign:** resource management, room/staff assignment, capacity-slot controls, `max appointments per slot`, blanket fitting garment blocks, merged payment/appointment status, mandatory-payment assumptions, and unapproved public self-booking.
 
 - [x] **FIT-FE-001 — Confirm frontend-only prototype data boundary**
@@ -151,7 +150,7 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
   - **Depends on:** FIT-FE-000.
   - **Acceptance:**
     - [x] `/fittings` is the appointment operations page.
-    - [x] `/fittings/schedule` is the fitting hours/availability page.
+    - [x] `/fittings/schedule` is the fitting schedule-settings page.
     - [x] Appointment details open in a Sheet from `/fittings`.
     - [x] `New Fitting` launches one clearly defined prototype flow.
     - [x] `Schedule & Availability` navigates to `/fittings/schedule`.
@@ -172,7 +171,6 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
     ├── operating days/hours
     ├── appointment duration
     ├── breaks / closures
-    └── fitting availability preview
 ```
 
 ---
@@ -377,15 +375,15 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
 
 ---
 
-# Phase 5: `/fittings/schedule` hours and availability prototype
+# Phase 5: `/fittings/schedule` hours and schedule-settings prototype
 
 - [x] **FIT-FE-050 — Create Fitting Schedule & Availability page shell**
   - **Acceptance:**
     - [x] Route is `/fittings/schedule`.
     - [x] Navigation back to `/fittings` exists.
     - [x] Page stays business-level and does not expose rooms/staff/resources.
-    - [x] Hours, duration, breaks, and availability are visually separated.
-  - **Evidence:** `app/src/app/(dashboard)/fittings/schedule/page.tsx` mounts the new `FittingSchedulePage`. The page uses the existing dashboard canvas/cards, has a `Back to Fittings` link, and separates weekly hours, duration, breaks/closures, and the bounded availability view without any room/staff/capacity-slot fields.
+    - [x] Hours, duration, and breaks/closures are visually separated.
+  - **Evidence:** `app/src/app/(dashboard)/fittings/schedule/page.tsx` mounts the `FittingSchedulePage`. The page uses the existing dashboard canvas/cards, has a `Back to Fittings` link, and keeps the V1 schedule surface focused on weekly hours, default duration, and breaks/closures without any room/staff/capacity-slot fields.
 
 - [ ] **FIT-FE-051 — Build weekly fitting operating-hours editor/visualizer** _(implementation complete; authenticated 360px browser verification pending)_
   - **Acceptance:**
@@ -401,7 +399,7 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
     - [x] Duration is clearly labeled as prototype/configuration-driven.
     - [x] Use a small bounded set of sensible options or one validated numeric control.
     - [x] No duration value is promoted to canonical product truth yet.
-  - **Evidence:** The duration control is local-only with bounded 30/45/60/90-minute options. Its helper copy explicitly says the value is prototype configuration and does not establish backend capacity; the selected value is reflected only in the local availability-view subtitle.
+  - **Evidence:** The duration control uses bounded 30/45/60/90-minute options. The selected business-level default is session-scoped for the prototype and becomes the initial duration in New Fitting; staff can still override an individual appointment.
 
 - [x] **FIT-FE-053 — Visualize breaks and date-specific closures**
   - **Acceptance:**
@@ -410,14 +408,12 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
     - [x] Create/edit/remove remains local-state-only.
   - **Evidence:** Seed examples include `Lunch break`, `Private event`, and `Holiday closure`. Each displays type, date, start/end time, and reason. Add/edit/remove operations mutate component state only, validate reason/date/time locally, and do not import or call any API client.
 
-- [x] **FIT-FE-054 — Build bounded fitting availability visualization**
+- [x] **FIT-FE-054 — De-scope duplicate fitting availability visualization**
   - **Acceptance:**
-    - [x] Use a bounded day/week view.
-    - [x] Distinguish working hours, booked mock appointments, and closures.
-    - [x] Appointment block can open the mock Fitting Details Sheet where practical.
-    - [x] UI never claims local rendering is authoritative backend capacity enforcement.
-    - [x] Avoid excessive slot rendering.
-  - **Evidence:** The view is bounded to Sep 26–Oct 2 and renders seven responsive day cards rather than a slot-heavy grid. Each day separately labels working hours, scheduled fixture fittings, and breaks/closures. At most three fitting blocks render per day with a `+N more` summary. Appointment blocks resolve the shared fitting fixture and open the same exported `FittingDetailsPreviewSheet`; the page explicitly states that the visualization does not enforce or certify backend capacity or garment availability.
+    - [x] Do not duplicate the main Calendar page inside `/fittings/schedule`.
+    - [x] Keep `/fittings/schedule` focused on configuration: hours, default duration, and breaks/closures.
+    - [x] Scheduled fitting visualization remains a Calendar responsibility for V1.
+  - **Evidence:** The earlier bounded weekly availability section was removed after review because it duplicated Calendar behavior and added another scheduling surface to maintain for V1.
   - **Validation:** Prettier, direct TypeScript transpilation, and `git diff --check` pass for the Phase 5 route/component/test. Typecheck reports no `src/components/fittings/*` or route source diagnostics; only the existing missing jest-dom matcher typings appear in the test file. Targeted Vitest still fails before test collection because the repository root cannot resolve `vitest` from `@testing-library/jest-dom/dist/vitest.mjs`.
 
 ---
@@ -427,10 +423,9 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
 - [x] **FIT-FE-060 — Keep fitting fixture identities consistent across screens**
   - **Acceptance:**
     - [x] `/fittings` row and Details Sheet share the same fixture source.
-    - [x] `/fittings/schedule` appointment blocks resolve the same fixture.
     - [x] Customer/garment/status/payment labels remain consistent.
     - [x] No duplicate fitting objects are maintained across components.
-  - **Evidence:** `/fittings`, its Details Sheet, New Fitting fixture catalogues, and `/fittings/schedule` all resolve `FITTING_PROTOTYPE_APPOINTMENTS` / `FittingPrototypeAppointment` from `fitting-prototype-data.ts`; no second appointment fixture collection was introduced. `fitting-prototype-presentation.ts` centralizes fitting status/payment badge classes, garment-intent labels, date/time formatting, and PHP formatting so list, review, and details wording cannot drift independently.
+  - **Evidence:** `/fittings`, its Details Sheet, and New Fitting fixture catalogues resolve `FITTING_PROTOTYPE_APPOINTMENTS` / `FittingPrototypeAppointment` from `fitting-prototype-data.ts`; no second appointment fixture collection was introduced. `fitting-prototype-presentation.ts` centralizes fitting status/payment badge classes, garment-intent labels, date/time formatting, and PHP formatting so list, review, and details wording cannot drift independently.
 
 - [x] **FIT-FE-061 — Prevent prototype fittings from becoming V1 Calendar authority**
   - **Acceptance:**
@@ -491,7 +486,7 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
     - [x] Avoid excessive cards.
     - [x] Avoid exposing ERD terms such as `resource_allocation` or `fitting_line`.
     - [x] Do not expose room/staff/resource concepts in fitting UI.
-  - **Evidence:** Staff-facing copy was shortened across New Fitting, Details, and Schedule; technical backend/network wording was removed where it did not help the workflow. The schedule remains four purposeful sections (hours, duration, closures, weekly availability) rather than nested dashboards, and a source scan finds no room/staff/resource or ERD field terminology in fitting components.
+  - **Evidence:** Staff-facing copy was shortened across New Fitting, Details, and Schedule; technical backend/network wording was removed where it did not help the workflow. The schedule is limited to three purposeful configuration areas (hours, duration, closures), and a source scan finds no room/staff/resource or ERD field terminology in fitting components.
   - **Validation:** Prettier, direct TypeScript syntax/transpile checks, and `git diff --check` pass for the edited Phase 7 fitting source/tests. The targeted Vitest command starts but does not complete within the runner timeout, and the repo-wide typecheck likewise exceeds the available timeout; no source syntax/transpile error was observed. Real 360px and light/dark browser walkthroughs remain the explicit visual verification gaps above.
 
 ---
@@ -526,7 +521,7 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
     - [x] List fields approved. (date/time, customer, garment summary, fee/payment, status, attention)
     - [x] Details Sheet sections approved. (customer, appointment, garments, fee/payment, local actions)
     - [x] New Fitting inputs approved. (customer, period, garments/intents, optional fee/payment, review)
-    - [x] Hours/availability interactions approved. (weekly hours, duration, breaks/closures, bounded weekly view)
+    - [x] Schedule interactions approved. (weekly hours, default duration, breaks/closures; duplicate weekly availability view removed)
     - [x] Prototype-only labels that should not become wire enums are identified.
     - [x] Fixture shapes are not blindly copied into API contracts. _(explicit freeze rule documented)_
     - [x] Backend checklist is created only after product decisions are canonicalized. _(no backend fitting checklist created yet)_
@@ -567,7 +562,7 @@ The fitting frontend prototype is complete when:
 - `/fittings/schedule` is visually complete using isolated mock data.
 - Fitting Details Sheet communicates customer, appointment, garment guarantee/preference, and optional fee/payment clearly.
 - New Fitting can be walked through locally without a network request.
-- Business-level fitting hours, duration, breaks/closures, and bounded availability can be understood visually.
+- Business-level fitting hours, default duration, and breaks/closures can be understood visually.
 - No room/staff/resource management appears in the fitting frontend.
 - The prototype works at 360px and with keyboard navigation.
 - No real fitting backend/contract/database behavior has been introduced.
