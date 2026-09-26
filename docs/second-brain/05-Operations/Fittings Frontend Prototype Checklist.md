@@ -379,40 +379,46 @@ For prototype presentation, labels such as **Pending**, **Confirmed**, **Complet
 
 # Phase 5: `/fittings/schedule` hours and availability prototype
 
-- [ ] **FIT-FE-050 — Create Fitting Schedule & Availability page shell**
+- [x] **FIT-FE-050 — Create Fitting Schedule & Availability page shell**
   - **Acceptance:**
-    - [ ] Route is `/fittings/schedule`.
-    - [ ] Navigation back to `/fittings` exists.
-    - [ ] Page stays business-level and does not expose rooms/staff/resources.
-    - [ ] Hours, duration, breaks, and availability are visually separated.
+    - [x] Route is `/fittings/schedule`.
+    - [x] Navigation back to `/fittings` exists.
+    - [x] Page stays business-level and does not expose rooms/staff/resources.
+    - [x] Hours, duration, breaks, and availability are visually separated.
+  - **Evidence:** `app/src/app/(dashboard)/fittings/schedule/page.tsx` mounts the new `FittingSchedulePage`. The page uses the existing dashboard canvas/cards, has a `Back to Fittings` link, and separates weekly hours, duration, breaks/closures, and the bounded availability view without any room/staff/capacity-slot fields.
 
-- [ ] **FIT-FE-051 — Build weekly fitting operating-hours editor/visualizer**
+- [ ] **FIT-FE-051 — Build weekly fitting operating-hours editor/visualizer** _(implementation complete; authenticated 360px browser verification pending)_
   - **Acceptance:**
-    - [ ] Monday–Sunday schedule.
-    - [ ] Multiple windows per day can be visualized if useful.
-    - [ ] A day can be unavailable.
-    - [ ] Validate start < end locally.
-    - [ ] Mobile editing avoids horizontal overflow.
+    - [x] Monday–Sunday schedule.
+    - [x] Multiple windows per day can be visualized if useful.
+    - [x] A day can be unavailable.
+    - [x] Validate start < end locally.
+    - [ ] Mobile editing avoids horizontal overflow. _(responsive stacking is implemented; real 360px walkthrough still required)_
+  - **Evidence:** The local hours editor renders all seven weekdays, supports enabling/disabling a day, adding/removing split windows, and shows inline validation when `start >= end`. Time controls stack below `sm` instead of requiring a horizontal table.
 
-- [ ] **FIT-FE-052 — Add appointment-duration setting prototype**
+- [x] **FIT-FE-052 — Add appointment-duration setting prototype**
   - **Acceptance:**
-    - [ ] Duration is clearly labeled as prototype/configuration-driven.
-    - [ ] Use a small bounded set of sensible options or one validated numeric control.
-    - [ ] No duration value is promoted to canonical product truth yet.
+    - [x] Duration is clearly labeled as prototype/configuration-driven.
+    - [x] Use a small bounded set of sensible options or one validated numeric control.
+    - [x] No duration value is promoted to canonical product truth yet.
+  - **Evidence:** The duration control is local-only with bounded 30/45/60/90-minute options. Its helper copy explicitly says the value is prototype configuration and does not establish backend capacity; the selected value is reflected only in the local availability-view subtitle.
 
-- [ ] **FIT-FE-053 — Visualize breaks and date-specific closures**
+- [x] **FIT-FE-053 — Visualize breaks and date-specific closures**
   - **Acceptance:**
-    - [ ] Show examples such as lunch break, holiday closure, or private event.
-    - [ ] Closure includes date/time and short reason.
-    - [ ] Create/edit/remove remains local-state-only.
+    - [x] Show examples such as lunch break, holiday closure, or private event.
+    - [x] Closure includes date/time and short reason.
+    - [x] Create/edit/remove remains local-state-only.
+  - **Evidence:** Seed examples include `Lunch break`, `Private event`, and `Holiday closure`. Each displays type, date, start/end time, and reason. Add/edit/remove operations mutate component state only, validate reason/date/time locally, and do not import or call any API client.
 
-- [ ] **FIT-FE-054 — Build bounded fitting availability visualization**
+- [x] **FIT-FE-054 — Build bounded fitting availability visualization**
   - **Acceptance:**
-    - [ ] Use a bounded day/week view.
-    - [ ] Distinguish working hours, booked mock appointments, and closures.
-    - [ ] Appointment block can open the mock Fitting Details Sheet where practical.
-    - [ ] UI never claims local rendering is authoritative backend capacity enforcement.
-    - [ ] Avoid excessive slot rendering.
+    - [x] Use a bounded day/week view.
+    - [x] Distinguish working hours, booked mock appointments, and closures.
+    - [x] Appointment block can open the mock Fitting Details Sheet where practical.
+    - [x] UI never claims local rendering is authoritative backend capacity enforcement.
+    - [x] Avoid excessive slot rendering.
+  - **Evidence:** The view is bounded to Sep 26–Oct 2 and renders seven responsive day cards rather than a slot-heavy grid. Each day separately labels working hours, scheduled fixture fittings, and breaks/closures. At most three fitting blocks render per day with a `+N more` summary. Appointment blocks resolve the shared fitting fixture and open the same exported `FittingDetailsPreviewSheet`; the page explicitly states that the visualization does not enforce or certify backend capacity or garment availability.
+  - **Validation:** Prettier, direct TypeScript transpilation, and `git diff --check` pass for the Phase 5 route/component/test. Typecheck reports no `src/components/fittings/*` or route source diagnostics; only the existing missing jest-dom matcher typings appear in the test file. Targeted Vitest still fails before test collection because the repository root cannot resolve `vitest` from `@testing-library/jest-dom/dist/vitest.mjs`.
 
 ---
 

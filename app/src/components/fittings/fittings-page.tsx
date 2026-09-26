@@ -672,7 +672,7 @@ function AppointmentState({
   );
 }
 
-function FittingDetailsPreviewSheet({
+export function FittingDetailsPreviewSheet({
   appointment,
   onOpenChange,
   onStatusChange,

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronLeft, ChevronRight, Plus, Search, Shirt } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Plus, Search, Shirt } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -542,20 +542,26 @@ function StepAppointment({
           />
         </Field>
         <Field label="Duration">
-          <select
-            aria-label="Fitting duration"
-            value={durationMinutes}
-            onChange={(event) =>
-              onDurationChange(Number(event.target.value) as (typeof DURATION_OPTIONS)[number])
-            }
-            className="h-10 w-full rounded-md border border-dashboard-border bg-dashboard-surface px-3 text-sm text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
-          >
-            {DURATION_OPTIONS.map((minutes) => (
-              <option key={minutes} value={minutes}>
-                {minutes} minutes
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <select
+              aria-label="Fitting duration"
+              value={durationMinutes}
+              onChange={(event) =>
+                onDurationChange(Number(event.target.value) as (typeof DURATION_OPTIONS)[number])
+              }
+              className="h-10 w-full appearance-none rounded-md border border-dashboard-border bg-dashboard-surface pl-3 pr-10 text-sm text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
+            >
+              {DURATION_OPTIONS.map((minutes) => (
+                <option key={minutes} value={minutes}>
+                  {minutes} minutes
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              aria-hidden="true"
+              className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-dashboard-muted"
+            />
+          </div>
         </Field>
       </div>
 
@@ -715,20 +721,26 @@ function StepGarments({
               />
             </Field>
             <Field label="Payment state">
-              <select
-                aria-label="Payment state"
-                value={paymentState}
-                onChange={(event) =>
-                  onPaymentStateChange(event.target.value as FittingPrototypePaymentState)
-                }
-                className="h-10 w-full rounded-md border border-dashboard-border bg-dashboard-surface px-3 text-sm text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
-              >
-                {PAYMENT_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  aria-label="Payment state"
+                  value={paymentState}
+                  onChange={(event) =>
+                    onPaymentStateChange(event.target.value as FittingPrototypePaymentState)
+                  }
+                  className="h-10 w-full appearance-none rounded-md border border-dashboard-border bg-dashboard-surface pl-3 pr-10 text-sm text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
+                >
+                  {PAYMENT_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  aria-hidden="true"
+                  className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-dashboard-muted"
+                />
+              </div>
             </Field>
           </div>
         ) : null}
