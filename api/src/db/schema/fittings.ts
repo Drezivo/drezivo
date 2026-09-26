@@ -249,6 +249,12 @@ export const fittingHours = pgTable(
       foreignColumns: [branch.tenantId, branch.id],
       name: 'fitting_hours_branch_same_tenant_fk',
     }).onDelete('restrict'),
+    check('fitting_hours_weekday_bounds', sql`${table.weekday} BETWEEN 1 AND 7`),
+    check('fitting_hours_window_order', sql`${table.startsLocal} < ${table.endsLocal}`),
+    check(
+      'fitting_hours_minute_precision',
+      sql`extract(second FROM ${table.startsLocal}) = 0 AND extract(second FROM ${table.endsLocal}) = 0 AND extract(hour FROM ${table.startsLocal}) BETWEEN 0 AND 23 AND extract(hour FROM ${table.endsLocal}) BETWEEN 0 AND 23`,
+    ),
   ],
 );
 
@@ -275,6 +281,10 @@ export const fittingClosure = pgTable(
     check(
       'fitting_closure_period_bounded',
       sql`NOT isempty(${table.period}) AND lower_inc(${table.period}) AND NOT upper_inc(${table.period}) AND lower(${table.period}) IS NOT NULL AND upper(${table.period}) IS NOT NULL AND lower(${table.period}) < upper(${table.period})`,
+    ),
+    check(
+      'fitting_closure_timezone_not_blank',
+      sql`length(btrim(${table.timezoneSnapshot})) BETWEEN 1 AND 64`,
     ),
     check('fitting_closure_reason_bounded', sql`length(btrim(${table.reason})) BETWEEN 1 AND 240`),
   ],

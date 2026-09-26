@@ -9,7 +9,7 @@ tags: [drezivo, v1.1, fittings, frontend, backend, implementation, checklist]
 
 # Fittings V1.1 Implementation Checklist
 
-**Status:** Frontend prototype approved. Backend Phases BE-0 and BE-1 are complete; BE-2 is in progress with FIT-BE-020 through FIT-BE-022 complete and FIT-BE-023 schedule/closure integrity next.
+**Status:** Frontend prototype approved. Backend Phases BE-0 and BE-1 are complete; BE-2 is in progress with FIT-BE-020 through FIT-BE-023 complete and FIT-BE-024 RLS/least-privilege policies next.
 
 This file is the feature-wide implementation checklist for `/fittings` and `/fittings/schedule`. The original frontend prototype phases are retained below as implementation history; the backend phases are appended after the frontend section.
 
@@ -807,13 +807,14 @@ The fitting frontend prototype is complete when:
     - [x] Constraint behavior is verified in PostgreSQL integration tests, not only TypeScript unit tests.
   - **Evidence:** `api/src/db/migrations/0043_fittings_exclusion.sql` adds GiST overlap exclusion for hidden capacity slots, one-current-blocking-claim partial uniqueness for capacity and guaranteed fitting lines, released/history semantics, and deferred final-state validation requiring scheduled fittings to own exactly one active same-branch slot plus one matching canonical asset allocation for each guaranteed line. PostgreSQL integration tests race two transactions for the same final capacity slot and the same physical garment, verify one valid winner, verify adjacent `[)` periods succeed, and verify released allocation history remains while the slot/asset becomes reusable.
 
-- [ ] **FIT-BE-023 — Add fitting schedule and closure persistence**
+- [x] **FIT-BE-023 — Add fitting schedule and closure persistence**
   - **Acceptance:**
-    - [ ] Weekly hours support all seven weekdays and multiple windows where approved.
-    - [ ] Strict duration, capacity, enabled state, fee and currency persist at branch scope.
-    - [ ] Recurring breaks are represented by weekly-window gaps; date-specific closures use `fitting_closure`.
-    - [ ] Invalid/overlapping configuration is rejected according to BE-0 rules.
-    - [ ] Branch timezone determines local schedule interpretation.
+    - [x] Weekly hours support ISO weekdays Monday=1 through Sunday=7 and multiple local windows per day, with an eight-window technical safety bound aligned to BE-1 contracts.
+    - [x] Strict duration, maximum simultaneous capacity, enabled state, fixed fee/currency and optimistic version persist in the branch-scoped `fitting_settings` row; tenant currency mismatch is rejected.
+    - [x] Recurring breaks are represented only by gaps between weekly windows; date-specific partial/full-day closures persist in `fitting_closure` as finite `[)` instants plus a bounded reason/timezone snapshot.
+    - [x] Invalid weekday/order/second-precision windows and true same-day overlaps are rejected in PostgreSQL while adjacent half-open windows remain valid; active hidden slots cannot exceed configured branch capacity.
+    - [x] Branch timezone is authoritative for local fitting schedule interpretation, and new/edited closure timezone snapshots must match the owning branch timezone.
+  - **Evidence:** `api/src/db/migrations/0044_fitting_schedule_persistence.sql`, aligned Drizzle checks in `api/src/db/schema/fittings.ts`, and PostgreSQL integration coverage in `api/tests/integration/fittings-phase2-schedule.test.ts`. Operational command authorization/version checks and guards that reject settings/closure changes which would invalidate already-accepted future fittings remain intentionally owned by BE-6 (`FIT-BE-060`–`FIT-BE-063`), rather than being hidden inside persistence-only triggers.
 
 - [ ] **FIT-BE-024 — Add RLS and least-privilege database policies**
   - **Acceptance:**
