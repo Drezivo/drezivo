@@ -74,7 +74,7 @@ describe('FIT-BE-101 fitting settings bootstrap migration', () => {
         version: number;
       }>(
         `SELECT fs.branch_id, fs.enabled, fs.capacity, fs.duration_minutes, fs.fee_minor::text,
-                fs.currency, fs.version
+                fs.currency, fs.version::integer AS version
            FROM fitting_settings fs
            JOIN branch b ON b.tenant_id = fs.tenant_id AND b.id = fs.branch_id
           WHERE fs.tenant_id = $1

@@ -122,7 +122,7 @@ describe('TBF-030 tenant bootstrap', async () => {
         currency: string;
         version: number;
       }>(
-        `SELECT enabled, capacity, duration_minutes, fee_minor::text, currency, version
+        `SELECT enabled, capacity, duration_minutes, fee_minor::text, currency, version::integer AS version
            FROM fitting_settings
           LIMIT 1`,
       );
