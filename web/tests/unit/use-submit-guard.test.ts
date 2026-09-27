@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { useSubmitGuard } from '@/lib/use-submit-guard';
 
 /**
@@ -40,9 +40,7 @@ describe('useSubmitGuard', () => {
       await Promise.resolve();
     });
 
-    await waitFor(() => {
-      expect(firstCallResult).toBe('hold-created');
-    });
+    expect(firstCallResult).toBe('hold-created');
     // The dropped duplicate resolves to undefined — it never reached `action`.
     expect(secondCallResult).toBeUndefined();
     expect(action).toHaveBeenCalledTimes(1);

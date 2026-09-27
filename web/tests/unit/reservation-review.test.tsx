@@ -16,8 +16,8 @@ vi.mock('next/image', () => ({
   },
 }));
 
-vi.mock('@/lib/capability', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/capability')>();
+vi.mock('@/lib/static-capability', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/static-capability')>();
   return {
     ...actual,
     confirmGuestReservation: vi.fn(),
@@ -30,6 +30,7 @@ const SUMMARY = {
   referenceNumber: 'RV-2026-10482',
   status: 'held',
   item: {
+    id: 'product-1',
     name: 'Black Gown',
     size: 'M',
     imageUrl: '/black-gown.jpg',
@@ -47,7 +48,7 @@ const SUMMARY = {
   },
   payment: {
     status: 'awaiting_upload',
-    reference: null,
+    method: 'gcash',
   },
   pricing: {
     rentalFeeDecimal: '3500.00',

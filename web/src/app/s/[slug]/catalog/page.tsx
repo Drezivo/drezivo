@@ -3,10 +3,10 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { CatalogItemCard } from '@/components/storefront/catalog-item-card';
-import { publicApiClient } from '@/lib/api-client';
+import { staticStorefrontClient } from '@/lib/static-storefront-client';
 
-type StoreProjection = NonNullable<Awaited<ReturnType<typeof publicApiClient.getStore>>>;
-type CatalogItemSummary = Awaited<ReturnType<typeof publicApiClient.getCatalog>>['items'][number];
+type StoreProjection = NonNullable<Awaited<ReturnType<typeof staticStorefrontClient.getStore>>>;
+type CatalogItemSummary = Awaited<ReturnType<typeof staticStorefrontClient.getCatalog>>['items'][number];
 
 interface CatalogPageProps {
   params: Promise<{ slug: string }>;
@@ -22,13 +22,13 @@ interface CatalogPageProps {
 export default async function CatalogPage({ params, searchParams }: CatalogPageProps) {
   const { slug } = await params;
   const filters = await searchParams;
-  const store = await publicApiClient.getStore(slug);
+  const store = await staticStorefrontClient.getStore(slug);
 
   if (!store) {
     notFound();
   }
 
-  const catalog = await publicApiClient.getCatalog(slug, {
+  const catalog = await staticStorefrontClient.getCatalog(slug, {
     q: filters.q,
     category: filters.category,
     size: filters.size,

@@ -1,26 +1,15 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { getGuestReservationByToken } from '@/lib/capability';
+import { getGuestReservationByToken } from '@/lib/static-capability';
 import { buildGuestFlowMetadata } from '@/lib/seo';
 import { ReservationSummaryCard } from '@/components/booking/reservation-summary-card';
 
 export const metadata: Metadata = buildGuestFlowMetadata('Your Reservation');
 
-// Never statically cache this route — it is keyed by a bearer token and the
-// underlying reservation state changes as the business reviews it.
-export const dynamic = 'force-dynamic';
-
 /**
- * The durable status page behind every "view your reservation" link sent by
- * email (Drezivo-PRD.md §4: "Resend guest link uses a hashed, expiring
- * token; it reveals no reservation before verification"). The dynamic
- * segment IS the raw capability secret — see src/lib/capability.ts for the
- * full security model this page depends on.
- *
- * The secret is read here, server-side, for exactly one request, and is
- * never interpolated into anything this page renders (no data attribute, no
- * hidden input, no outbound link target) — it only ever flows into the one
- * `getGuestReservationByToken` call below.
+ * Static preview of the durable guest reservation status page. During this
+ * storefront-design phase the token is only a route placeholder; no backend,
+ * capability cookie, or reservation API is contacted.
  */
 export default async function GuestReservationStatusPage({
   params,

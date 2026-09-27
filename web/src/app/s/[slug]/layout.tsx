@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { publicApiClient } from '@/lib/api-client';
+import { staticStorefrontClient } from '@/lib/static-storefront-client';
 import { buildStorefrontMetadata } from '@/lib/seo';
 import { StoreHeader } from '@/components/storefront/store-header';
 import { StoreFooter } from '@/components/storefront/store-footer';
@@ -12,7 +12,7 @@ interface StorefrontLayoutProps {
 
 export async function generateMetadata({ params }: StorefrontLayoutProps): Promise<Metadata> {
   const { slug } = await params;
-  const store = await publicApiClient.getStore(slug);
+  const store = await staticStorefrontClient.getStore(slug);
   if (!store) return {};
   return buildStorefrontMetadata(store);
 }
@@ -26,7 +26,7 @@ export async function generateMetadata({ params }: StorefrontLayoutProps): Promi
  */
 export default async function StorefrontLayout({ children, params }: StorefrontLayoutProps) {
   const { slug } = await params;
-  const store = await publicApiClient.getStore(slug);
+  const store = await staticStorefrontClient.getStore(slug);
 
   if (!store) {
     notFound();

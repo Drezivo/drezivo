@@ -17,7 +17,7 @@ export function SizeSelector({
 }: {
   storeSlug: string;
   itemId: string;
-  sizes: string[];
+  sizes: readonly string[];
 }) {
   const router = useRouter();
   const [selectedSize, setSelectedSize] = useState<string | undefined>(sizes[0]);

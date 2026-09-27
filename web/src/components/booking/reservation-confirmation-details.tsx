@@ -1,13 +1,13 @@
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { getGuestReservationById } from '@/lib/capability';
-import { publicApiClient } from '@/lib/api-client';
+import { getGuestReservationById } from '@/lib/static-capability';
+import { staticStorefrontClient } from '@/lib/static-storefront-client';
 import { formatPhp } from '@/lib/money';
 import { describePaymentStatus, describeReservationStatus } from '@/lib/reservation-status';
 
 type GuestReservationSummary = NonNullable<Awaited<ReturnType<typeof getGuestReservationById>>>;
-type PublicStoreProjection = NonNullable<Awaited<ReturnType<typeof publicApiClient.getStore>>>;
+type PublicStoreProjection = NonNullable<Awaited<ReturnType<typeof staticStorefrontClient.getStore>>>;
 
 interface ReservationConfirmationDetailsProps {
   store: PublicStoreProjection;

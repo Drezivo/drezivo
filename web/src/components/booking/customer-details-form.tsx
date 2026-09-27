@@ -5,7 +5,10 @@ import { useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { BookingSteps } from '@/components/booking/booking-steps';
-import { submitGuestReservationDetails, type SubmitGuestDetailsInput } from '@/lib/capability';
+import {
+  submitGuestReservationDetails,
+  type SubmitGuestDetailsInput,
+} from '@/lib/static-capability';
 import { formatPhp } from '@/lib/money';
 import { useSubmitGuard } from '@/lib/use-submit-guard';
 
@@ -55,8 +58,7 @@ export function CustomerDetailsForm({
       throw new Error('Please fill in your details first.');
     }
 
-    await submitGuestReservationDetails(reservationId, details, idempotencyKey);
-    return details;
+    return submitGuestReservationDetails(reservationId, details, idempotencyKey);
   });
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -76,7 +78,7 @@ export function CustomerDetailsForm({
     try {
       const result = await submit();
       if (!result) return;
-      router.push(`/s/${storeSlug}/book/${itemId}/review?rid=${reservationId}`);
+      router.push(`/s/${storeSlug}/book/${itemId}/review?rid=${encodeURIComponent(result.reservationId)}`);
     } catch {
       // useSubmitGuard exposes the normalized failure through `error` below.
     }

@@ -27,8 +27,11 @@ type Item = ComponentProps<typeof HoldDateSelector>['item'];
 const ITEM = {
   id: 'product-1',
   variantId: 'variant-1',
+  categoryId: 'gowns',
   name: 'Black Gown',
   categoryName: 'Gown',
+  primaryImageUrl: '/black-gown.jpg',
+  availabilityStatus: 'available',
   description: 'Formal black gown',
   images: ['/black-gown.jpg'],
   sizes: ['S', 'M', 'L'],

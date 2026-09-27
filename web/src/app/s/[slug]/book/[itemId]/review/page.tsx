@@ -1,13 +1,12 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 
 import { ReservationReview } from '@/components/booking/reservation-review';
-import { getGuestReservationById } from '@/lib/capability';
+import { getGuestReservationById } from '@/lib/static-capability';
 import { formatPhp, formatPhpPerUnit } from '@/lib/money';
-import { publicApiClient } from '@/lib/api-client';
+import { staticStorefrontClient } from '@/lib/static-storefront-client';
 import { buildGuestFlowMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = buildGuestFlowMetadata('Review Reservation');
@@ -26,10 +25,9 @@ export default async function BookingReviewPage({ params, searchParams }: Bookin
     redirect(`/s/${slug}/items/${itemId}`);
   }
 
-  const cookieStore = await cookies();
   const [item, summary] = await Promise.all([
-    publicApiClient.getCatalogItem(slug, itemId),
-    getGuestReservationById(rid, { cookieHeader: cookieStore.toString() }),
+    staticStorefrontClient.getCatalogItem(slug, itemId),
+    getGuestReservationById(rid),
   ]);
 
   if (!item || !summary) {

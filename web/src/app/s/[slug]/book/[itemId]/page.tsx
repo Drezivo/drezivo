@@ -5,7 +5,7 @@ import type { Metadata } from 'next';
 
 import { HoldDateSelector } from '@/components/booking/hold-date-selector';
 import { formatPhp, formatPhpPerUnit } from '@/lib/money';
-import { publicApiClient } from '@/lib/api-client';
+import { staticStorefrontClient } from '@/lib/static-storefront-client';
 import { buildGuestFlowMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = buildGuestFlowMetadata('Select Dates');
@@ -20,7 +20,7 @@ export default async function BookingDatesPage({ params, searchParams }: Booking
   const { slug, itemId } = await params;
   const { size } = await searchParams;
 
-  const item = await publicApiClient.getCatalogItem(slug, itemId);
+  const item = await staticStorefrontClient.getCatalogItem(slug, itemId);
   if (!item) {
     notFound();
   }
