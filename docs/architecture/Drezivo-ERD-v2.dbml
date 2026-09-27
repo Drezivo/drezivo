@@ -841,7 +841,7 @@ Table plan_entitlement {
   indexes {
     (plan_id, capability) [unique]
   }
-  Note: 'V1. TBF-030 seeds physical_assets.max at 75/250/1000 and frontdesk_seats.max at 1/3/10. TBF-032 guards usage under a tenant row lock; limits and release flags both required; null means nonnumeric capability, not implicitly unlimited.'
+  Note: 'V1. TBF-030 seeds physical_assets.max at 125/300/1000 and frontdesk_seats.max at 0/2/10. TBF-032 guards usage under a tenant row lock; limits and release flags both required; null means nonnumeric capability, not implicitly unlimited.'
 }
 
 Table subscription {

@@ -73,8 +73,8 @@ export const MARKETING_PLANS: readonly MarketingPlan[] = [
     price: '300.00',
     blurb: 'Perfect for small businesses just getting started.',
     features: [
-      'Up to 50 active physical assets',
-      'Owner + Front desk roles',
+      'Up to 125 active physical assets',
+      'Owner-only access',
       'Reservations, calendar & availability',
       'Customer management',
       'Returns, refunds & exports',
@@ -85,8 +85,8 @@ export const MARKETING_PLANS: readonly MarketingPlan[] = [
     price: '499.00',
     blurb: 'For growing businesses with more rentals and customers.',
     features: [
-      'Up to 200 active physical assets',
-      'Owner + up to 3 Front desk seats',
+      'Up to 300 active physical assets',
+      'Owner + up to 2 Front desk seats',
       'Everything in Starter',
       'Priority support',
     ],

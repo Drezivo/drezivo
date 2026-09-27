@@ -212,7 +212,7 @@ describe("OnboardingPlan", () => {
 
     expect(await screen.findByRole("heading", { name: "Review and launch" })).toBeVisible();
     expect(screen.getByText("Professional")).toBeVisible();
-    expect(screen.getByText("250 active assets", { exact: false })).toBeVisible();
+    expect(screen.getByText("300 active assets", { exact: false })).toBeVisible();
     expect(api.bootstrapOnboarding).not.toHaveBeenCalled();
   });
 
@@ -231,7 +231,7 @@ describe("OnboardingPlan", () => {
         active_branch_id: bootstrap.default_branch.id,
         branch_grants: bootstrap.branch_grants,
         subscription: bootstrap.subscription,
-        entitlements: { physical_assets_max: 250, frontdesk_seats_max: 3 },
+        entitlements: { physical_assets_max: 300, frontdesk_seats_max: 2 },
       },
       requestId: "req-actor",
     });
@@ -239,11 +239,11 @@ describe("OnboardingPlan", () => {
     renderPlan();
     fireEvent.click(await screen.findByRole("button", { name: /Launch Workspace/i }));
 
-    expect(screen.getByRole("dialog", { name: "Start your 7-day trial?" })).toBeVisible();
+    expect(screen.getByRole("dialog", { name: "Start your 14-day trial?" })).toBeVisible();
     expect(screen.getByText(/No credit card is required during the trial period/i)).toBeVisible();
     expect(api.bootstrapOnboarding).not.toHaveBeenCalled();
 
-    const confirm = screen.getByRole("button", { name: "Start 7-day trial" });
+    const confirm = screen.getByRole("button", { name: "Start 14-day trial" });
     fireEvent.click(confirm);
     fireEvent.click(confirm);
 
@@ -272,14 +272,14 @@ describe("OnboardingPlan", () => {
         active_branch_id: bootstrap.default_branch.id,
         branch_grants: bootstrap.branch_grants,
         subscription: bootstrap.subscription,
-        entitlements: { physical_assets_max: 250, frontdesk_seats_max: 3 },
+        entitlements: { physical_assets_max: 300, frontdesk_seats_max: 2 },
       },
       requestId: "req-actor",
     });
 
     renderPlan();
     fireEvent.click(await screen.findByRole("button", { name: /Launch Workspace/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Start 7-day trial" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start 14-day trial" }));
 
     expect(await screen.findByRole("heading", { name: "Your workspace was created" })).toBeVisible();
     expect(api.bootstrapOnboarding).toHaveBeenCalledTimes(1);

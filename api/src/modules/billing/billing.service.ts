@@ -33,6 +33,7 @@ import {
   resolvePlanEntitlements as resolvePlan,
   resolveTenantEntitlements,
 } from '../entitlements/entitlements.service.js';
+import { PAST_DUE_GRACE_DURATION_DAYS } from './billing.constants.js';
 
 const PLAN_CHANGE_OPERATION = 'subscription.plan_change';
 
@@ -71,6 +72,7 @@ export async function reconcileTenantLifecycle(
           client,
           current.subscription_id,
           current.trial_ends_at,
+          PAST_DUE_GRACE_DURATION_DAYS,
         );
         if (changed) {
           await appendSubscriptionEvent(client, {
@@ -95,7 +97,10 @@ export async function reconcileTenantLifecycle(
         current = {
           ...current,
           status: 'past_due',
-          grace_ends_at: new Date(current.trial_ends_at.getTime() + 7 * 24 * 60 * 60 * 1000),
+          grace_ends_at: new Date(
+            current.trial_ends_at.getTime() +
+              PAST_DUE_GRACE_DURATION_DAYS * 24 * 60 * 60 * 1000,
+          ),
         };
       }
     }

@@ -98,8 +98,9 @@ owner-eligibility implementation.
 TBF-030 adds the authenticated owner bootstrap command at
 `POST /api/v1/onboarding/{onboardingId}/bootstrap`. It requires a strict empty body, the active
 Clerk organization matching the onboarding record, and an account-scoped `Idempotency-Key`.
-Migration `0016_tenant_bootstrap.sql` seeds immutable version-1 Starter, Professional, and Business
-plans and their 75/250/1,000 physical-asset and 1/3/10 Front Desk-seat limits. The winning
+Migration `0016_tenant_bootstrap.sql` seeds the immutable version-1 Starter, Professional, and Business
+plan rows; forward-only policy migration `0053_update_v1_entitlements_and_trial_policy.sql` verifies
+the prices and sets their 125/300/1,000 physical-asset and 0/2/10 Front Desk-seat limits. The winning
 database transaction creates the tenant, `Main Branch`, Owner membership/grant, draft storefront,
 trialing subscription, `trial_started` event, both audit records, and a `tenant.bootstrapped`
 outbox event, then finalizes the safe response. A no-op worker handler acknowledges that event

@@ -46,9 +46,9 @@ Working rules:
   minor-unit money; outbox rows committed with the business change; fail closed on unknown values.
 
 Policy values for the agreed V1 tenancy lifecycle are: 15-minute hold TTL, 24-hour maximum review
-window, a single seven-day trial per verified person, and seven days of normal past-due grace before
-restriction. Starter allows 75 active physical assets and 1 Front Desk seat; Professional allows
-250 and 3; Business allows 1,000 and 10. Trial signup does not require a card; post-trial
+window, a single fourteen-day trial per verified person, and seven days of normal past-due grace before
+restriction. Starter allows 125 active physical assets and no Front Desk seats; Professional allows
+300 and 2; Business allows 1,000 and 10. Trial signup does not require a card; post-trial
 activation is an audited operator payment flow until a payment gateway is selected. Implement these
 as named configuration, never as scattered literals.
 
@@ -469,7 +469,7 @@ factory-seeded tenants during development.
 - **Outcome:** plan versions and entitlements are managed as data, not code, and quota checks stay correct under concurrency.
 - **Acceptance criteria:**
   - [ ] Plan prices are versioned rows (30000/49900/129900 PHP minor units) with authoritative
-        active-asset limits 75/250/1,000 and Front Desk seat limits 1/3/10; marketing/entitlement
+        active-asset limits 125/300/1,000 and Front Desk seat limits 0/2/10; marketing/entitlement
         values never come from the outdated screenshot.
   - [ ] Entitlement changes are additive/versioned; unreleased features (fittings, branches) cannot be purchased as available.
   - [ ] Concurrent import/activation quota checks cannot exceed the cap; the path is upgrade/archive, never deletion.
@@ -482,7 +482,7 @@ factory-seeded tenants during development.
 - **Acceptance criteria:**
   - [ ] One current subscription per tenant; transitions are immutable events with business keys; no silent repricing of an existing period.
   - [ ] V1 collection verification is audited operator action, not implied automated recurring billing.
-  - [ ] Expiry/grace processing runs through durable jobs plus request-time checks; the seven-day
+  - [ ] Expiry/grace processing runs through durable jobs plus request-time checks; the fourteen-day
         trial and seven-day normal past-due grace are named configuration.
   - [ ] Restricted state blocks new bookings/publish changes while preserving returns, refunds,
         exports, and existing-rental read access (verified by L04).

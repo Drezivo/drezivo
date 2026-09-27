@@ -164,7 +164,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
 
   it('collapses concurrent double-fire at the quota edge into one catalogue graph and one quota claim', async () => {
     const seed = await seedCommandTenant('org_clt020_concurrent', 'user_clt020_concurrent');
-    await seedQuotaAssets(seed.tenantId, seed.branchId, 'user_clt020_concurrent', 74);
+    await seedQuotaAssets(seed.tenantId, seed.branchId, 'user_clt020_concurrent', 124);
     const request = makeRequest(seed.categoryId, { code: 'RACE-001' });
     const command = {
       ...seed.context,
@@ -196,7 +196,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
         return result.rows[0]?.count ?? -1;
       },
     );
-    expect(totalActiveAssets).toBe(75);
+    expect(totalActiveAssets).toBe(125);
   });
 
   it('validates the closed create contract inside the service before opening a write transaction', async () => {
@@ -299,7 +299,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
 
   it('serializes competing creates at the physical-asset plan limit', async () => {
     const seed = await seedCommandTenant('org_clt020_quota', 'user_clt020_quota');
-    await seedQuotaAssets(seed.tenantId, seed.branchId, 'user_clt020_quota', 74);
+    await seedQuotaAssets(seed.tenantId, seed.branchId, 'user_clt020_quota', 124);
 
     const [a, b] = await Promise.all([
       createClothing({
@@ -339,7 +339,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
         newProducts: newProducts.rows[0]?.count ?? -1,
       };
     });
-    expect(state).toEqual({ assets: 75, newProducts: 1 });
+    expect(state).toEqual({ assets: 125, newProducts: 1 });
   });
 
   it('keeps the exact measurement-guide reference when the tenant default later changes', async () => {

@@ -78,7 +78,7 @@ describe('TBF-040 membership invitations', async () => {
     expect(rows.rows[0]).toEqual({ count: 1, outbox_count: 1 });
   });
 
-  it('reserves the Starter seat, releases it on cancellation, and preserves the row on resend', async () => {
+  it('reserves a Professional seat, releases it on cancellation, and preserves the row on resend', async () => {
     const context = await createOwnerContext('user_tbf040_capacity');
     const first = await createMembershipInvitation({
       ...context,
@@ -222,13 +222,13 @@ describe('TBF-040 membership invitations', async () => {
     const membershipId = await createTestMembership(tenant.id, principalId, 'owner');
     await withTenantTransaction(tenant.id, principalId, async (client) => {
       const plan = await client.query<{ id: string }>(
-        `SELECT id FROM plan WHERE code = 'starter' AND version = 1 AND active = true`,
+        `SELECT id FROM plan WHERE code = 'professional' AND version = 1 AND active = true`,
       );
       const planId = plan.rows[0]?.id;
-      if (!planId) throw new Error('Starter plan seed is missing.');
+      if (!planId) throw new Error('Professional plan seed is missing.');
       await client.query(
         `INSERT INTO subscription (tenant_id, plan_id, status, current_period_start, current_period_end)
-         VALUES ($1, $2, 'trialing', now(), now() + interval '7 days')`,
+         VALUES ($1, $2, 'trialing', now(), now() + interval '14 days')`,
         [tenant.id, planId],
       );
     });

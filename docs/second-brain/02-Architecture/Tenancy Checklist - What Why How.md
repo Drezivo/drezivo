@@ -65,8 +65,8 @@ explicit constraints, RLS policies, and forward-only correction rather than dest
 
 - **Why:** Conflicting trial, quota, membership, or authority language could make each workspace
   implement a different tenancy model.
-- **What:** The PRD, TRD, data model, ERD, and onboarding checklist agree on the seven-day trial,
-  one-trial-per-verified-person policy, 75/250/1,000 asset limits, 1/3/10 Front Desk caps,
+- **What:** The PRD, TRD, data model, ERD, and onboarding checklist agree on the fourteen-day trial,
+  one-trial-per-verified-person policy, 125/300/1,000 asset limits, 0/2/10 Front Desk caps,
   payment-pending onboarding, closure, and Clerk/Drezivo authority boundaries.
 - **How:** Conflicting legacy statements were replaced in the canonical documents and the accepted
   lifecycle was recorded before implementation work began.
@@ -485,8 +485,8 @@ cover webhook replay, payment, provider loss, closure, transfer, and terminal jo
 
 ## Reading Notes
 
-- The accepted plan limits are 75 / 250 / 1,000 active physical assets and 1 / 3 / 10 Front Desk
-  seats. The older PRD table showing 50 / 200 / 1,000 is stale.
+- The accepted plan limits are 125 / 300 / 1,000 active physical assets and 0 / 2 / 10 Front Desk
+  seats. Any older PRD table showing 50 / 200 / 1,000 is stale.
 - The checklist header still says only Phase 0 is complete, but its task-level checkboxes and the
   backend checklist mark TBF-000 through TBF-042 implemented. This guide follows the task-level
   status and keeps the TBF-041/TBF-042 integration-evidence gates explicit.

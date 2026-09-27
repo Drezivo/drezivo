@@ -159,8 +159,8 @@ describe('TBF-031 actor and workspace resolution', async () => {
       'reservations.manage',
     ]);
     expect(context.context.entitlements).toEqual({
-      physical_assets_max: 75,
-      frontdesk_seats_max: 1,
+      physical_assets_max: 125,
+      frontdesk_seats_max: 0,
     });
   });
 

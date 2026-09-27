@@ -49,8 +49,67 @@ describe('entitlement service', () => {
         })
         .mockResolvedValueOnce({
           rows: [
-            { capability: 'physical_assets.max', limit_value: 75, enabled: true },
+            { capability: 'physical_assets.max', limit_value: 125, enabled: true },
             { capability: 'frontdesk_seats.max', limit_value: null, enabled: false },
+          ],
+        }),
+    } as unknown as PoolClient;
+
+    await expect(resolvePlanEntitlements(client, 'starter')).rejects.toMatchObject({
+      code: 'STATE_CONFLICT',
+    });
+  });
+
+  it('accepts an Owner-only plan with zero Front Desk seats', async () => {
+    const client = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 'plan-1',
+              code: 'starter',
+              version: 1,
+              monthly_minor: 30000,
+              currency: 'PHP',
+              active: true,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            { capability: 'physical_assets.max', limit_value: 125, enabled: true },
+            { capability: 'frontdesk_seats.max', limit_value: 0, enabled: true },
+          ],
+        }),
+    } as unknown as PoolClient;
+
+    await expect(resolvePlanEntitlements(client, 'starter')).resolves.toMatchObject({
+      physicalAssetsMax: 125,
+      frontdeskSeatsMax: 0,
+    });
+  });
+
+  it('rejects a negative Front Desk seat entitlement', async () => {
+    const client = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 'plan-1',
+              code: 'starter',
+              version: 1,
+              monthly_minor: 30000,
+              currency: 'PHP',
+              active: true,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            { capability: 'physical_assets.max', limit_value: 125, enabled: true },
+            { capability: 'frontdesk_seats.max', limit_value: -1, enabled: true },
           ],
         }),
     } as unknown as PoolClient;
@@ -83,8 +142,8 @@ describe('entitlement service', () => {
       })
       .mockResolvedValueOnce({
         rows: [
-          { capability: 'physical_assets.max', limit_value: 75, enabled: true },
-          { capability: 'frontdesk_seats.max', limit_value: 1, enabled: true },
+          { capability: 'physical_assets.max', limit_value: 125, enabled: true },
+          { capability: 'frontdesk_seats.max', limit_value: 0, enabled: true },
         ],
       });
     const client = { query } as unknown as PoolClient;

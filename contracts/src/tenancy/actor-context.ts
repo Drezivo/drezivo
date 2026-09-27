@@ -22,7 +22,7 @@ export const actorContext = z.object({
   subscription: subscriptionSummary,
   entitlements: z.object({
     physical_assets_max: z.number().int().positive(),
-    frontdesk_seats_max: z.number().int().positive(),
+    frontdesk_seats_max: z.number().int().nonnegative(),
   }),
 });
 export type ActorContext = z.infer<typeof actorContext>;

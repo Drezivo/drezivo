@@ -56,16 +56,16 @@ const PLAN_OPTIONS: readonly PlanDefinition[] = [
     code: "starter",
     name: "Starter",
     monthlyPrice: "₱300",
-    assets: "75 active assets",
-    seats: "1 Front Desk seat",
+    assets: "125 active assets",
+    seats: "Owner only",
     icon: Sprout,
   },
   {
     code: "professional",
     name: "Professional",
     monthlyPrice: "₱499",
-    assets: "250 active assets",
-    seats: "3 Front Desk seats",
+    assets: "300 active assets",
+    seats: "2 Front Desk seats",
     icon: Gem,
   },
   {
@@ -327,7 +327,7 @@ export function OnboardingPlan() {
             Choose your plan
           </h1>
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-auth-dark-muted sm:text-base">
-            Pick a plan for your rental business. All plans start with a 7-day trial.
+            Pick a plan for your rental business. All plans start with a 14-day trial.
           </p>
         </div>
 
@@ -438,7 +438,7 @@ function LaunchReview({
           <ReviewRow label="Plan">
             <div className="min-w-0 flex-1">
               <p className="font-display text-xl text-auth-text">{plan.name}</p>
-              <p className="mt-1 text-sm text-auth-dark-muted">{plan.monthlyPrice} / month · 7-day trial</p>
+              <p className="mt-1 text-sm text-auth-dark-muted">{plan.monthlyPrice} / month · 14-day trial</p>
             </div>
             <button type="button" onClick={onChangePlan} className={changeButtonClass}>
               Change
@@ -454,7 +454,7 @@ function LaunchReview({
           <ReviewRow label="When you launch" last>
             <div className="space-y-2.5 text-sm text-auth-dark-muted">
               <LaunchEffect>Create your workspace</LaunchEffect>
-              <LaunchEffect>Start your 7-day trial</LaunchEffect>
+              <LaunchEffect>Start your 14-day trial</LaunchEffect>
               <LaunchEffect>Continue to your dashboard</LaunchEffect>
             </div>
           </ReviewRow>
@@ -471,9 +471,9 @@ function LaunchReview({
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 z-50 bg-auth-page/80 backdrop-blur-sm" />
             <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-auth-line bg-auth-panel p-6 shadow-2xl outline-none sm:p-7">
-              <Dialog.Title className="font-display text-3xl text-auth-text">Start your 7-day trial?</Dialog.Title>
+              <Dialog.Title className="font-display text-3xl text-auth-text">Start your 14-day trial?</Dialog.Title>
               <Dialog.Description className="mt-3 text-sm leading-6 text-auth-dark-muted">
-                Launching your workspace starts your 7-day trial immediately. No credit card is required during the trial period, and your lifetime trial can only be used once.
+                Launching your workspace starts your 14-day trial immediately. No credit card is required during the trial period, and your lifetime trial can only be used once.
               </Dialog.Description>
 
               <div className="mt-5 rounded-xl border border-auth-line bg-auth-page/30 p-4 text-sm text-auth-dark-muted">
@@ -495,7 +495,7 @@ function LaunchReview({
                   onClick={onConfirmLaunch}
                   className={dialogLaunchButtonClass}
                 >
-                  {isLaunching ? "Starting trial…" : "Start 7-day trial"}
+                  {isLaunching ? "Starting trial…" : "Start 14-day trial"}
                 </button>
               </div>
             </Dialog.Content>
@@ -618,7 +618,7 @@ function PlanCard({
       <span className="mt-1 font-display text-xl text-auth-gold">
         {plan.monthlyPrice} <span className="text-sm">/ month</span>
       </span>
-      <span className="mt-1 text-xs text-auth-text">7-day trial</span>
+      <span className="mt-1 text-xs text-auth-text">14-day trial</span>
 
       <span className="my-3 h-px bg-auth-line" />
 

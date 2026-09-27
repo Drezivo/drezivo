@@ -63,13 +63,14 @@ export async function updateSubscriptionToPastDue(
   client: PoolClient,
   subscriptionId: string,
   trialEndsAt: Date,
+  graceDurationDays: number,
 ): Promise<boolean> {
   const result = await client.query(
     `UPDATE subscription
         SET status = 'past_due',
-            grace_ends_at = $2::timestamptz + interval '7 days'
+            grace_ends_at = $2::timestamptz + ($3::integer * interval '1 day')
       WHERE id = $1 AND status = 'trialing'`,
-    [subscriptionId, trialEndsAt],
+    [subscriptionId, trialEndsAt, graceDurationDays],
   );
   return result.rowCount === 1;
 }
