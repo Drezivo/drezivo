@@ -100,6 +100,7 @@ export const clothingAvailabilityTimelineQuery = z
     search: z.string().trim().min(1).max(200).optional(),
     category_id: categoryId.optional(),
     size_label: z.string().trim().min(1).max(40).optional(),
+    size_kind: z.enum(['free_size', 'sized']).optional(),
     status: clothingAvailabilityTimelineStatus.optional(),
     cursor: z.string().min(1).max(512).optional(),
     limit: z.coerce
@@ -186,7 +187,7 @@ export const clothingAvailabilityTimelineRow = z
     variant: z
       .object({
         id: productVariantId,
-        size_label: z.string().trim().min(1).max(40),
+        size_label: z.string().trim().min(1).max(40).nullable(),
         color_label: z.string().trim().min(1).max(80).nullable(),
         rental_price_minor: nonNegativeMoneyString,
         currency: currencyCode,
@@ -215,6 +216,7 @@ export const clothingAvailabilityTimelineResponse = z
       .object({
         categories: z.array(clothingAvailabilityTimelineCategoryFacet).max(500),
         size_labels: z.array(z.string().trim().min(1).max(40)).max(500),
+        has_free_size: z.boolean(),
       })
       .strict(),
     rows: z.array(clothingAvailabilityTimelineRow).max(CLOTHING_AVAILABILITY_TIMELINE_MAX_LIMIT),

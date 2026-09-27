@@ -4,7 +4,7 @@ type: architecture
 status: accepted-for-staged-implementation
 owner: Drezivo platform team
 source: "Accepted product decisions, 2026-09-16; [[02-Architecture/Drezivo Architecture]]; [TRD](../../architecture/Drezivo-TRD.md); [Data Model](../../architecture/Drezivo-Data-Model.md); [ERD](../../architecture/Drezivo-ERD.dbml)"
-updated: 2026-09-16
+updated: 2026-09-27
 tags:
   [drezivo, architecture, tenancy, onboarding, clerk, memberships, billing, v1]
 ---
@@ -24,6 +24,20 @@ It is an implementation map, not a replacement for canonical specifications. The
 slice must align them with this decision before code changes behavior.
 
 This vault contains no credentials, customer records, payment evidence, or production identifiers.
+
+## Catalogue sizing mode
+
+Each product has exactly one active sizing mode. `sized` products expose one or more active
+variants with real size labels. `free_size` products expose exactly one active variant whose
+`size_label` is `NULL`; the UI renders that value as “Free size”. Active Free size and sized
+variants cannot coexist, and the database deferred trigger is the final invariant boundary.
+
+The owner/staff sizing-mode command archives the current active variants before creating or
+restoring the target mode. Archived variants and their physical assets remain addressable by
+existing reservations, fittings, allocations, and audit history, so changing a product from Free
+size to sized is safe for outstanding obligations. A later switch back restores the preserved
+Free size variant when possible. This is a product-level mode switch, not a second concurrent
+variant family.
 
 ## Decided boundaries
 

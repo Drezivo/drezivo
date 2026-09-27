@@ -172,7 +172,7 @@ export interface ClothingAvailabilityTimelineAssetRow {
   primary_image_storage_key: string | null;
   primary_image_version_id: string | null;
   variant_id: string;
-  size_label: string;
+  size_label: string | null;
   color_label: string | null;
   rental_price_minor: number;
   currency: string;
@@ -198,6 +198,7 @@ export interface ClothingAvailabilityTimelineAgendaRow {
 export interface ClothingAvailabilityTimelineFacets {
   categories: Array<{ id: string; name: string }>;
   size_labels: string[];
+  has_free_size: boolean;
 }
 
 export interface ClothingAvailabilityTimelinePage {
@@ -247,6 +248,7 @@ export async function listClothingAvailabilityTimelineAssets(
       search?: string | undefined;
       category_id?: string | undefined;
       size_label?: string | undefined;
+      size_kind?: 'free_size' | 'sized' | undefined;
       status?: 'reserved' | 'rented' | 'unavailable' | undefined;
       cursor?: string | undefined;
       limit: number;
@@ -268,7 +270,6 @@ export async function listClothingAvailabilityTimelineAssets(
     'pa.branch_id = $2::uuid',
     "pa.lifecycle_status = 'active'",
     "p.status = 'active'",
-    "pv.status = 'active'",
   ];
 
   if (input.query.search) {
@@ -281,6 +282,9 @@ export async function listClothingAvailabilityTimelineAssets(
   if (input.query.size_label) {
     where.push(`lower(pv.size_label) = lower(${bind(input.query.size_label)})`);
   }
+  if (input.query.size_kind) {
+    where.push(`pv.size_label IS ${input.query.size_kind === 'free_size' ? '' : 'NOT '}NULL`);
+  }
 
   const cursor = decodeClothingAvailabilityTimelineCursor(input.query.cursor);
   if (cursor) {
@@ -289,13 +293,13 @@ export async function listClothingAvailabilityTimelineAssets(
     const colorLabel = bind(cursor.colorLabel);
     const assetId = bind(cursor.assetId);
     where.push(
-      `(lower(p.name), lower(pv.size_label), lower(COALESCE(pv.color_label, '')), pa.id) >
+      `(lower(p.name), COALESCE(lower(pv.size_label), ''), lower(COALESCE(pv.color_label, '')), pa.id) >
          (${productName}, ${sizeLabel}, ${colorLabel}, ${assetId}::uuid)`,
     );
   }
 
   const hasCatalogueFilter = Boolean(
-    input.query.search || input.query.category_id || input.query.size_label,
+    input.query.search || input.query.category_id || input.query.size_label || input.query.size_kind,
   );
   if (input.query.status) {
     where.push(`activity.has_${input.query.status}`);
@@ -316,7 +320,7 @@ export async function listClothingAvailabilityTimelineAssets(
          pv.rental_price_minor,
          pv.currency,
          lower(p.name) AS sort_product_name,
-         lower(pv.size_label) AS sort_size_label,
+         COALESCE(lower(pv.size_label), '') AS sort_size_label,
          lower(COALESCE(pv.color_label, '')) AS sort_color_label
        FROM physical_asset pa
        JOIN product_variant pv
@@ -400,7 +404,11 @@ export async function listClothingAvailabilityTimelineAssets(
            ) AS has_unavailable
        ) activity
        WHERE ${where.join('\n         AND ')}
-       ORDER BY lower(p.name) ASC, lower(pv.size_label) ASC,
+         -- Archived variants remain visible only while they carry a live obligation.  A sizing
+         -- mode switch must not hide an existing rental/recovery/readiness lane, but archived
+         -- stock should not appear as an idle selectable asset after the switch.
+         AND (pv.status = 'active' OR activity.has_reserved OR activity.has_rented OR activity.has_unavailable)
+       ORDER BY lower(p.name) ASC, COALESCE(lower(pv.size_label), '') ASC,
                 lower(COALESCE(pv.color_label, '')) ASC, pa.id ASC
        LIMIT ${limit}
      )
@@ -694,13 +702,34 @@ export async function readClothingAvailabilityTimelineFacets(
         AND pa.lifecycle_status = 'active'
        WHERE pv.tenant_id = $1::uuid
          AND pv.status = 'active'
+         AND pv.size_label IS NOT NULL
      ) sizes
      ORDER BY sort_size_label ASC, size_label ASC`,
+    [input.tenantId, input.branchId],
+  );
+  const freeSize = await client.query<{ has_free_size: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM product_variant pv
+       JOIN product p
+         ON p.tenant_id = pv.tenant_id
+        AND p.id = pv.product_id
+        AND p.status = 'active'
+       JOIN physical_asset pa
+         ON pa.tenant_id = pv.tenant_id
+        AND pa.variant_id = pv.id
+        AND pa.branch_id = $2::uuid
+        AND pa.lifecycle_status = 'active'
+      WHERE pv.tenant_id = $1::uuid
+        AND pv.status = 'active'
+        AND pv.size_label IS NULL
+     ) AS has_free_size`,
     [input.tenantId, input.branchId],
   );
   return {
     categories: categories.rows,
     size_labels: sizes.rows.map((row) => row.size_label),
+    has_free_size: freeSize.rows[0]?.has_free_size ?? false,
   };
 }
 

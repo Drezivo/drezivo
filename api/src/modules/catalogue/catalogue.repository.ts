@@ -58,6 +58,7 @@ export interface ProductImageRow {
 export interface CreatedClothingGraph {
   productId: string;
   code: string;
+  sizingMode: 'free_size' | 'sized';
   variantCount: number;
   physicalPieceCount: number;
 }
@@ -67,6 +68,7 @@ export interface EditableProductRow {
   category_id: string | null;
   name: string;
   description: string | null;
+  sizing_mode: 'free_size' | 'sized';
   status: 'draft' | 'active' | 'archived';
   updated_at: Date;
 }
@@ -74,7 +76,7 @@ export interface EditableProductRow {
 export interface EditableVariantRow {
   id: string;
   product_id: string;
-  size_label: string;
+  size_label: string | null;
   color_label: string | null;
   measurement_mode: 'default_guide' | 'custom' | 'none';
   measurement_guide_id: string | null;
@@ -369,7 +371,7 @@ export async function readProductForEdit(
   productId: string,
 ): Promise<EditableProductRow | null> {
   const result = await client.query<EditableProductRow>(
-    `SELECT id, category_id, name, description, status, updated_at
+    `SELECT id, category_id, name, description, sizing_mode, status, updated_at
        FROM product
       WHERE tenant_id = $1 AND id = $2
       LIMIT 1
@@ -395,7 +397,7 @@ export async function updateProductForEdit(
             category_id = $5,
             updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
       WHERE tenant_id = $1 AND id = $2
-      RETURNING id, category_id, name, description, status, updated_at`,
+      RETURNING id, category_id, name, description, sizing_mode, status, updated_at`,
     [
       input.tenantId,
       input.productId,
@@ -407,6 +409,58 @@ export async function updateProductForEdit(
   const row = result.rows[0];
   if (!row) throw new StateConflictError('The clothing item could not be updated. Refresh and try again.');
   return row;
+}
+
+export async function updateProductSizingMode(
+  client: PoolClient,
+  input: { tenantId: string; productId: string; sizingMode: 'free_size' | 'sized' },
+): Promise<EditableProductRow> {
+  const result = await client.query<EditableProductRow>(
+    `UPDATE product
+        SET sizing_mode = $3,
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1 AND id = $2
+      RETURNING id, category_id, name, description, sizing_mode, status, updated_at`,
+    [input.tenantId, input.productId, input.sizingMode],
+  );
+  const row = result.rows[0];
+  if (!row) throw new StateConflictError('The clothing sizing mode could not be updated. Refresh and try again.');
+  return row;
+}
+
+export async function archiveActiveVariantsForSizingMode(
+  client: PoolClient,
+  tenantId: string,
+  productId: string,
+): Promise<number> {
+  const result = await client.query(
+    `UPDATE product_variant
+        SET status = 'archived',
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1 AND product_id = $2 AND status = 'active'`,
+    [tenantId, productId],
+  );
+  return result.rowCount ?? 0;
+}
+
+export async function readPreservedFreeSizeVariant(
+  client: PoolClient,
+  tenantId: string,
+  productId: string,
+): Promise<EditableVariantRow | null> {
+  const result = await client.query<EditableVariantRow>(
+    `SELECT id, product_id, size_label, color_label, measurement_mode, measurement_guide_id,
+            measurement_unit, measurements, rental_price_minor, security_deposit_minor, currency,
+            pricing_mode, included_duration_minutes, extra_day_price_minor, prep_minutes,
+            turnaround_minutes, status, updated_at
+       FROM product_variant
+      WHERE tenant_id = $1 AND product_id = $2 AND size_label IS NULL
+      ORDER BY id ASC
+      LIMIT 1
+      FOR UPDATE`,
+    [tenantId, productId],
+  );
+  return result.rows[0] ?? null;
 }
 
 export async function readVariantForEdit(
@@ -469,7 +523,7 @@ export async function updateVariantForEdit(
     [
       input.tenantId,
       input.variantId,
-      input.request.size_label ?? input.current.size_label,
+      input.request.size_label !== undefined ? input.request.size_label : input.current.size_label,
       input.request.color_label !== undefined ? input.request.color_label : input.current.color_label,
       measurement?.measurement_mode ?? input.current.measurement_mode,
       measurement
@@ -549,7 +603,7 @@ export async function publishClothingGraph(
         SET status = 'active',
             updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
       WHERE tenant_id = $1 AND id = $2 AND status = 'draft'
-      RETURNING id, category_id, name, description, status, updated_at`,
+      RETURNING id, category_id, name, description, sizing_mode, status, updated_at`,
     [tenantId, productId],
   );
   const row = product.rows[0];
@@ -567,7 +621,7 @@ export async function restoreClothingGraph(
         SET status = 'draft',
             updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
       WHERE tenant_id = $1 AND id = $2 AND status = 'archived'
-      RETURNING id, category_id, name, description, status, updated_at`,
+      RETURNING id, category_id, name, description, sizing_mode, status, updated_at`,
     [tenantId, productId],
   );
   const row = product.rows[0];
@@ -623,6 +677,20 @@ export async function countActiveVariantsForProduct(
   const result = await client.query<{ count: number }>(
     `SELECT count(*)::int AS count FROM product_variant
       WHERE tenant_id = $1 AND product_id = $2 AND status = 'active'`,
+    [tenantId, productId],
+  );
+  return result.rows[0]?.count ?? 0;
+}
+
+export async function countArchivedVariantsForProduct(
+  client: PoolClient,
+  tenantId: string,
+  productId: string,
+): Promise<number> {
+  const result = await client.query<{ count: number }>(
+    `SELECT count(*)::int AS count
+       FROM product_variant
+      WHERE tenant_id = $1 AND product_id = $2 AND status = 'archived'`,
     [tenantId, productId],
   );
   return result.rows[0]?.count ?? 0;
@@ -856,7 +924,7 @@ export async function archiveClothingGraph(
       WHERE tenant_id = $1
         AND id = $2
         AND status <> 'archived'
-      RETURNING id, category_id, name, description, status, updated_at`,
+      RETURNING id, category_id, name, description, sizing_mode, status, updated_at`,
     [input.tenantId, input.productId],
   );
   const productRow = product.rows[0];
@@ -961,6 +1029,7 @@ export async function createClothingGraph(
     requestedCode: input.request.code,
     name: input.request.name,
     description: input.request.description,
+    sizingMode: input.request.sizing_mode ?? (input.request.sizes.every((size) => size.size_label === null) ? 'free_size' : 'sized'),
     status: input.status,
   });
 
@@ -975,7 +1044,7 @@ export async function createClothingGraph(
 
   for (const [index, size] of input.request.sizes.entries()) {
     const variantId = randomUUID();
-    const sku = generatedCode('SKU', productId, size.size_label, index);
+    const sku = generatedCode('SKU', productId, size.size_label ?? 'FREE-SIZE', index);
     const measurementGuideId =
       size.measurement_mode === 'default_guide' ? (size.measurement_guide_id ?? null) : null;
     const measurements: MeasurementMap =
@@ -983,7 +1052,7 @@ export async function createClothingGraph(
 
     await client.query(
       `INSERT INTO product_variant
-         (id, tenant_id, product_id, sku, size_label, color_label,
+        (id, tenant_id, product_id, sku, size_label, color_label,
           measurements, measurement_unit, measurement_mode, measurement_guide_id,
           rental_price_minor, security_deposit_minor, currency, pricing_mode,
           included_duration_minutes, extra_day_price_minor, prep_minutes,
@@ -993,7 +1062,7 @@ export async function createClothingGraph(
       [
         variantId,
         input.tenantId,
-        productId,
+      productId,
         sku,
         size.size_label,
         input.request.color_label,
@@ -1022,7 +1091,7 @@ export async function createClothingGraph(
         input.tenantId,
         input.branchId,
         variantId,
-        generatedCode('AST', productId, size.size_label, index),
+        generatedCode('AST', productId, size.size_label ?? 'FREE-SIZE', index),
       ],
     );
   }
@@ -1030,6 +1099,7 @@ export async function createClothingGraph(
   return {
     productId,
     code: productCode,
+    sizingMode: input.request.sizing_mode ?? (input.request.sizes.every((size) => size.size_label === null) ? 'free_size' : 'sized'),
     variantCount: input.request.sizes.length,
     physicalPieceCount: input.request.sizes.length,
   };
@@ -1073,6 +1143,7 @@ async function insertProductWithCode(
     requestedCode: string | undefined;
     name: string;
     description: string;
+    sizingMode: 'free_size' | 'sized';
     status: 'draft' | 'active';
   },
 ): Promise<string> {
@@ -1081,8 +1152,8 @@ async function insertProductWithCode(
     const code = input.requestedCode?.trim() || generatedStyleCode();
     const result = await client.query<{ code: string }>(
       `INSERT INTO product
-         (id, tenant_id, category_id, code, name, description, status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())
+         (id, tenant_id, category_id, code, name, description, sizing_mode, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())
        ON CONFLICT DO NOTHING
        RETURNING code`,
       [
@@ -1092,6 +1163,7 @@ async function insertProductWithCode(
         code,
         input.name,
         input.description,
+        input.sizingMode,
         input.status,
       ],
     );

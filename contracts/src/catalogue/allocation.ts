@@ -44,7 +44,7 @@ export const reservationCatalogueQuoteSelection = reservationCatalogueSelection
     variant: z
       .object({
         sku: z.string().trim().min(1).max(120),
-        size_label: z.string().trim().min(1).max(40),
+        size_label: z.string().trim().min(1).max(40).nullable(),
         color_label: z.string().trim().min(1).max(80).nullable(),
         measurement_mode: measurementMode,
         measurement_guide_id: measurementGuideId.nullable(),

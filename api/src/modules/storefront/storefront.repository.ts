@@ -136,7 +136,7 @@ async function fetchPublishedProducts(client: PoolClient, tenantId: string): Pro
 
     const variants = await client.query<{
       id: string;
-      size_label: string;
+      size_label: string | null;
       color_label: string | null;
       rental_price_minor: number;
       security_deposit_minor: number;
@@ -146,7 +146,7 @@ async function fetchPublishedProducts(client: PoolClient, tenantId: string): Pro
       `SELECT id, size_label, color_label, rental_price_minor, security_deposit_minor, currency, included_duration_minutes
        FROM product_variant
        WHERE tenant_id = $1 AND product_id = $2 AND status = 'active'
-       ORDER BY size_label`,
+       ORDER BY (size_label IS NULL) DESC, lower(size_label) ASC NULLS LAST, id ASC`,
       [tenantId, product.id],
     );
 

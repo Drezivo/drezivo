@@ -132,7 +132,7 @@ function toListItem(row: FittingListReadRow): FittingListItem {
   });
 }
 
-type GarmentJson = { id: string; variant_id: string; product_name: string; sku: string; size_label: string; color_label: string | null; garment_guaranteed: boolean; asset_id: string | null; asset_code: string | null };
+type GarmentJson = { id: string; variant_id: string; product_name: string; sku: string; size_label: string | null; color_label: string | null; garment_guaranteed: boolean; asset_id: string | null; asset_code: string | null };
 function mapGarments(value: unknown, includeAsset: true): FittingGarmentLineDetail[];
 function mapGarments(value: unknown, includeAsset: false): FittingGarmentLineSummary[];
 function mapGarments(

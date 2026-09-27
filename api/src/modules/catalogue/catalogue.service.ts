@@ -14,6 +14,8 @@ import {
   createClothingResponse,
   createClothingVariantRequest,
   createClothingVariantResponse,
+  changeClothingSizingModeRequest,
+  changeClothingSizingModeResponse,
   createPhysicalAssetRequest,
   createPhysicalAssetResponse,
   measurementGuide,
@@ -48,6 +50,8 @@ import {
   type CreateClothingResponse,
   type CreateClothingVariantRequest,
   type CreateClothingVariantResponse,
+  type ChangeClothingSizingModeRequest,
+  type ChangeClothingSizingModeResponse,
   type CreatePhysicalAssetRequest,
   type CreatePhysicalAssetResponse,
   type MeasurementGuide,
@@ -118,10 +122,12 @@ import {
   archiveClothingGraph,
   countActivePhysicalAssetsForVariant,
   countActiveVariantsForProduct,
+  countArchivedVariantsForProduct,
   createCategory,
   createClothingGraph,
   createPhysicalAssetForVariant,
   createVariantForProduct,
+  archiveActiveVariantsForSizingMode,
   listCategories,
   readCategoryForCreate,
   readCatalogueImageFiles,
@@ -132,6 +138,7 @@ import {
   readPhysicalAssetForStateMutation,
   readPhysicalAssetsForArchive,
   readProductForEdit,
+  readPreservedFreeSizeVariant,
   readProductForImageMutation,
   readVariantForEdit,
   replaceDefaultMeasurementGuide,
@@ -144,6 +151,7 @@ import {
   updateVariantLifecycle,
   updatePhysicalAssetState as persistPhysicalAssetState,
   updateProductForEdit,
+  updateProductSizingMode,
   publishClothingGraph,
   updateVariantForEdit,
   validateMeasurementGuideFile,
@@ -154,6 +162,7 @@ import {
 
 const SAVE_GUIDE_OPERATION = 'catalogue.measurement_guide.save';
 const CREATE_CLOTHING_OPERATION = 'catalogue.clothing.create';
+const CHANGE_CLOTHING_SIZING_MODE_OPERATION = 'catalogue.clothing.sizing_mode.change';
 const CREATE_CATEGORY_OPERATION = 'catalogue.category.create';
 const UPDATE_CATEGORY_OPERATION = 'catalogue.category.update';
 const UPDATE_CATEGORY_STATUS_OPERATION = 'catalogue.category.status.update';
@@ -190,6 +199,7 @@ interface CommandContext extends CatalogueContext {
 
 type GuideCommandBody = SuccessEnvelope<MeasurementGuide> | FailureEnvelope;
 type ClothingCommandBody = SuccessEnvelope<CreateClothingResponse> | FailureEnvelope;
+type ClothingSizingModeCommandBody = SuccessEnvelope<ChangeClothingSizingModeResponse> | FailureEnvelope;
 type CategoryCommandBody = SuccessEnvelope<CatalogueCategory> | FailureEnvelope;
 type RemoveCategoryCommandBody = SuccessEnvelope<RemoveCatalogueCategoryResponse> | FailureEnvelope;
 type ClothingImagesCommandBody = SuccessEnvelope<ReplaceClothingImagesResponse> | FailureEnvelope;
@@ -252,6 +262,8 @@ export async function getCatalogueClothingList(
               ? { id: row.category_id, name: row.category_name }
               : null,
           product_status: row.product_status,
+          sizing_mode: row.sizing_mode,
+          has_free_size: row.has_free_size,
           size_labels: row.size_labels,
           price_from_minor: row.price_from_minor.toString(),
           currency: row.currency,
@@ -349,6 +361,7 @@ export async function getCatalogueClothingDetail(
           ? { id: model.product.category_id, name: model.product.category_name }
           : null,
       status: model.product.product_status,
+      sizing_mode: model.product.sizing_mode,
       images,
       variants: model.variants.map((variant) => ({
         id: variant.id,
@@ -767,6 +780,7 @@ export async function createClothing(input: CommandContext & {
       const data = createClothingResponse.parse({
         product_id: graph.productId,
         code: graph.code,
+        sizing_mode: graph.sizingMode,
         variant_count: graph.variantCount,
         physical_piece_count: graph.physicalPieceCount,
         status: request.activate ? 'active' : 'draft',
@@ -799,6 +813,180 @@ export async function createClothing(input: CommandContext & {
       return { status: 201, body };
     } catch (error) {
       return finalizeKnownFailure(client, input, CREATE_CLOTHING_OPERATION, payloadHash, error);
+    }
+  });
+}
+
+export async function changeClothingSizingMode(input: CommandContext & {
+  productId: string;
+  request: ChangeClothingSizingModeRequest;
+}): Promise<CatalogueCommandResponse<ClothingSizingModeCommandBody>> {
+  assertCatalogueWriteContext(input);
+  const parsedRequest = changeClothingSizingModeRequest.safeParse(input.request);
+  if (!parsedRequest.success) throw new ValidationError('Clothing sizing mode request is invalid.');
+  const request = parsedRequest.data;
+  const payloadHash = canonicalRequestHash({ product_id: input.productId, ...request });
+
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    await lockTenantQuotaScope(client, input.tenantId);
+    const claim = await claimTenantIdempotency(client, {
+      tenantId: input.tenantId,
+      principalKey: input.membershipId,
+      operation: CHANGE_CLOTHING_SIZING_MODE_OPERATION,
+      intentKey: input.idempotencyKey,
+      payloadHash,
+    });
+    const replay = replayOrThrow<ClothingSizingModeCommandBody>(claim);
+    if (replay) return replay;
+
+    try {
+      const product = await readProductForEdit(client, input.tenantId, input.productId);
+      if (!product) throw new NotFoundError('The clothing item could not be found.');
+      if (product.status === 'archived') throw new StateConflictError('Restore the clothing item before changing sizing mode.');
+
+      const activeVariantCount = await countActiveVariantsForProduct(client, input.tenantId, input.productId);
+      if (product.sizing_mode === request.mode) {
+        if (activeVariantCount < 1) throw new StateConflictError('The clothing item needs an active variant before its sizing mode can be used.');
+        const archivedVariantCount = await countArchivedVariantsForProduct(client, input.tenantId, input.productId);
+        const preserved = await readPreservedFreeSizeVariant(client, input.tenantId, input.productId);
+        const data = changeClothingSizingModeResponse.parse({
+          product_id: input.productId,
+          sizing_mode: product.sizing_mode,
+          active_variant_count: activeVariantCount,
+          archived_variant_count: archivedVariantCount,
+          free_size_variant_id: preserved?.id ?? null,
+        });
+        const body = successBody(input.requestId, data);
+        await finalizeTenantIdempotency(client, {
+          tenantId: input.tenantId,
+          principalKey: input.membershipId,
+          operation: CHANGE_CLOTHING_SIZING_MODE_OPERATION,
+          intentKey: input.idempotencyKey,
+          payloadHash,
+          status: 'succeeded',
+          responseCode: 200,
+          safeResponse: body,
+        });
+        return { status: 200, body };
+      }
+
+      const preservedFreeSize = await readPreservedFreeSizeVariant(client, input.tenantId, input.productId);
+      let additionalAssets = 0;
+      if (request.mode === 'sized') {
+        const variants = request.variants ?? [];
+        const seenSizes = new Set<string>();
+        for (const variant of variants) {
+          if (variant.size_label === null) throw new ValidationError('Sized mode requires real size labels.');
+          const key = variant.size_label.toLocaleLowerCase();
+          if (seenSizes.has(key)) throw new ValidationError('Each sized variant must use a unique size label.');
+          seenSizes.add(key);
+        }
+        additionalAssets = variants.length;
+      } else if (!preservedFreeSize || (await countActivePhysicalAssetsForVariant(client, input.tenantId, preservedFreeSize.id)) < 1) {
+        additionalAssets = 1;
+      }
+      if (additionalAssets > 0) await assertPhysicalAssetCapacity(client, input.tenantId, additionalAssets);
+
+      await archiveActiveVariantsForSizingMode(client, input.tenantId, input.productId);
+      await updateProductSizingMode(client, {
+        tenantId: input.tenantId,
+        productId: input.productId,
+        sizingMode: request.mode,
+      });
+
+      let freeSizeVariantId: string | null = preservedFreeSize?.id ?? null;
+      if (request.mode === 'sized') {
+        for (const variantRequest of request.variants ?? []) {
+          if (variantRequest.measurement_mode === 'default_guide' && variantRequest.measurement_guide_id) {
+            const guides = await readMeasurementGuidesForCreate(client, input.tenantId, [variantRequest.measurement_guide_id]);
+            if (!guides[0]) throw new NotFoundError('The selected measurement guide could not be found.');
+            if (guides[0].status !== 'active') throw new InvalidMeasurementGuideError('The selected measurement guide is not active.');
+          }
+          const pricing = normalizePricingInput(variantRequest.pricing);
+          const variant = await createVariantForProduct(client, {
+            tenantId: input.tenantId,
+            productId: input.productId,
+            request: variantRequest,
+            ...pricing,
+          });
+          await createPhysicalAssetForVariant(client, {
+            tenantId: input.tenantId,
+            branchId: input.branchId,
+            variantId: variant.id,
+            request: createPhysicalAssetRequest.parse({}),
+          });
+        }
+      } else if (preservedFreeSize) {
+        if (preservedFreeSize.status !== 'active') {
+          await updateVariantLifecycle(client, {
+            tenantId: input.tenantId,
+            variantId: preservedFreeSize.id,
+            status: 'active',
+          });
+        }
+        if ((await countActivePhysicalAssetsForVariant(client, input.tenantId, preservedFreeSize.id)) < 1) {
+          await createPhysicalAssetForVariant(client, {
+            tenantId: input.tenantId,
+            branchId: input.branchId,
+            variantId: preservedFreeSize.id,
+            request: createPhysicalAssetRequest.parse({}),
+          });
+        }
+      } else {
+        if (!request.variant) throw new ValidationError('A Free size variant is required for this product.');
+        if (request.variant.measurement_mode === 'default_guide' && request.variant.measurement_guide_id) {
+          const guides = await readMeasurementGuidesForCreate(client, input.tenantId, [request.variant.measurement_guide_id]);
+          if (!guides[0]) throw new NotFoundError('The selected measurement guide could not be found.');
+          if (guides[0].status !== 'active') throw new InvalidMeasurementGuideError('The selected measurement guide is not active.');
+        }
+        const pricing = normalizePricingInput(request.variant.pricing);
+        const variant = await createVariantForProduct(client, {
+          tenantId: input.tenantId,
+          productId: input.productId,
+          request: request.variant,
+          ...pricing,
+        });
+        freeSizeVariantId = variant.id;
+        await createPhysicalAssetForVariant(client, {
+          tenantId: input.tenantId,
+          branchId: input.branchId,
+          variantId: variant.id,
+          request: createPhysicalAssetRequest.parse({}),
+        });
+      }
+
+      const finalActiveVariantCount = await countActiveVariantsForProduct(client, input.tenantId, input.productId);
+      const archivedVariantCount = await countArchivedVariantsForProduct(client, input.tenantId, input.productId);
+      const data = changeClothingSizingModeResponse.parse({
+        product_id: input.productId,
+        sizing_mode: request.mode,
+        active_variant_count: finalActiveVariantCount,
+        archived_variant_count: archivedVariantCount,
+        free_size_variant_id: freeSizeVariantId,
+      });
+      const body = successBody(input.requestId, data);
+      await appendCatalogueAuditEvent(client, {
+        tenantId: input.tenantId,
+        actorKey: input.principalId,
+        action: 'catalogue.clothing.sizing_mode_changed',
+        entityType: 'product',
+        entityId: input.productId,
+        redactedSummary: { sizing_mode: request.mode, active_variant_count: finalActiveVariantCount },
+        requestId: input.requestId,
+      });
+      await finalizeTenantIdempotency(client, {
+        tenantId: input.tenantId,
+        principalKey: input.membershipId,
+        operation: CHANGE_CLOTHING_SIZING_MODE_OPERATION,
+        intentKey: input.idempotencyKey,
+        payloadHash,
+        status: 'succeeded',
+        responseCode: 200,
+        safeResponse: body,
+      });
+      return { status: 200, body };
+    } catch (error) {
+      return finalizeKnownFailure(client, input, CHANGE_CLOTHING_SIZING_MODE_OPERATION, payloadHash, error);
     }
   });
 }
@@ -860,6 +1048,7 @@ export async function updateClothingProduct(input: CommandContext & {
         description: updated.description ?? '',
         category: category ? { id: category.id, name: category.name } : null,
         status: updated.status,
+        sizing_mode: updated.sizing_mode,
         updated_at: updated.updated_at.toISOString(),
       });
       const body = successBody(input.requestId, data);
@@ -927,6 +1116,8 @@ export async function updateClothingVariant(input: CommandContext & {
     if (replay) return replay;
 
     try {
+      const product = await readProductForEdit(client, input.tenantId, input.productId);
+      if (!product) throw new NotFoundError('The clothing item could not be found.');
       const current = await readVariantForEdit(
         client,
         input.tenantId,
@@ -934,6 +1125,13 @@ export async function updateClothingVariant(input: CommandContext & {
         input.variantId,
       );
       if (!current) throw new NotFoundError('The clothing variant could not be found.');
+      const requestedSize = request.size_label !== undefined ? request.size_label : current.size_label;
+      if (product.sizing_mode === 'free_size' && requestedSize !== null) {
+        throw new StateConflictError('Switch this clothing item to sized mode before assigning a real size.');
+      }
+      if (product.sizing_mode === 'sized' && requestedSize === null) {
+        throw new StateConflictError('Switch this clothing item to Free size mode before removing the size label.');
+      }
       assertFreshCatalogueTimestamp(
         current.updated_at,
         request.expected_updated_at,
@@ -1209,6 +1407,18 @@ export async function createClothingVariant(input: CommandContext & {
       const product = await readProductForEdit(client, input.tenantId, input.productId);
       if (!product) throw new NotFoundError('The clothing item could not be found.');
       if (product.status === 'archived') throw new StateConflictError('Restore the clothing item before adding a variant.');
+      if (product.sizing_mode === 'free_size' && request.size_label !== null) {
+        throw new StateConflictError('Switch this clothing item to sized mode before adding a real size variant.');
+      }
+      if (product.sizing_mode === 'sized' && request.size_label === null) {
+        throw new StateConflictError('Switch this clothing item to Free size mode before adding an unsized variant.');
+      }
+      if (request.size_label === null) {
+        const existingFreeSize = await readPreservedFreeSizeVariant(client, input.tenantId, input.productId);
+        if (existingFreeSize) {
+          throw new StateConflictError('This clothing item already has a Free size variant. Use the sizing-mode command to change modes.');
+        }
+      }
       if (request.measurement_mode === 'default_guide' && request.measurement_guide_id) {
         const guides = await readMeasurementGuidesForCreate(client, input.tenantId, [request.measurement_guide_id]);
         if (!guides[0]) throw new NotFoundError('The selected measurement guide could not be found.');

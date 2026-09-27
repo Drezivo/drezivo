@@ -101,6 +101,10 @@ export type SaveMeasurementGuideRequest = z.infer<typeof saveMeasurementGuideReq
 export const cataloguePricingMode = z.enum(['fixed_duration', 'daily']);
 export type CataloguePricingMode = z.infer<typeof cataloguePricingMode>;
 
+/** The only active variant configuration a product may expose. */
+export const productSizingMode = z.enum(['free_size', 'sized']);
+export type ProductSizingMode = z.infer<typeof productSizingMode>;
+
 export const clothingStyleCode = z
   .string()
   .trim()
@@ -135,7 +139,8 @@ export type ClothingPricingInput = z.infer<typeof clothingPricingInput>;
 
 export const clothingSizeInput = z
   .object({
-    size_label: z.string().trim().min(1).max(40),
+    /** Null is the canonical representation of a Free size variant. */
+    size_label: z.string().trim().min(1).max(40).nullable(),
     measurement_mode: measurementMode,
     measurement_guide_id: measurementGuideId.nullable().optional(),
     measurement_unit: measurementUnit.default('cm'),
@@ -233,6 +238,7 @@ export const createClothingRequest = z
     ),
     image_file_ids: clothingImageFileIds.default([]),
     sizes: z.array(clothingSizeInput).min(1).max(20),
+    sizing_mode: productSizingMode.optional(),
     pricing: clothingPricingInput,
     activate: z.boolean().default(false),
   })
@@ -246,8 +252,25 @@ export const createClothingRequest = z
       });
     }
 
+    const requestedMode = value.sizing_mode ?? (value.sizes.every((size) => size.size_label === null) ? 'free_size' : 'sized');
+    if (requestedMode === 'free_size' && (value.sizes.length !== 1 || value.sizes[0]?.size_label !== null)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['sizes'],
+        message: 'Free size products must contain exactly one null-size variant.',
+      });
+    }
+    if (requestedMode === 'sized' && value.sizes.some((size) => size.size_label === null)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['sizes'],
+        message: 'Sized products cannot contain a Free size variant.',
+      });
+    }
+
     const seen = new Set<string>();
     value.sizes.forEach((size, index) => {
+      if (size.size_label === null) return;
       const key = size.size_label.toLocaleLowerCase();
       if (seen.has(key)) {
         ctx.addIssue({
@@ -264,6 +287,7 @@ export type CreateClothingRequest = z.infer<typeof createClothingRequest>;
 export const createClothingResponse = z.object({
   product_id: productId,
   code: clothingStyleCode,
+  sizing_mode: productSizingMode,
   variant_count: z.number().int().positive(),
   physical_piece_count: z.number().int().positive(),
   status: z.enum(['draft', 'active']),

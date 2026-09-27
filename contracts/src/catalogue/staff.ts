@@ -22,6 +22,7 @@ import {
   measurementMap,
   measurementMode,
   measurementUnit,
+  productSizingMode,
 } from './admin';
 
 export const clothingProductLifecycle = z.enum(['draft', 'active', 'archived']);
@@ -40,6 +41,9 @@ export type PhysicalAssetReadiness = z.infer<typeof physicalAssetReadiness>;
 
 export const physicalAssetCustodyKind = z.enum(['at_branch', 'with_customer', 'in_transit']);
 export type PhysicalAssetCustodyKind = z.infer<typeof physicalAssetCustodyKind>;
+
+export const clothingSizeKind = z.enum(['free_size', 'sized']);
+export type ClothingSizeKind = z.infer<typeof clothingSizeKind>;
 
 export const clothingListSort = z.enum([
   'name_asc',
@@ -60,6 +64,7 @@ export const clothingListQuery = paginationRequest
     search: z.string().trim().min(1).max(200).optional(),
     category_id: categoryId.optional(),
     size_label: z.string().trim().min(1).max(40).optional(),
+    size_kind: clothingSizeKind.optional(),
     product_status: clothingProductLifecycle.optional(),
     asset_lifecycle: physicalAssetLifecycle.optional(),
     readiness: physicalAssetReadiness.optional(),
@@ -137,6 +142,8 @@ export const clothingListItem = z.object({
   name: z.string().trim().min(1).max(200),
   category: clothingCategorySummary.nullable(),
   product_status: clothingProductLifecycle,
+  sizing_mode: productSizingMode,
+  has_free_size: z.boolean(),
   size_labels: z.array(z.string().trim().min(1).max(40)),
   price_from_minor: nonNegativeMoneyString,
   currency: currencyCode,
@@ -211,7 +218,7 @@ export type UpdatePhysicalAssetStateResponse = z.infer<typeof updatePhysicalAsse
 export const clothingVariantDetail = z.object({
   id: productVariantId,
   sku: z.string().trim().min(1).max(120),
-  size_label: z.string().trim().min(1).max(40),
+  size_label: z.string().trim().min(1).max(40).nullable(),
   color_label: z.string().trim().min(1).max(80).nullable(),
   measurement_mode: measurementMode,
   measurement_guide_id: measurementGuideId.nullable(),
@@ -283,6 +290,7 @@ export const clothingDetail = z.object({
   description: z.string().max(2_000),
   category: clothingCategorySummary.nullable(),
   status: clothingProductLifecycle,
+  sizing_mode: productSizingMode,
   images: z.array(clothingImageSummary).max(MAX_CLOTHING_PHOTOS),
   variants: z.array(clothingVariantDetail),
   upcoming_allocations: z.array(clothingUpcomingAllocationSummary).max(10),
@@ -312,6 +320,7 @@ export const updateClothingProductResponse = z.object({
   description: z.string().max(2_000),
   category: clothingCategorySummary.nullable(),
   status: clothingProductLifecycle,
+  sizing_mode: productSizingMode,
   updated_at: isoInstant,
 });
 export type UpdateClothingProductResponse = z.infer<typeof updateClothingProductResponse>;
@@ -374,7 +383,7 @@ const variantMeasurementPatch = z
 export const updateClothingVariantRequest = z
   .object({
     expected_updated_at: isoInstant,
-    size_label: z.string().trim().min(1).max(40).optional(),
+    size_label: z.string().trim().min(1).max(40).nullable().optional(),
     color_label: z.string().trim().min(1).max(80).nullable().optional(),
     measurement: variantMeasurementPatch.optional(),
     pricing: clothingPricingInput.optional(),
@@ -393,7 +402,7 @@ export type UpdateClothingVariantRequest = z.infer<typeof updateClothingVariantR
 export const updateClothingVariantResponse = z.object({
   variant_id: productVariantId,
   product_id: productId,
-  size_label: z.string().trim().min(1).max(40),
+  size_label: z.string().trim().min(1).max(40).nullable(),
   color_label: z.string().trim().min(1).max(80).nullable(),
   measurement_mode: measurementMode,
   measurement_guide_id: measurementGuideId.nullable(),
@@ -469,7 +478,7 @@ export type RemoveClothingVariantRequest = z.infer<typeof removeClothingVariantR
 export const createClothingVariantRequest = z
   .object({
     sku: z.string().trim().min(1).max(120).optional(),
-    size_label: z.string().trim().min(1).max(40),
+    size_label: z.string().trim().min(1).max(40).nullable(),
     color_label: z.string().trim().min(1).max(80).nullable().default(null),
     measurement_mode: measurementMode,
     measurement_guide_id: measurementGuideId.nullable().optional(),
@@ -495,6 +504,58 @@ export const createClothingVariantRequest = z
     }
   });
 export type CreateClothingVariantRequest = z.infer<typeof createClothingVariantRequest>;
+
+export const changeClothingSizingModeRequest = z
+  .object({
+    mode: productSizingMode,
+    variants: z.array(createClothingVariantRequest).min(1).max(20).optional(),
+    variant: createClothingVariantRequest.optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.mode === 'sized') {
+      if (!value.variants || value.variants.some((variant) => variant.size_label === null)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['variants'],
+          message: 'Sized mode requires at least one variant with a real size label.',
+        });
+      }
+      if (value.variant !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['variant'],
+          message: 'Sized mode does not accept a Free size variant payload.',
+        });
+      }
+      return;
+    }
+
+    if (value.variants !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['variants'],
+        message: 'Free size mode uses one Free size variant, not a variants array.',
+      });
+    }
+    if (value.variant && value.variant.size_label !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['variant', 'size_label'],
+        message: 'Free size mode requires a null size label.',
+      });
+    }
+  });
+export type ChangeClothingSizingModeRequest = z.infer<typeof changeClothingSizingModeRequest>;
+
+export const changeClothingSizingModeResponse = z.object({
+  product_id: productId,
+  sizing_mode: productSizingMode,
+  active_variant_count: z.number().int().positive(),
+  archived_variant_count: z.number().int().nonnegative(),
+  free_size_variant_id: productVariantId.nullable(),
+});
+export type ChangeClothingSizingModeResponse = z.infer<typeof changeClothingSizingModeResponse>;
 
 export const createClothingVariantResponse = z.object({
   variant: clothingVariantDetail.omit({ assets: true }).extend({ assets: z.array(physicalAssetSummary).length(1) }),

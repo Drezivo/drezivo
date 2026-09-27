@@ -232,6 +232,7 @@ Table product {
   code varchar(80) [not null]
   name varchar(200) [not null]
   description text [not null]
+  sizing_mode varchar(20) [not null, default: 'sized']
   status varchar(20) [not null]
   created_at timestamptz [not null]
   indexes {
@@ -239,7 +240,7 @@ Table product {
     (tenant_id, category_id, status)
     (tenant_id, code) [unique]
   }
-  Note: 'V1. Style-level marketing entry, not stock quantity. Code is owner-supplied or API-generated; SQL enforces tenant-local case-insensitive uniqueness.'
+  Note: 'V1. Style-level marketing entry, not stock quantity. sizing_mode is sized or free_size; active variants may use only the current mode. Mode changes archive old variants so historical references remain valid.'
 }
 
 Table measurement_guide {
@@ -263,7 +264,7 @@ Table product_variant {
   id uuid [not null]
   product_id uuid [not null]
   sku varchar(80) [not null]
-  size_label varchar(40) [not null]
+  size_label varchar(40)
   color_label varchar(80) [not null]
   measurements jsonb [not null]
   measurement_unit varchar(8) [not null]

@@ -117,6 +117,7 @@ describe('BE-8 operational integration contracts', () => {
       facets: {
         categories: [{ id: '00000000-0000-4000-8000-000000000205', name: 'Gowns' }],
         size_labels: ['M'],
+        has_free_size: false,
       },
       rows: [
         {

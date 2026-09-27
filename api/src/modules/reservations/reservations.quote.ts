@@ -44,7 +44,7 @@ export interface ReservationQuote {
   line_snapshot: {
     name: string;
     sku: string;
-    size_label: string;
+    size_label: string | null;
     color_label: string | null;
     measurement_mode: 'default_guide' | 'custom' | 'none';
     measurement_guide_id: string | null;

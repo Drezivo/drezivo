@@ -234,11 +234,13 @@ end-to-end: catalogue → booking → payment verification → pickup → return
 ### H06 — Catalogue and physical asset management
 
 - **Depends on:** H02, H03, H04, H05 (images), TBF-032 (entitlement service).
-- **Basis:** PRD §3 (three identities), §4 (FR8 inventory model, FR9 categories), §6 (asset quotas); Data-Model §5; TRD §2 (Catalogue/assets row); ERD `category/product/product_variant/physical_asset/product_image`; migrations 0002 and 0054; contracts `storefront/catalogue.ts` (public projection already defined).
+- **Basis:** PRD §3 (three identities), §4 (FR8 inventory model, FR9 categories), §6 (asset quotas); Data-Model §5; TRD §2 (Catalogue/assets row); ERD `category/product/product_variant/physical_asset/product_image`; migrations 0002, 0054, and 0055; contracts `storefront/catalogue.ts` (public projection already defined).
 - **Outcome:** owners and front desk manage styles, variants, individually tracked garments, and imagery; the public projection stays separate from staff DTOs.
 - **Acceptance criteria:**
   - [ ] Category, style, variant, and asset CRUD with archive-not-delete; records referenced by transactions cannot be hard-deleted.
   - [ ] Variants carry validated numeric measurements with unit, `fixed_duration`/`daily` pricing, extra-day price, prep and turnaround minutes — all bounded and nonnegative.
+  - [ ] Every product has one current sizing mode: `sized` (one or more non-null labels) or `free_size` (exactly one active variant with a `NULL` size label). Mixed active modes are rejected by contracts, service checks, and the deferred database invariant.
+  - [ ] Owner/staff mode changes archive prior active variants and preserve their UUIDs for existing reservations, fittings, allocations, and assets; switching back can restore the preserved Free size variant without deleting history.
   - [ ] Physical assets carry unique codes, lifecycle, readiness, custody kind, condition and alteration notes, and a version column for conditional updates.
   - [ ] Plan entitlements are seeded with the authoritative prices (Starter 30000 / Professional 49900 / Business 129900 PHP minor units per month) and the active-asset quota is checked under a tenant lock at creation and activation, with a clear upgrade/archive path that never deletes records.
   - [ ] Product images attach through finalized same-tenant file objects, preserve array order with display order `0` as the cover, and enforce a maximum of five catalogue photos per product. Existing oversized sets remain intact but cannot grow until replaced with five or fewer.

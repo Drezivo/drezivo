@@ -297,6 +297,7 @@ describe('catalogue staff contract', () => {
         description: 'Updated description',
         category: { id: ids.category, name: 'Gowns' },
         status: 'active',
+        sizing_mode: 'sized',
         updated_at: instant,
       }).success,
     ).toBe(true);
@@ -350,6 +351,7 @@ describe('catalogue staff contract', () => {
       description: 'Floor-length formal gown',
       category: { id: ids.category, name: 'Gowns' },
       status: 'active',
+      sizing_mode: 'sized',
       images: [],
       variants: [
         {
