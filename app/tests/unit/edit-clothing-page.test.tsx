@@ -24,6 +24,7 @@ const api = vi.hoisted(() => ({
   replaceClothingImages: vi.fn(),
   updateClothingProduct: vi.fn(),
   updateClothingVariant: vi.fn(),
+  changeClothingSizingMode: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({
@@ -68,6 +69,7 @@ const detail = {
   description: "Floor-length formal gown with fitted bodice.",
   category: { id: categoryId, name: "Gowns" },
   status: "active" as const,
+  sizing_mode: "sized" as const,
   images: [
     {
       file_id: fileId,
@@ -232,6 +234,16 @@ describe("EditClothingPage", () => {
       },
       requestId: "req-images",
     });
+    api.changeClothingSizingMode.mockResolvedValue({
+      data: {
+        product_id: productId,
+        sizing_mode: "free_size",
+        active_variant_count: 1,
+        archived_variant_count: 1,
+        free_size_variant_id: "00000000-0000-4000-8000-000000000099",
+      },
+      requestId: "req-sizing-mode",
+    });
   });
 
   it("prefills the edit form from the authoritative clothing detail response", async () => {
@@ -253,6 +265,82 @@ describe("EditClothingPage", () => {
     const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
     expect(within(breadcrumb).getByRole("link", { name: "Clothing" })).toHaveAttribute("href", "/inventory");
     expect(within(breadcrumb).getByText("Edit Emerald Evening Gown")).toHaveAttribute("aria-current", "page");
+  });
+
+  it("migrates a sized clothing item to Free size through the dedicated command", async () => {
+    render(<EditClothingPage productId={productId} />);
+    await screen.findByRole("heading", { name: "Edit Clothing" });
+
+    expect(screen.getByText("Sized", { selector: "span" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Change sizing mode" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/exactly one null-size variant/i)).toBeVisible();
+    expect(within(dialog).getByText(/Size label:/)).toBeVisible();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Change sizing mode" }));
+
+    await waitFor(() => expect(api.changeClothingSizingMode).toHaveBeenCalledTimes(1));
+    expect(api.changeClothingSizingMode).toHaveBeenCalledWith(
+      productId,
+      expect.objectContaining({
+        mode: "free_size",
+        variant: expect.objectContaining({
+          size_label: null,
+          color_label: "Emerald Green",
+          measurement_mode: "custom",
+          measurements: { bust: 90, waist: 72, hips: 96 },
+        }),
+      }),
+      expect.any(String)
+    );
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Sizing mode changed to Free size (1 active variant; 1 archived)."));
+  });
+
+  it("can migrate a Free size clothing item back to a labelled size", async () => {
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: {
+        ...detail,
+        sizing_mode: "free_size",
+        variants: [{ ...detail.variants[0]!, sku: "GWN-023-FS", size_label: null }],
+      },
+      requestId: "req-free-size-detail",
+    });
+
+    render(<EditClothingPage productId={productId} />);
+    await screen.findByRole("heading", { name: "Edit Clothing" });
+    fireEvent.click(screen.getByRole("button", { name: "Change sizing mode" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText("Sizing transition size 1")).toHaveValue("S");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Change sizing mode" }));
+
+    await waitFor(() => expect(api.changeClothingSizingMode).toHaveBeenCalledTimes(1));
+    expect(api.changeClothingSizingMode).toHaveBeenCalledWith(
+      productId,
+      expect.objectContaining({
+        mode: "sized",
+        variants: [expect.objectContaining({ size_label: "S" })],
+      }),
+      expect.any(String)
+    );
+  });
+
+  it("requires saved edits before changing sizing mode and blocks adding variants in Free size mode", async () => {
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: {
+        ...detail,
+        sizing_mode: "free_size",
+        variants: [{ ...detail.variants[0]!, sku: "GWN-023-FS", size_label: null }],
+      },
+      requestId: "req-free-size-detail",
+    });
+
+    render(<EditClothingPage productId={productId} />);
+    await screen.findByRole("heading", { name: "Edit Clothing" });
+    expect(screen.getByRole("button", { name: "Add Variant" })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Clothing Name"), { target: { value: "Unsaved Cape" } });
+    expect(screen.getByRole("button", { name: "Change sizing mode" })).toBeDisabled();
   });
 
   it("adds a new active variant without draft/publish controls and stays on the edit page", async () => {

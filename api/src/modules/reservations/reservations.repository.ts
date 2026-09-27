@@ -113,7 +113,7 @@ export interface ReservationDetailLineRow {
   id: string;
   variant_id: string;
   variant_sku: string;
-  variant_size_label: string;
+  variant_size_label: string | null;
   variant_color_label: string | null;
   current_asset_readiness: 'ready' | 'needs_cleaning' | 'needs_repair' | 'unready' | null;
   line_number: number;

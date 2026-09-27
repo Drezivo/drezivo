@@ -6,6 +6,7 @@ import type {
   CreateCatalogueCategoryRequest,
   CreateClothingRequest,
   CreateClothingVariantRequest,
+  ChangeClothingSizingModeRequest,
   CreatePhysicalAssetRequest,
   PermissionCode,
   ReplaceClothingImagesRequest,
@@ -30,6 +31,7 @@ import {
   createCatalogueCategory,
   createClothing,
   createClothingVariant,
+  changeClothingSizingMode,
   createPhysicalAsset,
   getCatalogueCategories,
   getCatalogueClothingDetail,
@@ -94,6 +96,19 @@ export async function createClothingVariantController(req: Request, res: Respons
   const result = await createClothingVariant({
     ...requireContext(req), requestId: req.requestId, idempotencyKey: requireIdempotencyKey(req),
     productId, request: req.body as CreateClothingVariantRequest,
+  });
+  res.status(result.status).json(result.body);
+}
+
+export async function changeClothingSizingModeController(req: Request, res: Response): Promise<void> {
+  const productId = req.catalogueProductId;
+  if (!productId) throw new ValidationError('A valid clothing product id is required.');
+  const result = await changeClothingSizingMode({
+    ...requireContext(req),
+    requestId: req.requestId,
+    idempotencyKey: requireIdempotencyKey(req),
+    productId,
+    request: req.body as ChangeClothingSizingModeRequest,
   });
   res.status(result.status).json(result.body);
 }

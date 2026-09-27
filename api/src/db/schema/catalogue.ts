@@ -37,6 +37,8 @@ export const assetLifecycleEnum = pgEnum('asset_lifecycle_status', ['active', 'r
 export const assetReadinessEnum = pgEnum('asset_readiness', ['ready', 'needs_cleaning', 'needs_repair', 'unready']);
 export const assetCustodyKindEnum = pgEnum('asset_custody_kind', ['at_branch', 'with_customer', 'in_transit']);
 
+export type ProductSizingMode = 'free_size' | 'sized';
+
 export type CategoryStatus = 'active' | 'inactive';
 
 export const category = pgTable(
@@ -73,6 +75,7 @@ export const product = pgTable(
     code: text('code').notNull(),
     name: text('name').notNull(),
     description: text('description'),
+    sizingMode: text('sizing_mode').$type<ProductSizingMode>().notNull().default('sized'),
     status: productStatusEnum('status').notNull().default('draft'),
     ...updatableTimestamps,
   },
@@ -96,6 +99,7 @@ export const product = pgTable(
       name: 'product_category_same_tenant_fk',
     }).onDelete('restrict'),
     check('product_name_not_blank', sql`length(btrim(${table.name})) BETWEEN 1 AND 200`),
+    check('product_sizing_mode_check', sql`${table.sizingMode} IN ('free_size', 'sized')`),
   ],
 );
 
@@ -136,7 +140,7 @@ export const productVariant = pgTable(
       .notNull()
       .references(() => product.id),
     sku: text('sku').notNull(),
-    sizeLabel: text('size_label').notNull(),
+    sizeLabel: text('size_label'),
     colorLabel: text('color_label'),
     measurements: jsonb('measurements').$type<Record<string, number>>().notNull().default({}),
     measurementUnit: text('measurement_unit').notNull().default('cm'),
@@ -157,6 +161,9 @@ export const productVariant = pgTable(
     unique('product_variant_tenant_id_id_key').on(table.tenantId, table.id),
     uniqueIndex('product_variant_tenant_sku_key').on(table.tenantId, table.sku),
     uniqueIndex('product_variant_tenant_sku_ci_key').on(table.tenantId, sql`lower(btrim(${table.sku}))`),
+    uniqueIndex('product_variant_one_free_size_key')
+      .on(table.tenantId, table.productId)
+      .where(sql`${table.sizeLabel} IS NULL`),
     index('product_variant_tenant_product_size_idx').on(
       table.tenantId,
       table.productId,

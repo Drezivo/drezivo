@@ -3,7 +3,7 @@
 **Status:** approved tenancy/onboarding foundation with additive owner identity and tenant bootstrap migrations applied in code
 **Owner:** API and database maintainers  
 **Source:** `Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation` in the Second Brain, 16 September 2026  
-**Updated:** 18 September 2026
+**Updated:** 27 September 2026
 **Related:** [TRD](Drezivo-TRD.md), [Data Model](Drezivo-Data-Model.md), [ERD](Drezivo-ERD.dbml), [migration runbook](../runbooks/migrations.md)
 
 This document defines the forward-only database work for tenancy onboarding. Reviewed SQL
@@ -164,6 +164,14 @@ provider membership visibility is delayed; membership webhook events alone never
 Invalid, foreign, expired, revoked, consumed, or Owner-role cases remain generic safe failures.
 PostgreSQL concurrency, RLS, provider-ordering, and rollback evidence is required before this
 task is marked complete.
+
+The catalogue sizing-mode boundary is recorded in forward-only migration `0055_product_sizing_modes.sql`.
+It adds `product.sizing_mode` and makes `product_variant.size_label` nullable so a product can use
+one canonical `NULL`-label Free size variant or one-or-more real sized variants, never both among
+active rows. A deferred database trigger enforces the active-mode invariant, while the catalogue
+command archives old variants and preserves their UUIDs for existing reservations, fittings,
+allocations, and physical-asset history. This migration is destructive only in behavior (it does
+not delete historical rows) and is independent of tenancy bootstrap or billing migrations.
 
 TBF-031 adds `GET /api/v1/workspaces` and `GET /api/v1/actor-context`. Workspace discovery is
 account-scoped and returns only provisioned tenants with an active local membership. Actor context

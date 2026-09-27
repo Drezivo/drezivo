@@ -10,6 +10,8 @@ import {
   createCatalogueCategoryRequest,
   createClothingVariantRequest,
   createClothingVariantResponse,
+  changeClothingSizingModeRequest,
+  changeClothingSizingModeResponse,
   clothingDetail,
   clothingListQuery,
   clothingListResponse,
@@ -118,6 +120,8 @@ import {
   type CreateCatalogueCategoryRequest,
   type CreateClothingVariantRequest,
   type CreateClothingVariantResponse,
+  type ChangeClothingSizingModeRequest,
+  type ChangeClothingSizingModeResponse,
   type ClothingDetail,
   type ClothingListQuery,
   type ClothingListResponse,
@@ -910,6 +914,19 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "POST",
         path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/variants`,
         responseSchema: apiEnvelope(createClothingVariantResponse),
+      }),
+    changeClothingSizingMode: (
+      productId: string,
+      input: ChangeClothingSizingModeRequest,
+      idempotencyKey: string
+    ) =>
+      request<ChangeClothingSizingModeResponse>({
+        getToken,
+        body: changeClothingSizingModeRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/catalogue/clothing/${encodeURIComponent(productId)}/sizing-mode`,
+        responseSchema: apiEnvelope(changeClothingSizingModeResponse),
       }),
     removeClothingVariant: (
       productId: string,

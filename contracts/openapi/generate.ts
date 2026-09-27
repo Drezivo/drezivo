@@ -32,6 +32,8 @@ import {
   contractVersion,
   createMembershipInvitationRequest,
   createClothingRequest,
+  changeClothingSizingModeRequest,
+  changeClothingSizingModeResponse,
   createOwnerOnboardingRequest,
   membershipInvitation,
   membershipInvitationList,
@@ -188,6 +190,8 @@ registry.register('CloseTenantRequest', closeTenantRequest);
 registry.register('TransferOwnershipRequest', transferOwnershipRequest);
 registry.register('ClothingImageFileIds', clothingImageFileIds);
 registry.register('CreateClothingRequest', createClothingRequest);
+registry.register('ChangeClothingSizingModeRequest', changeClothingSizingModeRequest);
+registry.register('ChangeClothingSizingModeResponse', changeClothingSizingModeResponse);
 registry.register('ReplaceClothingImagesRequest', replaceClothingImagesRequest);
 registry.register('ReplaceClothingImagesResponse', replaceClothingImagesResponse);
 registry.register('ClothingDetail', clothingDetail);
@@ -728,6 +732,27 @@ registry.registerPath({
       content: { 'application/json': { schema: successEnvelope(reservationCancelResponse) } },
     },
     409: jsonError('STATE_CONFLICT — already picked up, cannot cancel into available.'),
+  },
+});
+
+// ---- catalogue sizing -------------------------------------------------
+registry.registerPath({
+  method: 'post',
+  path: '/catalogue/clothing/{productId}/sizing-mode',
+  tags: ['catalogue'],
+  summary: 'Switch one clothing product between Free size and sized variants.',
+  request: {
+    params: z.object({ productId: z.string().uuid() }),
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: changeClothingSizingModeRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Sizing mode changed while preserving archived variant history.',
+      content: { 'application/json': { schema: successEnvelope(changeClothingSizingModeResponse) } },
+    },
+    409: jsonError('A sizing mode transition conflicts with the current product state.'),
+    422: jsonError('The sizing mode request is invalid.'),
   },
 });
 

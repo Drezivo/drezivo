@@ -108,7 +108,8 @@ export const fittingVariantSummary = z
     variant_id: productVariantId,
     product_name: z.string().trim().min(1).max(300),
     sku: z.string().trim().min(1).max(120),
-    size_label: z.string().trim().min(1).max(40),
+    // Null is the canonical wire representation for a product's single Free size variant.
+    size_label: z.string().trim().min(1).max(40).nullable(),
     color_label: z.string().trim().min(1).max(80).nullable(),
   })
   .strict();

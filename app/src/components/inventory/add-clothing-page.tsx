@@ -53,6 +53,8 @@ import { cn } from "@/lib/utils";
 
 const SIZE_OPTIONS = ["XS", "S", "M", "L", "XL", "XXL"] as const;
 type ClothingSize = (typeof SIZE_OPTIONS)[number];
+type SizingMode = "sized" | "free_size";
+type MeasurementTarget = ClothingSize | "FREE_SIZE";
 type PricingMode = "fixed_duration" | "daily";
 type MeasurementUnit = "in" | "cm";
 type MeasurementMode = "default_guide" | "custom" | "none";
@@ -84,6 +86,7 @@ type Measurements = {
 };
 
 const EMPTY_MEASUREMENTS: Measurements = { bust: "", waist: "", hips: "" };
+const MEASUREMENT_TARGETS = [...SIZE_OPTIONS, "FREE_SIZE"] as const;
 
 export function AddClothingPage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
@@ -108,17 +111,18 @@ export function AddClothingPage() {
   const [description, setDescription] = useState("");
   const [color, setColor] = useState("");
   const [photos, setPhotos] = useState<PendingPhoto[]>([]);
+  const [sizingMode, setSizingMode] = useState<SizingMode>("free_size");
   const [selectedSizes, setSelectedSizes] = useState<ClothingSize[]>(["S", "M", "L", "XL"]);
   const [measurementUnit, setMeasurementUnit] = useState<MeasurementUnit>("in");
-  const [measurementModes, setMeasurementModes] = useState<Record<ClothingSize, MeasurementMode>>(() =>
-    Object.fromEntries(SIZE_OPTIONS.map((size) => [size, "default_guide"])) as Record<
-      ClothingSize,
+  const [measurementModes, setMeasurementModes] = useState<Record<MeasurementTarget, MeasurementMode>>(() =>
+    Object.fromEntries(MEASUREMENT_TARGETS.map((target) => [target, "default_guide"])) as Record<
+      MeasurementTarget,
       MeasurementMode
     >
   );
-  const [measurements, setMeasurements] = useState<Record<ClothingSize, Measurements>>(() =>
-    Object.fromEntries(SIZE_OPTIONS.map((size) => [size, { ...EMPTY_MEASUREMENTS }])) as Record<
-      ClothingSize,
+  const [measurements, setMeasurements] = useState<Record<MeasurementTarget, Measurements>>(() =>
+    Object.fromEntries(MEASUREMENT_TARGETS.map((target) => [target, { ...EMPTY_MEASUREMENTS }])) as Record<
+      MeasurementTarget,
       Measurements
     >
   );
@@ -319,7 +323,11 @@ export function AddClothingPage() {
     [guidePreviewUrl]
   );
 
-  const totalPieces = selectedSizes.length;
+  const measurementTargets: Array<{ key: MeasurementTarget; label: string }> =
+    sizingMode === "free_size"
+      ? [{ key: "FREE_SIZE", label: "Free size" }]
+      : selectedSizes.map((size) => ({ key: size, label: size }));
+  const totalPieces = sizingMode === "free_size" ? 1 : selectedSizes.length;
   const pricingSummary = useMemo(() => {
     const formattedPrice = price.trim() ? `₱${Number(price || 0).toLocaleString()}` : "Set price";
     if (pricingMode === "daily") return `${formattedPrice} / day`;
@@ -337,50 +345,50 @@ export function AddClothingPage() {
     );
   };
 
-  const setMeasurementMode = (size: ClothingSize, mode: MeasurementMode) => {
+  const setMeasurementMode = (target: MeasurementTarget, mode: MeasurementMode) => {
     const clearsMeasurements =
-      mode !== "custom" && Object.values(measurements[size]).some((value) => value.trim().length > 0);
-    if (measurementModes[size] === mode && !clearsMeasurements) return;
+      mode !== "custom" && Object.values(measurements[target]).some((value) => value.trim().length > 0);
+    if (measurementModes[target] === mode && !clearsMeasurements) return;
     markDirty();
-    setMeasurementModes((current) => ({ ...current, [size]: mode }));
+    setMeasurementModes((current) => ({ ...current, [target]: mode }));
     if (mode !== "custom") {
-      setMeasurements((current) => ({ ...current, [size]: { ...EMPTY_MEASUREMENTS } }));
+      setMeasurements((current) => ({ ...current, [target]: { ...EMPTY_MEASUREMENTS } }));
     }
   };
 
   const useDefaultGuideForAll = () => {
-    const changesForm = selectedSizes.some(
-      (size) =>
-        measurementModes[size] !== "default_guide" ||
-        Object.values(measurements[size]).some((value) => value.trim().length > 0)
+    const changesForm = measurementTargets.some(
+      ({ key }) =>
+        measurementModes[key] !== "default_guide" ||
+        Object.values(measurements[key]).some((value) => value.trim().length > 0)
     );
     if (!changesForm) return;
     markDirty();
     setMeasurementModes((current) => {
       const next = { ...current };
-      selectedSizes.forEach((size) => {
-        next[size] = "default_guide";
+      measurementTargets.forEach(({ key }) => {
+        next[key] = "default_guide";
       });
       return next;
     });
     setMeasurements((current) => {
       const next = { ...current };
-      selectedSizes.forEach((size) => {
-        next[size] = { ...EMPTY_MEASUREMENTS };
+      measurementTargets.forEach(({ key }) => {
+        next[key] = { ...EMPTY_MEASUREMENTS };
       });
       return next;
     });
   };
 
   const updateMeasurement = (
-    size: ClothingSize,
+    target: MeasurementTarget,
     field: keyof Measurements,
     value: string
   ) => {
     markDirty();
     setMeasurements((current) => ({
       ...current,
-      [size]: { ...current[size], [field]: value },
+      [target]: { ...current[target], [field]: value },
     }));
   };
 
@@ -497,8 +505,8 @@ export function AddClothingPage() {
     }
   };
 
-  const needsDefaultGuide = selectedSizes.some(
-    (size) => measurementModes[size] === "default_guide"
+  const needsDefaultGuide = measurementTargets.some(
+    ({ key }) => measurementModes[key] === "default_guide"
   );
 
   const selectPhotos = (files: FileList | null) => {
@@ -593,16 +601,20 @@ export function AddClothingPage() {
   const buildCreateRequest = (activate: boolean, imageFileIds: string[]): CreateClothingRequest => {
     if (!categoryId) throw new Error("Choose an active category.");
     if (!name.trim()) throw new Error("Enter a clothing name.");
-    if (selectedSizes.length === 0) throw new Error("Select at least one size.");
+    if (sizingMode === "sized" && selectedSizes.length === 0) throw new Error("Select at least one size.");
     if (needsDefaultGuide && !defaultGuide) {
-      throw new Error("Set a default measurement guide, or use custom/no measurements for every selected size.");
+      throw new Error("Set a default measurement guide, or use custom/no measurements for every variant.");
     }
 
-    const sizes = selectedSizes.map((size) => {
-      const mode = measurementModes[size];
+    const sizeTargets: Array<{ target: MeasurementTarget; sizeLabel: ClothingSize | null }> =
+      sizingMode === "free_size"
+        ? [{ target: "FREE_SIZE", sizeLabel: null }]
+        : selectedSizes.map((size) => ({ target: size, sizeLabel: size }));
+    const sizes = sizeTargets.map(({ target, sizeLabel }) => {
+      const mode = measurementModes[target];
       if (mode === "default_guide") {
         return {
-          size_label: size,
+          size_label: sizeLabel,
           measurement_mode: mode,
           measurement_guide_id: defaultGuide!.id,
           measurement_unit: measurementUnit,
@@ -611,22 +623,22 @@ export function AddClothingPage() {
       }
       if (mode === "custom") {
         const values = Object.fromEntries(
-          Object.entries(measurements[size])
+          Object.entries(measurements[target])
             .filter(([, value]) => value.trim() !== "")
-            .map(([field, value]) => [field, parseMeasurement(value, `${size} ${field}`)])
+            .map(([field, value]) => [field, parseMeasurement(value, `${sizeLabel ?? "Free size"} ${field}`)])
         );
         if (Object.keys(values).length === 0) {
-          throw new Error(`Enter at least one custom measurement for size ${size}.`);
+          throw new Error(`Enter at least one custom measurement for ${sizeLabel ?? "Free size"}.`);
         }
         return {
-          size_label: size,
+          size_label: sizeLabel,
           measurement_mode: mode,
           measurement_unit: measurementUnit,
           measurements: values,
         };
       }
       return {
-        size_label: size,
+        size_label: sizeLabel,
         measurement_mode: mode,
         measurement_unit: measurementUnit,
         measurements: {},
@@ -651,6 +663,7 @@ export function AddClothingPage() {
       category_id: categoryId,
       color_label: color.trim() || null,
       image_file_ids: imageFileIds,
+      sizing_mode: sizingMode,
       sizes,
       pricing:
         pricingMode === "fixed_duration"
@@ -751,7 +764,7 @@ export function AddClothingPage() {
             Add Clothing
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-dashboard-muted">
-            Add one clothing style, choose the sizes you own, and Drezivo will create one rentable piece for each selected size.
+            Add one clothing style, then choose a single free-size piece or one rentable piece for each selected size.
           </p>
         </div>
 
@@ -928,7 +941,7 @@ export function AddClothingPage() {
             <SectionCard
               icon={Ruler}
               title="Color, Sizes & Measurements"
-              description="Choose the sizes you actually own. Each selected size creates one rentable piece in V1."
+              description="Choose whether this clothing is one free-size piece or has separate rentable pieces by size."
             >
               <Field label="Color (optional)">
                 <Input
@@ -943,40 +956,75 @@ export function AddClothingPage() {
               </Field>
 
               <div>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-sm font-medium text-dashboard-navy">Sizing mode</label>
+                  <div className="flex overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-surface" role="group" aria-label="Sizing mode">
+                    {([
+                      ["sized", "Sized"],
+                      ["free_size", "Free size"],
+                    ] as const).map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        aria-pressed={sizingMode === mode}
+                        onClick={() => {
+                          if (sizingMode !== mode) {
+                            setSizingMode(mode);
+                            markDirty();
+                          }
+                        }}
+                        className={cn(
+                          "min-h-9 px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30",
+                          sizingMode === mode
+                            ? "bg-dashboard-active text-dashboard-accent"
+                            : "text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy"
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <label className="text-sm font-medium text-dashboard-navy">
-                    Available Sizes <span className="text-dashboard-danger">*</span>
+                    {sizingMode === "free_size" ? "Variant" : "Available Sizes"} <span className="text-dashboard-danger">*</span>
                   </label>
                   <span className="text-xs text-dashboard-muted">
                     {totalPieces} selected · {totalPieces} Total {totalPieces === 1 ? "Piece" : "Pieces"}
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {SIZE_OPTIONS.map((size) => {
-                    const selected = selectedSizes.includes(size);
-                    return (
-                      <button
-                        key={size}
-                        type="button"
-                        aria-pressed={selected}
-                        onClick={() => toggleSize(size)}
-                        className={cn(
-                          "min-h-10 min-w-12 rounded-lg border px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30",
-                          selected
-                            ? "border-dashboard-accent bg-dashboard-active text-dashboard-accent"
-                            : "border-dashboard-border bg-dashboard-surface text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy"
-                        )}
-                      >
-                        {selected ? <Check className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" /> : null}
-                        {size}
-                      </button>
-                    );
-                  })}
-                </div>
+                {sizingMode === "sized" ? (
+                  <div className="flex flex-wrap gap-2">
+                    {SIZE_OPTIONS.map((size) => {
+                      const selected = selectedSizes.includes(size);
+                      return (
+                        <button
+                          key={size}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => toggleSize(size)}
+                          className={cn(
+                            "min-h-10 min-w-12 rounded-lg border px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30",
+                            selected
+                              ? "border-dashboard-accent bg-dashboard-active text-dashboard-accent"
+                              : "border-dashboard-border bg-dashboard-surface text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy"
+                          )}
+                        >
+                          {selected ? <Check className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" /> : null}
+                          {size}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="rounded-lg border border-dashboard-border bg-dashboard-surface px-3 py-2 text-sm text-dashboard-muted">
+                    Free size creates one rentable piece without a size label.
+                  </p>
+                )}
 
               </div>
 
-              {selectedSizes.length > 0 ? (
+              {measurementTargets.length > 0 ? (
                 <div className="overflow-hidden rounded-xl border border-dashboard-border">
                   <div className="flex flex-col gap-3 border-b border-dashboard-border bg-dashboard-active/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -1060,12 +1108,12 @@ export function AddClothingPage() {
                   </div>
 
                   <div className="divide-y divide-dashboard-border">
-                    {SIZE_OPTIONS.filter((size) => selectedSizes.includes(size)).map((size) => {
-                      const mode = measurementModes[size];
+                    {measurementTargets.map(({ key, label }) => {
+                      const mode = measurementModes[key];
                       const modeLabel = mode === "default_guide" ? "Default guide" : mode === "custom" ? "Custom" : "None";
                       return (
-                        <div key={size} className="grid gap-3 px-4 py-4 lg:grid-cols-[4rem_11rem_minmax(0,1fr)] lg:items-center">
-                          <span className="text-sm font-semibold text-dashboard-navy">{size}</span>
+                        <div key={key} className="grid gap-3 px-4 py-4 lg:grid-cols-[6rem_11rem_minmax(0,1fr)] lg:items-center">
+                          <span className="text-sm font-semibold text-dashboard-navy">{label}</span>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" className="w-full justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active">
@@ -1076,19 +1124,19 @@ export function AddClothingPage() {
                             <DropdownMenuContent align="start" className="w-48">
                               <DropdownMenuItem
                                 disabled={!defaultGuide}
-                                onSelect={() => setMeasurementMode(size, "default_guide")}
+                                onSelect={() => setMeasurementMode(key, "default_guide")}
                               >
                                 Default guide
                               </DropdownMenuItem>
-                              <DropdownMenuItem onSelect={() => setMeasurementMode(size, "custom")}>Custom measurements</DropdownMenuItem>
-                              <DropdownMenuItem onSelect={() => setMeasurementMode(size, "none")}>No measurements</DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => setMeasurementMode(key, "custom")}>Custom measurements</DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => setMeasurementMode(key, "none")}>No measurements</DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
 
                           {mode === "custom" ? (
                             <div className="space-y-2">
                               <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-medium text-dashboard-muted">Custom measurements for size {size}</span>
+                                <span className="text-xs font-medium text-dashboard-muted">Custom measurements for {label}</span>
                                 <div className="flex overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-surface">
                                   {(["in", "cm"] as const).map((unit) => (
                                     <button
@@ -1117,10 +1165,10 @@ export function AddClothingPage() {
                                 {(["bust", "waist", "hips"] as const).map((field) => (
                                   <div key={field} className="relative">
                                     <Input
-                                      aria-label={`${size} ${field}`}
+                                      aria-label={`${label} ${field}`}
                                       inputMode="decimal"
-                                      value={measurements[size][field]}
-                                      onChange={(event) => updateMeasurement(size, field, event.target.value)}
+                                      value={measurements[key][field]}
+                                      onChange={(event) => updateMeasurement(key, field, event.target.value)}
                                       placeholder={field[0]!.toUpperCase() + field.slice(1)}
                                       className="pr-9"
                                     />
@@ -1138,7 +1186,7 @@ export function AddClothingPage() {
                                 : "No default guide is configured. Choose Custom or None before submitting."}
                             </p>
                           ) : (
-                            <p className="text-xs text-dashboard-muted">No measurement information will be shown for this size.</p>
+                            <p className="text-xs text-dashboard-muted">No measurement information will be shown for {label.toLowerCase()}.</p>
                           )}
                         </div>
                       );
@@ -1151,7 +1199,7 @@ export function AddClothingPage() {
             <SectionCard
               icon={PhilippinePeso}
               title="Pricing"
-              description="Enter pricing once. Drezivo applies it to every selected size when the variants are created."
+              description="Enter pricing once. Drezivo applies it to the variant or variants created for this clothing."
             >
               <div>
                 <label className="mb-2 block text-sm font-medium text-dashboard-navy">
@@ -1315,7 +1363,7 @@ export function AddClothingPage() {
                   </span>
                   <div>
                     <h2 className="text-base font-semibold text-dashboard-navy">What Drezivo will create</h2>
-                    <p className="mt-0.5 text-xs text-dashboard-muted">Based on the sizes selected above.</p>
+                    <p className="mt-0.5 text-xs text-dashboard-muted">Based on the sizing mode selected above.</p>
                   </div>
                 </div>
 
@@ -1325,11 +1373,13 @@ export function AddClothingPage() {
                   <SummaryRow label="Total Pieces" value={String(totalPieces)} emphasize />
                 </div>
 
-                {selectedSizes.length > 0 ? (
+                {sizingMode === "free_size" || selectedSizes.length > 0 ? (
                   <div className="mt-4">
-                    <p className="text-xs font-medium text-dashboard-muted">Selected sizes</p>
+                    <p className="text-xs font-medium text-dashboard-muted">
+                      {sizingMode === "free_size" ? "Variant" : "Selected sizes"}
+                    </p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {selectedSizes.map((size) => (
+                      {(sizingMode === "free_size" ? ["Free size"] : selectedSizes).map((size) => (
                         <span
                           key={size}
                           className="rounded-lg border border-dashboard-border bg-dashboard-active px-2.5 py-1.5 text-xs font-semibold text-dashboard-accent"
@@ -1374,7 +1424,7 @@ export function AddClothingPage() {
                 <Button
                   variant="ghost"
                   className="w-full border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
-                  disabled={isSubmitting || selectedSizes.length === 0 || !categoryId}
+                  disabled={isSubmitting || (sizingMode === "sized" && selectedSizes.length === 0) || !categoryId}
                   onClick={() => void submitClothing(false)}
                 >
                   {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />}
@@ -1382,7 +1432,7 @@ export function AddClothingPage() {
                 </Button>
                 <Button
                   className="w-full"
-                  disabled={isSubmitting || selectedSizes.length === 0 || !categoryId || photos.length === 0}
+                  disabled={isSubmitting || (sizingMode === "sized" && selectedSizes.length === 0) || !categoryId || photos.length === 0}
                   onClick={() => void submitClothing(true)}
                 >
                   {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
@@ -1391,7 +1441,9 @@ export function AddClothingPage() {
                 <p className="text-center text-[0.68rem] leading-5 text-dashboard-muted">
                   {photos.length === 0
                     ? "Add at least 1 photo to activate this clothing. You can still save it as a draft."
-                    : "Add Clothing creates the selected variants and one physical piece for each size."}
+                    : sizingMode === "free_size"
+                      ? "Add Clothing creates one free-size variant and one physical piece."
+                      : "Add Clothing creates the selected variants and one physical piece for each size."}
                 </p>
               </CardContent>
             </Card>

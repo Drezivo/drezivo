@@ -41,6 +41,7 @@ describe("Drezivo Phase 3 API client", () => {
           description: "Updated description",
           category: null,
           status: "active",
+          sizing_mode: "sized",
           updated_at: instant,
         })
       )
@@ -133,6 +134,50 @@ describe("Drezivo Phase 3 API client", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[1]![1]?.body))).toEqual({
       expected_updated_at: instant,
     });
+  });
+
+  it("sends sizing-mode migrations to the canonical route with idempotency", async () => {
+    const intentKey = crypto.randomUUID();
+    fetchMock.mockResolvedValueOnce(
+      success({
+        product_id: productId,
+        sizing_mode: "free_size",
+        active_variant_count: 1,
+        archived_variant_count: 1,
+        free_size_variant_id: variantId,
+      })
+    );
+
+    const client = createDrezivoApiClient(getToken);
+    await client.changeClothingSizingMode(
+      productId,
+      {
+        mode: "free_size",
+        variant: {
+          size_label: null,
+          color_label: "Emerald",
+          measurement_mode: "none",
+          measurement_guide_id: null,
+          measurement_unit: "cm",
+          measurements: {},
+          pricing: {
+            mode: "daily",
+            rental_price_minor: "150000",
+            security_deposit_minor: "50000",
+            extra_day_price_minor: "150000",
+            prep_minutes: 0,
+            turnaround_minutes: 1440,
+          },
+        },
+      },
+      intentKey
+    );
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe(`https://api.example.test/api/v1/catalogue/clothing/${productId}/sizing-mode`);
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toMatchObject({ mode: "free_size", variant: { size_label: null } });
+    expect((init?.headers as Headers).get("Idempotency-Key")).toBe(intentKey);
   });
 
   it("keeps the CLT-031 asset-state client tenant-safe by sending only asset state fields", async () => {

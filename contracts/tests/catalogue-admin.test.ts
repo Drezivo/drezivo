@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MAX_CLOTHING_PHOTOS,
   catalogueCategoryStatus,
+  changeClothingSizingModeRequest,
   clothingSizeInput,
   createClothingRequest,
   filePurpose,
@@ -161,6 +162,87 @@ describe('catalogue admin contract', () => {
             measurement_unit: 'in',
           },
         ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('allows exactly one canonical Free size variant and never mixes sizing modes', () => {
+    const base = {
+      name: 'One Size Wrap',
+      category_id: categoryId,
+      color_label: null,
+      image_file_ids: [imageFileId],
+      pricing: {
+        mode: 'fixed_duration' as const,
+        rental_price_minor: '30000',
+        security_deposit_minor: '0',
+        extra_day_price_minor: '0',
+        included_days: 3,
+        prep_minutes: 0,
+        turnaround_minutes: 0,
+      },
+      activate: false,
+      sizes: [{ size_label: null, measurement_mode: 'none' as const, measurement_unit: 'cm' as const }],
+    };
+
+    expect(createClothingRequest.parse(base).sizing_mode).toBeUndefined();
+    expect(createClothingRequest.safeParse({ ...base, sizing_mode: 'free_size' }).success).toBe(true);
+    expect(
+      createClothingRequest.safeParse({
+        ...base,
+        sizing_mode: 'free_size',
+        sizes: [
+          { size_label: null, measurement_mode: 'none', measurement_unit: 'cm' },
+          { size_label: null, measurement_mode: 'none', measurement_unit: 'cm' },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      createClothingRequest.safeParse({
+        ...base,
+        sizing_mode: 'sized',
+        sizes: [{ size_label: null, measurement_mode: 'none', measurement_unit: 'cm' }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('requires an explicit target variant shape when changing sizing mode', () => {
+    const pricing = {
+      mode: 'daily' as const,
+      rental_price_minor: '30000',
+      security_deposit_minor: '0',
+      extra_day_price_minor: '0',
+      prep_minutes: 0,
+      turnaround_minutes: 0,
+    };
+    const baseVariant = {
+      measurement_mode: 'none' as const,
+      measurement_unit: 'cm' as const,
+      pricing,
+    };
+
+    expect(
+      changeClothingSizingModeRequest.safeParse({
+        mode: 'sized',
+        variants: [{ ...baseVariant, size_label: 'M' }],
+      }).success,
+    ).toBe(true);
+    expect(
+      changeClothingSizingModeRequest.safeParse({
+        mode: 'sized',
+        variants: [{ ...baseVariant, size_label: null }],
+      }).success,
+    ).toBe(false);
+    expect(
+      changeClothingSizingModeRequest.safeParse({
+        mode: 'free_size',
+        variant: { ...baseVariant, size_label: null },
+      }).success,
+    ).toBe(true);
+    expect(
+      changeClothingSizingModeRequest.safeParse({
+        mode: 'free_size',
+        variants: [{ ...baseVariant, size_label: 'M' }],
       }).success,
     ).toBe(false);
   });

@@ -22,11 +22,14 @@ import { MAX_CLOTHING_PHOTOS } from '../catalogue/admin';
 export const pricingMode = z.enum(['fixed_duration', 'daily']);
 export type PricingMode = z.infer<typeof pricingMode>;
 
+const storefrontSizeKind = z.enum(['free_size', 'sized']);
+
 /** GET /public/stores/{slug}/catalogue query params. */
 export const catalogueQuery = paginationRequest.extend({
   search: z.string().min(1).max(200).optional(),
   category: z.string().min(1).optional(),
   size_label: z.string().min(1).optional(),
+  size_kind: storefrontSizeKind.optional(),
   color_label: z.string().min(1).optional(),
   price_min_minor: nonNegativeMoneyString.optional(),
   price_max_minor: nonNegativeMoneyString.optional(),
@@ -51,7 +54,7 @@ const measurementUnit = z.enum(['cm', 'in']);
 export const catalogueVariant = z.object({
   variant_id: productVariantId,
   sku: z.string().min(1),
-  size_label: z.string().min(1),
+  size_label: z.string().min(1).nullable(),
   color_label: z.string().min(1).nullable(),
   measurements: z.record(z.string(), z.number()),
   measurement_unit: measurementUnit,

@@ -16,6 +16,8 @@ export interface ClothingListReadRow {
   category_id: string | null;
   category_name: string | null;
   product_status: 'draft' | 'active' | 'archived';
+  sizing_mode: 'free_size' | 'sized';
+  has_free_size: boolean;
   size_labels: string[];
   price_from_minor: number;
   currency: string;
@@ -56,6 +58,7 @@ export interface ClothingDetailProductRow {
   product_status: 'draft' | 'active' | 'archived';
   category_id: string | null;
   category_name: string | null;
+  sizing_mode: 'free_size' | 'sized';
   created_at: Date;
   updated_at: Date;
 }
@@ -70,7 +73,7 @@ export interface ClothingDetailImageRow {
 export interface ClothingDetailVariantRow {
   id: string;
   sku: string;
-  size_label: string;
+  size_label: string | null;
   color_label: string | null;
   measurement_mode: 'default_guide' | 'custom' | 'none';
   measurement_guide_id: string | null;
@@ -165,6 +168,17 @@ export async function listClothingReadModel(
     )`);
   }
 
+  if (input.query.size_kind) {
+    where.push(`EXISTS (
+      SELECT 1
+        FROM product_variant pv_kind
+       WHERE pv_kind.tenant_id = p.tenant_id
+         AND pv_kind.product_id = p.id
+         AND pv_kind.size_label IS ${input.query.size_kind === 'free_size' ? '' : 'NOT '}NULL
+         AND (p.status = 'archived' OR pv_kind.status <> 'archived')
+    )`);
+  }
+
   if (input.query.product_status) {
     where.push(`p.status = ${bind(input.query.product_status)}`);
   }
@@ -211,6 +225,7 @@ export async function listClothingReadModel(
          p.tenant_id,
          p.code,
          p.name,
+         p.sizing_mode,
          c.id AS category_id,
          c.name AS category_name,
          p.status,
@@ -233,6 +248,8 @@ export async function listClothingReadModel(
        p.category_id,
        p.category_name,
        p.status AS product_status,
+       p.sizing_mode,
+       COALESCE(variant_summary.has_free_size, false) AS has_free_size,
        COALESCE(variant_summary.size_labels, ARRAY[]::text[]) AS size_labels,
        COALESCE(variant_summary.price_from_minor, 0)::int AS price_from_minor,
        COALESCE(variant_summary.currency, 'PHP') AS currency,
@@ -284,6 +301,10 @@ export async function listClothingReadModel(
              ),
            ARRAY[]::text[]
          ) AS size_labels,
+         COALESCE(bool_or(
+           pv.size_label IS NULL
+           AND (p.status = 'archived' OR pv.status <> 'archived')
+         ), false) AS has_free_size,
          COALESCE(
            min(pv.rental_price_minor) FILTER (WHERE p.status = 'archived' OR pv.status <> 'archived'),
            min(pv.rental_price_minor)
@@ -479,6 +500,7 @@ export async function readClothingDetailModel(
        p.code,
        p.name,
        p.description,
+       p.sizing_mode,
        p.status AS product_status,
        c.id AS category_id,
        c.name AS category_name,
@@ -539,7 +561,8 @@ export async function readClothingDetailModel(
      FROM product_variant
      WHERE tenant_id = $1
        AND product_id = $2
-     ORDER BY lower(size_label) ASC, lower(color_label) ASC, id ASC`,
+     ORDER BY (size_label IS NOT NULL) DESC, lower(size_label) ASC NULLS LAST,
+              lower(color_label) ASC NULLS LAST, id ASC`,
     [input.tenantId, input.productId],
   );
 

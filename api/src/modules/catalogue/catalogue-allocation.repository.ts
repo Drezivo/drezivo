@@ -13,7 +13,7 @@ export interface ReservationCatalogueQuoteSelectionRow {
   variant_id: string;
   branch_id: string;
   sku: string;
-  size_label: string;
+  size_label: string | null;
   color_label: string | null;
   measurement_mode: 'default_guide' | 'custom' | 'none';
   measurement_guide_id: string | null;

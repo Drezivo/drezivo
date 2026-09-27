@@ -8,6 +8,7 @@ import {
   createCatalogueCategoryRequest,
   createClothingRequest,
   createClothingVariantRequest,
+  changeClothingSizingModeRequest,
   createPhysicalAssetRequest,
   idempotencyKey,
   physicalAssetId,
@@ -101,6 +102,18 @@ export const validateCreateClothingVariant: RequestHandler = (req, _res, next): 
   const parsedBody = createClothingVariantRequest.safeParse(req.body);
   if (!parsedProductId.success || !parsedBody.success) {
     next(new ValidationError('Clothing variant create request is invalid.'));
+    return;
+  }
+  req.catalogueProductId = parsedProductId.data;
+  req.body = parsedBody.data;
+  next();
+};
+
+export const validateChangeClothingSizingMode: RequestHandler = (req, _res, next): void => {
+  const parsedProductId = productId.safeParse(req.params.productId);
+  const parsedBody = changeClothingSizingModeRequest.safeParse(req.body);
+  if (!parsedProductId.success || !parsedBody.success) {
+    next(new ValidationError('Clothing sizing mode request is invalid.'));
     return;
   }
   req.catalogueProductId = parsedProductId.data;

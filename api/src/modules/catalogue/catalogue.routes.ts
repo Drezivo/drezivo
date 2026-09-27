@@ -10,6 +10,7 @@ import {
   createCatalogueCategoryController,
   createClothingController,
   createClothingVariantController,
+  changeClothingSizingModeController,
   createPhysicalAssetController,
   getCatalogueClothingDetailController,
   getDefaultMeasurementGuideController,
@@ -42,6 +43,7 @@ import {
   validateCreateCatalogueCategory,
   validateCreateClothing,
   validateCreateClothingVariant,
+  validateChangeClothingSizingMode,
   validateCreatePhysicalAsset,
   validatePublishClothing,
   validateRemoveClothingVariant,
@@ -153,6 +155,18 @@ catalogueRouter.post(
   validateCreateClothingVariant,
   requireCatalogueIdempotencyKey,
   createClothingVariantController,
+);
+
+catalogueRouter.post(
+  '/catalogue/clothing/:productId/sizing-mode',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  writePolicy,
+  requireAssetManagePermission,
+  validateChangeClothingSizingMode,
+  requireCatalogueIdempotencyKey,
+  changeClothingSizingModeController,
 );
 
 catalogueRouter.patch(
