@@ -46,6 +46,7 @@ import {
 } from "@drezivo/contracts";
 
 import { ArchiveClothingDialog, archiveSuccessMessage } from "@/components/inventory/archive-clothing-dialog";
+import { SizingTransitionDialog } from "@/components/inventory/sizing-transition-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -77,7 +78,7 @@ type VariantDraft = {
   sku: string;
   status: ClothingVariantDetail["status"];
   updatedAt: string;
-  sizeLabel: string;
+  sizeLabel: string | null;
   color: string;
   measurementMode: MeasurementMode;
   measurementGuideId: MeasurementGuideId;
@@ -136,6 +137,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
   const [submitStage, setSubmitStage] = useState<string | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [addVariantOpen, setAddVariantOpen] = useState(false);
+  const [sizingModeOpen, setSizingModeOpen] = useState(false);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
 
@@ -504,6 +506,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
   }
 
   const item = loadState.item;
+  const currentSizingMode = item.sizing_mode ?? (editableVariants.some((variant) => variant.sizeLabel === null) ? "free_size" : "sized");
   const activePieces = item.variants
     .filter((variant) => variant.status !== "archived")
     .flatMap((variant) => variant.assets)
@@ -705,20 +708,38 @@ export function EditClothingPage({ productId }: { productId: string }) {
             <SectionCard
               icon={Ruler}
               title="Variants, Measurements & Pricing"
-              description="Edit each existing variant independently so one size never overwrites another size's settings."
+              description="Edit each existing variant independently, or migrate the clothing between Sized and Free size."
               action={
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  disabled={saveGuard.isSubmitting || isDirty}
-                  onClick={() => setAddVariantOpen(true)}
-                >
-                  <Plus className="h-4 w-4" aria-hidden="true" />
-                  Add Variant
-                </Button>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={saveGuard.isSubmitting || isDirty}
+                    onClick={() => setSizingModeOpen(true)}
+                  >
+                    Change sizing mode
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={saveGuard.isSubmitting || isDirty || currentSizingMode === "free_size"}
+                    onClick={() => setAddVariantOpen(true)}
+                  >
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    Add Variant
+                  </Button>
+                </div>
               }
             >
+              <div className="flex flex-col gap-2 rounded-lg border border-dashboard-border bg-dashboard-active/25 px-3 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-dashboard-muted">Current sizing mode</span>
+                <span className="font-semibold text-dashboard-accent">{currentSizingMode === "free_size" ? "Free size" : "Sized"}</span>
+              </div>
+              {currentSizingMode === "free_size" ? (
+                <p className="text-xs text-dashboard-muted">Free size products use one active null-size variant. Switch to Sized before adding separate size variants.</p>
+              ) : null}
               <div className="space-y-3">
                 {editableVariants.length > 0 ? (
                   editableVariants.map((variant, index) => (
@@ -770,7 +791,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
                       key={variant.id}
                       className="rounded-lg border border-dashboard-border bg-dashboard-active px-2.5 py-1.5 text-xs font-semibold text-dashboard-accent"
                     >
-                      {variant.sizeLabel} · {variant.sku}
+                      {variant.sizeLabel ?? "Free size"} · {variant.sku}
                     </span>
                   ))}
                 </div>
@@ -860,6 +881,23 @@ export function EditClothingPage({ productId }: { productId: string }) {
           </aside>
         </div>
       </div>
+
+      <SizingTransitionDialog
+        activeVariants={item.variants.filter((variant) => variant.status !== "archived")}
+        currentMode={currentSizingMode}
+        defaultGuide={defaultGuide}
+        disabled={saveGuard.isSubmitting || isDirty}
+        getToken={getToken}
+        onCompleted={async (data) => {
+          await load();
+          setSaveNotice(
+            `Sizing mode changed to ${data.sizing_mode === "free_size" ? "Free size" : "Sized"} (${data.active_variant_count} active variant${data.active_variant_count === 1 ? "" : "s"}; ${data.archived_variant_count} archived).`
+          );
+        }}
+        onOpenChange={setSizingModeOpen}
+        open={sizingModeOpen}
+        productId={productId}
+      />
 
       <AddVariantDialog
         open={addVariantOpen}
@@ -1163,11 +1201,11 @@ function VariantEditor({
 
       <div className="space-y-5 p-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Size Label" required>
+          <Field label="Size Label" required={variant.sizeLabel !== null}>
             <Input
               aria-label={`${variant.sku} Size Label`}
-              value={variant.sizeLabel}
-              disabled={disabled}
+              value={variant.sizeLabel ?? "Free size"}
+              disabled={disabled || variant.sizeLabel === null}
               onChange={(event) => onChange({ sizeLabel: event.target.value })}
             />
           </Field>
@@ -1709,8 +1747,11 @@ function buildVariantPatch(
   const patch: Partial<UpdateClothingVariantRequest> & { expected_updated_at: string } = {
     expected_updated_at: initial.updated_at,
   };
-  if (!draft.sizeLabel.trim()) throw new Error(`Enter a size label for ${initial.sku}.`);
-  if (draft.sizeLabel.trim() !== initial.size_label) patch.size_label = draft.sizeLabel.trim();
+  if (initial.size_label !== null) {
+    const sizeLabel = draft.sizeLabel?.trim() ?? "";
+    if (!sizeLabel) throw new Error(`Enter a size label for ${initial.sku}.`);
+    if (sizeLabel !== initial.size_label) patch.size_label = sizeLabel;
+  }
 
   const color = draft.color.trim() || null;
   if (color !== initial.color_label) patch.color_label = color;

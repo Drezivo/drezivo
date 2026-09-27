@@ -99,6 +99,7 @@ describe("AddClothingPage", () => {
       data: {
         product_id: "00000000-0000-4000-8000-000000000050",
         code: "GOWN-001",
+        sizing_mode: "sized",
         variant_count: 4,
         physical_piece_count: 4,
         status: "active",
@@ -127,9 +128,18 @@ describe("AddClothingPage", () => {
     expect(screen.getByText(/Leave blank and Drezivo will generate one for you/)).toBeVisible();
   });
 
+  it("defaults to a single free-size variant", () => {
+    renderPage();
+
+    expect(screen.getByRole("button", { name: "Free size" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/1 selected · 1 Total Piece/)).toBeVisible();
+    expect(screen.getAllByText("Free size").length).toBeGreaterThanOrEqual(1);
+  });
+
   it("uses selected sizes to generate one piece per size", () => {
     renderPage();
 
+    fireEvent.click(screen.getByRole("button", { name: "Sized" }));
     expect(screen.getByText(/4 selected · 4 Total Pieces/)).toBeVisible();
     const selectedSizes = screen.getByText("Selected sizes").parentElement;
     if (!selectedSizes) throw new Error("Expected selected-size summary.");
@@ -142,8 +152,32 @@ describe("AddClothingPage", () => {
     expect(within(selectedSizes).queryByText("XL")).not.toBeInTheDocument();
   });
 
+  it("creates one null-size variant for a free-size clothing item", async () => {
+    renderPage();
+    await screen.findByText("Default Size Guide");
+
+    fireEvent.change(screen.getByLabelText("Clothing Name *"), {
+      target: { value: "One Size Cape" },
+    });
+    expect(screen.getByText(/1 selected · 1 Total Piece/)).toBeVisible();
+    expect(screen.getAllByText("Free size").length).toBeGreaterThanOrEqual(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save as Draft" }));
+
+    await waitFor(() => expect(api.createClothing).toHaveBeenCalledTimes(1));
+    const [requestBody] = api.createClothing.mock.calls[0]!;
+    expect(requestBody.sizing_mode).toBe("free_size");
+    expect(requestBody.sizes).toHaveLength(1);
+    expect(requestBody.sizes[0]).toMatchObject({
+      size_label: null,
+      measurement_mode: "default_guide",
+      measurement_guide_id: "00000000-0000-4000-8000-000000000099",
+    });
+  });
+
   it("uses the default guide until a size opts into custom measurements", async () => {
     renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Sized" }));
 
     expect(screen.queryByLabelText("S bust")).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Default guide" })).toHaveLength(4);
@@ -378,6 +412,7 @@ describe("AddClothingPage", () => {
   it("submits real draft variants with stable default-guide references and custom measurements", async () => {
     renderPage();
     expect(await screen.findByText("Default Size Guide")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Sized" }));
 
     fireEvent.change(screen.getByLabelText("Clothing Name *"), {
       target: { value: "Emerald Evening Gown" },
@@ -390,6 +425,7 @@ describe("AddClothingPage", () => {
       target: { value: "2" },
     });
 
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Default guide" })).toHaveLength(4));
     fireEvent.pointerDown(screen.getAllByRole("button", { name: "Default guide" })[0]!, {
       button: 0,
       ctrlKey: false,
@@ -411,6 +447,7 @@ describe("AddClothingPage", () => {
       category_id: "00000000-0000-4000-8000-000000000001",
       color_label: null,
       image_file_ids: [],
+      sizing_mode: "sized",
       pricing: {
         mode: "fixed_duration",
         rental_price_minor: "30000",
@@ -468,6 +505,7 @@ describe("AddClothingPage", () => {
       data: {
         product_id: "00000000-0000-4000-8000-000000000050",
         code: "GOWN-001",
+        sizing_mode: "sized",
         variant_count: 4,
         physical_piece_count: 4,
         status: "draft",
@@ -490,6 +528,7 @@ describe("AddClothingPage", () => {
         data: {
           product_id: "00000000-0000-4000-8000-000000000050",
           code: "GOWN-001",
+          sizing_mode: "sized",
           variant_count: 4,
           physical_piece_count: 4,
           status: "draft",
