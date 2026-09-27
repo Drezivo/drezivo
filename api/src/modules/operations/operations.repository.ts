@@ -176,6 +176,8 @@ export interface ClothingAvailabilityTimelineAssetRow {
   color_label: string | null;
   rental_price_minor: number;
   currency: string;
+  readiness: 'ready' | 'needs_cleaning' | 'needs_repair' | 'unready';
+  recovery_managed_readiness: boolean;
   sort_product_name: string;
   sort_size_label: string;
   sort_color_label: string;
@@ -187,12 +189,12 @@ export interface ClothingAvailabilityTimelineAgendaRow {
   type: 'reserved' | 'rented' | 'unavailable';
   starts_at: Date;
   ends_at: Date;
-  source_type: 'reservation' | 'maintenance' | 'readiness' | 'allocation';
+  source_type: 'reservation' | 'maintenance' | 'allocation';
   source_id: string;
   customer_name: string | null;
   pickup_at: Date | null;
   return_at: Date | null;
-  unavailable_reason: 'recovery' | 'cleaning' | 'maintenance' | 'manual_block' | 'readiness' | 'other' | null;
+  unavailable_reason: 'recovery' | 'cleaning' | 'maintenance' | 'manual_block' | 'other' | null;
 }
 
 export interface ClothingAvailabilityTimelineFacets {
@@ -319,6 +321,8 @@ export async function listClothingAvailabilityTimelineAssets(
          pv.color_label,
          pv.rental_price_minor,
          pv.currency,
+         pa.readiness,
+         pa.recovery_managed_readiness,
          lower(p.name) AS sort_product_name,
          COALESCE(lower(pv.size_label), '') AS sort_size_label,
          lower(COALESCE(pv.color_label, '')) AS sort_color_label
@@ -371,8 +375,7 @@ export async function listClothingAvailabilityTimelineAssets(
                AND r.due_at > $3::timestamptz
            ) AS has_rented,
            (
-             pa.readiness <> 'ready'
-             OR EXISTS (
+             EXISTS (
                SELECT 1
                FROM asset_allocation aa
                WHERE aa.tenant_id = pa.tenant_id
@@ -404,9 +407,9 @@ export async function listClothingAvailabilityTimelineAssets(
            ) AS has_unavailable
        ) activity
        WHERE ${where.join('\n         AND ')}
-         -- Archived variants remain visible only while they carry a live obligation.  A sizing
-         -- mode switch must not hide an existing rental/recovery/readiness lane, but archived
-         -- stock should not appear as an idle selectable asset after the switch.
+         -- Archived variants remain visible only while they carry a live obligation. A sizing
+         -- mode switch must not hide an existing rental/recovery lane, but archived stock should
+         -- not appear as an idle selectable asset after the switch.
          AND (pv.status = 'active' OR activity.has_reserved OR activity.has_rented OR activity.has_unavailable)
        ORDER BY lower(p.name) ASC, COALESCE(lower(pv.size_label), '') ASC,
                 lower(COALESCE(pv.color_label, '')) ASC, pa.id ASC
@@ -423,6 +426,8 @@ export async function listClothingAvailabilityTimelineAssets(
        candidate.color_label,
        candidate.rental_price_minor,
        candidate.currency,
+       candidate.readiness,
+       candidate.recovery_managed_readiness,
        candidate.sort_product_name,
        candidate.sort_size_label,
        candidate.sort_color_label
@@ -622,27 +627,6 @@ export async function readClothingAvailabilityTimelineAgendas(
          AND aa.is_blocking = true
          AND aa.kind = 'transfer'
          AND aa.period && tstzrange($4::timestamptz, $5::timestamptz, '[)')
-
-       UNION ALL
-
-       SELECT
-         'readiness:' || pa.id::text || ':' || pa.readiness AS id,
-         pa.id AS asset_id,
-         'unavailable'::text AS type,
-         $4::timestamptz AS starts_at,
-         $5::timestamptz AS ends_at,
-         'readiness'::text AS source_type,
-         pa.id AS source_id,
-         NULL::text AS customer_name,
-         NULL::timestamptz AS pickup_at,
-         NULL::timestamptz AS return_at,
-         'readiness'::text AS unavailable_reason
-       FROM physical_asset pa
-       JOIN candidate_assets candidate ON candidate.asset_id = pa.id
-       WHERE pa.tenant_id = $1::uuid
-         AND pa.branch_id = $2::uuid
-         AND pa.lifecycle_status = 'active'
-         AND pa.readiness <> 'ready'
      )
      SELECT *
      FROM timeline_agendas

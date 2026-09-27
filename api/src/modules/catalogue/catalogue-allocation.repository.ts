@@ -72,7 +72,21 @@ export async function readReservationCatalogueSelection(
            AND pa.branch_id = $2
            AND pa.variant_id = pv.id
            AND pa.lifecycle_status = 'active'
-           AND pa.readiness = 'ready'
+           AND (
+             pa.readiness = 'ready'
+             OR (
+               pa.readiness = 'needs_cleaning'
+               AND pa.recovery_managed_readiness = true
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM maintenance_work_order mwo
+                 WHERE mwo.tenant_id = pa.tenant_id
+                   AND mwo.branch_id = pa.branch_id
+                   AND mwo.asset_id = pa.id
+                   AND mwo.status = 'open'
+               )
+             )
+           )
            AND NOT EXISTS (
              SELECT 1
              FROM asset_allocation aa
@@ -162,7 +176,21 @@ export async function readReservationCatalogueQuoteSelection(
            AND pa.branch_id = $2
            AND pa.variant_id = pv.id
            AND pa.lifecycle_status = 'active'
-           AND pa.readiness = 'ready'
+           AND (
+             pa.readiness = 'ready'
+             OR (
+               pa.readiness = 'needs_cleaning'
+               AND pa.recovery_managed_readiness = true
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM maintenance_work_order mwo
+                 WHERE mwo.tenant_id = pa.tenant_id
+                   AND mwo.branch_id = pa.branch_id
+                   AND mwo.asset_id = pa.id
+                   AND mwo.status = 'open'
+               )
+             )
+           )
            AND NOT EXISTS (
              SELECT 1
              FROM asset_allocation aa

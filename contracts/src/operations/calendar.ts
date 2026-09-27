@@ -12,6 +12,7 @@ import {
 import { currencyCode, nonNegativeMoneyString } from '../common/money';
 import { pageMeta } from '../common/pagination';
 import { ianaTimezone, instantInterval, isoDate, isoInstant } from '../common/time';
+import { physicalAssetReadiness } from '../catalogue/staff';
 import { fittingState } from '../fittings/state';
 import { reservationState } from '../reservations/state';
 
@@ -145,7 +146,6 @@ export const clothingAvailabilityTimelineUnavailableReason = z.enum([
   'cleaning',
   'maintenance',
   'manual_block',
-  'readiness',
   'other',
 ]);
 export type ClothingAvailabilityTimelineUnavailableReason = z.infer<
@@ -158,7 +158,7 @@ export const clothingAvailabilityTimelineAgenda = z
     type: clothingAvailabilityTimelineStatus,
     period: instantInterval,
     display_lane: z.number().int().nonnegative().max(99),
-    source_type: z.enum(['reservation', 'maintenance', 'readiness', 'allocation']),
+    source_type: z.enum(['reservation', 'maintenance', 'allocation']),
     source_id: z.string().uuid(),
     customer_name: z.string().trim().min(1).max(200).nullable(),
     pickup: clothingAvailabilityTimelineBoundary.nullable(),
@@ -196,6 +196,7 @@ export const clothingAvailabilityTimelineRow = z
     asset: z
       .object({
         id: physicalAssetId,
+        readiness: physicalAssetReadiness,
       })
       .strict(),
     agendas: z.array(clothingAvailabilityTimelineAgenda).max(500),

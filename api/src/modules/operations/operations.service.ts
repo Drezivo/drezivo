@@ -125,7 +125,7 @@ export async function getClothingAvailabilityTimeline(
             rental_price_minor: row.rental_price_minor.toString(),
             currency: row.currency,
           },
-          asset: { id: row.asset_id },
+          asset: { id: row.asset_id, readiness: row.readiness },
           agendas: agendasByAssetId.get(row.asset_id) ?? [],
         };
       }),

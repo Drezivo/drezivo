@@ -470,6 +470,19 @@ Before marking a task complete:
     - [x] The public/storefront scaffold remains fail-closed through the strict/default review path; its guest receipt-upload API is still a separate storefront implementation increment and was not weakened by this staff exception.
   - **Tests/evidence:** API typecheck/lint pass; isolated reservation lifecycle integration passes `39/39`, including explicit staff manual-QR verification without receipt plus a strict/default missing-receipt rejection. Focused New Reservation unit coverage now asserts `Submit for Verification` is enabled without receipt and sends no upload/attachment request.
 
+- [x] **RSV-069D — Separate time-bounded Recovery from current garment readiness**
+  - **Outcome:** Normal post-return cleaning no longer behaves like an indefinite future availability block. Recovery remains the canonical timed occupancy, while readiness communicates the garment's current condition.
+  - **Acceptance:**
+    - [x] A normal on-time return sets `needs_cleaning` as Recovery-managed readiness only while a real post-due Recovery tail is active.
+    - [x] `asset_allocation.period` remains the only Recovery clock; no second recovery timestamp is introduced.
+    - [x] Exact availability and authoritative reservation creation may schedule a Recovery-managed cleaning garment after its existing allocation ends, but still reject any interval that overlaps Recovery.
+    - [x] Owner/Staff can mark the returned garment Ready before Recovery ends; only the post-due Recovery tail is shortened, never the rental period or unrelated maintenance/manual blocks.
+    - [x] If no one intervenes, elapsed normal Recovery becomes schedulable immediately and the durable worker reconciles `needs_cleaning` to `ready`; correctness does not depend on worker timing.
+    - [x] `needs_repair`, explicit/manual `unready`, open maintenance, and late returns are not auto-cleared; staff must explicitly resolve readiness after a late garment comes back.
+    - [x] Clothing Availability no longer fabricates a window-wide `Unavailable · Readiness` agenda. Current readiness is row metadata; real Recovery/Maintenance allocations remain time-bounded timeline bars.
+  - **Implemented:** migration `0057_recovery_managed_readiness.sql` adds provenance only (`physical_asset.recovery_managed_readiness`). Reservation return/inspection, allocator, exact/day availability, pickup/completion reconciliation, and the worker all use the existing reservation allocation as the timing authority. The Clothing Availability contract now exposes current readiness on the asset row and removes readiness as an agenda source/reason.
+  - **Tests/evidence:** Contracts pass `134/134`; focused Calendar app tests pass `14/14`; Contracts build and API typecheck pass. PostgreSQL regressions cover active-Recovery rejection, post-Recovery reservation creation, Ready-early truncation, request-time reconciliation, worker reconciliation, and removal of the infinite readiness agenda; local execution awaits the disposable `TEST_DATABASE_URL` and must run in CI.
+
 ## Phase 8: Security and completion evidence
 
 - [ ] **RSV-070 — Complete reservation authorization/RLS suite**

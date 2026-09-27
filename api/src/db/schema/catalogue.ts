@@ -203,6 +203,7 @@ export const physicalAsset = pgTable(
     lifecycleStatus: assetLifecycleEnum('lifecycle_status').notNull().default('active'),
     retiredByProductArchive: boolean('retired_by_product_archive').notNull().default(false),
     readiness: assetReadinessEnum('readiness').notNull().default('ready'),
+    recoveryManagedReadiness: boolean('recovery_managed_readiness').notNull().default(false),
     custodyKind: assetCustodyKindEnum('custody_kind').notNull().default('at_branch'),
     conditionNote: text('condition_note'),
     measurementOverrides: jsonb('measurement_overrides').$type<Record<string, number>>(),

@@ -45,6 +45,8 @@ import {
   readReservationMutationSummary,
   readReservationSettlementState,
   releaseReservationAllocations,
+  promoteRecoveryManagedReadinessIfDue,
+  truncateReturnedReservationRecovery,
   type LockedReservationAllocationRow,
   type LockedReservationReviewRow,
   type ReservationMutationSummaryRow,
@@ -130,11 +132,25 @@ export async function inspectReturnedReservationByStaff(
         assetId: allocation.asset_id,
         assetVersion: allocation.asset_version,
         readiness: request.readiness,
+        recoveryManagedReadiness:
+          request.readiness === 'needs_cleaning' &&
+          allocation.asset_recovery_managed_readiness &&
+          openMaintenance.length === 0 &&
+          allocation.blocked_end.getTime() > reservation.database_now.getTime(),
         ...(request.condition_note ? { conditionNote: request.condition_note } : {}),
       });
       if (!updated) {
         throw new StateConflictError('The garment changed before the inspection could be recorded.');
       }
+      const recoveryReleasedAt =
+        request.readiness === 'ready'
+          ? await truncateReturnedReservationRecovery(client, {
+              tenantId: context.tenantId,
+              branchId: context.branchId,
+              reservationId,
+              assetId: allocation.asset_id,
+            })
+          : null;
 
       await appendReservationAuditEvent(client, {
         tenantId: context.tenantId,
@@ -152,6 +168,7 @@ export async function inspectReturnedReservationByStaff(
           asset_version_after: updated.version,
           open_maintenance_count: openMaintenance.length,
           condition_note_recorded: Boolean(request.condition_note),
+          recovery_released_by_readiness: Boolean(recoveryReleasedAt),
         },
         requestId: context.requestId,
       });
@@ -215,7 +232,26 @@ export async function completeReturnedReservationByStaff(
         branchId: context.branchId,
         reservationId,
       });
-      const allocation = requireReturnedAllocation(context, allocations);
+      let allocation = requireReturnedAllocation(context, allocations);
+      if (
+        allocation.asset_readiness === 'needs_cleaning' &&
+        allocation.asset_recovery_managed_readiness
+      ) {
+        const promoted = await promoteRecoveryManagedReadinessIfDue(client, {
+          tenantId: context.tenantId,
+          branchId: context.branchId,
+          assetId: allocation.asset_id,
+          assetVersion: allocation.asset_version,
+        });
+        if (promoted) {
+          allocation = {
+            ...allocation,
+            asset_readiness: promoted.readiness,
+            asset_recovery_managed_readiness: false,
+            asset_version: promoted.version,
+          };
+        }
+      }
       if (
         allocation.asset_lifecycle_status !== 'active' ||
         allocation.asset_readiness !== 'ready'

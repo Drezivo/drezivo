@@ -36,6 +36,8 @@ describe("Drezivo catalogue list API client", () => {
             name: "Emerald Gown",
             category: null,
             product_status: "active",
+            sizing_mode: "sized",
+            has_free_size: false,
             size_labels: ["M"],
             price_from_minor: "150000",
             currency: "PHP",

@@ -101,6 +101,7 @@ export interface EditablePhysicalAssetRow {
   asset_code: string;
   lifecycle_status: 'active' | 'retired' | 'lost';
   readiness: 'ready' | 'needs_cleaning' | 'needs_repair' | 'unready';
+  recovery_managed_readiness: boolean;
   custody_kind: 'at_branch' | 'with_customer' | 'in_transit';
   condition_note: string | null;
   measurement_overrides: MeasurementMap | null;
@@ -791,8 +792,9 @@ export async function createPhysicalAssetForVariant(
         condition_note, measurement_overrides, alteration_note, version, created_at, updated_at)
      VALUES ($1,$2,$3,$4,'active','ready','at_branch',$5,$6::jsonb,$7,1,now(),now())
      ON CONFLICT DO NOTHING
-     RETURNING id, branch_id, variant_id, asset_code, lifecycle_status, readiness, custody_kind,
-               condition_note, measurement_overrides, alteration_note, version, created_at, updated_at`,
+     RETURNING id, branch_id, variant_id, asset_code, lifecycle_status, readiness,
+               recovery_managed_readiness, custody_kind, condition_note, measurement_overrides,
+               alteration_note, version, created_at, updated_at`,
     [input.tenantId, input.branchId, input.variantId, code, input.request.condition_note,
       JSON.stringify(input.request.measurement_overrides), input.request.alteration_note],
   );
@@ -808,8 +810,9 @@ export async function readPhysicalAssetForStateMutation(
   assetId: string,
 ): Promise<EditablePhysicalAssetRow | null> {
   const result = await client.query<EditablePhysicalAssetRow>(
-    `SELECT id, branch_id, variant_id, asset_code, lifecycle_status, readiness, custody_kind,
-            condition_note, measurement_overrides, alteration_note, version, created_at, updated_at
+    `SELECT id, branch_id, variant_id, asset_code, lifecycle_status, readiness,
+            recovery_managed_readiness, custody_kind, condition_note, measurement_overrides,
+            alteration_note, version, created_at, updated_at
        FROM physical_asset
       WHERE tenant_id = $1 AND branch_id = $2 AND id = $3
       LIMIT 1
@@ -834,12 +837,14 @@ export async function updatePhysicalAssetState(
     `UPDATE physical_asset
         SET lifecycle_status = $4,
             readiness = $5,
+            recovery_managed_readiness = $7,
             condition_note = $6,
             version = version + 1,
             updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
       WHERE tenant_id = $1 AND id = $2 AND version = $3
-      RETURNING id, branch_id, variant_id, asset_code, lifecycle_status, readiness, custody_kind,
-                condition_note, measurement_overrides, alteration_note, version, created_at, updated_at`,
+      RETURNING id, branch_id, variant_id, asset_code, lifecycle_status, readiness,
+                recovery_managed_readiness, custody_kind, condition_note, measurement_overrides,
+                alteration_note, version, created_at, updated_at`,
     [
       input.tenantId,
       input.assetId,
@@ -849,6 +854,9 @@ export async function updatePhysicalAssetState(
       input.request.condition_note !== undefined
         ? input.request.condition_note
         : input.current.condition_note,
+      input.request.readiness !== undefined || input.forcedReadiness !== undefined
+        ? false
+        : input.current.recovery_managed_readiness,
     ],
   );
   const row = result.rows[0];
@@ -871,6 +879,7 @@ export async function readPhysicalAssetsForArchive(
        pa.asset_code,
        pa.lifecycle_status,
        pa.readiness,
+       pa.recovery_managed_readiness,
        pa.custody_kind,
        pa.condition_note,
        pa.measurement_overrides,

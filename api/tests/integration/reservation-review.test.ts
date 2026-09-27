@@ -92,6 +92,9 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     '../../src/modules/reservations/reservations.review.service.js'
   );
   const { expireDueHoldsForAllTenants } = await import('../../src/worker/handlers/hold-expirer.js');
+  const { promoteElapsedRecoveryReadinessForAllTenants } = await import(
+    '../../src/worker/handlers/recovery-readiness.js'
+  );
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
 
   beforeAll(async () => {
@@ -1417,7 +1420,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     });
   });
 
-  it('returns a picked-up reservation once, restores branch custody, keeps the booking block, and requires inspection before readiness', async () => {
+  it('returns a picked-up reservation once, starts Recovery-managed cleaning, and keeps the booking block', async () => {
     const seed = await seedWorkspace('org_rsv051_return', 'user_rsv051_return', 'cash');
     const pickedUp = await createPickedUpReservation(seed, 'return-success');
 
@@ -1436,7 +1439,8 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     expect(state.reservation_status).toBe('returned');
     expect(state.asset).toMatchObject({
       custody_kind: 'at_branch',
-      readiness: 'unready',
+      readiness: 'needs_cleaning',
+      recovery_managed_readiness: true,
     });
     expect(state.allocation).toMatchObject({
       kind: 'reservation_confirmed',
@@ -1716,6 +1720,30 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     );
     expect(ready.status).toBe(200);
     expect(ready.body).toMatchObject({ success: true, data: { asset_readiness: 'ready' } });
+    const readyState = await pickupState(seed, returned.id);
+    expect(readyState.asset).toMatchObject({
+      readiness: 'ready',
+      recovery_managed_readiness: false,
+    });
+    const recoveryTailReleased = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const result = await client.query<{ released: boolean }>(
+          `SELECT upper(aa.period) <= GREATEST(r.due_at, statement_timestamp()) AS released
+             FROM asset_allocation aa
+             JOIN reservation_line rl
+               ON rl.tenant_id = aa.tenant_id AND rl.id = aa.reservation_line_id
+             JOIN reservation r
+               ON r.tenant_id = rl.tenant_id AND r.id = rl.reservation_id
+            WHERE aa.tenant_id = $1 AND r.id = $2::uuid
+            LIMIT 1`,
+          [seed.tenantId, returned.id],
+        );
+        return requireRow(result.rows, 'ready recovery tail').released;
+      },
+    );
+    expect(recoveryTailReleased).toBe(true);
 
     const completed = await completeRentalReservation(
       reviewContext(seed, 'req-complete-success', 'idem-complete-success'),
@@ -1735,6 +1763,92 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       audit: 1,
       outbox: 1,
     });
+  });
+
+  it('treats elapsed normal Recovery cleaning as ready even if the cleanup worker has not reconciled yet', async () => {
+    const seed = await seedWorkspace('org_rsv052_recovery_due', 'user_rsv052_recovery_due', 'cash');
+    const returned = await createReturnedReservation(seed, 'completion-recovery-due');
+
+    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      await client.query(
+        `UPDATE reservation
+            SET pickup_at = statement_timestamp() - interval '3 days',
+                due_at = statement_timestamp() - interval '2 days'
+          WHERE tenant_id = $1 AND id = $2::uuid`,
+        [seed.tenantId, returned.id],
+      );
+      await client.query(
+        `UPDATE asset_allocation aa
+            SET period = tstzrange(
+              statement_timestamp() - interval '3 days',
+              statement_timestamp() - interval '1 minute',
+              '[)'
+            )
+           FROM reservation_line rl
+          WHERE aa.tenant_id = $1
+            AND rl.tenant_id = aa.tenant_id
+            AND rl.id = aa.reservation_line_id
+            AND rl.reservation_id = $2::uuid`,
+        [seed.tenantId, returned.id],
+      );
+    });
+
+    const before = await pickupState(seed, returned.id);
+    expect(before.asset).toMatchObject({
+      readiness: 'needs_cleaning',
+      recovery_managed_readiness: true,
+    });
+
+    const completed = await completeRentalReservation(
+      reviewContext(seed, 'req-complete-recovery-due', 'idem-complete-recovery-due'),
+      returned.id,
+      { version: returned.version },
+    );
+    expect(completed.status).toBe(200);
+
+    const after = await pickupState(seed, returned.id);
+    expect(after.asset).toMatchObject({
+      readiness: 'ready',
+      recovery_managed_readiness: false,
+    });
+    expect(after.reservation_status).toBe('completed');
+  });
+
+  it('reconciles elapsed Recovery cleaning through the worker without touching persistent readiness states', async () => {
+    const seed = await seedWorkspace('org_rsv052_recovery_worker', 'user_rsv052_recovery_worker', 'cash');
+    const returned = await createReturnedReservation(seed, 'completion-recovery-worker');
+
+    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      await client.query(
+        `UPDATE reservation
+            SET pickup_at = statement_timestamp() - interval '3 days',
+                due_at = statement_timestamp() - interval '2 days'
+          WHERE tenant_id = $1 AND id = $2::uuid`,
+        [seed.tenantId, returned.id],
+      );
+      await client.query(
+        `UPDATE asset_allocation aa
+            SET period = tstzrange(
+              statement_timestamp() - interval '3 days',
+              statement_timestamp() - interval '1 minute',
+              '[)'
+            )
+           FROM reservation_line rl
+          WHERE aa.tenant_id = $1
+            AND rl.tenant_id = aa.tenant_id
+            AND rl.id = aa.reservation_line_id
+            AND rl.reservation_id = $2::uuid`,
+        [seed.tenantId, returned.id],
+      );
+    });
+
+    expect(await promoteElapsedRecoveryReadinessForAllTenants()).toBe(1);
+    const state = await pickupState(seed, returned.id);
+    expect(state.asset).toMatchObject({
+      readiness: 'ready',
+      recovery_managed_readiness: false,
+    });
+    expect(state.reservation_status).toBe('returned');
   });
 
   it('keeps canonical maintenance work authoritative and will not mark an asset ready while work remains open', async () => {
@@ -2486,10 +2600,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       const asset = await client.query<{
         lifecycle_status: string;
         readiness: string;
+        recovery_managed_readiness: boolean;
         custody_kind: string;
         version: number;
       }>(
-        `SELECT lifecycle_status, readiness, custody_kind, version
+        `SELECT lifecycle_status, readiness, recovery_managed_readiness, custody_kind, version
            FROM physical_asset
           WHERE tenant_id = $1 AND id = $2`,
         [seed.tenantId, seed.assetId],
@@ -2498,8 +2613,9 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
         kind: string;
         is_blocking: boolean;
         released_at: Date | null;
+        blocked_end: Date;
       }>(
-        `SELECT aa.kind, aa.is_blocking, aa.released_at
+        `SELECT aa.kind, aa.is_blocking, aa.released_at, upper(aa.period) AS blocked_end
            FROM asset_allocation aa
            JOIN reservation_line rl
              ON rl.tenant_id = aa.tenant_id

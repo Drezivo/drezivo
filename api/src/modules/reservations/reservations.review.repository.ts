@@ -64,6 +64,7 @@ export interface LockedReservationAllocationRow {
   asset_branch_id: string;
   asset_lifecycle_status: 'active' | 'retired' | 'lost';
   asset_readiness: 'ready' | 'needs_cleaning' | 'needs_repair' | 'unready';
+  asset_recovery_managed_readiness: boolean;
   asset_custody_kind: 'at_branch' | 'with_customer' | 'in_transit';
   asset_version: number;
   kind: 'reservation_hold' | 'reservation_confirmed';
@@ -221,6 +222,7 @@ export async function lockReservationAllocationsForReview(
        pa.branch_id AS asset_branch_id,
        pa.lifecycle_status AS asset_lifecycle_status,
        pa.readiness AS asset_readiness,
+       pa.recovery_managed_readiness AS asset_recovery_managed_readiness,
        pa.custody_kind AS asset_custody_kind,
        pa.version AS asset_version,
        aa.kind,
@@ -551,6 +553,7 @@ export async function markPhysicalAssetReturned(
     branchId: string;
     assetId: string;
     assetVersion: number;
+    recoveryManagedReadiness: boolean;
     conditionNote?: string;
   },
 ): Promise<{ version: number; readiness: LockedReservationAllocationRow['asset_readiness'] } | null> {
@@ -560,8 +563,15 @@ export async function markPhysicalAssetReturned(
   }>(
     `UPDATE physical_asset
         SET custody_kind = 'at_branch',
-            readiness = CASE WHEN readiness = 'ready' THEN 'unready' ELSE readiness END,
-            condition_note = COALESCE($5, condition_note),
+            readiness = CASE
+              WHEN readiness IN ('needs_repair', 'unready') THEN readiness
+              ELSE 'needs_cleaning'
+            END,
+            recovery_managed_readiness = CASE
+              WHEN readiness IN ('needs_repair', 'unready') THEN false
+              ELSE $5
+            END,
+            condition_note = COALESCE($6, condition_note),
             version = version + 1,
             updated_at = statement_timestamp()
       WHERE tenant_id = $1
@@ -575,6 +585,7 @@ export async function markPhysicalAssetReturned(
       input.branchId,
       input.assetId,
       input.assetVersion,
+      input.recoveryManagedReadiness,
       input.conditionNote ?? null,
     ],
   );
@@ -595,6 +606,7 @@ export async function inspectReturnedPhysicalAsset(
     assetId: string;
     assetVersion: number;
     readiness: LockedReservationAllocationRow['asset_readiness'];
+    recoveryManagedReadiness: boolean;
     conditionNote?: string;
   },
 ): Promise<{ version: number; readiness: LockedReservationAllocationRow['asset_readiness'] } | null> {
@@ -604,7 +616,8 @@ export async function inspectReturnedPhysicalAsset(
   }>(
     `UPDATE physical_asset
         SET readiness = $5,
-            condition_note = COALESCE($6, condition_note),
+            recovery_managed_readiness = $6,
+            condition_note = COALESCE($7, condition_note),
             version = version + 1,
             updated_at = statement_timestamp()
       WHERE tenant_id = $1
@@ -620,8 +633,108 @@ export async function inspectReturnedPhysicalAsset(
       input.assetId,
       input.assetVersion,
       input.readiness,
+      input.recoveryManagedReadiness,
       input.conditionNote ?? null,
     ],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function truncateReturnedReservationRecovery(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; reservationId: string; assetId: string },
+): Promise<Date | null> {
+  const result = await client.query<{ blocked_end: Date }>(
+    `UPDATE asset_allocation aa
+        SET period = tstzrange(
+          lower(aa.period),
+          LEAST(upper(aa.period), GREATEST(r.due_at, statement_timestamp())),
+          '[)'
+        )
+       FROM reservation_line rl
+       JOIN reservation r
+         ON r.tenant_id = rl.tenant_id
+        AND r.id = rl.reservation_id
+      WHERE aa.tenant_id = $1
+        AND aa.branch_id = $2::uuid
+        AND aa.asset_id = $3::uuid
+        AND aa.reservation_line_id = rl.id
+        AND r.id = $4::uuid
+        AND r.status = 'returned'
+        AND aa.kind = 'reservation_confirmed'
+        AND aa.is_blocking = true
+      RETURNING upper(aa.period) AS blocked_end`,
+    [input.tenantId, input.branchId, input.assetId, input.reservationId],
+  );
+  return result.rows[0]?.blocked_end ?? null;
+}
+
+export async function promoteRecoveryManagedReadinessIfDue(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; assetId: string; assetVersion: number },
+): Promise<{ version: number; readiness: LockedReservationAllocationRow['asset_readiness'] } | null> {
+  const result = await client.query<{
+    version: number;
+    readiness: LockedReservationAllocationRow['asset_readiness'];
+  }>(
+    `UPDATE physical_asset pa
+        SET readiness = 'ready',
+            recovery_managed_readiness = false,
+            version = version + 1,
+            updated_at = statement_timestamp()
+      WHERE pa.tenant_id = $1
+        AND pa.branch_id = $2::uuid
+        AND pa.id = $3::uuid
+        AND pa.version = $4
+        AND pa.lifecycle_status = 'active'
+        AND pa.custody_kind = 'at_branch'
+        AND pa.readiness = 'needs_cleaning'
+        AND pa.recovery_managed_readiness = true
+        AND NOT EXISTS (
+          SELECT 1
+            FROM maintenance_work_order mwo
+           WHERE mwo.tenant_id = pa.tenant_id
+             AND mwo.branch_id = pa.branch_id
+             AND mwo.asset_id = pa.id
+             AND mwo.status = 'open'
+        )
+        AND EXISTS (
+          SELECT 1
+            FROM asset_allocation aa
+            JOIN reservation_line rl
+              ON rl.tenant_id = aa.tenant_id
+             AND rl.id = aa.reservation_line_id
+            JOIN reservation r
+              ON r.tenant_id = rl.tenant_id
+             AND r.id = rl.reservation_id
+           WHERE aa.tenant_id = pa.tenant_id
+             AND aa.branch_id = pa.branch_id
+             AND aa.asset_id = pa.id
+             AND aa.kind = 'reservation_confirmed'
+             AND aa.is_blocking = true
+             AND r.status = 'returned'
+             AND upper(aa.period) <= statement_timestamp()
+        )
+        AND NOT EXISTS (
+          SELECT 1
+            FROM asset_allocation aa
+            JOIN reservation_line rl
+              ON rl.tenant_id = aa.tenant_id
+             AND rl.id = aa.reservation_line_id
+            JOIN reservation r
+              ON r.tenant_id = rl.tenant_id
+             AND r.id = rl.reservation_id
+           WHERE aa.tenant_id = pa.tenant_id
+             AND aa.branch_id = pa.branch_id
+             AND aa.asset_id = pa.id
+             AND aa.kind = 'reservation_confirmed'
+             AND aa.is_blocking = true
+             AND r.status = 'returned'
+             AND r.due_at < upper(aa.period)
+             AND upper(aa.period) > statement_timestamp()
+        )
+      RETURNING pa.version, pa.readiness`,
+    [input.tenantId, input.branchId, input.assetId, input.assetVersion],
   );
   return result.rows[0] ?? null;
 }

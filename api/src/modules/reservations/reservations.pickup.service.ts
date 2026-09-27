@@ -39,6 +39,7 @@ import {
   lockReservationPaymentForReview,
   markPhysicalAssetPickedUp,
   pickupReservationHandover,
+  promoteRecoveryManagedReadinessIfDue,
   readLatestReservationVerification,
   readReservationMutationSummary,
   type LockedReservationAllocationRow,
@@ -121,7 +122,26 @@ export async function pickupReservationByStaff(
         reservationId,
       });
 
-      const allocation = requirePickupAllocation(context, allocations);
+      let allocation = requirePickupAllocation(context, allocations);
+      if (
+        allocation.asset_readiness === 'needs_cleaning' &&
+        allocation.asset_recovery_managed_readiness
+      ) {
+        const promoted = await promoteRecoveryManagedReadinessIfDue(client, {
+          tenantId: context.tenantId,
+          branchId: context.branchId,
+          assetId: allocation.asset_id,
+          assetVersion: allocation.asset_version,
+        });
+        if (promoted) {
+          allocation = {
+            ...allocation,
+            asset_readiness: promoted.readiness,
+            asset_recovery_managed_readiness: false,
+            asset_version: promoted.version,
+          };
+        }
+      }
       assertPickupAssetReady(context, allocation);
       assertPickupPolicyPrerequisites(reservation);
       assertPickupPaymentPrerequisites(reservation, payment, receipt, verification);
