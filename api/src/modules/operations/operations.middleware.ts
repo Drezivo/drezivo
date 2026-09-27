@@ -1,12 +1,18 @@
 import type { RequestHandler } from 'express';
 
-import { operationalCalendarQuery, type OperationalCalendarQuery } from '@drezivo/contracts';
+import {
+  clothingAvailabilityTimelineQuery,
+  operationalCalendarQuery,
+  type ClothingAvailabilityTimelineQuery,
+  type OperationalCalendarQuery,
+} from '@drezivo/contracts';
 
 import { ForbiddenError, ValidationError } from '../../shared/errors.js';
 
 declare module 'express-serve-static-core' {
   interface Request {
     operationalCalendarQuery?: OperationalCalendarQuery;
+    clothingAvailabilityTimelineQuery?: ClothingAvailabilityTimelineQuery;
   }
 }
 
@@ -25,5 +31,15 @@ export const validateOperationalCalendarQuery: RequestHandler = (req, _res, next
     return;
   }
   req.operationalCalendarQuery = parsed.data;
+  next();
+};
+
+export const validateClothingAvailabilityTimelineQuery: RequestHandler = (req, _res, next): void => {
+  const parsed = clothingAvailabilityTimelineQuery.safeParse(req.query);
+  if (!parsed.success) {
+    next(new ValidationError('Clothing availability query is invalid.'));
+    return;
+  }
+  req.clothingAvailabilityTimelineQuery = parsed.data;
   next();
 };

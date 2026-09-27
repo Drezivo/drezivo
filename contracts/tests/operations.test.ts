@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   centralPaymentsQuery,
   centralPaymentsResponse,
+  clothingAvailabilityTimelineQuery,
+  clothingAvailabilityTimelineResponse,
   dashboardFittingSummaryResponse,
   operationalCalendarQuery,
   operationalCalendarResponse,
@@ -83,6 +85,79 @@ describe('BE-8 operational integration contracts', () => {
       revenue_minor: '100000',
     });
     expect(result.success).toBe(false);
+  });
+
+  it('defines the bounded asset-level Clothing Availability timeline without standalone pickup or return agendas', () => {
+    expect(
+      clothingAvailabilityTimelineQuery.safeParse({
+        start_date: '2026-09-27',
+        end_date: '2026-10-27',
+        search: 'gown',
+        status: 'rented',
+        limit: 50,
+      }).success,
+    ).toBe(true);
+    expect(
+      clothingAvailabilityTimelineQuery.safeParse({
+        start_date: '2026-09-27',
+        end_date: '2026-10-28',
+      }).success,
+    ).toBe(false);
+    expect(
+      clothingAvailabilityTimelineQuery.safeParse({
+        start_date: '2026-09-27',
+        end_date: '2026-10-01',
+        status: 'pickup',
+      }).success,
+    ).toBe(false);
+
+    const result = clothingAvailabilityTimelineResponse.safeParse({
+      timezone: 'Asia/Manila',
+      window: { start_date: '2026-09-27', end_date: '2026-10-01' },
+      facets: {
+        categories: [{ id: '00000000-0000-4000-8000-000000000205', name: 'Gowns' }],
+        size_labels: ['M'],
+      },
+      rows: [
+        {
+          product: {
+            id: '00000000-0000-4000-8000-000000000206',
+            name: 'Emerald Evening Gown',
+            primary_image_url: 'https://images.example.test/gown.jpg',
+          },
+          variant: {
+            id: '00000000-0000-4000-8000-000000000207',
+            size_label: 'M',
+            color_label: 'Emerald',
+            rental_price_minor: '150000',
+            currency: 'PHP',
+          },
+          asset: { id: '00000000-0000-4000-8000-000000000208' },
+          agendas: [
+            {
+              id: 'reservation:example:rental',
+              type: 'rented',
+              period: {
+                start: '2026-09-27T02:00:00.000Z',
+                end: '2026-10-02T00:00:00.000Z',
+              },
+              display_lane: 0,
+              source_type: 'reservation',
+              source_id: ids.reservation,
+              customer_name: 'Maria Santos',
+              pickup: { date: '2026-09-27', at: '2026-09-27T02:00:00.000Z' },
+              return: { date: '2026-10-01', at: '2026-10-01T02:00:00.000Z' },
+              unavailable_reason: null,
+            },
+          ],
+        },
+      ],
+      page_meta: { next_cursor: null, has_more: false },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.rows[0]?.agendas[0]).not.toHaveProperty('asset_code');
+    expect(result.data?.rows[0]?.agendas[0]?.type).not.toBe('pickup');
   });
 
   it('bounds central Payments and preserves reservation-versus-fitting source identity', () => {

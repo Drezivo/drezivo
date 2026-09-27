@@ -4,6 +4,7 @@ import { ForbiddenError, ValidationError } from '../../shared/errors.js';
 import { sendSuccess } from '../../shared/response.js';
 import {
   getDashboardFittingSummary,
+  getClothingAvailabilityTimeline,
   getOperationalCalendar,
   type OperationsReadContext,
 } from './operations.service.js';
@@ -14,6 +15,20 @@ export async function getOperationalCalendarController(req: Request, res: Respon
     req,
     res,
     await getOperationalCalendar(requireContext(req), req.operationalCalendarQuery),
+  );
+}
+
+export async function getClothingAvailabilityTimelineController(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  if (!req.clothingAvailabilityTimelineQuery) {
+    throw new ValidationError('Clothing availability query is invalid.');
+  }
+  sendSuccess(
+    req,
+    res,
+    await getClothingAvailabilityTimeline(requireContext(req), req.clothingAvailabilityTimelineQuery),
   );
 }
 

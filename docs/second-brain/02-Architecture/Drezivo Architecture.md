@@ -35,3 +35,8 @@ direct administrative connection. See [[Supabase Managed PostgreSQL]].
 The backend follows explicit feature boundaries between routes, controllers, services,
 repositories, DTOs, and schemas. See [[02-Architecture/API Module Boundaries and Layering]] for
 the accepted cleanup policy and infrastructure-module exception.
+
+The staff Calendar's Clothing Availability tab is documented in
+[[02-Architecture/Clothing Availability Timeline - Backend]]. It is a bounded asset-lane
+projection: Reserved and Rented are continuous reservation bars with Pickup/Return boundary labels,
+while all readiness and planned operational blocks render as Unavailable.
