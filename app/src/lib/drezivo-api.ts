@@ -94,7 +94,18 @@ import {
   fittingListResponse,
   fittingNoShowRequest,
   fittingRejectRequest,
+  fittingClosureCreateRequest,
+  fittingClosureListQuery,
+  fittingClosureListResponse,
+  fittingClosureMutationResponse,
+  fittingClosureRemoveRequest,
+  fittingClosureRemoveResponse,
+  fittingClosureUpdateRequest,
   fittingSettings,
+  fittingSettingsUpdateRequest,
+  fittingSettingsUpdateResponse,
+  fittingWeeklyHoursUpdateRequest,
+  fittingWeeklyHoursUpdateResponse,
   type AbandonOwnerOnboardingRequest,
   type ActorContext,
   type BootstrapTenantRequest,
@@ -187,7 +198,18 @@ import {
   type FittingListResponse,
   type FittingNoShowRequest,
   type FittingRejectRequest,
+  type FittingClosureCreateRequest,
+  type FittingClosureListQuery,
+  type FittingClosureListResponse,
+  type FittingClosureMutationResponse,
+  type FittingClosureRemoveRequest,
+  type FittingClosureRemoveResponse,
+  type FittingClosureUpdateRequest,
   type FittingSettings,
+  type FittingSettingsUpdateRequest,
+  type FittingSettingsUpdateResponse,
+  type FittingWeeklyHoursUpdateRequest,
+  type FittingWeeklyHoursUpdateResponse,
 } from "@drezivo/contracts";
 
 type TokenGetter = () => Promise<string | null>;
@@ -348,6 +370,75 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "GET",
         path: "/api/v1/fittings/settings",
         responseSchema: apiEnvelope(fittingSettings),
+      }),
+    updateFittingSettings: (input: FittingSettingsUpdateRequest, idempotencyKey: string) =>
+      request<FittingSettingsUpdateResponse>({
+        getToken,
+        body: fittingSettingsUpdateRequest.parse(input),
+        idempotencyKey,
+        method: "PUT",
+        path: "/api/v1/fittings/settings",
+        responseSchema: apiEnvelope(fittingSettingsUpdateResponse),
+      }),
+    updateFittingWeeklyHours: (input: FittingWeeklyHoursUpdateRequest, idempotencyKey: string) =>
+      request<FittingWeeklyHoursUpdateResponse>({
+        getToken,
+        body: fittingWeeklyHoursUpdateRequest.parse(input),
+        idempotencyKey,
+        method: "PUT",
+        path: "/api/v1/fittings/settings/hours",
+        responseSchema: apiEnvelope(fittingWeeklyHoursUpdateResponse),
+      }),
+    getFittingClosures: (input: FittingClosureListQuery) => {
+      const query = fittingClosureListQuery.parse(input);
+      const searchParams = new URLSearchParams({
+        limit: String(query.limit),
+        period_start: query.period_start,
+        period_end: query.period_end,
+      });
+      if (query.cursor) searchParams.set("cursor", query.cursor);
+
+      return request<FittingClosureListResponse>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/fittings/closures?${searchParams.toString()}`,
+        responseSchema: apiEnvelope(fittingClosureListResponse),
+      });
+    },
+    createFittingClosure: (input: FittingClosureCreateRequest, idempotencyKey: string) =>
+      request<FittingClosureMutationResponse>({
+        getToken,
+        body: fittingClosureCreateRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/fittings/closures",
+        responseSchema: apiEnvelope(fittingClosureMutationResponse),
+      }),
+    updateFittingClosure: (
+      closureId: string,
+      input: FittingClosureUpdateRequest,
+      idempotencyKey: string
+    ) =>
+      request<FittingClosureMutationResponse>({
+        getToken,
+        body: fittingClosureUpdateRequest.parse(input),
+        idempotencyKey,
+        method: "PUT",
+        path: `/api/v1/fittings/closures/${encodeURIComponent(closureId)}`,
+        responseSchema: apiEnvelope(fittingClosureMutationResponse),
+      }),
+    removeFittingClosure: (
+      closureId: string,
+      input: FittingClosureRemoveRequest,
+      idempotencyKey: string
+    ) =>
+      request<FittingClosureRemoveResponse>({
+        getToken,
+        body: fittingClosureRemoveRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/fittings/closures/${encodeURIComponent(closureId)}/remove`,
+        responseSchema: apiEnvelope(fittingClosureRemoveResponse),
       }),
     getFittingDashboardSummary: () =>
       request<DashboardFittingSummaryResponse>({
