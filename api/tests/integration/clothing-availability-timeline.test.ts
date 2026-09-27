@@ -105,17 +105,21 @@ describe('OPS-063 clothing availability timeline', async () => {
       customer_name: 'Reserved Customer',
       pickup: {
         date: '2026-09-27',
-        at: '2026-09-27T05:00:00.000Z',
+        at: '2026-09-27T02:00:00.000Z',
       },
       return: {
         date: '2026-10-01',
         at: '2026-10-01T02:00:00.000Z',
       },
     });
-    expect(rentedAgenda?.period.start).toBe('2026-09-27T05:00:00.000Z');
+    expect(rentedAgenda?.period).toEqual({
+      start: '2026-09-27T02:00:00.000Z',
+      end: '2026-10-01T02:00:00.000Z',
+    });
     expect(rented.agendas).toContainEqual(
       expect.objectContaining({ type: 'unavailable', unavailable_reason: 'recovery' }),
     );
+    expect(rented.agendas.every((agenda) => agenda.display_lane === 0)).toBe(true);
 
     const readiness = requireRow(byAsset.get(fixture.readinessAssetId), 'readiness asset');
     expect(readiness.agendas).toEqual([

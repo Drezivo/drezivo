@@ -80,6 +80,8 @@ import {
   updatePhysicalAssetStateRequest,
   updatePhysicalAssetStateResponse,
   workspaceList,
+  clothingAvailabilityTimelineQuery,
+  clothingAvailabilityTimelineResponse,
   dashboardFittingSummaryResponse,
   fittingActionResponse,
   fittingCancelRequest,
@@ -185,6 +187,8 @@ import {
   type UpdatePhysicalAssetStateRequest,
   type UpdatePhysicalAssetStateResponse,
   type WorkspaceList,
+  type ClothingAvailabilityTimelineQuery,
+  type ClothingAvailabilityTimelineResponse,
   type DashboardFittingSummaryResponse,
   type FittingActionResponse,
   type FittingCancelRequest,
@@ -449,6 +453,26 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         path: "/api/v1/dashboard/fittings-summary",
         responseSchema: apiEnvelope(dashboardFittingSummaryResponse),
       }),
+    getClothingAvailabilityTimeline: (input: ClothingAvailabilityTimelineQuery) => {
+      const query = clothingAvailabilityTimelineQuery.parse(input);
+      const searchParams = new URLSearchParams({
+        start_date: query.start_date,
+        end_date: query.end_date,
+        limit: String(query.limit),
+      });
+      if (query.search) searchParams.set("search", query.search);
+      if (query.category_id) searchParams.set("category_id", query.category_id);
+      if (query.size_label) searchParams.set("size_label", query.size_label);
+      if (query.status) searchParams.set("status", query.status);
+      if (query.cursor) searchParams.set("cursor", query.cursor);
+
+      return request<ClothingAvailabilityTimelineResponse>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/calendar/availability?${searchParams.toString()}`,
+        responseSchema: apiEnvelope(clothingAvailabilityTimelineResponse),
+      });
+    },
     createFitting: (input: FittingCreateRequest, idempotencyKey: string) =>
       request<FittingCreateResponse>({
         getToken,
