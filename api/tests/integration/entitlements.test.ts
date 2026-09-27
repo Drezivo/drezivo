@@ -66,16 +66,16 @@ describe('TBF-032 entitlement service', async () => {
         version: 1,
         monthlyMinor: 30000,
         currency: 'PHP',
-        physicalAssetsMax: 75,
-        frontdeskSeatsMax: 1,
+        physicalAssetsMax: 125,
+        frontdeskSeatsMax: 0,
       },
       {
         code: 'professional',
         version: 1,
         monthlyMinor: 49900,
         currency: 'PHP',
-        physicalAssetsMax: 250,
-        frontdeskSeatsMax: 3,
+        physicalAssetsMax: 300,
+        frontdeskSeatsMax: 2,
       },
       {
         code: 'business',
@@ -99,8 +99,8 @@ describe('TBF-032 entitlement service', async () => {
     expect(snapshot).toMatchObject({
       planCode: 'starter',
       planVersion: 1,
-      physicalAssetsMax: 75,
-      frontdeskSeatsMax: 1,
+      physicalAssetsMax: 125,
+      frontdeskSeatsMax: 0,
     });
   });
 
@@ -124,12 +124,12 @@ describe('TBF-032 entitlement service', async () => {
 
   it('allows exact asset capacity and rejects overage', async () => {
     const tenant = await createQuotaTenant('org_tbf032_asset_quota', 'user_tbf032_asset_quota');
-    await seedPhysicalAssets(tenant.id, 74);
+    await seedPhysicalAssets(tenant.id, 124);
 
     const exact = await withTenantTransaction(tenant.id, 'user_tbf032_asset_quota', (client) =>
       assertPhysicalAssetCapacity(client, tenant.id, 1),
     );
-    expect(exact).toMatchObject({ resource: 'physical_assets', current: 74, requested: 1, limit: 75, remaining: 0 });
+    expect(exact).toMatchObject({ resource: 'physical_assets', current: 124, requested: 1, limit: 125, remaining: 0 });
 
     await expect(
       withTenantTransaction(tenant.id, 'user_tbf032_asset_quota', (client) =>
@@ -140,7 +140,7 @@ describe('TBF-032 entitlement service', async () => {
 
   it('serializes concurrent asset claims so only one final write reaches the cap', async () => {
     const tenant = await createQuotaTenant('org_tbf032_asset_race', 'user_tbf032_asset_race');
-    await seedPhysicalAssets(tenant.id, 74);
+    await seedPhysicalAssets(tenant.id, 124);
 
     const attempts = await Promise.allSettled(
       ['user_tbf032_asset_race_a', 'user_tbf032_asset_race_b'].map((principalId) =>
@@ -160,7 +160,8 @@ describe('TBF-032 entitlement service', async () => {
   });
 
   it('counts active Front Desk memberships, excludes the Owner, and serializes claims', async () => {
-    const tenant = await createQuotaTenant('org_tbf032_seat_race', 'user_tbf032_seat_owner');
+    const tenant = await createQuotaTenant('org_tbf032_seat_race', 'user_tbf032_seat_owner', 'professional');
+    await createTestMembership(tenant.id, 'user_tbf032_existing_frontdesk', 'frontdesk');
 
     const attempts = await Promise.allSettled(
       ['user_tbf032_seat_a', 'user_tbf032_seat_b'].map((principalId) =>
@@ -185,7 +186,7 @@ describe('TBF-032 entitlement service', async () => {
         [tenant.id],
       ),
     );
-    expect(result.rows[0]?.count).toBe(1);
+    expect(result.rows[0]?.count).toBe(2);
   });
 
   it('keeps quota reads inside the authenticated tenant scope', async () => {
@@ -206,7 +207,7 @@ describe('TBF-032 entitlement service', async () => {
   });
 
   it('does not consume capacity when the caller rolls back after the guard', async () => {
-    const tenant = await createQuotaTenant('org_tbf032_rollback', 'user_tbf032_rollback');
+    const tenant = await createQuotaTenant('org_tbf032_rollback', 'user_tbf032_rollback', 'professional');
 
     await expect(
       withTenantTransaction(tenant.id, 'user_tbf032_rollback', async (client) => {
@@ -257,7 +258,11 @@ describe('TBF-032 entitlement service', async () => {
     });
   }
 
-  async function createQuotaTenant(clerkOrgId: string, ownerPrincipal: string) {
+  async function createQuotaTenant(
+    clerkOrgId: string,
+    ownerPrincipal: string,
+    planCode: 'starter' | 'professional' = 'starter',
+  ) {
     const tenant = await createTestTenant({ clerkOrgId });
     const membershipId = await createTestMembership(tenant.id, ownerPrincipal, 'owner');
     const branch = await withTenantTransaction(tenant.id, ownerPrincipal, async (client) => {
@@ -294,7 +299,7 @@ describe('TBF-032 entitlement service', async () => {
       if (!variantId) throw new Error('missing product variant');
       return { id: branchId, variantId };
     });
-    await createSubscription(tenant.id, 'starter');
+    await createSubscription(tenant.id, planCode);
     return { id: tenant.id, branchId: branch.id, variantId: branch.variantId };
   }
 

@@ -46,7 +46,7 @@ describe('TBF-030 tenant bootstrap', async () => {
     await closePool();
   });
 
-  it('creates one complete tenant graph and starts a seven-day trial', async () => {
+  it('creates one complete tenant graph and starts a fourteen-day trial', async () => {
     const principalId = 'user_tbf030_success';
     const account = await ensureAccount(principalId);
     const onboarding = await createOrResumeOnboarding(account.id, 'org_tbf030_success', principalId, {
@@ -122,7 +122,7 @@ describe('TBF-030 tenant bootstrap', async () => {
         currency: string;
         version: number;
       }>(
-        `SELECT enabled, capacity, duration_minutes, fee_minor::text, currency, version
+        `SELECT enabled, capacity, duration_minutes, fee_minor::text, currency, version::integer AS version
            FROM fitting_settings
           LIMIT 1`,
       );
@@ -147,7 +147,7 @@ describe('TBF-030 tenant bootstrap', async () => {
     });
     if (!tenantState.subscription) throw new Error('expected subscription');
     expect(tenantState.subscription.current_period_end.getTime() - tenantState.subscription.current_period_start.getTime()).toBe(
-      7 * 24 * 60 * 60 * 1000,
+      14 * 24 * 60 * 60 * 1000,
     );
     expect(tenantState.subscription.trial_ends_at.getTime()).toBe(tenantState.subscription.current_period_end.getTime());
     expect(tenantState.outbox).toEqual({ event_type: 'tenant.bootstrapped' });

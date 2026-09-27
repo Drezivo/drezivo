@@ -1188,7 +1188,7 @@ components:
               exclusiveMinimum: 0
             frontdesk_seats_max:
               type: integer
-              exclusiveMinimum: 0
+              minimum: 0
           required:
             - physical_assets_max
             - frontdesk_seats_max
@@ -2821,7 +2821,7 @@ paths:
                             exclusiveMinimum: 0
                           frontdesk_seats_max:
                             type: integer
-                            exclusiveMinimum: 0
+                            minimum: 0
                         required:
                           - physical_assets_max
                           - frontdesk_seats_max
@@ -4223,7 +4223,7 @@ paths:
                             exclusiveMinimum: 0
                           frontdesk_seats_max:
                             type: integer
-                            exclusiveMinimum: 0
+                            minimum: 0
                         required:
                           - physical_assets_max
                           - frontdesk_seats_max

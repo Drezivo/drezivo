@@ -28,12 +28,12 @@ or billing tasks as authority for this work.
 - A public verified person is an owner candidate, not automatically an Owner membership.
 - Backend-created Clerk organization plus local incomplete onboarding is the only owner-start path.
 - One verified person has one unfinished onboarding, one current owned tenant, and one lifetime
-  seven-day trial.
+  fourteen-day trial.
 - A person may be Front Desk in other tenants.
 - Front Desk membership is created only from a Drezivo invitation and verified Clerk claim.
 - The app switches only among provisioned businesses with active local membership.
-- Starter / Professional / Business enforce 75 / 250 / 1,000 active physical assets and
-  1 / 3 / 10 Front Desk seats.
+- Starter / Professional / Business enforce 125 / 300 / 1,000 active physical assets and
+  0 / 2 / 10 Front Desk seats.
 - Trial expiry has seven days of normal past-due grace, then restricted access.
 - Later businesses remain payment-pending until audited manual operator payment.
 - Clerk webhook or organization loss never creates access by assumption.
@@ -44,10 +44,9 @@ or billing tasks as authority for this work.
   - **Depends on:** None.
   - **Outcome:** PRD, TRD, Data Model, ERD, and this checklist agree on the accepted lifecycle.
   - **Acceptance:**
-    - [x] Replace 14-day trial and one-trial-per-tenant language with seven-day,
-          one-trial-per-verified-person policy.
-    - [x] Replace 50 / 200 / 1,000 asset limits with 75 / 250 / 1,000.
-    - [x] State Front Desk caps of 1 / 3 / 10 and count active members plus unexpired invites.
+    - [x] Enforce a fourteen-day trial and one-trial-per-verified-person policy.
+    - [x] Set 125 / 300 / 1,000 asset limits.
+    - [x] State Front Desk caps of 0 / 2 / 10 and count active members plus unexpired invites.
     - [x] Document payment-pending onboarding, one current owned tenant, closure, and external
           Clerk organization deletion restriction.
     - [x] Record that Clerk proves identity while Drezivo authorizes local membership and
@@ -211,7 +210,7 @@ or billing tasks as authority for this work.
     membership/grant, six active default clothing categories, draft storefront, subscription, and
     trial event.
   - **Acceptance:**
-    - [x] Database time starts the seven-day trial.
+    - [x] Database time starts the fourteen-day trial.
     - [x] Account trial state and current-owned-tenant link are updated in the same winning
           transaction.
     - [x] Provisioned onboarding cannot bootstrap again.

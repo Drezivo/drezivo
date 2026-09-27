@@ -6,6 +6,7 @@ import type { PoolClient } from 'pg';
 import type { BootstrapTransactionContext } from '../../db/client.js';
 import { appendGlobalAuditEvent } from '../audit/global-audit.repository.js';
 import { seedDefaultCatalogueCategories } from '../catalogue/catalogue.bootstrap.js';
+import { TRIAL_DURATION_DAYS } from '../billing/billing.constants.js';
 
 export interface BootstrapAccountRow {
   id: string;
@@ -196,7 +197,7 @@ export async function createTenantBootstrapGraph(
   const subscriptionEventId = randomUUID();
   const outboxId = randomUUID();
   const auditId = randomUUID();
-  const trialEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const trialEndsAt = new Date(now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000);
 
   const tenant = await client.query<TenantRow>(
     `INSERT INTO tenant (id, clerk_org_id, name, slug, status, currency, timezone)

@@ -74,7 +74,7 @@ describe('TBF-033 subscription lifecycle and gates', async () => {
     const tenant = await createTestTenant({ clerkOrgId: 'org_tbf033_grace' });
     const ownerId = 'user_tbf033_grace';
     await createTestMembership(tenant.id, ownerId, 'owner');
-    await seedSubscription(tenant.id, 'starter', "now() - interval '8 days'");
+    await seedSubscription(tenant.id, 'starter', "now() - interval '15 days'");
 
     const first = await withTenantTransaction(tenant.id, ownerId, (client) =>
       reconcileTenantLifecycle(client, tenant.id, {
@@ -107,7 +107,7 @@ describe('TBF-033 subscription lifecycle and gates', async () => {
     const ownerId = 'user_tbf033_context';
     const membershipId = await createTestMembership(tenant.id, ownerId, 'owner');
     await seedWorkspaceBranch(tenant.id, membershipId, ownerId);
-    await seedSubscription(tenant.id, 'starter', "now() - interval '8 days'");
+    await seedSubscription(tenant.id, 'starter', "now() - interval '15 days'");
 
     const result = await resolveActorContext({
       principalId: ownerId,
@@ -223,7 +223,7 @@ describe('TBF-033 subscription lifecycle and gates', async () => {
       await client.query(
         `INSERT INTO subscription
            (tenant_id, plan_id, status, trial_ends_at, current_period_start, current_period_end)
-         VALUES ($1, $2, 'trialing', ${trialEndsExpression}, now(), now() + interval '7 days')`,
+         VALUES ($1, $2, 'trialing', ${trialEndsExpression}, now(), now() + interval '14 days')`,
         [tenantId, planId],
       );
     });

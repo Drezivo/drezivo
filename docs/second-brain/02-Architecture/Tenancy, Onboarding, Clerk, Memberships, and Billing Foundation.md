@@ -37,7 +37,7 @@ This vault contains no credentials, customer records, payment evidence, or produ
 | Clerk organization creation | The Drezivo backend creates the Clerk organization. The client receives the result and sets that organization active in Clerk.                                                   |
 | Incomplete work             | Exactly one unfinished onboarding is allowed per owner. It can be resumed or abandoned. Abandonment archives Drezivo state but retains the Clerk organization and audit history. |
 | Existing businesses         | The app switches only among provisioned Drezivo businesses where the actor has an active local membership.                                                                       |
-| Trial                       | A verified person receives one seven-day lifetime trial. The selected plan's real limits apply immediately.                                                                      |
+| Trial                       | A verified person receives one fourteen-day lifetime trial. The selected plan's real limits apply immediately.                                                                    |
 | Later business              | After a trial is used, a replacement business is payment-pending. No tenant exists until a platform operator verifies payment.                                                   |
 | Closure                     | Operator-assisted permanent closure releases the one-owned-business slot. The former owner retains a limited read-only settlement and export view.                               |
 | Billing V1                  | Billing is manual and audited. V1 has no card collection, stored card, recurring charge, or payment gateway.                                                                     |
@@ -185,8 +185,8 @@ Bootstrap creates `Main Branch` (`main`) in `Asia/Manila` with empty address and
 placeholders. A supplied slug is preserved exactly. When no slug was supplied, the server
 normalizes the organization name and adds a stable onboarding-derived suffix only if the shared
 tenant/storefront slug namespace is occupied. The Starter, Professional, and Business version-1
-plan rows are seeded before bootstrap can run, with 75/250/1,000 physical-asset limits and
-1/3/10 Front Desk seats.
+plan rows are seeded before bootstrap can run, with 125/300/1,000 physical-asset limits and
+0/2/10 Front Desk seats.
 
 Duplicate requests return the original result. Concurrent requests create at most one tenant,
 membership, subscription, and trial. The first business needs no card or payment account.
@@ -273,8 +273,8 @@ evidence, a reason-coded audit record, and a second internal approval before loc
 
 | Plan         | Monthly price | Active physical assets | Front Desk seats |
 | ------------ | ------------: | ---------------------: | ---------------: |
-| Starter      |       PHP 300 |                     75 |                1 |
-| Professional |       PHP 499 |                    250 |                3 |
+| Starter      |       PHP 300 |                    125 |                0 |
+| Professional |       PHP 499 |                    300 |                2 |
 | Business     |     PHP 1,299 |                  1,000 |               10 |
 
 Prices are PHP minor units 30000, 49900, and 129900. Entitlements are versioned with the plan, not
@@ -290,7 +290,7 @@ not consume a Front Desk seat.
 
 ### Trial, plan changes, and downgrade
 
-- The first trial is seven days from database time and applies the selected plan immediately.
+- The first trial is fourteen days from database time and applies the selected plan immediately.
 - The owner may change plan during trial through `POST /api/v1/subscription/plan`. The new
   entitlement set is resolved from the active version-1 plan, checked against current usage, and
   applied immediately with an immutable plan-change event and tenant audit record. Paid-plan
@@ -377,7 +377,7 @@ Clerk references consulted 2026-09-16:
 | Tenant                          | Global root                       | Clerk org ID unique; active, restricted, or cancelled; retained after provider loss.                              |
 | Membership                      | Tenant-owned                      | One Clerk user per tenant; Owner or Front Desk; removal preserves history.                                        |
 | Membership invitation           | Tenant-owned                      | Stable intent per reserved seat; seven-day expiry; provider correlation; no raw provider token in ordinary reads. |
-| Plan and entitlement            | Global                            | Versioned prices/limits; 75/250/1000 asset and 1/3/10 seat limits explicit.                                       |
+| Plan and entitlement            | Global                            | Versioned prices/limits; 125/300/1000 asset and 0/2/10 seat limits explicit.                                       |
 | Subscription and events         | Tenant-owned                      | One current subscription; immutable history; database-time transitions.                                           |
 | Webhook inbox                   | Global                            | Provider/event identity unique before tenant resolution; verified raw payload handling.                           |
 | Outbox event                    | Tenant-owned or explicitly global | Stable dedupe key, lease, bounded retry, terminal failure visibility.                                             |
@@ -480,9 +480,9 @@ integration evidence.
 
 - Adopted backend-created, create-only Clerk organization onboarding.
 - Adopted one incomplete onboarding and one current owned business per verified person.
-- Adopted a seven-day per-person trial, then seven-day normal-access past-due grace, then
+- Adopted a fourteen-day per-person trial, then seven-day normal-access past-due grace, then
   restriction.
-- Set physical-asset limits to 75 / 250 / 1,000 and Front Desk seats to 1 / 3 / 10.
+- Set physical-asset limits to 125 / 300 / 1,000 and Front Desk seats to 0 / 2 / 10.
 - Chose manual operator-verified billing, no V1 payment gateway, and payment-pending replacement
   businesses.
 - Chose immediate verified invitation claim with webhook reconciliation, seven-day invitation

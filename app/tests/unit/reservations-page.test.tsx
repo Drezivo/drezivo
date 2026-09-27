@@ -274,8 +274,8 @@ const actorContext = {
     current_period_end: "2026-10-01T00:00:00.000Z",
   },
   entitlements: {
-    physical_assets_max: 75,
-    frontdesk_seats_max: 1,
+    physical_assets_max: 125,
+    frontdesk_seats_max: 0,
   },
 };
 

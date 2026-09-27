@@ -137,7 +137,7 @@ when the UI is still completing that same intent. Do not issue a second Clerk or
 ### 4. Select a plan before bootstrap
 
 The business flow is: choose Starter, Professional, or Business, then bootstrap the tenant. Plan
-limits are authoritative in the backend: 75/250/1,000 active physical assets and 1/3/10 Front
+limits are authoritative in the backend: 125/300/1,000 active physical assets and 0/2/10 Front
 Desk seats. The browser does not send prices or limits.
 
 The pre-tenant plan-selection command is `POST /api/v1/onboarding/:onboardingId/plan` with the
@@ -167,7 +167,7 @@ The API checks the active Clerk organization against the saved `clerk_org_id`, t
 - creates the `Main Branch` in `Asia/Manila`;
 - creates the active Owner membership and full Owner branch grant;
 - creates the draft storefront;
-- creates the seven-day trial subscription and immutable trial event;
+- creates the fourteen-day trial subscription and immutable trial event;
 - marks the account's trial/owned-tenant state;
 - marks onboarding `provisioned`;
 - writes the required audit and outbox records.

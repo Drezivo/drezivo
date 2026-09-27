@@ -165,7 +165,8 @@ function toSnapshot(plan: PlanRow, entitlements: PlanEntitlementRow[]): TenantEn
 
   const values = new Map(entitlements.map((row) => [row.capability, row]));
   const assets = requireNumericEntitlement(values.get('physical_assets.max'));
-  const seats = requireNumericEntitlement(values.get('frontdesk_seats.max'));
+  // Starter is intentionally Owner-only in v1, so a zero Front Desk seat limit is valid.
+  const seats = requireNumericEntitlement(values.get('frontdesk_seats.max'), { allowZero: true });
 
   return {
     planId: plan.id,
@@ -178,8 +179,17 @@ function toSnapshot(plan: PlanRow, entitlements: PlanEntitlementRow[]): TenantEn
   };
 }
 
-function requireNumericEntitlement(row: PlanEntitlementRow | undefined): number {
-  if (!row?.enabled || row.limit_value === null || !Number.isSafeInteger(row.limit_value) || row.limit_value <= 0) {
+function requireNumericEntitlement(
+  row: PlanEntitlementRow | undefined,
+  options?: { allowZero?: boolean },
+): number {
+  const minimum = options?.allowZero ? 0 : 1;
+  if (
+    !row?.enabled ||
+    row.limit_value === null ||
+    !Number.isSafeInteger(row.limit_value) ||
+    row.limit_value < minimum
+  ) {
     throw new StateConflictError('Workspace entitlement state is unavailable.');
   }
   return row.limit_value;
