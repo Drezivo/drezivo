@@ -222,10 +222,12 @@ describe('OPS-063 clothing availability timeline', async () => {
 
     const secondary = await getClothingAvailabilityTimeline(
       availabilityContext(tenant.id, secondaryBranchId, 'user_ops063_filters'),
-      timelineQuery(WINDOW),
+      timelineQuery({ ...WINDOW, search: 'Timeline Gown' }),
     );
     expect(secondary.rows).toHaveLength(1);
     expect(secondary.rows[0]?.asset.id).not.toBe(fixture.reservedAssetId);
+    expect(secondary.rows[0]?.asset.readiness).toBe('needs_cleaning');
+    expect(secondary.rows[0]?.agendas).toHaveLength(0);
   });
 
   it('rejects an operation context without the reservation-read permission', async () => {
