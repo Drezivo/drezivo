@@ -6,7 +6,8 @@
   "workspaces": ["contracts", "api", "app", "web", "docs"],
   "engines": {"node": ">=22 <25"},
   "devDependencies": {
-    "eslint": "^10.11.0"
+    "eslint": "^10.11.0",
+    "vitest": "^5.0.1"
   },
   "scripts": {
     "typecheck": "npm run typecheck --workspaces --if-present",

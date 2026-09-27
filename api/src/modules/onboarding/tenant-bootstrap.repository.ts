@@ -238,6 +238,20 @@ export async function createTenantBootstrapGraph(
        VALUES ($1, $2, 'Main Branch', 'main', true, 'Asia/Manila', '{}'::jsonb, '{}'::jsonb, 'active')`,
       [branchId, tenantId],
     );
+    // Fitting configuration is branch-scoped. Seed the enabled default schedule so the Owner
+    // can use or configure it without a separate hidden provisioning action.
+    await client.query(
+      `INSERT INTO fitting_settings
+         (tenant_id, branch_id, enabled, capacity, duration_minutes, fee_minor, currency)
+       VALUES ($1, $2, true, 1, 60, 0, $3)`,
+      [tenantId, branchId, tenantRow.currency],
+    );
+    await client.query(
+      `INSERT INTO fitting_hours (tenant_id, branch_id, weekday, starts_local, ends_local)
+       SELECT $1, $2, weekday, time '08:00', time '20:00'
+         FROM generate_series(1, 6) AS weekdays(weekday)`,
+      [tenantId, branchId],
+    );
     await client.query(
       `INSERT INTO membership (id, tenant_id, clerk_user_id, role, status, authz_version)
        VALUES ($1, $2, $3, 'owner', 'active', 1)`,
