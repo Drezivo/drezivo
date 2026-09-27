@@ -67,6 +67,7 @@ import {
   type FittingWeeklyWindowRow,
   type ScheduledFittingCapacityRow,
 } from './fittings.schedule.command.repository.js';
+import { recordFittingCommandFailure } from './fittings.observability.js';
 import { toFittingClosure, toFittingSettings } from './fittings.schedule.mapper.js';
 import { readFittingSettingsModel } from './fittings.schedule.repository.js';
 
@@ -861,6 +862,13 @@ async function finalizeConfigurationFailure<T extends { status: number; body: un
   error: unknown,
 ): Promise<T> {
   if (!isAppError(error)) throw error;
+  recordFittingCommandFailure({
+    operation,
+    tenantId: context.tenantId,
+    branchId: context.branchId,
+    requestId: context.requestId,
+    error,
+  });
   const body: FailureEnvelope = {
     success: false,
     error: { code: error.code, message: error.message },

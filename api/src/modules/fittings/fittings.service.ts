@@ -1,6 +1,7 @@
 import {
   fittingClosureListResponse,
   fittingDetail,
+  fittingIntakeResponse,
   fittingListItem,
   fittingListResponse,
   fittingSettings,
@@ -8,6 +9,8 @@ import {
   type FittingClosureListQuery,
   type FittingClosureListResponse,
   type FittingDetail,
+  type FittingIntakeQuery,
+  type FittingIntakeResponse,
   type FittingListItem,
   type FittingListQuery,
   type FittingListResponse,
@@ -22,7 +25,12 @@ import {
 
 import { withTenantTransaction } from '../../db/client.js';
 import { ForbiddenError, NotFoundError, TenantCancelledError, TenantRestrictedError } from '../../shared/errors.js';
-import { listFittingsReadModel, readFittingDetailModel, type FittingListReadRow } from './fittings.repository.js';
+import {
+  listFittingsReadModel,
+  readFittingDetailModel,
+  searchFittingIntakeCustomers,
+  type FittingListReadRow,
+} from './fittings.repository.js';
 import { toFittingClosure } from './fittings.schedule.mapper.js';
 import { listFittingClosuresReadModel, readFittingSettingsModel } from './fittings.schedule.repository.js';
 
@@ -33,6 +41,20 @@ export interface FittingReadContext {
   principalId: string;
   permissionCodes: PermissionCode[];
   effectiveTenantStatus: TenantStatus;
+}
+
+export async function getFittingIntakeOptions(
+  input: FittingReadContext,
+  query: FittingIntakeQuery,
+): Promise<FittingIntakeResponse> {
+  assertFittingReadContext(input);
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const customers = await searchFittingIntakeCustomers(client, {
+      tenantId: input.tenantId,
+      ...(query.customer_search ? { search: query.customer_search } : {}),
+    });
+    return fittingIntakeResponse.parse({ customers });
+  });
 }
 
 export async function getFittingList(input: FittingReadContext, query: FittingListQuery): Promise<FittingListResponse> {

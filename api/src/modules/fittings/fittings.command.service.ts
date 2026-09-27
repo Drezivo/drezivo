@@ -42,6 +42,7 @@ import {
   validateFittingScheduleForCreate,
   type FittingCreateCustomerRow,
 } from './fittings.command.repository.js';
+import { recordFittingCommandFailure } from './fittings.observability.js';
 import { readFittingDetailModel } from './fittings.repository.js';
 
 const CREATE_FITTING_OPERATION = 'fitting.create.staff';
@@ -438,6 +439,13 @@ async function finalizeKnownFailure(
   error: unknown,
 ): Promise<FittingCreateCommandResponse> {
   if (!isAppError(error)) throw error;
+  recordFittingCommandFailure({
+    operation: CREATE_FITTING_OPERATION,
+    tenantId: context.tenantId,
+    branchId: context.branchId,
+    requestId: context.requestId,
+    error,
+  });
   const body: FailureEnvelope = {
     success: false,
     error: { code: error.code, message: error.message },

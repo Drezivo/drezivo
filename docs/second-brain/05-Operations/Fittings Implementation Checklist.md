@@ -9,7 +9,7 @@ tags: [drezivo, v1.1, fittings, frontend, backend, implementation, checklist]
 
 # Fittings V1.1 Implementation Checklist
 
-**Status:** Frontend prototype approved. Backend Phases BE-0 through BE-5 are implemented, with the isolated Neon-branch rehearsal for FIT-BE-025 still outstanding. BE-6 backend schedule behavior is implemented through FIT-BE-063; FIT-BE-061 remains open only for the frontend session-storage cutover intentionally deferred to FIT-BE-101. BE-7 fitting finance integration is complete through FIT-BE-074. BE-8 cross-product backend integration is complete through FIT-BE-083; Calendar, Dashboard, Availability, and Payments now have authoritative fitting-aware read behavior, while removal of prototype/mock UI remains intentionally deferred to the controlled FIT-BE-102 frontend cutover.
+**Status:** Frontend prototype approved. Backend Phases BE-0 through BE-5 are implemented, with the isolated Neon-branch rehearsal for FIT-BE-025 still outstanding. BE-6 backend schedule behavior is implemented through FIT-BE-063; FIT-BE-061 remains open only for the frontend session-storage cutover intentionally deferred to FIT-BE-101. BE-7 fitting finance integration is complete through FIT-BE-074. BE-8 cross-product backend integration is complete through FIT-BE-083. BE-9 security, reliability, observability, and hardening is complete through FIT-BE-094: the production fitting router is mounted, authorization/RLS/pool isolation and contention have dedicated falsification coverage, safe audit/failure observability is active, and representative list/calendar query plans are verified. Frontend production cutover remains intentionally deferred to BE-10.
 
 This file is the feature-wide implementation checklist for `/fittings` and `/fittings/schedule`. The original frontend prototype phases are retained below as implementation history; the backend phases are appended after the frontend section.
 
@@ -1096,39 +1096,46 @@ The fitting frontend prototype is complete when:
 
 # Backend Phase BE-9: Security, reliability, observability, and hardening
 
-- [ ] **FIT-BE-090 — Complete fitting authorization matrix**
+- [x] **FIT-BE-090 — Complete fitting authorization matrix**
   - **Acceptance:**
-    - [ ] Owner and Front Desk may perform approved operational fitting actions; Owner alone may mutate enabled/capacity/duration/fee/hours/closures.
-    - [ ] Fitting permissions do not grant payment verification/refund authority beyond the existing finance policy.
-    - [ ] Every route checks active membership and tenant/branch scope.
-    - [ ] Cross-tenant IDs fail without leaking object existence.
+    - [x] Owner and Front Desk may perform approved operational fitting actions; Owner alone may mutate enabled/capacity/duration/fee/hours/closures.
+    - [x] Fitting permissions do not grant payment verification/refund authority beyond the existing finance policy.
+    - [x] Every route checks active membership and tenant/branch scope.
+    - [x] Cross-tenant IDs fail without leaking object existence.
+  - **Evidence:** `api/src/modules/fittings/fittings.routes.ts`, `fittings.middleware.ts`, and `fittings.controller.ts` now mount the published fitting HTTP surface through verified staff authentication, tenant/active-membership resolution, active branch grants, bounded rate limits, contract validation, and idempotency middleware. Owner and Front Desk share the existing `reservations.manage` operational grant, while settings/hours/closures are additionally Owner-only. Payment verification still requires `payments.manage` plus `evidence.verify`; FIT-BE-073's refund path remains Owner + `payments.manage`. The same hardening pass completed the previously published runtime intake-customer search and optimistic/versioned internal-note command. `fittings-phase9-security.test.ts` passes 4/4, including Front Desk operational success, Owner-only configuration, finance-permission separation, removed-membership denial, branch-grant denial, and cross-tenant fitting concealment.
 
-- [ ] **FIT-BE-091 — Complete fitting RLS and pooled-connection isolation tests**
+- [x] **FIT-BE-091 — Complete fitting RLS and pooled-connection isolation tests**
   - **Acceptance:**
-    - [ ] Reused pooled connections cannot retain another tenant context.
-    - [ ] Missing/empty tenant context fails closed.
-    - [ ] Rollback and revoked membership cases do not leak fitting/customer/payment data.
+    - [x] Reused pooled connections cannot retain another tenant context.
+    - [x] Missing/empty tenant context fails closed.
+    - [x] Rollback and revoked membership cases do not leak fitting/customer/payment data.
+  - **Evidence:** `fittings-phase9-rls-pool.test.ts` forces `DATABASE_POOL_MAX=1`, proves two tenants reuse the same PostgreSQL backend PID while each can see only its own fitting/customer/payment rows, forces a rollback then verifies the raw reused connection has an empty tenant GUC and zero tenant-owned rows, verifies a subsequent tenant scope remains isolated, and rejects an empty tenant id at the transaction-helper boundary. `fittings-phase9-security.test.ts` separately revokes a membership and verifies fitting list, fitting customer intake, and Payments reads all fail before data access. The pooled RLS suite passes 3/3.
 
-- [ ] **FIT-BE-092 — Complete concurrency falsification suite**
+- [x] **FIT-BE-092 — Complete concurrency falsification suite**
   - **Acceptance:**
-    - [ ] With branch capacity `N`, `N + 1` truly overlapping create/reschedule attempts cannot produce more than `N` winners; slot exclusion remains authoritative under races.
-    - [ ] Same guaranteed garment contention has one winner.
-    - [ ] Capacity/hour/closure configuration racing a booking cannot commit a booking that violates the winning configuration.
-    - [ ] Adjacent intervals succeed; true overlaps fail.
-    - [ ] Failed replacement/reschedule preserves the old winning state.
-    - [ ] Duplicate idempotent retries produce one business effect.
+    - [x] With branch capacity `N`, `N + 1` truly overlapping create/reschedule attempts cannot produce more than `N` winners; slot exclusion remains authoritative under races.
+    - [x] Same guaranteed garment contention has one winner.
+    - [x] Capacity/hour/closure configuration racing a booking cannot commit a booking that violates the winning configuration.
+    - [x] Adjacent intervals succeed; true overlaps fail.
+    - [x] Failed replacement/reschedule preserves the old winning state.
+    - [x] Duplicate idempotent retries produce one business effect.
+  - **Evidence:** `fittings-phase9-concurrency.test.ts` passes 7/7 against PostgreSQL: capacity 2 with three simultaneous creates yields exactly two winners; one physical garment under two guaranteed contenders yields exactly one winner; capacity reduction, weekly-hours replacement, and closure insertion serialize against booking creation so both conflicting writes cannot win; half-open adjacent appointments succeed while true overlap fails; failed reschedule preserves the original period/version; and concurrent identical idempotency deliveries yield one fitting plus one `fitting.created` audit effect.
 
-- [ ] **FIT-BE-093 — Add audit and safe observability**
+- [x] **FIT-BE-093 — Add audit and safe observability**
   - **Acceptance:**
-    - [ ] Create/reschedule/status/schedule/finance actions emit appropriate audit metadata.
-    - [ ] Logs contain IDs and safe summaries, not unrestricted customer PII, receipts, bearer secrets, or private URLs.
-    - [ ] Conflict/error metrics distinguish validation, state, capacity, and garment contention where useful.
+    - [x] Create/reschedule/status/schedule/finance actions emit appropriate audit metadata.
+    - [x] Logs contain IDs and safe summaries, not unrestricted customer PII, receipts, bearer secrets, or private URLs.
+    - [x] Conflict/error metrics distinguish validation, state, capacity, and garment contention where useful.
+  - **Evidence:** `fittings.observability.ts` adds normalized fitting failure classes (`validation`, `state`, `capacity`, `garment`, `schedule`, `authorization`, `payment`, `idempotency`, `not_found`, `other`) and bounded counters keyed only by operation/class/error code. Command and HTTP-boundary failures log request/tenant/branch/fitting identifiers plus safe classification metadata, never request bodies. `fittings-phase9-audit-observability.test.ts` passes 1/1 and verifies create, note, reschedule, status, settings/hours, payment-create, and payment-verification audit actions while proving sentinel customer name/email/internal-note values, authorization material, storage keys, receipt URLs, and private URLs are absent from audit summaries. `fittings.observability.test.ts` adds 2/2 unit tests for classification and counters.
 
-- [ ] **FIT-BE-094 — Run representative fitting load and query tests**
+- [x] **FIT-BE-094 — Run representative fitting load and query tests**
   - **Acceptance:**
-    - [ ] Seed enough appointments to exercise list/calendar windows and contention.
-    - [ ] Verify indexes with representative query plans.
-    - [ ] No new cache is allowed to become authority for fitting availability writes.
+    - [x] Seed enough appointments to exercise list/calendar windows and contention.
+    - [x] Verify indexes with representative query plans.
+    - [x] No new cache is allowed to become authority for fitting availability writes.
+  - **Evidence:** `fittings-phase9-load-query-plan.test.ts` passes 1/1 after seeding 3,000 valid appointment/line/capacity-claim graphs. Production fitting list remains keyset-bounded and Calendar remains date-window-bounded; PostgreSQL naturally selects `fitting_appointment_tenant_branch_start_id_idx` for the ordered list access path and `fitting_appointment_tenant_branch_period_gist_idx` for range overlap. The test also confirms no fitting/availability materialized view was introduced. Availability writes remain authoritative in canonical `fitting_slot_allocation`/`asset_allocation` rows and their exclusion constraints; no cache or projection became a write authority. The older BE-025 tiny-fixture plan test now explicitly checks GiST eligibility without relying on small-table planner preference, while this representative-load test proves natural planner selection.
+
+**BE-9 exit gate: PASSED 2026-09-27.** The fitting backend now has a mounted production HTTP boundary, completed operational/configuration/finance authorization separation, pooled RLS falsification, full booking/configuration contention tests, redacted audit and classified failure observability, and representative load/query-plan evidence. The complete 16-file fitting integration regression passes 91/91; API non-integration tests pass 85/85; reservation-review/finance regression passes 40/40; Contracts pass 128/128; API lint, typecheck, and build are green. BE-10 remains the controlled frontend cutover/release phase.
 
 ---
 

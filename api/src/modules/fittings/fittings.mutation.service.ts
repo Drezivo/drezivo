@@ -8,6 +8,8 @@ import {
   fittingGarmentPlanUpdateRequest,
   fittingGarmentPlanUpdateResponse,
   fittingNoShowRequest,
+  fittingNoteUpdateRequest,
+  fittingNoteUpdateResponse,
   fittingRejectRequest,
   fittingRescheduleRequest,
   type FittingActionResponse,
@@ -18,6 +20,8 @@ import {
   type FittingGarmentPlanUpdateRequest,
   type FittingGarmentPlanUpdateResponse,
   type FittingNoShowRequest,
+  type FittingNoteUpdateRequest,
+  type FittingNoteUpdateResponse,
   type FittingRejectRequest,
   type FittingRescheduleRequest,
   type PermissionCode,
@@ -60,6 +64,7 @@ import {
   releaseFittingBlockingClaims,
   retireFittingLine,
   transitionFittingLifecycle,
+  updateFittingInternalNote,
   updateFittingPeriodAndVersion,
   validateFittingScheduleForCreate,
   verifyFittingRequiredClaims,
@@ -67,9 +72,11 @@ import {
   type FittingLifecycleTimingGuard,
   type LockedFittingAppointmentRow,
 } from './fittings.command.repository.js';
+import { recordFittingCommandFailure } from './fittings.observability.js';
 import { readFittingDetailModel } from './fittings.repository.js';
 
 const RESCHEDULE_OPERATION = 'fitting.reschedule';
+const NOTE_OPERATION = 'fitting.note.update';
 const GARMENT_PLAN_OPERATION = 'fitting.garment-plan.update';
 const MUTATION_SAVEPOINT = 'fitting_mutation_effects';
 
@@ -152,6 +159,11 @@ export interface FittingActionCommandResponse {
   body: SuccessEnvelope<FittingActionResponse> | FailureEnvelope;
 }
 
+export interface FittingNoteCommandResponse {
+  status: number;
+  body: SuccessEnvelope<FittingNoteUpdateResponse> | FailureEnvelope;
+}
+
 export interface FittingGarmentPlanCommandResponse {
   status: number;
   body: SuccessEnvelope<FittingGarmentPlanUpdateResponse> | FailureEnvelope;
@@ -200,6 +212,73 @@ export async function markFittingNoShowCommand(
   const parsed = fittingNoShowRequest.safeParse(requestInput);
   if (!parsed.success) throw new ValidationError('Fitting no-show request is invalid.');
   return runFittingLifecycleCommand(context, parsed.data, NO_SHOW_SPEC);
+}
+
+export async function updateFittingNoteCommand(
+  context: FittingLifecycleContext,
+  requestInput: FittingNoteUpdateRequest,
+): Promise<FittingNoteCommandResponse> {
+  const parsed = fittingNoteUpdateRequest.safeParse(requestInput);
+  if (!parsed.success) throw new ValidationError('Fitting note request is invalid.');
+  if (!context.permissionCodes.includes('reservations.manage')) {
+    throw new ForbiddenError('This branch does not grant fitting management access.');
+  }
+  const request = parsed.data;
+  const payloadHash = canonicalRequestHash(request);
+
+  return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+    const claim = await claimMutationIdempotency(client, context, NOTE_OPERATION, payloadHash);
+    const replay = replayOrThrow<FittingNoteCommandResponse>(claim);
+    if (replay) return replay;
+
+    try {
+      const appointment = await lockFittingAppointmentForMutation(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+        fittingId: context.fittingId,
+      });
+      if (!appointment) throw new NotFoundError('Fitting could not be found.');
+      if (
+        Number(appointment.version) !== request.version ||
+        !['pending', 'confirmed'].includes(appointment.status)
+      ) {
+        throw new StateConflictError('Fitting changed or no longer accepts note updates.');
+      }
+      const version = await updateFittingInternalNote(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+        fittingId: context.fittingId,
+        version: request.version,
+        internalNote: request.internal_note,
+      });
+      if (!version)
+        throw new StateConflictError('Fitting changed before the note could be updated.');
+      await appendFittingMutationAudit(client, {
+        tenantId: context.tenantId,
+        actorKey: context.principalId,
+        action: 'fitting.note_updated',
+        fittingId: context.fittingId,
+        branchId: context.branchId,
+        requestId: context.requestId,
+        version,
+      });
+      const row = await readFittingDetailModel(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+        fittingId: context.fittingId,
+      });
+      if (!row) throw new Error('Updated fitting note could not be read back.');
+      const body: SuccessEnvelope<FittingNoteUpdateResponse> = {
+        success: true,
+        data: fittingNoteUpdateResponse.parse({ fitting: toFittingDetail(row) }),
+        request_id: context.requestId,
+      };
+      await finalizeMutationSuccess(client, context, NOTE_OPERATION, payloadHash, body);
+      return { status: 200, body };
+    } catch (error) {
+      return finalizeMutationFailure(client, context, NOTE_OPERATION, payloadHash, error);
+    }
+  });
 }
 
 /** Atomic period replacement: replacement slot/assets are acquired by in-place protected claims. */
@@ -911,6 +990,14 @@ async function finalizeMutationFailure<T extends { status: number; body: unknown
   error: unknown,
 ): Promise<T> {
   if (!isAppError(error)) throw error;
+  recordFittingCommandFailure({
+    operation,
+    tenantId: context.tenantId,
+    branchId: context.branchId,
+    fittingId: context.fittingId,
+    requestId: context.requestId,
+    error,
+  });
   const body: FailureEnvelope = {
     success: false,
     error: { code: error.code, message: error.message },
