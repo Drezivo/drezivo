@@ -190,6 +190,36 @@ describe("Drezivo fittings API client", () => {
     expect(result.data.fitting).toMatchObject({ status: "confirmed", version: 2 });
   });
 
+  it("reschedules a fitting with the guarded command contract", async () => {
+    const rescheduled = {
+      ...detail("confirmed", 3),
+      period: {
+        start: "2026-10-05T03:00:00.000Z",
+        end: "2026-10-05T04:00:00.000Z",
+      },
+    };
+    fetchMock.mockResolvedValueOnce(success({ fitting: rescheduled }));
+
+    const result = await createDrezivoApiClient(getToken).rescheduleFitting(
+      fittingId,
+      { version: 2, starts_at: "2026-10-05T03:00:00.000Z" },
+      "fit-reschedule-test-key"
+    );
+
+    const [rawUrl, init] = fetchMock.mock.calls[0]!;
+    expect(new URL(String(rawUrl)).pathname).toBe(`/api/v1/fittings/${fittingId}/reschedule`);
+    expect(init?.method).toBe("POST");
+    expect(new Headers(init?.headers).get("Idempotency-Key")).toBe("fit-reschedule-test-key");
+    expect(JSON.parse(String(init?.body))).toEqual({
+      version: 2,
+      starts_at: "2026-10-05T03:00:00.000Z",
+    });
+    expect(result.data.fitting).toMatchObject({
+      version: 3,
+      period: { start: "2026-10-05T03:00:00.000Z" },
+    });
+  });
+
   it("serializes settings, weekly-hours, and closure operations with guarded contract payloads", async () => {
     fetchMock
       .mockResolvedValueOnce(success({ settings: scheduleSettings(2) }))

@@ -94,6 +94,7 @@ import {
   fittingListResponse,
   fittingNoShowRequest,
   fittingRejectRequest,
+  fittingRescheduleRequest,
   fittingClosureCreateRequest,
   fittingClosureListQuery,
   fittingClosureListResponse,
@@ -198,6 +199,7 @@ import {
   type FittingListResponse,
   type FittingNoShowRequest,
   type FittingRejectRequest,
+  type FittingRescheduleRequest,
   type FittingClosureCreateRequest,
   type FittingClosureListQuery,
   type FittingClosureListResponse,
@@ -499,6 +501,19 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         idempotencyKey,
         method: "POST",
         path: `/api/v1/fittings/${encodeURIComponent(fittingId)}/no-show`,
+        responseSchema: apiEnvelope(fittingActionResponse),
+      }),
+    rescheduleFitting: (
+      fittingId: string,
+      input: FittingRescheduleRequest,
+      idempotencyKey: string
+    ) =>
+      request<FittingActionResponse>({
+        getToken,
+        body: fittingRescheduleRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/fittings/${encodeURIComponent(fittingId)}/reschedule`,
         responseSchema: apiEnvelope(fittingActionResponse),
       }),
     getReservations: (input: ReservationListQuery) => {
