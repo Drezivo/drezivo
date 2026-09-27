@@ -9505,8 +9505,16 @@ paths:
                                 id:
                                   type: string
                                   format: uuid
+                                readiness:
+                                  type: string
+                                  enum:
+                                    - ready
+                                    - needs_cleaning
+                                    - needs_repair
+                                    - unready
                               required:
                                 - id
+                                - readiness
                               additionalProperties: false
                             agendas:
                               type: array
@@ -9541,7 +9549,6 @@ paths:
                                     enum:
                                       - reservation
                                       - maintenance
-                                      - readiness
                                       - allocation
                                   source_id:
                                     type: string
@@ -9591,7 +9598,6 @@ paths:
                                       - cleaning
                                       - maintenance
                                       - manual_block
-                                      - readiness
                                       - other
                                 required:
                                   - id

@@ -115,6 +115,10 @@ export async function returnReservationByStaff(
         branchId: context.branchId,
         assetId: allocation.asset_id,
         assetVersion: allocation.asset_version,
+        recoveryManagedReadiness:
+          reservation.database_now.getTime() <= reservation.due_at.getTime() &&
+          allocation.blocked_end.getTime() > reservation.database_now.getTime() &&
+          allocation.blocked_end.getTime() > reservation.due_at.getTime(),
         ...(request.condition_note ? { conditionNote: request.condition_note } : {}),
       });
       if (!returnedAsset) {

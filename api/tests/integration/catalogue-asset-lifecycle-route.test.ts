@@ -130,6 +130,80 @@ describe('CLT-031 physical asset lifecycle/readiness safety', async () => {
     expect(afterReady.asset.custody_kind).toBe('at_branch');
   });
 
+  it('lets Clothing mark a recovery-managed returned garment ready early without shortening its rental period', async () => {
+    const seed = await seedAssetFixture('org_clt031_recovery_ready', 'user_clt031_recovery_ready', {
+      readiness: 'needs_cleaning',
+      recoveryManagedReadiness: true,
+      withReservation: true,
+      reservationStatus: 'returned',
+    });
+    useClerk(seed);
+
+    const before = await readAssetState(seed);
+    const beforeEnd = before.allocations[0]?.ends_at;
+    expect(before.asset).toMatchObject({
+      readiness: 'needs_cleaning',
+      recovery_managed_readiness: true,
+    });
+    expect(beforeEnd).toBeInstanceOf(Date);
+    expect(beforeEnd?.getTime()).toBeGreaterThan(Date.now());
+
+    const ready = await request(createApp())
+      .patch(`/api/v1/catalogue/assets/${seed.assetId}/state`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt031-recovery-ready-early')
+      .send({ expected_version: 1, readiness: 'ready' });
+
+    expect(ready.status).toBe(200);
+    expect(ready.body).toMatchObject({
+      success: true,
+      data: {
+        asset: { readiness: 'ready', custody_kind: 'at_branch', version: 2 },
+        blocking_allocation_count: 1,
+      },
+    });
+
+    const after = await readAssetState(seed);
+    const afterEnd = after.allocations[0]?.ends_at;
+    const dueAt = after.allocations[0]?.reservation_due_at;
+    expect(after.asset).toMatchObject({
+      readiness: 'ready',
+      recovery_managed_readiness: false,
+    });
+    expect(afterEnd).toBeInstanceOf(Date);
+    expect(dueAt).toBeInstanceOf(Date);
+    expect(afterEnd?.getTime()).toBeGreaterThanOrEqual(dueAt?.getTime() ?? 0);
+    expect(afterEnd?.getTime()).toBeLessThanOrEqual(Date.now() + 5_000);
+  });
+
+  it('does not let generic Clothing edits mark an asset ready while maintenance remains open', async () => {
+    const seed = await seedAssetFixture('org_clt031_ready_maintenance', 'user_clt031_ready_maintenance', {
+      readiness: 'needs_repair',
+    });
+    useClerk(seed);
+    const app = createApp();
+    const maintenance = await request(app)
+      .post(`/api/v1/catalogue/assets/${seed.assetId}/maintenance-blocks`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt031-ready-maintenance-block')
+      .send({
+        kind: 'repair',
+        period: { start: futureIso(1), end: futureIso(24) },
+        reason: 'Repair must finish before this garment is ready.',
+      });
+    expect(maintenance.status).toBe(201);
+
+    const ready = await request(app)
+      .patch(`/api/v1/catalogue/assets/${seed.assetId}/state`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt031-ready-with-open-maintenance')
+      .send({ expected_version: 1, readiness: 'ready' });
+
+    expect(ready.status).toBe(409);
+    expectSafeError(ready.body, 'STATE_CONFLICT');
+    expect((await readAssetState(seed)).asset.readiness).toBe('needs_repair');
+  });
+
   it('keeps custody transitions out of generic Clothing edits and guards retirement lifecycle transitions', async () => {
     const withCustomer = await seedAssetFixture('org_clt031_custody', 'user_clt031_custody', {
       custodyKind: 'with_customer',
@@ -359,7 +433,9 @@ describe('CLT-031 physical asset lifecycle/readiness safety', async () => {
       permissions?: string[];
       custodyKind?: 'at_branch' | 'with_customer' | 'in_transit';
       readiness?: 'ready' | 'needs_cleaning' | 'needs_repair' | 'unready';
+      recoveryManagedReadiness?: boolean;
       withReservation?: boolean;
+      reservationStatus?: 'confirmed' | 'returned';
     } = {},
   ) {
     const tenant = await createTestTenant({ clerkOrgId });
@@ -367,6 +443,8 @@ describe('CLT-031 physical asset lifecycle/readiness safety', async () => {
     const permissions = options.permissions ?? ['assets.manage'];
     const custodyKind = options.custodyKind ?? 'at_branch';
     const readiness = options.readiness ?? 'ready';
+    const recoveryManagedReadiness = options.recoveryManagedReadiness ?? false;
+    const reservationStatus = options.reservationStatus ?? 'confirmed';
 
     const seeded = await withTenantTransaction(tenant.id, principalId, async (client) => {
       const branch = await client.query<{ id: string }>(
@@ -423,10 +501,18 @@ describe('CLT-031 physical asset lifecycle/readiness safety', async () => {
       const asset = await client.query<{ id: string }>(
         `INSERT INTO physical_asset
            (tenant_id, branch_id, variant_id, asset_code, lifecycle_status, readiness,
-            custody_kind, measurement_overrides, version, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 'active', $5, $6, '{}'::jsonb, 1, now(), now())
+            recovery_managed_readiness, custody_kind, measurement_overrides, version, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, '{}'::jsonb, 1, now(), now())
          RETURNING id`,
-        [tenant.id, branchId, variantId, `AST-${tenant.id.slice(0, 8)}`, readiness, custodyKind],
+        [
+          tenant.id,
+          branchId,
+          variantId,
+          `AST-${tenant.id.slice(0, 8)}`,
+          readiness,
+          recoveryManagedReadiness,
+          custodyKind,
+        ],
       );
       const assetId = requireRow(asset.rows, 'physical asset').id;
 
@@ -458,13 +544,15 @@ describe('CLT-031 physical asset lifecycle/readiness safety', async () => {
           [tenant.id],
         );
         const paymentMethodId = requireRow(paymentMethod.rows, 'payment method').id;
+        const pickupAt = reservationStatus === 'returned' ? futureIso(-72) : futureIso(48);
+        const dueAt = reservationStatus === 'returned' ? futureIso(-1) : futureIso(96);
         const reservation = await client.query<{ id: string }>(
           `INSERT INTO reservation
              (tenant_id, branch_id, storefront_id, policy_snapshot_id, payment_method_id,
               reference_code, status, pickup_at, due_at, timezone_snapshot, price_snapshot,
               currency, rental_total_minor, security_required_minor, due_now_minor,
               hold_acquired_at, confirmed_at)
-           VALUES ($1, $2, $3, $4, $5, $6, 'confirmed', $7, $8, 'Asia/Manila',
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Asia/Manila',
                    '{}'::jsonb, 'PHP', 10000, 5000, 15000, now(), now())
            RETURNING id`,
           [
@@ -474,8 +562,9 @@ describe('CLT-031 physical asset lifecycle/readiness safety', async () => {
             policyId,
             paymentMethodId,
             `CLT031-${tenant.id.slice(0, 8)}`,
-            futureIso(48),
-            futureIso(96),
+            reservationStatus,
+            pickupAt,
+            dueAt,
           ],
         );
         const reservationId = requireRow(reservation.rows, 'reservation').id;
@@ -496,7 +585,14 @@ describe('CLT-031 physical asset lifecycle/readiness safety', async () => {
            VALUES ($1, $2, $3, $4, 'reservation_confirmed',
                    tstzrange($5::timestamptz, $6::timestamptz, '[)'), true, NULL, now())
            RETURNING id`,
-          [tenant.id, branchId, assetId, reservationLineId, futureIso(24), futureIso(120)],
+          [
+            tenant.id,
+            branchId,
+            assetId,
+            reservationLineId,
+            reservationStatus === 'returned' ? futureIso(-72) : futureIso(24),
+            reservationStatus === 'returned' ? futureIso(23) : futureIso(120),
+          ],
         );
         reservationAllocationId = requireRow(allocation.rows, 'reservation allocation').id;
       }
@@ -524,11 +620,12 @@ describe('CLT-031 physical asset lifecycle/readiness safety', async () => {
       const asset = await client.query<{
         lifecycle_status: string;
         readiness: string;
+        recovery_managed_readiness: boolean;
         custody_kind: string;
         condition_note: string | null;
         version: number;
       }>(
-        `SELECT lifecycle_status, readiness, custody_kind, condition_note, version
+        `SELECT lifecycle_status, readiness, recovery_managed_readiness, custody_kind, condition_note, version
            FROM physical_asset
           WHERE tenant_id = $1 AND id = $2`,
         [seed.tenantId, seed.assetId],
@@ -539,11 +636,20 @@ describe('CLT-031 physical asset lifecycle/readiness safety', async () => {
         maintenance_id: string | null;
         kind: string;
         is_blocking: boolean;
+        ends_at: Date;
+        reservation_due_at: Date | null;
       }>(
-        `SELECT id, reservation_line_id, maintenance_id, kind, is_blocking
-           FROM asset_allocation
-          WHERE tenant_id = $1 AND asset_id = $2
-          ORDER BY created_at ASC, id ASC`,
+        `SELECT aa.id, aa.reservation_line_id, aa.maintenance_id, aa.kind, aa.is_blocking,
+                upper(aa.period) AS ends_at, r.due_at AS reservation_due_at
+           FROM asset_allocation aa
+           LEFT JOIN reservation_line rl
+             ON rl.tenant_id = aa.tenant_id
+            AND rl.id = aa.reservation_line_id
+           LEFT JOIN reservation r
+             ON r.tenant_id = rl.tenant_id
+            AND r.id = rl.reservation_id
+          WHERE aa.tenant_id = $1 AND aa.asset_id = $2
+          ORDER BY aa.created_at ASC, aa.id ASC`,
         [seed.tenantId, seed.assetId],
       );
       const workOrders = await client.query<{ id: string; kind: string; status: string }>(

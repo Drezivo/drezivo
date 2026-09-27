@@ -33,10 +33,11 @@ export interface StaffVariantCalendarReadModel {
 
 /**
  * Reads a bounded, branch-local calendar projection for one active variant without per-day queries. Each day
- * asks whether a currently ready serialized garment is free for that local calendar day. Recovery is not
- * added again here because authoritative reservation allocations already include their post-return recovery
- * occupancy. It is deliberately advisory; reservation create still revalidates the exact timestamp interval
- * plus recovery under asset locks.
+ * asks whether an operationally eligible serialized garment is free for that local calendar day. Normal
+ * Recovery-managed cleaning remains eligible for future dates because the authoritative reservation
+ * allocation already carries its post-return Recovery occupancy; persistent repair/manual readiness stays
+ * excluded. `ready_assets` still reports only pieces physically Ready now. This projection is advisory;
+ * reservation create still revalidates the exact timestamp interval plus Recovery under asset locks.
  */
 export async function readStaffVariantCalendarAvailability(
   client: PoolClient,
@@ -114,7 +115,20 @@ export async function readStaffVariantCalendarAvailability(
          AND pa.branch_id = $2::uuid
          AND pa.variant_id = $3::uuid
          AND pa.lifecycle_status = 'active'
-         AND pa.readiness = 'ready'
+         AND (
+           pa.readiness = 'ready'
+           OR (
+             pa.readiness = 'needs_cleaning'
+             AND pa.recovery_managed_readiness = true
+             AND NOT EXISTS (
+               SELECT 1 FROM maintenance_work_order mwo
+               WHERE mwo.tenant_id = pa.tenant_id
+                 AND mwo.branch_id = pa.branch_id
+                 AND mwo.asset_id = pa.id
+                 AND mwo.status = 'open'
+             )
+           )
+         )
      )
      SELECT
        to_char(day.day_date, 'YYYY-MM-DD') AS date,
@@ -179,9 +193,11 @@ export async function readStaffVariantCalendarAvailability(
 }
 
 /**
- * Counts currently ready physical pieces free for one exact buffered interval. Expired reservation
- * holds are treated as logically released using database time, matching the authoritative create
- * transaction which releases those holds under the asset lock before claiming capacity.
+ * Counts operationally eligible physical pieces free for one exact buffered interval. Recovery-managed
+ * cleaning can satisfy a later non-overlapping interval even before the cleanup worker reconciles the
+ * readiness projection. Expired reservation holds are treated as logically released using database time,
+ * matching the authoritative create transaction which releases those holds under the asset lock before
+ * claiming capacity.
  */
 export async function countStaffVariantAvailableAssets(
   client: PoolClient,
@@ -200,7 +216,20 @@ export async function countStaffVariantAvailableAssets(
         AND pa.branch_id = $2::uuid
         AND pa.variant_id = $3::uuid
         AND pa.lifecycle_status = 'active'
-        AND pa.readiness = 'ready'
+        AND (
+          pa.readiness = 'ready'
+          OR (
+            pa.readiness = 'needs_cleaning'
+            AND pa.recovery_managed_readiness = true
+            AND NOT EXISTS (
+              SELECT 1 FROM maintenance_work_order mwo
+              WHERE mwo.tenant_id = pa.tenant_id
+                AND mwo.branch_id = pa.branch_id
+                AND mwo.asset_id = pa.id
+                AND mwo.status = 'open'
+            )
+          )
+        )
         AND NOT EXISTS (
           SELECT 1
             FROM asset_allocation allocation

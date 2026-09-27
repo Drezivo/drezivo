@@ -53,6 +53,36 @@ export async function readAssetOperationalConstraints(
   };
 }
 
+export async function truncateRecoveryForReadyAsset(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; assetId: string },
+): Promise<Date | null> {
+  const result = await client.query<{ blocked_end: Date }>(
+    `UPDATE asset_allocation aa
+        SET period = tstzrange(
+          lower(aa.period),
+          LEAST(upper(aa.period), GREATEST(r.due_at, statement_timestamp())),
+          '[)'
+        )
+       FROM reservation_line rl
+       JOIN reservation r
+         ON r.tenant_id = rl.tenant_id
+        AND r.id = rl.reservation_id
+      WHERE aa.tenant_id = $1
+        AND aa.branch_id = $2::uuid
+        AND aa.asset_id = $3::uuid
+        AND aa.reservation_line_id = rl.id
+        AND aa.kind = 'reservation_confirmed'
+        AND aa.is_blocking = true
+        AND r.status = 'returned'
+        AND r.due_at < upper(aa.period)
+        AND upper(aa.period) > statement_timestamp()
+      RETURNING upper(aa.period) AS blocked_end`,
+    [input.tenantId, input.branchId, input.assetId],
+  );
+  return result.rows[0]?.blocked_end ?? null;
+}
+
 export async function createDisruptionsForThreatenedReservations(
   client: PoolClient,
   input: {

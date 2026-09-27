@@ -112,6 +112,7 @@ import {
   createDisruptionsForThreatenedReservations,
   createMaintenanceBlock,
   readAssetOperationalConstraints,
+  truncateRecoveryForReadyAsset,
 } from '../availability/availability.repository.js';
 import {
   listClothingReadModel,
@@ -1555,6 +1556,11 @@ export async function updatePhysicalAssetState(input: CommandContext & {
           'An asset outside the branch cannot be marked ready through Clothing.',
         );
       }
+      if (request.readiness === 'ready' && constraints.openMaintenanceCount > 0) {
+        throw new StateConflictError(
+          'Close required cleaning or maintenance work before marking this asset ready.',
+        );
+      }
       if (requestedLifecycle === 'retired' && current.lifecycle_status !== 'retired') {
         if (current.custody_kind !== 'at_branch') {
           throw new UnresolvedCustodyError(
@@ -1573,6 +1579,16 @@ export async function updatePhysicalAssetState(input: CommandContext & {
         }
       }
 
+      const recoveryReleasedAt =
+        request.readiness === 'ready' &&
+        requestedLifecycle === 'active' &&
+        current.recovery_managed_readiness
+          ? await truncateRecoveryForReadyAsset(client, {
+              tenantId: input.tenantId,
+              branchId: input.branchId,
+              assetId: input.assetId,
+            })
+          : null;
       const forcedReadiness =
         requestedLifecycle === 'retired' || requestedLifecycle === 'lost' ? 'unready' : undefined;
       const updated = await persistPhysicalAssetState(client, {
@@ -1620,6 +1636,7 @@ export async function updatePhysicalAssetState(input: CommandContext & {
           readiness: updated.readiness,
           blocking_allocation_count: afterConstraints.blockingAllocationCount,
           disruptions_created: disruptionsCreated,
+          recovery_released_early: recoveryReleasedAt !== null,
           version: updated.version,
         },
         requestId: input.requestId,

@@ -226,13 +226,13 @@ most). Candidate assets are bounded before agenda, customer, custody, or image w
 
 The visual vocabulary is intentionally small. A pending/confirmed reservation is one continuous
 `reserved` range from scheduled pickup through scheduled due, and a picked-up reservation is one
-continuous `rented` range from the recorded pickup custody time through the selected window (with
-the scheduled due shown as the Return boundary label). Pickup and Return are labels, not separate
-agenda types or colors. Cleaning, repair, manual blocks, readiness issues, recovery, and future
-blocking allocations collapse to `unavailable`; the drawer may show the safe reason. Fittings are
-excluded from this day-based projection but remain part of the exact-time allocator. The endpoint
-returns only safe customer summaries and UUID references, never catalogue codes, emails, phones,
-maintenance notes, or provider payloads.
+continuous `rented` range from scheduled pickup through scheduled due. Pickup and Return are labels,
+not separate agenda types or colors. Time-bounded cleaning/repair/manual blocks, Recovery, and other
+blocking allocations collapse to `unavailable`; the drawer may show the safe reason. Current physical
+readiness is row metadata, not a fabricated interval across the requested window. Fittings are excluded
+from this day-based projection but remain part of the exact-time allocator. The endpoint returns only
+safe customer summaries and UUID references, never catalogue codes, emails, phones, maintenance notes,
+or provider payloads.
 
 Errors use a stable envelope: `code`, safe `message`, `request_id`, optional field errors. Use `401` unauthenticated, `403` unauthorized, `404` for concealed foreign objects, `409` capacity/state/idempotency conflict, `422` invalid inputs, `429` throttled, `503` unavailable dependency. Never return raw SQL errors or foreign-key information that identifies another tenant.
 
@@ -253,6 +253,17 @@ Persist UTC instants with the booking's IANA timezone snapshot. Customer/staff d
 A `fixed_duration` tariff treats `included_duration_minutes` as both the base-price duration and the minimum elapsed rental duration. A request shorter than that minimum fails server-side. Longer intervals retain the existing extra-day pricing rule, including rounding a partial extra day upward. `daily` pricing does not inherit that fixed-duration minimum. Optional `event_date` must fall inclusively between the branch-local pickup and return calendar dates; frontend bounds are convenience only and the API repeats the rule.
 
 Use `[blocked_start, blocked_end)` where `blocked_start = pickup_at` and `blocked_end = due_at + recovery_duration`. V1 has no pre-pickup preparation buffer. Example: pickup 10:00 Friday, due 10:00 Monday, and 24 hours of recovery blocks Friday 10:00 through Tuesday 10:00. An adjacent allocation starting Tuesday 10:00 can be accepted if other readiness constraints allow it. Recovery is the single owner-configured post-return operational buffer for cleaning, inspection, transport, or preparation for the next rental. Charging duration is separate from occupied duration; display both clearly.
+
+Normal post-return cleaning is managed by that Recovery allocation rather than by an indefinite future
+readiness block. On a normal return, the physical garment may project `needs_cleaning` while the
+reservation allocation remains the timing authority. Owner/Staff may inspect and mark the garment
+`ready` before Recovery ends; that action may shorten only the post-due Recovery tail, never the paid
+rental interval or an unrelated maintenance/manual block. If nobody intervenes, the normal
+Recovery-managed cleaning state becomes eligible after the allocation ends and a worker reconciles the
+mutable readiness projection to `ready`; exact availability and reservation creation must remain correct
+even if that cleanup worker is late. `needs_repair`, explicit/manual `unready`, open maintenance, and
+late returns are persistent conditions and are never auto-cleared by this rule; staff must explicitly
+resolve readiness after the garment is physically back.
 
 ### Hold transaction
 
@@ -279,7 +290,7 @@ An expired hold does not reverse a bank transfer. Late evidence or a settled tra
 - Reschedule locks old/new assets and the reservation. Acquire the new valid allocation and update snapshots within one transaction. If the new interval fails, roll back completely and retain the old booking. Obtain customer acceptance for repricing/policy changes.
 - Cancellation atomically releases eligible future allocation and creates any financial obligation; an external refund remains pending until verified. A picked-up rental cannot be cancelled into “available.”
 - Record actual pickup/return as immutable custody facts with a conditional current-state update. A late return cannot fail because it intersects a future planned interval. Mark affected bookings disrupted, deny handover of the missing/unready asset, and offer alternatives/refund handling.
-- Return does not mean ready. Inspect, settle approved adjustments, clean, then mark ready. Extension requests must recheck future capacity; actual overrun still needs recording if extension is denied.
+- Return does not mean immediately ready. A normal on-time return enters Recovery-managed cleaning; Owner/Staff may mark it Ready early, otherwise normal Recovery expiry restores eligibility and the worker reconciles readiness. Repair, explicit unready states, open maintenance, and late returns outside their planned Recovery require deliberate resolution. Extension requests must recheck future capacity; actual overrun still needs recording if extension is denied.
 
 ## 6. Operational finance
 

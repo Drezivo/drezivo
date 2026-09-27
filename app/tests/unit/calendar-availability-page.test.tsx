@@ -55,6 +55,7 @@ function timelineResponse(
     idle?: boolean;
     name?: string;
     nextCursor?: string | null;
+    readiness?: "ready" | "needs_cleaning" | "needs_repair" | "unready";
   } = {}
 ) {
   const name = options.name ?? "Emerald Evening Gown";
@@ -67,6 +68,7 @@ function timelineResponse(
     facets: {
       categories: [{ id: categoryId, name: "Gowns" }],
       size_labels: ["M", "L"],
+      has_free_size: false,
     },
     rows: [
       {
@@ -82,7 +84,10 @@ function timelineResponse(
           rental_price_minor: "150000",
           currency: "PHP",
         },
-        asset: { id: "00000000-0000-4000-8000-000000000208" },
+        asset: {
+          id: "00000000-0000-4000-8000-000000000208",
+          readiness: options.readiness ?? "ready",
+        },
         agendas: options.idle
           ? []
           : [
@@ -225,6 +230,7 @@ describe("CalendarAvailabilityPage", () => {
         data: timelineResponse(input.start_date, input.end_date, {
           idle: Boolean(input.search),
           name: input.search ? "Searched Database Gown" : "Emerald Evening Gown",
+          readiness: input.search ? "needs_cleaning" : "ready",
         }),
       })
     );
@@ -244,6 +250,8 @@ describe("CalendarAvailabilityPage", () => {
       expect(latest?.search).toBe("searched");
     });
     expect(screen.getByText(/No projected blocking activity in this date range/)).toBeVisible();
+    expect(screen.getByText("Needs cleaning")).toBeVisible();
+    expect(screen.queryByText("Readiness")).not.toBeInTheDocument();
   });
 
   it("moves the query window by fourteen days when navigating the date range", async () => {

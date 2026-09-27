@@ -7,6 +7,7 @@ import { reconcileDueSubscriptionsForAllTenants } from './worker/handlers/subscr
 import { handleMembershipInvitationDispatch } from './modules/membership-invitations/membership-invitations.dispatcher.js';
 import { reconcileDueClerkWebhooks } from './worker/handlers/clerk-webhook-reconciler.js';
 import { cleanupAbandonedClerkOrganizations } from './worker/handlers/clerk-organization-cleanup.js';
+import { promoteElapsedRecoveryReadinessForAllTenants } from './worker/handlers/recovery-readiness.js';
 import { WorkerRunner } from './worker/runner.js';
 import { logger } from './shared/logger.js';
 
@@ -39,6 +40,8 @@ let holdExpirySweepTimer: NodeJS.Timeout | undefined;
 let subscriptionLifecycleSweepTimer: NodeJS.Timeout | undefined;
 let clerkWebhookSweepTimer: NodeJS.Timeout | undefined;
 let clerkOrganizationCleanupSweepTimer: NodeJS.Timeout | undefined;
+let recoveryReadinessSweepTimer: NodeJS.Timeout | undefined;
+const RECOVERY_READINESS_SWEEP_INTERVAL_MS = Math.max(config.WORKER_POLL_INTERVAL_MS, 60_000);
 
 function scheduleHoldExpirySweep(): void {
   holdExpirySweepTimer = setInterval(() => {
@@ -72,6 +75,14 @@ function scheduleClerkOrganizationCleanupSweep(): void {
   }, config.WORKER_POLL_INTERVAL_MS);
 }
 
+function scheduleRecoveryReadinessSweep(): void {
+  recoveryReadinessSweepTimer = setInterval(() => {
+    promoteElapsedRecoveryReadinessForAllTenants().catch((error: unknown) => {
+      logger.error({ err: error }, 'recovery-readiness sweep failed; will retry on next interval');
+    });
+  }, RECOVERY_READINESS_SWEEP_INTERVAL_MS);
+}
+
 logger.info({ enabled: config.WORKER_ENABLED }, 'worker process starting');
 if (!config.WORKER_ENABLED) {
   logger.warn('worker disabled by configuration; no jobs will be claimed');
@@ -80,6 +91,7 @@ if (!config.WORKER_ENABLED) {
   scheduleSubscriptionLifecycleSweep();
   scheduleClerkWebhookSweep();
   scheduleClerkOrganizationCleanupSweep();
+  scheduleRecoveryReadinessSweep();
 }
 if (config.WORKER_ENABLED) runner.start().catch((error: unknown) => {
   logger.error({ err: error }, 'worker runner crashed');
@@ -100,6 +112,9 @@ async function shutdown(signal: string): Promise<void> {
   }
   if (clerkOrganizationCleanupSweepTimer) {
     clearInterval(clerkOrganizationCleanupSweepTimer);
+  }
+  if (recoveryReadinessSweepTimer) {
+    clearInterval(recoveryReadinessSweepTimer);
   }
   await closePool();
   process.exit(0);

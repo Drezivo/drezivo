@@ -133,7 +133,10 @@ describe('BE-8 operational integration contracts', () => {
             rental_price_minor: '150000',
             currency: 'PHP',
           },
-          asset: { id: '00000000-0000-4000-8000-000000000208' },
+          asset: {
+            id: '00000000-0000-4000-8000-000000000208',
+            readiness: 'ready',
+          },
           agendas: [
             {
               id: 'reservation:example:rental',

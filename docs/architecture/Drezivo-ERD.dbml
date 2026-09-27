@@ -296,6 +296,7 @@ Table physical_asset {
   lifecycle_status varchar(30) [not null]
   retired_by_product_archive boolean [not null, default: false]
   readiness varchar(30) [not null]
+  recovery_managed_readiness boolean [not null, default: false]
   custody_kind varchar(30) [not null]
   condition_note text
   measurement_overrides jsonb [not null]
@@ -308,7 +309,7 @@ Table physical_asset {
     (tenant_id, asset_code) [unique]
     (tenant_id, branch_id, variant_id, readiness)
   }
-  Note: 'V1. branch_id is administrative home/holding branch; actual custody can be customer/transit. retired_by_product_archive distinguishes temporary product-archive retirement from staff retirement so restore can safely reactivate only archive-retired pieces. Location optional until V2.'
+  Note: 'V1. branch_id is administrative home/holding branch; actual custody can be customer/transit. recovery_managed_readiness records whether needs_cleaning is the normal post-return Recovery projection; asset_allocation remains the timing authority. retired_by_product_archive distinguishes temporary product-archive retirement from staff retirement so restore can safely reactivate only archive-retired pieces. Location optional until V2.'
 }
 
 Table file_object {

@@ -96,7 +96,7 @@ export function CalendarAvailabilityPage() {
   const [pageIndex, setPageIndex] = useState(0);
   const [pageCursors, setPageCursors] = useState<Array<string | null>>([null]);
   const [timeline, setTimeline] = useState<ClothingAvailabilityTimelineResponse | null>(null);
-  const [facets, setFacets] = useState<TimelineFacets>({ categories: [], size_labels: [] });
+  const [facets, setFacets] = useState<TimelineFacets>({ categories: [], size_labels: [], has_free_size: false });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<DrezivoApiError | null>(null);
   const [reloadVersion, setReloadVersion] = useState(0);
@@ -739,6 +739,14 @@ function AvailabilityRow({
           <span className="mt-1 hidden text-[0.68rem] text-dashboard-muted sm:block">
             Size {item.variant.size_label} · {formatMinorMoney(item.variant.rental_price_minor, item.variant.currency)}
           </span>
+          <span
+            className={cn(
+              "mt-1 hidden w-fit rounded-full px-1.5 py-0.5 text-[0.6rem] font-medium sm:inline-flex",
+              assetReadinessTone(item.asset.readiness)
+            )}
+          >
+            {assetReadinessLabel(item.asset.readiness)}
+          </span>
         </span>
       </div>
 
@@ -899,6 +907,12 @@ function AvailabilityDetailsSheet({
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Badge variant="secondary" className="px-2 py-1 text-xs">
                       Size {item.variant.size_label}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={cn("px-2 py-1 text-xs", assetReadinessTone(item.asset.readiness))}
+                    >
+                      {assetReadinessLabel(item.asset.readiness)}
                     </Badge>
                     <span className="text-sm font-semibold text-dashboard-navy">
                       {formatMinorMoney(item.variant.rental_price_minor, item.variant.currency)}
@@ -1109,6 +1123,32 @@ function QuickLink({
       <Icon className="h-4 w-4 text-dashboard-accent" aria-hidden="true" />
       {label}
     </Link>
+  );
+}
+
+function assetReadinessLabel(
+  readiness: ClothingAvailabilityTimelineRow["asset"]["readiness"]
+): string {
+  switch (readiness) {
+    case "ready":
+      return "Ready";
+    case "needs_cleaning":
+      return "Needs cleaning";
+    case "needs_repair":
+      return "Needs repair";
+    case "unready":
+      return "Unready";
+  }
+}
+
+function assetReadinessTone(
+  readiness: ClothingAvailabilityTimelineRow["asset"]["readiness"]
+): string {
+  return cn(
+    readiness === "ready" && "dashboard-tone-mint",
+    readiness === "needs_cleaning" && "dashboard-tone-orange",
+    readiness === "needs_repair" && "reservation-status-danger",
+    readiness === "unready" && "bg-dashboard-neutral-soft text-dashboard-neutral-text"
   );
 }
 

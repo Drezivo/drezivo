@@ -28,7 +28,6 @@ const unavailableReasonLabels: Record<ClothingAvailabilityTimelineUnavailableRea
   cleaning: "Cleaning",
   maintenance: "Maintenance",
   manual_block: "Manual block",
-  readiness: "Readiness",
   other: "Other",
 };
 

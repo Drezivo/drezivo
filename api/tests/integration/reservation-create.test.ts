@@ -617,6 +617,70 @@ describe('RSV-021/022 staff reservation creation', async () => {
     expectSafeError(tooShort.body, 'STATE_CONFLICT');
   });
 
+  it('blocks active Recovery but allows a later reservation while normal cleaning is still recovery-managed', async () => {
+    const seed = await seedWorkspace('org_rsv063_recovery_readiness', 'user_rsv063_recovery_readiness', [
+      'reservations.manage',
+    ]);
+    await seedReturnedRecovery(seed, {
+      pickupAt: '2026-10-07T02:00:00.000Z',
+      dueAt: '2026-10-10T02:00:00.000Z',
+      recoveryEnd: '2026-10-11T02:00:00.000Z',
+    });
+    useClerk(seed);
+
+    const overlapping = await request(createApp())
+      .get('/api/v1/reservations/availability-check')
+      .query({
+        variant_id: seed.variantId,
+        pickup_at: '2026-10-10T10:00:00.000Z',
+        due_at: '2026-10-13T10:00:00.000Z',
+      });
+    expect(overlapping.status).toBe(200);
+    expect(overlapping.body).toMatchObject({
+      success: true,
+      data: { available: false, available_assets: 0 },
+    });
+
+    const afterRecovery = await request(createApp())
+      .get('/api/v1/reservations/availability-check')
+      .query({
+        variant_id: seed.variantId,
+        pickup_at: '2026-10-11T02:00:00.000Z',
+        due_at: '2026-10-14T02:00:00.000Z',
+      });
+    expect(afterRecovery.status).toBe(200);
+    expect(afterRecovery.body).toMatchObject({
+      success: true,
+      data: { available: true, available_assets: 1 },
+    });
+
+    const created = await createStaffReservation(
+      commandContext(seed, 'req-rsv063-after-recovery', 'idem-rsv063-after-recovery'),
+      {
+        variant_id: seed.variantId as StaffReservationCreateRequest['variant_id'],
+        requested_interval: {
+          start: '2026-10-11T02:00:00.000Z',
+          end: '2026-10-14T02:00:00.000Z',
+        },
+        fulfillment_method: 'pickup',
+        payment_method_id: seed.paymentMethodId as StaffReservationCreateRequest['payment_method_id'],
+      },
+    );
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({ success: true, data: { reservation: { status: 'held' } } });
+
+    const readiness = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ readiness: string; recovery_managed_readiness: boolean }>(
+        `SELECT readiness, recovery_managed_readiness
+           FROM physical_asset
+          WHERE tenant_id = $1 AND id = $2::uuid`,
+        [seed.tenantId, seed.assetId],
+      );
+      return requireRow(result.rows, 'recovery-managed asset readiness');
+    });
+    expect(readiness).toEqual({ readiness: 'needs_cleaning', recovery_managed_readiness: true });
+  });
+
   it('treats a database-expired hold as available in staff previews before create releases it', async () => {
     const seed = await seedWorkspace('org_rsv063_expired_preview', 'user_rsv063_expired_preview', [
       'reservations.manage',
@@ -965,6 +1029,58 @@ describe('RSV-021/022 staff reservation creation', async () => {
         allocations: allocations.rows[0]?.count ?? 0,
         customers: customers.rows[0]?.count ?? 0,
       };
+    });
+  }
+
+  async function seedReturnedRecovery(
+    seed: CreateSeed,
+    input: { pickupAt: string; dueAt: string; recoveryEnd: string },
+  ): Promise<string> {
+    return withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      await client.query(
+        `UPDATE physical_asset
+            SET readiness = 'needs_cleaning', recovery_managed_readiness = true
+          WHERE tenant_id = $1 AND id = $2::uuid`,
+        [seed.tenantId, seed.assetId],
+      );
+      const reservation = await client.query<{ id: string }>(
+        `INSERT INTO reservation
+           (tenant_id, branch_id, storefront_id, policy_snapshot_id, payment_method_id,
+            reference_code, status, pickup_at, due_at, timezone_snapshot, delivery_snapshot,
+            price_snapshot, currency, rental_total_minor, security_required_minor, due_now_minor)
+         VALUES ($1, $2, $3, $4, $5, 'RSV-RETURNED-RECOVERY', 'returned',
+                 $6::timestamptz, $7::timestamptz, 'Asia/Manila',
+                 '{"fulfillment_method":"pickup"}'::jsonb, '{}'::jsonb,
+                 'PHP', 150000, 50000, 200000)
+         RETURNING id`,
+        [
+          seed.tenantId,
+          seed.branchId,
+          seed.storefrontId,
+          seed.policySnapshotId,
+          seed.paymentMethodId,
+          input.pickupAt,
+          input.dueAt,
+        ],
+      );
+      const reservationId = requireRow(reservation.rows, 'returned recovery reservation').id;
+      const line = await client.query<{ id: string }>(
+        `INSERT INTO reservation_line
+           (tenant_id, reservation_id, variant_id, line_number, name_snapshot,
+            measurements_snapshot, pricing_snapshot, rental_minor, deposit_minor, currency)
+         VALUES ($1, $2, $3, 1, 'Recovery Gown', '{}'::jsonb, '{}'::jsonb, 150000, 50000, 'PHP')
+         RETURNING id`,
+        [seed.tenantId, reservationId, seed.variantId],
+      );
+      const lineId = requireRow(line.rows, 'returned recovery line').id;
+      await client.query(
+        `INSERT INTO asset_allocation
+           (tenant_id, branch_id, asset_id, reservation_line_id, kind, period, is_blocking)
+         VALUES ($1, $2, $3, $4, 'reservation_confirmed',
+                 tstzrange($5::timestamptz, $6::timestamptz, '[)'), true)`,
+        [seed.tenantId, seed.branchId, seed.assetId, lineId, input.pickupAt, input.recoveryEnd],
+      );
+      return reservationId;
     });
   }
 

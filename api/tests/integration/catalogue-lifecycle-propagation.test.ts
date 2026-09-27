@@ -249,6 +249,27 @@ describe('CLT-078 catalogue lifecycle propagation', async () => {
       seed.mediumAssetId,
     ]);
 
+    await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query(
+        `UPDATE physical_asset
+            SET readiness = 'needs_cleaning', recovery_managed_readiness = true
+          WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, seed.mediumAssetId],
+      ),
+    );
+    expect(await availableUnits(seed.storefrontSlug, seed.mediumVariantId)).toBe(1);
+    expect((await reservationSelection(seed, seed.mediumVariantId))?.candidate_asset_ids).toEqual([
+      seed.mediumAssetId,
+    ]);
+    await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query(
+        `UPDATE physical_asset
+            SET readiness = 'ready', recovery_managed_readiness = false
+          WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, seed.mediumAssetId],
+      ),
+    );
+
     await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       const workOrder = await client.query<{ id: string }>(
         `INSERT INTO maintenance_work_order
