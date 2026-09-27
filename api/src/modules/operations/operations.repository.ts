@@ -357,23 +357,14 @@ export async function listClothingAvailabilityTimelineAssets(
              JOIN reservation r
                ON r.tenant_id = rl.tenant_id
               AND r.id = rl.reservation_id
-             JOIN LATERAL (
-               SELECT ce.occurred_at
-               FROM custody_event ce
-               WHERE ce.tenant_id = aa.tenant_id
-                 AND ce.asset_id = aa.asset_id
-                 AND ce.reservation_line_id = aa.reservation_line_id
-                 AND ce.event_kind = 'pickup'
-               ORDER BY ce.occurred_at DESC, ce.id DESC
-               LIMIT 1
-             ) pickup ON true
              WHERE aa.tenant_id = pa.tenant_id
                AND aa.branch_id = pa.branch_id
                AND aa.asset_id = pa.id
                AND aa.is_blocking = true
                AND aa.kind = 'reservation_confirmed'
                AND r.status = 'picked_up'
-               AND pickup.occurred_at < $4::timestamptz
+               AND r.pickup_at < $4::timestamptz
+               AND r.due_at > $3::timestamptz
            ) AS has_rented,
            (
              pa.readiness <> 'ready'
@@ -511,12 +502,12 @@ export async function readClothingAvailabilityTimelineAgendas(
          'reservation:' || aa.id::text || ':rental' AS id,
          aa.asset_id,
          'rented'::text AS type,
-         pickup.occurred_at AS starts_at,
-         $5::timestamptz AS ends_at,
+         r.pickup_at AS starts_at,
+         r.due_at AS ends_at,
          'reservation'::text AS source_type,
          r.id AS source_id,
          COALESCE(NULLIF(btrim(c.full_name), ''), NULLIF(btrim(r.customer_snapshot ->> 'full_name'), ''), 'Customer') AS customer_name,
-         pickup.occurred_at AS pickup_at,
+         r.pickup_at AS pickup_at,
          r.due_at AS return_at,
          NULL::text AS unavailable_reason
        FROM asset_allocation aa
@@ -527,16 +518,6 @@ export async function readClothingAvailabilityTimelineAgendas(
        JOIN reservation r
          ON r.tenant_id = rl.tenant_id
         AND r.id = rl.reservation_id
-       JOIN LATERAL (
-         SELECT ce.occurred_at
-         FROM custody_event ce
-         WHERE ce.tenant_id = aa.tenant_id
-           AND ce.asset_id = aa.asset_id
-           AND ce.reservation_line_id = aa.reservation_line_id
-           AND ce.event_kind = 'pickup'
-         ORDER BY ce.occurred_at DESC, ce.id DESC
-         LIMIT 1
-       ) pickup ON true
        LEFT JOIN customer c
          ON c.tenant_id = r.tenant_id
         AND c.id = r.customer_id
@@ -545,7 +526,8 @@ export async function readClothingAvailabilityTimelineAgendas(
          AND aa.is_blocking = true
          AND aa.kind = 'reservation_confirmed'
          AND r.status = 'picked_up'
-         AND pickup.occurred_at < $5::timestamptz
+         AND r.pickup_at < $5::timestamptz
+         AND r.due_at > $4::timestamptz
 
        UNION ALL
 

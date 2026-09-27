@@ -25,14 +25,18 @@ The endpoint returns physical-asset lanes grouped by product and variant. Its vi
 deliberately limited to:
 
 - `reserved`: pending-confirmation or confirmed rental, from scheduled pickup through scheduled due;
-- `rented`: picked-up rental, from the recorded pickup custody time through the selected window;
+- `rented`: picked-up rental, still projected from its scheduled pickup through scheduled due so the
+  planning lane does not extend indefinitely or overlap a later non-conflicting booking;
 - `unavailable`: readiness problems, recovery, cleaning, repair, manual blocks, and other planned
   blocks.
 
-Pickup and Return are boundary labels on the reservation range, not separate agenda records or
-colors. Fittings remain authoritative for exact-time booking protection but are excluded from this
-day-based timeline. The frontend may show the safe unavailable reason in a detail drawer while the
-grid continues to render only `Unavailable`.
+Pickup and Return are scheduled boundary labels on the reservation range, not separate agenda
+records or colors. Actual custody events remain authoritative operational history, but they do not
+stretch or shift this planning projection. Fittings remain authoritative for exact-time booking
+protection but are excluded from this day-based timeline. The frontend may show the safe unavailable
+reason in a detail drawer while the grid continues to render only `Unavailable`. For recovery ranges,
+the day grid gives the return date to the reservation and begins the recovery display on the next
+branch-local calendar day.
 
 ## API boundary
 

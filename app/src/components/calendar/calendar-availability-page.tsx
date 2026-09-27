@@ -1,15 +1,27 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
+import type {
+  ClothingAvailabilityTimelineAgenda,
+  ClothingAvailabilityTimelineResponse,
+  ClothingAvailabilityTimelineRow,
+  ClothingAvailabilityTimelineStatus,
+} from "@drezivo/contracts";
 import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  Eye,
   Search,
   Shirt,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,121 +34,284 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { cn } from "@/lib/utils";
 
 import {
-  AVAILABILITY_DAYS,
-  AVAILABILITY_ITEMS,
-  type AvailabilityBlock,
-  type AvailabilityItem,
-  type AvailabilityState,
+  AVAILABILITY_WINDOW_DAYS,
+  addCalendarDays,
+  agendaPlacement,
+  availabilityStatusLabel,
+  buildAvailabilityDays,
+  formatAgendaDateRange,
+  formatAvailabilityRange,
+  formatBoundaryDateTime,
+  formatBoundarySummary,
+  formatMinorMoney,
+  initials,
+  todayInTimeZone,
+  unavailableReasonLabel,
+  type AvailabilityDay,
 } from "./calendar-availability-data";
 
-const availabilityTone: Record<AvailabilityState, string> = {
-  Reserved: "availability-state-reserved",
-  Rented: "availability-state-rented",
-  Pickup: "availability-state-pickup",
-  Return: "availability-state-return",
-  Fitting: "availability-state-fitting",
-  Unavailable: "availability-state-unavailable",
-  Cleaning: "availability-state-unavailable",
-  Maintenance: "availability-state-unavailable",
-  Available: "availability-state-available",
+const availabilityTone: Record<ClothingAvailabilityTimelineStatus, string> = {
+  reserved: "availability-state-reserved",
+  rented: "availability-state-rented",
+  unavailable: "availability-state-unavailable",
 };
+
+const STATUS_OPTIONS: ReadonlyArray<{
+  label: string;
+  value: ClothingAvailabilityTimelineStatus | "";
+}> = [
+  { label: "All Statuses", value: "" },
+  { label: "Reserved", value: "reserved" },
+  { label: "Rented", value: "rented" },
+  { label: "Unavailable", value: "unavailable" },
+];
 
 type SelectedAgenda = {
-  itemId: string;
-  blockIndex: number;
+  assetId: string;
+  agendaId: string;
 };
 
+type TimelineFacets = ClothingAvailabilityTimelineResponse["facets"];
+
 export function CalendarAvailabilityPage() {
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const [timeZone, setTimeZone] = useState(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+  );
+  const [isContextResolved, setIsContextResolved] = useState(false);
+  const [windowStart, setWindowStart] = useState<string | null>(null);
   const [selectedAgenda, setSelectedAgenda] = useState<SelectedAgenda | null>(null);
   const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("All Categories");
-  const [sizeFilter, setSizeFilter] = useState("All Sizes");
-  const [statusFilter, setStatusFilter] = useState<"All Statuses" | AvailabilityState>(
-    "All Statuses"
-  );
-  const [page, setPage] = useState(1);
+  const deferredQuery = useDeferredValue(query.trim());
+  const [categoryId, setCategoryId] = useState<
+    TimelineFacets["categories"][number]["id"] | null
+  >(null);
+  const [sizeFilter, setSizeFilter] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<ClothingAvailabilityTimelineStatus | null>(null);
   const [pageSize, setPageSize] = useState<25 | 50>(25);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageCursors, setPageCursors] = useState<Array<string | null>>([null]);
+  const [timeline, setTimeline] = useState<ClothingAvailabilityTimelineResponse | null>(null);
+  const [facets, setFacets] = useState<TimelineFacets>({ categories: [], size_labels: [] });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<DrezivoApiError | null>(null);
+  const [reloadVersion, setReloadVersion] = useState(0);
 
-  const visibleItems = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+  const currentCursor = pageCursors[pageIndex] ?? null;
+  const windowEnd = windowStart
+    ? addCalendarDays(windowStart, AVAILABILITY_WINDOW_DAYS - 1)
+    : null;
+  const days = useMemo(
+    () => (windowStart ? buildAvailabilityDays(windowStart) : []),
+    [windowStart]
+  );
+  const rangeLabel =
+    windowStart && windowEnd ? formatAvailabilityRange(windowStart, windowEnd) : "Loading dates…";
+  const categoryLabel =
+    (categoryId ? facets.categories.find((category) => category.id === categoryId)?.name : null) ??
+    "All Categories";
+  const statusLabel = statusFilter ? availabilityStatusLabel(statusFilter) : "All Statuses";
+  const hasCatalogueFilter = Boolean(deferredQuery || categoryId || sizeFilter);
+  const permissionRestricted = error?.status === 403 || error?.code === "FORBIDDEN";
 
-    return AVAILABILITY_ITEMS.filter((item) => {
-      const hasAgendaInRange = item.blocks.length > 0;
-      const queryMatches =
-        normalizedQuery.length === 0 ||
-        item.name.toLowerCase().includes(normalizedQuery) ||
-        item.code.toLowerCase().includes(normalizedQuery) ||
-        item.category.toLowerCase().includes(normalizedQuery);
-      const categoryMatches = categoryFilter === "All Categories" || item.category === categoryFilter;
-      const sizeMatches = sizeFilter === "All Sizes" || item.size === sizeFilter;
-      const statusMatches =
-        statusFilter === "All Statuses" || item.blocks.some((block) => block.state === statusFilter);
+  const resetPagination = useCallback(() => {
+    setPageIndex(0);
+    setPageCursors([null]);
+    setSelectedAgenda(null);
+  }, []);
 
-      return (
-        (normalizedQuery.length > 0 || hasAgendaInRange) &&
-        queryMatches &&
-        categoryMatches &&
-        sizeMatches &&
-        statusMatches
-      );
-    });
-  }, [categoryFilter, query, sizeFilter, statusFilter]);
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    let cancelled = false;
+    const fallbackTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
-  const totalPages = Math.max(1, Math.ceil(visibleItems.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  const pageStart = (currentPage - 1) * pageSize;
-  const paginatedItems = visibleItems.slice(pageStart, pageStart + pageSize);
+    void createDrezivoApiClient(getToken)
+      .getActorContext()
+      .then((result) => {
+        if (cancelled) return;
+        const activeBranch = result.data.branches.find(
+          (branch) => branch.id === result.data.active_branch_id
+        );
+        const resolvedTimeZone = activeBranch?.timezone ?? result.data.tenant.timezone;
+        setTimeZone(resolvedTimeZone);
+        setWindowStart(todayInTimeZone(resolvedTimeZone));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setTimeZone(fallbackTimeZone);
+        setWindowStart(todayInTimeZone(fallbackTimeZone));
+      })
+      .finally(() => {
+        if (!cancelled) setIsContextResolved(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, isLoaded, isSignedIn]);
+
+  useEffect(() => {
+    if (
+      !isLoaded ||
+      !isSignedIn ||
+      !isContextResolved ||
+      !windowStart ||
+      !windowEnd
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+    setTimeline(null);
+
+    void createDrezivoApiClient(getToken)
+      .getClothingAvailabilityTimeline({
+        start_date: windowStart,
+        end_date: windowEnd,
+        limit: pageSize,
+        ...(currentCursor ? { cursor: currentCursor } : {}),
+        ...(deferredQuery ? { search: deferredQuery } : {}),
+        ...(categoryId ? { category_id: categoryId } : {}),
+        ...(sizeFilter ? { size_label: sizeFilter } : {}),
+        ...(statusFilter ? { status: statusFilter } : {}),
+      })
+      .then((result) => {
+        if (cancelled) return;
+        setTimeline(result.data);
+        setFacets(result.data.facets);
+      })
+      .catch((caughtError) => {
+        if (cancelled) return;
+        setError(toDrezivoApiError(caughtError));
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    categoryId,
+    currentCursor,
+    deferredQuery,
+    getToken,
+    isContextResolved,
+    isLoaded,
+    isSignedIn,
+    pageSize,
+    reloadVersion,
+    sizeFilter,
+    statusFilter,
+    windowEnd,
+    windowStart,
+  ]);
 
   const selectedItem = selectedAgenda
-    ? AVAILABILITY_ITEMS.find((item) => item.id === selectedAgenda.itemId) ?? null
+    ? timeline?.rows.find((row) => row.asset.id === selectedAgenda.assetId) ?? null
     : null;
   const selectedBlock =
-    selectedItem && selectedAgenda ? selectedItem.blocks[selectedAgenda.blockIndex] ?? null : null;
+    selectedItem && selectedAgenda
+      ? selectedItem.agendas.find((agenda) => agenda.id === selectedAgenda.agendaId) ?? null
+      : null;
+  const effectiveTimeZone = timeline?.timezone ?? timeZone;
+
+  const shiftDateRange = (direction: -1 | 1) => {
+    if (!windowStart) return;
+    setWindowStart(addCalendarDays(windowStart, direction * AVAILABILITY_WINDOW_DAYS));
+    resetPagination();
+  };
+
+  const resetDateRange = () => {
+    setWindowStart(todayInTimeZone(timeZone));
+    resetPagination();
+  };
+
+  const goNextPage = () => {
+    const nextCursor = timeline?.page_meta.next_cursor;
+    if (!timeline?.page_meta.has_more || !nextCursor) return;
+    setPageCursors((current) => {
+      const next = current.slice(0, pageIndex + 1);
+      next[pageIndex + 1] = nextCursor;
+      return next;
+    });
+    setPageIndex((current) => current + 1);
+    setSelectedAgenda(null);
+  };
+
+  const goPreviousPage = () => {
+    setPageIndex((current) => Math.max(0, current - 1));
+    setSelectedAgenda(null);
+  };
 
   return (
     <div className="min-h-full bg-dashboard-canvas px-3 py-5 sm:px-4 lg:px-5">
       <div className="flex w-full max-w-none flex-col gap-4">
         <AvailabilityHeading />
         <AvailabilityControls
-          categoryFilter={categoryFilter}
+          categoryFilter={categoryLabel}
+          categoryOptions={facets.categories.map((category) => ({
+            label: category.name,
+            value: category.id,
+          }))}
+          dateRangeLabel={rangeLabel}
           query={query}
-          sizeFilter={sizeFilter}
-          statusFilter={statusFilter}
+          sizeFilter={sizeFilter ?? "All Sizes"}
+          sizeOptions={facets.size_labels}
+          statusFilter={statusLabel}
+          hasCatalogueFilter={hasCatalogueFilter}
+          dateNavigationDisabled={!windowStart}
           onQueryChange={(value) => {
             setQuery(value);
-            setPage(1);
+            resetPagination();
           }}
           onCategoryChange={(value) => {
-            setCategoryFilter(value);
-            setPage(1);
+            const selectedCategory = facets.categories.find((category) => category.id === value);
+            setCategoryId(selectedCategory?.id ?? null);
+            resetPagination();
           }}
           onSizeChange={(value) => {
-            setSizeFilter(value);
-            setPage(1);
+            setSizeFilter(value || null);
+            resetPagination();
           }}
           onStatusChange={(value) => {
-            setStatusFilter(value);
-            setPage(1);
+            setStatusFilter((value || null) as ClothingAvailabilityTimelineStatus | null);
+            resetPagination();
           }}
+          onPreviousRange={() => shiftDateRange(-1)}
+          onNextRange={() => shiftDateRange(1)}
+          onResetRange={resetDateRange}
         />
 
         <AvailabilityTimeline
-          currentPage={currentPage}
-          items={paginatedItems}
-          pageSize={pageSize}
-          pageStart={pageStart}
-          totalItems={visibleItems.length}
-          totalPages={totalPages}
-          isSearching={query.trim().length > 0}
-          onPageChange={setPage}
+          currentPage={pageIndex + 1}
+          days={days}
+          error={error}
+          hasCatalogueFilter={hasCatalogueFilter}
+          hasMore={timeline?.page_meta.has_more ?? false}
+          isLoading={isLoading}
+          items={timeline?.rows ?? []}
+          onNextPage={goNextPage}
+          onOpenAgenda={(assetId, agendaId) => setSelectedAgenda({ assetId, agendaId })}
           onPageSizeChange={(value) => {
             setPageSize(value);
-            setPage(1);
+            resetPagination();
           }}
-          onOpenAgenda={(itemId, blockIndex) => setSelectedAgenda({ itemId, blockIndex })}
+          onPreviousPage={goPreviousPage}
+          onRetry={() => setReloadVersion((value) => value + 1)}
+          pageIndex={pageIndex}
+          pageSize={pageSize}
+          permissionRestricted={permissionRestricted}
+          rangeLabel={rangeLabel}
+          timeZone={effectiveTimeZone}
+          windowEnd={windowEnd}
+          windowStart={windowStart}
         />
       </div>
 
@@ -144,6 +319,8 @@ export function CalendarAvailabilityPage() {
         item={selectedItem}
         selectedBlock={selectedBlock}
         open={Boolean(selectedItem && selectedBlock)}
+        rangeLabel={rangeLabel}
+        timeZone={effectiveTimeZone}
         onOpenChange={(open) => {
           if (!open) setSelectedAgenda(null);
         }}
@@ -197,23 +374,45 @@ function AvailabilityHeading() {
 
 function AvailabilityControls({
   categoryFilter,
+  categoryOptions,
+  dateNavigationDisabled,
+  dateRangeLabel,
+  hasCatalogueFilter,
   onCategoryChange,
+  onNextRange,
+  onPreviousRange,
   onQueryChange,
+  onResetRange,
   onSizeChange,
   onStatusChange,
   query,
   sizeFilter,
+  sizeOptions,
   statusFilter,
 }: {
   categoryFilter: string;
+  categoryOptions: ReadonlyArray<{ label: string; value: string }>;
+  dateNavigationDisabled: boolean;
+  dateRangeLabel: string;
+  hasCatalogueFilter: boolean;
   onCategoryChange: (value: string) => void;
+  onNextRange: () => void;
+  onPreviousRange: () => void;
   onQueryChange: (value: string) => void;
+  onResetRange: () => void;
   onSizeChange: (value: string) => void;
-  onStatusChange: (value: "All Statuses" | AvailabilityState) => void;
+  onStatusChange: (value: string) => void;
   query: string;
   sizeFilter: string;
-  statusFilter: "All Statuses" | AvailabilityState;
+  sizeOptions: readonly string[];
+  statusFilter: string;
 }) {
+  const categories = [{ label: "All Categories", value: "" }, ...categoryOptions];
+  const sizes = [
+    { label: "All Sizes", value: "" },
+    ...sizeOptions.map((size) => ({ label: size, value: size })),
+  ];
+
   return (
     <Card className="gap-0 py-0">
       <CardContent className="flex flex-col gap-3 p-3">
@@ -227,7 +426,7 @@ function AvailabilityControls({
             <Input
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
-              placeholder="Search clothing by name, code, or category..."
+              placeholder="Search clothing by name or category..."
               className="pl-9"
             />
           </label>
@@ -237,6 +436,8 @@ function AvailabilityControls({
               variant="ghost"
               size="icon"
               aria-label="Previous date range"
+              disabled={dateNavigationDisabled}
+              onClick={onPreviousRange}
               className="border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
             >
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
@@ -245,40 +446,37 @@ function AvailabilityControls({
               variant="ghost"
               size="icon"
               aria-label="Next date range"
+              disabled={dateNavigationDisabled}
+              onClick={onNextRange}
               className="border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
             >
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
             </Button>
             <Button
               variant="ghost"
+              aria-label="Return to the current date range"
+              disabled={dateNavigationDisabled}
+              onClick={onResetRange}
               className="border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
             >
               <CalendarDays className="h-4 w-4" aria-hidden="true" />
-              Sep 8 – Sep 21, 2025
+              {dateRangeLabel}
             </Button>
           </div>
         </div>
 
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            <FilterMenu
-              label={categoryFilter}
-              options={["All Categories", "Gowns", "Dresses", "Wedding", "Filipiniana", "Barong"]}
-              onSelect={onCategoryChange}
-            />
-            <FilterMenu
-              label={sizeFilter}
-              options={["All Sizes", "S", "M", "L"]}
-              onSelect={onSizeChange}
-            />
+            <FilterMenu label={categoryFilter} options={categories} onSelect={onCategoryChange} />
+            <FilterMenu label={sizeFilter} options={sizes} onSelect={onSizeChange} />
             <FilterMenu
               label={statusFilter}
-              options={["All Statuses", "Reserved", "Rented", "Pickup", "Return", "Fitting", "Unavailable", "Cleaning", "Maintenance"]}
-              onSelect={(value) => onStatusChange(value as "All Statuses" | AvailabilityState)}
+              options={STATUS_OPTIONS}
+              onSelect={onStatusChange}
             />
             <span className="text-xs text-dashboard-muted">
-              {query.trim()
-                ? "Searching the full clothing catalogue"
+              {hasCatalogueFilter
+                ? "Matching clothing may include items with no blocking activity in this range"
                 : "Showing only clothing with activity in this date range"}
             </span>
           </div>
@@ -297,7 +495,7 @@ function FilterMenu({
 }: {
   label: string;
   onSelect: (value: string) => void;
-  options: readonly string[];
+  options: ReadonlyArray<{ label: string; value: string }>;
 }) {
   return (
     <DropdownMenu>
@@ -312,8 +510,8 @@ function FilterMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         {options.map((option) => (
-          <DropdownMenuItem key={option} onSelect={() => onSelect(option)}>
-            {option}
+          <DropdownMenuItem key={option.value || "all"} onSelect={() => onSelect(option.value)}>
+            {option.label}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -322,20 +520,13 @@ function FilterMenu({
 }
 
 function AvailabilityLegend() {
-  const items: AvailabilityState[] = [
-    "Reserved",
-    "Rented",
-    "Pickup",
-    "Return",
-    "Fitting",
-    "Unavailable",
-  ];
+  const items: ClothingAvailabilityTimelineStatus[] = ["reserved", "rented", "unavailable"];
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-dashboard-muted">
       {items.map((item) => (
         <span key={item} className="inline-flex items-center gap-2">
           <span className={cn("h-2.5 w-2.5 rounded-full", availabilityTone[item])} />
-          {item}
+          {availabilityStatusLabel(item)}
         </span>
       ))}
     </div>
@@ -344,30 +535,47 @@ function AvailabilityLegend() {
 
 function AvailabilityTimeline({
   currentPage,
-  isSearching,
+  days,
+  error,
+  hasCatalogueFilter,
+  hasMore,
+  isLoading,
   items,
+  onNextPage,
   onOpenAgenda,
-  onPageChange,
   onPageSizeChange,
+  onPreviousPage,
+  onRetry,
+  pageIndex,
   pageSize,
-  pageStart,
-  totalItems,
-  totalPages,
+  permissionRestricted,
+  rangeLabel,
+  timeZone,
+  windowEnd,
+  windowStart,
 }: {
   currentPage: number;
-  isSearching: boolean;
-  items: readonly AvailabilityItem[];
-  onOpenAgenda: (itemId: string, blockIndex: number) => void;
-  onPageChange: (page: number) => void;
+  days: readonly AvailabilityDay[];
+  error: DrezivoApiError | null;
+  hasCatalogueFilter: boolean;
+  hasMore: boolean;
+  isLoading: boolean;
+  items: readonly ClothingAvailabilityTimelineRow[];
+  onNextPage: () => void;
+  onOpenAgenda: (assetId: string, agendaId: string) => void;
   onPageSizeChange: (pageSize: 25 | 50) => void;
+  onPreviousPage: () => void;
+  onRetry: () => void;
+  pageIndex: number;
   pageSize: 25 | 50;
-  pageStart: number;
-  totalItems: number;
-  totalPages: number;
+  permissionRestricted: boolean;
+  rangeLabel: string;
+  timeZone: string;
+  windowEnd: string | null;
+  windowStart: string | null;
 }) {
-  const firstShown = totalItems === 0 ? 0 : pageStart + 1;
-  const lastShown = Math.min(pageStart + items.length, totalItems);
-  const pages = Array.from({ length: totalPages }, (_, index) => index + 1);
+  const firstShown = items.length === 0 ? 0 : pageIndex * pageSize + 1;
+  const lastShown = pageIndex * pageSize + items.length;
 
   return (
     <Card className="gap-0 overflow-hidden py-0">
@@ -378,155 +586,263 @@ function AvailabilityTimeline({
               <div className="sticky left-0 z-40 flex items-center border-r border-dashboard-border bg-dashboard-surface px-2 py-3 text-xs font-semibold text-dashboard-navy sm:px-3 sm:text-sm lg:px-4">
                 Clothing Item
               </div>
-              {AVAILABILITY_DAYS.map((day) => (
+              {days.map((day) => (
                 <div
-                  key={`${day.label}-${day.date}`}
+                  key={day.date}
                   className="border-r border-dashboard-border bg-dashboard-surface px-2 py-3 text-center last:border-r-0"
                 >
                   <p className="text-xs font-semibold text-dashboard-navy">{day.label}</p>
-                  <p className="mt-1 text-[0.7rem] text-dashboard-muted">{day.date}</p>
+                  <p className="mt-1 text-[0.7rem] text-dashboard-muted">{day.dateLabel}</p>
                 </div>
               ))}
             </div>
 
-            {items.length === 0 ? (
-              <div className="flex h-40 items-center justify-center text-sm text-dashboard-muted">
-                No clothing items match the selected filters.
-              </div>
-            ) : (
+            {isLoading ? (
+              <TimelineLoadingState />
+            ) : error ? (
+              <TimelineState
+                title={
+                  permissionRestricted
+                    ? "Calendar availability access is restricted"
+                    : "Could not load clothing availability"
+                }
+                message={
+                  permissionRestricted
+                    ? "Your current branch permissions do not allow reservation operations. Ask a workspace owner to update your access."
+                    : error.message
+                }
+                requestId={error.requestId}
+                {...(!permissionRestricted ? { actionLabel: "Try again", onAction: onRetry } : {})}
+              />
+            ) : items.length === 0 ? (
+              <TimelineState
+                title={hasCatalogueFilter ? "No clothing matches these filters" : "No activity in this date range"}
+                message={
+                  hasCatalogueFilter
+                    ? "Adjust the search, category, size, or status filter to see other clothing."
+                    : "Reservation and unavailable activity will appear here when it overlaps this range."
+                }
+              />
+            ) : windowStart && windowEnd ? (
               items.map((item) => (
-                <div
-                  key={item.id}
-                  className="grid min-h-16 grid-cols-[7.5rem_repeat(14,minmax(3.25rem,1fr))] border-b border-dashboard-border last:border-b-0 sm:min-h-20 sm:grid-cols-[9rem_repeat(14,minmax(3.5rem,1fr))] lg:grid-cols-[12rem_repeat(14,minmax(3.5rem,1fr))]"
-                >
-                  <div className="sticky left-0 z-20 flex min-h-16 items-center gap-2 border-r border-dashboard-border bg-dashboard-surface px-2 text-left shadow-[4px_0_8px_-8px_var(--color-dashboard-muted)] sm:min-h-20 sm:gap-3 sm:px-3">
-                    <span className="hidden h-12 w-10 shrink-0 items-center justify-center rounded-lg bg-dashboard-active text-xs font-semibold text-dashboard-accent sm:flex">
-                      {item.initials}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-[0.7rem] font-semibold text-dashboard-navy sm:text-xs">
-                        {item.name}
-                      </span>
-                      <span className="mt-1 block text-[0.64rem] text-dashboard-muted sm:hidden">
-                        Size {item.size}
-                      </span>
-                      <span className="mt-1 hidden text-[0.68rem] text-dashboard-muted sm:block">{item.code}</span>
-                      <span className="mt-1 hidden text-[0.68rem] text-dashboard-muted sm:block">
-                        Size {item.size} · {item.pricePerDay}
-                      </span>
-                    </span>
-                  </div>
-
-                  <div className="relative col-span-14 grid min-h-16 grid-cols-14 bg-dashboard-surface sm:min-h-20">
-                    {AVAILABILITY_DAYS.map((day, index) => (
-                      <div
-                        key={`${item.id}-${day.date}`}
-                        className={cn(
-                          "border-r border-dashboard-border/70",
-                          index === AVAILABILITY_DAYS.length - 1 && "border-r-0"
-                        )}
-                      />
-                    ))}
-
-                    {item.blocks.length === 0 && isSearching ? (
-                      <div className="absolute inset-2 z-10 flex items-center justify-center rounded-lg border border-dashed border-dashboard-border bg-dashboard-active/40 px-4 text-center text-xs text-dashboard-muted">
-                        No scheduled activity in this date range · Available Sep 8 – Sep 21
-                      </div>
-                    ) : null}
-
-                    {item.blocks.map((block, index) => (
-                      <button
-                        key={`${item.id}-${block.state}-${index}`}
-                        type="button"
-                        aria-label={`Open ${item.name} ${block.state} details`}
-                        onClick={() => onOpenAgenda(item.id, index)}
-                        style={{
-                          gridColumn: `${block.start} / span ${block.span}`,
-                          gridRow: "1",
-                        }}
-                        className={cn(
-                          "z-10 m-1 min-w-0 rounded-lg border px-1.5 py-2 text-left text-[0.64rem] leading-4 transition hover:brightness-95 focus-visible:ring-2 focus-visible:ring-dashboard-accent/40 sm:px-2 sm:text-[0.68rem]", 
-                          availabilityTone[block.state]
-                        )}
-                      >
-                        <span className="block truncate font-semibold">{block.state}</span>
-                        {block.customer ? <span className="block truncate">{block.customer}</span> : null}
-                        {block.note ? <span className="block truncate opacity-80">{block.note}</span> : null}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <AvailabilityRow
+                  key={item.asset.id}
+                  days={days}
+                  hasCatalogueFilter={hasCatalogueFilter}
+                  item={item}
+                  rangeLabel={rangeLabel}
+                  timeZone={timeZone}
+                  windowEnd={windowEnd}
+                  windowStart={windowStart}
+                  onOpenAgenda={onOpenAgenda}
+                />
               ))
-            )}
+            ) : null}
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-dashboard-border px-4 py-3 text-xs text-dashboard-muted sm:flex-row sm:items-center sm:justify-between">
-          <p>
-            Showing {firstShown}–{lastShown} of {totalItems} clothing items
-            {isSearching ? "" : " with activity"}
-          </p>
+        {!isLoading && !error && items.length > 0 ? (
+          <div className="flex flex-col gap-3 border-t border-dashboard-border px-4 py-3 text-xs text-dashboard-muted sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              Showing {firstShown}–{lastShown} clothing items · Page {currentPage}
+            </p>
 
-          <div className="flex flex-wrap items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Previous clothing page"
-              disabled={currentPage === 1}
-              onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-              className="h-8 w-8"
-            >
-              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-            </Button>
-
-            {pages.map((pageNumber) => (
+            <div className="flex flex-wrap items-center gap-1">
               <Button
-                key={pageNumber}
                 variant="ghost"
-                aria-current={pageNumber === currentPage ? "page" : undefined}
-                onClick={() => onPageChange(pageNumber)}
-                className={cn(
-                  "h-8 min-w-8 px-2",
-                  pageNumber === currentPage
-                    ? "bg-dashboard-active text-dashboard-accent hover:bg-dashboard-active"
-                    : "text-dashboard-muted"
-                )}
+                size="icon"
+                aria-label="Previous clothing page"
+                disabled={pageIndex === 0}
+                onClick={onPreviousPage}
+                className="h-8 w-8"
               >
-                {pageNumber}
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
               </Button>
-            ))}
 
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Next clothing page"
-              disabled={currentPage === totalPages || totalItems === 0}
-              onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-              className="h-8 w-8"
-            >
-              <ChevronRight className="h-4 w-4" aria-hidden="true" />
-            </Button>
+              <span className="min-w-16 px-2 text-center text-xs font-medium text-dashboard-navy">
+                Page {currentPage}
+              </span>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  aria-label="Clothing rows per page"
-                  className="ml-2 h-8 border border-dashboard-border bg-dashboard-surface px-3 text-dashboard-muted hover:bg-dashboard-active"
-                >
-                  {pageSize} / page
-                  <ChevronRight className="h-3.5 w-3.5 rotate-90" aria-hidden="true" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => onPageSizeChange(25)}>25 / page</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onPageSizeChange(50)}>50 / page</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Next clothing page"
+                disabled={!hasMore}
+                onClick={onNextPage}
+                className="h-8 w-8"
+              >
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    aria-label="Clothing rows per page"
+                    className="ml-2 h-8 border border-dashboard-border bg-dashboard-surface px-3 text-dashboard-muted hover:bg-dashboard-active"
+                  >
+                    {pageSize} / page
+                    <ChevronRight className="h-3.5 w-3.5 rotate-90" aria-hidden="true" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => onPageSizeChange(25)}>25 / page</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => onPageSizeChange(50)}>50 / page</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
-        </div>
+        ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+function AvailabilityRow({
+  days,
+  hasCatalogueFilter,
+  item,
+  onOpenAgenda,
+  rangeLabel,
+  timeZone,
+  windowEnd,
+  windowStart,
+}: {
+  days: readonly AvailabilityDay[];
+  hasCatalogueFilter: boolean;
+  item: ClothingAvailabilityTimelineRow;
+  onOpenAgenda: (assetId: string, agendaId: string) => void;
+  rangeLabel: string;
+  timeZone: string;
+  windowEnd: string;
+  windowStart: string;
+}) {
+  const laneCount = Math.max(1, ...item.agendas.map((agenda) => agenda.display_lane + 1));
+
+  return (
+    <div className="grid grid-cols-[7.5rem_repeat(14,minmax(3.25rem,1fr))] border-b border-dashboard-border last:border-b-0 sm:grid-cols-[9rem_repeat(14,minmax(3.5rem,1fr))] lg:grid-cols-[12rem_repeat(14,minmax(3.5rem,1fr))]">
+      <div className="sticky left-0 z-20 flex min-h-20 items-center gap-2 border-r border-dashboard-border bg-dashboard-surface px-2 text-left shadow-[4px_0_8px_-8px_var(--color-dashboard-muted)] sm:gap-3 sm:px-3">
+        <ClothingThumbnail item={item} compact />
+        <span className="min-w-0">
+          <span className="block truncate text-[0.7rem] font-semibold text-dashboard-navy sm:text-xs">
+            {item.product.name}
+          </span>
+          <span className="mt-1 block text-[0.64rem] text-dashboard-muted sm:hidden">
+            Size {item.variant.size_label}
+          </span>
+          <span className="mt-1 hidden text-[0.68rem] text-dashboard-muted sm:block">
+            {item.variant.color_label ?? "No color label"}
+          </span>
+          <span className="mt-1 hidden text-[0.68rem] text-dashboard-muted sm:block">
+            Size {item.variant.size_label} · {formatMinorMoney(item.variant.rental_price_minor, item.variant.currency)}
+          </span>
+        </span>
+      </div>
+
+      <div className="relative col-span-14 bg-dashboard-surface">
+        <div className="pointer-events-none absolute inset-0 grid grid-cols-14" aria-hidden="true">
+          {days.map((day, index) => (
+            <div
+              key={`${item.asset.id}-${day.date}`}
+              className={cn(
+                "border-r border-dashboard-border/70",
+                index === days.length - 1 && "border-r-0"
+              )}
+            />
+          ))}
+        </div>
+
+        <div
+          className="relative z-10 grid min-h-20 grid-cols-14"
+          style={{ gridTemplateRows: `repeat(${laneCount}, minmax(4rem, auto))` }}
+        >
+          {item.agendas.length === 0 && hasCatalogueFilter ? (
+            <div className="col-span-14 m-2 flex min-h-16 items-center justify-center rounded-lg border border-dashed border-dashboard-border bg-dashboard-active/40 px-4 text-center text-xs text-dashboard-muted">
+              No projected blocking activity in this date range · {rangeLabel}
+            </div>
+          ) : null}
+
+          {item.agendas.map((agenda) => {
+            const placement = agendaPlacement(agenda, windowStart, windowEnd, timeZone);
+            if (!placement) return null;
+            const boundarySummary = formatBoundarySummary(agenda);
+            return (
+              <button
+                key={agenda.id}
+                type="button"
+                aria-label={`Open ${item.product.name} ${availabilityStatusLabel(agenda.type)} details`}
+                onClick={() => onOpenAgenda(item.asset.id, agenda.id)}
+                style={{
+                  gridColumn: `${placement.startColumn} / span ${placement.span}`,
+                  gridRow: String(agenda.display_lane + 1),
+                }}
+                className={cn(
+                  "z-10 m-1 min-w-0 rounded-lg border px-1.5 py-2 text-left text-[0.64rem] leading-4 transition hover:brightness-95 focus-visible:ring-2 focus-visible:ring-dashboard-accent/40 sm:px-2 sm:text-[0.68rem]",
+                  availabilityTone[agenda.type]
+                )}
+              >
+                <span className="block truncate font-semibold">
+                  {availabilityStatusLabel(agenda.type)}
+                </span>
+                {agenda.customer_name ? <span className="block truncate">{agenda.customer_name}</span> : null}
+                {boundarySummary ? <span className="block truncate opacity-80">{boundarySummary}</span> : null}
+                {agenda.type === "unavailable" && agenda.unavailable_reason ? (
+                  <span className="block truncate opacity-80">
+                    {unavailableReasonLabel(agenda.unavailable_reason)}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TimelineLoadingState() {
+  return (
+    <div aria-label="Loading clothing availability" className="animate-pulse">
+      {Array.from({ length: 5 }, (_, index) => (
+        <div
+          key={index}
+          className="grid min-h-20 grid-cols-[7.5rem_repeat(14,minmax(3.25rem,1fr))] border-b border-dashboard-border sm:grid-cols-[9rem_repeat(14,minmax(3.5rem,1fr))] lg:grid-cols-[12rem_repeat(14,minmax(3.5rem,1fr))]"
+        >
+          <div className="sticky left-0 z-20 border-r border-dashboard-border bg-dashboard-surface p-3">
+            <div className="h-3 w-3/4 rounded bg-dashboard-active" />
+            <div className="mt-3 h-2 w-1/2 rounded bg-dashboard-active" />
+          </div>
+          <div className="col-span-14 m-3 rounded-lg bg-dashboard-active/70" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TimelineState({
+  actionLabel,
+  message,
+  onAction,
+  requestId,
+  title,
+}: {
+  actionLabel?: string;
+  message: string;
+  onAction?: () => void;
+  requestId?: string | null;
+  title: string;
+}) {
+  return (
+    <div className="flex min-h-44 flex-col items-center justify-center gap-2 px-5 py-8 text-center">
+      <p className="text-sm font-semibold text-dashboard-navy">{title}</p>
+      <p className="max-w-xl text-xs text-dashboard-muted">{message}</p>
+      {requestId ? <p className="text-[0.65rem] text-dashboard-muted">Request ID: {requestId}</p> : null}
+      {actionLabel && onAction ? (
+        <Button variant="secondary" size="sm" onClick={onAction} className="mt-2">
+          {actionLabel}
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -534,13 +850,25 @@ function AvailabilityDetailsSheet({
   item,
   onOpenChange,
   open,
+  rangeLabel,
   selectedBlock,
+  timeZone,
 }: {
-  item: AvailabilityItem | null;
+  item: ClothingAvailabilityTimelineRow | null;
   onOpenChange: (open: boolean) => void;
   open: boolean;
-  selectedBlock: AvailabilityBlock | null;
+  rangeLabel: string;
+  selectedBlock: ClothingAvailabilityTimelineAgenda | null;
+  timeZone: string;
 }) {
+  const reservationAgendas =
+    item?.agendas.filter(
+      (agenda) =>
+        agenda.source_type === "reservation" &&
+        (agenda.type === "reserved" || agenda.type === "rented") &&
+        agenda.customer_name
+    ) ?? [];
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -551,58 +879,73 @@ function AvailabilityDetailsSheet({
           <div className="flex min-h-full flex-col">
             <header className="border-b border-dashboard-border px-5 py-5 pr-14">
               <div className="flex items-start gap-3">
-                <div className="flex h-20 w-16 shrink-0 items-center justify-center rounded-lg bg-dashboard-active text-sm font-semibold text-dashboard-accent">
-                  {item.initials}
-                </div>
+                <ClothingThumbnail item={item} />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <SheetTitle className="truncate text-lg">{item.name}</SheetTitle>
+                    <SheetTitle className="truncate text-lg">{item.product.name}</SheetTitle>
                     <Badge
                       variant="outline"
-                      className={cn("px-2 py-1 text-xs", availabilityTone[selectedBlock.state])}
+                      className={cn("px-2 py-1 text-xs", availabilityTone[selectedBlock.type])}
                     >
-                      {selectedBlock.state}
+                      {availabilityStatusLabel(selectedBlock.type)}
                     </Badge>
                   </div>
-                  <SheetDescription className="mt-1">{item.code}</SheetDescription>
+                  <SheetDescription className="mt-1">
+                    {item.variant.color_label ?? "No color label"}
+                  </SheetDescription>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Badge variant="secondary" className="px-2 py-1 text-xs">
-                      Size {item.size}
+                      Size {item.variant.size_label}
                     </Badge>
-                    <span className="text-sm font-semibold text-dashboard-navy">{item.pricePerDay}</span>
+                    <span className="text-sm font-semibold text-dashboard-navy">
+                      {formatMinorMoney(item.variant.rental_price_minor, item.variant.currency)}
+                    </span>
                   </div>
                 </div>
               </div>
 
-              <div className={cn("mt-4 rounded-lg border px-4 py-3", availabilityTone[selectedBlock.state])}>
-                <p className="text-xs font-semibold">{selectedBlock.note ?? selectedBlock.state}</p>
+              <div className={cn("mt-4 rounded-lg border px-4 py-3", availabilityTone[selectedBlock.type])}>
+                <p className="text-xs font-semibold">
+                  {availabilityStatusLabel(selectedBlock.type)} · {formatAgendaDateRange(selectedBlock, timeZone)}
+                </p>
                 <p className="mt-1 text-xs opacity-90">
-                  {selectedBlock.customer
-                    ? `${selectedBlock.state} · ${selectedBlock.customer}`
-                    : selectedBlock.state}
+                  {selectedBlock.customer_name ??
+                    unavailableReasonLabel(selectedBlock.unavailable_reason) ??
+                    availabilityStatusLabel(selectedBlock.type)}
                 </p>
               </div>
             </header>
 
             <div className="flex flex-1 flex-col gap-3 p-4">
+              {(selectedBlock.pickup || selectedBlock.return) ? (
+                <Card className="gap-0 py-0">
+                  <CardContent className="grid gap-3 p-4 sm:grid-cols-2">
+                    <BoundaryDetail
+                      label="Pickup"
+                      value={formatBoundaryDateTime(selectedBlock.pickup, timeZone) ?? "Not recorded"}
+                    />
+                    <BoundaryDetail
+                      label="Return"
+                      value={formatBoundaryDateTime(selectedBlock.return, timeZone) ?? "Not scheduled"}
+                    />
+                  </CardContent>
+                </Card>
+              ) : null}
+
               <Card className="gap-0 py-0">
                 <CardContent className="p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <CalendarDays className="h-4 w-4 text-dashboard-accent" aria-hidden="true" />
-                      <h3 className="text-sm font-semibold text-dashboard-navy">Availability</h3>
-                    </div>
-                    <button type="button" className="text-xs font-medium text-dashboard-accent hover:underline">
-                      View details →
-                    </button>
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="h-4 w-4 text-dashboard-accent" aria-hidden="true" />
+                    <h3 className="text-sm font-semibold text-dashboard-navy">Availability</h3>
                   </div>
-                  <p className="mt-3 text-xs font-semibold text-dashboard-navy">Sep 8 – Sep 21, 2025</p>
+                  <p className="mt-3 text-xs font-semibold text-dashboard-navy">{rangeLabel}</p>
                   <div className="mt-3 overflow-hidden rounded-lg border border-dashboard-border">
-                    {item.blocks.map((block, index) => {
-                      const isSelected = block === selectedBlock;
+                    {item.agendas.map((agenda) => {
+                      const isSelected = agenda.id === selectedBlock.id;
+                      const reason = unavailableReasonLabel(agenda.unavailable_reason);
                       return (
                         <div
-                          key={`${block.state}-${index}`}
+                          key={agenda.id}
                           className={cn(
                             "flex items-start gap-3 border-b border-dashboard-border px-3 py-3 last:border-b-0",
                             isSelected && "bg-dashboard-active"
@@ -611,13 +954,13 @@ function AvailabilityDetailsSheet({
                           <span
                             className={cn(
                               "mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full",
-                              availabilityTone[block.state]
+                              availabilityTone[agenda.type]
                             )}
                           />
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <p className="text-xs font-semibold text-dashboard-navy">
-                                {block.note ?? block.state}
+                                {formatAgendaDateRange(agenda, timeZone)}
                               </p>
                               {isSelected ? (
                                 <span className="text-[0.65rem] font-semibold uppercase tracking-wide text-dashboard-accent">
@@ -626,8 +969,15 @@ function AvailabilityDetailsSheet({
                               ) : null}
                             </div>
                             <p className="mt-1 text-xs text-dashboard-muted">
-                              {block.state}{block.customer ? ` (${block.customer})` : ""}
+                              {availabilityStatusLabel(agenda.type)}
+                              {agenda.customer_name ? ` · ${agenda.customer_name}` : ""}
+                              {reason ? ` · ${reason}` : ""}
                             </p>
+                            {formatBoundarySummary(agenda) ? (
+                              <p className="mt-1 text-[0.68rem] text-dashboard-muted">
+                                {formatBoundarySummary(agenda)}
+                              </p>
+                            ) : null}
                           </div>
                         </div>
                       );
@@ -635,8 +985,10 @@ function AvailabilityDetailsSheet({
                     <div className="flex items-start gap-3 px-3 py-3">
                       <span className="availability-state-available mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" />
                       <div>
-                        <p className="text-xs font-semibold text-dashboard-navy">Remaining dates</p>
-                        <p className="mt-1 text-xs text-dashboard-muted">Available</p>
+                        <p className="text-xs font-semibold text-dashboard-navy">Other dates</p>
+                        <p className="mt-1 text-xs text-dashboard-muted">
+                          No blocking agenda is projected for uncovered dates in this selected range.
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -647,47 +999,47 @@ function AvailabilityDetailsSheet({
                 <CardContent className="p-4">
                   <h3 className="text-sm font-semibold text-dashboard-navy">Quick Actions</h3>
                   <div className="mt-3 space-y-2">
-                    <QuickLink icon={Shirt} label="View Clothing Details" />
-                    <QuickLink icon={CalendarDays} label="View All Reservations" />
-                    <QuickLink icon={Eye} label="Check Availability" />
+                    <QuickLink href={`/inventory/${item.product.id}`} icon={Shirt} label="View Clothing Details" />
+                    <QuickLink href="/reservations" icon={CalendarDays} label="View Reservations" />
                   </div>
                 </CardContent>
               </Card>
 
               <Card className="gap-0 py-0">
                 <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-dashboard-navy">Upcoming Reservations</h3>
-                    <button type="button" className="text-xs font-medium text-dashboard-accent hover:underline">
-                      View all →
-                    </button>
-                  </div>
-                  <div className="mt-3 space-y-1">
-                    {item.upcoming.map((reservation) => (
-                      <div
-                        key={`${reservation.customer}-${reservation.date}`}
-                        className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-dashboard-active"
-                      >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-dashboard-active text-[0.65rem] font-semibold text-dashboard-accent">
-                          {reservation.customer
-                            .split(" ")
-                            .map((part) => part[0])
-                            .join("")
-                            .slice(0, 2)}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-semibold text-dashboard-navy">{reservation.customer}</p>
-                          <p className="mt-0.5 text-[0.68rem] text-dashboard-muted">{reservation.date}</p>
-                        </div>
-                        <Badge
-                          variant="outline"
-                          className={cn("px-2 py-1 text-[0.68rem]", availabilityTone[reservation.state])}
+                  <h3 className="text-sm font-semibold text-dashboard-navy">Reservations in this range</h3>
+                  {reservationAgendas.length > 0 ? (
+                    <div className="mt-3 space-y-1">
+                      {reservationAgendas.map((agenda) => (
+                        <div
+                          key={agenda.id}
+                          className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-dashboard-active"
                         >
-                          {reservation.state}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-dashboard-active text-[0.65rem] font-semibold text-dashboard-accent">
+                            {initials(agenda.customer_name ?? "Customer")}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-xs font-semibold text-dashboard-navy">
+                              {agenda.customer_name}
+                            </p>
+                            <p className="mt-0.5 text-[0.68rem] text-dashboard-muted">
+                              {formatAgendaDateRange(agenda, timeZone)}
+                            </p>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={cn("px-2 py-1 text-[0.68rem]", availabilityTone[agenda.type])}
+                          >
+                            {availabilityStatusLabel(agenda.type)}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-xs text-dashboard-muted">
+                      No reservation-backed activity is projected for this clothing item in the selected range.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -698,14 +1050,69 @@ function AvailabilityDetailsSheet({
   );
 }
 
-function QuickLink({ icon: Icon, label }: { icon: typeof Shirt; label: string }) {
+function ClothingThumbnail({
+  compact = false,
+  item,
+}: {
+  compact?: boolean;
+  item: ClothingAvailabilityTimelineRow;
+}) {
   return (
-    <Button
-      variant="ghost"
-      className="w-full justify-start border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+    <span
+      className={cn(
+        "shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active font-semibold text-dashboard-accent",
+        compact ? "hidden h-12 w-10 text-xs sm:flex" : "flex h-20 w-16 text-sm"
+      )}
+    >
+      {item.product.primary_image_url ? (
+        // eslint-disable-next-line @next/next/no-img-element -- catalogue images use short-lived signed URLs that cannot be configured as stable Next.js image hosts.
+        <img
+          src={item.product.primary_image_url}
+          alt={`${item.product.name} catalogue photo`}
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        initials(item.product.name)
+      )}
+    </span>
+  );
+}
+
+function BoundaryDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[0.68rem] font-medium uppercase tracking-wide text-dashboard-muted">{label}</p>
+      <p className="mt-1 text-xs font-semibold text-dashboard-navy">{value}</p>
+    </div>
+  );
+}
+
+function QuickLink({
+  href,
+  icon: Icon,
+  label,
+}: {
+  href: string;
+  icon: typeof Shirt;
+  label: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex h-10 w-full items-center justify-start gap-2 rounded-md border border-dashboard-border bg-dashboard-surface px-4 text-sm font-medium text-dashboard-navy transition-colors hover:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
     >
       <Icon className="h-4 w-4 text-dashboard-accent" aria-hidden="true" />
       {label}
-    </Button>
+    </Link>
   );
+}
+
+function toDrezivoApiError(error: unknown): DrezivoApiError {
+  return error instanceof DrezivoApiError
+    ? error
+    : new DrezivoApiError("We could not load clothing availability. Please try again.", {
+        status: 500,
+      });
 }

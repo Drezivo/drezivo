@@ -1,218 +1,219 @@
-export type AvailabilityState =
-  | "Reserved"
-  | "Rented"
-  | "Pickup"
-  | "Return"
-  | "Fitting"
-  | "Unavailable"
-  | "Cleaning"
-  | "Maintenance"
-  | "Available";
+import type {
+  ClothingAvailabilityTimelineAgenda,
+  ClothingAvailabilityTimelineStatus,
+  ClothingAvailabilityTimelineUnavailableReason,
+} from "@drezivo/contracts";
 
-export type AvailabilityBlock = {
-  state: AvailabilityState;
-  start: number;
+export const AVAILABILITY_WINDOW_DAYS = 14;
+
+export type AvailabilityDay = {
+  date: string;
+  label: string;
+  dateLabel: string;
+};
+
+export type AgendaPlacement = {
+  startColumn: number;
   span: number;
-  customer?: string;
-  note?: string;
 };
 
-export type AvailabilityItem = {
-  id: string;
-  name: string;
-  code: string;
-  size: string;
-  pricePerDay: string;
-  category: string;
-  initials: string;
-  blocks: AvailabilityBlock[];
-  upcoming: { customer: string; date: string; state: AvailabilityState }[];
+const statusLabels: Record<ClothingAvailabilityTimelineStatus, string> = {
+  reserved: "Reserved",
+  rented: "Rented",
+  unavailable: "Unavailable",
 };
 
-export const AVAILABILITY_DAYS = [
-  { label: "Mon", date: "Sep 8" },
-  { label: "Tue", date: "Sep 9" },
-  { label: "Wed", date: "Sep 10" },
-  { label: "Thu", date: "Sep 11" },
-  { label: "Fri", date: "Sep 12" },
-  { label: "Sat", date: "Sep 13" },
-  { label: "Sun", date: "Sep 14" },
-  { label: "Mon", date: "Sep 15" },
-  { label: "Tue", date: "Sep 16" },
-  { label: "Wed", date: "Sep 17" },
-  { label: "Thu", date: "Sep 18" },
-  { label: "Fri", date: "Sep 19" },
-  { label: "Sat", date: "Sep 20" },
-  { label: "Sun", date: "Sep 21" },
-] as const;
+const unavailableReasonLabels: Record<ClothingAvailabilityTimelineUnavailableReason, string> = {
+  recovery: "Recovery",
+  cleaning: "Cleaning",
+  maintenance: "Maintenance",
+  manual_block: "Manual block",
+  readiness: "Readiness",
+  other: "Other",
+};
 
-const BASE_AVAILABILITY_ITEMS: AvailabilityItem[] = [
-  {
-    id: "CG-001",
-    name: "Black Satin Gown",
-    code: "#CG-001",
-    size: "S",
-    pricePerDay: "₱1,500/day",
-    category: "Gowns",
-    initials: "BS",
-    blocks: [
-      { state: "Reserved", start: 1, span: 4, customer: "Maria Santos", note: "Sep 8 – 11" },
-      { state: "Rented", start: 5, span: 4, customer: "Carla Dela Cruz", note: "Sep 12 – 14" },
-      { state: "Cleaning", start: 9, span: 2, note: "Sep 15" },
-    ],
-    upcoming: [
-      { customer: "Carla Dela Cruz", date: "Sep 12 – 14", state: "Rented" },
-      { customer: "Maria Santos", date: "Sep 8 – 11", state: "Reserved" },
-      { customer: "Leanne Cruz", date: "Sep 17", state: "Fitting" },
-    ],
-  },
-  {
-    id: "CG-002",
-    name: "Red Evening Dress",
-    code: "#CG-002",
-    size: "M",
-    pricePerDay: "₱1,200/day",
-    category: "Dresses",
-    initials: "RE",
-    blocks: [
-      { state: "Pickup", start: 2, span: 2, customer: "Anna Reyes", note: "Sep 9 · 10:30 AM" },
-      { state: "Rented", start: 6, span: 4, customer: "Sofia Garcia", note: "Sep 13 – 16" },
-      { state: "Fitting", start: 10, span: 3, customer: "Leanne Cruz", note: "Sep 17 · 11:00 AM" },
-    ],
-    upcoming: [
-      { customer: "Sofia Garcia", date: "Sep 13 – 16", state: "Rented" },
-      { customer: "Leanne Cruz", date: "Sep 17", state: "Fitting" },
-    ],
-  },
-  {
-    id: "CG-003",
-    name: "White Wedding Gown",
-    code: "#CG-003",
-    size: "S",
-    pricePerDay: "₱3,000/day",
-    category: "Wedding",
-    initials: "WW",
-    blocks: [
-      { state: "Unavailable", start: 1, span: 3, note: "Sep 8 – 10" },
-      { state: "Reserved", start: 4, span: 3, customer: "Patricia Lim", note: "Sep 11 – 13" },
-      { state: "Pickup", start: 11, span: 3, customer: "Mika Reyes", note: "Sep 18 · 2:00 PM" },
-    ],
-    upcoming: [
-      { customer: "Patricia Lim", date: "Sep 11 – 13", state: "Reserved" },
-      { customer: "Mika Reyes", date: "Sep 18", state: "Pickup" },
-    ],
-  },
-  {
-    id: "CG-004",
-    name: "Blue Bridesmaid Dress",
-    code: "#CG-004",
-    size: "M",
-    pricePerDay: "₱1,200/day",
-    category: "Dresses",
-    initials: "BB",
-    blocks: [
-      { state: "Reserved", start: 3, span: 3, customer: "Jamie Cruz", note: "Sep 10 – 12" },
-      { state: "Rented", start: 7, span: 4, customer: "Bea Cruz", note: "Sep 14 – 17" },
-      { state: "Return", start: 12, span: 2, customer: "Karen Lim", note: "Sep 19" },
-    ],
-    upcoming: [
-      { customer: "Jamie Cruz", date: "Sep 10 – 12", state: "Reserved" },
-      { customer: "Bea Cruz", date: "Sep 14 – 17", state: "Rented" },
-    ],
-  },
-  {
-    id: "CG-005",
-    name: "Filipiniana Dress",
-    code: "#CG-005",
-    size: "S",
-    pricePerDay: "₱2,000/day",
-    category: "Filipiniana",
-    initials: "FD",
-    blocks: [
-      { state: "Rented", start: 2, span: 4, customer: "Trisha Garcia", note: "Sep 9 – 11" },
-      { state: "Maintenance", start: 6, span: 2, note: "Sep 12 – 13" },
-      { state: "Reserved", start: 9, span: 4, customer: "Alyssa Santos", note: "Sep 16 – 19" },
-    ],
-    upcoming: [
-      { customer: "Alyssa Santos", date: "Sep 16 – 19", state: "Reserved" },
-      { customer: "Trisha Garcia", date: "Sep 9 – 11", state: "Rented" },
-    ],
-  },
-  {
-    id: "CG-006",
-    name: "Pink Gown",
-    code: "#CG-006",
-    size: "L",
-    pricePerDay: "₱1,500/day",
-    category: "Gowns",
-    initials: "PG",
-    blocks: [
-      { state: "Fitting", start: 3, span: 3, customer: "Sophia Garcia", note: "Sep 10 · 1:00 PM" },
-      { state: "Rented", start: 7, span: 3, customer: "Leanne Cruz", note: "Sep 14 – 16" },
-      { state: "Pickup", start: 13, span: 2, customer: "Carmen Lopez", note: "Sep 20 · 11:00 AM" },
-    ],
-    upcoming: [
-      { customer: "Leanne Cruz", date: "Sep 14 – 16", state: "Rented" },
-      { customer: "Sophia Garcia", date: "Sep 10", state: "Fitting" },
-    ],
-  },
-  {
-    id: "CG-007",
-    name: "Barong Tagalog",
-    code: "#CG-007",
-    size: "M",
-    pricePerDay: "₱1,000/day",
-    category: "Barong",
-    initials: "BT",
-    blocks: [
-      { state: "Reserved", start: 5, span: 3, customer: "Daniel Reyes", note: "Sep 11 – 13" },
-      { state: "Rented", start: 8, span: 4, customer: "Roy Santos", note: "Sep 15 – 18" },
-    ],
-    upcoming: [
-      { customer: "Roy Santos", date: "Sep 15 – 18", state: "Rented" },
-      { customer: "Daniel Reyes", date: "Sep 11 – 13", state: "Reserved" },
-    ],
-  },
-  {
-    id: "CG-008",
-    name: "Green Evening Dress",
-    code: "#CG-008",
-    size: "M",
-    pricePerDay: "₱1,200/day",
-    category: "Dresses",
-    initials: "GE",
-    blocks: [
-      { state: "Unavailable", start: 1, span: 3, note: "Sep 8 – 9" },
-      { state: "Reserved", start: 5, span: 4, customer: "Katrina Lim", note: "Sep 12 – 14" },
-      { state: "Fitting", start: 10, span: 4, customer: "Janelle Cruz", note: "Sep 17 · 10:00 AM" },
-    ],
-    upcoming: [
-      { customer: "Katrina Lim", date: "Sep 12 – 14", state: "Reserved" },
-      { customer: "Janelle Cruz", date: "Sep 17", state: "Fitting" },
-    ],
-  },
-];
+export function availabilityStatusLabel(status: ClothingAvailabilityTimelineStatus): string {
+  return statusLabels[status];
+}
 
-/**
- * Development-scale calendar data. Keep the first eight records unchanged for predictable UI
- * references, then repeat them with unique IDs/codes so pagination and scrolling can be tested
- * against a realistically dense rental catalogue. Every tenth generated record intentionally has
- * no agenda in this range; the default calendar omits those rows, while search can still surface
- * them as available.
- */
-export const AVAILABILITY_ITEMS: AvailabilityItem[] = Array.from({ length: 80 }, (_, index) => {
-  const source = BASE_AVAILABILITY_ITEMS[index % BASE_AVAILABILITY_ITEMS.length]!;
-  const cycle = Math.floor(index / BASE_AVAILABILITY_ITEMS.length) + 1;
-  const hasAgenda = (index + 1) % 10 !== 0;
-  const suffix = cycle === 1 ? "" : ` ${cycle}`;
-  const generatedNumber = String(index + 1).padStart(3, "0");
+export function unavailableReasonLabel(
+  reason: ClothingAvailabilityTimelineUnavailableReason | null
+): string | null {
+  return reason ? unavailableReasonLabels[reason] : null;
+}
+
+export function todayInTimeZone(timeZone: string, now = new Date()): string {
+  return instantToDateKey(now, timeZone);
+}
+
+export function addCalendarDays(value: string, amount: number): string {
+  const date = parseCalendarDate(value);
+  date.setUTCDate(date.getUTCDate() + amount);
+  return toCalendarDateKey(date);
+}
+
+export function buildAvailabilityDays(startDate: string): AvailabilityDay[] {
+  return Array.from({ length: AVAILABILITY_WINDOW_DAYS }, (_, index) => {
+    const date = parseCalendarDate(addCalendarDays(startDate, index));
+    return {
+      date: toCalendarDateKey(date),
+      label: new Intl.DateTimeFormat("en-US", {
+        weekday: "short",
+        timeZone: "UTC",
+      }).format(date),
+      dateLabel: new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      }).format(date),
+    };
+  });
+}
+
+export function formatAvailabilityRange(startDate: string, endDate: string): string {
+  const start = parseCalendarDate(startDate);
+  const end = parseCalendarDate(endDate);
+  const startLabel = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(start);
+  const endLabel = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(end);
+  return `${startLabel} – ${endLabel}`;
+}
+
+export function formatAgendaDateRange(
+  agenda: ClothingAvailabilityTimelineAgenda,
+  timeZone: string
+): string {
+  const startDate = displayAgendaStartDate(agenda, timeZone);
+  const endInstant = new Date(Date.parse(agenda.period.end) - 1);
+  const endDate = instantToDateKey(endInstant, timeZone);
+  if (startDate === endDate) return formatCalendarDate(startDate);
+  return `${formatCalendarDate(startDate)} – ${formatCalendarDate(endDate)}`;
+}
+
+export function formatBoundarySummary(agenda: ClothingAvailabilityTimelineAgenda): string | null {
+  const labels: string[] = [];
+  if (agenda.pickup) labels.push(`Pickup ${formatCalendarDate(agenda.pickup.date)}`);
+  if (agenda.return) labels.push(`Return ${formatCalendarDate(agenda.return.date)}`);
+  return labels.length > 0 ? labels.join(" · ") : null;
+}
+
+export function formatBoundaryDateTime(
+  value: { at: string } | null,
+  timeZone: string
+): string | null {
+  if (!value) return null;
+  return new Intl.DateTimeFormat("en-PH", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  }).format(new Date(value.at));
+}
+
+export function agendaPlacement(
+  agenda: ClothingAvailabilityTimelineAgenda,
+  windowStart: string,
+  windowEnd: string,
+  timeZone: string
+): AgendaPlacement | null {
+  const agendaStart = displayAgendaStartDate(agenda, timeZone);
+  const endMilliseconds = Date.parse(agenda.period.end);
+  if (!Number.isFinite(endMilliseconds)) return null;
+
+  // API periods are end-exclusive. Subtracting one millisecond prevents a midnight end from
+  // incorrectly occupying the following calendar day in this day-based projection.
+  const agendaEnd = instantToDateKey(new Date(endMilliseconds - 1), timeZone);
+  const clippedStart = agendaStart < windowStart ? windowStart : agendaStart;
+  const clippedEnd = agendaEnd > windowEnd ? windowEnd : agendaEnd;
+  if (clippedStart > clippedEnd) return null;
 
   return {
-    ...source,
-    id: `CG-${generatedNumber}`,
-    code: `#CG-${generatedNumber}`,
-    name: `${source.name}${suffix}`,
-    blocks: hasAgenda ? source.blocks.map((block) => ({ ...block })) : [],
-    upcoming: hasAgenda ? source.upcoming.map((reservation) => ({ ...reservation })) : [],
+    startColumn: calendarDayDifference(windowStart, clippedStart) + 1,
+    span: calendarDayDifference(clippedStart, clippedEnd) + 1,
   };
-});
+}
+
+export function formatMinorMoney(value: string, currency: string): string {
+  const amount = Number(value) / 100;
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+export function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "—";
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function displayAgendaStartDate(
+  agenda: ClothingAvailabilityTimelineAgenda,
+  timeZone: string
+): string {
+  const periodStartDate = instantToDateKey(new Date(agenda.period.start), timeZone);
+
+  // This is a day-based planning grid: the reservation owns its return calendar day, while the
+  // post-rental recovery block begins on the following branch-local day.
+  return agenda.type === "unavailable" && agenda.unavailable_reason === "recovery"
+    ? addCalendarDays(periodStartDate, 1)
+    : periodStartDate;
+}
+
+function formatCalendarDate(value: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(parseCalendarDate(value));
+}
+
+function instantToDateKey(value: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone,
+  }).formatToParts(value);
+  const byType = new Map(parts.map((part) => [part.type, part.value]));
+  const year = byType.get("year");
+  const month = byType.get("month");
+  const day = byType.get("day");
+  if (!year || !month || !day) throw new Error("Calendar date could not be formatted.");
+  return `${year}-${month}-${day}`;
+}
+
+function calendarDayDifference(startDate: string, endDate: string): number {
+  return Math.round(
+    (parseCalendarDate(endDate).getTime() - parseCalendarDate(startDate).getTime()) /
+      (24 * 60 * 60 * 1_000)
+  );
+}
+
+function parseCalendarDate(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) throw new Error(`Invalid calendar date: ${value}`);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function toCalendarDateKey(value: Date): string {
+  const year = value.getUTCFullYear();
+  const month = String(value.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(value.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
