@@ -621,15 +621,16 @@ describe('CLT-022 clothing file attachment flow', async () => {
       request: replaceClothingImagesRequest.parse({ file_ids: fileIds.slice(0, 4) }),
     });
     const concurrentResults = await Promise.allSettled(
-      [4, 5].map((displayOrder) =>
-        withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      fileIds.slice(4, 6).map((fileId, index) => {
+        const displayOrder = index + 4;
+        return withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
           client.query(
             `INSERT INTO product_image (tenant_id, product_id, file_id, display_order)
              VALUES ($1, $2, $3, $4)`,
-            [seed.tenantId, concurrentProductId, fileIds[displayOrder]!, displayOrder],
+            [seed.tenantId, concurrentProductId, fileId, displayOrder],
           ),
-        ),
-      ),
+        );
+      }),
     );
     expect(concurrentResults.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
     const concurrentFailure = concurrentResults.find((outcome) => outcome.status === 'rejected');
