@@ -1,240 +1,281 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  dashboardFittingSummaryResponse,
+  fittingDetail,
+  fittingListItem,
+  fittingSettings,
+} from "@drezivo/contracts";
 
 import { FittingsPage } from "@/components/fittings/fittings-page";
 
-describe("FittingsPage", () => {
+const clerk = vi.hoisted(() => ({
+  getToken: vi.fn(),
+  useAuth: vi.fn(),
+}));
+
+const api = vi.hoisted(() => ({
+  cancelFitting: vi.fn(),
+  completeFitting: vi.fn(),
+  confirmFitting: vi.fn(),
+  createFitting: vi.fn(),
+  getCatalogueClothing: vi.fn(),
+  getCatalogueClothingDetail: vi.fn(),
+  getFittingDashboardSummary: vi.fn(),
+  getFittingDetail: vi.fn(),
+  getFittingIntakeOptions: vi.fn(),
+  getFittingSettings: vi.fn(),
+  getFittings: vi.fn(),
+  markFittingNoShow: vi.fn(),
+  rejectFitting: vi.fn(),
+}));
+
+vi.mock("@clerk/nextjs", () => ({ useAuth: clerk.useAuth }));
+
+vi.mock("@/lib/drezivo-api", () => ({
+  DrezivoApiError: class DrezivoApiError extends Error {
+    code: string;
+    requestId: string | null;
+    status: number;
+
+    constructor(
+      message: string,
+      options: { code?: string; requestId?: string | null; status?: number } = {}
+    ) {
+      super(message);
+      this.code = options.code ?? "INTERNAL_ERROR";
+      this.requestId = options.requestId ?? null;
+      this.status = options.status ?? 500;
+    }
+  },
+  createDrezivoApiClient: () => api,
+}));
+
+const branchId = "00000000-0000-4000-8000-000000001001";
+const customerId = "00000000-0000-4000-8000-000000001002";
+const fittingId = "00000000-0000-4000-8000-000000001003";
+const lineId = "00000000-0000-4000-8000-000000001004";
+const variantId = "00000000-0000-4000-8000-000000001005";
+const assetId = "00000000-0000-4000-8000-000000001006";
+
+const listItem = fittingListItem.parse({
+  id: fittingId,
+  status: "pending",
+  period: {
+    start: "2026-10-05T02:00:00.000Z",
+    end: "2026-10-05T03:00:00.000Z",
+  },
+  customer: { id: customerId, full_name: "Real Fitting Customer" },
+  garments: [
+    {
+      id: lineId,
+      variant: {
+        variant_id: variantId,
+        product_name: "Emerald Evening Gown",
+        sku: "EMERALD-M",
+        size_label: "Medium",
+        color_label: "Emerald",
+      },
+      garment_mode: "guaranteed",
+    },
+  ],
+  fee: { fee_minor: "50000", currency: "PHP", payment: null },
+  attention: "none",
+  version: 1,
+  created_at: "2026-09-27T01:00:00.000Z",
+});
+
+const detail = fittingDetail.parse({
+  ...listItem,
+  branch_id: branchId,
+  booking_channel: "staff",
+  timezone_snapshot: "Asia/Manila",
+  customer: {
+    id: customerId,
+    full_name: "Real Fitting Customer",
+    phone: "09171234567",
+    email: "real@example.test",
+  },
+  garments: [
+    {
+      ...listItem.garments[0],
+      assigned_asset: { id: assetId, asset_code: "GWN-0042" },
+    },
+  ],
+  internal_note: "Bring heels for final fitting.",
+  terminal_reason: null,
+  allowed_actions: ["confirm", "reject", "cancel", "reschedule", "update_garments", "update_note"],
+});
+
+const confirmedDetail = fittingDetail.parse({
+  ...detail,
+  status: "confirmed",
+  version: 2,
+  allowed_actions: ["cancel", "reschedule", "update_garments", "update_note"],
+});
+
+const settings = fittingSettings.parse({
+  branch_id: branchId,
+  enabled: true,
+  capacity: 2,
+  duration_minutes: 60,
+  fee_minor: "50000",
+  currency: "PHP",
+  timezone: "Asia/Manila",
+  weekly_hours: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].map(
+    (weekday) => ({ weekday, windows: [{ starts_local: "09:00", ends_local: "17:00" }] })
+  ),
+  version: 1,
+  updated_at: "2026-09-27T00:00:00.000Z",
+});
+
+const summary = dashboardFittingSummaryResponse.parse({
+  window: {
+    today_start: "2026-09-27T00:00:00.000Z",
+    today_end: "2026-09-28T00:00:00.000Z",
+    upcoming_end: "2026-10-04T00:00:00.000Z",
+  },
+  fittings_today: 3,
+  fittings_upcoming: 7,
+  fittings_pending_review: 2,
+});
+
+function page(items = [listItem], nextCursor: string | null = null) {
+  return {
+    data: { items, page_meta: { next_cursor: nextCursor, has_more: Boolean(nextCursor) } },
+    requestId: "request-list",
+  };
+}
+
+function installDefaults() {
+  clerk.useAuth.mockReturnValue({
+    getToken: clerk.getToken,
+    isLoaded: true,
+    isSignedIn: true,
+  });
+  clerk.getToken.mockResolvedValue("test-token");
+  api.getFittingSettings.mockResolvedValue({ data: settings, requestId: "request-settings" });
+  api.getFittingDashboardSummary.mockResolvedValue({ data: summary, requestId: "request-summary" });
+  api.getFittings.mockResolvedValue(page());
+  api.getFittingDetail.mockResolvedValue({ data: detail, requestId: "request-detail" });
+  api.confirmFitting.mockResolvedValue({
+    data: { fitting: confirmedDetail },
+    requestId: "request-confirm",
+  });
+}
+
+describe("FittingsPage production cutover", () => {
   beforeEach(() => {
-    window.sessionStorage.clear();
+    vi.clearAllMocks();
+    installDefaults();
   });
 
-  it("renders the operational hierarchy with fixture-derived summaries", () => {
+  it("renders authoritative fitting rows and dashboard summary instead of fixture data", async () => {
     render(<FittingsPage />);
 
-    expect(screen.getByRole("heading", { name: "Fittings" })).toBeVisible();
-    expect(screen.getByText("Manage fitting appointments and today's schedule.")).toBeVisible();
-    expect(screen.getByRole("link", { name: /Schedule & Availability/ })).toHaveAttribute(
-      "href",
-      "/fittings/schedule"
+    expect(await screen.findByText("Real Fitting Customer")).toBeVisible();
+    expect(screen.getByText("Emerald Evening Gown")).toBeVisible();
+    expect(screen.getByText("₱500")).toBeVisible();
+    expect(screen.getByText("Not started")).toBeVisible();
+    expect(screen.getByText("3")).toBeVisible();
+    expect(screen.getByText("7")).toBeVisible();
+    expect(screen.getByText("2")).toBeVisible();
+    expect(screen.queryByText("Local prototype only.")).not.toBeInTheDocument();
+    expect(api.getFittings).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 10, sort: "starts_at_asc" })
     );
-    expect(screen.getByRole("button", { name: /New Fitting/ })).toBeEnabled();
-
-    expect(screen.getByText("Today")).toBeVisible();
-    expect(screen.getByText("Upcoming")).toBeVisible();
-    expect(screen.getByText("Pending review")).toBeVisible();
-    expect(screen.getByText("Page 1 · 10 fittings loaded")).toBeVisible();
   });
 
-  it("paginates fitting appointments at 10 rows per page", () => {
+  it("keeps search/status filters and cursor pagination server-authoritative", async () => {
+    api.getFittings.mockImplementation(
+      async (input: { cursor?: string; search?: string; status?: string }) =>
+        input.cursor === "next-page" ? page([listItem], null) : page([listItem], "next-page")
+    );
+
     render(<FittingsPage />);
+    await screen.findByText("Real Fitting Customer");
 
-    expect(screen.getAllByRole("button", { name: /Open fitting for/ })).toHaveLength(10);
-    expect(screen.getByRole("button", { name: "Previous page" })).toBeDisabled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
-
-    expect(screen.getByText("Page 2 · 10 fittings loaded")).toBeVisible();
-    expect(screen.getAllByRole("button", { name: /Open fitting for/ })).toHaveLength(10);
-    expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
-  });
-
-  it("filters appointments by customer or garment search and clears the filter", () => {
-    render(<FittingsPage />);
-
-    fireEvent.change(screen.getByPlaceholderText("Customer or garment..."), {
-      target: { value: "Ivory Wedding Gown" },
+    fireEvent.change(screen.getByRole("textbox", { name: "Search fittings" }), {
+      target: { value: "Emerald" },
     });
-
-    expect(screen.getByText("Page 1 · 1 fittings loaded")).toBeVisible();
-    expect(screen.getByRole("button", { name: /Open fitting for Bianca Flores/ })).toBeVisible();
-
-    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
-    expect(screen.getByText("Page 1 · 10 fittings loaded")).toBeVisible();
-  });
-
-  it("supports status and date filters with a distinct empty filtered state", async () => {
-    render(<FittingsPage />);
+    await waitFor(() =>
+      expect(api.getFittings).toHaveBeenCalledWith(expect.objectContaining({ search: "Emerald" }))
+    );
 
     fireEvent.pointerDown(screen.getByRole("button", { name: "Status: All statuses" }), {
       button: 0,
       ctrlKey: false,
     });
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Completed" }));
-    expect(screen.getByText("Page 1 · 3 fittings loaded")).toBeVisible();
-
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Date: All dates" }), {
-      button: 0,
-      ctrlKey: false,
-    });
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Today" }));
-    expect(screen.getByRole("heading", { name: "No fittings match these filters" })).toBeVisible();
-
-    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
-    expect(screen.getByText("Page 1 · 10 fittings loaded")).toBeVisible();
-  });
-
-  it("shows date, customer, garment, payment, status, and attention without resource fields", () => {
-    render(<FittingsPage />);
-
-    const biancaRow = screen.getByRole("button", {
-      name: /Open fitting for Bianca Flores on Sep 26, 2026/,
-    });
-
-    expect(within(biancaRow).getByText("Bianca Flores")).toBeVisible();
-    expect(within(biancaRow).getByText("Ivory Wedding Gown")).toBeVisible();
-    expect(within(biancaRow).getByText("Small / Ivory")).toBeVisible();
-    expect(within(biancaRow).getByText("₱300")).toBeVisible();
-    expect(within(biancaRow).getByText("Pending")).toBeVisible();
-    expect(within(biancaRow).getByText("Pending review")).toBeVisible();
-    expect(within(biancaRow).getByText("Payment review")).toBeVisible();
-    expect(within(biancaRow).getByText("Preference only")).toBeVisible();
-    expect(screen.queryByText(/Fitting Room/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Fitting Staff/i)).not.toBeInTheDocument();
-  });
-
-  it("opens the fitting details sheet with customer, garment, payment, and guarantee details", () => {
-    render(<FittingsPage />);
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: /Open fitting for Ari dela Rosa on Sep 26, 2026/,
-      })
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Pending" }));
+    await waitFor(() =>
+      expect(api.getFittings).toHaveBeenCalledWith(expect.objectContaining({ status: "pending" }))
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    await waitFor(() =>
+      expect(api.getFittings).toHaveBeenCalledWith(expect.objectContaining({ cursor: "next-page" }))
+    );
+    expect(screen.getByText("Page 2 · 1 fittings loaded")).toBeVisible();
+  });
+
+  it("fetches authoritative fitting detail and shows guaranteed asset results without capacity slots", async () => {
+    render(<FittingsPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Open fitting for Real Fitting Customer/ })
+    );
+
+    expect(await screen.findByText("real@example.test")).toBeVisible();
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("Fitting Details")).toBeVisible();
-    expect(within(dialog).getByText("Ari dela Rosa")).toBeVisible();
-    expect(within(dialog).getByText("ari@example.test")).toBeVisible();
-    expect(within(dialog).getByText("0917 000 0001")).toBeVisible();
-    expect(within(dialog).getByText("Emerald Evening Gown")).toBeVisible();
     expect(within(dialog).getByText("Guaranteed garment")).toBeVisible();
-    expect(within(dialog).getByText("Asset PROTO-GWN-0042")).toBeVisible();
-    expect(within(dialog).getAllByText("Verified").length).toBeGreaterThan(0);
+    expect(within(dialog).getByText("Guaranteed asset GWN-0042")).toBeVisible();
+    expect(within(dialog).getByText("Bring heels for final fitting.")).toBeVisible();
+    expect(within(dialog).queryByText(/capacity slot/i)).not.toBeInTheDocument();
+    expect(api.getFittingDetail).toHaveBeenCalledWith(fittingId);
+  });
+
+  it("uses the lifecycle API response as status authority instead of mutating local state", async () => {
+    render(<FittingsPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Open fitting for Real Fitting Customer/ })
+    );
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByRole("button", { name: "Confirm fitting" });
+
+    const confirmButton = within(dialog).getByRole("button", { name: "Confirm fitting" });
+    fireEvent.click(confirmButton);
+    fireEvent.click(confirmButton);
+
+    await waitFor(() =>
+      expect(api.confirmFitting).toHaveBeenCalledWith(fittingId, { version: 1 }, expect.any(String))
+    );
+    expect(api.confirmFitting).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(within(dialog).getAllByText("Confirmed").length).toBeGreaterThan(0));
+    expect(api.getFittings.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it("preserves empty and retryable error states", async () => {
+    api.getFittings.mockResolvedValueOnce(page([]));
+    const empty = render(<FittingsPage />);
     expect(
-      within(dialog).getByText(/does not change the appointment status automatically/i)
+      await screen.findByRole("heading", { name: "No fitting appointments yet" })
     ).toBeVisible();
-  });
+    empty.unmount();
 
-  it("keeps preference-only garments distinct and supports guarded local prototype actions", () => {
+    vi.clearAllMocks();
+    installDefaults();
+    api.getFittings.mockRejectedValueOnce(
+      new (await import("@/lib/drezivo-api")).DrezivoApiError("Temporary fitting failure", {
+        status: 503,
+        requestId: "request-error",
+      })
+    );
     render(<FittingsPage />);
-
-    fireEvent.click(screen.getByRole("button", { name: /Open fitting for Bianca Flores/ }));
-    let dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("Preference only")).toBeVisible();
-    expect(within(dialog).queryByText(/Asset PROTO-/)).not.toBeInTheDocument();
-
-    fireEvent.click(within(dialog).getByRole("button", { name: "Confirm fitting" }));
-    expect(within(dialog).getAllByText("Confirmed").length).toBeGreaterThan(0);
-
-    fireEvent.click(within(dialog).getByRole("button", { name: "Mark no-show" }));
-    expect(within(dialog).getByText(/Mark this fitting as no-show\?/i)).toBeVisible();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Keep current status" }));
-    expect(within(dialog).queryByText(/Mark this fitting as no-show\?/i)).not.toBeInTheDocument();
-
-    fireEvent.click(within(dialog).getByRole("button", { name: "Mark no-show" }));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Confirm change" }));
-    dialog = screen.getByRole("dialog");
-    expect(within(dialog).getAllByText("No-show").length).toBeGreaterThan(0);
-  });
-
-  it("uses the schedule default duration when opening New Fitting", () => {
-    window.sessionStorage.setItem("drezivo:fittings:prototype-default-duration", "45");
-    render(<FittingsPage />);
-
-    fireEvent.click(screen.getByRole("button", { name: "New Fitting" }));
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByLabelText("Fitting duration")).toHaveValue("45");
-  });
-
-  it("creates one local fitting through the three-step prototype flow", () => {
-    render(<FittingsPage />);
-
-    fireEvent.click(screen.getByRole("button", { name: "New Fitting" }));
-    let dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("Local prototype only. Changes are not saved.")).toBeVisible();
-
-    fireEvent.change(within(dialog).getByPlaceholderText("Name, email, or phone..."), {
-      target: { value: "Bianca" },
-    });
-    fireEvent.click(within(dialog).getByRole("radio", { name: /Bianca Flores/ }));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
-
-    dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Add Ivory Wedding Gown" }));
-    fireEvent.change(within(dialog).getByLabelText("Garment intent"), {
-      target: { value: "Guaranteed intent" },
-    });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
-
-    dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("Bianca Flores")).toBeVisible();
-    expect(within(dialog).getByText("Ivory Wedding Gown")).toBeVisible();
-    expect(within(dialog).getByText("Guaranteed intent")).toBeVisible();
-    expect(within(dialog).getByText("₱300")).toBeVisible();
-
-    const createButton = within(dialog).getByRole("button", { name: "Create local fitting" });
-    fireEvent.click(createButton);
-    fireEvent.click(createButton);
-
-    expect(screen.getByText("Page 1 · 10 fittings loaded")).toBeVisible();
-    const details = screen.getByRole("dialog");
-    expect(within(details).getByText("Guaranteed intent")).toBeVisible();
-    expect(within(details).queryByText(/Asset PROTO-LOCAL/)).not.toBeInTheDocument();
-  });
-
-  it("supports a minimal walk-in customer and no-fee fitting", () => {
-    render(<FittingsPage />);
-
-    fireEvent.click(screen.getByRole("button", { name: "New Fitting" }));
-    let dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Walk-in customer" }));
-    fireEvent.change(within(dialog).getByPlaceholderText("Full name"), {
-      target: { value: "Local Walk-in" },
-    });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
-
-    dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Add Classic Barong" }));
-    fireEvent.click(within(dialog).getByRole("checkbox", { name: "This fitting has a fee" }));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
-
-    dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("Local Walk-in")).toBeVisible();
-    expect(within(dialog).getByText("No fee")).toBeVisible();
-    expect(within(dialog).getByText("Not required")).toBeVisible();
-  });
-
-  it("exposes keyboard-friendly names for filters, pagination, and the new fitting flow", () => {
-    render(<FittingsPage />);
-
-    expect(screen.getByRole("textbox", { name: "Search fittings" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Status: All statuses" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Date: All dates" })).toBeVisible();
-    expect(screen.getByRole("navigation", { name: "Fittings pagination" })).toBeVisible();
-    expect(screen.getByLabelText("Page 1 of 2")).toHaveAttribute("aria-current", "page");
-
-    fireEvent.click(screen.getByRole("button", { name: "New Fitting" }));
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByRole("group", { name: "Customer type" })).toBeVisible();
-    expect(within(dialog).getByRole("radiogroup", { name: "Existing customers" })).toBeVisible();
-    expect(within(dialog).getByRole("button", { name: "Close" })).toBeVisible();
-  });
-
-  it("distinguishes first-use empty, loading, and retryable error states", () => {
-    const emptyView = render(<FittingsPage appointments={[]} />);
-    expect(screen.getByRole("heading", { name: "No fitting appointments yet" })).toBeVisible();
-    emptyView.unmount();
-
-    const loadingView = render(<FittingsPage initialViewState="loading" />);
-    expect(screen.getByRole("status", { name: "Loading fittings" })).toBeVisible();
-    expect(screen.queryByText(/Page \d+ · \d+ fittings loaded/)).not.toBeInTheDocument();
-    loadingView.unmount();
-
-    render(<FittingsPage initialViewState="error" />);
     expect(
-      screen.getByRole("heading", { name: "Could not load fitting appointments" })
+      await screen.findByRole("heading", { name: "Could not load fitting appointments" })
     ).toBeVisible();
+    expect(screen.getByText("Request ID: request-error")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(screen.getByRole("list", { name: "Fitting appointments" })).toBeVisible();
+    expect(await screen.findByText("Real Fitting Customer")).toBeVisible();
   });
 });

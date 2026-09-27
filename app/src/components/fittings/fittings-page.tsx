@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
 import {
   CalendarClock,
   CheckCircle2,
@@ -19,7 +20,16 @@ import {
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+
+import type {
+  DashboardFittingSummaryResponse,
+  FittingAction,
+  FittingDetail,
+  FittingListItem,
+  FittingSettings,
+  FittingState,
+} from "@drezivo/contracts";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -32,41 +42,37 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
 
 import {
-  FITTING_PROTOTYPE_APPOINTMENTS,
-  FITTING_PROTOTYPE_ROUTES,
-  FITTING_PROTOTYPE_TODAY,
-  type FittingPrototypeAppointment,
-  type FittingPrototypeAttentionKind,
-  type FittingPrototypeStatus,
-} from "./fitting-prototype-data";
-import {
   FITTING_PAYMENT_CLASSES,
   FITTING_STATUS_CLASSES,
-  fittingGarmentIntentLabel,
+  FITTING_STATUS_LABELS,
+  fittingGarmentModeLabel,
+  fittingPaymentLabel,
+  fittingVariantLabel,
   formatFittingDate,
   formatFittingMoney,
   formatFittingTimeRange,
-} from "./fitting-prototype-presentation";
+} from "./fittings-presentation";
 import { NewFittingSheet } from "./new-fitting-sheet";
 
 type FittingDateFilter = "all" | "today" | "upcoming";
-type FittingPrototypeViewState = "ready" | "loading" | "error";
 
-type FittingsPageProps = {
-  appointments?: readonly FittingPrototypeAppointment[];
-  initialViewState?: FittingPrototypeViewState;
+type PageMeta = {
+  next_cursor: string | null;
+  has_more: boolean;
 };
 
-const STATUS_OPTIONS: readonly FittingPrototypeStatus[] = [
-  "Pending",
-  "Confirmed",
-  "Completed",
-  "Cancelled",
-  "Rejected",
-  "No-show",
+const STATUS_OPTIONS: readonly FittingState[] = [
+  "pending",
+  "confirmed",
+  "completed",
+  "cancelled",
+  "rejected",
+  "no_show",
 ];
 
 const DATE_FILTER_LABELS: Record<FittingDateFilter, string> = {
@@ -81,95 +87,174 @@ const SUMMARY_ITEMS = [
   { key: "pending", label: "Pending review", icon: UserCheck, tone: "dashboard-tone-purple" },
 ] as const;
 
-const STATUS_CLASSES = FITTING_STATUS_CLASSES;
-const PAYMENT_CLASSES = FITTING_PAYMENT_CLASSES;
 const FITTINGS_PAGE_SIZE = 10;
 
-export function FittingsPage({
-  appointments = FITTING_PROTOTYPE_APPOINTMENTS,
-  initialViewState = "ready",
-}: FittingsPageProps = {}) {
+export function FittingsPage() {
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<FittingPrototypeStatus | null>(null);
+  const deferredQuery = useDeferredValue(query.trim());
+  const [status, setStatus] = useState<FittingState | null>(null);
   const [dateFilter, setDateFilter] = useState<FittingDateFilter>("all");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [viewState, setViewState] = useState<FittingPrototypeViewState>(initialViewState);
+  const [rows, setRows] = useState<FittingListItem[]>([]);
+  const [pageMeta, setPageMeta] = useState<PageMeta>({ next_cursor: null, has_more: false });
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageCursors, setPageCursors] = useState<Array<string | null>>([null]);
+  const [settings, setSettings] = useState<FittingSettings | null>(null);
+  const [summary, setSummary] = useState<DashboardFittingSummaryResponse | null>(null);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<DrezivoApiError | null>(null);
+  const [reloadVersion, setReloadVersion] = useState(0);
   const [isNewFittingOpen, setIsNewFittingOpen] = useState(false);
-  const [createdAppointments, setCreatedAppointments] = useState<FittingPrototypeAppointment[]>([]);
-  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
-  const [statusOverrides, setStatusOverrides] = useState<Record<string, FittingPrototypeStatus>>(
-    {}
-  );
+  const [selectedFittingId, setSelectedFittingId] = useState<string | null>(null);
+  const [selectedFitting, setSelectedFitting] = useState<FittingDetail | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<DrezivoApiError | null>(null);
+  const [detailReloadVersion, setDetailReloadVersion] = useState(0);
 
-  const effectiveAppointments = useMemo(
-    () =>
-      [...appointments, ...createdAppointments].map((appointment) => ({
-        ...appointment,
-        status: statusOverrides[appointment.id] ?? appointment.status,
-      })),
-    [appointments, createdAppointments, statusOverrides]
-  );
+  const currentCursor = pageCursors[pageIndex] ?? null;
+  const timeZone = settings?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  const period = useMemo(() => fittingPeriodFilter(dateFilter, timeZone), [dateFilter, timeZone]);
+  const hasActiveFilters = Boolean(deferredQuery || status || dateFilter !== "all");
+  const permissionRestricted = error?.status === 403 || error?.code === "FORBIDDEN";
 
-  const selectedAppointment = selectedAppointmentId
-    ? (effectiveAppointments.find((appointment) => appointment.id === selectedAppointmentId) ??
-      null)
-    : null;
-
-  const summary = useMemo(
-    () => ({
-      today: effectiveAppointments.filter(
-        (appointment) => appointmentDate(appointment) === FITTING_PROTOTYPE_TODAY
-      ).length,
-      upcoming: effectiveAppointments.filter(
-        (appointment) => appointmentDate(appointment) > FITTING_PROTOTYPE_TODAY
-      ).length,
-      pending: effectiveAppointments.filter((appointment) => appointment.status === "Pending")
-        .length,
-    }),
-    [effectiveAppointments]
-  );
-
-  const visibleAppointments = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase();
-
-    return effectiveAppointments.filter((appointment) => {
-      if (normalizedQuery && !matchesSearch(appointment, normalizedQuery)) return false;
-      if (status && appointment.status !== status) return false;
-
-      const date = appointmentDate(appointment);
-      if (dateFilter === "today" && date !== FITTING_PROTOTYPE_TODAY) return false;
-      if (dateFilter === "upcoming" && date <= FITTING_PROTOTYPE_TODAY) return false;
-
-      return true;
-    });
-  }, [dateFilter, effectiveAppointments, query, status]);
-
-  const totalPages = Math.max(1, Math.ceil(visibleAppointments.length / FITTINGS_PAGE_SIZE));
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-  const pageStartIndex = (safeCurrentPage - 1) * FITTINGS_PAGE_SIZE;
-  const paginatedAppointments = visibleAppointments.slice(
-    pageStartIndex,
-    pageStartIndex + FITTINGS_PAGE_SIZE
-  );
+  const resetPagination = useCallback(() => {
+    setPageIndex(0);
+    setPageCursors([null]);
+  }, []);
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [query, status, dateFilter]);
+    if (!isLoaded || !isSignedIn) return;
+    let cancelled = false;
+    setIsSummaryLoading(true);
+    const api = createDrezivoApiClient(getToken);
 
-  const hasActiveFilters = Boolean(query.trim() || status || dateFilter !== "all");
+    void Promise.allSettled([api.getFittingSettings(), api.getFittingDashboardSummary()]).then(
+      ([settingsResult, summaryResult]) => {
+        if (cancelled) return;
+        if (settingsResult.status === "fulfilled") setSettings(settingsResult.value.data);
+        if (summaryResult.status === "fulfilled") setSummary(summaryResult.value.data);
+        setIsSummaryLoading(false);
+      }
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, isLoaded, isSignedIn, reloadVersion]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+
+    void createDrezivoApiClient(getToken)
+      .getFittings({
+        limit: FITTINGS_PAGE_SIZE,
+        sort: "starts_at_asc",
+        ...(currentCursor ? { cursor: currentCursor } : {}),
+        ...(deferredQuery ? { search: deferredQuery } : {}),
+        ...(status ? { status } : {}),
+        ...(period ? { period_start: period.start, period_end: period.end } : {}),
+      })
+      .then((result) => {
+        if (cancelled) return;
+        setRows(result.data.items);
+        setPageMeta(result.data.page_meta);
+      })
+      .catch((caughtError) => {
+        if (cancelled) return;
+        setRows([]);
+        setPageMeta({ next_cursor: null, has_more: false });
+        setError(toDrezivoApiError(caughtError));
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentCursor, deferredQuery, getToken, isLoaded, isSignedIn, period, reloadVersion, status]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !selectedFittingId) return;
+    let cancelled = false;
+    setIsDetailLoading(true);
+    setDetailError(null);
+    setSelectedFitting(null);
+
+    void createDrezivoApiClient(getToken)
+      .getFittingDetail(selectedFittingId)
+      .then((result) => {
+        if (!cancelled) setSelectedFitting(result.data);
+      })
+      .catch((caughtError) => {
+        if (!cancelled) setDetailError(toDrezivoApiError(caughtError));
+      })
+      .finally(() => {
+        if (!cancelled) setIsDetailLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailReloadVersion, getToken, isLoaded, isSignedIn, selectedFittingId]);
+
+  const refreshProductionState = useCallback((detail?: FittingDetail) => {
+    if (detail) {
+      setSelectedFittingId(detail.id);
+      setSelectedFitting(detail);
+      setDetailError(null);
+    }
+    setReloadVersion((value) => value + 1);
+  }, []);
+
+  const updateSearch = (value: string) => {
+    setQuery(value);
+    resetPagination();
+  };
+
+  const updateStatus = (value: FittingState | null) => {
+    setStatus(value);
+    resetPagination();
+  };
+
+  const updateDateFilter = (value: FittingDateFilter) => {
+    setDateFilter(value);
+    resetPagination();
+  };
 
   const clearFilters = () => {
     setQuery("");
     setStatus(null);
     setDateFilter("all");
+    resetPagination();
   };
+
+  const goNext = () => {
+    if (!pageMeta.has_more || !pageMeta.next_cursor) return;
+    const nextCursor = pageMeta.next_cursor;
+    setPageCursors((current) => {
+      const next = current.slice(0, pageIndex + 1);
+      next[pageIndex + 1] = nextCursor;
+      return next;
+    });
+    setPageIndex((current) => current + 1);
+  };
+
+  const goPrevious = () => setPageIndex((current) => Math.max(0, current - 1));
 
   return (
     <div className="min-h-[calc(100svh-4.5rem)] overflow-x-hidden bg-dashboard-canvas px-3 py-5 sm:px-6 sm:py-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-5">
-        <FittingsHeading onNewFitting={() => setIsNewFittingOpen(true)} />
+        <FittingsHeading
+          canCreate={!permissionRestricted && settings?.enabled === true}
+          onNewFitting={() => setIsNewFittingOpen(true)}
+        />
 
-        <SummarySection summary={summary} viewState={viewState} />
+        <SummarySection summary={summary} loading={isSummaryLoading} />
 
         <Card className="gap-0 overflow-visible py-0">
           <CardContent className="p-0">
@@ -178,47 +263,66 @@ export function FittingsPage({
               status={status}
               dateFilter={dateFilter}
               hasActiveFilters={hasActiveFilters}
-              onQueryChange={setQuery}
-              onStatusChange={setStatus}
-              onDateFilterChange={setDateFilter}
+              onQueryChange={updateSearch}
+              onStatusChange={updateStatus}
+              onDateFilterChange={updateDateFilter}
               onClearFilters={clearFilters}
             />
 
-            {viewState === "loading" ? (
+            {isLoading ? (
               <AppointmentLoadingState />
-            ) : viewState === "error" ? (
+            ) : error ? (
               <AppointmentState
-                title="Could not load fitting appointments"
-                message="Fittings could not be displayed. Try loading the local data again."
-                actionLabel="Try again"
-                onAction={() => setViewState("ready")}
+                title={
+                  permissionRestricted
+                    ? "Fitting access is restricted"
+                    : "Could not load fitting appointments"
+                }
+                message={
+                  permissionRestricted
+                    ? "Your current branch permissions do not allow fitting operations. Ask a workspace owner to update your access."
+                    : error.message
+                }
+                requestId={error.requestId}
+                {...(!permissionRestricted
+                  ? {
+                      actionLabel: "Try again",
+                      onAction: () => setReloadVersion((value) => value + 1),
+                    }
+                  : {})}
               />
-            ) : effectiveAppointments.length === 0 && !hasActiveFilters ? (
+            ) : rows.length === 0 ? (
               <AppointmentState
-                title="No fitting appointments yet"
-                message="New fittings will appear here once the appointment workflow is in use."
-              />
-            ) : visibleAppointments.length === 0 ? (
-              <AppointmentState
-                title="No fittings match these filters"
-                message="Clear or adjust the search, status, or date filter to see other fittings."
-                actionLabel="Clear filters"
-                onAction={clearFilters}
+                title={
+                  hasActiveFilters
+                    ? "No fittings match these filters"
+                    : "No fitting appointments yet"
+                }
+                message={
+                  hasActiveFilters
+                    ? "Clear or adjust the search, status, or date filter to see other fittings."
+                    : "Fittings created by staff will appear here."
+                }
+                {...(hasActiveFilters
+                  ? { actionLabel: "Clear filters", onAction: clearFilters }
+                  : {})}
               />
             ) : (
               <AppointmentList
-                appointments={paginatedAppointments}
-                onSelect={(appointment) => setSelectedAppointmentId(appointment.id)}
+                appointments={rows}
+                timeZone={timeZone}
+                onSelect={(appointment) => setSelectedFittingId(appointment.id)}
               />
             )}
 
-            {viewState === "ready" && visibleAppointments.length > 0 ? (
+            {!isLoading && !error && rows.length > 0 ? (
               <AppointmentsPagination
-                currentPage={safeCurrentPage}
-                pageSize={FITTINGS_PAGE_SIZE}
-                totalItems={visibleAppointments.length}
-                totalPages={totalPages}
-                onPageChange={setCurrentPage}
+                currentPage={pageIndex + 1}
+                loadedCount={rows.length}
+                hasMore={pageMeta.has_more}
+                hasPrevious={pageIndex > 0}
+                onNext={goNext}
+                onPrevious={goPrevious}
               />
             ) : null}
           </CardContent>
@@ -227,27 +331,42 @@ export function FittingsPage({
 
       <NewFittingSheet
         open={isNewFittingOpen}
+        settings={settings}
         onOpenChange={setIsNewFittingOpen}
-        onCreate={(appointment) => {
-          setCreatedAppointments((current) => [...current, appointment]);
-          setSelectedAppointmentId(appointment.id);
+        onCreated={(fitting) => {
+          setIsNewFittingOpen(false);
+          refreshProductionState(fitting);
         }}
       />
 
-      <FittingDetailsPreviewSheet
-        appointment={selectedAppointment}
-        onStatusChange={(appointmentId, nextStatus) => {
-          setStatusOverrides((current) => ({ ...current, [appointmentId]: nextStatus }));
-        }}
+      <FittingDetailsSheet
+        fittingId={selectedFittingId}
+        fitting={selectedFitting}
+        loading={isDetailLoading}
+        error={detailError}
+        timeZone={timeZone}
+        getToken={getToken}
+        onChanged={refreshProductionState}
+        onRetry={() => setDetailReloadVersion((value) => value + 1)}
         onOpenChange={(open) => {
-          if (!open) setSelectedAppointmentId(null);
+          if (!open) {
+            setSelectedFittingId(null);
+            setSelectedFitting(null);
+            setDetailError(null);
+          }
         }}
       />
     </div>
   );
 }
 
-function FittingsHeading({ onNewFitting }: { onNewFitting: () => void }) {
+function FittingsHeading({
+  canCreate,
+  onNewFitting,
+}: {
+  canCreate: boolean;
+  onNewFitting: () => void;
+}) {
   return (
     <section
       aria-labelledby="fittings-heading"
@@ -264,13 +383,18 @@ function FittingsHeading({ onNewFitting }: { onNewFitting: () => void }) {
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <Link
-          href={FITTING_PROTOTYPE_ROUTES.schedule}
+          href="/fittings/schedule"
           className={cn(buttonVariants({ variant: "secondary" }), "w-full sm:w-auto")}
         >
           <CalendarClock className="h-4 w-4" aria-hidden="true" />
           Schedule &amp; Availability
         </Link>
-        <Button type="button" onClick={onNewFitting} className="w-full sm:w-auto">
+        <Button
+          type="button"
+          onClick={onNewFitting}
+          disabled={!canCreate}
+          className="w-full sm:w-auto"
+        >
           <Plus className="h-4 w-4" aria-hidden="true" />
           New Fitting
         </Button>
@@ -281,11 +405,17 @@ function FittingsHeading({ onNewFitting }: { onNewFitting: () => void }) {
 
 function SummarySection({
   summary,
-  viewState,
+  loading,
 }: {
-  summary: { today: number; upcoming: number; pending: number };
-  viewState: FittingPrototypeViewState;
+  summary: DashboardFittingSummaryResponse | null;
+  loading: boolean;
 }) {
+  const values = {
+    today: summary?.fittings_today ?? 0,
+    upcoming: summary?.fittings_upcoming ?? 0,
+    pending: summary?.fittings_pending_review ?? 0,
+  };
+
   return (
     <section aria-label="Fitting workload" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
       {SUMMARY_ITEMS.map((item) => {
@@ -303,11 +433,11 @@ function SummarySection({
                 <Icon className="h-4 w-4" />
               </span>
               <span>
-                {viewState === "loading" ? (
+                {loading ? (
                   <span className="mb-1 block h-5 w-8 animate-pulse rounded bg-dashboard-active" />
                 ) : (
                   <span className="block text-xl font-semibold leading-none text-dashboard-navy">
-                    {viewState === "error" ? "—" : summary[item.key]}
+                    {summary ? values[item.key] : "—"}
                   </span>
                 )}
                 <span className="mt-1 block text-xs text-dashboard-muted">{item.label}</span>
@@ -335,9 +465,9 @@ function FittingsToolbar({
   onClearFilters: () => void;
   onDateFilterChange: (value: FittingDateFilter) => void;
   onQueryChange: (value: string) => void;
-  onStatusChange: (value: FittingPrototypeStatus | null) => void;
+  onStatusChange: (value: FittingState | null) => void;
   query: string;
-  status: FittingPrototypeStatus | null;
+  status: FittingState | null;
 }) {
   return (
     <div className="flex flex-col gap-3 border-b border-dashboard-border p-3 sm:p-4 xl:flex-row xl:items-end">
@@ -360,13 +490,17 @@ function FittingsToolbar({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:flex xl:items-end">
         <FilterMenu
           label="Status"
-          value={status ?? "All statuses"}
-          options={["All statuses", ...STATUS_OPTIONS]}
-          onSelect={(value) =>
-            onStatusChange(value === "All statuses" ? null : (value as FittingPrototypeStatus))
-          }
+          value={status ? FITTING_STATUS_LABELS[status] : "All statuses"}
+          options={[
+            "All statuses",
+            ...STATUS_OPTIONS.map((option) => FITTING_STATUS_LABELS[option]),
+          ]}
+          onSelect={(value) => {
+            const next =
+              STATUS_OPTIONS.find((option) => FITTING_STATUS_LABELS[option] === value) ?? null;
+            onStatusChange(next);
+          }}
         />
-
         <FilterMenu
           label="Date"
           value={DATE_FILTER_LABELS[dateFilter]}
@@ -395,67 +529,14 @@ function FittingsToolbar({
   );
 }
 
-function AppointmentsPagination({
-  currentPage,
-  onPageChange,
-  pageSize,
-  totalItems,
-  totalPages,
-}: {
-  currentPage: number;
-  onPageChange: (page: number) => void;
-  pageSize: number;
-  totalItems: number;
-  totalPages: number;
-}) {
-  const loadedCount = Math.min(pageSize, Math.max(0, totalItems - (currentPage - 1) * pageSize));
-
-  return (
-    <nav
-      aria-label="Fittings pagination"
-      className="flex flex-wrap items-center justify-between gap-2 border-t border-dashboard-border px-3 py-3 text-sm text-dashboard-muted sm:px-4"
-    >
-      <span aria-live="polite">
-        Page {currentPage} · {loadedCount} fittings loaded
-      </span>
-
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          aria-label="Previous page"
-          disabled={currentPage === 1}
-          onClick={() => onPageChange(currentPage - 1)}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-dashboard-muted transition-colors hover:bg-dashboard-active hover:text-dashboard-navy disabled:pointer-events-none disabled:opacity-30"
-        >
-          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-        </button>
-        <span
-          aria-current="page"
-          aria-label={`Page ${currentPage} of ${totalPages}`}
-          className="min-w-5 text-center text-sm font-medium text-dashboard-navy"
-        >
-          {currentPage}
-        </span>
-        <button
-          type="button"
-          aria-label="Next page"
-          disabled={currentPage === totalPages}
-          onClick={() => onPageChange(currentPage + 1)}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-dashboard-muted transition-colors hover:bg-dashboard-active hover:text-dashboard-navy disabled:pointer-events-none disabled:opacity-30"
-        >
-          <ChevronRight className="h-4 w-4" aria-hidden="true" />
-        </button>
-      </div>
-    </nav>
-  );
-}
-
 function AppointmentList({
   appointments,
   onSelect,
+  timeZone,
 }: {
-  appointments: readonly FittingPrototypeAppointment[];
-  onSelect: (appointment: FittingPrototypeAppointment) => void;
+  appointments: readonly FittingListItem[];
+  onSelect: (appointment: FittingListItem) => void;
+  timeZone: string;
 }) {
   return (
     <section aria-label="Fitting appointments">
@@ -472,48 +553,85 @@ function AppointmentList({
       </div>
 
       <ul className="divide-y divide-dashboard-border" aria-label="Fitting appointments">
-        {appointments.map((appointment) => (
-          <li key={appointment.id}>
-            <button
-              type="button"
-              onClick={() => onSelect(appointment)}
-              aria-label={`Open fitting for ${appointment.customer.name} on ${formatAppointmentDate(appointment.startsAt)}`}
-              className="grid w-full grid-cols-2 gap-x-4 gap-y-3 px-4 py-4 text-left transition-colors hover:bg-dashboard-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/30 lg:grid-cols-[minmax(9rem,1fr)_minmax(10rem,1.1fr)_minmax(12rem,1.4fr)_minmax(9rem,1fr)_minmax(7.5rem,0.8fr)_minmax(9rem,1fr)] lg:items-start lg:gap-4"
-            >
-              <AppointmentCell label="Date & time" className="col-span-2 lg:col-span-1">
-                <p className="font-semibold text-dashboard-navy">
-                  {formatAppointmentDate(appointment.startsAt)}
-                </p>
-                <p className="mt-1 text-xs text-dashboard-muted">
-                  {formatAppointmentTimeRange(appointment)}
-                </p>
-              </AppointmentCell>
+        {appointments.map((appointment) => {
+          const paymentLabel = fittingPaymentLabel(appointment.fee);
+          const attention = fittingAttentionLabels(appointment);
+          const firstGarment = appointment.garments[0];
+          return (
+            <li key={appointment.id}>
+              <button
+                type="button"
+                onClick={() => onSelect(appointment)}
+                aria-label={`Open fitting for ${appointment.customer.full_name} on ${formatFittingDate(appointment.period.start, timeZone)}`}
+                className="grid w-full grid-cols-2 gap-x-4 gap-y-3 px-4 py-4 text-left transition-colors hover:bg-dashboard-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/30 lg:grid-cols-[minmax(9rem,1fr)_minmax(10rem,1.1fr)_minmax(12rem,1.4fr)_minmax(9rem,1fr)_minmax(7.5rem,0.8fr)_minmax(9rem,1fr)] lg:items-start lg:gap-4"
+              >
+                <AppointmentCell label="Date & time" className="col-span-2 lg:col-span-1">
+                  <p className="font-semibold text-dashboard-navy">
+                    {formatFittingDate(appointment.period.start, timeZone)}
+                  </p>
+                  <p className="mt-1 text-xs text-dashboard-muted">
+                    {formatFittingTimeRange(
+                      appointment.period.start,
+                      appointment.period.end,
+                      timeZone
+                    )}
+                  </p>
+                </AppointmentCell>
 
-              <AppointmentCell label="Customer" className="col-span-2 lg:col-span-1">
-                <p className="font-medium text-dashboard-navy">{appointment.customer.name}</p>
-                <p className="mt-1 text-xs text-dashboard-muted">Fitting appointment</p>
-              </AppointmentCell>
+                <AppointmentCell label="Customer" className="col-span-2 lg:col-span-1">
+                  <p className="font-medium text-dashboard-navy">
+                    {appointment.customer.full_name}
+                  </p>
+                  <p className="mt-1 text-xs text-dashboard-muted">Fitting appointment</p>
+                </AppointmentCell>
 
-              <AppointmentCell label="Garments" className="col-span-2 lg:col-span-1">
-                <GarmentSummary appointment={appointment} />
-              </AppointmentCell>
+                <AppointmentCell label="Garments" className="col-span-2 lg:col-span-1">
+                  {firstGarment ? (
+                    <div className="flex min-w-0 items-start gap-2">
+                      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-dashboard-active text-dashboard-accent">
+                        <Shirt className="h-4 w-4" aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-dashboard-navy">
+                          {firstGarment.variant.product_name}
+                          {appointment.garments.length > 1
+                            ? ` +${appointment.garments.length - 1} more`
+                            : ""}
+                        </span>
+                        <span className="mt-1 block truncate text-xs text-dashboard-muted">
+                          {fittingVariantLabel(firstGarment)}
+                        </span>
+                      </span>
+                    </div>
+                  ) : null}
+                </AppointmentCell>
 
-              <AppointmentCell label="Fee / payment" className="col-span-1">
-                <PaymentSummary appointment={appointment} />
-              </AppointmentCell>
+                <AppointmentCell label="Fee / payment" className="col-span-1">
+                  <div className="space-y-1.5">
+                    <p className="font-medium text-dashboard-navy">
+                      {BigInt(appointment.fee.fee_minor) === 0n
+                        ? "No fee"
+                        : formatFittingMoney(appointment.fee.fee_minor, appointment.fee.currency)}
+                    </p>
+                    <Badge variant="outline" className={FITTING_PAYMENT_CLASSES[paymentLabel]}>
+                      {paymentLabel}
+                    </Badge>
+                  </div>
+                </AppointmentCell>
 
-              <AppointmentCell label="Status" className="col-span-1">
-                <Badge variant="outline" className={STATUS_CLASSES[appointment.status]}>
-                  {appointment.status}
-                </Badge>
-              </AppointmentCell>
+                <AppointmentCell label="Status" className="col-span-1">
+                  <Badge variant="outline" className={FITTING_STATUS_CLASSES[appointment.status]}>
+                    {FITTING_STATUS_LABELS[appointment.status]}
+                  </Badge>
+                </AppointmentCell>
 
-              <AppointmentCell label="Attention" className="col-span-2 lg:col-span-1">
-                <AttentionSummary attention={appointment.attention} />
-              </AppointmentCell>
-            </button>
-          </li>
-        ))}
+                <AppointmentCell label="Attention" className="col-span-2 lg:col-span-1">
+                  <AttentionSummary attention={attention} />
+                </AppointmentCell>
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
@@ -538,60 +656,19 @@ function AppointmentCell({
   );
 }
 
-function GarmentSummary({ appointment }: { appointment: FittingPrototypeAppointment }) {
-  const firstGarment = appointment.garments[0];
-  if (!firstGarment) {
-    return <span className="text-sm text-dashboard-muted">No garments added</span>;
-  }
-
-  return (
-    <div className="flex min-w-0 items-start gap-2">
-      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-dashboard-active text-dashboard-accent">
-        <Shirt className="h-4 w-4" aria-hidden="true" />
-      </span>
-      <span className="min-w-0">
-        <span className="block truncate font-medium text-dashboard-navy">
-          {firstGarment.productName}
-          {appointment.garments.length > 1 ? ` +${appointment.garments.length - 1} more` : ""}
-        </span>
-        <span className="mt-1 block truncate text-xs text-dashboard-muted">
-          {firstGarment.variantLabel}
-        </span>
-      </span>
-    </div>
-  );
-}
-
-function PaymentSummary({ appointment }: { appointment: FittingPrototypeAppointment }) {
-  return (
-    <div className="space-y-1.5">
-      <p className="font-medium text-dashboard-navy">
-        {appointment.feeMinor === null ? "No fee" : formatPhpMoney(appointment.feeMinor)}
-      </p>
-      <Badge variant="outline" className={PAYMENT_CLASSES[appointment.paymentState]}>
-        {appointment.paymentState}
-      </Badge>
-    </div>
-  );
-}
-
-function AttentionSummary({ attention }: { attention: readonly FittingPrototypeAttentionKind[] }) {
-  if (attention.length === 0) {
-    return <span className="text-sm text-dashboard-muted">None</span>;
-  }
-
+function AttentionSummary({ attention }: { attention: readonly string[] }) {
+  if (attention.length === 0) return <span className="text-sm text-dashboard-muted">None</span>;
   return (
     <div className="flex flex-wrap gap-1.5">
       {attention.map((item) => {
-        const Icon = item === "Payment review" ? CircleAlert : Info;
+        const urgent = item === "Payment review" || item === "Outcome required";
+        const Icon = urgent ? CircleAlert : Info;
         return (
           <Badge
             key={item}
             variant="outline"
             className={
-              item === "Payment review"
-                ? "reservation-status-pending gap-1"
-                : "dashboard-event-fitting gap-1"
+              urgent ? "reservation-status-pending gap-1" : "dashboard-event-fitting gap-1"
             }
           >
             <Icon className="h-3 w-3" aria-hidden="true" />
@@ -600,6 +677,62 @@ function AttentionSummary({ attention }: { attention: readonly FittingPrototypeA
         );
       })}
     </div>
+  );
+}
+
+function AppointmentsPagination({
+  currentPage,
+  hasMore,
+  hasPrevious,
+  loadedCount,
+  onNext,
+  onPrevious,
+}: {
+  currentPage: number;
+  hasMore: boolean;
+  hasPrevious: boolean;
+  loadedCount: number;
+  onNext: () => void;
+  onPrevious: () => void;
+}) {
+  return (
+    <nav
+      aria-label="Fittings pagination"
+      className="flex flex-wrap items-center justify-between gap-2 border-t border-dashboard-border px-3 py-3 text-sm text-dashboard-muted sm:px-4"
+    >
+      <span aria-live="polite">
+        Page {currentPage} · {loadedCount} fittings loaded
+      </span>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label="Previous page"
+          disabled={!hasPrevious}
+          onClick={onPrevious}
+        >
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Previous
+        </Button>
+        <span
+          aria-label={`Page ${currentPage}`}
+          aria-current="page"
+          className="px-2 font-medium text-dashboard-navy"
+        >
+          {currentPage}
+        </span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label="Next page"
+          disabled={!hasMore}
+          onClick={onNext}
+        >
+          Next <ChevronRight className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      </div>
+    </nav>
   );
 }
 
@@ -630,11 +763,13 @@ function AppointmentState({
   actionLabel,
   message,
   onAction,
+  requestId,
   title,
 }: {
   actionLabel?: string;
   message: string;
   onAction?: () => void;
+  requestId?: string | null;
   title: string;
 }) {
   return (
@@ -644,6 +779,9 @@ function AppointmentState({
       </div>
       <h2 className="mt-3 text-sm font-semibold text-dashboard-navy">{title}</h2>
       <p className="mt-1 max-w-md text-sm text-dashboard-muted">{message}</p>
+      {requestId ? (
+        <p className="mt-2 text-xs text-dashboard-muted">Request ID: {requestId}</p>
+      ) : null}
       {actionLabel && onAction ? (
         <Button type="button" variant="secondary" size="sm" className="mt-4" onClick={onAction}>
           {actionLabel}
@@ -653,53 +791,119 @@ function AppointmentState({
   );
 }
 
-export function FittingDetailsPreviewSheet({
-  appointment,
+function FittingDetailsSheet({
+  error,
+  fitting,
+  fittingId,
+  getToken,
+  loading,
+  onChanged,
   onOpenChange,
-  onStatusChange,
+  onRetry,
+  timeZone,
 }: {
-  appointment: FittingPrototypeAppointment | null;
+  error: DrezivoApiError | null;
+  fitting: FittingDetail | null;
+  fittingId: string | null;
+  getToken: () => Promise<string | null>;
+  loading: boolean;
+  onChanged: (fitting: FittingDetail) => void;
   onOpenChange: (open: boolean) => void;
-  onStatusChange: (appointmentId: string, status: FittingPrototypeStatus) => void;
+  onRetry: () => void;
+  timeZone: string;
 }) {
-  const [confirmationStatus, setConfirmationStatus] = useState<FittingPrototypeStatus | null>(null);
-  const [isApplyingAction, setIsApplyingAction] = useState(false);
-  const actionInFlightRef = useRef(false);
+  const [confirmationAction, setConfirmationAction] = useState<FittingAction | null>(null);
+  const [reason, setReason] = useState("");
+  const [actionError, setActionError] = useState<DrezivoApiError | null>(null);
+  const {
+    isSubmitting: isApplying,
+    resetIntent: resetActionIntent,
+    submit: submitAction,
+  } = useSubmitGuard();
 
   useEffect(() => {
-    setConfirmationStatus(null);
-    setIsApplyingAction(false);
-    actionInFlightRef.current = false;
-  }, [appointment?.id]);
+    setConfirmationAction(null);
+    setReason("");
+    setActionError(null);
+    resetActionIntent();
+  }, [fittingId, resetActionIntent]);
 
-  const applyStatus = (nextStatus: FittingPrototypeStatus) => {
-    if (!appointment || actionInFlightRef.current) return;
-    actionInFlightRef.current = true;
-    setIsApplyingAction(true);
-    onStatusChange(appointment.id, nextStatus);
-    setConfirmationStatus(null);
-    setIsApplyingAction(false);
-    actionInFlightRef.current = false;
+  const applyAction = async (action: FittingAction) => {
+    if (!fitting) return;
+    if ((action === "reject" || action === "cancel") && !reason.trim()) {
+      setActionError(
+        new DrezivoApiError("Enter a reason before applying this change.", { status: 422 })
+      );
+      return;
+    }
+
+    setActionError(null);
+    const api = createDrezivoApiClient(getToken);
+    try {
+      const result = await submitAction((idempotencyKey) =>
+        action === "confirm"
+          ? api.confirmFitting(fitting.id, { version: fitting.version }, idempotencyKey)
+          : action === "reject"
+            ? api.rejectFitting(
+                fitting.id,
+                { version: fitting.version, reason: reason.trim() },
+                idempotencyKey
+              )
+            : action === "cancel"
+              ? api.cancelFitting(
+                  fitting.id,
+                  { version: fitting.version, reason: reason.trim() },
+                  idempotencyKey
+                )
+              : action === "complete"
+                ? api.completeFitting(fitting.id, { version: fitting.version }, idempotencyKey)
+                : api.markFittingNoShow(fitting.id, { version: fitting.version }, idempotencyKey)
+      );
+      if (!result) return;
+      onChanged(result.data.fitting);
+      setConfirmationAction(null);
+      setReason("");
+      resetActionIntent();
+    } catch (caughtError) {
+      setActionError(toDrezivoApiError(caughtError));
+    }
   };
 
   return (
-    <Sheet open={Boolean(appointment)} onOpenChange={onOpenChange}>
+    <Sheet open={Boolean(fittingId)} onOpenChange={onOpenChange}>
       <SheetContent className="w-full max-w-full overflow-x-hidden overflow-y-auto sm:max-w-lg">
-        {appointment ? (
+        {loading ? (
+          <div className="px-6 py-10" role="status">
+            <p className="text-sm text-dashboard-muted">Loading fitting details…</p>
+          </div>
+        ) : error ? (
+          <div className="px-6 py-10">
+            <AppointmentState
+              title="Could not load fitting details"
+              message={error.message}
+              requestId={error.requestId}
+              actionLabel="Try again"
+              onAction={onRetry}
+            />
+          </div>
+        ) : fitting ? (
           <>
             <header className="border-b border-dashboard-border px-4 py-5 pr-14 sm:px-6">
               <div className="flex flex-wrap items-center gap-2 pr-2">
-                <Badge variant="outline" className={STATUS_CLASSES[appointment.status]}>
-                  {appointment.status}
+                <Badge variant="outline" className={FITTING_STATUS_CLASSES[fitting.status]}>
+                  {FITTING_STATUS_LABELS[fitting.status]}
                 </Badge>
-                <Badge variant="outline" className={PAYMENT_CLASSES[appointment.paymentState]}>
-                  {appointment.paymentState}
+                <Badge
+                  variant="outline"
+                  className={FITTING_PAYMENT_CLASSES[fittingPaymentLabel(fitting.fee)]}
+                >
+                  {fittingPaymentLabel(fitting.fee)}
                 </Badge>
               </div>
               <SheetTitle className="mt-3 text-lg">Fitting Details</SheetTitle>
               <SheetDescription className="mt-1">
-                {formatAppointmentDate(appointment.startsAt)} ·{" "}
-                {formatAppointmentTimeRange(appointment)}
+                {formatFittingDate(fitting.period.start, timeZone)} ·{" "}
+                {formatFittingTimeRange(fitting.period.start, fitting.period.end, timeZone)}
               </SheetDescription>
             </header>
 
@@ -707,16 +911,20 @@ export function FittingDetailsPreviewSheet({
               <section aria-labelledby="fitting-customer-heading">
                 <SectionHeading id="fitting-customer-heading">Customer</SectionHeading>
                 <div className="mt-3 rounded-lg border border-dashboard-border p-4">
-                  <p className="font-semibold text-dashboard-navy">{appointment.customer.name}</p>
+                  <p className="font-semibold text-dashboard-navy">{fitting.customer.full_name}</p>
                   <div className="mt-3 grid gap-2 text-sm text-dashboard-muted">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <Mail className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      <span className="min-w-0 break-all">{appointment.customer.email}</span>
-                    </span>
-                    <span className="flex items-center gap-2">
-                      <Phone className="h-4 w-4" aria-hidden="true" />
-                      {appointment.customer.phone}
-                    </span>
+                    {fitting.customer.email ? (
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Mail className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span className="min-w-0 break-all">{fitting.customer.email}</span>
+                      </span>
+                    ) : null}
+                    {fitting.customer.phone ? (
+                      <span className="flex items-center gap-2">
+                        <Phone className="h-4 w-4" aria-hidden="true" />
+                        {fitting.customer.phone}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </section>
@@ -724,39 +932,51 @@ export function FittingDetailsPreviewSheet({
               <section aria-labelledby="fitting-appointment-heading">
                 <SectionHeading id="fitting-appointment-heading">Appointment</SectionHeading>
                 <div className="mt-3 grid grid-cols-1 gap-3 rounded-lg border border-dashboard-border p-4 text-sm sm:grid-cols-2">
-                  <DetailValue label="Date" value={formatAppointmentDate(appointment.startsAt)} />
-                  <DetailValue label="Time" value={formatAppointmentTimeRange(appointment)} />
-                  <DetailValue label="Status" value={appointment.status} />
-                  <DetailValue label="Payment" value={appointment.paymentState} />
+                  <DetailValue
+                    label="Date"
+                    value={formatFittingDate(fitting.period.start, timeZone)}
+                  />
+                  <DetailValue
+                    label="Time"
+                    value={formatFittingTimeRange(
+                      fitting.period.start,
+                      fitting.period.end,
+                      timeZone
+                    )}
+                  />
+                  <DetailValue label="Status" value={FITTING_STATUS_LABELS[fitting.status]} />
+                  <DetailValue label="Payment" value={fittingPaymentLabel(fitting.fee)} />
                 </div>
               </section>
 
               <section aria-labelledby="fitting-garments-heading">
                 <SectionHeading id="fitting-garments-heading">Garments</SectionHeading>
                 <div className="mt-3 space-y-2">
-                  {appointment.garments.map((garment) => (
+                  {fitting.garments.map((garment) => (
                     <div key={garment.id} className="rounded-lg border border-dashboard-border p-4">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
-                          <p className="font-medium text-dashboard-navy">{garment.productName}</p>
+                          <p className="font-medium text-dashboard-navy">
+                            {garment.variant.product_name}
+                          </p>
                           <p className="mt-1 text-xs text-dashboard-muted">
-                            {garment.variantLabel}
+                            {fittingVariantLabel(garment)}
                           </p>
                         </div>
                         <Badge
                           variant="outline"
                           className={
-                            garment.guarantee === "Preference only"
+                            garment.garment_mode === "preference"
                               ? "dashboard-event-fitting"
                               : "reservation-status-confirmed"
                           }
                         >
-                          {fittingGarmentIntentLabel(garment.guarantee)}
+                          {fittingGarmentModeLabel(garment.garment_mode)}
                         </Badge>
                       </div>
-                      {garment.guarantee === "Guaranteed" && garment.assetCode ? (
+                      {garment.garment_mode === "guaranteed" && garment.assigned_asset ? (
                         <p className="mt-3 text-xs text-dashboard-muted">
-                          Asset {garment.assetCode}
+                          Guaranteed asset {garment.assigned_asset.asset_code}
                         </p>
                       ) : null}
                     </div>
@@ -765,45 +985,66 @@ export function FittingDetailsPreviewSheet({
               </section>
 
               <section aria-labelledby="fitting-payment-heading">
-                <SectionHeading id="fitting-payment-heading">Fee & payment</SectionHeading>
+                <SectionHeading id="fitting-payment-heading">Fee &amp; payment</SectionHeading>
                 <div className="mt-3 rounded-lg border border-dashboard-border p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-xs text-dashboard-muted">Fitting fee</p>
                       <p className="mt-1 font-semibold text-dashboard-navy">
-                        {appointment.feeMinor === null
+                        {BigInt(fitting.fee.fee_minor) === 0n
                           ? "No fitting fee"
-                          : formatPhpMoney(appointment.feeMinor)}
+                          : formatFittingMoney(fitting.fee.fee_minor, fitting.fee.currency)}
                       </p>
                     </div>
-                    <Badge variant="outline" className={PAYMENT_CLASSES[appointment.paymentState]}>
-                      {appointment.paymentState}
+                    <Badge
+                      variant="outline"
+                      className={FITTING_PAYMENT_CLASSES[fittingPaymentLabel(fitting.fee)]}
+                    >
+                      {fittingPaymentLabel(fitting.fee)}
                     </Badge>
                   </div>
                   <p className="mt-3 text-xs text-dashboard-muted">
-                    Payment is tracked separately from the appointment status.
+                    Payment is tracked separately and does not change the appointment status
+                    automatically.
                   </p>
                 </div>
               </section>
 
+              {fitting.internal_note ? (
+                <section aria-labelledby="fitting-note-heading">
+                  <SectionHeading id="fitting-note-heading">Internal note</SectionHeading>
+                  <p className="mt-3 whitespace-pre-wrap rounded-lg border border-dashboard-border p-4 text-sm text-dashboard-muted">
+                    {fitting.internal_note}
+                  </p>
+                </section>
+              ) : null}
+
               <section aria-labelledby="fitting-actions-heading">
                 <SectionHeading id="fitting-actions-heading">Actions</SectionHeading>
-                <p className="mt-2 text-xs text-dashboard-muted">Local prototype only.</p>
-                <PrototypeActions
-                  status={appointment.status}
-                  confirmationStatus={confirmationStatus}
-                  isApplying={isApplyingAction}
-                  onAction={(nextStatus, destructive) => {
+                <ProductionActions
+                  actions={fitting.allowed_actions}
+                  confirmationAction={confirmationAction}
+                  isApplying={isApplying}
+                  reason={reason}
+                  error={actionError}
+                  onAction={(action, destructive) => {
+                    setActionError(null);
                     if (destructive) {
-                      setConfirmationStatus(nextStatus);
+                      setConfirmationAction(action);
                       return;
                     }
-                    applyStatus(nextStatus);
+                    void applyAction(action);
                   }}
+                  onReasonChange={setReason}
                   onConfirm={() => {
-                    if (confirmationStatus) applyStatus(confirmationStatus);
+                    if (confirmationAction) void applyAction(confirmationAction);
                   }}
-                  onCancelConfirmation={() => setConfirmationStatus(null)}
+                  onCancelConfirmation={() => {
+                    setConfirmationAction(null);
+                    setReason("");
+                    setActionError(null);
+                    resetActionIntent();
+                  }}
                 />
               </section>
             </div>
@@ -811,6 +1052,134 @@ export function FittingDetailsPreviewSheet({
         ) : null}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function ProductionActions({
+  actions,
+  confirmationAction,
+  error,
+  isApplying,
+  onAction,
+  onCancelConfirmation,
+  onConfirm,
+  onReasonChange,
+  reason,
+}: {
+  actions: readonly FittingAction[];
+  confirmationAction: FittingAction | null;
+  error: DrezivoApiError | null;
+  isApplying: boolean;
+  onAction: (action: FittingAction, destructive: boolean) => void;
+  onCancelConfirmation: () => void;
+  onConfirm: () => void;
+  onReasonChange: (value: string) => void;
+  reason: string;
+}) {
+  const actionDefinitions = [
+    {
+      action: "confirm" as const,
+      label: "Confirm fitting",
+      destructive: false,
+      icon: CheckCircle2,
+    },
+    { action: "complete" as const, label: "Complete", destructive: false, icon: CheckCircle2 },
+    { action: "reject" as const, label: "Reject", destructive: true, icon: XCircle },
+    {
+      action: "mark_no_show" as const,
+      label: "Mark no-show",
+      destructive: true,
+      icon: CircleAlert,
+    },
+    { action: "cancel" as const, label: "Cancel", destructive: true, icon: XCircle },
+  ].filter((definition) => actions.includes(definition.action));
+
+  if (confirmationAction) {
+    const requiresReason = confirmationAction === "reject" || confirmationAction === "cancel";
+    return (
+      <div className="mt-3 rounded-lg border border-dashboard-border bg-dashboard-canvas p-4">
+        <p className="text-sm font-medium text-dashboard-navy">
+          Apply {actionLabel(confirmationAction).toLowerCase()}?
+        </p>
+        <p className="mt-1 text-xs text-dashboard-muted">
+          This change is saved to the production fitting record.
+        </p>
+        {requiresReason ? (
+          <label className="mt-3 block">
+            <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">Reason</span>
+            <Input
+              value={reason}
+              onChange={(event) => onReasonChange(event.target.value)}
+              placeholder="Required reason"
+              maxLength={500}
+            />
+          </label>
+        ) : null}
+        {error ? <InlineError error={error} /> : null}
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={isApplying}
+            onClick={onCancelConfirmation}
+          >
+            Keep current status
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            isPending={isApplying}
+            pendingLabel="Applying…"
+            onClick={onConfirm}
+          >
+            Confirm change
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (actionDefinitions.length === 0) {
+    return (
+      <p className="mt-3 text-sm text-dashboard-muted">
+        No lifecycle actions are currently available.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-3">
+      <div className="flex flex-wrap gap-2">
+        {actionDefinitions.map((definition) => {
+          const Icon = definition.icon;
+          return (
+            <Button
+              key={definition.action}
+              type="button"
+              variant={definition.destructive ? "secondary" : "default"}
+              disabled={isApplying}
+              onClick={() => onAction(definition.action, definition.destructive)}
+            >
+              <Icon className="h-4 w-4" aria-hidden="true" />
+              {definition.label}
+            </Button>
+          );
+        })}
+      </div>
+      {error ? <InlineError error={error} /> : null}
+    </div>
+  );
+}
+
+function InlineError({ error }: { error: DrezivoApiError }) {
+  return (
+    <div
+      role="alert"
+      className="mt-3 rounded-lg bg-dashboard-danger/10 px-3 py-2 text-sm text-dashboard-danger"
+    >
+      <p>{error.message}</p>
+      {error.requestId ? <p className="mt-1 text-xs">Request ID: {error.requestId}</p> : null}
+    </div>
   );
 }
 
@@ -827,110 +1196,6 @@ function DetailValue({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-xs text-dashboard-muted">{label}</p>
       <p className="mt-1 font-medium text-dashboard-navy">{value}</p>
-    </div>
-  );
-}
-
-function PrototypeActions({
-  confirmationStatus,
-  isApplying,
-  onAction,
-  onCancelConfirmation,
-  onConfirm,
-  status,
-}: {
-  confirmationStatus: FittingPrototypeStatus | null;
-  isApplying: boolean;
-  onAction: (status: FittingPrototypeStatus, destructive: boolean) => void;
-  onCancelConfirmation: () => void;
-  onConfirm: () => void;
-  status: FittingPrototypeStatus;
-}) {
-  if (confirmationStatus) {
-    return (
-      <div className="mt-3 rounded-lg border border-dashboard-border bg-dashboard-canvas p-4">
-        <p className="text-sm font-medium text-dashboard-navy">
-          Mark this fitting as {confirmationStatus.toLowerCase()}?
-        </p>
-        <p className="mt-1 text-xs text-dashboard-muted">
-          This changes local prototype state only.
-        </p>
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-end">
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={isApplying}
-            onClick={onCancelConfirmation}
-            className="w-full sm:w-auto"
-          >
-            Keep current status
-          </Button>
-          <Button
-            type="button"
-            variant="danger"
-            isPending={isApplying}
-            pendingLabel="Applying…"
-            onClick={onConfirm}
-            className="w-full sm:w-auto"
-          >
-            Confirm change
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  const actions =
-    status === "Pending"
-      ? [
-          {
-            label: "Confirm fitting",
-            status: "Confirmed" as const,
-            destructive: false,
-            icon: CheckCircle2,
-          },
-          { label: "Reject", status: "Rejected" as const, destructive: true, icon: XCircle },
-        ]
-      : status === "Confirmed"
-        ? [
-            {
-              label: "Complete",
-              status: "Completed" as const,
-              destructive: false,
-              icon: CheckCircle2,
-            },
-            {
-              label: "Mark no-show",
-              status: "No-show" as const,
-              destructive: true,
-              icon: CircleAlert,
-            },
-            { label: "Cancel", status: "Cancelled" as const, destructive: true, icon: XCircle },
-          ]
-        : [];
-
-  if (actions.length === 0) {
-    return <p className="mt-3 text-sm text-dashboard-muted">No actions for this status.</p>;
-  }
-
-  return (
-    <div className="mt-3 flex flex-wrap gap-2">
-      {actions.map((action) => {
-        const Icon = action.icon;
-        return (
-          <Button
-            key={action.status}
-            type="button"
-            variant={action.destructive ? "secondary" : "default"}
-            disabled={isApplying}
-            onClick={() => onAction(action.status, action.destructive)}
-            className="w-full sm:w-auto"
-          >
-            <Icon className="h-4 w-4" aria-hidden="true" />
-            {action.label}
-          </Button>
-        );
-      })}
     </div>
   );
 }
@@ -972,28 +1237,115 @@ function FilterMenu({
   );
 }
 
-function appointmentDate(appointment: FittingPrototypeAppointment): string {
-  return appointment.startsAt.slice(0, 10);
+function fittingAttentionLabels(appointment: FittingListItem): string[] {
+  const values: string[] = [];
+  if (appointment.attention === "outcome_required") values.push("Outcome required");
+  if (fittingPaymentLabel(appointment.fee) === "Pending review") values.push("Payment review");
+  if (appointment.garments.some((garment) => garment.garment_mode === "preference")) {
+    values.push("Preference only");
+  }
+  return values;
 }
 
-function matchesSearch(appointment: FittingPrototypeAppointment, query: string): boolean {
-  if (appointment.customer.name.toLocaleLowerCase().includes(query)) return true;
+function actionLabel(action: FittingAction): string {
+  if (action === "mark_no_show") return "Mark no-show";
+  return `${action.charAt(0).toUpperCase()}${action.slice(1)}`;
+}
 
-  return appointment.garments.some(
-    (garment) =>
-      garment.productName.toLocaleLowerCase().includes(query) ||
-      garment.variantLabel.toLocaleLowerCase().includes(query)
+function fittingPeriodFilter(
+  filter: FittingDateFilter,
+  timeZone: string
+): { start: string; end: string } | null {
+  if (filter === "all") return null;
+  const today = todayInTimeZone(timeZone);
+  const startDate = filter === "today" ? today : addCalendarDays(today, 1);
+  const endDate = filter === "today" ? addCalendarDays(today, 1) : addCalendarDays(startDate, 31);
+  return {
+    start: zonedStartOfDay(startDate, timeZone).toISOString(),
+    end: zonedStartOfDay(endDate, timeZone).toISOString(),
+  };
+}
+
+function todayInTimeZone(timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone,
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values["year"]}-${values["month"]}-${values["day"]}`;
+}
+
+function zonedStartOfDay(dateValue: string, timeZone: string): Date {
+  const parsed = parseCalendarDate(dateValue);
+  if (!parsed) return new Date(Number.NaN);
+  const wallTimeUtc = Date.UTC(parsed.year, parsed.month - 1, parsed.day, 0, 0, 0);
+  let instant = new Date(wallTimeUtc);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const offset = timeZoneOffsetMs(instant, timeZone);
+    instant = new Date(wallTimeUtc - offset);
+  }
+  return instant;
+}
+
+function timeZoneOffsetMs(instant: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+    minute: "2-digit",
+    month: "2-digit",
+    second: "2-digit",
+    timeZone,
+    year: "numeric",
+  }).formatToParts(instant);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return (
+    Date.UTC(
+      Number(values["year"]),
+      Number(values["month"]) - 1,
+      Number(values["day"]),
+      Number(values["hour"]),
+      Number(values["minute"]),
+      Number(values["second"])
+    ) - instant.getTime()
   );
 }
 
-function formatAppointmentDate(value: string): string {
-  return formatFittingDate(value);
+function addCalendarDays(dateValue: string, days: number): string {
+  const parsed = parseCalendarDate(dateValue);
+  if (!parsed) return dateValue;
+  const date = new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day + days));
+  return [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, "0"),
+    String(date.getUTCDate()).padStart(2, "0"),
+  ].join("-");
 }
 
-function formatAppointmentTimeRange(appointment: FittingPrototypeAppointment): string {
-  return formatFittingTimeRange(appointment.startsAt, appointment.endsAt);
+function parseCalendarDate(value: string): { year: number; month: number; day: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const timestamp = Date.UTC(year, month - 1, day);
+  const date = new Date(timestamp);
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() + 1 !== month ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return { year, month, day };
 }
 
-function formatPhpMoney(minor: number): string {
-  return formatFittingMoney(minor);
+function toDrezivoApiError(error: unknown): DrezivoApiError {
+  return error instanceof DrezivoApiError
+    ? error
+    : new DrezivoApiError("The fitting request could not be completed. Please try again.", {
+        status: 500,
+      });
 }

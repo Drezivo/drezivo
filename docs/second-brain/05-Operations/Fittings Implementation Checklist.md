@@ -1141,14 +1141,16 @@ The fitting frontend prototype is complete when:
 
 # Backend Phase BE-10: Frontend cutover and release gate
 
-- [ ] **FIT-BE-100 — Wire `/fittings` to production contracts/API**
+- [ ] **FIT-BE-100 — Wire `/fittings` to production contracts/API** _(implementation complete; component/browser verification pending)_
   - **Acceptance:**
-    - [ ] Replace fixture list/detail/create/status data with API client calls.
-    - [ ] Preserve approved loading, empty, error, filters, pagination, Details Sheet, and New Fitting UX.
-    - [ ] Tighten walk-in creation to require full name plus phone or email.
-    - [ ] Remove per-appointment duration/fee overrides; New Fitting reads the active branch strict duration and fee.
-    - [ ] Replace prototype `Guaranteed intent` with the canonical guarantee request/result presentation without exposing physical capacity slots.
-    - [ ] Remove local status mutation as production authority.
+    - [x] Replace fixture list/detail/create/status data with API client calls.
+    - [x] Preserve approved loading, empty, error, filters, pagination, Details Sheet, and New Fitting UX.
+    - [x] Tighten walk-in creation to require full name plus phone or email.
+    - [x] Remove per-appointment duration/fee overrides; New Fitting reads the active branch strict duration and fee.
+    - [x] Replace prototype `Guaranteed intent` with the canonical guarantee request/result presentation without exposing physical capacity slots.
+    - [x] Remove local status mutation as production authority.
+  - **Implementation evidence:** `app/src/lib/drezivo-api.ts` now exposes contract-validated fitting list/detail/intake/settings/create/lifecycle calls; `fittings-page.tsx` reads the bounded server list, authoritative detail, dashboard fitting summary, and lifecycle command responses; `new-fitting-sheet.tsx` searches real customers/catalogue variants, reads strict duration/fee/timezone from persisted branch settings, requires walk-in full name plus phone/email, and submits only canonical `preference|guaranteed` garment requests. Physical capacity-slot identities are never rendered. Both New Fitting and lifecycle mutations use `useSubmitGuard` so duplicate dispatch is blocked and retry of one intent reuses its idempotency key.
+  - **Validation evidence:** fitting API-client tests pass 3/3; strict focused production-source TypeScript validation passes after correcting the shared dropdown checkbox wrapper so optional `checked` is not forwarded as explicit `undefined`; Prettier passes on the changed fitting components/tests, shared dropdown wrapper, and API client with its existing CRLF convention respected; `git diff --check` passes. API-backed component suites were added for list/filter/cursor/detail/lifecycle/create/walk-in/guarantee/double-dispatch behavior, but the isolated worktree has no installed dependencies and the borrowed main-checkout `@testing-library/react` install is missing its lockfile-declared `@testing-library/dom` peer, so those suites cannot start. A borrowed-dependency Next build also fails inside Next's own relative module resolution, so no production build claim is made. Required real-browser Playwright verification is likewise still outstanding. Keep the top-level item open until those UI verification gates are green in a complete install.
 
 - [ ] **FIT-BE-101 — Wire `/fittings/schedule` to persisted settings**
   - **Acceptance:**

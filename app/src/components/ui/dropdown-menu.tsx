@@ -92,7 +92,7 @@ const DropdownMenuCheckboxItem = forwardRef<
   return (
     <DropdownMenuPrimitive.CheckboxItem
       ref={ref}
-      checked={checked}
+      {...(checked !== undefined ? { checked } : {})}
       className={cn(
         "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-dashboard-active data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         className
