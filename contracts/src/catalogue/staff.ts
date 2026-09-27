@@ -18,6 +18,7 @@ import {
   clothingImageFileIds,
   clothingPricingInput,
   clothingStyleCode,
+  MAX_CLOTHING_PHOTOS,
   measurementMap,
   measurementMode,
   measurementUnit,
@@ -250,7 +251,7 @@ export const replaceClothingImagesRequest = z
 export type ReplaceClothingImagesRequest = z.infer<typeof replaceClothingImagesRequest>;
 
 export const replaceClothingImagesResponse = z.object({
-  images: z.array(clothingImageSummary).max(10),
+  images: z.array(clothingImageSummary).max(MAX_CLOTHING_PHOTOS),
   cover_file_id: fileObjectId.nullable(),
 });
 export type ReplaceClothingImagesResponse = z.infer<typeof replaceClothingImagesResponse>;
@@ -282,7 +283,7 @@ export const clothingDetail = z.object({
   description: z.string().max(2_000),
   category: clothingCategorySummary.nullable(),
   status: clothingProductLifecycle,
-  images: z.array(clothingImageSummary),
+  images: z.array(clothingImageSummary).max(MAX_CLOTHING_PHOTOS),
   variants: z.array(clothingVariantDetail),
   upcoming_allocations: z.array(clothingUpcomingAllocationSummary).max(10),
   has_more_upcoming_allocations: z.boolean(),

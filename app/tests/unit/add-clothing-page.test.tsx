@@ -538,7 +538,7 @@ describe("AddClothingPage", () => {
     );
   });
 
-  it("accepts at most 10 photos, uploads/finalizes them, and submits their file ids in order", async () => {
+  it("accepts at most 5 photos, uploads/finalizes them, and submits their file ids in order", async () => {
     let sequence = 0;
     vi.stubGlobal("crypto", {
       randomUUID: () => `00000000-0000-4000-8000-${String(++sequence).padStart(12, "0")}`,
@@ -613,19 +613,20 @@ describe("AddClothingPage", () => {
       target: { files },
     });
 
-    expect(screen.getAllByRole("button", { name: /^Remove photo-/ })).toHaveLength(10);
-    expect(screen.queryByText("10/10")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /^Remove photo-/ })).toHaveLength(5);
+    expect(screen.getByText("5/5 photos")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add Photos" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Add Clothing" }));
 
-    await waitFor(() => expect(api.authorizeUpload).toHaveBeenCalledTimes(10));
-    await waitFor(() => expect(api.finalizeUpload).toHaveBeenCalledTimes(10));
+    await waitFor(() => expect(api.authorizeUpload).toHaveBeenCalledTimes(5));
+    await waitFor(() => expect(api.finalizeUpload).toHaveBeenCalledTimes(5));
     await waitFor(() => expect(api.createClothing).toHaveBeenCalledTimes(1));
     const [requestBody] = api.createClothing.mock.calls[0]!;
     expect(requestBody.activate).toBe(true);
     expect(requestBody.image_file_ids).toEqual(
       Array.from(
-        { length: 10 },
+        { length: 5 },
         (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`
       )
     );

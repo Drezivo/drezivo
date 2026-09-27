@@ -259,7 +259,7 @@ Clothing is modeled as **style → variant → physical piece**, not as one ecom
 A clothing style contains shared information such as:
 
 - Name
-- Photos
+- Up to five ordered catalogue photos, with the first photo as the cover
 - Description
 - Category
 

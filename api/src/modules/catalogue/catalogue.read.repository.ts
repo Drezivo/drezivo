@@ -205,12 +205,33 @@ export async function listClothingReadModel(
 
   const limitPlaceholder = bind(input.query.limit + 1);
   const result = await client.query<ClothingListReadRow>(
-    `SELECT
+    `WITH candidate_products AS MATERIALIZED (
+      SELECT
+         p.id,
+         p.tenant_id,
+         p.code,
+         p.name,
+         c.id AS category_id,
+         c.name AS category_name,
+         p.status,
+         p.created_at,
+         p.updated_at,
+         lower(p.name) AS sort_name,
+         lower(p.code) AS sort_code
+        FROM product p
+        LEFT JOIN category c
+          ON c.tenant_id = p.tenant_id
+         AND c.id = p.category_id
+       WHERE ${where.join('\n         AND ')}
+       ORDER BY ${sortClause(input.query.sort)}
+       LIMIT ${limitPlaceholder}
+    )
+    SELECT
        p.id AS product_id,
        p.code,
        p.name,
-       c.id AS category_id,
-       c.name AS category_name,
+       p.category_id,
+       p.category_name,
        p.status AS product_status,
        COALESCE(variant_summary.size_labels, ARRAY[]::text[]) AS size_labels,
        COALESCE(variant_summary.price_from_minor, 0)::int AS price_from_minor,
@@ -236,10 +257,7 @@ export async function listClothingReadModel(
        p.updated_at,
        lower(p.name) AS sort_name,
        lower(p.code) AS sort_code
-     FROM product p
-     LEFT JOIN category c
-       ON c.tenant_id = p.tenant_id
-      AND c.id = p.category_id
+     FROM candidate_products p
      LEFT JOIN LATERAL (
        SELECT f.storage_key, f.version_id
          FROM product_image pi
@@ -433,9 +451,7 @@ export async function listClothingReadModel(
            AND (p.status = 'archived' OR pv_availability.status <> 'archived')
        ) summary
      ) availability_summary ON true
-     WHERE ${where.join('\n       AND ')}
-     ORDER BY ${sortClause(input.query.sort)}
-     LIMIT ${limitPlaceholder}`,
+     ORDER BY ${sortClause(input.query.sort)}`,
     values,
   );
 
@@ -495,7 +511,7 @@ export async function readClothingDetailModel(
         AND f.lifecycle_status = 'accepted'
         AND f.frozen_at IS NOT NULL
       ORDER BY pi.display_order ASC, pi.file_id ASC
-      LIMIT 10`,
+      LIMIT 5`,
     [input.tenantId, input.productId],
   );
 

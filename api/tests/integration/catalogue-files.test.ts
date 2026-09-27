@@ -571,6 +571,76 @@ describe('CLT-022 clothing file attachment flow', async () => {
     ]);
   });
 
+  it('enforces the five-photo database guard and keeps the ordered replacement path bounded', async () => {
+    const seed = await seedTenant('org_clt022_photo_limit', 'user_clt022_photo_limit');
+    const productId = await seedProduct(seed, 'IMG-005');
+    const fileIds = await Promise.all(
+      Array.from({ length: 6 }, (_, index) =>
+        seedAcceptedImage(seed, `photo-limit-${index + 1}`, index % 2 === 0 ? SHA_A : SHA_B),
+      ),
+    );
+
+    await expect(
+      replaceClothingImages({
+        ...seed.catalogueContext,
+        productId,
+        requestId: 'req-clt022-photo-limit-invalid',
+        idempotencyKey: 'clt022-photo-limit-invalid',
+        request: { file_ids: fileIds },
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect(await readProductImages(seed, productId)).toHaveLength(0);
+
+    const result = await replaceClothingImages({
+      ...seed.catalogueContext,
+      productId,
+      requestId: 'req-clt022-photo-limit',
+      idempotencyKey: 'clt022-photo-limit',
+      request: replaceClothingImagesRequest.parse({ file_ids: fileIds.slice(0, 5) }),
+    });
+    expect(result.status).toBe(200);
+    expect(await readProductImages(seed, productId)).toHaveLength(5);
+
+    await expect(
+      withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+        client.query(
+          `INSERT INTO product_image (tenant_id, product_id, file_id, display_order)
+           VALUES ($1, $2, $3, 5)`,
+          [seed.tenantId, productId, fileIds[5]],
+        ),
+      ),
+    ).rejects.toMatchObject({ constraint: 'product_image_max_five_per_product' });
+    expect(await readProductImages(seed, productId)).toHaveLength(5);
+
+    const concurrentProductId = await seedProduct(seed, 'IMG-006');
+    await replaceClothingImages({
+      ...seed.catalogueContext,
+      productId: concurrentProductId,
+      requestId: 'req-clt022-photo-limit-concurrent-seed',
+      idempotencyKey: 'clt022-photo-limit-concurrent-seed',
+      request: replaceClothingImagesRequest.parse({ file_ids: fileIds.slice(0, 4) }),
+    });
+    const concurrentResults = await Promise.allSettled(
+      fileIds.slice(4, 6).map((fileId, index) => {
+        const displayOrder = index + 4;
+        return withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+          client.query(
+            `INSERT INTO product_image (tenant_id, product_id, file_id, display_order)
+             VALUES ($1, $2, $3, $4)`,
+            [seed.tenantId, concurrentProductId, fileId, displayOrder],
+          ),
+        );
+      }),
+    );
+    expect(concurrentResults.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
+    const concurrentFailure = concurrentResults.find((outcome) => outcome.status === 'rejected');
+    expect(concurrentFailure).toMatchObject({
+      status: 'rejected',
+      reason: { constraint: 'product_image_max_five_per_product' },
+    });
+    expect(await readProductImages(seed, concurrentProductId)).toHaveLength(5);
+  });
+
   async function seedTenant(clerkOrgId: string, principalId: string) {
     const tenant = await createTestTenant({ clerkOrgId });
     const membershipId = await createTestMembership(tenant.id, principalId, 'owner');

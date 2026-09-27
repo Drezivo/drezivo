@@ -16,6 +16,7 @@ import { currencyCode, moneyString, nonNegativeMoneyString } from '../common/mon
 import { productId, productVariantId } from '../common/ids';
 import { paginationRequest } from '../common/pagination';
 import { isoDate } from '../common/time';
+import { MAX_CLOTHING_PHOTOS } from '../catalogue/admin';
 
 /** Data-Model §2 `product_variant.pricing_mode`. */
 export const pricingMode = z.enum(['fixed_duration', 'daily']);
@@ -69,7 +70,7 @@ export const itemDetail = z.object({
   name: z.string().min(1),
   description: z.string(),
   category: z.string().min(1),
-  image_urls: z.array(z.string().url()),
+  image_urls: z.array(z.string().url()).max(MAX_CLOTHING_PHOTOS),
   variants: z.array(catalogueVariant).min(1),
 });
 export type ItemDetail = z.infer<typeof itemDetail>;

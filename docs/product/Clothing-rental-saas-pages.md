@@ -226,7 +226,7 @@ The current V1 creation UX follows the authoritative style → variant → physi
 
 Create a clothing style with:
 
-- Shared photos
+- Shared photos (up to five per clothing style; the first is the cover)
 - Name
 - Description
 - Category

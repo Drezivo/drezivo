@@ -190,6 +190,9 @@ export const clothingSizeInput = z
   });
 export type ClothingSizeInput = z.infer<typeof clothingSizeInput>;
 
+/** Maximum number of ordered catalogue photos attached to one clothing product. */
+export const MAX_CLOTHING_PHOTOS = 5;
+
 /**
  * Staff V1 aggregate command. The owner enters shared color/pricing once; the API expands each
  * selected size into one product_variant and one initial physical_asset. V1 intentionally exposes
@@ -199,7 +202,7 @@ export type ClothingSizeInput = z.infer<typeof clothingSizeInput>;
  */
 export const clothingImageFileIds = z
   .array(fileObjectId)
-  .max(10)
+  .max(MAX_CLOTHING_PHOTOS)
   .superRefine((fileIds, ctx) => {
     const seen = new Set<string>();
     fileIds.forEach((fileId, index) => {
