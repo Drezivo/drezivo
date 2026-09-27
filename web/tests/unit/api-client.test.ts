@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError, unwrapSuccessData } from '@/lib/api-client';
 import { submitGuestReservationDetails } from '@/lib/capability';
+import { encodeStaticReservationState } from '@/lib/static-storefront-client';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -77,34 +78,40 @@ describe('web API envelope handling', () => {
     });
   });
 
-  it('validates the envelope for guest details mutations', async () => {
-    vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', 'https://api.test');
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      jsonResponse({ success: true, data: null, request_id: 'req_123' }),
+  it('keeps guest detail submission fully local during the static storefront phase', async () => {
+    const reservationId = encodeStaticReservationState({
+      storeSlug: 'luxe-rentals',
+      itemId: 'emerald-evening-gown',
+      size: 'M',
+      pickupDate: '2026-10-10',
+      returnDate: '2026-10-13',
+      status: 'held',
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const result = await submitGuestReservationDetails(
+      reservationId,
+      {
+        fullName: 'Ava Cruz',
+        phone: '09171234567',
+        email: 'ava@example.com',
+        pickupMethod: 'self_pickup',
+        paymentMethod: 'cash',
+      },
+      'idem_12345678',
     );
 
-    await expect(
-      submitGuestReservationDetails(
-        'res_123',
-        {
-          fullName: 'Ava Cruz',
-          phone: '09171234567',
-          email: 'ava@example.com',
-          pickupMethod: 'self_pickup',
-          paymentMethod: 'cash',
-        },
-        'idem_12345678',
-      ),
-    ).resolves.toBeUndefined();
+    expect(result.summary.customer.fullName).toBe('Ava Cruz');
+    expect(result.summary.payment.method).toBe('cash');
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('rejects a malformed 2xx envelope for guest details mutations', async () => {
-    vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', 'https://api.test');
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ success: true, data: null }));
+  it('rejects an invalid static reservation id without contacting a backend', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
     await expect(
       submitGuestReservationDetails(
-        'res_123',
+        'not-a-static-reservation',
         {
           fullName: 'Ava Cruz',
           phone: '09171234567',
@@ -114,6 +121,7 @@ describe('web API envelope handling', () => {
         },
         'idem_12345678',
       ),
-    ).rejects.toMatchObject({ code: 'unknown_error', status: 200 });
+    ).rejects.toThrow(/static reservation preview/i);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

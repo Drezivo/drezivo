@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import type { PublicStoreProjection } from '@drezivo/contracts';
+import type { StaticStoreProjection } from './static-storefront-client';
 
 const SITE_NAME = 'Drezivo';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://drezivo.com';
@@ -12,7 +12,7 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://drezivo.com';
  * out of the index while still allowing published storefront pages to be
  * found, since a storefront is real content the tenant wants discovered.
  */
-export function buildStorefrontMetadata(store: PublicStoreProjection): Metadata {
+export function buildStorefrontMetadata(store: StaticStoreProjection): Metadata {
   const canonicalUrl = `${SITE_URL}/s/${store.slug}`;
 
   return {

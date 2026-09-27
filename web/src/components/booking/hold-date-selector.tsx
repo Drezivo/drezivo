@@ -6,12 +6,12 @@ import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 
 import { BookingSteps } from '@/components/booking/booking-steps';
-import { exchangeGuestCapability } from '@/lib/capability';
-import { publicApiClient } from '@/lib/api-client';
+import { exchangeGuestCapability } from '@/lib/static-capability';
+import { staticStorefrontClient } from '@/lib/static-storefront-client';
 import { formatPhp, formatPhpPerUnit } from '@/lib/money';
 import { useSubmitGuard } from '@/lib/use-submit-guard';
 
-type CatalogItemDetail = NonNullable<Awaited<ReturnType<typeof publicApiClient.getCatalogItem>>>;
+type CatalogItemDetail = NonNullable<Awaited<ReturnType<typeof staticStorefrontClient.getCatalogItem>>>;
 
 function formatMonthParam(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -87,7 +87,7 @@ export function HoldDateSelector({ storeSlug, item, size }: HoldDateSelectorProp
   const monthParam = formatMonthParam(visibleMonth);
   const availabilityQuery = useQuery({
     queryKey: ['availability', storeSlug, item.id, monthParam],
-    queryFn: () => publicApiClient.getAvailability(storeSlug, item.id, monthParam),
+    queryFn: () => staticStorefrontClient.getAvailability(storeSlug, item.id, monthParam),
   });
 
   const unavailableDates = useMemo(
@@ -103,7 +103,7 @@ export function HoldDateSelector({ storeSlug, item, size }: HoldDateSelectorProp
       throw new Error('Select a rental start date first.');
     }
 
-    const hold = await publicApiClient.createHold(
+    const hold = await staticStorefrontClient.createHold(
       storeSlug,
       {
         itemId: item.id,

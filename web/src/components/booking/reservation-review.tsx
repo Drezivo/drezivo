@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
 import { BookingSteps } from '@/components/booking/booking-steps';
-import { confirmGuestReservation, getGuestReservationById } from '@/lib/capability';
+import { confirmGuestReservation, getGuestReservationById } from '@/lib/static-capability';
 import { formatPhp } from '@/lib/money';
 import { describePaymentStatus } from '@/lib/reservation-status';
 import { useSubmitGuard } from '@/lib/use-submit-guard';
@@ -36,7 +36,9 @@ export function ReservationReview({
     try {
       const confirmed = await submit();
       if (!confirmed) return;
-      router.push(`/s/${storeSlug}/book/${itemId}/confirmation?rid=${reservationId}`);
+      router.push(
+        `/s/${storeSlug}/book/${itemId}/confirmation?rid=${encodeURIComponent(confirmed.staticReservationId)}`,
+      );
     } catch {
       // useSubmitGuard exposes the normalized failure through `error` below.
     }

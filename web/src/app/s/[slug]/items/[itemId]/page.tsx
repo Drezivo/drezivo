@@ -1,7 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { publicApiClient } from '@/lib/api-client';
+import { staticStorefrontClient } from '@/lib/static-storefront-client';
 import { SizeSelector } from '@/components/storefront/size-selector';
 import { formatPhp, formatPhpPerUnit } from '@/lib/money';
 
@@ -11,7 +11,7 @@ export default async function ItemDetailPage({
   params: Promise<{ slug: string; itemId: string }>;
 }) {
   const { slug, itemId } = await params;
-  const item = await publicApiClient.getCatalogItem(slug, itemId);
+  const item = await staticStorefrontClient.getCatalogItem(slug, itemId);
 
   if (!item) {
     // A foreign or archived item behind this store must 404 the same way a

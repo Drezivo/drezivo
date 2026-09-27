@@ -1,10 +1,9 @@
-import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 
 import { ReservationConfirmationDetails } from '@/components/booking/reservation-confirmation-details';
-import { getGuestReservationById } from '@/lib/capability';
-import { publicApiClient } from '@/lib/api-client';
+import { getGuestReservationById } from '@/lib/static-capability';
+import { staticStorefrontClient } from '@/lib/static-storefront-client';
 import { buildGuestFlowMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = buildGuestFlowMetadata('Reservation Received');
@@ -26,10 +25,9 @@ export default async function BookingConfirmationPage({
     redirect(`/s/${slug}/items/${itemId}`);
   }
 
-  const cookieStore = await cookies();
   const [summary, store] = await Promise.all([
-    getGuestReservationById(rid, { cookieHeader: cookieStore.toString() }),
-    publicApiClient.getStore(slug),
+    getGuestReservationById(rid),
+    staticStorefrontClient.getStore(slug),
   ]);
 
   if (!summary || !store) {

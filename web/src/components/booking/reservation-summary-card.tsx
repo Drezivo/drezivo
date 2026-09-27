@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import type { GuestReservationSummary } from '@drezivo/contracts';
+import type { StaticGuestReservationSummary } from '@/lib/static-capability';
 import { Badge } from '@/components/ui/badge';
 import { formatPhp } from '@/lib/money';
 import { describePaymentStatus, describeReservationStatus } from '@/lib/reservation-status';
@@ -10,7 +10,7 @@ import { describePaymentStatus, describeReservationStatus } from '@/lib/reservat
  * page — one place that renders payment/reservation status, so the "never
  * show 'Paid'" rule (Drezivo-PRD.md §4) only needs to be honored once.
  */
-export function ReservationSummaryCard({ summary }: { summary: GuestReservationSummary }) {
+export function ReservationSummaryCard({ summary }: { summary: StaticGuestReservationSummary }) {
   const reservationStatus = describeReservationStatus(summary.status);
   const paymentStatus = describePaymentStatus(summary.payment.status);
 

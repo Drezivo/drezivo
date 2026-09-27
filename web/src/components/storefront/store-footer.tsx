@@ -1,9 +1,9 @@
 import Link from 'next/link';
 
-import type { publicApiClient } from '@/lib/api-client';
+import type { staticStorefrontClient } from '@/lib/static-storefront-client';
 import { StorefrontBrand } from './storefront-brand';
 
-type PublicStoreProjection = NonNullable<Awaited<ReturnType<typeof publicApiClient.getStore>>>;
+type PublicStoreProjection = NonNullable<Awaited<ReturnType<typeof staticStorefrontClient.getStore>>>;
 
 export function StoreFooter({ store }: { store: PublicStoreProjection }) {
   const basePath = `/s/${store.slug}`;

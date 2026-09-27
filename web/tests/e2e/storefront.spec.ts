@@ -1,13 +1,10 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * These smoke tests exercise the public marketing surface, which needs no
- * backend fixture data. Storefront/booking e2e coverage (catalog → item →
- * dates → hold) requires a seeded tenant + running API and belongs in a
- * separate suite wired to that fixture — it is intentionally not stubbed
- * out here with a fake network layer, since a green test against a mock
- * would not prove the real hold/idempotency contract in TRD §5 actually
- * holds end to end.
+ * The storefront is intentionally local-only during the current design phase.
+ * These browser tests verify the visual customer flow without a seeded tenant,
+ * API process, capability cookie, or database. Reintroduce API-backed E2E tests
+ * when the storefront is approved and reconnected to the production contract.
  */
 test.describe('marketing site', () => {
   test('landing page renders the hero and links to pricing', async ({ page }) => {
@@ -33,6 +30,49 @@ test.describe('marketing site', () => {
     await expect(
       page.getByText('Do customers need to create an account to book?'),
     ).toBeVisible();
+  });
+});
+
+test.describe('static tenant storefront', () => {
+  test('customer can walk from storefront to reservation confirmation without an API', async ({
+    page,
+  }) => {
+    await page.goto('/s/luxe-rentals');
+    await expect(page.getByRole('heading', { name: 'Luxe Rental Studio' })).toBeVisible();
+
+    await page.getByRole('link', { name: /Browse Collection/i }).click();
+    await expect(page).toHaveURL(/\/s\/luxe-rentals\/catalog/);
+
+    await page.getByRole('link', { name: /Emerald Evening Gown/i }).first().click();
+    await expect(page.getByRole('heading', { name: 'Emerald Evening Gown' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'M' }).click();
+    await page.getByRole('button', { name: 'Reserve This Item' }).click();
+    await expect(page.getByRole('heading', { name: 'Select Rental Dates' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Next month' }).click();
+    const nextMonth = new Date();
+    nextMonth.setMonth(nextMonth.getMonth() + 1, 2);
+    const nextMonthDateLabel = new Intl.DateTimeFormat('en-PH', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }).format(nextMonth);
+    await page.getByRole('button', { name: nextMonthDateLabel }).click();
+    await page.getByRole('button', { name: 'Continue' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Reservation Details' })).toBeVisible();
+    await page.locator('input[name="fullName"]').fill('Ava Cruz');
+    await page.locator('input[name="phone"]').fill('09171234567');
+    await page.locator('input[name="email"]').fill('ava@example.com');
+    await page.getByRole('button', { name: 'Continue' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Review Your Reservation' })).toBeVisible();
+    await expect(page.getByText('Ava Cruz')).toBeVisible();
+    await page.getByRole('button', { name: 'Confirm Reservation' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Reservation Received' })).toBeVisible();
+    await expect(page.getByText('Ava Cruz')).toBeVisible();
   });
 });
 

@@ -4,10 +4,10 @@ import { notFound } from 'next/navigation';
 
 import { StorefrontDressMark } from '@/components/storefront/storefront-brand';
 import { StorefrontHomeItemCard } from '@/components/storefront/storefront-home-item-card';
-import { publicApiClient } from '@/lib/api-client';
+import { staticStorefrontClient } from '@/lib/static-storefront-client';
 
-type StoreProjection = NonNullable<Awaited<ReturnType<typeof publicApiClient.getStore>>>;
-type CatalogItemSummary = Awaited<ReturnType<typeof publicApiClient.getCatalog>>['items'][number];
+type StoreProjection = NonNullable<Awaited<ReturnType<typeof staticStorefrontClient.getStore>>>;
+type CatalogItemSummary = Awaited<ReturnType<typeof staticStorefrontClient.getCatalog>>['items'][number];
 
 /** Published tenant storefront home, modeled on the approved storefront reference. */
 export default async function StorefrontHomePage({
@@ -16,7 +16,7 @@ export default async function StorefrontHomePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const store = await publicApiClient.getStore(slug);
+  const store = await staticStorefrontClient.getStore(slug);
 
   // Resolve publication first so an unknown or unpublished slug stays a generic 404
   // instead of surfacing a downstream catalogue error that could reveal state.
@@ -24,7 +24,7 @@ export default async function StorefrontHomePage({
     notFound();
   }
 
-  const collection = await publicApiClient.getCatalog(slug, { pageSize: '20' });
+  const collection = await staticStorefrontClient.getCatalog(slug, { pageSize: '20' });
   const categoryImages = getCategoryImages(collection.items);
 
   return (

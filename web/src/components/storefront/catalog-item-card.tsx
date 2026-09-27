@@ -2,10 +2,10 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 import { Badge } from '@/components/ui/badge';
-import type { publicApiClient } from '@/lib/api-client';
+import type { staticStorefrontClient } from '@/lib/static-storefront-client';
 import { formatPhpPerUnit } from '@/lib/money';
 
-type CatalogItemSummary = Awaited<ReturnType<typeof publicApiClient.getCatalog>>['items'][number];
+type CatalogItemSummary = Awaited<ReturnType<typeof staticStorefrontClient.getCatalog>>['items'][number];
 
 const AVAILABILITY_TONE = {
   available: 'success',

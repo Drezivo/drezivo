@@ -1,4 +1,4 @@
-import { publicApiClient } from '@/lib/api-client';
+import { staticStorefrontClient } from '@/lib/static-storefront-client';
 import { notFound } from 'next/navigation';
 
 /**
@@ -13,7 +13,7 @@ export default async function StorePoliciesPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const store = await publicApiClient.getStore(slug);
+  const store = await staticStorefrontClient.getStore(slug);
   if (!store) {
     notFound();
   }
