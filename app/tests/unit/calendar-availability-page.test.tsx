@@ -160,6 +160,16 @@ describe("CalendarAvailabilityPage", () => {
     expect(await screen.findByText("Emerald Evening Gown")).toBeVisible();
   });
 
+  it("lets a short timeline shrink to its content while capping larger lists", async () => {
+    render(<CalendarAvailabilityPage />);
+
+    await screen.findByText("Emerald Evening Gown");
+    const timeline = screen.getByLabelText("Clothing availability timeline");
+
+    expect(timeline).toHaveClass("max-h-[clamp(34rem,64vh,46rem)]");
+    expect(timeline).not.toHaveClass("h-[clamp(34rem,64vh,46rem)]");
+  });
+
   it("renders database-backed agenda data and opens the selected agenda drawer", async () => {
     render(<CalendarAvailabilityPage />);
 

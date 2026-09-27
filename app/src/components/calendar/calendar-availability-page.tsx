@@ -580,7 +580,10 @@ function AvailabilityTimeline({
   return (
     <Card className="gap-0 overflow-hidden py-0">
       <CardContent className="p-0">
-        <div className="h-[clamp(34rem,64vh,46rem)] overflow-auto">
+        <div
+          aria-label="Clothing availability timeline"
+          className="max-h-[clamp(34rem,64vh,46rem)] overflow-auto"
+        >
           <div className="min-w-[58rem] sm:min-w-[68rem] lg:min-w-[78rem]">
             <div className="sticky top-0 z-30 grid grid-cols-[7.5rem_repeat(14,minmax(3.25rem,1fr))] border-b border-dashboard-border bg-dashboard-surface shadow-sm sm:grid-cols-[9rem_repeat(14,minmax(3.5rem,1fr))] lg:grid-cols-[12rem_repeat(14,minmax(3.5rem,1fr))]">
               <div className="sticky left-0 z-40 flex items-center border-r border-dashboard-border bg-dashboard-surface px-2 py-3 text-xs font-semibold text-dashboard-navy sm:px-3 sm:text-sm lg:px-4">
