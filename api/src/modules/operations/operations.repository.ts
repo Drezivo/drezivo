@@ -1,5 +1,7 @@
 import type { PoolClient } from 'pg';
 
+import { ValidationError } from '../../shared/errors.js';
+
 export interface CalendarEventRow {
   id: string;
   source: 'reservation' | 'fitting';
@@ -155,4 +157,615 @@ export async function readDashboardFittingSummary(
     [input.tenantId, input.branchId],
   );
   return result.rows[0] ?? null;
+}
+
+export interface ClothingAvailabilityTimelineWindow {
+  timezone: string;
+  starts_at: Date;
+  ends_at: Date;
+}
+
+export interface ClothingAvailabilityTimelineAssetRow {
+  asset_id: string;
+  product_id: string;
+  product_name: string;
+  primary_image_storage_key: string | null;
+  primary_image_version_id: string | null;
+  variant_id: string;
+  size_label: string;
+  color_label: string | null;
+  rental_price_minor: number;
+  currency: string;
+  sort_product_name: string;
+  sort_size_label: string;
+  sort_color_label: string;
+}
+
+export interface ClothingAvailabilityTimelineAgendaRow {
+  id: string;
+  asset_id: string;
+  type: 'reserved' | 'rented' | 'unavailable';
+  starts_at: Date;
+  ends_at: Date;
+  source_type: 'reservation' | 'maintenance' | 'readiness' | 'allocation';
+  source_id: string;
+  customer_name: string | null;
+  pickup_at: Date | null;
+  return_at: Date | null;
+  unavailable_reason: 'recovery' | 'cleaning' | 'maintenance' | 'manual_block' | 'readiness' | 'other' | null;
+}
+
+export interface ClothingAvailabilityTimelineFacets {
+  categories: Array<{ id: string; name: string }>;
+  size_labels: string[];
+}
+
+export interface ClothingAvailabilityTimelinePage {
+  rows: ClothingAvailabilityTimelineAssetRow[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+interface ClothingAvailabilityTimelineCursor {
+  productName: string;
+  sizeLabel: string;
+  colorLabel: string;
+  assetId: string;
+}
+
+export async function readClothingAvailabilityTimelineWindow(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; startDate: string; endDate: string },
+): Promise<ClothingAvailabilityTimelineWindow | null> {
+  const result = await client.query<ClothingAvailabilityTimelineWindow>(
+    `SELECT
+       b.timezone,
+       ($3::date::timestamp AT TIME ZONE b.timezone) AS starts_at,
+       (($4::date + 1)::timestamp AT TIME ZONE b.timezone) AS ends_at
+     FROM branch b
+     WHERE b.tenant_id = $1::uuid
+       AND b.id = $2::uuid
+       AND b.status = 'active'
+     LIMIT 1`,
+    [input.tenantId, input.branchId, input.startDate, input.endDate],
+  );
+  return result.rows[0] ?? null;
+}
+
+/**
+ * Selects the physical-asset page before resolving interval projections. The visibility EXISTS
+ * predicates are intentionally small existence checks; customer, image, custody, and agenda work
+ * is deferred until after this keyset page is bounded.
+ */
+export async function listClothingAvailabilityTimelineAssets(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    window: ClothingAvailabilityTimelineWindow;
+    query: {
+      search?: string | undefined;
+      category_id?: string | undefined;
+      size_label?: string | undefined;
+      status?: 'reserved' | 'rented' | 'unavailable' | undefined;
+      cursor?: string | undefined;
+      limit: number;
+    };
+  },
+): Promise<ClothingAvailabilityTimelinePage> {
+  const values: unknown[] = [
+    input.tenantId,
+    input.branchId,
+    input.window.starts_at,
+    input.window.ends_at,
+  ];
+  const bind = (value: unknown): string => {
+    values.push(value);
+    return `$${values.length}`;
+  };
+  const where = [
+    'pa.tenant_id = $1::uuid',
+    'pa.branch_id = $2::uuid',
+    "pa.lifecycle_status = 'active'",
+    "p.status = 'active'",
+    "pv.status = 'active'",
+  ];
+
+  if (input.query.search) {
+    const search = bind(`%${escapeLikePattern(input.query.search)}%`);
+    where.push(`lower(p.name || ' ' || COALESCE(c.name, '')) LIKE lower(${search}) ESCAPE '\\'`);
+  }
+  if (input.query.category_id) {
+    where.push(`p.category_id = ${bind(input.query.category_id)}::uuid`);
+  }
+  if (input.query.size_label) {
+    where.push(`lower(pv.size_label) = lower(${bind(input.query.size_label)})`);
+  }
+
+  const cursor = decodeClothingAvailabilityTimelineCursor(input.query.cursor);
+  if (cursor) {
+    const productName = bind(cursor.productName);
+    const sizeLabel = bind(cursor.sizeLabel);
+    const colorLabel = bind(cursor.colorLabel);
+    const assetId = bind(cursor.assetId);
+    where.push(
+      `(lower(p.name), lower(pv.size_label), lower(COALESCE(pv.color_label, '')), pa.id) >
+         (${productName}, ${sizeLabel}, ${colorLabel}, ${assetId}::uuid)`,
+    );
+  }
+
+  const hasCatalogueFilter = Boolean(
+    input.query.search || input.query.category_id || input.query.size_label,
+  );
+  if (input.query.status) {
+    where.push(`activity.has_${input.query.status}`);
+  } else if (!hasCatalogueFilter) {
+    where.push('(activity.has_reserved OR activity.has_rented OR activity.has_unavailable)');
+  }
+
+  const limit = bind(input.query.limit + 1);
+  const result = await client.query<ClothingAvailabilityTimelineAssetRow>(
+    `WITH candidate_assets AS MATERIALIZED (
+       SELECT
+         pa.id AS asset_id,
+         p.id AS product_id,
+         p.name AS product_name,
+         pv.id AS variant_id,
+         pv.size_label,
+         pv.color_label,
+         pv.rental_price_minor,
+         pv.currency,
+         lower(p.name) AS sort_product_name,
+         lower(pv.size_label) AS sort_size_label,
+         lower(COALESCE(pv.color_label, '')) AS sort_color_label
+       FROM physical_asset pa
+       JOIN product_variant pv
+         ON pv.tenant_id = pa.tenant_id
+        AND pv.id = pa.variant_id
+       JOIN product p
+         ON p.tenant_id = pv.tenant_id
+        AND p.id = pv.product_id
+       LEFT JOIN category c
+         ON c.tenant_id = p.tenant_id
+        AND c.id = p.category_id
+       CROSS JOIN LATERAL (
+         SELECT
+           EXISTS (
+             SELECT 1
+             FROM asset_allocation aa
+             JOIN reservation_line rl
+               ON rl.tenant_id = aa.tenant_id
+              AND rl.id = aa.reservation_line_id
+             JOIN reservation r
+               ON r.tenant_id = rl.tenant_id
+              AND r.id = rl.reservation_id
+             WHERE aa.tenant_id = pa.tenant_id
+               AND aa.branch_id = pa.branch_id
+               AND aa.asset_id = pa.id
+               AND aa.is_blocking = true
+               AND aa.kind = 'reservation_confirmed'
+               AND r.status IN ('pending_confirmation', 'confirmed')
+               AND r.pickup_at < $4::timestamptz
+               AND r.due_at > $3::timestamptz
+           ) AS has_reserved,
+           EXISTS (
+             SELECT 1
+             FROM asset_allocation aa
+             JOIN reservation_line rl
+               ON rl.tenant_id = aa.tenant_id
+              AND rl.id = aa.reservation_line_id
+             JOIN reservation r
+               ON r.tenant_id = rl.tenant_id
+              AND r.id = rl.reservation_id
+             JOIN LATERAL (
+               SELECT ce.occurred_at
+               FROM custody_event ce
+               WHERE ce.tenant_id = aa.tenant_id
+                 AND ce.asset_id = aa.asset_id
+                 AND ce.reservation_line_id = aa.reservation_line_id
+                 AND ce.event_kind = 'pickup'
+               ORDER BY ce.occurred_at DESC, ce.id DESC
+               LIMIT 1
+             ) pickup ON true
+             WHERE aa.tenant_id = pa.tenant_id
+               AND aa.branch_id = pa.branch_id
+               AND aa.asset_id = pa.id
+               AND aa.is_blocking = true
+               AND aa.kind = 'reservation_confirmed'
+               AND r.status = 'picked_up'
+               AND pickup.occurred_at < $4::timestamptz
+           ) AS has_rented,
+           (
+             pa.readiness <> 'ready'
+             OR EXISTS (
+               SELECT 1
+               FROM asset_allocation aa
+               WHERE aa.tenant_id = pa.tenant_id
+                 AND aa.branch_id = pa.branch_id
+                 AND aa.asset_id = pa.id
+                 AND aa.is_blocking = true
+                 AND aa.kind IN ('maintenance', 'transfer')
+                 AND aa.period && tstzrange($3::timestamptz, $4::timestamptz, '[)')
+             )
+             OR EXISTS (
+               SELECT 1
+               FROM asset_allocation aa
+               JOIN reservation_line rl
+                 ON rl.tenant_id = aa.tenant_id
+                AND rl.id = aa.reservation_line_id
+               JOIN reservation r
+                 ON r.tenant_id = rl.tenant_id
+                AND r.id = rl.reservation_id
+               WHERE aa.tenant_id = pa.tenant_id
+                 AND aa.branch_id = pa.branch_id
+                 AND aa.asset_id = pa.id
+                 AND aa.is_blocking = true
+                 AND aa.kind = 'reservation_confirmed'
+                 AND r.status IN ('pending_confirmation', 'confirmed', 'picked_up', 'returned', 'completed')
+                 AND r.due_at < upper(aa.period)
+                 AND r.due_at < $4::timestamptz
+                 AND upper(aa.period) > $3::timestamptz
+             )
+           ) AS has_unavailable
+       ) activity
+       WHERE ${where.join('\n         AND ')}
+       ORDER BY lower(p.name) ASC, lower(pv.size_label) ASC,
+                lower(COALESCE(pv.color_label, '')) ASC, pa.id ASC
+       LIMIT ${limit}
+     )
+     SELECT
+       candidate.asset_id,
+       candidate.product_id,
+       candidate.product_name,
+       cover_image.storage_key AS primary_image_storage_key,
+       cover_image.version_id AS primary_image_version_id,
+       candidate.variant_id,
+       candidate.size_label,
+       candidate.color_label,
+       candidate.rental_price_minor,
+       candidate.currency,
+       candidate.sort_product_name,
+       candidate.sort_size_label,
+       candidate.sort_color_label
+     FROM candidate_assets candidate
+     LEFT JOIN LATERAL (
+       SELECT f.storage_key, f.version_id
+       FROM product_image pi
+       JOIN file_object f
+         ON f.tenant_id = pi.tenant_id
+        AND f.id = pi.file_id
+       WHERE pi.tenant_id = $1::uuid
+         AND pi.product_id = candidate.product_id
+         AND pi.display_order = 0
+         AND f.purpose = 'catalogue_image'
+         AND f.lifecycle_status = 'accepted'
+         AND f.frozen_at IS NOT NULL
+         AND (f.version_id IS NOT NULL OR f.sha256 IS NOT NULL)
+         AND f.mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+       LIMIT 1
+     ) cover_image ON true
+     ORDER BY candidate.sort_product_name ASC, candidate.sort_size_label ASC,
+              candidate.sort_color_label ASC, candidate.asset_id ASC`,
+    values,
+  );
+
+  const hasMore = result.rows.length > input.query.limit;
+  const rows = hasMore ? result.rows.slice(0, input.query.limit) : result.rows;
+  const last = rows.at(-1);
+  return {
+    rows,
+    hasMore,
+    nextCursor: hasMore && last ? encodeClothingAvailabilityTimelineCursor(last) : null,
+  };
+}
+
+export async function readClothingAvailabilityTimelineAgendas(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    assetIds: string[];
+    window: ClothingAvailabilityTimelineWindow;
+    status?: 'reserved' | 'rented' | 'unavailable' | undefined;
+  },
+): Promise<ClothingAvailabilityTimelineAgendaRow[]> {
+  if (input.assetIds.length === 0) return [];
+  const result = await client.query<ClothingAvailabilityTimelineAgendaRow>(
+    `WITH candidate_assets AS (
+       SELECT unnest($3::uuid[]) AS asset_id
+     ), timeline_agendas AS (
+       SELECT
+         'reservation:' || aa.id::text || ':scheduled' AS id,
+         aa.asset_id,
+         'reserved'::text AS type,
+         r.pickup_at AS starts_at,
+         r.due_at AS ends_at,
+         'reservation'::text AS source_type,
+         r.id AS source_id,
+         COALESCE(NULLIF(btrim(c.full_name), ''), NULLIF(btrim(r.customer_snapshot ->> 'full_name'), ''), 'Customer') AS customer_name,
+         r.pickup_at AS pickup_at,
+         r.due_at AS return_at,
+         NULL::text AS unavailable_reason
+       FROM asset_allocation aa
+       JOIN candidate_assets candidate ON candidate.asset_id = aa.asset_id
+       JOIN reservation_line rl
+         ON rl.tenant_id = aa.tenant_id
+        AND rl.id = aa.reservation_line_id
+       JOIN reservation r
+         ON r.tenant_id = rl.tenant_id
+        AND r.id = rl.reservation_id
+       LEFT JOIN customer c
+         ON c.tenant_id = r.tenant_id
+        AND c.id = r.customer_id
+       WHERE aa.tenant_id = $1::uuid
+         AND aa.branch_id = $2::uuid
+         AND aa.is_blocking = true
+         AND aa.kind = 'reservation_confirmed'
+         AND r.status IN ('pending_confirmation', 'confirmed')
+         AND r.pickup_at < $5::timestamptz
+         AND r.due_at > $4::timestamptz
+
+       UNION ALL
+
+       SELECT
+         'reservation:' || aa.id::text || ':rental' AS id,
+         aa.asset_id,
+         'rented'::text AS type,
+         pickup.occurred_at AS starts_at,
+         $5::timestamptz AS ends_at,
+         'reservation'::text AS source_type,
+         r.id AS source_id,
+         COALESCE(NULLIF(btrim(c.full_name), ''), NULLIF(btrim(r.customer_snapshot ->> 'full_name'), ''), 'Customer') AS customer_name,
+         pickup.occurred_at AS pickup_at,
+         r.due_at AS return_at,
+         NULL::text AS unavailable_reason
+       FROM asset_allocation aa
+       JOIN candidate_assets candidate ON candidate.asset_id = aa.asset_id
+       JOIN reservation_line rl
+         ON rl.tenant_id = aa.tenant_id
+        AND rl.id = aa.reservation_line_id
+       JOIN reservation r
+         ON r.tenant_id = rl.tenant_id
+        AND r.id = rl.reservation_id
+       JOIN LATERAL (
+         SELECT ce.occurred_at
+         FROM custody_event ce
+         WHERE ce.tenant_id = aa.tenant_id
+           AND ce.asset_id = aa.asset_id
+           AND ce.reservation_line_id = aa.reservation_line_id
+           AND ce.event_kind = 'pickup'
+         ORDER BY ce.occurred_at DESC, ce.id DESC
+         LIMIT 1
+       ) pickup ON true
+       LEFT JOIN customer c
+         ON c.tenant_id = r.tenant_id
+        AND c.id = r.customer_id
+       WHERE aa.tenant_id = $1::uuid
+         AND aa.branch_id = $2::uuid
+         AND aa.is_blocking = true
+         AND aa.kind = 'reservation_confirmed'
+         AND r.status = 'picked_up'
+         AND pickup.occurred_at < $5::timestamptz
+
+       UNION ALL
+
+       SELECT
+         'reservation:' || aa.id::text || ':recovery' AS id,
+         aa.asset_id,
+         'unavailable'::text AS type,
+         r.due_at AS starts_at,
+         upper(aa.period) AS ends_at,
+         'reservation'::text AS source_type,
+         r.id AS source_id,
+         COALESCE(NULLIF(btrim(c.full_name), ''), NULLIF(btrim(r.customer_snapshot ->> 'full_name'), ''), 'Customer') AS customer_name,
+         NULL::timestamptz AS pickup_at,
+         NULL::timestamptz AS return_at,
+         'recovery'::text AS unavailable_reason
+       FROM asset_allocation aa
+       JOIN candidate_assets candidate ON candidate.asset_id = aa.asset_id
+       JOIN reservation_line rl
+         ON rl.tenant_id = aa.tenant_id
+        AND rl.id = aa.reservation_line_id
+       JOIN reservation r
+         ON r.tenant_id = rl.tenant_id
+        AND r.id = rl.reservation_id
+       LEFT JOIN customer c
+         ON c.tenant_id = r.tenant_id
+        AND c.id = r.customer_id
+       WHERE aa.tenant_id = $1::uuid
+         AND aa.branch_id = $2::uuid
+         AND aa.is_blocking = true
+         AND aa.kind = 'reservation_confirmed'
+         AND r.status IN ('pending_confirmation', 'confirmed', 'picked_up', 'returned', 'completed')
+         AND r.due_at < upper(aa.period)
+         AND r.due_at < $5::timestamptz
+         AND upper(aa.period) > $4::timestamptz
+
+       UNION ALL
+
+       SELECT
+         'maintenance:' || aa.id::text AS id,
+         aa.asset_id,
+         'unavailable'::text AS type,
+         lower(aa.period) AS starts_at,
+         upper(aa.period) AS ends_at,
+         'maintenance'::text AS source_type,
+         mwo.id AS source_id,
+         NULL::text AS customer_name,
+         NULL::timestamptz AS pickup_at,
+         NULL::timestamptz AS return_at,
+         CASE mwo.kind
+           WHEN 'cleaning' THEN 'cleaning'
+           WHEN 'repair' THEN 'maintenance'
+           WHEN 'manual_block' THEN 'manual_block'
+           ELSE 'other'
+         END::text AS unavailable_reason
+       FROM asset_allocation aa
+       JOIN candidate_assets candidate ON candidate.asset_id = aa.asset_id
+       JOIN maintenance_work_order mwo
+         ON mwo.tenant_id = aa.tenant_id
+        AND mwo.id = aa.maintenance_id
+       WHERE aa.tenant_id = $1::uuid
+         AND aa.branch_id = $2::uuid
+         AND aa.is_blocking = true
+         AND aa.kind = 'maintenance'
+         AND aa.period && tstzrange($4::timestamptz, $5::timestamptz, '[)')
+
+       UNION ALL
+
+       SELECT
+         'allocation:' || aa.id::text AS id,
+         aa.asset_id,
+         'unavailable'::text AS type,
+         lower(aa.period) AS starts_at,
+         upper(aa.period) AS ends_at,
+         'allocation'::text AS source_type,
+         aa.id AS source_id,
+         NULL::text AS customer_name,
+         NULL::timestamptz AS pickup_at,
+         NULL::timestamptz AS return_at,
+         'other'::text AS unavailable_reason
+       FROM asset_allocation aa
+       JOIN candidate_assets candidate ON candidate.asset_id = aa.asset_id
+       WHERE aa.tenant_id = $1::uuid
+         AND aa.branch_id = $2::uuid
+         AND aa.is_blocking = true
+         AND aa.kind = 'transfer'
+         AND aa.period && tstzrange($4::timestamptz, $5::timestamptz, '[)')
+
+       UNION ALL
+
+       SELECT
+         'readiness:' || pa.id::text || ':' || pa.readiness AS id,
+         pa.id AS asset_id,
+         'unavailable'::text AS type,
+         $4::timestamptz AS starts_at,
+         $5::timestamptz AS ends_at,
+         'readiness'::text AS source_type,
+         pa.id AS source_id,
+         NULL::text AS customer_name,
+         NULL::timestamptz AS pickup_at,
+         NULL::timestamptz AS return_at,
+         'readiness'::text AS unavailable_reason
+       FROM physical_asset pa
+       JOIN candidate_assets candidate ON candidate.asset_id = pa.id
+       WHERE pa.tenant_id = $1::uuid
+         AND pa.branch_id = $2::uuid
+         AND pa.lifecycle_status = 'active'
+         AND pa.readiness <> 'ready'
+     )
+     SELECT *
+     FROM timeline_agendas
+     WHERE $6::text IS NULL OR type = $6::text
+     ORDER BY asset_id ASC, starts_at ASC, ends_at ASC, id ASC`,
+    [
+      input.tenantId,
+      input.branchId,
+      input.assetIds,
+      input.window.starts_at,
+      input.window.ends_at,
+      input.status ?? null,
+    ],
+  );
+  return result.rows;
+}
+
+export async function readClothingAvailabilityTimelineFacets(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string },
+): Promise<ClothingAvailabilityTimelineFacets> {
+  const categories = await client.query<{ id: string; name: string }>(
+    `SELECT c.id, c.name
+     FROM category c
+     JOIN product p
+       ON p.tenant_id = c.tenant_id
+      AND p.category_id = c.id
+      AND p.status = 'active'
+     JOIN product_variant pv
+       ON pv.tenant_id = p.tenant_id
+      AND pv.product_id = p.id
+      AND pv.status = 'active'
+     JOIN physical_asset pa
+       ON pa.tenant_id = pv.tenant_id
+      AND pa.variant_id = pv.id
+      AND pa.branch_id = $2::uuid
+      AND pa.lifecycle_status = 'active'
+     WHERE c.tenant_id = $1::uuid
+       AND c.status = 'active'
+     GROUP BY c.id, c.name, c.display_order
+     ORDER BY c.display_order ASC, lower(c.name) ASC, c.id ASC`,
+    [input.tenantId, input.branchId],
+  );
+  const sizes = await client.query<{ size_label: string }>(
+    `SELECT size_label
+     FROM (
+       SELECT DISTINCT pv.size_label, lower(pv.size_label) AS sort_size_label
+       FROM product_variant pv
+       JOIN product p
+         ON p.tenant_id = pv.tenant_id
+        AND p.id = pv.product_id
+        AND p.status = 'active'
+       JOIN physical_asset pa
+         ON pa.tenant_id = pv.tenant_id
+        AND pa.variant_id = pv.id
+        AND pa.branch_id = $2::uuid
+        AND pa.lifecycle_status = 'active'
+       WHERE pv.tenant_id = $1::uuid
+         AND pv.status = 'active'
+     ) sizes
+     ORDER BY sort_size_label ASC, size_label ASC`,
+    [input.tenantId, input.branchId],
+  );
+  return {
+    categories: categories.rows,
+    size_labels: sizes.rows.map((row) => row.size_label),
+  };
+}
+
+function encodeClothingAvailabilityTimelineCursor(
+  row: ClothingAvailabilityTimelineAssetRow,
+): string {
+  const cursor: ClothingAvailabilityTimelineCursor = {
+    productName: row.sort_product_name,
+    sizeLabel: row.sort_size_label,
+    colorLabel: row.sort_color_label,
+    assetId: row.asset_id,
+  };
+  return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+}
+
+function decodeClothingAvailabilityTimelineCursor(
+  value: string | undefined,
+): ClothingAvailabilityTimelineCursor | null {
+  if (!value) return null;
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
+    if (!parsed || typeof parsed !== 'object') throw new Error('cursor');
+    const record = parsed as Record<string, unknown>;
+    if (
+      typeof record.productName !== 'string' ||
+      typeof record.sizeLabel !== 'string' ||
+      typeof record.colorLabel !== 'string' ||
+      typeof record.assetId !== 'string' ||
+      !isUuid(record.assetId)
+    ) {
+      throw new Error('cursor');
+    }
+    return {
+      productName: record.productName,
+      sizeLabel: record.sizeLabel,
+      colorLabel: record.colorLabel,
+      assetId: record.assetId,
+    };
+  } catch {
+    throw new ValidationError('Clothing availability cursor is invalid.');
+  }
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

@@ -47,6 +47,8 @@ import {
   cancelMembershipInvitationRequest,
   abandonOwnerOnboardingRequest,
   bootstrapTenantRequest,
+  clothingAvailabilityTimelineQuery,
+  clothingAvailabilityTimelineResponse,
   chooseOnboardingPlanRequest,
   organizationOnboarding,
   errorEnvelope,
@@ -743,6 +745,27 @@ registry.registerPath({
     },
     403: jsonError('Operational schedule access is required.'),
     422: jsonError('The calendar query is invalid or exceeds the bounded window.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/calendar/availability',
+  tags: ['operations', 'availability'],
+  summary: 'Read a bounded asset-level clothing availability timeline for the active branch.',
+  request: { query: clothingAvailabilityTimelineQuery },
+  responses: {
+    200: {
+      description:
+        'Safe asset lanes with reserved/rented/unavailable ranges. Pickup and return are boundary labels on reservation ranges.',
+      content: {
+        'application/json': { schema: successEnvelope(clothingAvailabilityTimelineResponse) },
+      },
+    },
+    403: jsonError('Reservation management permission is required.'),
+    404: jsonError('The active branch could not be found.'),
+    409: jsonError('The tenant lifecycle does not permit this operational read.'),
+    422: jsonError('The clothing availability query is invalid or exceeds the bounded window.'),
   },
 });
 

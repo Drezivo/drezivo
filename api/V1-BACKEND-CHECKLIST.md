@@ -382,11 +382,26 @@ H09 allocator unchanged.
 - **Depends on:** H09, H10, H07.
 - **Basis:** PRD §4 (FR7 interval calendar with conflict reasons); TRD §9 (bounded calendar windows); Data-Model §5.
 - **Outcome:** a derived calendar projection across reservations, pickups, returns, and blocks — no separately editable calendar table.
+- **Implementation note:** `GET /api/v1/calendar/availability` is the staff Clothing Availability
+  projection. It returns physical-asset lanes grouped by product and variant, with only `reserved`,
+  `rented`, and `unavailable` agenda types. Pickup and return are boundary labels on one continuous
+  reservation range; fitting allocations remain authoritative for exact-time booking protection but
+  are not rendered in this day-based view.
 - **Acceptance criteria:**
-  - [ ] A required, bounded date range rejects or caps oversized windows.
-  - [ ] Events carry stable types, source IDs, status, start/end, and customer-safe summaries rendered in the tenant timezone.
-  - [ ] Blocking reasons are visible per asset/day (booking hold, confirmed rental, cleaning, maintenance, manual block) without exposing other customers' private data.
-  - [ ] Cancelled/rejected sources follow explicit visibility filters; daily counts match filtered events.
+  - [x] A required, bounded `start_date`/`end_date` rejects reversed or over-31-day windows; the
+    branch IANA timezone defines day boundaries.
+  - [x] Asset-lane rows paginate with an opaque keyset cursor (25 default, 50 maximum) before
+    expensive agenda, custody, customer, or image projections run.
+  - [x] Agenda rows carry stable source IDs, bounded periods, display lanes, and safe customer
+    summaries; no catalogue codes, emails, phones, maintenance notes, or provider data are returned.
+  - [x] Blocking reasons resolve to the single safe `unavailable` type with drawer-safe reasons for
+    recovery, cleaning, maintenance, manual blocks, readiness, or other planned allocations.
+  - [x] Held, completed/returned/cancelled/expired/rejected, and fitting-only allocations do not
+    create active reservation timeline bars; readiness and future reservation causes may stack in
+    separate deterministic display lanes.
+  - [x] Focused PostgreSQL integration coverage passes for continuous reserved/rented bars,
+    pickup/return boundary labels, readiness and maintenance blocks, idle filtering, branch
+    isolation, pagination, and permission denial.
 
 ### M06 — CSV import (OR6)
 

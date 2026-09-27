@@ -198,6 +198,7 @@ Use `/api/v1` for the first API major version. Product V2 branches do not requir
 | `/guest/reservations/{id}/receipts`  | POST evidence attachment       | Scoped capability; immutable uploaded object; idempotency                       |
 | `/guest/reservations/{id}`           | GET own summary                | Scoped capability, `no-store`                                                   |
 | `/reservations/availability-calendar` | GET staff variant/day preview | Membership + reservation permission; branch-local bounded advisory projection, never a guarantee |
+| `/calendar/availability`             | GET staff physical-asset timeline | Verified staff + tenant context + `reservations.manage`; branch-timezone asset lanes with Reserved/Rented/Unavailable bars and Pickup/Return boundary labels |
 | `/reservations/availability-check`   | GET staff exact-time preview  | Membership + reservation permission; exact buffered interval and server pricing, still non-binding |
 | `/reservations`                      | POST staff/walk-in request     | Membership; same quote/hold logic as storefront                                 |
 | `/reservations/{id}/confirm`         | POST merchant confirmation     | Financial capability, state/version checks, idempotency                         |
@@ -213,6 +214,25 @@ Use `/api/v1` for the first API major version. Product V2 branches do not requir
 | `/webhooks/{provider}`               | POST provider event            | Exact raw bytes, signature verification, replay checks and event inbox          |
 
 Every implemented route needs a permission policy even when public access is the intended policy. Preserve exact webhook bytes before JSON parsing. Use provider-supported signature algorithms, replay windows and constant-time secret comparison where applicable.
+
+### Staff clothing availability timeline
+
+The staff Calendar's Clothing Availability tab reads `GET /api/v1/calendar/availability`. This is a
+bounded, read-only projection over physical-asset allocations, custody events, readiness, and
+maintenance state; it does not introduce a calendar table or a second availability authority. The
+server resolves `start_date` and `end_date` at the active branch's IANA timezone, limits the window
+to 31 inclusive dates, and paginates asset lanes with an opaque keyset cursor (25 by default, 50 at
+most). Candidate assets are bounded before agenda, customer, custody, or image work is evaluated.
+
+The visual vocabulary is intentionally small. A pending/confirmed reservation is one continuous
+`reserved` range from scheduled pickup through scheduled due, and a picked-up reservation is one
+continuous `rented` range from the recorded pickup custody time through the selected window (with
+the scheduled due shown as the Return boundary label). Pickup and Return are labels, not separate
+agenda types or colors. Cleaning, repair, manual blocks, readiness issues, recovery, and future
+blocking allocations collapse to `unavailable`; the drawer may show the safe reason. Fittings are
+excluded from this day-based projection but remain part of the exact-time allocator. The endpoint
+returns only safe customer summaries and UUID references, never catalogue codes, emails, phones,
+maintenance notes, or provider payloads.
 
 Errors use a stable envelope: `code`, safe `message`, `request_id`, optional field errors. Use `401` unauthenticated, `403` unauthorized, `404` for concealed foreign objects, `409` capacity/state/idempotency conflict, `422` invalid inputs, `429` throttled, `503` unavailable dependency. Never return raw SQL errors or foreign-key information that identifies another tenant.
 

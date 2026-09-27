@@ -1,15 +1,17 @@
 import { Router } from 'express';
 
-import { requireStaffAuth } from '../../middleware/auth.js';
+import { requireStaffAuth, requireVerifiedStaffAuth } from '../../middleware/auth.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
 import {
   getDashboardFittingSummaryController,
+  getClothingAvailabilityTimelineController,
   getOperationalCalendarController,
 } from './operations.controller.js';
 import {
   requireOperationsReadPermission,
+  validateClothingAvailabilityTimelineQuery,
   validateOperationalCalendarQuery,
 } from './operations.middleware.js';
 
@@ -31,6 +33,17 @@ operationsRouter.get(
   requireOperationsReadPermission,
   validateOperationalCalendarQuery,
   getOperationalCalendarController,
+);
+
+operationsRouter.get(
+  '/calendar/availability',
+  requireVerifiedStaffAuth,
+  requireTenantContext,
+  readRateLimit,
+  requireTenantAction('existing_rental_read'),
+  requireOperationsReadPermission,
+  validateClothingAvailabilityTimelineQuery,
+  getClothingAvailabilityTimelineController,
 );
 
 operationsRouter.get(

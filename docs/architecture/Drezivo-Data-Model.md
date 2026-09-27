@@ -109,6 +109,23 @@ Initial hold, pending review, confirmed rental and reserved turnaround all block
 
 Cleaning inside an existing turnaround uses that same block; inserting another overlapping cleaning block would be incorrect. Extra planned maintenance gets a separate nonoverlapping block. If unexpected damage cannot extend a block because it conflicts with a later booking, preserve the physical unready state and create a disruption rather than claiming the garment is ready.
 
+### Staff availability timeline projection
+
+The staff Clothing Availability tab is a derived read model, not a persisted calendar entity. The
+API selects a bounded page of active physical assets for the branch first, then projects only the
+selected lanes from `asset_allocation`, reservation status, actual `custody_event` pickup time,
+maintenance work orders, and asset readiness. Dates are interpreted in the branch timezone and the
+window is limited to 31 inclusive calendar dates.
+
+The projection exposes three agenda types: `reserved`, `rented`, and `unavailable`. A pending or
+confirmed reservation is one continuous reserved range from scheduled pickup through scheduled due;
+after actual pickup it becomes one rented range beginning at the pickup custody event. Pickup and
+Return are boundary labels on those ranges, not separate occupancy records. Recovery, cleaning,
+repair, manual blocks, readiness problems, and other planned blocking allocations become
+Unavailable with a safe reason for the detail drawer. Held, terminal reservation states, and fitting
+allocations do not create day-view agendas. Fitting allocations still protect exact-time reservation
+claims through the canonical exclusion path.
+
 ### Actual truth
 
 `custody_event` is append-only and outside the overlap exclusion. Actual late return must be recordable. Lock the asset's current projection and conditionally record handover/return once; update custody/readiness in that transaction. A `disruption` identifies threatened future lines and resolution work.
