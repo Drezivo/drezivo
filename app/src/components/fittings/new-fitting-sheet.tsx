@@ -1,7 +1,18 @@
 "use client";
 
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Plus, Search, Shirt } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { Check, ChevronLeft, ChevronRight, Plus, Search, Shirt } from "lucide-react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+
+import type {
+  ClothingDetail,
+  ClothingListItem,
+  FittingCustomerOption,
+  FittingDetail,
+  FittingGarmentMode,
+  FittingSettings,
+  ProductVariantId,
+} from "@drezivo/contracts";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,143 +20,202 @@ import { DatePickerField } from "@/components/ui/date-picker-field";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { TimePickerField } from "@/components/ui/time-picker-field";
+import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
 
-import {
-  FITTING_PROTOTYPE_APPOINTMENTS,
-  FITTING_PROTOTYPE_TODAY,
-  type FittingPrototypeAppointment,
-  type FittingPrototypeGarment,
-  type FittingPrototypePaymentState,
-} from "./fitting-prototype-data";
-import { fittingGarmentIntentLabel } from "./fitting-prototype-presentation";
-import {
-  FITTING_DURATION_OPTIONS,
-  readFittingPrototypeDefaultDuration,
-  type FittingPrototypeDuration,
-} from "./fitting-prototype-settings";
+import { fittingGarmentModeLabel, formatFittingMoney } from "./fittings-presentation";
 
 type CustomerMode = "existing" | "walk-in";
 type Step = 1 | 2 | 3;
 
 type GarmentSelection = {
   key: string;
+  variantId: ProductVariantId;
   productName: string;
   variantLabel: string;
-  guarantee: FittingPrototypeGarment["guarantee"];
+  garmentMode: FittingGarmentMode;
 };
 
 type NewFittingSheetProps = {
   open: boolean;
+  settings: FittingSettings | null;
   onOpenChange: (open: boolean) => void;
-  onCreate: (appointment: FittingPrototypeAppointment) => void;
+  onCreated: (fitting: FittingDetail) => void;
 };
 
-const DURATION_OPTIONS = FITTING_DURATION_OPTIONS;
-const PAYMENT_OPTIONS: readonly FittingPrototypePaymentState[] = [
-  "Not required",
-  "Pending review",
-  "Verified",
-];
+const PRODUCT_LIMIT = 20;
 
-const CUSTOMERS = FITTING_PROTOTYPE_APPOINTMENTS.map((appointment) => appointment.customer).filter(
-  (customer, index, all) => all.findIndex((candidate) => candidate.id === customer.id) === index
-);
-
-const GARMENT_OPTIONS = FITTING_PROTOTYPE_APPOINTMENTS.flatMap(
-  (appointment) => appointment.garments
-)
-  .map((garment) => ({
-    key: `${garment.productName}__${garment.variantLabel}`,
-    productName: garment.productName,
-    variantLabel: garment.variantLabel,
-  }))
-  .filter(
-    (garment, index, all) => all.findIndex((candidate) => candidate.key === garment.key) === index
-  );
-
-export function NewFittingSheet({ open, onCreate, onOpenChange }: NewFittingSheetProps) {
+export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: NewFittingSheetProps) {
+  const { getToken } = useAuth();
   const [step, setStep] = useState<Step>(1);
   const [customerMode, setCustomerMode] = useState<CustomerMode>("existing");
   const [customerQuery, setCustomerQuery] = useState("");
-  const [existingCustomerId, setExistingCustomerId] = useState(CUSTOMERS[0]?.id ?? "");
+  const deferredCustomerQuery = useDeferredValue(customerQuery.trim());
+  const [customerOptions, setCustomerOptions] = useState<FittingCustomerOption[]>([]);
+  const [customersLoading, setCustomersLoading] = useState(false);
+  const [existingCustomerId, setExistingCustomerId] = useState("");
   const [walkInName, setWalkInName] = useState("");
   const [walkInEmail, setWalkInEmail] = useState("");
   const [walkInPhone, setWalkInPhone] = useState("");
-  const [date, setDate] = useState(FITTING_PROTOTYPE_TODAY);
+  const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("10:00");
-  const [durationMinutes, setDurationMinutes] = useState<FittingPrototypeDuration>(() =>
-    readFittingPrototypeDefaultDuration()
-  );
   const [garmentQuery, setGarmentQuery] = useState("");
+  const deferredGarmentQuery = useDeferredValue(garmentQuery.trim());
+  const [products, setProducts] = useState<ClothingListItem[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [productDetail, setProductDetail] = useState<ClothingDetail | null>(null);
+  const [productDetailLoading, setProductDetailLoading] = useState(false);
   const [garments, setGarments] = useState<GarmentSelection[]>([]);
-  const [hasFee, setHasFee] = useState(true);
-  const [feePesos, setFeePesos] = useState("300");
-  const [paymentState, setPaymentState] = useState<FittingPrototypePaymentState>("Pending review");
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const submitInFlightRef = useRef(false);
-  const sequenceRef = useRef(1);
+  const [submitError, setSubmitError] = useState<DrezivoApiError | null>(null);
+  const { isSubmitting, resetIntent: resetCreateIntent, submit: submitCreate } = useSubmitGuard();
 
-  useEffect(() => {
-    if (!open) return;
-    submitInFlightRef.current = false;
-    setIsSubmitting(false);
-    setDurationMinutes(readFittingPrototypeDefaultDuration());
-  }, [open]);
-
-  const visibleCustomers = useMemo(() => {
-    const query = customerQuery.trim().toLocaleLowerCase();
-    if (!query) return CUSTOMERS;
-    return CUSTOMERS.filter(
-      (customer) =>
-        customer.name.toLocaleLowerCase().includes(query) ||
-        customer.email.toLocaleLowerCase().includes(query) ||
-        customer.phone.toLocaleLowerCase().includes(query)
-    );
-  }, [customerQuery]);
-
-  const visibleGarments = useMemo(() => {
-    const query = garmentQuery.trim().toLocaleLowerCase();
-    if (!query) return GARMENT_OPTIONS;
-    return GARMENT_OPTIONS.filter(
-      (garment) =>
-        garment.productName.toLocaleLowerCase().includes(query) ||
-        garment.variantLabel.toLocaleLowerCase().includes(query)
-    );
-  }, [garmentQuery]);
-
+  const timeZone = settings?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  const today = useMemo(() => todayInTimeZone(timeZone), [timeZone]);
   const selectedCustomer =
-    customerMode === "existing"
-      ? (CUSTOMERS.find((customer) => customer.id === existingCustomerId) ?? null)
-      : null;
+    customerOptions.find((customer) => customer.id === existingCustomerId) ?? null;
 
-  const closeAndReset = (releaseSubmitLock = true) => {
-    resetDraft(releaseSubmitLock);
-    onOpenChange(false);
-  };
-
-  const resetDraft = (releaseSubmitLock = true) => {
+  const resetDraft = useCallback(() => {
+    resetCreateIntent();
     setStep(1);
     setCustomerMode("existing");
     setCustomerQuery("");
-    setExistingCustomerId(CUSTOMERS[0]?.id ?? "");
+    setCustomerOptions([]);
+    setExistingCustomerId("");
     setWalkInName("");
     setWalkInEmail("");
     setWalkInPhone("");
-    setDate(FITTING_PROTOTYPE_TODAY);
+    setDate(today);
     setStartTime("10:00");
-    setDurationMinutes(readFittingPrototypeDefaultDuration());
     setGarmentQuery("");
+    setProducts([]);
+    setSelectedProductId(null);
+    setProductDetail(null);
     setGarments([]);
-    setHasFee(true);
-    setFeePesos("300");
-    setPaymentState("Pending review");
     setValidationMessage(null);
-    if (releaseSubmitLock) {
-      setIsSubmitting(false);
-      submitInFlightRef.current = false;
+    setSubmitError(null);
+  }, [resetCreateIntent, today]);
+
+  useEffect(() => {
+    if (!open) return;
+    resetDraft();
+  }, [open, resetDraft]);
+
+  useEffect(() => {
+    if (!open || customerMode !== "existing" || deferredCustomerQuery.length < 2) {
+      setCustomerOptions([]);
+      setCustomersLoading(false);
+      return;
     }
+    let cancelled = false;
+    setCustomersLoading(true);
+    void createDrezivoApiClient(getToken)
+      .getFittingIntakeOptions({ customer_search: deferredCustomerQuery })
+      .then((result) => {
+        if (cancelled) return;
+        setCustomerOptions(result.data.customers);
+        setExistingCustomerId((current) =>
+          result.data.customers.some((customer) => customer.id === current) ? current : ""
+        );
+      })
+      .catch((error) => {
+        if (!cancelled) setSubmitError(toDrezivoApiError(error));
+      })
+      .finally(() => {
+        if (!cancelled) setCustomersLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customerMode, deferredCustomerQuery, getToken, open]);
+
+  useEffect(() => {
+    if (!open || step !== 2) return;
+    let cancelled = false;
+    setProductsLoading(true);
+    void createDrezivoApiClient(getToken)
+      .getCatalogueClothing({
+        limit: PRODUCT_LIMIT,
+        sort: "name_asc",
+        product_status: "active",
+        ...(deferredGarmentQuery ? { search: deferredGarmentQuery } : {}),
+      })
+      .then((result) => {
+        if (!cancelled) setProducts(result.data.items);
+      })
+      .catch((error) => {
+        if (!cancelled) setSubmitError(toDrezivoApiError(error));
+      })
+      .finally(() => {
+        if (!cancelled) setProductsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [deferredGarmentQuery, getToken, open, step]);
+
+  useEffect(() => {
+    if (!open || step !== 2 || !selectedProductId) {
+      setProductDetail(null);
+      setProductDetailLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setProductDetailLoading(true);
+    void createDrezivoApiClient(getToken)
+      .getCatalogueClothingDetail(selectedProductId)
+      .then((result) => {
+        if (!cancelled) setProductDetail(result.data);
+      })
+      .catch((error) => {
+        if (!cancelled) setSubmitError(toDrezivoApiError(error));
+      })
+      .finally(() => {
+        if (!cancelled) setProductDetailLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, open, selectedProductId, step]);
+
+  const closeAndReset = () => {
+    resetDraft();
+    onOpenChange(false);
+  };
+
+  const validateStep = (currentStep: Step): string | null => {
+    if (!settings) return "Fitting settings are still loading. Try again in a moment.";
+    if (!settings.enabled) return "Fittings are disabled for this branch.";
+    if (currentStep === 1) {
+      if (customerMode === "existing" && !selectedCustomer) return "Select an existing customer.";
+      if (customerMode === "walk-in") {
+        if (!walkInName.trim()) return "Enter the walk-in customer full name.";
+        if (!walkInPhone.trim() && !walkInEmail.trim()) {
+          return "Enter a phone number or email for the walk-in customer.";
+        }
+        if (walkInPhone.trim() && !/^\d{11}$/.test(walkInPhone.trim())) {
+          return "Phone number must contain exactly 11 digits.";
+        }
+        if (walkInEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(walkInEmail.trim())) {
+          return "Enter a valid email address.";
+        }
+      }
+      if (!date || date < today) return "Choose today or a future date.";
+      if (!startTime) return "Choose a fitting start time.";
+      const startMinute = Number(startTime.split(":")[1] ?? Number.NaN);
+      if (!Number.isInteger(startMinute) || startMinute % 30 !== 0) {
+        return "Fitting start time must be on a 30-minute boundary.";
+      }
+    }
+    if (currentStep === 2 && garments.length === 0) {
+      return "Add at least one garment to the fitting.";
+    }
+    return null;
   };
 
   const goNext = () => {
@@ -155,102 +225,97 @@ export function NewFittingSheet({ open, onCreate, onOpenChange }: NewFittingShee
       return;
     }
     setValidationMessage(null);
+    setSubmitError(null);
     setStep((current) => Math.min(3, current + 1) as Step);
   };
 
-  const validateStep = (currentStep: Step): string | null => {
-    if (currentStep === 1) {
-      if (customerMode === "existing" && !selectedCustomer) return "Select a customer.";
-      if (customerMode === "walk-in" && !walkInName.trim())
-        return "Enter the walk-in customer name.";
-      if (!date || date < FITTING_PROTOTYPE_TODAY) return "Choose today or a future date.";
-      if (!startTime) return "Choose a fitting start time.";
-    }
-    if (currentStep === 2) {
-      if (garments.length === 0) return "Add at least one garment to the fitting.";
-      if (hasFee) {
-        const fee = Number(feePesos);
-        if (!feePesos.trim() || !Number.isFinite(fee) || fee < 0) {
-          return "Enter a valid fitting fee or turn the fee off.";
-        }
-      }
-    }
-    return null;
-  };
-
-  const toggleGarment = (option: (typeof GARMENT_OPTIONS)[number]) => {
+  const toggleVariant = (
+    variantId: ProductVariantId,
+    productName: string,
+    variantLabel: string
+  ) => {
     setGarments((current) => {
-      const exists = current.some((garment) => garment.key === option.key);
-      if (exists) return current.filter((garment) => garment.key !== option.key);
-      return [...current, { ...option, guarantee: "Preference only" }];
+      const existing = current.find((garment) => garment.variantId === variantId);
+      if (existing) return current.filter((garment) => garment.variantId !== variantId);
+      return [
+        ...current,
+        {
+          key: variantId,
+          variantId,
+          productName,
+          variantLabel,
+          garmentMode: "preference",
+        },
+      ];
     });
   };
 
-  const setGarmentGuarantee = (key: string, guarantee: FittingPrototypeGarment["guarantee"]) => {
+  const setGarmentMode = (variantId: ProductVariantId, garmentMode: FittingGarmentMode) => {
     setGarments((current) =>
-      current.map((garment) => (garment.key === key ? { ...garment, guarantee } : garment))
+      current.map((garment) =>
+        garment.variantId === variantId ? { ...garment, garmentMode } : garment
+      )
     );
   };
 
-  const createPrototypeAppointment = () => {
-    if (submitInFlightRef.current) return;
-    const message = validateStep(2);
-    if (message) {
-      setValidationMessage(message);
-      setStep(2);
+  const submit = async () => {
+    if (!settings) return;
+    const stepOneMessage = validateStep(1);
+    const stepTwoMessage = validateStep(2);
+    if (stepOneMessage || stepTwoMessage) {
+      setValidationMessage(stepOneMessage ?? stepTwoMessage);
+      setStep(stepOneMessage ? 1 : 2);
+      return;
+    }
+
+    const startsAt = zonedDateTimeToIso(date, startTime, settings.timezone);
+    if (!startsAt) {
+      setValidationMessage("Choose a valid fitting date and time.");
+      setStep(1);
       return;
     }
 
     const customer =
       customerMode === "existing" && selectedCustomer
-        ? selectedCustomer
-        : {
-            id: `fit-walkin-${sequenceRef.current}`,
-            name: walkInName.trim(),
-            email: walkInEmail.trim() || "walkin@example.test",
-            phone: walkInPhone.trim() || "Not provided",
-          };
+        ? ({ source: "existing", customer_id: selectedCustomer.id } as const)
+        : ({
+            source: "new",
+            customer: {
+              full_name: walkInName.trim(),
+              ...(walkInPhone.trim() ? { phone: walkInPhone.trim() } : {}),
+              ...(walkInEmail.trim() ? { email: walkInEmail.trim() } : {}),
+            },
+          } as const);
 
-    submitInFlightRef.current = true;
-    setIsSubmitting(true);
-
-    const startsAt = `${date}T${startTime}:00+08:00`;
-    const endsAt = addMinutesToIso(startsAt, durationMinutes);
-    const feeMinor = hasFee ? Math.max(0, Math.round(Number(feePesos || "0") * 100)) : null;
-    const appointmentId = `fit-local-${String(sequenceRef.current).padStart(3, "0")}`;
-
-    const appointment: FittingPrototypeAppointment = {
-      id: appointmentId,
-      customer,
-      startsAt,
-      endsAt,
-      status: "Pending",
-      garments: garments.map((garment, index) => ({
-        id: `${appointmentId}-line-${index + 1}`,
-        productName: garment.productName,
-        variantLabel: garment.variantLabel,
-        guarantee: garment.guarantee,
-      })),
-      feeMinor,
-      currency: "PHP",
-      paymentState: hasFee ? paymentState : "Not required",
-      attention: [
-        ...(hasFee && paymentState === "Pending review" ? (["Payment review"] as const) : []),
-        ...(garments.some((garment) => garment.guarantee === "Preference only")
-          ? (["Preference only"] as const)
-          : []),
-      ],
-    };
-
-    sequenceRef.current += 1;
-    onCreate(appointment);
-    closeAndReset(false);
+    setSubmitError(null);
+    setValidationMessage(null);
+    try {
+      const result = await submitCreate((idempotencyKey) =>
+        createDrezivoApiClient(getToken).createFitting(
+          {
+            customer,
+            starts_at: startsAt,
+            garments: garments.map((garment) => ({
+              variant_id: garment.variantId,
+              garment_mode: garment.garmentMode,
+            })),
+          },
+          idempotencyKey
+        )
+      );
+      if (!result) return;
+      onCreated(result.data.fitting);
+      resetCreateIntent();
+      resetDraft();
+    } catch (error) {
+      setSubmitError(toDrezivoApiError(error));
+    }
   };
 
   return (
     <Sheet
       open={open}
-      onOpenChange={(nextOpen: boolean) => {
+      onOpenChange={(nextOpen) => {
         if (!nextOpen) closeAndReset();
         else onOpenChange(true);
       }}
@@ -259,7 +324,7 @@ export function NewFittingSheet({ open, onCreate, onOpenChange }: NewFittingShee
         <header className="border-b border-dashboard-border px-4 py-5 pr-14 sm:px-6">
           <SheetTitle className="text-lg">New Fitting</SheetTitle>
           <SheetDescription className="mt-1">
-            Local prototype only. Changes are not saved.
+            Create a production fitting using the active branch schedule and fee settings.
           </SheetDescription>
           <div
             className="mt-4 grid grid-cols-3 gap-2"
@@ -288,18 +353,36 @@ export function NewFittingSheet({ open, onCreate, onOpenChange }: NewFittingShee
         </header>
 
         <div className="min-w-0 space-y-6 px-4 pb-6 sm:px-6">
+          {!settings ? (
+            <p
+              role="status"
+              className="rounded-lg bg-dashboard-active px-3 py-2 text-sm text-dashboard-muted"
+            >
+              Loading branch fitting settings…
+            </p>
+          ) : !settings.enabled ? (
+            <p
+              role="alert"
+              className="rounded-lg bg-dashboard-danger/10 px-3 py-2 text-sm text-dashboard-danger"
+            >
+              Fittings are disabled for this branch. Enable them in Schedule &amp; Availability
+              before creating an appointment.
+            </p>
+          ) : null}
+
           {step === 1 ? (
             <StepAppointment
               customerMode={customerMode}
               customerQuery={customerQuery}
-              visibleCustomers={visibleCustomers}
+              customers={customerOptions}
+              customersLoading={customersLoading}
               existingCustomerId={existingCustomerId}
               walkInName={walkInName}
               walkInEmail={walkInEmail}
               walkInPhone={walkInPhone}
               date={date}
               startTime={startTime}
-              durationMinutes={durationMinutes}
+              durationMinutes={settings?.duration_minutes ?? null}
               onCustomerModeChange={setCustomerMode}
               onCustomerQueryChange={setCustomerQuery}
               onExistingCustomerChange={setExistingCustomerId}
@@ -308,32 +391,33 @@ export function NewFittingSheet({ open, onCreate, onOpenChange }: NewFittingShee
               onWalkInPhoneChange={setWalkInPhone}
               onDateChange={setDate}
               onStartTimeChange={setStartTime}
-              onDurationChange={setDurationMinutes}
+              today={today}
             />
           ) : step === 2 ? (
             <StepGarments
               query={garmentQuery}
-              visibleGarments={visibleGarments}
+              products={products}
+              productsLoading={productsLoading}
+              selectedProductId={selectedProductId}
+              productDetail={productDetail}
+              productDetailLoading={productDetailLoading}
               selections={garments}
-              hasFee={hasFee}
-              feePesos={feePesos}
-              paymentState={paymentState}
+              feeMinor={settings?.fee_minor ?? "0"}
+              currency={settings?.currency ?? "PHP"}
               onQueryChange={setGarmentQuery}
-              onToggleGarment={toggleGarment}
-              onGuaranteeChange={setGarmentGuarantee}
-              onHasFeeChange={setHasFee}
-              onFeeChange={setFeePesos}
-              onPaymentStateChange={setPaymentState}
+              onProductSelect={setSelectedProductId}
+              onToggleVariant={toggleVariant}
+              onModeChange={setGarmentMode}
             />
           ) : (
             <StepReview
-              customerName={selectedCustomer?.name ?? walkInName.trim()}
+              customerName={selectedCustomer?.full_name ?? walkInName.trim()}
               date={date}
               startTime={startTime}
-              durationMinutes={durationMinutes}
+              durationMinutes={settings?.duration_minutes ?? 0}
               garments={garments}
-              feeMinor={hasFee ? Math.max(0, Math.round(Number(feePesos || "0") * 100)) : null}
-              paymentState={hasFee ? paymentState : "Not required"}
+              feeMinor={settings?.fee_minor ?? "0"}
+              currency={settings?.currency ?? "PHP"}
             />
           )}
 
@@ -345,6 +429,7 @@ export function NewFittingSheet({ open, onCreate, onOpenChange }: NewFittingShee
               {validationMessage}
             </p>
           ) : null}
+          {submitError ? <ApiErrorNotice error={submitError} /> : null}
 
           <div className="sticky bottom-0 z-10 -mx-4 flex flex-col-reverse gap-2 border-t border-dashboard-border bg-dashboard-surface/95 px-4 pb-4 pt-4 backdrop-blur sm:static sm:-mx-6 sm:flex-row sm:items-center sm:justify-between sm:bg-transparent sm:px-6 sm:pb-0 sm:backdrop-blur-none">
             <Button
@@ -355,6 +440,7 @@ export function NewFittingSheet({ open, onCreate, onOpenChange }: NewFittingShee
                 if (step === 1) closeAndReset();
                 else {
                   setValidationMessage(null);
+                  setSubmitError(null);
                   setStep((current) => Math.max(1, current - 1) as Step);
                 }
               }}
@@ -369,20 +455,24 @@ export function NewFittingSheet({ open, onCreate, onOpenChange }: NewFittingShee
             </Button>
 
             {step < 3 ? (
-              <Button type="button" onClick={goNext} className="w-full sm:w-auto">
-                Continue
-                <ChevronRight className="h-4 w-4" />
+              <Button
+                type="button"
+                onClick={goNext}
+                disabled={!settings?.enabled}
+                className="w-full sm:w-auto"
+              >
+                Continue <ChevronRight className="h-4 w-4" />
               </Button>
             ) : (
               <Button
                 type="button"
-                onClick={createPrototypeAppointment}
+                onClick={() => void submit()}
+                disabled={!settings?.enabled}
                 isPending={isSubmitting}
                 pendingLabel="Creating…"
                 className="w-full sm:w-auto"
               >
-                <Plus className="h-4 w-4" />
-                Create local fitting
+                <Plus className="h-4 w-4" /> Create fitting
               </Button>
             )}
           </div>
@@ -395,7 +485,8 @@ export function NewFittingSheet({ open, onCreate, onOpenChange }: NewFittingShee
 function StepAppointment({
   customerMode,
   customerQuery,
-  visibleCustomers,
+  customers,
+  customersLoading,
   existingCustomerId,
   walkInName,
   walkInEmail,
@@ -411,18 +502,19 @@ function StepAppointment({
   onWalkInPhoneChange,
   onDateChange,
   onStartTimeChange,
-  onDurationChange,
+  today,
 }: {
   customerMode: CustomerMode;
   customerQuery: string;
-  visibleCustomers: readonly (typeof CUSTOMERS)[number][];
+  customers: readonly FittingCustomerOption[];
+  customersLoading: boolean;
   existingCustomerId: string;
   walkInName: string;
   walkInEmail: string;
   walkInPhone: string;
   date: string;
   startTime: string;
-  durationMinutes: FittingPrototypeDuration;
+  durationMinutes: number | null;
   onCustomerModeChange: (value: CustomerMode) => void;
   onCustomerQueryChange: (value: string) => void;
   onExistingCustomerChange: (value: string) => void;
@@ -431,7 +523,7 @@ function StepAppointment({
   onWalkInPhoneChange: (value: string) => void;
   onDateChange: (value: string) => void;
   onStartTimeChange: (value: string) => void;
-  onDurationChange: (value: FittingPrototypeDuration) => void;
+  today: string;
 }) {
   return (
     <section aria-labelledby="new-fitting-appointment-heading">
@@ -489,12 +581,18 @@ function StepAppointment({
             role="radiogroup"
             aria-label="Existing customers"
           >
-            {visibleCustomers.length === 0 ? (
+            {customerQuery.trim().length < 2 ? (
+              <p className="rounded-lg border border-dashed border-dashboard-border px-3 py-4 text-sm text-dashboard-muted">
+                Type at least 2 characters to search existing customers.
+              </p>
+            ) : customersLoading ? (
+              <p className="px-3 py-4 text-sm text-dashboard-muted">Searching customers…</p>
+            ) : customers.length === 0 ? (
               <p className="rounded-lg border border-dashed border-dashboard-border px-3 py-4 text-sm text-dashboard-muted">
                 No customers match this search.
               </p>
             ) : (
-              visibleCustomers.map((customer) => {
+              customers.map((customer) => {
                 const selected = customer.id === existingCustomerId;
                 return (
                   <button
@@ -511,9 +609,11 @@ function StepAppointment({
                     )}
                   >
                     <span className="min-w-0">
-                      <span className="block font-medium text-dashboard-navy">{customer.name}</span>
+                      <span className="block font-medium text-dashboard-navy">
+                        {customer.full_name}
+                      </span>
                       <span className="mt-1 block truncate text-xs text-dashboard-muted">
-                        {customer.email} · {customer.phone}
+                        {[customer.email, customer.phone].filter(Boolean).join(" · ")}
                       </span>
                     </span>
                     {selected ? (
@@ -537,7 +637,7 @@ function StepAppointment({
               placeholder="Full name"
             />
           </Field>
-          <Field label="Email (optional)">
+          <Field label="Email">
             <Input
               type="email"
               value={walkInEmail}
@@ -545,13 +645,18 @@ function StepAppointment({
               placeholder="name@example.test"
             />
           </Field>
-          <Field label="Phone (optional)">
+          <Field label="Phone">
             <Input
+              inputMode="numeric"
               value={walkInPhone}
               onChange={(event) => onWalkInPhoneChange(event.target.value)}
-              placeholder="Contact number"
+              placeholder="09XXXXXXXXX"
+              maxLength={11}
             />
           </Field>
+          <p className="text-xs text-dashboard-muted sm:col-span-2">
+            Full name plus at least one contact method is required.
+          </p>
         </div>
       )}
 
@@ -560,7 +665,7 @@ function StepAppointment({
           <DatePickerField
             ariaLabel="Fitting date"
             value={date}
-            min={FITTING_PROTOTYPE_TODAY}
+            min={today}
             clearable={false}
             onChange={onDateChange}
           />
@@ -572,32 +677,16 @@ function StepAppointment({
             onChange={onStartTimeChange}
           />
         </Field>
-        <Field label="Duration">
-          <div className="relative">
-            <select
-              aria-label="Fitting duration"
-              value={durationMinutes}
-              onChange={(event) =>
-                onDurationChange(Number(event.target.value) as FittingPrototypeDuration)
-              }
-              className="h-10 w-full appearance-none rounded-md border border-dashboard-border bg-dashboard-surface pl-3 pr-10 text-sm text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
-            >
-              {DURATION_OPTIONS.map((minutes) => (
-                <option key={minutes} value={minutes}>
-                  {minutes} minutes
-                </option>
-              ))}
-            </select>
-            <ChevronDown
-              aria-hidden="true"
-              className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-dashboard-muted"
-            />
+        <div className="mt-4">
+          <p className="mb-1.5 text-xs font-medium text-dashboard-muted">Duration</p>
+          <div className="flex h-10 items-center rounded-md border border-dashboard-border bg-dashboard-canvas px-3 text-sm font-medium text-dashboard-navy">
+            {durationMinutes ? `${durationMinutes} minutes` : "Loading…"}
           </div>
-        </Field>
+        </div>
       </div>
-
       <p className="mt-3 text-xs text-dashboard-muted">
-        Local preview only; this screen does not confirm slot availability.
+        Duration is fixed by branch settings. The server checks operating hours, closures, and
+        simultaneous fitting capacity when you create the appointment.
       </p>
     </section>
   );
@@ -605,30 +694,32 @@ function StepAppointment({
 
 function StepGarments({
   query,
-  visibleGarments,
+  products,
+  productsLoading,
+  selectedProductId,
+  productDetail,
+  productDetailLoading,
   selections,
-  hasFee,
-  feePesos,
-  paymentState,
+  feeMinor,
+  currency,
   onQueryChange,
-  onToggleGarment,
-  onGuaranteeChange,
-  onHasFeeChange,
-  onFeeChange,
-  onPaymentStateChange,
+  onProductSelect,
+  onToggleVariant,
+  onModeChange,
 }: {
   query: string;
-  visibleGarments: readonly (typeof GARMENT_OPTIONS)[number][];
+  products: readonly ClothingListItem[];
+  productsLoading: boolean;
+  selectedProductId: string | null;
+  productDetail: ClothingDetail | null;
+  productDetailLoading: boolean;
   selections: readonly GarmentSelection[];
-  hasFee: boolean;
-  feePesos: string;
-  paymentState: FittingPrototypePaymentState;
+  feeMinor: string;
+  currency: string;
   onQueryChange: (value: string) => void;
-  onToggleGarment: (option: (typeof GARMENT_OPTIONS)[number]) => void;
-  onGuaranteeChange: (key: string, value: FittingPrototypeGarment["guarantee"]) => void;
-  onHasFeeChange: (value: boolean) => void;
-  onFeeChange: (value: string) => void;
-  onPaymentStateChange: (value: FittingPrototypePaymentState) => void;
+  onProductSelect: (productId: string | null) => void;
+  onToggleVariant: (variantId: ProductVariantId, productName: string, variantLabel: string) => void;
+  onModeChange: (variantId: ProductVariantId, mode: FittingGarmentMode) => void;
 }) {
   return (
     <div className="space-y-6">
@@ -637,7 +728,7 @@ function StepGarments({
           Garments
         </h3>
         <p className="mt-1 text-xs text-dashboard-muted">
-          Add the garments the customer wants to try.
+          Choose the variants the customer wants to try.
         </p>
 
         <label className="relative mt-4 block">
@@ -654,136 +745,161 @@ function StepGarments({
           />
         </label>
 
-        <div className="mt-3 space-y-2">
-          {visibleGarments.map((option) => {
-            const selected = selections.find((garment) => garment.key === option.key);
-            return (
-              <div key={option.key} className="rounded-lg border border-dashboard-border p-3">
-                <div className="flex items-start gap-3">
-                  <button
-                    type="button"
-                    aria-pressed={Boolean(selected)}
-                    aria-label={`${selected ? "Remove" : "Add"} ${option.productName}`}
-                    onClick={() => onToggleGarment(option)}
-                    className={cn(
-                      "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30",
-                      selected
-                        ? "border-dashboard-accent bg-dashboard-active text-dashboard-accent"
-                        : "border-dashboard-border text-dashboard-muted"
-                    )}
-                  >
-                    {selected ? (
-                      <Check className="h-4 w-4" aria-hidden="true" />
-                    ) : (
-                      <Plus className="h-4 w-4" aria-hidden="true" />
-                    )}
-                  </button>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start gap-2">
-                      <Shirt
-                        className="mt-0.5 h-4 w-4 shrink-0 text-dashboard-accent"
-                        aria-hidden="true"
-                      />
-                      <div className="min-w-0">
-                        <p className="font-medium text-dashboard-navy">{option.productName}</p>
-                        <p className="mt-1 text-xs text-dashboard-muted">{option.variantLabel}</p>
-                      </div>
-                    </div>
-                    {selected ? (
-                      <div className="mt-3">
-                        <label
-                          className="text-xs font-medium text-dashboard-muted"
-                          htmlFor={`guarantee-${option.key}`}
-                        >
-                          Garment intent
-                        </label>
-                        <div className="relative mt-1">
-                          <select
-                            id={`guarantee-${option.key}`}
-                            value={selected.guarantee}
-                            onChange={(event) =>
-                              onGuaranteeChange(
-                                option.key,
-                                event.target.value as FittingPrototypeGarment["guarantee"]
-                              )
-                            }
-                            className="h-9 w-full appearance-none rounded-md border border-dashboard-border bg-dashboard-surface pl-3 pr-10 text-sm text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {productsLoading ? (
+            <p className="text-sm text-dashboard-muted">Loading garments…</p>
+          ) : products.length === 0 ? (
+            <p className="text-sm text-dashboard-muted">No active garments match this search.</p>
+          ) : (
+            products.map((product) => (
+              <button
+                key={product.product_id}
+                type="button"
+                aria-pressed={selectedProductId === product.product_id}
+                onClick={() =>
+                  onProductSelect(
+                    selectedProductId === product.product_id ? null : product.product_id
+                  )
+                }
+                className={cn(
+                  "rounded-lg border px-3 py-3 text-left transition-colors",
+                  selectedProductId === product.product_id
+                    ? "border-dashboard-accent bg-dashboard-active"
+                    : "border-dashboard-border bg-dashboard-surface hover:bg-dashboard-canvas"
+                )}
+              >
+                <span className="flex items-start gap-2">
+                  <Shirt
+                    className="mt-0.5 h-4 w-4 shrink-0 text-dashboard-accent"
+                    aria-hidden="true"
+                  />
+                  <span>
+                    <span className="block font-medium text-dashboard-navy">{product.name}</span>
+                    <span className="mt-1 block text-xs text-dashboard-muted">
+                      {product.size_labels.join(", ") || "Variants available"}
+                    </span>
+                  </span>
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+
+        {selectedProductId ? (
+          <div className="mt-4 rounded-lg border border-dashboard-border p-3">
+            {productDetailLoading ? (
+              <p className="text-sm text-dashboard-muted">Loading variants…</p>
+            ) : productDetail ? (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-dashboard-muted">
+                  Choose variants
+                </p>
+                {productDetail.variants
+                  .filter((variant) => variant.status === "active")
+                  .map((variant) => {
+                    const selected = selections.find(
+                      (selection) => selection.variantId === variant.id
+                    );
+                    const label = [variant.size_label, variant.color_label]
+                      .filter(Boolean)
+                      .join(" / ");
+                    return (
+                      <div
+                        key={variant.id}
+                        className="rounded-lg border border-dashboard-border p-3"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-medium text-dashboard-navy">{label}</p>
+                            <p className="mt-1 text-xs text-dashboard-muted">SKU {variant.sku}</p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant={selected ? "secondary" : "default"}
+                            size="sm"
+                            onClick={() => onToggleVariant(variant.id, productDetail.name, label)}
                           >
-                            <option value="Preference only">Preference only</option>
-                            <option value="Guaranteed intent">Guaranteed intent</option>
-                          </select>
-                          <ChevronDown
-                            aria-hidden="true"
-                            className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-dashboard-muted"
-                          />
+                            {selected ? "Remove" : "Add"}
+                          </Button>
                         </div>
-                        {selected.guarantee === "Guaranteed intent" ? (
-                          <p className="mt-1 text-xs text-dashboard-muted">
-                            Intent only; availability must be confirmed before the garment is
-                            guaranteed.
-                          </p>
+                        {selected ? (
+                          <div
+                            className="mt-3 grid grid-cols-2 gap-2"
+                            role="group"
+                            aria-label={`Garment mode for ${productDetail.name} ${label}`}
+                          >
+                            {(["preference", "guaranteed"] as const).map((mode) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                aria-pressed={selected.garmentMode === mode}
+                                onClick={() => onModeChange(variant.id, mode)}
+                                className={cn(
+                                  "rounded-md border px-3 py-2 text-xs font-medium",
+                                  selected.garmentMode === mode
+                                    ? "border-dashboard-accent bg-dashboard-active text-dashboard-accent"
+                                    : "border-dashboard-border text-dashboard-muted"
+                                )}
+                              >
+                                {mode === "preference" ? "Preference only" : "Guarantee garment"}
+                              </button>
+                            ))}
+                          </div>
                         ) : null}
                       </div>
-                    ) : null}
-                  </div>
-                </div>
+                    );
+                  })}
               </div>
-            );
-          })}
-        </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {selections.length > 0 ? (
+          <div className="mt-4 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-dashboard-muted">
+              Selected garments
+            </p>
+            {selections.map((garment) => (
+              <div
+                key={garment.key}
+                className="flex items-center justify-between gap-3 rounded-lg bg-dashboard-canvas px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-dashboard-navy">
+                    {garment.productName}
+                  </p>
+                  <p className="text-xs text-dashboard-muted">{garment.variantLabel}</p>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={
+                    garment.garmentMode === "guaranteed"
+                      ? "reservation-status-confirmed"
+                      : "dashboard-event-fitting"
+                  }
+                >
+                  {fittingGarmentModeLabel(garment.garmentMode)}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section aria-labelledby="new-fitting-fee-heading">
         <h3 id="new-fitting-fee-heading" className="text-sm font-semibold text-dashboard-navy">
-          Fee & payment
+          Fee &amp; payment
         </h3>
-        <p className="mt-1 text-xs text-dashboard-muted">Optional for this fitting.</p>
-
-        <label className="mt-4 flex items-center gap-2 text-sm text-dashboard-navy">
-          <input
-            type="checkbox"
-            checked={hasFee}
-            onChange={(event) => onHasFeeChange(event.target.checked)}
-            className="h-4 w-4 rounded border-dashboard-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
-          />
-          This fitting has a fee
-        </label>
-
-        {hasFee ? (
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <Field label="Fitting fee (PHP)">
-              <Input
-                type="number"
-                min="0"
-                step="1"
-                value={feePesos}
-                onChange={(event) => onFeeChange(event.target.value)}
-              />
-            </Field>
-            <Field label="Payment state">
-              <div className="relative">
-                <select
-                  aria-label="Payment state"
-                  value={paymentState}
-                  onChange={(event) =>
-                    onPaymentStateChange(event.target.value as FittingPrototypePaymentState)
-                  }
-                  className="h-10 w-full appearance-none rounded-md border border-dashboard-border bg-dashboard-surface pl-3 pr-10 text-sm text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30"
-                >
-                  {PAYMENT_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  aria-hidden="true"
-                  className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-dashboard-muted"
-                />
-              </div>
-            </Field>
-          </div>
-        ) : null}
+        <div className="mt-3 rounded-lg border border-dashboard-border p-4">
+          <p className="text-xs text-dashboard-muted">Branch fitting fee</p>
+          <p className="mt-1 font-semibold text-dashboard-navy">
+            {BigInt(feeMinor) === 0n ? "No fitting fee" : formatFittingMoney(feeMinor, currency)}
+          </p>
+          <p className="mt-2 text-xs text-dashboard-muted">
+            The fee is fixed by branch settings and snapshotted when the fitting is created. Payment
+            is handled separately after creation.
+          </p>
+        </div>
       </section>
     </div>
   );
@@ -796,30 +912,33 @@ function StepReview({
   durationMinutes,
   garments,
   feeMinor,
-  paymentState,
+  currency,
 }: {
   customerName: string;
   date: string;
   startTime: string;
   durationMinutes: number;
   garments: readonly GarmentSelection[];
-  feeMinor: number | null;
-  paymentState: FittingPrototypePaymentState;
+  feeMinor: string;
+  currency: string;
 }) {
   return (
     <section aria-labelledby="new-fitting-review-heading">
       <h3 id="new-fitting-review-heading" className="text-sm font-semibold text-dashboard-navy">
         Review
       </h3>
-      <p className="mt-1 text-xs text-dashboard-muted">Review this fitting before adding it.</p>
-
+      <p className="mt-1 text-xs text-dashboard-muted">
+        Review the production fitting before creating it.
+      </p>
       <div className="mt-4 grid gap-3 rounded-lg border border-dashboard-border p-4 sm:grid-cols-2">
         <ReviewItem label="Customer" value={customerName} />
         <ReviewItem label="Appointment" value={`${date} · ${startTime} · ${durationMinutes} min`} />
-        <ReviewItem label="Fee" value={feeMinor === null ? "No fee" : formatPhpMoney(feeMinor)} />
-        <ReviewItem label="Payment" value={paymentState} />
+        <ReviewItem
+          label="Fee"
+          value={BigInt(feeMinor) === 0n ? "No fee" : formatFittingMoney(feeMinor, currency)}
+        />
+        <ReviewItem label="Initial status" value="Pending" />
       </div>
-
       <div className="mt-4 space-y-2">
         {garments.map((garment) => (
           <div
@@ -833,21 +952,33 @@ function StepReview({
             <Badge
               variant="outline"
               className={
-                garment.guarantee === "Guaranteed intent"
+                garment.garmentMode === "guaranteed"
                   ? "reservation-status-confirmed"
                   : "dashboard-event-fitting"
               }
             >
-              {fittingGarmentIntentLabel(garment.guarantee)}
+              {fittingGarmentModeLabel(garment.garmentMode)}
             </Badge>
           </div>
         ))}
       </div>
-
       <p className="mt-4 rounded-lg bg-dashboard-active px-3 py-2 text-xs text-dashboard-muted">
-        Local only. Refreshing the page removes this fitting.
+        Guaranteed garments are requested by variant only. The server selects and claims an eligible
+        physical asset atomically; hidden fitting-capacity slots are never exposed to the browser.
       </p>
     </section>
+  );
+}
+
+function ApiErrorNotice({ error }: { error: DrezivoApiError }) {
+  return (
+    <div
+      role="alert"
+      className="rounded-lg bg-dashboard-danger/10 px-3 py-2 text-sm text-dashboard-danger"
+    >
+      <p>{error.message}</p>
+      {error.requestId ? <p className="mt-1 text-xs">Request ID: {error.requestId}</p> : null}
+    </div>
   );
 }
 
@@ -877,30 +1008,62 @@ function ReviewItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-function addMinutesToIso(value: string, minutes: number): string {
-  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):00\+08:00$/.exec(value);
-  if (!match) return value;
-
-  const totalMinutes = Number(match[2]) * 60 + Number(match[3]) + minutes;
-  const hours = Math.floor(totalMinutes / 60) % 24;
-  const dayOffset = Math.floor(totalMinutes / (24 * 60));
-  const baseDate = new Date(`${match[1]}T00:00:00+08:00`);
-  baseDate.setUTCDate(baseDate.getUTCDate() + dayOffset);
-  const datePart = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Manila",
+function todayInTimeZone(timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(baseDate);
-
-  return `${datePart}T${String(hours).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}:00+08:00`;
+    timeZone,
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values["year"]}-${values["month"]}-${values["day"]}`;
 }
 
-function formatPhpMoney(minor: number): string {
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(minor / 100);
+function zonedDateTimeToIso(dateValue: string, timeValue: string, timeZone: string): string | null {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateValue);
+  const timeMatch = /^(\d{2}):(\d{2})$/.exec(timeValue);
+  if (!dateMatch || !timeMatch) return null;
+  const year = Number(dateMatch[1]);
+  const month = Number(dateMatch[2]);
+  const day = Number(dateMatch[3]);
+  const hour = Number(timeMatch[1]);
+  const minute = Number(timeMatch[2]);
+  const wallTimeUtc = Date.UTC(year, month - 1, day, hour, minute, 0);
+  let instant = new Date(wallTimeUtc);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    instant = new Date(wallTimeUtc - timeZoneOffsetMs(instant, timeZone));
+  }
+  return Number.isNaN(instant.getTime()) ? null : instant.toISOString();
+}
+
+function timeZoneOffsetMs(instant: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+    minute: "2-digit",
+    month: "2-digit",
+    second: "2-digit",
+    timeZone,
+    year: "numeric",
+  }).formatToParts(instant);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return (
+    Date.UTC(
+      Number(values["year"]),
+      Number(values["month"]) - 1,
+      Number(values["day"]),
+      Number(values["hour"]),
+      Number(values["minute"]),
+      Number(values["second"])
+    ) - instant.getTime()
+  );
+}
+
+function toDrezivoApiError(error: unknown): DrezivoApiError {
+  return error instanceof DrezivoApiError
+    ? error
+    : new DrezivoApiError("The fitting request could not be completed. Please try again.", {
+        status: 500,
+      });
 }

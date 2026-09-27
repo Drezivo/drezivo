@@ -80,6 +80,21 @@ import {
   updatePhysicalAssetStateRequest,
   updatePhysicalAssetStateResponse,
   workspaceList,
+  dashboardFittingSummaryResponse,
+  fittingActionResponse,
+  fittingCancelRequest,
+  fittingCompleteRequest,
+  fittingConfirmRequest,
+  fittingCreateRequest,
+  fittingCreateResponse,
+  fittingDetail,
+  fittingIntakeQuery,
+  fittingIntakeResponse,
+  fittingListQuery,
+  fittingListResponse,
+  fittingNoShowRequest,
+  fittingRejectRequest,
+  fittingSettings,
   type AbandonOwnerOnboardingRequest,
   type ActorContext,
   type BootstrapTenantRequest,
@@ -158,6 +173,21 @@ import {
   type UpdatePhysicalAssetStateRequest,
   type UpdatePhysicalAssetStateResponse,
   type WorkspaceList,
+  type DashboardFittingSummaryResponse,
+  type FittingActionResponse,
+  type FittingCancelRequest,
+  type FittingCompleteRequest,
+  type FittingConfirmRequest,
+  type FittingCreateRequest,
+  type FittingCreateResponse,
+  type FittingDetail,
+  type FittingIntakeQuery,
+  type FittingIntakeResponse,
+  type FittingListQuery,
+  type FittingListResponse,
+  type FittingNoShowRequest,
+  type FittingRejectRequest,
+  type FittingSettings,
 } from "@drezivo/contracts";
 
 type TokenGetter = () => Promise<string | null>;
@@ -275,6 +305,111 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         path: `/api/v1/payment-methods/${encodeURIComponent(paymentMethodId)}`,
         responseSchema: apiEnvelope(paymentMethodSettingsItem),
       }),
+    getFittings: (input: FittingListQuery) => {
+      const query = fittingListQuery.parse(input);
+      const searchParams = new URLSearchParams();
+      if (query.cursor) searchParams.set("cursor", query.cursor);
+      searchParams.set("limit", String(query.limit));
+      if (query.search) searchParams.set("search", query.search);
+      if (query.status) searchParams.set("status", query.status);
+      if (query.period_start) searchParams.set("period_start", query.period_start);
+      if (query.period_end) searchParams.set("period_end", query.period_end);
+      searchParams.set("sort", query.sort);
+
+      return request<FittingListResponse>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/fittings?${searchParams.toString()}`,
+        responseSchema: apiEnvelope(fittingListResponse),
+      });
+    },
+    getFittingDetail: (fittingId: string) =>
+      request<FittingDetail>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/fittings/${encodeURIComponent(fittingId)}`,
+        responseSchema: apiEnvelope(fittingDetail),
+      }),
+    getFittingIntakeOptions: (input: FittingIntakeQuery) => {
+      const query = fittingIntakeQuery.parse(input);
+      const searchParams = new URLSearchParams();
+      if (query.customer_search) searchParams.set("customer_search", query.customer_search);
+      const suffix = searchParams.toString();
+      return request<FittingIntakeResponse>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/fittings/intake-options${suffix ? `?${suffix}` : ""}`,
+        responseSchema: apiEnvelope(fittingIntakeResponse),
+      });
+    },
+    getFittingSettings: () =>
+      request<FittingSettings>({
+        getToken,
+        method: "GET",
+        path: "/api/v1/fittings/settings",
+        responseSchema: apiEnvelope(fittingSettings),
+      }),
+    getFittingDashboardSummary: () =>
+      request<DashboardFittingSummaryResponse>({
+        getToken,
+        method: "GET",
+        path: "/api/v1/dashboard/fittings-summary",
+        responseSchema: apiEnvelope(dashboardFittingSummaryResponse),
+      }),
+    createFitting: (input: FittingCreateRequest, idempotencyKey: string) =>
+      request<FittingCreateResponse>({
+        getToken,
+        body: fittingCreateRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/fittings",
+        responseSchema: apiEnvelope(fittingCreateResponse),
+      }),
+    confirmFitting: (fittingId: string, input: FittingConfirmRequest, idempotencyKey: string) =>
+      request<FittingActionResponse>({
+        getToken,
+        body: fittingConfirmRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/fittings/${encodeURIComponent(fittingId)}/confirm`,
+        responseSchema: apiEnvelope(fittingActionResponse),
+      }),
+    rejectFitting: (fittingId: string, input: FittingRejectRequest, idempotencyKey: string) =>
+      request<FittingActionResponse>({
+        getToken,
+        body: fittingRejectRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/fittings/${encodeURIComponent(fittingId)}/reject`,
+        responseSchema: apiEnvelope(fittingActionResponse),
+      }),
+    cancelFitting: (fittingId: string, input: FittingCancelRequest, idempotencyKey: string) =>
+      request<FittingActionResponse>({
+        getToken,
+        body: fittingCancelRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/fittings/${encodeURIComponent(fittingId)}/cancel`,
+        responseSchema: apiEnvelope(fittingActionResponse),
+      }),
+    completeFitting: (fittingId: string, input: FittingCompleteRequest, idempotencyKey: string) =>
+      request<FittingActionResponse>({
+        getToken,
+        body: fittingCompleteRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/fittings/${encodeURIComponent(fittingId)}/complete`,
+        responseSchema: apiEnvelope(fittingActionResponse),
+      }),
+    markFittingNoShow: (fittingId: string, input: FittingNoShowRequest, idempotencyKey: string) =>
+      request<FittingActionResponse>({
+        getToken,
+        body: fittingNoShowRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/fittings/${encodeURIComponent(fittingId)}/no-show`,
+        responseSchema: apiEnvelope(fittingActionResponse),
+      }),
     getReservations: (input: ReservationListQuery) => {
       const query = reservationListQuery.parse(input);
       const searchParams = new URLSearchParams();
@@ -312,9 +447,7 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         responseSchema: apiEnvelope(staffReservationIntakeResponse),
       });
     },
-    getStaffReservationAvailabilityCalendar: (
-      input: StaffReservationAvailabilityCalendarQuery
-    ) => {
+    getStaffReservationAvailabilityCalendar: (input: StaffReservationAvailabilityCalendarQuery) => {
       const query = staffReservationAvailabilityCalendarQuery.parse(input);
       const searchParams = new URLSearchParams({
         variant_id: query.variant_id,
@@ -342,10 +475,7 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         responseSchema: apiEnvelope(staffReservationAvailabilityCheckResponse),
       });
     },
-    createStaffReservation: (
-      input: StaffReservationCreateRequest,
-      idempotencyKey: string
-    ) =>
+    createStaffReservation: (input: StaffReservationCreateRequest, idempotencyKey: string) =>
       request<StaffReservationCreateResponse>({
         getToken,
         body: staffReservationCreateRequest.parse(input),
