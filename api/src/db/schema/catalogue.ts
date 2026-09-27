@@ -92,7 +92,6 @@ export const product = pgTable(
     index('product_tenant_name_sort_idx').on(table.tenantId, sql`lower(${table.name})`, table.id),
     index('product_tenant_code_sort_idx').on(table.tenantId, sql`lower(${table.code})`, table.id),
     index('product_tenant_created_sort_idx').on(table.tenantId, table.createdAt, table.id),
-    index('product_tenant_sizing_mode_idx').on(table.tenantId, table.sizingMode, table.id),
     uniqueIndex('product_tenant_code_ci_key').on(table.tenantId, sql`lower(${table.code})`),
     foreignKey({
       columns: [table.tenantId, table.categoryId],
