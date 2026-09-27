@@ -88,11 +88,19 @@ describe('TBF-040 membership invitations', async () => {
     });
     const firstId = String((first.body.data as { id: string }).id);
 
-    const overCap = await createMembershipInvitation({
+    const second = await createMembershipInvitation({
       ...context,
       requestId: 'req-tbf040-capacity-2',
       idempotencyKey: 'capacity-2',
       request: { email: 'two@example.com' },
+    });
+    expect(second.status).toBe(200);
+
+    const overCap = await createMembershipInvitation({
+      ...context,
+      requestId: 'req-tbf040-capacity-3',
+      idempotencyKey: 'capacity-3',
+      request: { email: 'three@example.com' },
     });
     expect(overCap.status).toBe(409);
     expect(overCap.body).toMatchObject({ success: false, error: { code: 'CAPACITY_CONFLICT' } });
@@ -122,7 +130,7 @@ describe('TBF-040 membership invitations', async () => {
         [context.tenantId, firstId],
       ),
     );
-    expect(rows.rows[0]).toEqual({ count: 1, dispatch_version: 2, outbox_count: 3 });
+    expect(rows.rows[0]).toEqual({ count: 2, dispatch_version: 2, outbox_count: 4 });
   });
 
   it('replays the exact idempotent response and rejects a changed payload', async () => {
