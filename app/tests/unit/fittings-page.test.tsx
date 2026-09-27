@@ -29,6 +29,7 @@ const api = vi.hoisted(() => ({
   getFittings: vi.fn(),
   markFittingNoShow: vi.fn(),
   rejectFitting: vi.fn(),
+  rescheduleFitting: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({ useAuth: clerk.useAuth }));
@@ -115,6 +116,15 @@ const confirmedDetail = fittingDetail.parse({
   allowed_actions: ["cancel", "reschedule", "update_garments", "update_note"],
 });
 
+const rescheduledDetail = fittingDetail.parse({
+  ...detail,
+  period: {
+    start: "2026-10-05T03:00:00.000Z",
+    end: "2026-10-05T04:00:00.000Z",
+  },
+  version: 2,
+});
+
 const settings = fittingSettings.parse({
   branch_id: branchId,
   enabled: true,
@@ -162,6 +172,10 @@ function installDefaults() {
   api.confirmFitting.mockResolvedValue({
     data: { fitting: confirmedDetail },
     requestId: "request-confirm",
+  });
+  api.rescheduleFitting.mockResolvedValue({
+    data: { fitting: rescheduledDetail },
+    requestId: "request-reschedule",
   });
 }
 
@@ -251,6 +265,39 @@ describe("FittingsPage production cutover", () => {
     );
     expect(api.confirmFitting).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(within(dialog).getAllByText("Confirmed").length).toBeGreaterThan(0));
+    expect(api.getFittings.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it("reschedules from the detail sheet and sends one guarded mutation for a double submit", async () => {
+    render(<FittingsPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Open fitting for Real Fitting Customer/ })
+    );
+    const dialog = await screen.findByRole("dialog");
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Reschedule" }));
+    expect(within(dialog).getByText("Reschedule fitting")).toBeVisible();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Reschedule fitting start time" }));
+    fireEvent.change(
+      within(dialog).getByRole("combobox", { name: "Reschedule fitting start time hour" }),
+      { target: { value: "11" } }
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Set time" }));
+
+    const saveButton = within(dialog).getByRole("button", { name: "Save new time" });
+    fireEvent.click(saveButton);
+    fireEvent.click(saveButton);
+
+    await waitFor(() =>
+      expect(api.rescheduleFitting).toHaveBeenCalledWith(
+        fittingId,
+        { version: 1, starts_at: "2026-10-05T03:00:00.000Z" },
+        expect.any(String)
+      )
+    );
+    expect(api.rescheduleFitting).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(within(dialog).getByText("11:00 AM–12:00 PM")).toBeVisible());
     expect(api.getFittings.mock.calls.length).toBeGreaterThan(1);
   });
 

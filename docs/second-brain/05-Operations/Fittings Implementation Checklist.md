@@ -1152,13 +1152,13 @@ The fitting frontend prototype is complete when:
   - **Implementation evidence:** `app/src/lib/drezivo-api.ts` now exposes contract-validated fitting list/detail/intake/settings/create/lifecycle calls; `fittings-page.tsx` reads the bounded server list, authoritative detail, dashboard fitting summary, and lifecycle command responses; `new-fitting-sheet.tsx` searches real customers/catalogue variants, reads strict duration/fee/timezone from persisted branch settings, requires walk-in full name plus phone/email, and submits only canonical `preference|guaranteed` garment requests. Physical capacity-slot identities are never rendered. Both New Fitting and lifecycle mutations use `useSubmitGuard` so duplicate dispatch is blocked and retry of one intent reuses its idempotency key.
   - **Validation evidence:** fitting API-client tests pass 3/3; strict focused production-source TypeScript validation passes after correcting the shared dropdown checkbox wrapper so optional `checked` is not forwarded as explicit `undefined`; Prettier passes on the changed fitting components/tests, shared dropdown wrapper, and API client with its existing CRLF convention respected; `git diff --check` passes. API-backed component suites were added for list/filter/cursor/detail/lifecycle/create/walk-in/guarantee/double-dispatch behavior, but the isolated worktree has no installed dependencies and the borrowed main-checkout `@testing-library/react` install is missing its lockfile-declared `@testing-library/dom` peer, so those suites cannot start. A borrowed-dependency Next build also fails inside Next's own relative module resolution, so no production build claim is made. Required real-browser Playwright verification is likewise still outstanding. Keep the top-level item open until those UI verification gates are green in a complete install.
 
-- [ ] **FIT-BE-101 — Wire `/fittings/schedule` to persisted settings**
+- [x] **FIT-BE-101 — Wire `/fittings/schedule` to persisted settings**
   - **Acceptance:**
-    - [ ] Add simple branch-level controls for fittings enabled, maximum simultaneous fittings, strict duration, and optional fixed fee without exposing hidden slot/resource identities.
-    - [ ] Weekly windows and date-specific closures load/save through backend contracts; recurring breaks are represented by split windows.
-    - [ ] Remove session-storage duration and local-only fee/schedule state as production authority.
-    - [ ] Surface server rejection when a settings change would invalidate existing future fittings.
-    - [ ] Do not reintroduce the removed weekly availability section.
+    - [x] Add simple branch-level controls for fittings enabled, maximum simultaneous fittings, strict duration, and optional fixed fee without exposing hidden slot/resource identities.
+    - [x] Weekly windows and date-specific closures load/save through backend contracts; recurring breaks are represented by split windows.
+    - [x] Remove session-storage duration and local-only fee/schedule state as production authority.
+    - [x] Surface server rejection when a settings change would invalidate existing future fittings.
+    - [x] Do not reintroduce the removed weekly availability section.
 
 - [ ] **FIT-BE-102 — Replace fitting prototype data in Calendar/Dashboard/Availability/Payments**
   - **Acceptance:**

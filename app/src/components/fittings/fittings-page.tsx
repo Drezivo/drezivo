@@ -58,6 +58,7 @@ import {
   formatFittingTimeRange,
 } from "./fittings-presentation";
 import { NewFittingSheet } from "./new-fitting-sheet";
+import { RescheduleFittingForm } from "./reschedule-fitting-form";
 
 type FittingDateFilter = "all" | "today" | "upcoming";
 
@@ -813,6 +814,7 @@ function FittingDetailsSheet({
   timeZone: string;
 }) {
   const [confirmationAction, setConfirmationAction] = useState<FittingAction | null>(null);
+  const [isRescheduling, setIsRescheduling] = useState(false);
   const [reason, setReason] = useState("");
   const [actionError, setActionError] = useState<DrezivoApiError | null>(null);
   const {
@@ -823,6 +825,7 @@ function FittingDetailsSheet({
 
   useEffect(() => {
     setConfirmationAction(null);
+    setIsRescheduling(false);
     setReason("");
     setActionError(null);
     resetActionIntent();
@@ -830,6 +833,7 @@ function FittingDetailsSheet({
 
   const applyAction = async (action: FittingAction) => {
     if (!fitting) return;
+    if (action === "reschedule" || action === "update_garments" || action === "update_note") return;
     if ((action === "reject" || action === "cancel") && !reason.trim()) {
       setActionError(
         new DrezivoApiError("Enter a reason before applying this change.", { status: 422 })
@@ -1021,31 +1025,51 @@ function FittingDetailsSheet({
 
               <section aria-labelledby="fitting-actions-heading">
                 <SectionHeading id="fitting-actions-heading">Actions</SectionHeading>
-                <ProductionActions
-                  actions={fitting.allowed_actions}
-                  confirmationAction={confirmationAction}
-                  isApplying={isApplying}
-                  reason={reason}
-                  error={actionError}
-                  onAction={(action, destructive) => {
-                    setActionError(null);
-                    if (destructive) {
-                      setConfirmationAction(action);
-                      return;
-                    }
-                    void applyAction(action);
-                  }}
-                  onReasonChange={setReason}
-                  onConfirm={() => {
-                    if (confirmationAction) void applyAction(confirmationAction);
-                  }}
-                  onCancelConfirmation={() => {
-                    setConfirmationAction(null);
-                    setReason("");
-                    setActionError(null);
-                    resetActionIntent();
-                  }}
-                />
+                {isRescheduling ? (
+                  <RescheduleFittingForm
+                    fitting={fitting}
+                    getToken={getToken}
+                    timeZone={timeZone}
+                    onCancel={() => setIsRescheduling(false)}
+                    onRescheduled={(updatedFitting) => {
+                      setIsRescheduling(false);
+                      onChanged(updatedFitting);
+                    }}
+                  />
+                ) : (
+                  <ProductionActions
+                    actions={fitting.allowed_actions}
+                    confirmationAction={confirmationAction}
+                    isApplying={isApplying}
+                    reason={reason}
+                    error={actionError}
+                    onAction={(action, destructive) => {
+                      setActionError(null);
+                      if (action === "reschedule") {
+                        setConfirmationAction(null);
+                        setReason("");
+                        setIsRescheduling(true);
+                        resetActionIntent();
+                        return;
+                      }
+                      if (destructive) {
+                        setConfirmationAction(action);
+                        return;
+                      }
+                      void applyAction(action);
+                    }}
+                    onReasonChange={setReason}
+                    onConfirm={() => {
+                      if (confirmationAction) void applyAction(confirmationAction);
+                    }}
+                    onCancelConfirmation={() => {
+                      setConfirmationAction(null);
+                      setReason("");
+                      setActionError(null);
+                      resetActionIntent();
+                    }}
+                  />
+                )}
               </section>
             </div>
           </>
@@ -1083,7 +1107,18 @@ function ProductionActions({
       destructive: false,
       icon: CheckCircle2,
     },
-    { action: "complete" as const, label: "Complete", destructive: false, icon: CheckCircle2 },
+    {
+      action: "reschedule" as const,
+      label: "Reschedule",
+      destructive: false,
+      icon: CalendarClock,
+    },
+    {
+      action: "complete" as const,
+      label: "Complete fitting",
+      destructive: false,
+      icon: CheckCircle2,
+    },
     { action: "reject" as const, label: "Reject", destructive: true, icon: XCircle },
     {
       action: "mark_no_show" as const,

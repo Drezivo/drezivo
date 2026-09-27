@@ -25,6 +25,7 @@ export function TimePickerField({
   disabled = false,
   min,
   className,
+  popoverAlign = "start",
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -33,6 +34,7 @@ export function TimePickerField({
   disabled?: boolean;
   min?: string;
   className?: string;
+  popoverAlign?: "start" | "end";
 }) {
   const parsedValue = useMemo(() => parseTime(value), [value]);
   const [open, setOpen] = useState(false);
@@ -84,7 +86,12 @@ export function TimePickerField({
       </button>
 
       {open ? (
-        <div className="absolute left-0 top-[calc(100%+0.5rem)] z-50 w-full min-w-[18rem] rounded-lg border border-dashboard-border bg-dashboard-surface p-3 shadow-xl">
+        <div
+          className={cn(
+            "absolute top-[calc(100%+0.5rem)] z-50 w-[18rem] max-w-[calc(100vw-2rem)] rounded-lg border border-dashboard-border bg-dashboard-surface p-3 shadow-xl",
+            popoverAlign === "end" ? "right-0" : "left-0"
+          )}
+        >
           <p className="mb-3 text-xs font-medium text-dashboard-muted">Choose time</p>
           <div className="grid grid-cols-[1fr_auto_1fr_1fr] items-center gap-2">
             <TimeSelect
