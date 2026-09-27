@@ -495,7 +495,7 @@ export async function readClothingDetailModel(
         AND f.lifecycle_status = 'accepted'
         AND f.frozen_at IS NOT NULL
       ORDER BY pi.display_order ASC, pi.file_id ASC
-      LIMIT 10`,
+      LIMIT 5`,
     [input.tenantId, input.productId],
   );
 

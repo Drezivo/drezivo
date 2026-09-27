@@ -18,6 +18,8 @@ import { z } from 'zod';
 import {
   availabilityQuery,
   availabilityResult,
+  clothingDetail,
+  clothingImageFileIds,
   catalogueItem,
   catalogueQuery,
   centralPaymentsQuery,
@@ -29,6 +31,7 @@ import {
   closeTenantRequest,
   contractVersion,
   createMembershipInvitationRequest,
+  createClothingRequest,
   createOwnerOnboardingRequest,
   membershipInvitation,
   membershipInvitationList,
@@ -102,6 +105,8 @@ import {
   publicStorefront,
   refundCreateRequest,
   refundCreateResponse,
+  replaceClothingImagesRequest,
+  replaceClothingImagesResponse,
   reservationCancelRequest,
   reservationCancelResponse,
   reservationConfirmRequest,
@@ -179,6 +184,11 @@ registry.register('UpdatePaymentMethodSettingsRequest', updatePaymentMethodSetti
 registry.register('VerifyOnboardingPaymentRequest', verifyOnboardingPaymentRequest);
 registry.register('CloseTenantRequest', closeTenantRequest);
 registry.register('TransferOwnershipRequest', transferOwnershipRequest);
+registry.register('ClothingImageFileIds', clothingImageFileIds);
+registry.register('CreateClothingRequest', createClothingRequest);
+registry.register('ReplaceClothingImagesRequest', replaceClothingImagesRequest);
+registry.register('ReplaceClothingImagesResponse', replaceClothingImagesResponse);
+registry.register('ClothingDetail', clothingDetail);
 
 const jsonError = (description: string) => ({
   description,

@@ -29,6 +29,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
+  MAX_CLOTHING_PHOTOS,
   createClothingRequest,
   type CatalogueCategory,
   type CreateClothingRequest,
@@ -504,9 +505,9 @@ export function AddClothingPage() {
     if (!files || files.length === 0) return;
     setFormError(null);
     const incoming = Array.from(files);
-    const availableSlots = Math.max(0, 10 - photos.length);
+    const availableSlots = Math.max(0, MAX_CLOTHING_PHOTOS - photos.length);
     if (incoming.length > availableSlots) {
-      setFormError(`You can upload a maximum of 10 photos. ${availableSlots} slot${availableSlots === 1 ? " is" : "s are"} available.`);
+      setFormError(`You can upload a maximum of ${MAX_CLOTHING_PHOTOS} photos. ${availableSlots} slot${availableSlots === 1 ? " is" : "s are"} available.`);
     }
     const accepted = incoming.slice(0, availableSlots).filter((file) => {
       if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
@@ -803,7 +804,7 @@ export function AddClothingPage() {
                     ) : null}
                   </div>
                 ))}
-                {photos.length < 10 ? (
+                {photos.length < MAX_CLOTHING_PHOTOS ? (
                   <button
                     type="button"
                     disabled={isSubmitting}
@@ -812,7 +813,6 @@ export function AddClothingPage() {
                   >
                     <ImagePlus className="h-5 w-5" aria-hidden="true" />
                     Add Photos
-                    <span className="text-[0.65rem] font-normal">{photos.length}/10</span>
                   </button>
                 ) : null}
               </div>
@@ -821,6 +821,9 @@ export function AddClothingPage() {
                   One or more photos could not be uploaded. Retry the form submission to try again.
                 </p>
               ) : null}
+              <p className="text-xs text-dashboard-muted" aria-live="polite">
+                {photos.length}/{MAX_CLOTHING_PHOTOS} photos
+              </p>
             </SectionCard>
 
             <SectionCard

@@ -162,6 +162,7 @@ Before marking a task complete:
     - [x] Browser never receives unrestricted S3 credentials; Drezivo returns only a short-lived checksum-bound direct PUT URL and required headers.
     - [x] Upload acceptance validates MIME/type/size, checksum/file signature, and tenant ownership before a private file can become `accepted`/frozen.
     - [x] Product photo order/cover image mutation is idempotent and authorization checked; the complete ordered set is replaced transactionally and index `0` is the cover.
+    - [ ] Product photo sets are capped at five ordered images across contracts, API reads/writes, the staff UI, and a concurrency-safe database trigger; existing oversized sets are preserved until replaced. Implementation is present; disposable PostgreSQL integration evidence is still pending.
     - [x] Failed file/provider work cannot leave the catalogue transaction falsely claiming an accepted image; mismatch is rejected and provider failure leaves the file pending.
   - **Tests/evidence:** `catalogue-files.test.ts` passes 7/7 against disposable local PostgreSQL, covering safe upload authorization/finalization, size/type/checksum validation, foreign-file concealment, permission checks, ordered cover/photo replacement, idempotent replay, changed-payload rejection, duplicate attachment, and pending/foreign image safety. Contracts remain 66/66, CLT-020 and CLT-021 regressions remain 10/10 each, API units remain 82/82, and typecheck/lint/build pass. See [[Clothing Phase 2 File Attachment Flow]].
 

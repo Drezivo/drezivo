@@ -33,15 +33,16 @@ import {
   type ReactNode,
 } from "react";
 
-import type {
-  CatalogueCategory,
-  ClothingDetail,
-  CreateClothingVariantRequest,
-  ClothingPricingInput,
-  ClothingVariantDetail,
-  MeasurementGuide,
-  UpdateClothingProductRequest,
-  UpdateClothingVariantRequest,
+import {
+  MAX_CLOTHING_PHOTOS,
+  type CatalogueCategory,
+  type ClothingDetail,
+  type CreateClothingVariantRequest,
+  type ClothingPricingInput,
+  type ClothingVariantDetail,
+  type MeasurementGuide,
+  type UpdateClothingProductRequest,
+  type UpdateClothingVariantRequest,
 } from "@drezivo/contracts";
 
 import { ArchiveClothingDialog, archiveSuccessMessage } from "@/components/inventory/archive-clothing-dialog";
@@ -309,10 +310,10 @@ export function EditClothingPage({ productId }: { productId: string }) {
 
   const selectPhotos = (files: FileList | null) => {
     if (!files?.length) return;
-    const availableSlots = Math.max(0, 10 - photos.length);
+    const availableSlots = Math.max(0, MAX_CLOTHING_PHOTOS - photos.length);
     const incoming = Array.from(files);
     if (incoming.length > availableSlots) {
-      setFormError(`You can keep a maximum of 10 photos. ${availableSlots} slot${availableSlots === 1 ? " is" : "s are"} available.`);
+      setFormError(`You can keep a maximum of ${MAX_CLOTHING_PHOTOS} photos. ${availableSlots} slot${availableSlots === 1 ? " is" : "s are"} available.`);
     }
     const accepted = incoming.slice(0, availableSlots).filter((file) => {
       if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
@@ -546,7 +547,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
                   type="button"
                   variant="secondary"
                   size="sm"
-                  disabled={saveGuard.isSubmitting || photos.length >= 10}
+                  disabled={saveGuard.isSubmitting || photos.length >= MAX_CLOTHING_PHOTOS}
                   onClick={() => fileInputRef.current?.click()}
                 >
                   <ImagePlus className="h-4 w-4" aria-hidden="true" />
@@ -564,6 +565,9 @@ export function EditClothingPage({ productId }: { productId: string }) {
                 disabled={saveGuard.isSubmitting}
                 onChange={(event) => selectPhotos(event.target.files)}
               />
+              <p className="mb-3 text-xs text-dashboard-muted" aria-live="polite">
+                {photos.length}/{MAX_CLOTHING_PHOTOS} photos
+              </p>
               {photos.length === 0 ? (
                 <button
                   type="button"

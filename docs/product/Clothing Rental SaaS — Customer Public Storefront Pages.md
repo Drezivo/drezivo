@@ -326,7 +326,7 @@ Potential image information:
 - Different angles
 - Details of the clothing
 
-The system should support multiple photos because customers need to visually evaluate rental clothing.
+The system supports up to five ordered photos because customers need enough visual context to evaluate rental clothing without an unbounded gallery.
 
 ---
 

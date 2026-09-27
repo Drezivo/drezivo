@@ -163,6 +163,32 @@ describe('CLT-021 Add Clothing HTTP route', async () => {
     expect(await countProductCode(seed.tenantId, seed.principalId, 'AUTHORITY-001')).toBe(0);
   });
 
+  it('rejects more than five product photos before creating any catalogue rows', async () => {
+    const seed = await seedRouteTenant(
+      'org_clt021_photo_limit',
+      'user_clt021_photo_limit',
+      ['assets.manage'],
+    );
+    useClerk(seed);
+    const imageFileIds = Array.from(
+      { length: 6 },
+      (_, index) => `00000000-0000-4000-8000-${String(index + 40).padStart(12, '0')}`,
+    );
+
+    const response = await request(createApp())
+      .post('/api/v1/catalogue/clothing')
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt021-photo-limit')
+      .send({
+        ...validRequest(seed.categoryId, 'PHOTO-LIMIT-001'),
+        image_file_ids: imageFileIds,
+      });
+
+    expect(response.status).toBe(422);
+    expectSafeError(response.body, 'VALIDATION_FAILED');
+    expect(await countProductCode(seed.tenantId, seed.principalId, 'PHOTO-LIMIT-001')).toBe(0);
+  });
+
   it('uses the dedicated 64 KB catalogue metadata body limit', async () => {
     const seed = await seedRouteTenant(
       'org_clt021_body_limit',

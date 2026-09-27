@@ -9,6 +9,9 @@ import {
   clothingProductLifecycle,
   createClothingRequest,
   errorCode,
+  MAX_CLOTHING_PHOTOS,
+  replaceClothingImagesRequest,
+  replaceClothingImagesResponse,
   physicalAssetLifecycle,
   physicalAssetReadiness,
   updateClothingProductRequest,
@@ -38,6 +41,40 @@ describe('catalogue staff contract', () => {
 
     expect(clothingProductLifecycle.safeParse('deleted').success).toBe(false);
     expect(physicalAssetReadiness.safeParse('reserved').success).toBe(false);
+  });
+
+  it('caps staff image replacement and detail projections at five photos', () => {
+    const fileIds = Array.from({ length: MAX_CLOTHING_PHOTOS + 1 }, (_, index) =>
+      `00000000-0000-4000-8000-${String(index + 20).padStart(12, '0')}`,
+    );
+    expect(replaceClothingImagesRequest.safeParse({ file_ids: fileIds.slice(0, MAX_CLOTHING_PHOTOS) }).success).toBe(true);
+    expect(replaceClothingImagesRequest.safeParse({ file_ids: fileIds }).success).toBe(false);
+    expect(
+      replaceClothingImagesResponse.safeParse({
+        images: fileIds.slice(0, MAX_CLOTHING_PHOTOS).map((file_id, display_order) => ({
+          file_id,
+          display_order,
+          image_url: null,
+        })),
+        cover_file_id: fileIds[0],
+      }).success,
+    ).toBe(true);
+    expect(
+      clothingDetail.safeParse({
+        product_id: ids.product,
+        code: 'PHOTO-001',
+        name: 'Photo Gown',
+        description: '',
+        category: null,
+        status: 'draft',
+        images: fileIds.map((file_id, display_order) => ({ file_id, display_order, image_url: null })),
+        variants: [],
+        upcoming_allocations: [],
+        has_more_upcoming_allocations: false,
+        created_at: instant,
+        updated_at: instant,
+      }).success,
+    ).toBe(false);
   });
 
   it('defines strict physical-asset lifecycle/readiness mutation without custody override', () => {

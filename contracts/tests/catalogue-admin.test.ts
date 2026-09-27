@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  MAX_CLOTHING_PHOTOS,
   catalogueCategoryStatus,
   clothingSizeInput,
   createClothingRequest,
@@ -161,6 +162,37 @@ describe('catalogue admin contract', () => {
           },
         ],
       }).success,
+    ).toBe(false);
+  });
+
+  it('caps one product at five catalogue photos while preserving duplicate rejection', () => {
+    const fileIds = Array.from({ length: MAX_CLOTHING_PHOTOS + 1 }, (_, index) =>
+      `00000000-0000-4000-8000-${String(index + 10).padStart(12, '0')}`,
+    );
+    const base = {
+      name: 'Photo Gown',
+      category_id: categoryId,
+      color_label: 'Gold',
+      sizes: [{ size_label: 'M', measurement_mode: 'none' as const }],
+      pricing: {
+        mode: 'daily' as const,
+        rental_price_minor: '30000',
+        security_deposit_minor: '50000',
+        extra_day_price_minor: '10000',
+        prep_minutes: 0,
+        turnaround_minutes: 0,
+      },
+      activate: false,
+    };
+
+    expect(
+      createClothingRequest.safeParse({ ...base, image_file_ids: fileIds.slice(0, MAX_CLOTHING_PHOTOS) })
+        .success,
+    ).toBe(true);
+    expect(createClothingRequest.safeParse({ ...base, image_file_ids: fileIds }).success).toBe(false);
+    expect(
+      createClothingRequest.safeParse({ ...base, image_file_ids: fileIds.slice(0, 2).concat(fileIds[0]!) })
+        .success,
     ).toBe(false);
   });
 });

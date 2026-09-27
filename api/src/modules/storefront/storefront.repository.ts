@@ -130,7 +130,7 @@ async function fetchPublishedProducts(client: PoolClient, tenantId: string): Pro
        JOIN file_object f ON f.id = pi.file_id
        WHERE pi.tenant_id = $1 AND pi.product_id = $2 AND f.is_private = false AND f.lifecycle_status = 'accepted'
        ORDER BY pi.display_order
-       LIMIT 10`,
+       LIMIT 5`,
       [tenantId, product.id],
     );
 

@@ -345,7 +345,7 @@ Table product_image {
     (tenant_id, id) [pk]
     (tenant_id, product_id, display_order) [unique]
   }
-  Note: 'V1. Order zero is primary image; only public derivatives may be exposed.'
+  Note: 'V1. At most five ordered photos per product; order zero is primary image. Only public derivatives may be exposed.'
 }
 
 Table storefront {
