@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { CustomersPage } from "@/components/customers/customers-page";
@@ -24,5 +24,28 @@ describe("CustomersPage", () => {
     expect(screen.getByText("14")).toBeVisible();
     expect(screen.getByText("42")).toBeVisible();
     expect(screen.getByText("19")).toBeVisible();
+  });
+
+  it("uses Active as the default customer filter and can clear toolbar filters", async () => {
+    render(<CustomersPage />);
+
+    const search = screen.getByRole("textbox", { name: "Search customers" });
+    expect(search).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Status: Active" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Clear filters" })).not.toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: "Maria" } });
+    expect(screen.getByRole("button", { name: "Clear filters" })).toBeVisible();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Status: Active" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Archived" }));
+    expect(screen.getByRole("button", { name: "Status: Archived" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(search).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Status: Active" })).toBeVisible();
   });
 });

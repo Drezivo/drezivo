@@ -1,12 +1,39 @@
-import { CalendarCheck2, Repeat2, UserPlus, UsersRound } from "lucide-react";
+"use client";
 
+import {
+  CalendarCheck2,
+  ChevronDown,
+  Repeat2,
+  Search,
+  UserPlus,
+  UsersRound,
+  X,
+} from "lucide-react";
+import { useState } from "react";
+
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 import {
   CUSTOMER_DASHBOARD_SUMMARY_PROTOTYPE,
   type CustomerDashboardSummaryPrototype,
 } from "./customers-prototype-data";
+
+type CustomerStatusFilter = "active" | "archived" | "all";
+
+const CUSTOMER_STATUS_LABELS: Record<CustomerStatusFilter, string> = {
+  active: "Active",
+  archived: "Archived",
+  all: "All customers",
+};
 
 const SUMMARY_ITEMS = [
   {
@@ -36,6 +63,15 @@ const SUMMARY_ITEMS = [
 ] as const;
 
 export function CustomersPage() {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<CustomerStatusFilter>("active");
+  const hasActiveFilters = Boolean(query.trim() || status !== "active");
+
+  const clearFilters = () => {
+    setQuery("");
+    setStatus("active");
+  };
+
   return (
     <div className="min-h-[calc(100svh-4.5rem)] overflow-x-hidden bg-dashboard-canvas px-3 py-5 sm:px-6 sm:py-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-5">
@@ -49,6 +85,19 @@ export function CustomersPage() {
         </section>
 
         <CustomerSummarySection summary={CUSTOMER_DASHBOARD_SUMMARY_PROTOTYPE} />
+
+        <Card className="gap-0 overflow-visible py-0">
+          <CardContent className="p-0">
+            <CustomerToolbar
+              query={query}
+              status={status}
+              hasActiveFilters={hasActiveFilters}
+              onQueryChange={setQuery}
+              onStatusChange={setStatus}
+              onClearFilters={clearFilters}
+            />
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
@@ -86,5 +135,77 @@ function CustomerSummarySection({
         );
       })}
     </section>
+  );
+}
+
+function CustomerToolbar({
+  hasActiveFilters,
+  onClearFilters,
+  onQueryChange,
+  onStatusChange,
+  query,
+  status,
+}: {
+  hasActiveFilters: boolean;
+  onClearFilters: () => void;
+  onQueryChange: (value: string) => void;
+  onStatusChange: (value: CustomerStatusFilter) => void;
+  query: string;
+  status: CustomerStatusFilter;
+}) {
+  return (
+    <div className="flex flex-col gap-3 border-b border-dashboard-border p-3 sm:p-4 xl:flex-row xl:items-end">
+      <label className="relative min-w-0 flex-1 xl:max-w-xl">
+        <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">Search customers</span>
+        <Search
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-2.5 left-3 h-4 w-4 text-dashboard-muted"
+        />
+        <Input
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder="Search name, phone, or email..."
+          className="pl-9"
+        />
+      </label>
+
+      <div className="min-w-0 sm:min-w-40">
+        <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">Status</span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              aria-label={`Status: ${CUSTOMER_STATUS_LABELS[status]}`}
+              className="w-full justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active sm:min-w-40"
+            >
+              <span className="truncate">{CUSTOMER_STATUS_LABELS[status]}</span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-dashboard-muted" aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-44">
+            {(Object.entries(CUSTOMER_STATUS_LABELS) as Array<[CustomerStatusFilter, string]>).map(
+              ([value, label]) => (
+                <DropdownMenuItem key={value} onSelect={() => onStatusChange(value)}>
+                  {label}
+                </DropdownMenuItem>
+              )
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {hasActiveFilters ? (
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onClearFilters}
+          className="shrink-0 text-dashboard-muted hover:text-dashboard-navy"
+        >
+          <X className="h-4 w-4" aria-hidden="true" />
+          Clear filters
+        </Button>
+      ) : null}
+    </div>
   );
 }
