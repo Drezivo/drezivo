@@ -266,24 +266,24 @@ Build the customer API around the already-existing `customer`, `reservation`, an
 
 ## 16. `GET /api/v1/customers`
 
-- [ ] Tenant-safe staff-only customer list.
-- [ ] Query supports:
+- [x] Tenant-safe staff-only customer list.
+- [x] Query supports:
   - `search`.
   - `status=active|archived|all`.
   - `cursor`.
   - bounded `limit`.
-- [ ] Frontend requests `limit=10`.
-- [ ] Search only:
+- [x] Frontend requests `limit=10`.
+- [x] Search only:
   - name.
   - phone.
   - email.
-- [ ] Stable keyset pagination; avoid offset pagination for the production list.
-- [ ] Default sort should be deterministic, such as `lower(full_name), id` unless another approved customer sort is chosen.
-- [ ] Response includes only safe directory fields plus derived aggregates required by the table.
-- [ ] Derive Reservation count and Fitting count without N+1 queries.
-- [ ] Derive Last Activity across both modules.
-- [ ] Derive Next Activity across both modules.
-- [ ] Default excludes anonymized profiles and defaults to non-archived profiles.
+- [x] Stable keyset pagination; avoid offset pagination for the production list.
+- [x] Default sort should be deterministic, such as `lower(full_name), id` unless another approved customer sort is chosen.
+- [x] Response includes only safe directory fields plus derived aggregates required by the table.
+- [x] Derive Reservation count and Fitting count without N+1 queries.
+- [x] Derive Last Activity across both modules.
+- [x] Derive Next Activity across both modules.
+- [x] Default excludes anonymized profiles and defaults to non-archived profiles.
 
 ## 17. `GET /api/v1/customers/summary`
 

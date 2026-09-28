@@ -767,6 +767,23 @@ registry.registerPath({
   },
 });
 
+// ---- customers -------------------------------------------------------
+registry.registerPath({
+  method: 'get',
+  path: '/customers',
+  tags: ['customers'],
+  summary: 'List live customer profiles for the active tenant with branch-scoped activity aggregates.',
+  request: { query: customerListQuery },
+  responses: {
+    200: {
+      description: 'Bounded customer directory page for authorized staff.',
+      content: { 'application/json': { schema: successEnvelope(customerListResponse) } },
+    },
+    403: jsonError('Reservation management permission is required.'),
+    422: jsonError('The customer list query or cursor is invalid.'),
+  },
+});
+
 // ---- operations ------------------------------------------------------
 registry.registerPath({
   method: 'get',
