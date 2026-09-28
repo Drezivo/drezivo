@@ -2,15 +2,12 @@
 
 import {
   AlertCircle,
-  Archive,
   CalendarCheck2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Eye,
   LockKeyhole,
   MoreHorizontal,
-  Pencil,
   RefreshCw,
   Repeat2,
   Search,
@@ -673,17 +670,13 @@ function CustomerActions({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={() => onView(customer.id)}>
-          <Eye className="h-4 w-4" aria-hidden="true" />
-          View details
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onEdit(customer.id)}>
-          <Pencil className="h-4 w-4" aria-hidden="true" />
-          Edit
-        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onView(customer.id)}>View details</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onEdit(customer.id)}>Edit</DropdownMenuItem>
         {customer.status === "active" ? (
-          <DropdownMenuItem onSelect={() => onArchive(customer.id)} className="text-dashboard-danger focus:text-dashboard-danger">
-            <Archive className="h-4 w-4" aria-hidden="true" />
+          <DropdownMenuItem
+            onSelect={() => onArchive(customer.id)}
+            className="text-dashboard-danger focus:text-dashboard-danger"
+          >
             Archive
           </DropdownMenuItem>
         ) : null}
