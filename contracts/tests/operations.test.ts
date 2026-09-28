@@ -73,6 +73,25 @@ describe('BE-8 operational integration contracts', () => {
     ).toBe(true);
   });
 
+  it('accepts offset-bearing instants for branch-local DST boundary conversion', () => {
+    expect(
+      operationalCalendarQuery.safeParse({
+        // America/New_York spring-forward boundary; the API receives instants,
+        // while the frontend owns conversion from the branch-local calendar day.
+        start: '2026-03-08T00:00:00-05:00',
+        end: '2026-03-09T00:00:00-04:00',
+      }).success,
+    ).toBe(true);
+    expect(
+      operationalCalendarQuery.safeParse({
+        // Asia/Manila has no DST; this still verifies an explicit branch offset
+        // is treated as an instant and not as an unvalidated timezone authority.
+        start: '2026-09-27T00:00:00+08:00',
+        end: '2026-09-28T00:00:00+08:00',
+      }).success,
+    ).toBe(true);
+  });
+
   it('keeps excluded lifecycle states out of Calendar event contracts', () => {
     const baseReservationEvent = {
       id: `pickup:${ids.reservation}`,

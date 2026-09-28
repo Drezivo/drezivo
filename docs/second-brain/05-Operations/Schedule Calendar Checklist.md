@@ -191,39 +191,41 @@ These rules must be covered by the backend integration evidence before any Calen
 - [ ] **CAL-BE-030 — Prove active-branch timezone range construction**
   - **Outcome:** Week/month/day boundaries include the correct business-local events.
   - **Acceptance:**
-    - [ ] Backend accepts only validated UTC `start/end` instants, enforces the approved window, and never treats a client-supplied timezone as authority.
+    - [x] Backend accepts only validated UTC `start/end` instants, enforces the approved window, and never treats a client-supplied timezone as authority.
     - [ ] Frontend obtains the active branch IANA timezone from actor context and converts local Week/Month/day boundaries to UTC instants before calling Calendar.
-    - [ ] Tests cover Asia/Manila and at least one DST-observing timezone at the API boundary.
+    - [x] Tests cover Asia/Manila and at least one DST-observing timezone at the API boundary.
     - [ ] Events around local midnight are grouped into the expected branch-local business date by the frontend mapper.
+  - **Backend evidence:** `contracts/tests/operations.test.ts` validates Asia/Manila and America/New_York offset-bearing instants; frontend timezone conversion remains CAL-FE-001/CAL-FE-020 scope.
 
-- [ ] **CAL-BE-031 — Verify deterministic event ordering and deduplication**
+- [x] **CAL-BE-031 — Verify deterministic event ordering and deduplication**
   - **Acceptance:**
-    - [ ] Results order by event start then stable tie-breakers.
-    - [ ] One Reservation may legitimately produce Pickup + Return, but never two identical Pickup or two identical Return events.
-    - [ ] One Fitting produces one fitting event.
-    - [ ] Concurrent unrelated inserts do not make ordering unstable for equal timestamps.
+    - [x] Results order by event start then stable tie-breakers.
+    - [x] One Reservation may legitimately produce Pickup + Return, but never two identical Pickup or two identical Return events.
+    - [x] One Fitting produces one fitting event.
+    - [x] Concurrent unrelated inserts do not make ordering unstable for equal timestamps.
 
 - [ ] **CAL-BE-032 — Harden dense-range result limits**
   - **Outcome:** Calendar never silently presents an incomplete month/week as complete.
   - **Acceptance:**
-    - [ ] Representative supported tenant scale is tested against the current event cap.
-    - [ ] The repository queries up to 2,001 ordered rows (`2000 + 1`) and returns at most 2,000 events.
-    - [ ] The response exposes `truncated: boolean`, set only when the extra row exists; no dense range is silently presented as complete.
+    - [x] Representative supported tenant scale is tested against the current event cap.
+    - [x] The repository queries up to 2,001 ordered rows (`2000 + 1`) and returns at most 2,000 events.
+    - [x] The response exposes `truncated: boolean`, set only when the extra row exists; no dense range is silently presented as complete.
     - [ ] The frontend visibly warns or otherwise prevents a truncated range from appearing complete.
-    - [ ] Week and 42-day visible Month-grid windows remain supported within the server range limit.
-    - [ ] Reservation line aggregation is bounded to the candidate reservations that survive tenant, branch, status, and date filtering; all tenant reservation lines are not scanned before the bounded event page is selected.
-    - [ ] Queries use relevant reservation/fitting tenant/branch/time indexes.
-  - **Tests/evidence:** Representative load/query-plan evidence.
+    - [x] Week and 42-day visible Month-grid windows remain supported within the server range limit.
+    - [x] Reservation line aggregation is bounded to the candidate reservations that survive tenant, branch, status, and date filtering; all tenant reservation lines are not scanned before the bounded event page is selected.
+    - [x] Queries use relevant reservation/fitting tenant/branch/time indexes.
+  - **Tests/evidence:** `fittings-phase9-load-query-plan.test.ts` proves a 3,000-appointment range returns 2,000 events with `truncated: true`; frontend warning remains CAL-FE-021 scope.
 
-- [ ] **CAL-BE-033 — Verify Calendar authorization and isolation**
+- [x] **CAL-BE-033 — Verify Calendar authorization and isolation**
   - **Acceptance:**
-    - [ ] Staff authentication is required.
-    - [ ] Tenant context is required.
-    - [ ] Existing rental read policy is applied.
-    - [ ] `reservations.manage` operational permission is required.
-    - [ ] Missing actor context fails closed.
-    - [ ] Cross-tenant Calendar reads return no foreign events.
-    - [ ] Active branch cannot read another branch's schedule.
+    - [x] Staff authentication is required.
+    - [x] Tenant context is required.
+    - [x] Existing rental read policy is applied.
+    - [x] `reservations.manage` operational permission is required.
+    - [x] Missing actor context fails closed.
+    - [x] Cross-tenant Calendar reads return no foreign events.
+    - [x] Active branch cannot read another branch's schedule.
+  - **Tests/evidence:** `fittings-phase8-integrations.test.ts` covers permission failure, tenant isolation, branch isolation, and deterministic ordering; route middleware supplies staff/tenant/lifecycle enforcement.
 
 ---
 

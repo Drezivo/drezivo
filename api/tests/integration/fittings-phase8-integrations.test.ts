@@ -647,6 +647,79 @@ describe('FIT-BE-080..083 cross-product integration', async () => {
     expect(detail.garments[0]?.assigned_asset).toBeNull();
   });
 
+  it('keeps Calendar ordering stable and isolates tenants and active branches', async () => {
+    const seed = await seedWorkspace('calendar-ordering');
+    const foreignTenant = await seedWorkspace('calendar-foreign-tenant');
+    const reservation = await insertReservation(seed, {
+      pickupAt: plus(seed.todayStart, 12),
+      dueAt: plus(seed.todayStart, 36),
+    });
+    const fitting = await insertFitting(seed, {
+      startsAt: plus(seed.todayStart, 12),
+      endsAt: plus(seed.todayStart, 13),
+      guaranteed: false,
+    });
+    const foreignFitting = await insertFitting(foreignTenant, {
+      startsAt: plus(foreignTenant.todayStart, 12),
+      endsAt: plus(foreignTenant.todayStart, 13),
+      guaranteed: false,
+    });
+
+    const secondaryBranch = await withAdmin(async (client) => {
+      const branchId = requireId(
+        (
+          await client.query<{ id: string }>(
+            `INSERT INTO branch (tenant_id,name,code,is_default,timezone,status)
+             VALUES ($1,'Secondary','SECONDARY',false,'UTC','active') RETURNING id`,
+            [seed.tenantId],
+          )
+        ).rows,
+        'secondary branch',
+      );
+      await client.query(
+        `INSERT INTO fitting_settings
+           (tenant_id,branch_id,enabled,capacity,duration_minutes,fee_minor,currency,version)
+         VALUES ($1,$2,true,1,60,0,'PHP',1)`,
+        [seed.tenantId, branchId],
+      );
+      const slotId = requireId(
+        (
+          await client.query<{ id: string }>(
+            `INSERT INTO fitting_capacity_slot (tenant_id,branch_id,slot_number,active)
+             VALUES ($1,$2,1,true) RETURNING id`,
+            [seed.tenantId, branchId],
+          )
+        ).rows,
+        'secondary slot',
+      );
+      return { branchId, slotId };
+    });
+    const secondaryBranchFitting = await insertFitting(
+      { ...seed, branchId: secondaryBranch.branchId, slotId: secondaryBranch.slotId },
+      { startsAt: plus(seed.todayStart, 12), endsAt: plus(seed.todayStart, 13), guaranteed: false },
+    );
+
+    const query = { start: seed.todayStart.toISOString(), end: plus(seed.todayStart, 48) };
+    const first = await getOperationalCalendar(operationsContext(seed), query);
+    const second = await getOperationalCalendar(operationsContext(seed), query);
+
+    expect(first.events.map((event) => event.id)).toEqual(second.events.map((event) => event.id));
+    expect(first.events.filter((event) => event.source_id === reservation.reservationId)).toHaveLength(2);
+    expect(first.events.filter((event) => event.source_id === fitting)).toHaveLength(1);
+    expect(first.events.some((event) => event.source_id === foreignFitting)).toBe(false);
+    expect(first.events.some((event) => event.source_id === secondaryBranchFitting)).toBe(false);
+  });
+
+  it('fails closed when the operational reservation-read permission is absent', async () => {
+    const seed = await seedWorkspace('calendar-permission');
+    await expect(
+      getOperationalCalendar(
+        { ...operationsContext(seed), permissionCodes: [] },
+        { start: seed.todayStart.toISOString(), end: plus(seed.todayStart, 24) },
+      ),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
   it('derives bounded Dashboard fitting today/upcoming/pending-review counts from authoritative appointments', async () => {
     const seed = await seedWorkspace('dashboard');
     await insertFitting(seed, {
