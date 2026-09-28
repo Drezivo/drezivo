@@ -158,31 +158,31 @@ These rules must be covered by the backend integration evidence before any Calen
 
 # Backend Phase BE-2 — Fitting schedule projection
 
-- [ ] **CAL-BE-020 — Verify persisted Fitting appointments are projected**
+- [x] **CAL-BE-020 — Verify persisted Fitting appointments are projected**
   - **Depends on:** CAL-BE-000, CAL-BE-001, Fittings backend production gate.
   - **Outcome:** Calendar consumes the Fittings module directly instead of Calendar prototype fixtures.
   - **Acceptance:**
-    - [ ] Query reads persisted `fitting_appointment` rows only.
-    - [ ] Appointment inclusion uses overlap with the requested Calendar window.
-    - [ ] Event `source = fitting`.
-    - [ ] Event `source_id` equals the authoritative fitting ID.
-    - [ ] Event period uses the stored fitting appointment start/end exactly.
-    - [ ] Customer display name comes from the linked production customer.
-    - [ ] Item names come from active fitting lines.
-    - [ ] Hidden fitting capacity slots are never exposed to Calendar.
-    - [ ] No duplicate Calendar fitting store/table is introduced.
+    - [x] Query reads persisted `fitting_appointment` rows only.
+    - [x] Appointment inclusion uses overlap with the requested Calendar window.
+    - [x] Event `source = fitting`.
+    - [x] Event `source_id` equals the authoritative fitting ID.
+    - [x] Event period uses the stored fitting appointment start/end exactly.
+    - [x] Customer display name comes from the linked production customer.
+    - [x] Item names come from active fitting lines.
+    - [x] Hidden fitting capacity slots are never exposed to Calendar.
+    - [x] No duplicate Calendar fitting store/table is introduced.
   - **Existing foundation:** FIT-BE-080 is implemented and `readOperationalCalendarEvents()` already projects persisted fittings. Those persisted rows are the production authority; only removal of prototype fitting data from the Calendar UI remains for the frontend phase.
 
-- [ ] **CAL-BE-021 — Prove Fitting Calendar identity matches `/fittings`**
+- [x] **CAL-BE-021 — Prove Fitting Calendar identity matches `/fittings`**
   - **Depends on:** CAL-BE-020.
   - **Outcome:** Clicking a Calendar fitting resolves the same production appointment as `/fittings`.
   - **Acceptance:**
-    - [ ] `source_id` can be fetched through `GET /api/v1/fittings/:id`.
-    - [ ] Calendar fitting status equals the authoritative fitting status at read time.
-    - [ ] Garment summary corresponds to active fitting lines.
-    - [ ] Preference-only fitting garments are display data only and do not imply physical allocation.
-    - [ ] Guaranteed fitting asset identities remain inside the Fitting detail contract, not Calendar event summaries.
-  - **Tests/evidence:** Cross-surface seeded integration tests.
+    - [x] `source_id` can be fetched through `GET /api/v1/fittings/:id`.
+    - [x] Calendar fitting status equals the authoritative fitting status at read time.
+    - [x] Garment summary corresponds to active fitting lines.
+    - [x] Preference-only fitting garments are display data only and do not imply physical allocation.
+    - [x] Guaranteed fitting asset identities remain inside the Fitting detail contract, not Calendar event summaries.
+  - **Tests/evidence:** `fittings-phase8-integrations.test.ts` (7 passed) against the disposable PostgreSQL database; the test covers eligible/terminal fitting states, exact periods, source identity, production detail alignment, and preference-only lines.
 
 ---
 

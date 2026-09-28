@@ -372,6 +372,7 @@ describe('FIT-BE-080..083 cross-product integration', async () => {
   const { closePool } = await import('../../src/db/client.js');
   const { getOperationalCalendar, getDashboardFittingSummary } =
     await import('../../src/modules/operations/operations.service.js');
+  const { getFittingDetail } = await import('../../src/modules/fittings/fittings.service.js');
   const { getCentralPayments } = await import('../../src/modules/payments/payments.service.js');
   const { computeAvailability } =
     await import('../../src/modules/storefront/storefront.repository.js');
@@ -525,6 +526,125 @@ describe('FIT-BE-080..083 cross-product integration', async () => {
     for (const reservationId of excludedIds) {
       expect(reservationEvents.some((event) => event.source_id === reservationId)).toBe(false);
     }
+  });
+
+  it('projects every eligible fitting state once and excludes terminal appointments', async () => {
+    const seed = await seedWorkspace('calendar-fitting-states');
+    const eligibleStatuses = ['pending', 'confirmed', 'completed', 'no_show'] as const;
+    const excludedStatuses = ['cancelled', 'rejected'] as const;
+    const eligibleIds: string[] = [];
+    const excludedIds: string[] = [];
+
+    for (const [index, status] of eligibleStatuses.entries()) {
+      const fittingId = await insertFitting(seed, {
+        startsAt: plus(seed.todayStart, 12 + index * 2),
+        endsAt: plus(seed.todayStart, 13 + index * 2),
+      });
+      eligibleIds.push(fittingId);
+      await withAdmin(async (client) => {
+        await client.query('BEGIN');
+        try {
+          if (status === 'completed' || status === 'no_show') {
+            await client.query('UPDATE fitting_appointment SET status = $1 WHERE id = $2', [
+              'confirmed',
+              fittingId,
+            ]);
+            await client.query(
+              `DELETE FROM asset_allocation
+                WHERE fitting_line_id IN (SELECT id FROM fitting_line WHERE fitting_id = $1)`,
+              [fittingId],
+            );
+            await client.query('DELETE FROM fitting_slot_allocation WHERE fitting_id = $1', [fittingId]);
+          }
+          await client.query('UPDATE fitting_appointment SET status = $1 WHERE id = $2', [
+            status,
+            fittingId,
+          ]);
+          await client.query('COMMIT');
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        }
+      });
+    }
+    for (const [index, status] of excludedStatuses.entries()) {
+      const fittingId = await insertFitting(seed, {
+        startsAt: plus(seed.todayStart, 30 + index * 2),
+        endsAt: plus(seed.todayStart, 31 + index * 2),
+      });
+      excludedIds.push(fittingId);
+      await withAdmin(async (client) => {
+        await client.query('BEGIN');
+        try {
+          await client.query(
+            `DELETE FROM asset_allocation
+              WHERE fitting_line_id IN (SELECT id FROM fitting_line WHERE fitting_id = $1)`,
+            [fittingId],
+          );
+          await client.query('DELETE FROM fitting_slot_allocation WHERE fitting_id = $1', [fittingId]);
+          await client.query(
+            `UPDATE fitting_appointment
+                SET status = $1, terminal_reason = 'calendar integration test'
+              WHERE id = $2`,
+            [status, fittingId],
+          );
+          await client.query('COMMIT');
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        }
+      });
+    }
+
+    const calendar = await getOperationalCalendar(operationsContext(seed), {
+      start: seed.todayStart.toISOString(),
+      end: plus(seed.todayStart, 48),
+    });
+    const fittingEvents = calendar.events.filter((event) => event.source === 'fitting');
+
+    expect(fittingEvents).toHaveLength(eligibleIds.length);
+    for (const fittingId of eligibleIds) {
+      expect(fittingEvents.filter((event) => event.source_id === fittingId)).toHaveLength(1);
+    }
+    for (const fittingId of excludedIds) {
+      expect(fittingEvents.some((event) => event.source_id === fittingId)).toBe(false);
+    }
+  });
+
+  it('keeps Calendar fitting identity aligned with the production fitting detail', async () => {
+    const seed = await seedWorkspace('calendar-fitting-detail');
+    const fittingId = await insertFitting(seed, {
+      startsAt: plus(seed.todayStart, 10),
+      endsAt: plus(seed.todayStart, 12),
+      guaranteed: false,
+    });
+    await withAdmin(async (client) => {
+      await client.query(`UPDATE fitting_appointment SET timezone_snapshot = 'Asia/Manila' WHERE id = $1`, [
+        fittingId,
+      ]);
+    });
+    const calendar = await getOperationalCalendar(operationsContext(seed), {
+      start: seed.todayStart.toISOString(),
+      end: plus(seed.todayStart, 24),
+    });
+    const event = calendar.events.find((candidate) => candidate.source_id === fittingId);
+    expect(event).toBeDefined();
+
+    const detail = await getFittingDetail({
+      ...operationsContext(seed),
+      membershipId: seed.membershipId,
+      effectiveTenantStatus: 'active',
+    }, fittingId);
+    expect(event).toMatchObject({
+      source: 'fitting',
+      source_id: detail.id,
+      status: detail.status,
+      period: detail.period,
+      customer_name: detail.customer.full_name,
+      item_names: [detail.garments[0]?.variant.product_name],
+    });
+    expect(detail.garments[0]?.garment_mode).toBe('preference');
+    expect(detail.garments[0]?.assigned_asset).toBeNull();
   });
 
   it('derives bounded Dashboard fitting today/upcoming/pending-review counts from authoritative appointments', async () => {
