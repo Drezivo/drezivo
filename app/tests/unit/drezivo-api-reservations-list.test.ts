@@ -131,7 +131,7 @@ describe("Drezivo reservations list API client", () => {
           {
             id: "00000000-0000-4000-8000-000000000103",
             variant_id: "00000000-0000-4000-8000-000000000104",
-            variant: { sku: "EMERALD-M", size_label: "M", color_label: "Emerald" },
+            variant: { sku: "EMERALD-M", size_label: "M", color_label: "Emerald", image_url: null },
             current_asset_readiness: "ready",
             line_number: 1,
             name_snapshot: "Emerald Gown",

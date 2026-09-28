@@ -62,6 +62,8 @@ const firstItem = {
   name: "Real Black Satin Gown",
   category: { id: category.id, name: category.name },
   product_status: "active" as const,
+  sizing_mode: "sized" as const,
+  has_free_size: false,
   size_labels: ["S", "M"],
   price_from_minor: "150000",
   currency: "PHP",
@@ -167,6 +169,22 @@ describe("ClothingPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss inventory message" }));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("shows free-size clothing as one explicit size instead of zero sizes", async () => {
+    api.getCatalogueClothing.mockResolvedValue({
+      data: {
+        items: [{ ...firstItem, sizing_mode: "free_size", has_free_size: true, size_labels: [] }],
+        page_meta: { next_cursor: null, has_more: false },
+      },
+      requestId: "req-free-size",
+    });
+
+    render(<ClothingPage />);
+
+    expect((await screen.findAllByText("Free size")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("1 size")).toBeVisible();
+    expect(screen.queryByText("0 sizes")).not.toBeInTheDocument();
   });
 
   it("shows a one-time clothing-added notice and refreshes real inventory state", async () => {

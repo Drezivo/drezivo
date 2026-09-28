@@ -44,6 +44,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { displayProductSizes, displaySizeLabel } from "@/lib/catalogue-display";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
 
@@ -169,7 +170,10 @@ function DetailContent({
   const allAssets = useMemo(() => item.variants.flatMap((variant) => variant.assets), [item.variants]);
   const activeAssets = allAssets.filter((asset) => asset.lifecycle_status === "active");
   const readyAssets = activeAssets.filter((asset) => asset.readiness === "ready");
-  const sizes = [...new Set(item.variants.map((variant) => variant.size_label))];
+  const sizes = displayProductSizes({
+    hasFreeSize: item.sizing_mode === "free_size",
+    sizeLabels: [...new Set(item.variants.flatMap((variant) => (variant.size_label ? [variant.size_label] : [])))],
+  });
   const priceRange = formatPriceRange(item.variants);
   const usableImageUrls = imageUrls.filter((url) => !failedImageUrls.has(url));
   const primaryImage =
@@ -392,7 +396,7 @@ function DetailContent({
                 <TableBody>
                   {item.variants.map((variant) => (
                     <TableRow key={variant.id}>
-                      <TableCell className="font-semibold text-dashboard-navy">{variant.size_label}</TableCell>
+                      <TableCell className="font-semibold text-dashboard-navy">{displaySizeLabel(variant.size_label)}</TableCell>
                       <TableCell className="text-dashboard-muted">{variant.color_label ?? "—"}</TableCell>
                       <TableCell className="text-dashboard-muted">{variant.sku}</TableCell>
                       <TableCell>
@@ -443,7 +447,7 @@ function DetailContent({
                       variant.assets.map((asset) => (
                         <TableRow key={asset.id}>
                           <TableCell className="font-medium text-dashboard-navy">{asset.asset_code}</TableCell>
-                          <TableCell className="text-dashboard-muted">{variant.size_label}</TableCell>
+                          <TableCell className="text-dashboard-muted">{displaySizeLabel(variant.size_label)}</TableCell>
                           <TableCell><StatusBadge label={labelize(asset.lifecycle_status)} /></TableCell>
                           <TableCell><ReadinessBadge readiness={asset.readiness} /></TableCell>
                           <TableCell className="text-dashboard-muted">{labelize(asset.custody_kind)}</TableCell>
@@ -458,7 +462,7 @@ function DetailContent({
                               aria-label={`Manage ${asset.asset_code}`}
                               onClick={() => {
                                 setManagedAsset(asset);
-                                setManagedAssetSize(variant.size_label);
+                                setManagedAssetSize(displaySizeLabel(variant.size_label));
                               }}
                             >
                               Manage
