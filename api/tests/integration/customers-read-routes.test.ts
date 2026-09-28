@@ -1,7 +1,12 @@
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { customerListResponse, customerSummaryResponse, successEnvelope } from '@drezivo/contracts';
+import {
+  customerDetailResponse,
+  customerListResponse,
+  customerSummaryResponse,
+  successEnvelope,
+} from '@drezivo/contracts';
 
 import '../../src/config/load-env.js';
 import {
@@ -114,6 +119,42 @@ describe('Customers read routes', async () => {
       returning_customers: 1,
       upcoming_customers: 1,
     });
+  });
+
+  it('returns one live customer detail and conceals foreign tenant ids', async () => {
+    const seed = await seedWorkspace('org_customers_detail', 'user_customers_detail', ['reservations.manage']);
+    const foreign = await seedWorkspace('org_customers_detail_foreign', 'user_customers_detail_foreign', ['reservations.manage']);
+    useClerk(seed);
+    const customerId = await seedCustomer(seed, 'Detail Customer', '09175550001', 'detail@example.test', {
+      notes: 'Staff-only note',
+      address: '24 Sampaguita Street',
+      socialMedia: '@detail.customer',
+    });
+    const foreignCustomerId = await seedCustomer(foreign, 'Foreign Detail', '09175550002', null);
+    await seedFitting(seed, customerId, 'completed', -48, 'detail-completed');
+    await seedFitting(seed, customerId, 'confirmed', 72, 'detail-upcoming');
+
+    const response = await request(createApp()).get(`/api/v1/customers/${customerId}`);
+    expect(response.status).toBe(200);
+    const body = successEnvelope(customerDetailResponse).parse(response.body);
+    expect(body.data).toMatchObject({
+      id: customerId,
+      full_name: 'Detail Customer',
+      phone: '09175550001',
+      email: 'detail@example.test',
+      address: '24 Sampaguita Street',
+      social_media: '@detail.customer',
+      notes: 'Staff-only note',
+      status: 'active',
+      reservation_count: 0,
+      fitting_count: 2,
+      completed_engagement_count: 1,
+    });
+    expect(body.data.last_activity?.type).toBe('fitting');
+    expect(body.data.next_activity?.type).toBe('fitting');
+
+    const concealed = await request(createApp()).get(`/api/v1/customers/${foreignCustomerId}`);
+    expect(concealed.status).toBe(404);
   });
 
   it('searches only name phone and email and supports archived/all status filters', async () => {
@@ -257,14 +298,29 @@ describe('Customers read routes', async () => {
     fullName: string,
     phone: string | null,
     email: string | null,
-    options: { archived?: boolean; notes?: string } = {},
+    options: {
+      archived?: boolean;
+      notes?: string;
+      address?: string;
+      socialMedia?: string;
+    } = {},
   ): Promise<string> {
     return withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       const result = await client.query<{ id: string }>(
-        `INSERT INTO customer (tenant_id, full_name, phone, email, notes, archived_at)
-         VALUES ($1, $2, $3, $4, $5, CASE WHEN $6::boolean THEN now() ELSE NULL END)
+        `INSERT INTO customer
+           (tenant_id, full_name, phone, email, notes, address, social_media, archived_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $8::boolean THEN now() ELSE NULL END)
          RETURNING id`,
-        [seed.tenantId, fullName, phone, email, options.notes ?? null, options.archived ?? false],
+        [
+          seed.tenantId,
+          fullName,
+          phone,
+          email,
+          options.notes ?? null,
+          options.address ?? null,
+          options.socialMedia ?? null,
+          options.archived ?? false,
+        ],
       );
       const id = result.rows[0]?.id;
       if (!id) throw new Error('customer insert returned no row');

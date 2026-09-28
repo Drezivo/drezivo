@@ -299,8 +299,8 @@ Build the customer API around the already-existing `customer`, `reservation`, an
 
 ## 18. `GET /api/v1/customers/:customerId`
 
-- [ ] Conceal foreign/unauthorized customer IDs as not found.
-- [ ] Return live profile fields:
+- [x] Conceal foreign/unauthorized customer IDs as not found.
+- [x] Return live profile fields:
   - full name.
   - phone.
   - email.
@@ -309,8 +309,8 @@ Build the customer API around the already-existing `customer`, `reservation`, an
   - notes.
   - created/updated timestamps.
   - archived state.
-- [ ] Return bounded summary fields needed by the Sheet.
-- [ ] Do not return unrelated private payment/evidence/provider data.
+- [x] Return bounded summary fields needed by the Sheet.
+- [x] Do not return unrelated private payment/evidence/provider data.
 
 ## 19. `GET /api/v1/customers/:customerId/reservations`
 
@@ -319,7 +319,7 @@ Build the customer API around the already-existing `customer`, `reservation`, an
 - [ ] Tenant + authorized branch scope is explicit.
 - [ ] Use Reservation snapshot fields for historical facts.
 - [ ] Return only fields needed for customer history UI.
-- [ ] Stable newest-first ordering using created/pickup timestamp plus ID as tie-breaker.
+- [ ] Stable newest-first ordering using created timestamp plus ID as tie-breaker.
 
 ## 20. `GET /api/v1/customers/:customerId/fittings`
 

@@ -33,6 +33,7 @@ import {
   customerHistoryQuery,
   customerListQuery,
   customerListResponse,
+  customerParams,
   customerReservationHistoryResponse,
   customerSummaryResponse,
   changeSubscriptionPlanRequest,
@@ -796,6 +797,23 @@ registry.registerPath({
     },
     403: jsonError('Reservation management permission is required.'),
     404: jsonError('The active branch could not be found.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/customers/{customerId}',
+  tags: ['customers'],
+  summary: 'Read one live customer profile with active-branch activity aggregates.',
+  request: { params: customerParams },
+  responses: {
+    200: {
+      description: 'Authorized live customer profile without payment evidence or provider data.',
+      content: { 'application/json': { schema: successEnvelope(customerDetailResponse) } },
+    },
+    403: jsonError('Reservation management permission is required.'),
+    404: jsonError('The customer was not found for the active tenant.'),
+    422: jsonError('The customer id is invalid.'),
   },
 });
 

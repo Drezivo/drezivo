@@ -10041,6 +10041,280 @@ paths:
                   - success
                   - error
                   - request_id
+  /customers/{customerId}:
+    get:
+      tags:
+        - customers
+      summary: Read one live customer profile with active-branch activity aggregates.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: customerId
+          in: path
+      responses:
+        "200":
+          description: Authorized live customer profile without payment evidence or
+            provider data.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      full_name:
+                        type: string
+                        minLength: 1
+                        maxLength: 300
+                      phone:
+                        type:
+                          - string
+                          - "null"
+                        minLength: 1
+                        maxLength: 80
+                      email:
+                        type:
+                          - string
+                          - "null"
+                        maxLength: 320
+                        format: email
+                      address:
+                        type:
+                          - string
+                          - "null"
+                        minLength: 1
+                        maxLength: 500
+                      social_media:
+                        type:
+                          - string
+                          - "null"
+                        minLength: 1
+                        maxLength: 320
+                      notes:
+                        type:
+                          - string
+                          - "null"
+                        maxLength: 2000
+                      status:
+                        type: string
+                        enum: *a23
+                      archived_at:
+                        type:
+                          - string
+                          - "null"
+                        format: date-time
+                      reservation_count:
+                        type: integer
+                        minimum: 0
+                      fitting_count:
+                        type: integer
+                        minimum: 0
+                      completed_engagement_count:
+                        type: integer
+                        minimum: 0
+                      last_activity:
+                        type:
+                          - object
+                          - "null"
+                        properties:
+                          type:
+                            type: string
+                            enum: *a22
+                          at:
+                            type: string
+                            format: date-time
+                        required:
+                          - type
+                          - at
+                        additionalProperties: false
+                      next_activity:
+                        type:
+                          - object
+                          - "null"
+                        properties:
+                          type:
+                            type: string
+                            enum: *a22
+                          at:
+                            type: string
+                            format: date-time
+                        required:
+                          - type
+                          - at
+                        additionalProperties: false
+                      created_at:
+                        type: string
+                        format: date-time
+                      updated_at:
+                        type: string
+                        format: date-time
+                    required:
+                      - id
+                      - full_name
+                      - phone
+                      - email
+                      - address
+                      - social_media
+                      - notes
+                      - status
+                      - archived_at
+                      - reservation_count
+                      - fitting_count
+                      - completed_engagement_count
+                      - last_activity
+                      - next_activity
+                      - created_at
+                      - updated_at
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Reservation management permission is required.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a24
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "404":
+          description: The customer was not found for the active tenant.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a24
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "422":
+          description: The customer id is invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a24
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
   /calendar:
     get:
       tags:

@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { ValidationError } from '../../shared/errors.js';
 import { sendSuccess } from '../../shared/response.js';
 import {
+  getCustomerDetail,
   getCustomerList,
   getCustomerSummary,
   type CustomerReadContext,
@@ -16,6 +17,11 @@ export async function listCustomersController(req: Request, res: Response): Prom
 
 export async function getCustomerSummaryController(req: Request, res: Response): Promise<void> {
   sendSuccess(req, res, await getCustomerSummary(requireCustomerContext(req)));
+}
+
+export async function getCustomerDetailController(req: Request, res: Response): Promise<void> {
+  if (!req.customerId) throw new ValidationError('A valid customer id is required.');
+  sendSuccess(req, res, await getCustomerDetail(requireCustomerContext(req), req.customerId));
 }
 
 function requireCustomerContext(req: Request): CustomerReadContext {

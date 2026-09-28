@@ -4,11 +4,13 @@ import { requireStaffAuth } from '../../middleware/auth.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
 import {
+  getCustomerDetailController,
   getCustomerSummaryController,
   listCustomersController,
 } from './customers.controller.js';
 import {
   requireCustomerReadPermission,
+  validateCustomerId,
   validateCustomerListQuery,
 } from './customers.middleware.js';
 
@@ -30,3 +32,4 @@ const customerRead = [
 
 customersRouter.get('/customers/summary', ...customerRead, getCustomerSummaryController);
 customersRouter.get('/customers', ...customerRead, validateCustomerListQuery, listCustomersController);
+customersRouter.get('/customers/:customerId', ...customerRead, validateCustomerId, getCustomerDetailController);

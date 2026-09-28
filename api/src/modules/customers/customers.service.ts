@@ -1,6 +1,8 @@
 import {
+  customerDetailResponse,
   customerListResponse,
   customerSummaryResponse,
+  type CustomerDetailResponse,
   type CustomerListQuery,
   type CustomerListResponse,
   type CustomerSummaryResponse,
@@ -9,7 +11,11 @@ import {
 
 import { withTenantTransaction } from '../../db/client.js';
 import { ForbiddenError, NotFoundError } from '../../shared/errors.js';
-import { listCustomersReadModel, readCustomerSummary } from './customers.repository.js';
+import {
+  listCustomersReadModel,
+  readCustomerDetailModel,
+  readCustomerSummary,
+} from './customers.repository.js';
 
 export interface CustomerReadContext {
   tenantId: string;
@@ -66,6 +72,46 @@ export async function getCustomerSummary(
   );
   if (!summary) throw new NotFoundError('Active branch could not be found.');
   return customerSummaryResponse.parse(summary);
+}
+
+export async function getCustomerDetail(
+  context: CustomerReadContext,
+  customerId: string,
+): Promise<CustomerDetailResponse> {
+  assertCustomerReadPermission(context.permissionCodes);
+  const row = await withTenantTransaction(context.tenantId, context.principalId, (client) =>
+    readCustomerDetailModel(client, {
+      tenantId: context.tenantId,
+      branchId: context.branchId,
+      customerId,
+    }),
+  );
+  if (!row) throw new NotFoundError('Customer could not be found.');
+
+  return customerDetailResponse.parse({
+    id: row.customer_id,
+    full_name: row.full_name,
+    phone: row.phone,
+    email: row.email,
+    address: row.address,
+    social_media: row.social_media,
+    notes: row.notes,
+    status: row.archived_at === null ? 'active' : 'archived',
+    archived_at: row.archived_at?.toISOString() ?? null,
+    reservation_count: row.reservation_count,
+    fitting_count: row.fitting_count,
+    completed_engagement_count: row.completed_engagement_count,
+    last_activity:
+      row.last_activity_type && row.last_activity_at
+        ? { type: row.last_activity_type, at: row.last_activity_at.toISOString() }
+        : null,
+    next_activity:
+      row.next_activity_type && row.next_activity_at
+        ? { type: row.next_activity_type, at: row.next_activity_at.toISOString() }
+        : null,
+    created_at: row.created_at.toISOString(),
+    updated_at: row.updated_at.toISOString(),
+  });
 }
 
 export function assertCustomerReadPermission(permissionCodes: PermissionCode[]): void {
