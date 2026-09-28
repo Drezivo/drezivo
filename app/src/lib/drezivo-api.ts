@@ -116,6 +116,9 @@ import {
   customerArchiveRequest,
   customerArchiveResponse,
   customerDetailResponse,
+  customerHistoryQuery,
+  customerFittingHistoryResponse,
+  customerReservationHistoryResponse,
   customerSummaryResponse,
   type AbandonOwnerOnboardingRequest,
   type ActorContext,
@@ -231,6 +234,9 @@ import {
   type CustomerArchiveRequest,
   type CustomerArchiveResponse,
   type CustomerDetailResponse,
+  type CustomerHistoryQuery,
+  type CustomerFittingHistoryResponse,
+  type CustomerReservationHistoryResponse,
   type CustomerSummaryResponse,
 } from "@drezivo/contracts";
 
@@ -359,6 +365,28 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         path: `/api/v1/customers/${encodeURIComponent(customerId)}`,
         responseSchema: apiEnvelope(customerDetailResponse),
       }),
+    getCustomerReservations: (customerId: string, input: CustomerHistoryQuery) => {
+      const query = customerHistoryQuery.parse(input);
+      const searchParams = new URLSearchParams({ limit: String(query.limit) });
+      if (query.cursor) searchParams.set("cursor", query.cursor);
+      return request<CustomerReservationHistoryResponse>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/customers/${encodeURIComponent(customerId)}/reservations?${searchParams.toString()}`,
+        responseSchema: apiEnvelope(customerReservationHistoryResponse),
+      });
+    },
+    getCustomerFittings: (customerId: string, input: CustomerHistoryQuery) => {
+      const query = customerHistoryQuery.parse(input);
+      const searchParams = new URLSearchParams({ limit: String(query.limit) });
+      if (query.cursor) searchParams.set("cursor", query.cursor);
+      return request<CustomerFittingHistoryResponse>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/customers/${encodeURIComponent(customerId)}/fittings?${searchParams.toString()}`,
+        responseSchema: apiEnvelope(customerFittingHistoryResponse),
+      });
+    },
     archiveCustomer: (
       customerId: string,
       input: CustomerArchiveRequest,
