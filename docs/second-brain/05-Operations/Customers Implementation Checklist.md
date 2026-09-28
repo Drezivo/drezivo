@@ -314,12 +314,12 @@ Build the customer API around the already-existing `customer`, `reservation`, an
 
 ## 19. `GET /api/v1/customers/:customerId/reservations`
 
-- [ ] Cursor-paginated customer Reservation history.
-- [ ] Default/bounded page size; frontend initially requests 10.
-- [ ] Tenant + authorized branch scope is explicit.
-- [ ] Use Reservation snapshot fields for historical facts.
-- [ ] Return only fields needed for customer history UI.
-- [ ] Stable newest-first ordering using created timestamp plus ID as tie-breaker.
+- [x] Cursor-paginated customer Reservation history.
+- [x] Default/bounded page size; frontend initially requests 10.
+- [x] Tenant + authorized branch scope is explicit.
+- [x] Use Reservation snapshot fields for historical facts.
+- [x] Return only fields needed for customer history UI.
+- [x] Stable newest-first ordering using created timestamp plus ID as tie-breaker.
 
 ## 20. `GET /api/v1/customers/:customerId/fittings`
 

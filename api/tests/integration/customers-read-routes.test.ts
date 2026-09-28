@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import {
   customerDetailResponse,
   customerListResponse,
+  customerReservationHistoryResponse,
   customerSummaryResponse,
   successEnvelope,
 } from '@drezivo/contracts';
@@ -157,6 +158,79 @@ describe('Customers read routes', async () => {
     expect(concealed.status).toBe(404);
   });
 
+  it('paginates branch-scoped reservation history from immutable reservation snapshots', async () => {
+    const seed = await seedWorkspace(
+      'org_customers_reservation_history',
+      'user_customers_reservation_history',
+      ['reservations.manage'],
+    );
+    const foreign = await seedWorkspace(
+      'org_customers_reservation_history_foreign',
+      'user_customers_reservation_history_foreign',
+      ['reservations.manage'],
+    );
+    useClerk(seed);
+    const customerId = await seedCustomer(seed, 'History Customer', '09176660001', null);
+    const foreignCustomerId = await seedCustomer(foreign, 'Foreign History', '09176660002', null);
+    const secondBranchId = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const branch = await client.query<{ id: string }>(
+        `INSERT INTO branch (tenant_id, name, code, timezone, status)
+         VALUES ($1, 'Other Branch', 'OTHER', 'Asia/Manila', 'active') RETURNING id`,
+        [seed.tenantId],
+      );
+      const id = branch.rows[0]?.id;
+      if (!id) throw new Error('second branch insert returned no row');
+      return id;
+    });
+
+    await seedReservationHistory(seed, customerId, {
+      referenceCode: 'RSV-HISTORY-001',
+      lineName: 'Oldest Snapshot Gown',
+      createdOffsetHours: -72,
+    });
+    await seedReservationHistory(seed, customerId, {
+      referenceCode: 'RSV-HISTORY-002',
+      lineName: 'Middle Snapshot Gown',
+      createdOffsetHours: -48,
+    });
+    await seedReservationHistory(seed, customerId, {
+      referenceCode: 'RSV-HISTORY-003',
+      lineName: 'Newest Snapshot Gown',
+      createdOffsetHours: -24,
+    });
+    await seedReservationHistory(seed, customerId, {
+      referenceCode: 'RSV-OTHER-BRANCH',
+      lineName: 'Other Branch Snapshot',
+      createdOffsetHours: -12,
+      branchId: secondBranchId,
+    });
+
+    const first = await request(createApp()).get(`/api/v1/customers/${customerId}/reservations?limit=2`);
+    expect(first.status).toBe(200);
+    const firstBody = successEnvelope(customerReservationHistoryResponse).parse(first.body);
+    expect(firstBody.data.items.map((item) => item.clothing_name_snapshot)).toEqual([
+      'Newest Snapshot Gown',
+      'Middle Snapshot Gown',
+    ]);
+    expect(firstBody.data.page_meta.has_more).toBe(true);
+
+    const cursor = firstBody.data.page_meta.next_cursor;
+    if (!cursor) throw new Error('expected reservation history cursor');
+    const second = await request(createApp()).get(
+      `/api/v1/customers/${customerId}/reservations?limit=2&cursor=${encodeURIComponent(cursor)}`,
+    );
+    expect(second.status).toBe(200);
+    const secondBody = successEnvelope(customerReservationHistoryResponse).parse(second.body);
+    expect(secondBody.data.items.map((item) => item.clothing_name_snapshot)).toEqual([
+      'Oldest Snapshot Gown',
+    ]);
+
+    const concealed = await request(createApp()).get(
+      `/api/v1/customers/${foreignCustomerId}/reservations?limit=10`,
+    );
+    expect(concealed.status).toBe(404);
+  });
+
   it('searches only name phone and email and supports archived/all status filters', async () => {
     const seed = await seedWorkspace('org_customers_filters', 'user_customers_filters', ['reservations.manage']);
     useClerk(seed);
@@ -210,6 +284,107 @@ describe('Customers read routes', async () => {
       return id;
     });
     return { tenantId: tenant.id, clerkOrgId: tenant.clerkOrgId, principalId, branchId };
+  }
+
+  async function seedReservationHistory(
+    seed: { tenantId: string; principalId: string; branchId: string },
+    customerId: string,
+    input: {
+      referenceCode: string;
+      lineName: string;
+      createdOffsetHours: number;
+      branchId?: string;
+    },
+  ): Promise<string> {
+    const branchId = input.branchId ?? seed.branchId;
+    const suffix = input.referenceCode.toLowerCase();
+    const createdAt = new Date(Date.now() + input.createdOffsetHours * 60 * 60 * 1000);
+    const pickupAt = new Date(createdAt.getTime() + 24 * 60 * 60 * 1000);
+    const dueAt = new Date(pickupAt.getTime() + 24 * 60 * 60 * 1000);
+
+    return withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const storefront = await client.query<{ id: string }>(
+        `INSERT INTO storefront (tenant_id, branch_id, slug, status, branding, contact)
+         VALUES ($1, $2, $3, 'draft', '{}'::jsonb, '{}'::jsonb) RETURNING id`,
+        [seed.tenantId, branchId, `customer-${suffix}`],
+      );
+      const storefrontId = storefront.rows[0]?.id;
+      if (!storefrontId) throw new Error('storefront insert returned no row');
+      const policy = await client.query<{ id: string }>(
+        `INSERT INTO policy_snapshot
+           (tenant_id, storefront_id, version, rental_rules, deposit_rules,
+            cancellation_rules, delivery_rules, privacy_notice, effective_at)
+         VALUES ($1, $2, 1, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+                 'Customer history policy', now()) RETURNING id`,
+        [seed.tenantId, storefrontId],
+      );
+      const policyId = policy.rows[0]?.id;
+      if (!policyId) throw new Error('policy insert returned no row');
+      const paymentMethod = await client.query<{ id: string }>(
+        `INSERT INTO payment_method
+           (tenant_id, name, rail, destination_snapshot, active, version)
+         VALUES ($1, $2, 'cash', '{}'::jsonb, true, 1) RETURNING id`,
+        [seed.tenantId, `Cash ${suffix}`],
+      );
+      const paymentMethodId = paymentMethod.rows[0]?.id;
+      if (!paymentMethodId) throw new Error('payment method insert returned no row');
+      const product = await client.query<{ id: string }>(
+        `INSERT INTO product (tenant_id, code, name, status)
+         VALUES ($1, $2, $3, 'active') RETURNING id`,
+        [seed.tenantId, `P-${suffix}`, `Live ${input.lineName}`],
+      );
+      const productId = product.rows[0]?.id;
+      if (!productId) throw new Error('reservation history product insert returned no row');
+      const variant = await client.query<{ id: string }>(
+        `INSERT INTO product_variant
+           (tenant_id, product_id, sku, size_label, measurements, measurement_unit,
+            measurement_mode, rental_price_minor, security_deposit_minor, currency,
+            pricing_mode, included_duration_minutes, extra_day_price_minor, prep_minutes,
+            turnaround_minutes, status)
+         VALUES ($1, $2, $3, 'M', '{}'::jsonb, 'cm', 'none', 350000, 0, 'PHP',
+                 'fixed_duration', 1440, 0, 0, 0, 'active') RETURNING id`,
+        [seed.tenantId, productId, `SKU-${suffix}`],
+      );
+      const variantId = variant.rows[0]?.id;
+      if (!variantId) throw new Error('reservation history variant insert returned no row');
+      const reservation = await client.query<{ id: string }>(
+        `INSERT INTO reservation
+           (tenant_id, branch_id, customer_id, storefront_id, policy_snapshot_id,
+            payment_method_id, reference_code, status, pickup_at, due_at, timezone_snapshot,
+            customer_snapshot, delivery_snapshot, price_snapshot, currency, rental_total_minor,
+            security_required_minor, due_now_minor, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed', $8::timestamptz, $9::timestamptz,
+                 'Asia/Manila', '{"full_name":"Historical Customer","phone":null,"email":null,"address":null}'::jsonb,
+                 '{"fulfillment_method":"pickup"}'::jsonb,
+                 '{"rental_total_minor":"350000","security_required_minor":"0","due_now_minor":"350000","currency":"PHP"}'::jsonb,
+                 'PHP', 350000, 0, 350000, $10::timestamptz)
+         RETURNING id`,
+        [
+          seed.tenantId,
+          branchId,
+          customerId,
+          storefrontId,
+          policyId,
+          paymentMethodId,
+          input.referenceCode,
+          pickupAt.toISOString(),
+          dueAt.toISOString(),
+          createdAt.toISOString(),
+        ],
+      );
+      const reservationId = reservation.rows[0]?.id;
+      if (!reservationId) throw new Error('reservation history insert returned no row');
+      await client.query(
+        `INSERT INTO reservation_line
+           (tenant_id, reservation_id, variant_id, line_number, name_snapshot,
+            measurements_snapshot, pricing_snapshot, rental_minor, deposit_minor, currency)
+         VALUES ($1, $2, $3, 1, $4, '{}'::jsonb,
+                 '{"rental_minor":"350000","deposit_minor":"0","currency":"PHP"}'::jsonb,
+                 350000, 0, 'PHP')`,
+        [seed.tenantId, reservationId, variantId, input.lineName],
+      );
+      return reservationId;
+    });
   }
 
   async function seedFitting(

@@ -817,6 +817,23 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: 'get',
+  path: '/customers/{customerId}/reservations',
+  tags: ['customers'],
+  summary: 'List bounded reservation history for one customer in the active branch.',
+  request: { params: customerParams, query: customerHistoryQuery },
+  responses: {
+    200: {
+      description: 'Cursor-paginated reservation history using immutable reservation snapshots.',
+      content: { 'application/json': { schema: successEnvelope(customerReservationHistoryResponse) } },
+    },
+    403: jsonError('Reservation management permission is required.'),
+    404: jsonError('The customer was not found for the active tenant.'),
+    422: jsonError('The customer history query or cursor is invalid.'),
+  },
+});
+
 // ---- operations ------------------------------------------------------
 registry.registerPath({
   method: 'get',

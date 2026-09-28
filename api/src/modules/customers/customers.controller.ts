@@ -5,6 +5,7 @@ import { sendSuccess } from '../../shared/response.js';
 import {
   getCustomerDetail,
   getCustomerList,
+  getCustomerReservationHistory,
   getCustomerSummary,
   type CustomerReadContext,
 } from './customers.service.js';
@@ -22,6 +23,17 @@ export async function getCustomerSummaryController(req: Request, res: Response):
 export async function getCustomerDetailController(req: Request, res: Response): Promise<void> {
   if (!req.customerId) throw new ValidationError('A valid customer id is required.');
   sendSuccess(req, res, await getCustomerDetail(requireCustomerContext(req), req.customerId));
+}
+
+export async function listCustomerReservationsController(req: Request, res: Response): Promise<void> {
+  const customerId = req.customerId;
+  const query = req.customerHistoryQuery;
+  if (!customerId || !query) throw new ValidationError('A valid customer history request is required.');
+  sendSuccess(
+    req,
+    res,
+    await getCustomerReservationHistory(requireCustomerContext(req), customerId, query),
+  );
 }
 
 function requireCustomerContext(req: Request): CustomerReadContext {

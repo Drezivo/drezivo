@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 
-import { customerId, type CustomerListQuery } from '@drezivo/contracts';
+import { customerId, reservationId, type CustomerListQuery } from '@drezivo/contracts';
 
 import { ValidationError } from '../../shared/errors.js';
 
@@ -50,6 +50,24 @@ export interface CustomerDetailReadRow {
   next_activity_at: Date | null;
   created_at: Date;
   updated_at: Date;
+}
+
+export interface CustomerReservationHistoryReadRow {
+  id: string;
+  reference_code: string;
+  clothing_name_snapshot: string;
+  status: string;
+  pickup_at: Date;
+  due_at: Date;
+  rental_total_minor: string;
+  currency: string;
+  created_at: Date;
+}
+
+export interface CustomerHistoryReadPage<T> {
+  rows: T[];
+  nextCursor: string | null;
+  hasMore: boolean;
 }
 
 interface CustomerListCursor {
@@ -365,6 +383,108 @@ export async function readCustomerDetailModel(
     [input.tenantId, input.branchId, input.customerId],
   );
   return result.rows[0] ?? null;
+}
+
+export async function listCustomerReservationHistory(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    customerId: string;
+    limit: number;
+    cursor?: string;
+  },
+): Promise<CustomerHistoryReadPage<CustomerReservationHistoryReadRow> | null> {
+  if (!(await customerIsReadable(client, input.tenantId, input.customerId))) return null;
+
+  const values: unknown[] = [input.tenantId, input.branchId, input.customerId];
+  const cursor = decodeReservationHistoryCursor(input.cursor);
+  const cursorClause = cursor
+    ? `AND (r.created_at, r.id) < ($${values.push(cursor.createdAt)}::timestamptz, $${values.push(cursor.reservationId)}::uuid)`
+    : '';
+  const limit = values.push(input.limit + 1);
+  const result = await client.query<CustomerReservationHistoryReadRow>(
+    `SELECT
+       r.id,
+       r.reference_code,
+       coalesce(line.name_snapshot, 'Reservation') AS clothing_name_snapshot,
+       r.status,
+       r.pickup_at,
+       r.due_at,
+       r.rental_total_minor::text AS rental_total_minor,
+       r.currency,
+       r.created_at
+     FROM reservation r
+     LEFT JOIN LATERAL (
+       SELECT rl.name_snapshot
+       FROM reservation_line rl
+       WHERE rl.tenant_id = r.tenant_id AND rl.reservation_id = r.id
+       ORDER BY rl.line_number ASC, rl.id ASC
+       LIMIT 1
+     ) line ON true
+     WHERE r.tenant_id = $1
+       AND r.branch_id = $2
+       AND r.customer_id = $3::uuid
+       ${cursorClause}
+     ORDER BY r.created_at DESC, r.id DESC
+     LIMIT $${limit}`,
+    values,
+  );
+
+  const hasMore = result.rows.length > input.limit;
+  const rows = hasMore ? result.rows.slice(0, input.limit) : result.rows;
+  const last = rows.at(-1);
+  return {
+    rows,
+    hasMore,
+    nextCursor: hasMore && last ? encodeReservationHistoryCursor(last) : null,
+  };
+}
+
+async function customerIsReadable(
+  client: PoolClient,
+  tenantId: string,
+  customerIdValue: string,
+): Promise<boolean> {
+  const result = await client.query(
+    `SELECT 1
+       FROM customer
+      WHERE tenant_id = $1 AND id = $2::uuid AND anonymized_at IS NULL
+      LIMIT 1`,
+    [tenantId, customerIdValue],
+  );
+  return result.rowCount === 1;
+}
+
+interface ReservationHistoryCursor {
+  createdAt: string;
+  reservationId: string;
+}
+
+function encodeReservationHistoryCursor(row: CustomerReservationHistoryReadRow): string {
+  const cursor: ReservationHistoryCursor = {
+    createdAt: row.created_at.toISOString(),
+    reservationId: row.id,
+  };
+  return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+}
+
+function decodeReservationHistoryCursor(cursor: string | undefined): ReservationHistoryCursor | null {
+  if (!cursor) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as {
+      createdAt?: unknown;
+      reservationId?: unknown;
+    };
+    if (typeof parsed.createdAt !== 'string' || Number.isNaN(Date.parse(parsed.createdAt))) {
+      throw new Error('cursor');
+    }
+    const parsedId = reservationId.safeParse(parsed.reservationId);
+    if (!parsedId.success) throw new Error('cursor');
+    return { createdAt: parsed.createdAt, reservationId: parsedId.data };
+  } catch {
+    throw new ValidationError('Customer reservation history cursor is invalid.');
+  }
 }
 
 function encodeCustomerListCursor(row: CustomerListReadRow): string {

@@ -1,10 +1,13 @@
 import {
   customerDetailResponse,
   customerListResponse,
+  customerReservationHistoryResponse,
   customerSummaryResponse,
   type CustomerDetailResponse,
+  type CustomerHistoryQuery,
   type CustomerListQuery,
   type CustomerListResponse,
+  type CustomerReservationHistoryResponse,
   type CustomerSummaryResponse,
   type PermissionCode,
 } from '@drezivo/contracts';
@@ -12,6 +15,7 @@ import {
 import { withTenantTransaction } from '../../db/client.js';
 import { ForbiddenError, NotFoundError } from '../../shared/errors.js';
 import {
+  listCustomerReservationHistory,
   listCustomersReadModel,
   readCustomerDetailModel,
   readCustomerSummary,
@@ -111,6 +115,41 @@ export async function getCustomerDetail(
         : null,
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),
+  });
+}
+
+export async function getCustomerReservationHistory(
+  context: CustomerReadContext,
+  customerId: string,
+  query: CustomerHistoryQuery,
+): Promise<CustomerReservationHistoryResponse> {
+  assertCustomerReadPermission(context.permissionCodes);
+  const page = await withTenantTransaction(context.tenantId, context.principalId, (client) =>
+    listCustomerReservationHistory(client, {
+      tenantId: context.tenantId,
+      branchId: context.branchId,
+      customerId,
+      limit: query.limit,
+      ...(query.cursor ? { cursor: query.cursor } : {}),
+    }),
+  );
+  if (!page) throw new NotFoundError('Customer could not be found.');
+
+  return customerReservationHistoryResponse.parse({
+    items: page.rows.map((row) => ({
+      id: row.id,
+      reference_code: row.reference_code,
+      clothing_name_snapshot: row.clothing_name_snapshot,
+      status: row.status,
+      pickup_at: row.pickup_at.toISOString(),
+      due_at: row.due_at.toISOString(),
+      rental_total_minor: row.rental_total_minor,
+      currency: row.currency,
+    })),
+    page_meta: {
+      next_cursor: page.nextCursor,
+      has_more: page.hasMore,
+    },
   });
 }
 

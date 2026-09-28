@@ -6,10 +6,12 @@ import { requireTenantContext } from '../../middleware/tenant-context.js';
 import {
   getCustomerDetailController,
   getCustomerSummaryController,
+  listCustomerReservationsController,
   listCustomersController,
 } from './customers.controller.js';
 import {
   requireCustomerReadPermission,
+  validateCustomerHistoryQuery,
   validateCustomerId,
   validateCustomerListQuery,
 } from './customers.middleware.js';
@@ -33,3 +35,10 @@ const customerRead = [
 customersRouter.get('/customers/summary', ...customerRead, getCustomerSummaryController);
 customersRouter.get('/customers', ...customerRead, validateCustomerListQuery, listCustomersController);
 customersRouter.get('/customers/:customerId', ...customerRead, validateCustomerId, getCustomerDetailController);
+customersRouter.get(
+  '/customers/:customerId/reservations',
+  ...customerRead,
+  validateCustomerId,
+  validateCustomerHistoryQuery,
+  listCustomerReservationsController,
+);
