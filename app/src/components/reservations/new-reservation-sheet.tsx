@@ -118,6 +118,8 @@ export function NewReservationSheet({
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [address, setAddress] = useState("");
+  const [socialMedia, setSocialMedia] = useState("");
   const [notes, setNotes] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
 
@@ -128,8 +130,8 @@ export function NewReservationSheet({
     customerOptions.find((customer) => customer.id === selectedCustomerId) ?? null;
   const customerReady =
     customerMode === "existing"
-      ? Boolean(selectedCustomerId)
-      : Boolean(fullName.trim() && (phone.trim() || email.trim()));
+      ? Boolean(selectedCustomerId && (selectedCustomer?.has_address || address.trim()))
+      : Boolean(fullName.trim() && (phone.trim() || email.trim()) && address.trim());
   const requestedInterval = useMemo(
     () => toRequestedInterval(pickupDate, pickupTime, dueDate, dueTime, timeZone),
     [dueDate, dueTime, pickupDate, pickupTime, timeZone]
@@ -383,6 +385,8 @@ export function NewReservationSheet({
     setFullName("");
     setPhone("");
     setEmail("");
+    setAddress("");
+    setSocialMedia("");
     setNotes("");
     setTermsAccepted(false);
   };
@@ -533,6 +537,9 @@ export function NewReservationSheet({
       fullName,
       phone,
       email,
+      address,
+      hasAddress: selectedCustomer?.has_address ?? false,
+      socialMedia,
       notes,
     });
     if (!customer) {
@@ -540,8 +547,8 @@ export function NewReservationSheet({
         tone: "attention",
         text:
           customerMode === "existing"
-            ? "Choose an existing customer before completing the reservation."
-            : "Enter the customer name and at least one contact method.",
+            ? "Choose an existing customer and enter an address when the profile is missing one."
+            : "Enter the customer name, address, and at least one contact method.",
       });
       return;
     }
@@ -1178,6 +1185,7 @@ export function NewReservationSheet({
                       variant={customerMode === "new" ? "default" : "secondary"}
                       onClick={() => {
                         setCustomerMode("new");
+                        setAddress("");
                         completeGuard.resetIntent();
                       }}
                     >
@@ -1189,6 +1197,8 @@ export function NewReservationSheet({
                       variant={customerMode === "existing" ? "default" : "secondary"}
                       onClick={() => {
                         setCustomerMode("existing");
+                        setAddress("");
+                        setSocialMedia("");
                         completeGuard.resetIntent();
                       }}
                     >
@@ -1231,6 +1241,27 @@ export function NewReservationSheet({
                           }}
                         />
                       </Field>
+                      <Field label="Address">
+                        <Input
+                          autoComplete="street-address"
+                          maxLength={500}
+                          value={address}
+                          onChange={(event) => {
+                            setAddress(event.target.value);
+                            completeGuard.resetIntent();
+                          }}
+                        />
+                      </Field>
+                      <Field label="Social media (optional)">
+                        <Input
+                          maxLength={320}
+                          value={socialMedia}
+                          onChange={(event) => {
+                            setSocialMedia(event.target.value);
+                            completeGuard.resetIntent();
+                          }}
+                        />
+                      </Field>
                       <Field label="Customer notes (optional)">
                         <Input
                           value={notes}
@@ -1268,6 +1299,7 @@ export function NewReservationSheet({
                               aria-pressed={isSelected}
                               onClick={() => {
                                 setSelectedCustomerId(customer.id);
+                                setAddress("");
                                 setNotice(null);
                                 completeGuard.resetIntent();
                               }}
@@ -1302,16 +1334,31 @@ export function NewReservationSheet({
                         })}
                       </div>
                       {selectedCustomer ? (
-                        <div className="mt-3 rounded-lg border border-dashboard-accent/50 bg-dashboard-active/60 p-3">
-                          <p className="text-xs font-medium uppercase tracking-wide text-dashboard-muted">
-                            Selected customer
-                          </p>
-                          <p className="mt-1 font-medium text-dashboard-navy">
-                            {selectedCustomer.full_name}
-                          </p>
-                          <p className="mt-1 text-xs text-dashboard-muted">
-                            {selectedCustomer.phone ?? selectedCustomer.email ?? "No contact shown"}
-                          </p>
+                        <div className="mt-3 space-y-3 rounded-lg border border-dashboard-accent/50 bg-dashboard-active/60 p-3">
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-dashboard-muted">
+                              Selected customer
+                            </p>
+                            <p className="mt-1 font-medium text-dashboard-navy">
+                              {selectedCustomer.full_name}
+                            </p>
+                            <p className="mt-1 text-xs text-dashboard-muted">
+                              {selectedCustomer.phone ?? selectedCustomer.email ?? "No contact shown"}
+                            </p>
+                          </div>
+                          {!selectedCustomer.has_address ? (
+                            <Field label="Address required for this reservation">
+                              <Input
+                                autoComplete="street-address"
+                                maxLength={500}
+                                value={address}
+                                onChange={(event) => {
+                                  setAddress(event.target.value);
+                                  completeGuard.resetIntent();
+                                }}
+                              />
+                            </Field>
+                          ) : null}
                         </div>
                       ) : null}
                     </div>
@@ -1411,25 +1458,33 @@ function buildCustomerInput(input: {
   fullName: string;
   phone: string;
   email: string;
+  address: string;
+  hasAddress: boolean;
+  socialMedia: string;
   notes: string;
 }): StaffReservationCustomerInput | null {
   if (input.customerMode === "existing") {
-    return input.selectedCustomerId
-      ? { source: "existing", customer_id: input.selectedCustomerId }
-      : null;
+    if (!input.selectedCustomerId) return null;
+    if (input.hasAddress) return { source: "existing", customer_id: input.selectedCustomerId };
+    const address = input.address.trim();
+    return address ? { source: "existing", customer_id: input.selectedCustomerId, address } : null;
   }
 
   const fullName = input.fullName.trim();
   const phone = input.phone.trim();
   const email = input.email.trim();
+  const address = input.address.trim();
+  const socialMedia = input.socialMedia.trim();
   const notes = input.notes.trim();
-  if (!fullName || (!phone && !email)) return null;
+  if (!fullName || !address || (!phone && !email)) return null;
   return {
     source: "new",
     customer: {
       full_name: fullName,
       ...(phone ? { phone } : {}),
       ...(email ? { email } : {}),
+      address,
+      ...(socialMedia ? { social_media: socialMedia } : {}),
       ...(notes ? { notes } : {}),
     },
   };

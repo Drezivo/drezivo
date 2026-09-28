@@ -189,4 +189,64 @@ describe('FIT-BE-042 preference-only fitting garments', async () => {
       await admin.end();
     }
   });
+
+  it('persists optional address and social media for a new fitting walk-in and returns them only in detail', async () => {
+    const seed = await seedPreferenceTenant('walk-in-profile');
+    const membershipId = randomUUID();
+    const response = await createStaffFittingCommand(
+      {
+        tenantId: seed.tenantId,
+        branchId: seed.branchId,
+        membershipId,
+        principalId: `user_${membershipId}`,
+        requestId: randomUUID(),
+        idempotencyKey: randomUUID(),
+      },
+      {
+        customer: {
+          source: 'new',
+          customer: {
+            full_name: 'Walk-in Profile Customer',
+            phone: '09175550002',
+            address: '789 Fitting Street, Quezon City',
+            social_media: '@fittingcustomer',
+          },
+        },
+        starts_at: '2099-01-09T02:00:00.000Z',
+        garments: [{ variant_id: seed.variantId as never, garment_mode: 'preference' }],
+      },
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      success: true,
+      data: {
+        fitting: {
+          customer: {
+            full_name: 'Walk-in Profile Customer',
+            address: '789 Fitting Street, Quezon City',
+            social_media: '@fittingcustomer',
+          },
+        },
+      },
+    });
+    if (!response.body.success) throw new Error('Expected fitting creation to succeed.');
+
+    const admin = new Client({ connectionString: adminUrl });
+    await admin.connect();
+    try {
+      const customer = await admin.query<{ address: string | null; social_media: string | null }>(
+        `SELECT c.address, c.social_media
+           FROM customer c
+           JOIN fitting_appointment f ON f.tenant_id = c.tenant_id AND f.customer_id = c.id
+          WHERE f.tenant_id = $1 AND f.id = $2`,
+        [seed.tenantId, response.body.data.fitting.id],
+      );
+      expect(customer.rows).toEqual([
+        { address: '789 Fitting Street, Quezon City', social_media: '@fittingcustomer' },
+      ]);
+    } finally {
+      await admin.end();
+    }
+  });
 });

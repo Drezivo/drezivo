@@ -4,7 +4,7 @@ type: index
 status: active
 owner: Drezivo team
 source: "ROOT-REPOSITORY-ARCHITECTURE.md and linked second-brain notes"
-updated: 2026-09-26
+updated: 2026-09-28
 tags: [drezivo, index]
 ---
 
@@ -16,6 +16,7 @@ The navigation hub for the Drezivo second brain.
 
 - [[01-Product/Drezivo Product Brief]]
 - [[02-Architecture/Drezivo Architecture]]
+- [[02-Architecture/Customer Address and Social Profile Fields]]
 - [[02-Architecture/API Module Boundaries and Layering]]
 - [[02-Architecture/Tenancy Checklist - What Why How]]
 - [[02-Architecture/Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation]]
@@ -32,6 +33,7 @@ The navigation hub for the Drezivo second brain.
 - [[08-Daily/2026-09-18]]
 - [[08-Daily/2026-09-23]]
 - [[08-Daily/2026-09-26]]
+- [[08-Daily/2026-09-28]]
 
 ## Current truth
 

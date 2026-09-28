@@ -86,6 +86,8 @@ export function ReservationMutationActions({
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [address, setAddress] = useState("");
+  const [socialMedia, setSocialMedia] = useState("");
   const [notes, setNotes] = useState("");
   const [mutationError, setMutationError] = useState<DrezivoApiError | null>(null);
 
@@ -113,6 +115,8 @@ export function ReservationMutationActions({
     setFullName("");
     setPhone("");
     setEmail("");
+    setAddress("");
+    setSocialMedia("");
     setNotes("");
     setMutationError(null);
     submitGuard.resetIntent();
@@ -164,6 +168,8 @@ export function ReservationMutationActions({
     setFullName("");
     setPhone("");
     setEmail("");
+    setAddress("");
+    setSocialMedia("");
     setNotes("");
     setMutationError(null);
     onNotice(null);
@@ -187,6 +193,13 @@ export function ReservationMutationActions({
     selectedAction === "complete_reservation" &&
     detail.status === "held" &&
     !detail.customer.snapshot;
+  const needsAddressCapture =
+    selectedAction === "complete_reservation" &&
+    detail.status === "held" &&
+    detail.customer.snapshot?.address === null &&
+    detail.customer.customer_id !== null;
+  const selectedCustomer =
+    customerOptions.find((customer) => customer.id === selectedCustomerId) ?? null;
   const customerInput = needsCustomerEntry
     ? buildCustomerInput({
         customerMode,
@@ -194,12 +207,14 @@ export function ReservationMutationActions({
         fullName,
         phone,
         email,
+        address,
+        hasAddress: selectedCustomer?.has_address ?? false,
+        socialMedia,
         notes,
       })
-    : null;
-  const selectedCustomer =
-    customerOptions.find((customer) => customer.id === selectedCustomerId) ?? null;
-
+    : needsAddressCapture
+      ? buildBoundSnapshotCustomerInput(detail.customer.customer_id!, address)
+      : null;
   const submitAction = async () => {
     if (!selectedAction || submitGuard.isSubmitting) return;
     setMutationError(null);
@@ -340,7 +355,7 @@ export function ReservationMutationActions({
     }
   };
 
-  const completionNeedsCustomer = needsCustomerEntry && customerInput === null;
+  const completionNeedsCustomer = (needsCustomerEntry || needsAddressCapture) && customerInput === null;
   const completionNeedsTerms =
     selectedAction === "complete_reservation" &&
     detail.terms_accepted_at === null &&
@@ -438,6 +453,7 @@ export function ReservationMutationActions({
                       updateIntentField(() => {
                         setCustomerMode("new");
                         setSelectedCustomerId("");
+                        setAddress("");
                       })
                     }
                   >
@@ -454,6 +470,8 @@ export function ReservationMutationActions({
                         setFullName("");
                         setPhone("");
                         setEmail("");
+                        setAddress("");
+                        setSocialMedia("");
                         setNotes("");
                       })
                     }
@@ -475,6 +493,29 @@ export function ReservationMutationActions({
                         onChange={(event) =>
                           updateIntentField(() => setFullName(event.target.value))
                         }
+                      />
+                    </label>
+                    <label className="block sm:col-span-2">
+                      <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
+                        Address
+                      </span>
+                      <Input
+                        autoComplete="street-address"
+                        value={address}
+                        disabled={submitGuard.isSubmitting}
+                        maxLength={500}
+                        onChange={(event) => updateIntentField(() => setAddress(event.target.value))}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
+                        Social media (optional)
+                      </span>
+                      <Input
+                        value={socialMedia}
+                        disabled={submitGuard.isSubmitting}
+                        maxLength={320}
+                        onChange={(event) => updateIntentField(() => setSocialMedia(event.target.value))}
                       />
                     </label>
                     <label className="block">
@@ -548,7 +589,10 @@ export function ReservationMutationActions({
                             aria-pressed={isSelected}
                             disabled={submitGuard.isSubmitting}
                             onClick={() =>
-                              updateIntentField(() => setSelectedCustomerId(customer.id))
+                              updateIntentField(() => {
+                                setSelectedCustomerId(customer.id);
+                                setAddress("");
+                              })
                             }
                             className={`flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition-colors ${
                               isSelected
@@ -579,16 +623,32 @@ export function ReservationMutationActions({
                       })}
                     </div>
                     {selectedCustomer ? (
-                      <div className="mt-3 rounded-lg border border-dashboard-accent/50 bg-dashboard-active/60 p-3">
-                        <p className="text-xs font-medium uppercase tracking-wide text-dashboard-muted">
-                          Selected customer
-                        </p>
-                        <p className="mt-1 text-sm font-medium text-dashboard-navy">
-                          {selectedCustomer.full_name}
-                        </p>
-                        <p className="mt-1 text-xs text-dashboard-muted">
-                          {selectedCustomer.phone ?? selectedCustomer.email ?? "No contact shown"}
-                        </p>
+                      <div className="mt-3 space-y-3 rounded-lg border border-dashboard-accent/50 bg-dashboard-active/60 p-3">
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-dashboard-muted">
+                            Selected customer
+                          </p>
+                          <p className="mt-1 text-sm font-medium text-dashboard-navy">
+                            {selectedCustomer.full_name}
+                          </p>
+                          <p className="mt-1 text-xs text-dashboard-muted">
+                            {selectedCustomer.phone ?? selectedCustomer.email ?? "No contact shown"}
+                          </p>
+                        </div>
+                        {!selectedCustomer.has_address ? (
+                          <label className="block">
+                            <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
+                              Address required for this reservation
+                            </span>
+                            <Input
+                              autoComplete="street-address"
+                              value={address}
+                              disabled={submitGuard.isSubmitting}
+                              maxLength={500}
+                              onChange={(event) => updateIntentField(() => setAddress(event.target.value))}
+                            />
+                          </label>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
@@ -597,6 +657,34 @@ export function ReservationMutationActions({
                 {completionNeedsCustomer ? (
                   <p className="text-xs text-dashboard-muted">
                     Choose a customer before completing the reservation.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {needsAddressCapture ? (
+              <div className="space-y-3 rounded-lg border border-dashboard-border bg-dashboard-surface p-3">
+                <div>
+                  <p className="text-xs font-semibold text-dashboard-navy">Address required</p>
+                  <p className="mt-1 text-xs text-dashboard-muted">
+                    Capture an address before completing this existing reservation.
+                  </p>
+                </div>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
+                    Address
+                  </span>
+                  <Input
+                    autoComplete="street-address"
+                    value={address}
+                    disabled={submitGuard.isSubmitting}
+                    maxLength={500}
+                    onChange={(event) => updateIntentField(() => setAddress(event.target.value))}
+                  />
+                </label>
+                {completionNeedsCustomer ? (
+                  <p className="text-xs text-dashboard-muted">
+                    An address is required before completing the reservation.
                   </p>
                 ) : null}
               </div>
@@ -905,9 +993,12 @@ function getVisibleMutationActions(
                 action: "complete_rental" as const,
                 label: "Complete Rental",
                 disabled: !allReturnedAssetsReady,
-                disabledReason: !allReturnedAssetsReady
-                  ? "Inspect the returned garment and mark it Ready before completing the rental."
-                  : undefined,
+                ...(!allReturnedAssetsReady
+                  ? {
+                      disabledReason:
+                        "Inspect the returned garment and mark it Ready before completing the rental.",
+                    }
+                  : {}),
               },
             ]
           : []),
@@ -1094,22 +1185,29 @@ function buildCustomerInput(input: {
   fullName: string;
   phone: string;
   email: string;
+  address: string;
+  hasAddress: boolean;
+  socialMedia: string;
   notes: string;
 }): StaffReservationCustomerInput | null {
   if (input.customerMode === "existing") {
-    return input.selectedCustomerId
-      ? { source: "existing", customer_id: input.selectedCustomerId }
-      : null;
+    if (!input.selectedCustomerId) return null;
+    if (input.hasAddress) return { source: "existing", customer_id: input.selectedCustomerId };
+    const address = input.address.trim();
+    return address ? { source: "existing", customer_id: input.selectedCustomerId, address } : null;
   }
 
   const fullName = input.fullName.trim();
   const phone = input.phone.trim();
   const email = input.email.trim();
+  const address = input.address.trim();
+  const socialMedia = input.socialMedia.trim();
   const notes = input.notes.trim();
   if (!fullName) return null;
   if (phone && !/^\d{11}$/.test(phone)) return null;
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
   if (!phone && !email) return null;
+  if (!address) return null;
 
   return {
     source: "new",
@@ -1117,9 +1215,19 @@ function buildCustomerInput(input: {
       full_name: fullName,
       ...(phone ? { phone } : {}),
       ...(email ? { email } : {}),
+      address,
+      ...(socialMedia ? { social_media: socialMedia } : {}),
       ...(notes ? { notes } : {}),
     },
   };
+}
+
+function buildBoundSnapshotCustomerInput(
+  customerId: CustomerId,
+  addressInput: string
+): StaffReservationCustomerInput | null {
+  const address = addressInput.trim();
+  return address ? { source: "existing", customer_id: customerId, address } : null;
 }
 
 function minorUnitsToMajorInput(value: string): string {

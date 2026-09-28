@@ -107,6 +107,8 @@ const product = clothingListItem.parse({
   name: "Emerald Gown",
   category: { id: "00000000-0000-4000-8000-000000000109", name: "Gowns" },
   product_status: "active",
+  sizing_mode: "sized",
+  has_free_size: false,
   size_labels: ["M"],
   price_from_minor: "150000",
   currency: "PHP",
@@ -142,6 +144,7 @@ const detail = clothingDetail.parse({
   name: "Emerald Gown",
   description: "Test gown",
   category: product.category,
+  sizing_mode: "sized",
   status: "active",
   images: [],
   variants: [
@@ -412,7 +415,7 @@ describe("NewReservationSheet", () => {
     setPickerTime("Return time", "10", "00", "AM");
 
     expect(await screen.findByText(/this is a 3 days fixed rental/i)).toBeVisible();
-    expect(screen.getByText(/stays unavailable for 1 day of recovery/i)).toBeVisible();
+    expect(screen.getAllByText(/stays unavailable for 1 day of recovery/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/preparation/i)).not.toBeInTheDocument();
     expect(api.getStaffReservationAvailabilityCheck).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Reserve" })).toBeDisabled();
@@ -462,13 +465,14 @@ describe("NewReservationSheet", () => {
 
     fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Walk-in Customer" } });
     fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
+    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Test Street" } });
     fireEvent.click(
       screen.getByRole("checkbox", {
         name: /Customer has reviewed and accepted the business rental terms/i,
       })
     );
-    fireEvent.click(screen.getByRole("checkbox", { name: "Cash received" }));
-    fireEvent.click(screen.getByRole("button", { name: "Complete Reservation" }));
+    fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Reservation" }));
 
     await waitFor(() =>
       expect(api.completeStaffReservation).toHaveBeenCalledWith(
@@ -478,7 +482,11 @@ describe("NewReservationSheet", () => {
           terms_accepted: true,
           customer: {
             source: "new",
-            customer: { full_name: "Walk-in Customer", phone: "09171234567" },
+            customer: {
+              full_name: "Walk-in Customer",
+              phone: "09171234567",
+              address: "123 Test Street",
+            },
           },
           cash_collection: { amount_tendered_minor: "200000" },
         },
@@ -561,6 +569,7 @@ describe("NewReservationSheet", () => {
       target: { value: "Walk-in GCash Customer" },
     });
     fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
+    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Test Street" } });
     fireEvent.click(
       screen.getByRole("checkbox", {
         name: /Customer has reviewed and accepted the business rental terms/i,
@@ -579,7 +588,11 @@ describe("NewReservationSheet", () => {
           terms_accepted: true,
           customer: {
             source: "new",
-            customer: { full_name: "Walk-in GCash Customer", phone: "09171234567" },
+            customer: {
+              full_name: "Walk-in GCash Customer",
+              phone: "09171234567",
+              address: "123 Test Street",
+            },
           },
         },
         expect.any(String)
@@ -621,6 +634,7 @@ describe("NewReservationSheet", () => {
                   full_name: "Maria Existing",
                   phone: "09170000000",
                   email: "maria@example.test",
+                  has_address: true,
                 },
               ]
             : [],
@@ -646,8 +660,8 @@ describe("NewReservationSheet", () => {
         name: /Customer has reviewed and accepted the business rental terms/i,
       })
     );
-    fireEvent.click(screen.getByRole("checkbox", { name: "Cash received" }));
-    fireEvent.click(screen.getByRole("button", { name: "Complete Reservation" }));
+    fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Reservation" }));
 
     await waitFor(() =>
       expect(api.completeStaffReservation).toHaveBeenCalledWith(
@@ -656,6 +670,66 @@ describe("NewReservationSheet", () => {
           version: 1,
           terms_accepted: true,
           customer: { source: "existing", customer_id: ids.customer },
+          cash_collection: { amount_tendered_minor: "200000" },
+        },
+        expect.any(String)
+      )
+    );
+  });
+
+  it("requires an inline address before an addressless existing customer can complete a reservation", async () => {
+    api.getStaffReservationIntakeOptions.mockImplementation((input: { customer_search?: string }) =>
+      Promise.resolve({
+        data: {
+          payment_methods: [{ id: ids.paymentMethod, name: "Cash", rail: "cash" }],
+          customers: input.customer_search
+            ? [
+                {
+                  id: ids.customer,
+                  full_name: "Addressless Existing",
+                  phone: "09170000000",
+                  email: "addressless@example.test",
+                  has_address: false,
+                },
+              ]
+            : [],
+        },
+        requestId: "req-intake-addressless",
+      })
+    );
+    renderSheet();
+    await fillDatesAndSelectProduct();
+    fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
+    await screen.findByText("RSV-WALKIN-001");
+
+    fireEvent.click(screen.getByRole("button", { name: "Existing customer" }));
+    fireEvent.change(screen.getByLabelText("Search existing customer"), {
+      target: { value: "Addressless" },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: /Addressless Existing/i }));
+    const complete = screen.getByRole("button", { name: "Confirm Reservation" });
+    expect(screen.getByLabelText("Address required for this reservation")).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /Customer has reviewed and accepted the business rental terms/i,
+      })
+    );
+    fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
+    expect(complete).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Address required for this reservation"), {
+      target: { value: "123 Test Street" },
+    });
+    expect(complete).toBeEnabled();
+    fireEvent.click(complete);
+
+    await waitFor(() =>
+      expect(api.completeStaffReservation).toHaveBeenCalledWith(
+        ids.reservation,
+        {
+          version: 1,
+          terms_accepted: true,
+          customer: { source: "existing", customer_id: ids.customer, address: "123 Test Street" },
           cash_collection: { amount_tendered_minor: "200000" },
         },
         expect.any(String)
@@ -704,17 +778,18 @@ describe("NewReservationSheet", () => {
 
     fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Walk-in Customer" } });
     fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
+    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Test Street" } });
     fireEvent.click(
       screen.getByRole("checkbox", {
         name: /Customer has reviewed and accepted the business rental terms/i,
       })
     );
-    fireEvent.click(screen.getByRole("checkbox", { name: "Cash received" }));
-    fireEvent.click(screen.getByRole("button", { name: "Complete Reservation" }));
+    fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Reservation" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/hold (has )?expired/i);
     expect(screen.getByRole("button", { name: "Start over" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Complete Reservation" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirm Reservation" })).not.toBeInTheDocument();
   });
 
   it("explicitly cancels an active walk-in hold instead of waiting for expiry", async () => {

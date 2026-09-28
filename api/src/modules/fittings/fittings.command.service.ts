@@ -317,6 +317,8 @@ async function resolveCustomer(
     fullName: request.customer.customer.full_name,
     phone: request.customer.customer.phone ?? null,
     email: request.customer.customer.email ?? null,
+    address: request.customer.customer.address ?? null,
+    socialMedia: request.customer.customer.social_media ?? null,
   });
 }
 
@@ -361,6 +363,8 @@ function toCreatedDetail(row: Awaited<ReturnType<typeof readFittingDetailModel>>
       full_name: row.customer_full_name,
       phone: row.customer_phone,
       email: row.customer_email,
+      address: row.customer_address,
+      social_media: row.customer_social_media,
     },
     garments: garments.map((raw) => {
       const line = raw as Record<string, unknown>;

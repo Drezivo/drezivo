@@ -63,6 +63,8 @@ function detail(status: "pending" | "confirmed" = "pending", version = 1) {
       full_name: "API Fitting Customer",
       phone: "09171234567",
       email: null,
+      address: null,
+      social_media: null,
     },
     garments: [{ ...listItem().garments[0], assigned_asset: null }],
     internal_note: null,

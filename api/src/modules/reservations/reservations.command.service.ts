@@ -30,6 +30,7 @@ import {
   chooseAvailableLockedAsset,
   createReservationCustomer,
   createReservationGraph,
+  fillReservationCustomerAddress,
   lockEligibleReservationAssets,
   readReservationCustomerForCreate,
   releaseExpiredReservationHolds,
@@ -168,6 +169,7 @@ export async function createStaffReservationCommand(
               full_name: customer.full_name,
               phone: customer.phone,
               email: customer.email,
+              address: customer.address,
             }
           : null,
         deliverySnapshot: quote.delivery_snapshot,
@@ -297,7 +299,7 @@ async function resolveCustomer(
       customerId: request.customer.customer_id,
     });
     if (!existing) throw new NotFoundError('Customer could not be found.');
-    return existing;
+    return fillMissingReservationAddress(client, tenantId, existing, request.customer.address);
   }
 
   return createReservationCustomer(client, {
@@ -305,8 +307,36 @@ async function resolveCustomer(
     fullName: request.customer.customer.full_name,
     phone: request.customer.customer.phone ?? null,
     email: request.customer.customer.email?.trim().toLowerCase() ?? null,
+    address: request.customer.customer.address,
+    socialMedia: request.customer.customer.social_media ?? null,
     notes: request.customer.customer.notes ?? null,
   });
+}
+
+async function fillMissingReservationAddress(
+  client: Parameters<typeof readReservationCustomerForCreate>[0],
+  tenantId: string,
+  customer: ReservationCustomerSnapshotRow,
+  address: string | undefined,
+): Promise<ReservationCustomerSnapshotRow> {
+  if (customer.address !== null) {
+    if (address !== undefined) {
+      throw new ValidationError('Customer already has an address. Update it through customer management.');
+    }
+    return customer;
+  }
+  if (address === undefined) {
+    throw new ValidationError('Customer address is required before creating a reservation.');
+  }
+  const filledAddress = await fillReservationCustomerAddress(client, {
+    tenantId,
+    customerId: customer.id,
+    address,
+  });
+  if (!filledAddress) {
+    throw new StateConflictError('Customer address changed during reservation creation.');
+  }
+  return { ...customer, address: filledAddress };
 }
 
 function toPaymentInstructions(snapshot: {

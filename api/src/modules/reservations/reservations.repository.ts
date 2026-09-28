@@ -79,6 +79,7 @@ export interface ReservationDetailHeaderRow {
   customer_full_name: string | null;
   customer_phone: string | null;
   customer_email: string | null;
+  customer_address: string | null;
   pickup_at: Date;
   due_at: Date;
   timezone_snapshot: string;
@@ -171,6 +172,7 @@ export interface StaffReservationCustomerOptionRow {
   full_name: string;
   phone: string | null;
   email: string | null;
+  has_address: boolean;
 }
 
 interface ReservationListCursor {
@@ -379,6 +381,7 @@ export async function readReservationDetailModel(
        nullif(btrim(r.customer_snapshot ->> 'full_name'), '') AS customer_full_name,
        nullif(btrim(r.customer_snapshot ->> 'phone'), '') AS customer_phone,
        nullif(btrim(r.customer_snapshot ->> 'email'), '') AS customer_email,
+       nullif(btrim(r.customer_snapshot ->> 'address'), '') AS customer_address,
        r.pickup_at,
        r.due_at,
        r.timezone_snapshot,
@@ -622,7 +625,8 @@ export async function searchStaffReservationCustomerOptions(
   if (!input.search) return [];
   const pattern = `%${input.search}%`;
   const result = await client.query<StaffReservationCustomerOptionRow>(
-    `SELECT c.id, c.full_name, c.phone, c.email
+    `SELECT c.id, c.full_name, c.phone, c.email,
+            nullif(btrim(c.address), '') IS NOT NULL AS has_address
      FROM customer c
      WHERE c.tenant_id = $1::uuid
        AND c.anonymized_at IS NULL

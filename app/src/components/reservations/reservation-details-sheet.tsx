@@ -171,6 +171,7 @@ function ReservationDetails({
                 <DetailValue label="Name" value={customer.full_name} />
                 <DetailValue label="Phone" value={customer.phone ?? "Not provided"} />
                 <DetailValue label="Email" value={customer.email ?? "Not provided"} />
+                <DetailValue label="Address" value={customer.address ?? "Not recorded"} />
                 <DetailValue
                   label="Customer record"
                   value={detail.customer.customer_id ? "Linked customer" : "Snapshot only"}

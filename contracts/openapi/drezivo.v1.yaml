@@ -106,7 +106,7 @@ components:
           format: uuid
         booking_channel:
           type: string
-          enum: &a29
+          enum: &a30
             - staff
         status:
           type: string
@@ -148,11 +148,25 @@ components:
                 - "null"
               maxLength: 320
               format: email
+            address:
+              type:
+                - string
+                - "null"
+              minLength: 1
+              maxLength: 500
+            social_media:
+              type:
+                - string
+                - "null"
+              minLength: 1
+              maxLength: 320
           required:
             - id
             - full_name
             - phone
             - email
+            - address
+            - social_media
           additionalProperties: false
         garments:
           type: array
@@ -303,7 +317,7 @@ components:
           type: array
           items:
             type: string
-            enum: &a30
+            enum: &a31
               - confirm
               - reject
               - cancel
@@ -542,7 +556,7 @@ components:
             properties:
               weekday:
                 type: string
-                enum: &a31
+                enum: &a32
                   - monday
                   - tuesday
                   - wednesday
@@ -2232,7 +2246,7 @@ components:
                         - lost
                     readiness:
                       type: string
-                      enum:
+                      enum: &a28
                         - ready
                         - needs_cleaning
                         - needs_repair
@@ -6474,9 +6488,18 @@ paths:
                     email:
                       type: string
                       format: email
+                    address:
+                      type: string
+                      minLength: 1
+                      maxLength: 500
+                    social_media:
+                      type: string
+                      minLength: 1
+                      maxLength: 320
                   required:
                     - full_name
                     - email
+                    - address
                   additionalProperties: false
               required:
                 - variant_id
@@ -7439,6 +7462,10 @@ paths:
                         customer_id:
                           type: string
                           format: uuid
+                        address:
+                          type: string
+                          minLength: 1
+                          maxLength: 500
                       required:
                         - source
                         - customer_id
@@ -7462,11 +7489,20 @@ paths:
                             email:
                               type: string
                               format: email
+                            address:
+                              type: string
+                              minLength: 1
+                              maxLength: 500
+                            social_media:
+                              type: string
+                              minLength: 1
+                              maxLength: 320
                             notes:
                               type: string
                               maxLength: 2000
                           required:
                             - full_name
+                            - address
                           additionalProperties: false
                       required:
                         - source
@@ -9355,7 +9391,7 @@ paths:
           in: query
         - schema:
             type: string
-            enum: &a28
+            enum: &a29
               - reserved
               - rented
               - unavailable
@@ -9507,11 +9543,7 @@ paths:
                                   format: uuid
                                 readiness:
                                   type: string
-                                  enum:
-                                    - ready
-                                    - needs_cleaning
-                                    - needs_repair
-                                    - unready
+                                  enum: *a28
                               required:
                                 - id
                                 - readiness
@@ -9527,7 +9559,7 @@ paths:
                                     maxLength: 200
                                   type:
                                     type: string
-                                    enum: *a28
+                                    enum: *a29
                                   period:
                                     type: object
                                     properties:
@@ -10363,6 +10395,14 @@ paths:
                               type: string
                               maxLength: 320
                               format: email
+                            address:
+                              type: string
+                              minLength: 1
+                              maxLength: 500
+                            social_media:
+                              type: string
+                              minLength: 1
+                              maxLength: 320
                           required:
                             - full_name
                           additionalProperties: false
@@ -10424,7 +10464,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a29
+                            enum: *a30
                           status:
                             type: string
                             enum: *a1
@@ -10465,11 +10505,25 @@ paths:
                                   - "null"
                                 maxLength: 320
                                 format: email
+                              address:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 500
+                              social_media:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 320
                             required:
                               - id
                               - full_name
                               - phone
                               - email
+                              - address
+                              - social_media
                             additionalProperties: false
                           garments:
                             type: array
@@ -10604,7 +10658,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a30
+                              enum: *a31
                             maxItems: 8
                           version:
                             type: integer
@@ -10808,7 +10862,7 @@ paths:
                         format: uuid
                       booking_channel:
                         type: string
-                        enum: *a29
+                        enum: *a30
                       status:
                         type: string
                         enum: *a1
@@ -10849,11 +10903,25 @@ paths:
                               - "null"
                             maxLength: 320
                             format: email
+                          address:
+                            type:
+                              - string
+                              - "null"
+                            minLength: 1
+                            maxLength: 500
+                          social_media:
+                            type:
+                              - string
+                              - "null"
+                            minLength: 1
+                            maxLength: 320
                         required:
                           - id
                           - full_name
                           - phone
                           - email
+                          - address
+                          - social_media
                         additionalProperties: false
                       garments:
                         type: array
@@ -10988,7 +11056,7 @@ paths:
                         type: array
                         items:
                           type: string
-                          enum: *a30
+                          enum: *a31
                         maxItems: 8
                       version:
                         type: integer
@@ -11330,7 +11398,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a29
+                            enum: *a30
                           status:
                             type: string
                             enum: *a1
@@ -11371,11 +11439,25 @@ paths:
                                   - "null"
                                 maxLength: 320
                                 format: email
+                              address:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 500
+                              social_media:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 320
                             required:
                               - id
                               - full_name
                               - phone
                               - email
+                              - address
+                              - social_media
                             additionalProperties: false
                           garments:
                             type: array
@@ -11510,7 +11592,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a30
+                              enum: *a31
                             maxItems: 8
                           version:
                             type: integer
@@ -11753,7 +11835,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a29
+                            enum: *a30
                           status:
                             type: string
                             enum: *a1
@@ -11794,11 +11876,25 @@ paths:
                                   - "null"
                                 maxLength: 320
                                 format: email
+                              address:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 500
+                              social_media:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 320
                             required:
                               - id
                               - full_name
                               - phone
                               - email
+                              - address
+                              - social_media
                             additionalProperties: false
                           garments:
                             type: array
@@ -11933,7 +12029,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a30
+                              enum: *a31
                             maxItems: 8
                           version:
                             type: integer
@@ -12207,7 +12303,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a29
+                            enum: *a30
                           status:
                             type: string
                             enum: *a1
@@ -12248,11 +12344,25 @@ paths:
                                   - "null"
                                 maxLength: 320
                                 format: email
+                              address:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 500
+                              social_media:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 320
                             required:
                               - id
                               - full_name
                               - phone
                               - email
+                              - address
+                              - social_media
                             additionalProperties: false
                           garments:
                             type: array
@@ -12387,7 +12497,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a30
+                              enum: *a31
                             maxItems: 8
                           version:
                             type: integer
@@ -12656,7 +12766,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a29
+                            enum: *a30
                           status:
                             type: string
                             enum: *a1
@@ -12697,11 +12807,25 @@ paths:
                                   - "null"
                                 maxLength: 320
                                 format: email
+                              address:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 500
+                              social_media:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 320
                             required:
                               - id
                               - full_name
                               - phone
                               - email
+                              - address
+                              - social_media
                             additionalProperties: false
                           garments:
                             type: array
@@ -12836,7 +12960,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a30
+                              enum: *a31
                             maxItems: 8
                           version:
                             type: integer
@@ -13109,7 +13233,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a29
+                            enum: *a30
                           status:
                             type: string
                             enum: *a1
@@ -13150,11 +13274,25 @@ paths:
                                   - "null"
                                 maxLength: 320
                                 format: email
+                              address:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 500
+                              social_media:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 320
                             required:
                               - id
                               - full_name
                               - phone
                               - email
+                              - address
+                              - social_media
                             additionalProperties: false
                           garments:
                             type: array
@@ -13289,7 +13427,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a30
+                              enum: *a31
                             maxItems: 8
                           version:
                             type: integer
@@ -13562,7 +13700,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a29
+                            enum: *a30
                           status:
                             type: string
                             enum: *a1
@@ -13603,11 +13741,25 @@ paths:
                                   - "null"
                                 maxLength: 320
                                 format: email
+                              address:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 500
+                              social_media:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 320
                             required:
                               - id
                               - full_name
                               - phone
                               - email
+                              - address
+                              - social_media
                             additionalProperties: false
                           garments:
                             type: array
@@ -13742,7 +13894,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a30
+                              enum: *a31
                             maxItems: 8
                           version:
                             type: integer
@@ -14010,7 +14162,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a29
+                            enum: *a30
                           status:
                             type: string
                             enum: *a1
@@ -14051,11 +14203,25 @@ paths:
                                   - "null"
                                 maxLength: 320
                                 format: email
+                              address:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 500
+                              social_media:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 320
                             required:
                               - id
                               - full_name
                               - phone
                               - email
+                              - address
+                              - social_media
                             additionalProperties: false
                           garments:
                             type: array
@@ -14190,7 +14356,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a30
+                              enum: *a31
                             maxItems: 8
                           version:
                             type: integer
@@ -14458,7 +14624,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a29
+                            enum: *a30
                           status:
                             type: string
                             enum: *a1
@@ -14499,11 +14665,25 @@ paths:
                                   - "null"
                                 maxLength: 320
                                 format: email
+                              address:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 500
+                              social_media:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 320
                             required:
                               - id
                               - full_name
                               - phone
                               - email
+                              - address
+                              - social_media
                             additionalProperties: false
                           garments:
                             type: array
@@ -14638,7 +14818,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a30
+                              enum: *a31
                             maxItems: 8
                           version:
                             type: integer
@@ -14909,7 +15089,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a29
+                            enum: *a30
                           status:
                             type: string
                             enum: *a1
@@ -14950,11 +15130,25 @@ paths:
                                   - "null"
                                 maxLength: 320
                                 format: email
+                              address:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 500
+                              social_media:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 320
                             required:
                               - id
                               - full_name
                               - phone
                               - email
+                              - address
+                              - social_media
                             additionalProperties: false
                           garments:
                             type: array
@@ -15089,7 +15283,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a30
+                              enum: *a31
                             maxItems: 8
                           version:
                             type: integer
@@ -15360,7 +15554,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a29
+                            enum: *a30
                           status:
                             type: string
                             enum: *a1
@@ -15401,11 +15595,25 @@ paths:
                                   - "null"
                                 maxLength: 320
                                 format: email
+                              address:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 500
+                              social_media:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 320
                             required:
                               - id
                               - full_name
                               - phone
                               - email
+                              - address
+                              - social_media
                             additionalProperties: false
                           garments:
                             type: array
@@ -15540,7 +15748,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a30
+                              enum: *a31
                             maxItems: 8
                           version:
                             type: integer
@@ -15831,7 +16039,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a29
+                            enum: *a30
                           status:
                             type: string
                             enum: *a1
@@ -15872,11 +16080,25 @@ paths:
                                   - "null"
                                 maxLength: 320
                                 format: email
+                              address:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 500
+                              social_media:
+                                type:
+                                  - string
+                                  - "null"
+                                minLength: 1
+                                maxLength: 320
                             required:
                               - id
                               - full_name
                               - phone
                               - email
+                              - address
+                              - social_media
                             additionalProperties: false
                           garments:
                             type: array
@@ -16011,7 +16233,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a30
+                              enum: *a31
                             maxItems: 8
                           version:
                             type: integer
@@ -16292,7 +16514,7 @@ paths:
                           properties:
                             weekday:
                               type: string
-                              enum: *a31
+                              enum: *a32
                             windows:
                               type: array
                               items:
@@ -16471,7 +16693,7 @@ paths:
                               properties:
                                 weekday:
                                   type: string
-                                  enum: *a31
+                                  enum: *a32
                                 windows:
                                   type: array
                                   items:
@@ -16682,7 +16904,7 @@ paths:
                     properties:
                       weekday:
                         type: string
-                        enum: *a31
+                        enum: *a32
                       windows:
                         type: array
                         items:
@@ -16754,7 +16976,7 @@ paths:
                               properties:
                                 weekday:
                                   type: string
-                                  enum: *a31
+                                  enum: *a32
                                 windows:
                                   type: array
                                   items:
@@ -18122,7 +18344,7 @@ paths:
                               type:
                                 - string
                                 - "null"
-                              enum: &a33
+                              enum: &a34
                                 - requested
                                 - processing
                                 - completed
@@ -18413,7 +18635,7 @@ paths:
                   pattern: ^[A-Z]{3}$
                 purpose:
                   type: string
-                  enum: &a32
+                  enum: &a33
                     - rental_refund
                     - security_deposit_release
                     - goodwill_adjustment
@@ -18460,10 +18682,10 @@ paths:
                             pattern: ^[A-Z]{3}$
                           purpose:
                             type: string
-                            enum: *a32
+                            enum: *a33
                           status:
                             type: string
-                            enum: *a33
+                            enum: *a34
                           merchant_reference:
                             type:
                               - string

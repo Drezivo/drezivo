@@ -577,7 +577,11 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
     return {
       customer: {
         source: 'new',
-        customer: { full_name: 'Walk-in Customer', phone: '09171234567' },
+        customer: {
+          full_name: 'Walk-in Customer',
+          phone: '09171234567',
+          address: '123 Quote Street, Quezon City',
+        },
       },
       variant_id: seed.variantId as StaffReservationCreateRequest['variant_id'],
       requested_interval: overrides.requested_interval,

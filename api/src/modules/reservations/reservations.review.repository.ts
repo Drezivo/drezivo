@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 
 export interface LockedReservationReviewRow {
   reservation_id: string;
+  customer_id: string | null;
   status:
     | 'held'
     | 'pending_confirmation'
@@ -103,6 +104,7 @@ export async function lockReservationForReview(
   const result = await client.query<LockedReservationReviewRow>(
     `SELECT
        r.id AS reservation_id,
+       r.customer_id,
        r.status,
        r.version,
        r.customer_snapshot,
@@ -124,6 +126,51 @@ export async function lockReservationForReview(
     [input.tenantId, input.branchId, input.reservationId],
   );
   return result.rows[0] ?? null;
+}
+
+/**
+ * Repairs only the missing address on a pre-address reservation snapshot while
+ * the reservation header remains locked. The original identity/contact facts
+ * are intentionally preserved.
+ */
+export async function repairReservationSnapshotAddressForSubmit(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    reservationId: string;
+    version: number;
+    customerId: string;
+    address: string;
+  },
+): Promise<boolean> {
+  const result = await client.query<{ id: string }>(
+    `UPDATE reservation
+        SET customer_snapshot = jsonb_set(
+          customer_snapshot,
+          '{address}',
+          to_jsonb($6::text),
+          true
+        )
+      WHERE tenant_id = $1
+        AND branch_id = $2
+        AND id = $3::uuid
+        AND status = 'held'
+        AND version = $4
+        AND customer_id = $5::uuid
+        AND customer_snapshot IS NOT NULL
+        AND nullif(btrim(customer_snapshot ->> 'address'), '') IS NULL
+      RETURNING id`,
+    [
+      input.tenantId,
+      input.branchId,
+      input.reservationId,
+      input.version,
+      input.customerId,
+      input.address,
+    ],
+  );
+  return result.rowCount === 1;
 }
 
 /** Second lock: the canonical initial payment intent created atomically with the hold. */

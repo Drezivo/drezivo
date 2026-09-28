@@ -31,6 +31,8 @@ export interface FittingDetailReadRow extends FittingListReadRow {
   timezone_snapshot: string;
   customer_phone: string | null;
   customer_email: string | null;
+  customer_address: string | null;
+  customer_social_media: string | null;
   internal_note: string | null;
   terminal_reason: string | null;
 }
@@ -151,6 +153,8 @@ export async function readFittingDetailModel(
        fa.timezone_snapshot,
        c.phone AS customer_phone,
        c.email AS customer_email,
+       c.address AS customer_address,
+       c.social_media AS customer_social_media,
        fa.internal_note,
        fa.terminal_reason`)}
      WHERE fa.tenant_id = $1 AND fa.branch_id = $2 AND fa.id = $3::uuid

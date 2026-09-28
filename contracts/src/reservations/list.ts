@@ -82,7 +82,7 @@ export const reservationStaffCustomerProjection = z
   .object({
     customer_id: customerId.nullable(),
     /** Anonymous short holds may not have verified contact facts yet. */
-    snapshot: reservationCustomerSnapshot.nullable(),
+    snapshot: reservationCustomerSnapshot.omit({ address: true }).nullable(),
   })
   .strict();
 export type ReservationStaffCustomerProjection = z.infer<typeof reservationStaffCustomerProjection>;

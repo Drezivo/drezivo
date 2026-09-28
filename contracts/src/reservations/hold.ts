@@ -5,6 +5,7 @@
  */
 import { z } from 'zod';
 
+import { customerAddress } from '../common/customer';
 import { customerId, paymentMethodId, productVariantId } from '../common/ids';
 import { paymentRail } from '../finance/payment-status';
 import { instantInterval, isoDate, isoInstant } from '../common/time';
@@ -62,6 +63,8 @@ export const staffReservationCustomerInput = z.discriminatedUnion('source', [
     .object({
       source: z.literal('existing'),
       customer_id: customerId,
+      /** Accepted only when the selected profile is missing its required reservation address. */
+      address: customerAddress.optional(),
     })
     .strict(),
   z
@@ -87,6 +90,7 @@ export const staffReservationCustomerOption = z
     full_name: z.string().trim().min(1).max(300),
     phone: z.string().trim().min(1).max(80).nullable(),
     email: z.string().trim().email().max(320).nullable(),
+    has_address: z.boolean(),
   })
   .strict();
 export type StaffReservationCustomerOption = z.infer<typeof staffReservationCustomerOption>;

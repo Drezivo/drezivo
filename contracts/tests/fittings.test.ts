@@ -82,6 +82,8 @@ const baseDetail = {
     full_name: 'Maria Santos',
     phone: '09171234567',
     email: null,
+    address: null,
+    social_media: null,
   },
   garments: [
     {
@@ -182,6 +184,42 @@ describe('fitting contracts', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it('accepts optional bounded walk-in address and social-media fields', () => {
+    const request = {
+      customer: {
+        source: 'new' as const,
+        customer: {
+          full_name: 'Walk-in Customer',
+          phone: '09171234567',
+          address: '123 Test Street',
+          social_media: '@walkin',
+        },
+      },
+      starts_at: period.start,
+      garments: [{ variant_id: ids.variantPreference, garment_mode: 'preference' as const }],
+    };
+
+    expect(fittingCreateRequest.safeParse(request).success).toBe(true);
+    expect(
+      fittingCreateRequest.safeParse({
+        ...request,
+        customer: {
+          ...request.customer,
+          customer: { ...request.customer.customer, address: '   ' },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      fittingCreateRequest.safeParse({
+        ...request,
+        customer: {
+          ...request.customer,
+          customer: { ...request.customer.customer, social_media: 'S'.repeat(321) },
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects a name-only walk-in', () => {

@@ -61,7 +61,7 @@ const confirmedDetail = reservationDetail.parse({
   storefront_id: "00000000-0000-4000-8000-000000000301",
   customer: {
     customer_id: "00000000-0000-4000-8000-000000000102",
-    snapshot: { full_name: "Action Customer", phone: "09171234567", email: null },
+    snapshot: { full_name: "Action Customer", phone: "09171234567", email: null, address: "123 Test Street" },
   },
   lines: [
     {
@@ -361,6 +361,7 @@ describe("ReservationMutationActions", () => {
 
     fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Maria Walk-in" } });
     fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
+    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Test Street" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Customer accepted the rental terms." }));
     expect(confirm).toBeEnabled();
     fireEvent.click(confirm);
@@ -373,7 +374,7 @@ describe("ReservationMutationActions", () => {
         terms_accepted: true,
         customer: {
           source: "new",
-          customer: { full_name: "Maria Walk-in", phone: "09171234567" },
+          customer: { full_name: "Maria Walk-in", phone: "09171234567", address: "123 Test Street" },
         },
       },
       expect.any(String)
@@ -401,6 +402,7 @@ describe("ReservationMutationActions", () => {
             full_name: "Maria Existing",
             phone: "09170000000",
             email: "maria@example.test",
+            has_address: true,
           },
         ],
       },
@@ -427,6 +429,54 @@ describe("ReservationMutationActions", () => {
         version: 1,
         terms_accepted: true,
         customer: { source: "existing", customer_id: customerId },
+      },
+      expect.any(String)
+    );
+  });
+
+  it("captures an address before completing a held pre-change customer snapshot", async () => {
+    const heldDetail = reservationDetail.parse({
+      ...confirmedDetail,
+      status: "held",
+      customer: {
+        customer_id: "00000000-0000-4000-8000-000000000102",
+        snapshot: {
+          full_name: "Action Customer",
+          phone: "09171234567",
+          email: null,
+          address: null,
+        },
+      },
+      terms_accepted_at: null,
+      submitted_at: null,
+      confirmed_at: null,
+      hold_expires_at: "2026-10-10T02:15:00.000Z",
+      version: 1,
+    });
+    api.completeStaffReservation.mockResolvedValueOnce(mutationResult("confirmed", 2));
+    renderActions(heldDetail, ["reservations.manage"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Complete Reservation" }));
+    const confirm = screen.getAllByRole("button", { name: "Complete Reservation" })[1]!;
+    expect(screen.getByText("Address required")).toBeVisible();
+    expect(confirm).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Legacy Street" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Customer accepted the rental terms." }));
+    expect(confirm).toBeEnabled();
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(api.completeStaffReservation).toHaveBeenCalledTimes(1));
+    expect(api.completeStaffReservation).toHaveBeenCalledWith(
+      heldDetail.id,
+      {
+        version: 1,
+        terms_accepted: true,
+        customer: {
+          source: "existing",
+          customer_id: "00000000-0000-4000-8000-000000000102",
+          address: "123 Legacy Street",
+        },
       },
       expect.any(String)
     );

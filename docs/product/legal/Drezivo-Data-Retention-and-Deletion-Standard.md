@@ -34,6 +34,7 @@ public Privacy Policy, DPA, product configuration, backups, and deletion jobs mu
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Drezivo account and billing records | [INSERT] | [INSERT] | [INSERT] | [INSERT] | [INSERT] | [INSERT] | [INSERT] | Unapproved |
 | Tenant catalogue and reservation operations | [INSERT] | [INSERT] | [INSERT] | [INSERT] | [INSERT] | [INSERT] | [INSERT] | Unapproved |
+| Customer addresses and optional social-media profiles | Reservation fulfillment/operational contact for address; live-profile contact preference for optional social media. [COUNSEL TO CONFIRM LAWFUL BASIS] | Tenant rental business / [INSERT] | [INSERT] | [INSERT] | [INSERT] | [INSERT] | [INSERT] | Unapproved |
 | Financial, tax, refund, and deposit records | [INSERT] | [INSERT] | [INSERT] | [INSERT] | [INSERT] | [INSERT] | [INSERT] | Unapproved |
 | Payment evidence and private uploads | [INSERT] | [INSERT] | [INSERT] | [INSERT] | [INSERT] | [INSERT] | [INSERT] | Unapproved |
 | Optional government-ID verification | [INSERT] | [INSERT] | [INSERT] | [INSERT] | [INSERT] | [INSERT] | [INSERT] | Unapproved |
@@ -43,8 +44,7 @@ public Privacy Policy, DPA, product configuration, backups, and deletion jobs mu
 
 ## 3. Operating rules
 
-- Collect the minimum data needed for the declared feature. Government ID, date of birth, social
-  handles, and other sensitive data are not default fields.
+- Collect the minimum data needed for the declared feature. Customer address is required only for reservation create/submit and is snapshotted with the accepted booking; it remains optional for fitting walk-ins and legacy customer records. Social-media handles or URLs are optional live-profile data, are not reservation snapshots or search fields, and remain subject to the approved profile-data schedule. Government ID, date of birth, and other sensitive data are not default fields.
 - Apply the shortest approved retention period that meets the documented purpose. A tenant's
   business records, Drezivo's billing records, and a security audit record may have different
   legitimate retention needs.

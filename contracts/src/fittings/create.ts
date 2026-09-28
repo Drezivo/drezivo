@@ -1,6 +1,7 @@
 /** Staff fitting creation and non-lifecycle update contracts. */
 import { z } from 'zod';
 
+import { customerAddress, customerSocialMedia } from '../common/customer';
 import { customerId, productVariantId } from '../common/ids';
 import { isoInstant } from '../common/time';
 import {
@@ -20,6 +21,8 @@ export const fittingNewCustomerDetails = z
       .regex(/^\d{11}$/, 'Phone number must contain exactly 11 digits.')
       .optional(),
     email: z.string().trim().email().max(320).optional(),
+    address: customerAddress.optional(),
+    social_media: customerSocialMedia.optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
