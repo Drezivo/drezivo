@@ -1,234 +1,303 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { customerListItem, customerSummaryResponse } from "@drezivo/contracts";
 
 import { CustomersPage } from "@/components/customers/customers-page";
 
-describe("CustomersPage", () => {
-  it("renders the customer directory page shell", () => {
-    render(<CustomersPage />);
+const clerk = vi.hoisted(() => ({
+  getToken: vi.fn(),
+  useAuth: vi.fn(),
+}));
 
-    expect(screen.getByRole("heading", { name: "Customers" })).toBeVisible();
-    expect(
-      screen.getByText("View customer profiles and their reservation and fitting activity.")
-    ).toBeVisible();
+const api = vi.hoisted(() => ({
+  archiveCustomer: vi.fn(),
+  getCustomerDetail: vi.fn(),
+  getCustomerSummary: vi.fn(),
+  getCustomers: vi.fn(),
+}));
+
+vi.mock("@clerk/nextjs", () => ({ useAuth: clerk.useAuth }));
+
+vi.mock("@/lib/drezivo-api", () => ({
+  DrezivoApiError: class DrezivoApiError extends Error {
+    code: string;
+    requestId: string | null;
+    status: number;
+
+    constructor(
+      message: string,
+      options: { code?: string; requestId?: string | null; status?: number } = {}
+    ) {
+      super(message);
+      this.name = "DrezivoApiError";
+      this.code = options.code ?? "INTERNAL_ERROR";
+      this.requestId = options.requestId ?? null;
+      this.status = options.status ?? 500;
+    }
+  },
+  createDrezivoApiClient: () => api,
+}));
+
+const firstCustomer = customerListItem.parse({
+  id: "00000000-0000-4000-8000-000000000101",
+  full_name: "Real Database Customer",
+  phone: "09171234567",
+  email: "real.customer@example.test",
+  status: "active",
+  reservation_count: 4,
+  fitting_count: 2,
+  last_activity: { type: "reservation", at: "2026-09-27T02:00:00.000Z" },
+  next_activity: { type: "fitting", at: "2026-10-02T02:00:00.000Z" },
+  created_at: "2026-08-14T02:00:00.000Z",
+});
+
+const secondCustomer = customerListItem.parse({
+  id: "00000000-0000-4000-8000-000000000102",
+  full_name: "Second Database Customer",
+  phone: null,
+  email: "second.customer@example.test",
+  status: "active",
+  reservation_count: 1,
+  fitting_count: 0,
+  last_activity: null,
+  next_activity: null,
+  created_at: "2026-09-01T02:00:00.000Z",
+});
+
+const summary = customerSummaryResponse.parse({
+  all_customers: 42,
+  new_this_month: 8,
+  returning_customers: 17,
+  upcoming_customers: 11,
+});
+
+function page(items = [firstCustomer], nextCursor: string | null = null) {
+  return {
+    data: {
+      items,
+      page_meta: { next_cursor: nextCursor, has_more: Boolean(nextCursor) },
+    },
+    requestId: "request-customers",
+  };
+}
+
+function installDefaults() {
+  clerk.useAuth.mockReturnValue({
+    getToken: clerk.getToken,
+    isLoaded: true,
+    isSignedIn: true,
+  });
+  clerk.getToken.mockResolvedValue("test-token");
+  api.getCustomerSummary.mockResolvedValue({ data: summary, requestId: "request-summary" });
+  api.getCustomers.mockResolvedValue(page());
+  api.getCustomerDetail.mockResolvedValue({
+    data: { updated_at: "2026-09-27T03:00:00.000Z" },
+    requestId: "request-detail",
+  });
+  api.archiveCustomer.mockResolvedValue({
+    data: {
+      id: firstCustomer.id,
+      status: "archived",
+      archived_at: "2026-09-27T03:00:00.000Z",
+      updated_at: "2026-09-27T03:00:00.000Z",
+    },
+    requestId: "request-archive",
+  });
+}
+
+describe("CustomersPage production wiring", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    installDefaults();
   });
 
-  it("renders the four customer dashboard metrics", () => {
+  it("renders database-backed customers and summary values", async () => {
     render(<CustomersPage />);
 
-    expect(screen.getByText("All Customers")).toBeVisible();
-    expect(screen.getByText("New This Month")).toBeVisible();
-    expect(screen.getByText("Returning Customers")).toBeVisible();
-    expect(screen.getByText("Upcoming Customers")).toBeVisible();
-    expect(screen.getByText("128")).toBeVisible();
-    expect(screen.getByText("14")).toBeVisible();
+    expect(await screen.findByText("Real Database Customer")).toBeVisible();
+    expect(screen.getByText("real.customer@example.test")).toBeVisible();
     expect(screen.getByText("42")).toBeVisible();
-    expect(screen.getByText("19")).toBeVisible();
+    expect(screen.getByText("8")).toBeVisible();
+    expect(screen.getByText("17")).toBeVisible();
+    expect(screen.getByText("11")).toBeVisible();
+    expect(screen.queryByText("Maria Santos")).not.toBeInTheDocument();
+    expect(api.getCustomers).toHaveBeenCalledWith({ limit: 10, status: "active" });
   });
 
-  it("uses Active as the default customer filter and can clear toolbar filters", async () => {
+  it("serializes search and status filters for the server and resets pagination", async () => {
+    api.getCustomers.mockImplementation(async (input: { cursor?: string; search?: string; status: string }) => {
+      if (input.search === "second") return page([secondCustomer]);
+      if (input.cursor === "next-cursor") return page([secondCustomer]);
+      return page([firstCustomer], "next-cursor");
+    });
+
     render(<CustomersPage />);
+    await screen.findByText("Real Database Customer");
 
-    const search = screen.getByRole("textbox", { name: "Search customers" });
-    expect(search).toHaveValue("");
-    expect(screen.getByRole("button", { name: "Status: Active" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Clear filters" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next customers page" }));
+    await waitFor(() =>
+      expect(api.getCustomers).toHaveBeenCalledWith(
+        expect.objectContaining({ cursor: "next-cursor", limit: 10, status: "active" })
+      )
+    );
+    expect(screen.getByText("Page 2 · 1 customer loaded")).toBeVisible();
 
-    fireEvent.change(search, { target: { value: "Maria" } });
-    expect(screen.getByRole("button", { name: "Clear filters" })).toBeVisible();
+    fireEvent.change(screen.getByRole("textbox", { name: "Search customers" }), {
+      target: { value: "second" },
+    });
+    await waitFor(() =>
+      expect(api.getCustomers).toHaveBeenCalledWith({
+        limit: 10,
+        search: "second",
+        status: "active",
+      })
+    );
+    expect(screen.getByText("Page 1 · 1 customer loaded")).toBeVisible();
 
     fireEvent.pointerDown(screen.getByRole("button", { name: "Status: Active" }), {
       button: 0,
       ctrlKey: false,
     });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Archived" }));
-    expect(screen.getByRole("button", { name: "Status: Archived" })).toBeVisible();
-
-    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
-    expect(search).toHaveValue("");
-    expect(screen.getByRole("button", { name: "Status: Active" })).toBeVisible();
+    await waitFor(() =>
+      expect(api.getCustomers).toHaveBeenCalledWith({
+        limit: 10,
+        search: "second",
+        status: "archived",
+      })
+    );
   });
 
-  it("renders the customer directory table from approved list fields", () => {
-    render(<CustomersPage />);
-
-    const table = screen.getByRole("table", { name: "Customers" });
-    expect(within(table).getByText("Maria Santos")).toBeVisible();
-    expect(within(table).getByText("maria.santos@example.test")).toBeVisible();
-    expect(within(table).getByText("0917 555 0101")).toBeVisible();
-    expect(within(table).queryByText("Diana Ramos")).not.toBeInTheDocument();
-
-    const mariaRow = within(table).getByText("Maria Santos").closest("tr");
-    expect(mariaRow).not.toBeNull();
-    if (!mariaRow) return;
-    expect(within(mariaRow).getByText("4")).toBeVisible();
-    expect(within(mariaRow).getByText("2")).toBeVisible();
-    expect(within(mariaRow).getByText("Active")).toBeVisible();
-  });
-
-  it("filters the prototype table by customer name, phone, or email", () => {
-    render(<CustomersPage />);
-
-    const search = screen.getByRole("textbox", { name: "Search customers" });
-    fireEvent.change(search, { target: { value: "nicole.mendoza@example.test" } });
-
-    expect(screen.getByText("Nicole Mendoza")).toBeVisible();
-    expect(screen.queryByText("Maria Santos")).not.toBeInTheDocument();
-  });
-
-  it("renders ten customers per page and keeps cursor-style previous and next navigation", () => {
-    render(<CustomersPage />);
-
-    const firstPageTable = screen.getByRole("table", { name: "Customers" });
-    expect(within(firstPageTable).getAllByRole("row")).toHaveLength(11);
-    expect(screen.getByText("Page 1 · 10 customers loaded")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Previous customers page" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Next customers page" })).toBeEnabled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Next customers page" }));
-
-    expect(screen.getByText("Page 2 · 4 customers loaded")).toBeVisible();
-    expect(screen.getByText("Trisha Garcia")).toBeVisible();
-    expect(screen.queryByText("Maria Santos")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Previous customers page" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Next customers page" })).toBeDisabled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Previous customers page" }));
-    expect(screen.getByText("Page 1 · 10 customers loaded")).toBeVisible();
-    expect(screen.getByText("Maria Santos")).toBeVisible();
-  });
-
-  it("exposes only the approved row actions and opens customer details with both histories", async () => {
-    render(<CustomersPage />);
-
-    const actions = screen.getByRole("button", { name: "Actions for Maria Santos" });
-    actions.focus();
-    fireEvent.keyDown(actions, { key: "ArrowDown" });
-
-    expect(await screen.findByRole("menuitem", { name: "View details" })).toBeVisible();
-    expect(screen.getByRole("menuitem", { name: "Edit" })).toBeVisible();
-    expect(screen.getByRole("menuitem", { name: "Archive" })).toBeVisible();
-    expect(screen.queryByText(/delete/i)).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("menuitem", { name: "View details" }));
-    expect(await screen.findByRole("heading", { name: "Maria Santos" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Reservation History" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Fitting History" })).toBeVisible();
-    expect(screen.getByText("RSV-260924-018")).toBeVisible();
-    expect(screen.getByText("Emerald Filipiniana Gown · Size S")).toBeVisible();
-  });
-
-  it("keeps address optional but requires at least one customer contact", async () => {
-    render(<CustomersPage />);
-
-    const actions = screen.getByRole("button", { name: "Actions for Maria Santos" });
-    actions.focus();
-    fireEvent.keyDown(actions, { key: "ArrowDown" });
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
-
-    const phone = await screen.findByDisplayValue("0917 555 0101");
-    const email = screen.getByDisplayValue("maria.santos@example.test");
-    const address = screen.getByDisplayValue("24 Sampaguita Street, Quezon City, Metro Manila");
-
-    fireEvent.change(address, { target: { value: "" } });
-    fireEvent.change(phone, { target: { value: "" } });
-    fireEvent.change(email, { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save Customer" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Add at least a phone number or email address.");
-
-    fireEvent.change(email, { target: { value: "maria.updated@example.test" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save Customer" }));
-    await waitFor(() => expect(screen.getByText("maria.updated@example.test")).toBeVisible());
-  });
-
-  it("uses preservation copy for archive and never presents a hard-delete action", async () => {
-    render(<CustomersPage />);
-
-    const actions = screen.getByRole("button", { name: "Actions for Maria Santos" });
-    actions.focus();
-    fireEvent.keyDown(actions, { key: "ArrowDown" });
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Archive" }));
-
-    expect(await screen.findByText("Archive Maria Santos?")).toBeVisible();
-    expect(screen.getByText(/Reservation and fitting history will remain unchanged/i)).toBeVisible();
-    expect(screen.getByText(/no longer be selectable for new bookings/i)).toBeVisible();
-    expect(screen.getByRole("button", { name: "Archive Customer" })).toBeVisible();
-    expect(screen.queryByText(/delete customer/i)).not.toBeInTheDocument();
-  });
-
-  it("resets pagination to page one when the directory filters change", () => {
-    render(<CustomersPage />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Next customers page" }));
-    expect(screen.getByText("Page 2 · 4 customers loaded")).toBeVisible();
-
-    fireEvent.change(screen.getByRole("textbox", { name: "Search customers" }), {
-      target: { value: "Maria" },
+  it("falls back to the previous page when a later page becomes empty", async () => {
+    api.getCustomers.mockImplementation(async (input: { cursor?: string }) => {
+      if (input.cursor === "next-cursor") return page([]);
+      return page([firstCustomer], "next-cursor");
     });
-    expect(screen.getByText("Page 1 · 1 customer loaded")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Previous customers page" })).toBeDisabled();
+
+    render(<CustomersPage />);
+    await screen.findByText("Real Database Customer");
+    fireEvent.click(screen.getByRole("button", { name: "Next customers page" }));
+
+    await waitFor(() => expect(api.getCustomers).toHaveBeenCalledTimes(3));
+    expect(await screen.findByText("Page 1 · 1 customer loaded")).toBeVisible();
+    expect(screen.getByText("Real Database Customer")).toBeVisible();
   });
 
-  it("renders summary and table loading states without changing the page structure", () => {
-    render(<CustomersPage prototypeState={{ summary: "loading", directory: "loading" }} />);
+  it("renders empty and permission states from API responses", async () => {
+    api.getCustomers.mockResolvedValueOnce(page([]));
+    const empty = render(<CustomersPage />);
+    expect(await screen.findByText("No active customers yet")).toBeVisible();
+    empty.unmount();
+
+    vi.clearAllMocks();
+    installDefaults();
+    api.getCustomers.mockRejectedValueOnce(
+      new (await import("@/lib/drezivo-api")).DrezivoApiError("Customer access denied", {
+        code: "FORBIDDEN",
+        requestId: "request-forbidden",
+        status: 403,
+      })
+    );
+    render(<CustomersPage />);
+    expect(await screen.findByText("Customer access restricted")).toBeVisible();
+    expect(screen.getByText("Request ID: request-forbidden")).toBeVisible();
+  });
+
+  it("shows a safe retryable error and preserves its request id", async () => {
+    api.getCustomers.mockRejectedValueOnce(
+      new (await import("@/lib/drezivo-api")).DrezivoApiError("Temporary customer failure", {
+        requestId: "request-error",
+        status: 503,
+      })
+    );
+    render(<CustomersPage />);
+
+    expect(await screen.findByText("Temporary customer failure")).toBeVisible();
+    expect(screen.getByText("Request ID: request-error")).toBeVisible();
+
+    api.getCustomers.mockResolvedValueOnce(page());
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Real Database Customer")).toBeVisible();
+  });
+
+  it("keeps summary failures independent from a healthy customer directory", async () => {
+    api.getCustomerSummary.mockRejectedValueOnce(
+      new (await import("@/lib/drezivo-api")).DrezivoApiError("Summary temporarily unavailable", {
+        requestId: "request-summary-error",
+        status: 503,
+      })
+    );
+    render(<CustomersPage />);
+
+    expect(await screen.findByText("Summary temporarily unavailable")).toBeVisible();
+    expect(screen.getByText("Request ID: request-summary-error")).toBeVisible();
+    expect(await screen.findByText("Real Database Customer")).toBeVisible();
+  });
+
+  it("renders independent loading states while API requests are pending", async () => {
+    let releaseSummary: (() => void) | undefined;
+    let releaseCustomers: (() => void) | undefined;
+    api.getCustomerSummary.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseSummary = () => resolve({ data: summary, requestId: "request-summary" });
+        })
+    );
+    api.getCustomers.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseCustomers = () => resolve(page());
+        })
+    );
+    render(<CustomersPage />);
 
     expect(screen.getByLabelText("Loading All Customers")).toBeVisible();
-    expect(screen.getByLabelText("Loading New This Month")).toBeVisible();
     expect(screen.getByLabelText("Loading customers")).toHaveAttribute("aria-busy", "true");
-    expect(screen.getByRole("textbox", { name: "Search customers" })).toBeVisible();
+
+    releaseSummary?.();
+    releaseCustomers?.();
+    await waitFor(() => expect(screen.queryByLabelText("Loading customers")).not.toBeInTheDocument());
   });
 
-  it("distinguishes the empty active directory from an empty filtered result", () => {
-    const { rerender } = render(<CustomersPage prototypeState={{ directory: "empty" }} />);
-    expect(screen.getByText("No active customers yet")).toBeVisible();
-
-    rerender(<CustomersPage />);
-    fireEvent.change(screen.getByRole("textbox", { name: "Search customers" }), {
-      target: { value: "customer-that-does-not-exist" },
-    });
-    expect(screen.getByText("No customers match these filters")).toBeVisible();
-  });
-
-  it("renders a permission-restricted customer directory state", () => {
-    render(<CustomersPage prototypeState={{ directory: "permission" }} />);
-
-    expect(screen.getByText("Customer access restricted")).toBeVisible();
-    expect(screen.getByText(/do not have permission to view the customer directory/i)).toBeVisible();
-    expect(screen.queryByRole("table", { name: "Customers" })).not.toBeInTheDocument();
-  });
-
-  it("renders an API error state and can retry into the ready directory", () => {
-    render(<CustomersPage prototypeState={{ directory: "error" }} />);
-
-    expect(screen.getByText("Customers could not be loaded")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-
-    expect(screen.getByRole("table", { name: "Customers" })).toBeVisible();
-    expect(screen.queryByText("Customers could not be loaded")).not.toBeInTheDocument();
-  });
-
-  it("renders customer-detail loading and concealed not-found states", async () => {
-    const { rerender } = render(<CustomersPage prototypeState={{ detail: "loading" }} />);
-
-    let actions = screen.getByRole("button", { name: "Actions for Maria Santos" });
+  it("keeps details and edit unavailable while enabling archive confirmation", async () => {
+    render(<CustomersPage />);
+    await screen.findByText("Real Database Customer");
+    const actions = screen.getByRole("button", { name: "Actions for Real Database Customer" });
     actions.focus();
-    fireEvent.keyDown(actions, { key: "ArrowDown" });
-    fireEvent.click(await screen.findByRole("menuitem", { name: "View details" }));
-    expect(await screen.findByLabelText("Loading customer details")).toHaveAttribute("aria-busy", "true");
+    fireEvent.keyDown(actions, { key: "Enter", code: "Enter" });
 
-    rerender(<CustomersPage prototypeState={{ detail: "not-found" }} />);
-    expect(await screen.findByText("Customer unavailable")).toBeVisible();
-    expect(screen.getByText(/could not be found or you no longer have access/i)).toBeVisible();
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getByRole("menuitem", { name: "View details" })).toHaveAttribute(
+      "data-disabled"
+    );
+    expect(within(menu).getByRole("menuitem", { name: "Edit" })).toHaveAttribute("data-disabled");
+    expect(within(menu).getByRole("menuitem", { name: "Archive" })).not.toHaveAttribute("data-disabled");
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Archive" }));
+    expect(await screen.findByText("Archive Real Database Customer?")).toBeVisible();
+    expect(screen.queryByText("Reservation history")).not.toBeInTheDocument();
   });
 
-  it("renders mutation pending, success, and failure states from the API-shaped state contract", () => {
-    const { rerender } = render(<CustomersPage prototypeState={{ mutation: "pending" }} />);
-    expect(screen.getByRole("status")).toHaveTextContent("Saving customer changes…");
+  it("archives a customer with concurrency data and refreshes the list and summary", async () => {
+    render(<CustomersPage />);
+    await screen.findByText("Real Database Customer");
+    const actions = screen.getByRole("button", { name: "Actions for Real Database Customer" });
+    actions.focus();
+    fireEvent.keyDown(actions, { key: "Enter", code: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Archive" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Archive Customer" }));
 
-    rerender(<CustomersPage prototypeState={{ mutation: "success" }} />);
-    expect(screen.getByRole("status")).toHaveTextContent("Customer changes saved.");
-
-    rerender(<CustomersPage prototypeState={{ mutation: "failure" }} />);
-    expect(screen.getByRole("alert")).toHaveTextContent("Customer changes could not be saved");
+    await waitFor(() =>
+      expect(api.archiveCustomer).toHaveBeenCalledWith(
+        firstCustomer.id,
+        { expected_updated_at: "2026-09-27T03:00:00.000Z" },
+        expect.any(String)
+      )
+    );
+    await waitFor(() => {
+      expect(api.getCustomers).toHaveBeenCalledTimes(2);
+      expect(api.getCustomerSummary).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent("Real Database Customer was archived.");
   });
 });

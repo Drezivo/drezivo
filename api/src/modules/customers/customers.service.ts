@@ -1,10 +1,14 @@
 import {
+  customerArchiveRequest,
+  customerArchiveResponse,
   customerDetailResponse,
   customerFittingHistoryResponse,
   customerListResponse,
   customerReservationHistoryResponse,
   customerSummaryResponse,
   type CustomerDetailResponse,
+  type CustomerArchiveRequest,
+  type CustomerArchiveResponse,
   type CustomerFittingHistoryResponse,
   type CustomerHistoryQuery,
   type CustomerListQuery,
@@ -15,7 +19,21 @@ import {
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
-import { ForbiddenError, NotFoundError } from '../../shared/errors.js';
+import {
+  ForbiddenError,
+  IdempotencyKeyReusedError,
+  NotFoundError,
+  StaleVersionError,
+  StateConflictError,
+  ValidationError,
+  isAppError,
+} from '../../shared/errors.js';
+import { canonicalRequestHash } from '../../shared/idempotency.js';
+import type { FailureEnvelope, SuccessEnvelope } from '../../shared/response.js';
+import {
+  claimTenantIdempotency,
+  finalizeTenantIdempotency,
+} from '../../shared/tenant-idempotency.js';
 import {
   listCustomerFittingHistory,
   listCustomerReservationHistory,
@@ -30,6 +48,18 @@ export interface CustomerReadContext {
   principalId: string;
   permissionCodes: PermissionCode[];
 }
+
+export interface CustomerCommandContext extends CustomerReadContext {
+  membershipId: string;
+  requestId: string;
+}
+
+type CustomerCommandResponse<T> = {
+  status: number;
+  body: SuccessEnvelope<T> | FailureEnvelope;
+};
+
+const CUSTOMER_ARCHIVE_OPERATION = 'customer.archive';
 
 export async function getCustomerList(
   context: CustomerReadContext,
@@ -67,6 +97,98 @@ export async function getCustomerList(
       next_cursor: page.nextCursor,
       has_more: page.hasMore,
     },
+  });
+}
+
+export async function archiveCustomer(
+  input: CustomerCommandContext & {
+    customerId: string;
+    idempotencyKey: string;
+    request: CustomerArchiveRequest;
+  },
+): Promise<CustomerCommandResponse<CustomerArchiveResponse>> {
+  assertCustomerReadPermission(input.permissionCodes);
+  const parsedRequest = customerArchiveRequest.safeParse(input.request);
+  if (!parsedRequest.success) throw new ValidationError('Customer archive request is invalid.');
+  const request = parsedRequest.data;
+  const payloadHash = canonicalRequestHash({ customer_id: input.customerId, ...request });
+
+  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const claim = await claimTenantIdempotency(client, {
+      tenantId: input.tenantId,
+      principalKey: input.membershipId,
+      operation: CUSTOMER_ARCHIVE_OPERATION,
+      intentKey: input.idempotencyKey,
+      payloadHash,
+    });
+    if (claim.kind === 'replayed') {
+      return { status: claim.responseCode, body: claim.safeResponse as CustomerCommandResponse<CustomerArchiveResponse>['body'] };
+    }
+    if (claim.kind === 'key_reused') {
+      throw new IdempotencyKeyReusedError('This Idempotency-Key was already used for another request.');
+    }
+    if (claim.kind === 'in_progress') {
+      throw new StateConflictError('An identical request is already being processed. Retry shortly.');
+    }
+
+    try {
+      const current = await client.query<{ archived_at: Date | null; updated_at: Date }>(
+        `SELECT archived_at, updated_at
+           FROM customer
+          WHERE tenant_id = $1 AND id = $2::uuid AND anonymized_at IS NULL
+          FOR UPDATE`,
+        [input.tenantId, input.customerId],
+      );
+      const row = current.rows[0];
+      if (!row) throw new NotFoundError('Customer could not be found.');
+      if (row.updated_at.getTime() !== new Date(request.expected_updated_at).getTime()) {
+        throw new StaleVersionError('This customer changed before it could be archived. Refresh and try again.');
+      }
+      if (row.archived_at !== null) throw new StateConflictError('This customer is already archived.');
+
+      const updated = await client.query<{ id: string; archived_at: Date; updated_at: Date }>(
+        `UPDATE customer
+            SET archived_at = now(), updated_at = now()
+          WHERE tenant_id = $1 AND id = $2::uuid AND anonymized_at IS NULL
+          RETURNING id, archived_at, updated_at`,
+        [input.tenantId, input.customerId],
+      );
+      const archived = updated.rows[0];
+      if (!archived) throw new NotFoundError('Customer could not be found.');
+
+      const data = customerArchiveResponse.parse({
+        id: archived.id,
+        status: 'archived',
+        archived_at: archived.archived_at.toISOString(),
+        updated_at: archived.updated_at.toISOString(),
+      });
+      const body = successBody(input.requestId, data);
+      await finalizeTenantIdempotency(client, {
+        tenantId: input.tenantId,
+        principalKey: input.membershipId,
+        operation: CUSTOMER_ARCHIVE_OPERATION,
+        intentKey: input.idempotencyKey,
+        payloadHash,
+        status: 'succeeded',
+        responseCode: 200,
+        safeResponse: body,
+      });
+      return { status: 200, body };
+    } catch (error) {
+      if (!isAppError(error)) throw error;
+      const body = failureBody(input.requestId, error.code, error.message);
+      await finalizeTenantIdempotency(client, {
+        tenantId: input.tenantId,
+        principalKey: input.membershipId,
+        operation: CUSTOMER_ARCHIVE_OPERATION,
+        intentKey: input.idempotencyKey,
+        payloadHash,
+        status: 'failed',
+        responseCode: error.status,
+        safeResponse: body,
+      });
+      return { status: error.status, body };
+    }
   });
 }
 
@@ -196,4 +318,16 @@ export function assertCustomerReadPermission(permissionCodes: PermissionCode[]):
   if (!permissionCodes.includes('reservations.manage')) {
     throw new ForbiddenError('Customer directory access requires reservation management permission.');
   }
+}
+
+function successBody<T>(requestId: string, data: T): SuccessEnvelope<T> {
+  return { success: true, data, request_id: requestId };
+}
+
+function failureBody(
+  requestId: string,
+  code: FailureEnvelope['error']['code'],
+  message: string,
+): FailureEnvelope {
+  return { success: false, error: { code, message }, request_id: requestId };
 }

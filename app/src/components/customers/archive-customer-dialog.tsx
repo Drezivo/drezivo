@@ -1,11 +1,10 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
+import type { CustomerListItem } from "@drezivo/contracts";
 import { Archive, Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-
-import type { CustomerDetailPrototype } from "./customers-prototype-detail-data";
 
 export function ArchiveCustomerDialog({
   customer,
@@ -13,12 +12,14 @@ export function ArchiveCustomerDialog({
   mutationError,
   onArchive,
   onOpenChange,
+  requestId,
 }: {
-  customer: CustomerDetailPrototype | null;
+  customer: CustomerListItem | null;
   isSubmitting: boolean;
   mutationError?: string | null;
   onArchive: () => Promise<void>;
   onOpenChange: (open: boolean) => void;
+  requestId?: string | null;
 }) {
   return (
     <Dialog.Root open={customer !== null} onOpenChange={(open: boolean) => !isSubmitting && onOpenChange(open)}>
@@ -54,6 +55,7 @@ export function ArchiveCustomerDialog({
           {mutationError ? (
             <div role="alert" className="mt-5 rounded-lg border border-dashboard-danger/30 bg-dashboard-danger/10 px-3 py-2.5 text-sm text-dashboard-danger">
               {mutationError}
+              {requestId ? <p className="mt-1 text-xs">Request ID: {requestId}</p> : null}
             </div>
           ) : null}
 
