@@ -253,16 +253,16 @@ Build the customer API around the already-existing `customer`, `reservation`, an
 
 ## 15. Customer contracts
 
-- [ ] Add a dedicated `contracts/src/customers/` contract surface.
-- [ ] Define customer list query/response.
-- [ ] Define summary response.
-- [ ] Define customer detail response.
-- [ ] Define customer Reservation history response.
-- [ ] Define customer Fitting history response.
-- [ ] Define Edit request/response.
-- [ ] Define Archive request/response.
-- [ ] All responses use existing branded IDs, money strings, ISO timestamps, status schemas, and page-meta conventions.
-- [ ] Update generated OpenAPI from the contract generator; do not hand-maintain a drifting OpenAPI shape.
+- [x] Add a dedicated `contracts/src/customers/` contract surface.
+- [x] Define customer list query/response.
+- [x] Define summary response.
+- [x] Define customer detail response.
+- [x] Define customer Reservation history response.
+- [x] Define customer Fitting history response.
+- [x] Define Edit request/response.
+- [x] Define Archive request/response.
+- [x] All responses use existing branded IDs, money strings, ISO timestamps, status schemas, and page-meta conventions.
+- [x] Update generated OpenAPI from the contract generator; do not hand-maintain a drifting OpenAPI shape.
 
 ## 16. `GET /api/v1/customers`
 

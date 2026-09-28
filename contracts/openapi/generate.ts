@@ -24,6 +24,17 @@ import {
   catalogueQuery,
   centralPaymentsQuery,
   centralPaymentsResponse,
+  customerArchiveRequest,
+  customerArchiveResponse,
+  customerDetailResponse,
+  customerEditRequest,
+  customerEditResponse,
+  customerFittingHistoryResponse,
+  customerHistoryQuery,
+  customerListQuery,
+  customerListResponse,
+  customerReservationHistoryResponse,
+  customerSummaryResponse,
   changeSubscriptionPlanRequest,
   claimMembershipInvitationRequest,
   clerkWebhookInboxRecord,
@@ -1273,6 +1284,20 @@ registry.registerPath({
     422: jsonError(`Validation failed — see ${filePurpose.options.join(', ')} for allowed purposes.`),
   },
 });
+
+// Customer components are published before the routes land in Phase 2. Keeping these late in
+// registration order avoids renumbering YAML anchors for unrelated existing components.
+registry.register('CustomerListQuery', customerListQuery);
+registry.register('CustomerListResponse', customerListResponse);
+registry.register('CustomerSummaryResponse', customerSummaryResponse);
+registry.register('CustomerDetailResponse', customerDetailResponse);
+registry.register('CustomerHistoryQuery', customerHistoryQuery);
+registry.register('CustomerReservationHistoryResponse', customerReservationHistoryResponse);
+registry.register('CustomerFittingHistoryResponse', customerFittingHistoryResponse);
+registry.register('CustomerEditRequest', customerEditRequest);
+registry.register('CustomerEditResponse', customerEditResponse);
+registry.register('CustomerArchiveRequest', customerArchiveRequest);
+registry.register('CustomerArchiveResponse', customerArchiveResponse);
 
 const generator = new OpenApiGeneratorV31(registry.definitions);
 const document = generator.generateDocument({

@@ -24,7 +24,7 @@ components:
           properties:
             code:
               type: string
-              enum: &a22
+              enum: &a24
                 - UNAUTHENTICATED
                 - FORBIDDEN
                 - NOT_FOUND
@@ -106,7 +106,7 @@ components:
           format: uuid
         booking_channel:
           type: string
-          enum: &a30
+          enum: &a32
             - staff
         status:
           type: string
@@ -317,7 +317,7 @@ components:
           type: array
           items:
             type: string
-            enum: &a31
+            enum: &a33
               - confirm
               - reject
               - cancel
@@ -556,7 +556,7 @@ components:
             properties:
               weekday:
                 type: string
-                enum: &a32
+                enum: &a34
                   - monday
                   - tuesday
                   - wednesday
@@ -878,7 +878,7 @@ components:
       properties:
         reason_code:
           type: string
-          enum: &a23
+          enum: &a25
             - not_now
             - wrong_details
             - payment_concern
@@ -2246,7 +2246,7 @@ components:
                         - lost
                     readiness:
                       type: string
-                      enum: &a28
+                      enum: &a30
                         - ready
                         - needs_cleaning
                         - needs_repair
@@ -2379,6 +2379,601 @@ components:
         - has_more_upcoming_allocations
         - created_at
         - updated_at
+    CustomerListQuery:
+      type: object
+      properties:
+        cursor:
+          type: string
+          minLength: 1
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+        search:
+          type: string
+          minLength: 1
+          maxLength: 200
+        status:
+          type: string
+          enum:
+            - active
+            - archived
+            - all
+          default: active
+      additionalProperties: false
+    CustomerListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              full_name:
+                type: string
+                minLength: 1
+                maxLength: 300
+              phone:
+                type:
+                  - string
+                  - "null"
+                minLength: 1
+                maxLength: 80
+              email:
+                type:
+                  - string
+                  - "null"
+                maxLength: 320
+                format: email
+              status:
+                type: string
+                enum: &a23
+                  - active
+                  - archived
+              reservation_count:
+                type: integer
+                minimum: 0
+              fitting_count:
+                type: integer
+                minimum: 0
+              last_activity:
+                type:
+                  - object
+                  - "null"
+                properties:
+                  type:
+                    type: string
+                    enum: &a22
+                      - reservation
+                      - fitting
+                  at:
+                    type: string
+                    format: date-time
+                required:
+                  - type
+                  - at
+                additionalProperties: false
+              next_activity:
+                type:
+                  - object
+                  - "null"
+                properties:
+                  type:
+                    type: string
+                    enum: *a22
+                  at:
+                    type: string
+                    format: date-time
+                required:
+                  - type
+                  - at
+                additionalProperties: false
+              created_at:
+                type: string
+                format: date-time
+            required:
+              - id
+              - full_name
+              - phone
+              - email
+              - status
+              - reservation_count
+              - fitting_count
+              - last_activity
+              - next_activity
+              - created_at
+            additionalProperties: false
+        page_meta:
+          type: object
+          properties:
+            next_cursor:
+              type:
+                - string
+                - "null"
+              minLength: 1
+            has_more:
+              type: boolean
+          required:
+            - next_cursor
+            - has_more
+      required:
+        - items
+        - page_meta
+    CustomerSummaryResponse:
+      type: object
+      properties:
+        all_customers:
+          type: integer
+          minimum: 0
+        new_this_month:
+          type: integer
+          minimum: 0
+        returning_customers:
+          type: integer
+          minimum: 0
+        upcoming_customers:
+          type: integer
+          minimum: 0
+      required:
+        - all_customers
+        - new_this_month
+        - returning_customers
+        - upcoming_customers
+      additionalProperties: false
+    CustomerDetailResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 300
+        phone:
+          type:
+            - string
+            - "null"
+          minLength: 1
+          maxLength: 80
+        email:
+          type:
+            - string
+            - "null"
+          maxLength: 320
+          format: email
+        address:
+          type:
+            - string
+            - "null"
+          minLength: 1
+          maxLength: 500
+        social_media:
+          type:
+            - string
+            - "null"
+          minLength: 1
+          maxLength: 320
+        notes:
+          type:
+            - string
+            - "null"
+          maxLength: 2000
+        status:
+          type: string
+          enum: *a23
+        archived_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        reservation_count:
+          type: integer
+          minimum: 0
+        fitting_count:
+          type: integer
+          minimum: 0
+        completed_engagement_count:
+          type: integer
+          minimum: 0
+        last_activity:
+          type:
+            - object
+            - "null"
+          properties:
+            type:
+              type: string
+              enum: *a22
+            at:
+              type: string
+              format: date-time
+          required:
+            - type
+            - at
+          additionalProperties: false
+        next_activity:
+          type:
+            - object
+            - "null"
+          properties:
+            type:
+              type: string
+              enum: *a22
+            at:
+              type: string
+              format: date-time
+          required:
+            - type
+            - at
+          additionalProperties: false
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - full_name
+        - phone
+        - email
+        - address
+        - social_media
+        - notes
+        - status
+        - archived_at
+        - reservation_count
+        - fitting_count
+        - completed_engagement_count
+        - last_activity
+        - next_activity
+        - created_at
+        - updated_at
+      additionalProperties: false
+    CustomerHistoryQuery:
+      type: object
+      properties:
+        cursor:
+          type: string
+          minLength: 1
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      additionalProperties: false
+    CustomerReservationHistoryResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              reference_code:
+                type: string
+                minLength: 1
+                maxLength: 120
+              clothing_name_snapshot:
+                type: string
+                minLength: 1
+                maxLength: 300
+              status:
+                type: string
+                enum: &a26
+                  - held
+                  - pending_confirmation
+                  - confirmed
+                  - picked_up
+                  - returned
+                  - completed
+                  - cancelled
+                  - expired
+                  - rejected
+              pickup_at:
+                type: string
+                format: date-time
+              due_at:
+                type: string
+                format: date-time
+              rental_total_minor:
+                type: string
+                pattern: ^-?(0|[1-9]\d*)$
+              currency:
+                type: string
+                pattern: ^[A-Z]{3}$
+            required:
+              - id
+              - reference_code
+              - clothing_name_snapshot
+              - status
+              - pickup_at
+              - due_at
+              - rental_total_minor
+              - currency
+            additionalProperties: false
+        page_meta:
+          type: object
+          properties:
+            next_cursor:
+              type:
+                - string
+                - "null"
+              minLength: 1
+            has_more:
+              type: boolean
+          required:
+            - next_cursor
+            - has_more
+      required:
+        - items
+        - page_meta
+    CustomerFittingHistoryResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              starts_at:
+                type: string
+                format: date-time
+              status:
+                type: string
+                enum: *a1
+              garment_summary:
+                type:
+                  - string
+                  - "null"
+                minLength: 1
+                maxLength: 500
+              fee:
+                type: object
+                properties:
+                  fee_minor:
+                    type: string
+                    pattern: ^-?(0|[1-9]\d*)$
+                  currency:
+                    type: string
+                    pattern: ^[A-Z]{3}$
+                  payment_status:
+                    type:
+                      - string
+                      - "null"
+                    enum: *a3
+                required:
+                  - fee_minor
+                  - currency
+                  - payment_status
+                additionalProperties: false
+            required:
+              - id
+              - starts_at
+              - status
+              - garment_summary
+              - fee
+            additionalProperties: false
+        page_meta:
+          type: object
+          properties:
+            next_cursor:
+              type:
+                - string
+                - "null"
+              minLength: 1
+            has_more:
+              type: boolean
+          required:
+            - next_cursor
+            - has_more
+      required:
+        - items
+        - page_meta
+    CustomerEditRequest:
+      type: object
+      properties:
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        phone:
+          type:
+            - string
+            - "null"
+          pattern: ^\d{11}$
+        email:
+          type:
+            - string
+            - "null"
+          maxLength: 320
+          format: email
+        address:
+          type:
+            - string
+            - "null"
+          minLength: 1
+          maxLength: 500
+        social_media:
+          type:
+            - string
+            - "null"
+          minLength: 1
+          maxLength: 320
+        notes:
+          type:
+            - string
+            - "null"
+          maxLength: 2000
+        expected_updated_at:
+          type: string
+          format: date-time
+      required:
+        - full_name
+        - phone
+        - email
+        - address
+        - social_media
+        - notes
+        - expected_updated_at
+      additionalProperties: false
+    CustomerEditResponse:
+      type: object
+      properties:
+        customer:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            full_name:
+              type: string
+              minLength: 1
+              maxLength: 300
+            phone:
+              type:
+                - string
+                - "null"
+              minLength: 1
+              maxLength: 80
+            email:
+              type:
+                - string
+                - "null"
+              maxLength: 320
+              format: email
+            address:
+              type:
+                - string
+                - "null"
+              minLength: 1
+              maxLength: 500
+            social_media:
+              type:
+                - string
+                - "null"
+              minLength: 1
+              maxLength: 320
+            notes:
+              type:
+                - string
+                - "null"
+              maxLength: 2000
+            status:
+              type: string
+              enum: *a23
+            archived_at:
+              type:
+                - string
+                - "null"
+              format: date-time
+            reservation_count:
+              type: integer
+              minimum: 0
+            fitting_count:
+              type: integer
+              minimum: 0
+            completed_engagement_count:
+              type: integer
+              minimum: 0
+            last_activity:
+              type:
+                - object
+                - "null"
+              properties:
+                type:
+                  type: string
+                  enum: *a22
+                at:
+                  type: string
+                  format: date-time
+              required:
+                - type
+                - at
+              additionalProperties: false
+            next_activity:
+              type:
+                - object
+                - "null"
+              properties:
+                type:
+                  type: string
+                  enum: *a22
+                at:
+                  type: string
+                  format: date-time
+              required:
+                - type
+                - at
+              additionalProperties: false
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+          required:
+            - id
+            - full_name
+            - phone
+            - email
+            - address
+            - social_media
+            - notes
+            - status
+            - archived_at
+            - reservation_count
+            - fitting_count
+            - completed_engagement_count
+            - last_activity
+            - next_activity
+            - created_at
+            - updated_at
+          additionalProperties: false
+      required:
+        - customer
+      additionalProperties: false
+    CustomerArchiveRequest:
+      type: object
+      properties:
+        expected_updated_at:
+          type: string
+          format: date-time
+      required:
+        - expected_updated_at
+      additionalProperties: false
+    CustomerArchiveResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - archived
+        archived_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - status
+        - archived_at
+        - updated_at
+      additionalProperties: false
   parameters: {}
 paths:
   /onboarding:
@@ -2538,7 +3133,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -2582,7 +3177,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -2715,7 +3310,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -2760,7 +3355,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -2804,7 +3399,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -3030,7 +3625,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -3075,7 +3670,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -3119,7 +3714,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -3239,7 +3834,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -3398,7 +3993,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -3631,7 +4226,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -3675,7 +4270,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -3719,7 +4314,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -3774,7 +4369,7 @@ paths:
               properties:
                 reason_code:
                   type: string
-                  enum: *a23
+                  enum: *a25
               required:
                 - reason_code
               additionalProperties: false
@@ -3852,7 +4447,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -3897,7 +4492,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -3941,7 +4536,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -4050,7 +4645,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -4094,7 +4689,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -4138,7 +4733,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -4261,7 +4856,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -4305,7 +4900,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -4414,7 +5009,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -4458,7 +5053,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -4502,7 +5097,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -4546,7 +5141,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -4655,7 +5250,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -4699,7 +5294,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -4743,7 +5338,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -4787,7 +5382,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -5033,7 +5628,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -5077,7 +5672,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -5121,7 +5716,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -5165,7 +5760,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -5281,7 +5876,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -5325,7 +5920,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -5369,7 +5964,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -5507,7 +6102,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -5698,7 +6293,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -5742,7 +6337,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -5786,7 +6381,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -5830,7 +6425,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -5976,7 +6571,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -6295,7 +6890,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -6468,7 +7063,7 @@ paths:
                   pattern: ^\d{4}-\d{2}-\d{2}$
                 fulfillment_method:
                   type: string
-                  enum: &a24
+                  enum: &a27
                     - pickup
                     - delivery
                 payment_method_id:
@@ -6535,16 +7130,7 @@ paths:
                             maxLength: 120
                           status:
                             type: string
-                            enum: &a26
-                              - held
-                              - pending_confirmation
-                              - confirmed
-                              - picked_up
-                              - returned
-                              - completed
-                              - cancelled
-                              - expired
-                              - rejected
+                            enum: *a26
                           branch_id:
                             type: string
                             format: uuid
@@ -6559,7 +7145,7 @@ paths:
                             format: uuid
                           fulfillment_method:
                             type: string
-                            enum: *a24
+                            enum: *a27
                           pickup_at:
                             type: string
                             format: date-time
@@ -6642,7 +7228,7 @@ paths:
                             minLength: 1
                           rail:
                             type: string
-                            enum: &a27
+                            enum: &a29
                               - cash
                               - manual_qr
                               - manual_transfer
@@ -6685,7 +7271,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -6729,7 +7315,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -6828,7 +7414,7 @@ paths:
                         properties:
                           pricing_mode:
                             type: string
-                            enum: &a25
+                            enum: &a28
                               - fixed_duration
                               - daily
                           rental_price_minor:
@@ -6945,7 +7531,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -6989,7 +7575,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -7034,7 +7620,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -7078,7 +7664,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -7189,7 +7775,7 @@ paths:
                         properties:
                           pricing_mode:
                             type: string
-                            enum: *a25
+                            enum: *a28
                           rental_price_minor:
                             type: string
                             pattern: ^-?(0|[1-9]\d*)$
@@ -7271,7 +7857,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -7315,7 +7901,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -7360,7 +7946,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -7404,7 +7990,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -7528,7 +8114,7 @@ paths:
                   pattern: ^\d{4}-\d{2}-\d{2}$
                 fulfillment_method:
                   type: string
-                  enum: *a24
+                  enum: *a27
                 payment_method_id:
                   type: string
                   format: uuid
@@ -7580,7 +8166,7 @@ paths:
                             format: uuid
                           fulfillment_method:
                             type: string
-                            enum: *a24
+                            enum: *a27
                           pickup_at:
                             type: string
                             format: date-time
@@ -7650,7 +8236,7 @@ paths:
                             minLength: 1
                           rail:
                             type: string
-                            enum: *a27
+                            enum: *a29
                           qr_image_url:
                             type: string
                             format: uri
@@ -7688,7 +8274,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -7789,7 +8375,7 @@ paths:
                             format: uuid
                           fulfillment_method:
                             type: string
-                            enum: *a24
+                            enum: *a27
                           pickup_at:
                             type: string
                             format: date-time
@@ -7877,7 +8463,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -7995,7 +8581,7 @@ paths:
                             format: uuid
                           fulfillment_method:
                             type: string
-                            enum: *a24
+                            enum: *a27
                           pickup_at:
                             type: string
                             format: date-time
@@ -8087,7 +8673,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -8131,7 +8717,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -8235,7 +8821,7 @@ paths:
                             format: uuid
                           fulfillment_method:
                             type: string
-                            enum: *a24
+                            enum: *a27
                           pickup_at:
                             type: string
                             format: date-time
@@ -8323,7 +8909,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -8427,7 +9013,7 @@ paths:
                             format: uuid
                           fulfillment_method:
                             type: string
-                            enum: *a24
+                            enum: *a27
                           pickup_at:
                             type: string
                             format: date-time
@@ -8576,7 +9162,7 @@ paths:
                             format: uuid
                           fulfillment_method:
                             type: string
-                            enum: *a24
+                            enum: *a27
                           pickup_at:
                             type: string
                             format: date-time
@@ -8664,7 +9250,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -9010,7 +9596,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -9054,7 +9640,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -9269,7 +9855,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -9313,7 +9899,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -9391,7 +9977,7 @@ paths:
           in: query
         - schema:
             type: string
-            enum: &a29
+            enum: &a31
               - reserved
               - rented
               - unavailable
@@ -9543,7 +10129,7 @@ paths:
                                   format: uuid
                                 readiness:
                                   type: string
-                                  enum: *a28
+                                  enum: *a30
                               required:
                                 - id
                                 - readiness
@@ -9559,7 +10145,7 @@ paths:
                                     maxLength: 200
                                   type:
                                     type: string
-                                    enum: *a29
+                                    enum: *a31
                                   period:
                                     type: object
                                     properties:
@@ -9694,7 +10280,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -9738,7 +10324,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -9782,7 +10368,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -9827,7 +10413,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -9932,7 +10518,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -9976,7 +10562,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -10269,7 +10855,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -10313,7 +10899,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -10464,7 +11050,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a30
+                            enum: *a32
                           status:
                             type: string
                             enum: *a1
@@ -10658,7 +11244,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a31
+                              enum: *a33
                             maxItems: 8
                           version:
                             type: integer
@@ -10709,7 +11295,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -10754,7 +11340,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -10798,7 +11384,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -10862,7 +11448,7 @@ paths:
                         format: uuid
                       booking_channel:
                         type: string
-                        enum: *a30
+                        enum: *a32
                       status:
                         type: string
                         enum: *a1
@@ -11056,7 +11642,7 @@ paths:
                         type: array
                         items:
                           type: string
-                          enum: *a31
+                          enum: *a33
                         maxItems: 8
                       version:
                         type: integer
@@ -11104,7 +11690,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -11148,7 +11734,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -11262,7 +11848,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -11306,7 +11892,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -11398,7 +11984,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a30
+                            enum: *a32
                           status:
                             type: string
                             enum: *a1
@@ -11592,7 +12178,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a31
+                              enum: *a33
                             maxItems: 8
                           version:
                             type: integer
@@ -11643,7 +12229,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -11687,7 +12273,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -11731,7 +12317,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -11835,7 +12421,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a30
+                            enum: *a32
                           status:
                             type: string
                             enum: *a1
@@ -12029,7 +12615,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a31
+                              enum: *a33
                             maxItems: 8
                           version:
                             type: integer
@@ -12080,7 +12666,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -12124,7 +12710,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -12168,7 +12754,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -12212,7 +12798,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -12303,7 +12889,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a30
+                            enum: *a32
                           status:
                             type: string
                             enum: *a1
@@ -12497,7 +13083,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a31
+                              enum: *a33
                             maxItems: 8
                           version:
                             type: integer
@@ -12548,7 +13134,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -12592,7 +13178,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -12637,7 +13223,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -12681,7 +13267,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -12766,7 +13352,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a30
+                            enum: *a32
                           status:
                             type: string
                             enum: *a1
@@ -12960,7 +13546,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a31
+                              enum: *a33
                             maxItems: 8
                           version:
                             type: integer
@@ -13011,7 +13597,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -13055,7 +13641,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -13099,7 +13685,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -13143,7 +13729,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -13233,7 +13819,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a30
+                            enum: *a32
                           status:
                             type: string
                             enum: *a1
@@ -13427,7 +14013,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a31
+                              enum: *a33
                             maxItems: 8
                           version:
                             type: integer
@@ -13478,7 +14064,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -13522,7 +14108,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -13566,7 +14152,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -13610,7 +14196,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -13700,7 +14286,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a30
+                            enum: *a32
                           status:
                             type: string
                             enum: *a1
@@ -13894,7 +14480,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a31
+                              enum: *a33
                             maxItems: 8
                           version:
                             type: integer
@@ -13945,7 +14531,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -13989,7 +14575,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -14033,7 +14619,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -14077,7 +14663,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -14162,7 +14748,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a30
+                            enum: *a32
                           status:
                             type: string
                             enum: *a1
@@ -14356,7 +14942,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a31
+                              enum: *a33
                             maxItems: 8
                           version:
                             type: integer
@@ -14407,7 +14993,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -14451,7 +15037,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -14495,7 +15081,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -14539,7 +15125,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -14624,7 +15210,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a30
+                            enum: *a32
                           status:
                             type: string
                             enum: *a1
@@ -14818,7 +15404,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a31
+                              enum: *a33
                             maxItems: 8
                           version:
                             type: integer
@@ -14869,7 +15455,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -14913,7 +15499,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -14957,7 +15543,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -15001,7 +15587,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -15089,7 +15675,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a30
+                            enum: *a32
                           status:
                             type: string
                             enum: *a1
@@ -15283,7 +15869,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a31
+                              enum: *a33
                             maxItems: 8
                           version:
                             type: integer
@@ -15334,7 +15920,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -15379,7 +15965,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -15423,7 +16009,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -15467,7 +16053,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -15554,7 +16140,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a30
+                            enum: *a32
                           status:
                             type: string
                             enum: *a1
@@ -15748,7 +16334,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a31
+                              enum: *a33
                             maxItems: 8
                           version:
                             type: integer
@@ -15812,7 +16398,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -15856,7 +16442,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -15901,7 +16487,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -15945,7 +16531,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -16039,7 +16625,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a30
+                            enum: *a32
                           status:
                             type: string
                             enum: *a1
@@ -16233,7 +16819,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a31
+                              enum: *a33
                             maxItems: 8
                           version:
                             type: integer
@@ -16302,7 +16888,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -16346,7 +16932,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -16391,7 +16977,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -16435,7 +17021,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -16514,7 +17100,7 @@ paths:
                           properties:
                             weekday:
                               type: string
-                              enum: *a32
+                              enum: *a34
                             windows:
                               type: array
                               items:
@@ -16576,7 +17162,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -16693,7 +17279,7 @@ paths:
                               properties:
                                 weekday:
                                   type: string
-                                  enum: *a32
+                                  enum: *a34
                                 windows:
                                   type: array
                                   items:
@@ -16758,7 +17344,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -16803,7 +17389,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -16847,7 +17433,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -16904,7 +17490,7 @@ paths:
                     properties:
                       weekday:
                         type: string
-                        enum: *a32
+                        enum: *a34
                       windows:
                         type: array
                         items:
@@ -16976,7 +17562,7 @@ paths:
                               properties:
                                 weekday:
                                   type: string
-                                  enum: *a32
+                                  enum: *a34
                                 windows:
                                   type: array
                                   items:
@@ -17041,7 +17627,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -17085,7 +17671,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -17129,7 +17715,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -17280,7 +17866,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -17324,7 +17910,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -17474,7 +18060,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -17518,7 +18104,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -17562,7 +18148,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -17719,7 +18305,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -17763,7 +18349,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -17807,7 +18393,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -17851,7 +18437,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -17958,7 +18544,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -18002,7 +18588,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -18046,7 +18632,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -18115,7 +18701,7 @@ paths:
                         format: uuid
                       fulfillment_method:
                         type: string
-                        enum: *a24
+                        enum: *a27
                       pickup_at:
                         type: string
                         format: date-time
@@ -18198,7 +18784,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -18344,7 +18930,7 @@ paths:
                               type:
                                 - string
                                 - "null"
-                              enum: &a34
+                              enum: &a36
                                 - requested
                                 - processing
                                 - completed
@@ -18410,7 +18996,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -18454,7 +19040,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -18577,7 +19163,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -18635,7 +19221,7 @@ paths:
                   pattern: ^[A-Z]{3}$
                 purpose:
                   type: string
-                  enum: &a33
+                  enum: &a35
                     - rental_refund
                     - security_deposit_release
                     - goodwill_adjustment
@@ -18682,10 +19268,10 @@ paths:
                             pattern: ^[A-Z]{3}$
                           purpose:
                             type: string
-                            enum: *a33
+                            enum: *a35
                           status:
                             type: string
-                            enum: *a34
+                            enum: *a36
                           merchant_reference:
                             type:
                               - string
@@ -18730,7 +19316,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
@@ -18869,7 +19455,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: *a22
+                        enum: *a24
                       message:
                         type: string
                         minLength: 1
