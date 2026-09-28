@@ -1,5 +1,5 @@
 [build]
-  command = "npm run build --workspace @drezivo/app"
+  command = "npm run build --workspace @drezivo/contracts && npm run build --workspace @drezivo/app"
   publish = "app/.next"
 
 [build.environment]
