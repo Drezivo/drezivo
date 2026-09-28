@@ -1,13 +1,15 @@
 import {
   customerListResponse,
+  customerSummaryResponse,
   type CustomerListQuery,
   type CustomerListResponse,
+  type CustomerSummaryResponse,
   type PermissionCode,
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
-import { ForbiddenError } from '../../shared/errors.js';
-import { listCustomersReadModel } from './customers.repository.js';
+import { ForbiddenError, NotFoundError } from '../../shared/errors.js';
+import { listCustomersReadModel, readCustomerSummary } from './customers.repository.js';
 
 export interface CustomerReadContext {
   tenantId: string;
@@ -53,6 +55,17 @@ export async function getCustomerList(
       has_more: page.hasMore,
     },
   });
+}
+
+export async function getCustomerSummary(
+  context: CustomerReadContext,
+): Promise<CustomerSummaryResponse> {
+  assertCustomerReadPermission(context.permissionCodes);
+  const summary = await withTenantTransaction(context.tenantId, context.principalId, (client) =>
+    readCustomerSummary(client, { tenantId: context.tenantId, branchId: context.branchId }),
+  );
+  if (!summary) throw new NotFoundError('Active branch could not be found.');
+  return customerSummaryResponse.parse(summary);
 }
 
 export function assertCustomerReadPermission(permissionCodes: PermissionCode[]): void {

@@ -3,7 +3,10 @@ import { Router } from 'express';
 import { requireStaffAuth } from '../../middleware/auth.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
-import { listCustomersController } from './customers.controller.js';
+import {
+  getCustomerSummaryController,
+  listCustomersController,
+} from './customers.controller.js';
 import {
   requireCustomerReadPermission,
   validateCustomerListQuery,
@@ -25,4 +28,5 @@ const customerRead = [
   requireCustomerReadPermission,
 ] as const;
 
+customersRouter.get('/customers/summary', ...customerRead, getCustomerSummaryController);
 customersRouter.get('/customers', ...customerRead, validateCustomerListQuery, listCustomersController);

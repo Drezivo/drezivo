@@ -25,6 +25,13 @@ export interface CustomerListReadPage {
   hasMore: boolean;
 }
 
+export interface CustomerSummaryReadRow {
+  all_customers: number;
+  new_this_month: number;
+  returning_customers: number;
+  upcoming_customers: number;
+}
+
 interface CustomerListCursor {
   key: string;
   customerId: string;
@@ -165,6 +172,80 @@ export async function listCustomersReadModel(
     hasMore,
     nextCursor: hasMore && last ? encodeCustomerListCursor(last) : null,
   };
+}
+
+/** Computes all four customer dashboard metrics in one branch-aware aggregate query. */
+export async function readCustomerSummary(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string },
+): Promise<CustomerSummaryReadRow | null> {
+  const result = await client.query<CustomerSummaryReadRow>(
+    `WITH branch_clock AS (
+       SELECT
+         (date_trunc('month', now() AT TIME ZONE b.timezone) AT TIME ZONE b.timezone) AS month_start,
+         ((date_trunc('month', now() AT TIME ZONE b.timezone) + interval '1 month') AT TIME ZONE b.timezone) AS month_end
+       FROM branch b
+       WHERE b.tenant_id = $1 AND b.id = $2
+     ),
+     active_customers AS (
+       SELECT c.id, c.created_at
+       FROM customer c
+       WHERE c.tenant_id = $1
+         AND c.anonymized_at IS NULL
+         AND c.archived_at IS NULL
+     ),
+     completed_engagements AS (
+       SELECT engagement.customer_id, count(*)::int AS engagement_count
+       FROM (
+         SELECT r.customer_id
+         FROM reservation r
+         WHERE r.tenant_id = $1
+           AND r.branch_id = $2
+           AND r.status = 'completed'
+           AND r.customer_id IS NOT NULL
+         UNION ALL
+         SELECT fa.customer_id
+         FROM fitting_appointment fa
+         WHERE fa.tenant_id = $1
+           AND fa.branch_id = $2
+           AND fa.status = 'completed'
+       ) engagement
+       GROUP BY engagement.customer_id
+     ),
+     upcoming_customers AS (
+       SELECT r.customer_id
+       FROM reservation r
+       WHERE r.tenant_id = $1
+         AND r.branch_id = $2
+         AND r.status = 'confirmed'
+         AND r.pickup_at > now()
+         AND r.customer_id IS NOT NULL
+       UNION
+       SELECT fa.customer_id
+       FROM fitting_appointment fa
+       WHERE fa.tenant_id = $1
+         AND fa.branch_id = $2
+         AND fa.status = 'confirmed'
+         AND lower(fa.period) > now()
+     )
+     SELECT
+       count(*)::int AS all_customers,
+       count(*) FILTER (
+         WHERE ac.created_at >= bc.month_start AND ac.created_at < bc.month_end
+       )::int AS new_this_month,
+       count(*) FILTER (
+         WHERE coalesce(ce.engagement_count, 0) >= 2
+       )::int AS returning_customers,
+       count(*) FILTER (
+         WHERE uc.customer_id IS NOT NULL
+       )::int AS upcoming_customers
+     FROM active_customers ac
+     CROSS JOIN branch_clock bc
+     LEFT JOIN completed_engagements ce ON ce.customer_id = ac.id
+     LEFT JOIN upcoming_customers uc ON uc.customer_id = ac.id`,
+    [input.tenantId, input.branchId],
+  );
+  return result.rows[0] ?? null;
 }
 
 function encodeCustomerListCursor(row: CustomerListReadRow): string {

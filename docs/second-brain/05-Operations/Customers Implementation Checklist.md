@@ -287,15 +287,15 @@ Build the customer API around the already-existing `customer`, `reservation`, an
 
 ## 17. `GET /api/v1/customers/summary`
 
-- [ ] Return:
+- [x] Return:
   - `all_customers`.
   - `new_this_month`.
   - `returning_customers`.
   - `upcoming_customers`.
-- [ ] Use active branch timezone for monthly boundary calculations.
-- [ ] Returning Customers requires at least two completed qualifying engagements.
-- [ ] Upcoming Customers is a distinct-customer count, not a booking count.
-- [ ] Keep the query bounded/aggregated; no per-customer loop from the service layer.
+- [x] Use active branch timezone for monthly boundary calculations.
+- [x] Returning Customers requires at least two completed qualifying engagements.
+- [x] Upcoming Customers is a distinct-customer count, not a booking count.
+- [x] Keep the query bounded/aggregated; no per-customer loop from the service layer.
 
 ## 18. `GET /api/v1/customers/:customerId`
 

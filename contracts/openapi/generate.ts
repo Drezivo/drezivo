@@ -784,6 +784,21 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: 'get',
+  path: '/customers/summary',
+  tags: ['customers'],
+  summary: 'Read branch-aware operational customer summary counts.',
+  responses: {
+    200: {
+      description: 'Customer summary counts calculated from active profiles and authoritative activity.',
+      content: { 'application/json': { schema: successEnvelope(customerSummaryResponse) } },
+    },
+    403: jsonError('Reservation management permission is required.'),
+    404: jsonError('The active branch could not be found.'),
+  },
+});
+
 // ---- operations ------------------------------------------------------
 registry.registerPath({
   method: 'get',

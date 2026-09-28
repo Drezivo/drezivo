@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { customerListResponse, successEnvelope } from '@drezivo/contracts';
+import { customerListResponse, customerSummaryResponse, successEnvelope } from '@drezivo/contracts';
 
 import '../../src/config/load-env.js';
 import {
@@ -89,6 +89,33 @@ describe('Customers read routes', async () => {
     expect(secondBody.data.items[0]?.full_name).toBe('Carla Cruz');
   });
 
+  it('computes customer summary counts from active profiles and qualifying branch activity', async () => {
+    const seed = await seedWorkspace('org_customers_summary', 'user_customers_summary', ['reservations.manage']);
+    useClerk(seed);
+    const returningId = await seedCustomer(seed, 'Returning Customer', '09170000011', null);
+    const upcomingId = await seedCustomer(seed, 'Upcoming Customer', '09170000012', null);
+    const oldId = await seedCustomer(seed, 'Old Customer', '09170000013', null);
+    await seedCustomer(seed, 'Archived Customer', '09170000014', null, { archived: true });
+
+    await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query(`UPDATE customer SET created_at = now() - interval '40 days' WHERE tenant_id = $1 AND id = $2`, [seed.tenantId, oldId]),
+    );
+    await seedFitting(seed, returningId, 'completed', -72, 'summary-returning-1');
+    await seedFitting(seed, returningId, 'completed', -48, 'summary-returning-2');
+    await seedFitting(seed, upcomingId, 'confirmed', 72, 'summary-upcoming');
+    await seedFitting(seed, oldId, 'no_show', 96, 'summary-no-show');
+
+    const response = await request(createApp()).get('/api/v1/customers/summary');
+    expect(response.status).toBe(200);
+    const body = successEnvelope(customerSummaryResponse).parse(response.body);
+    expect(body.data).toEqual({
+      all_customers: 3,
+      new_this_month: 2,
+      returning_customers: 1,
+      upcoming_customers: 1,
+    });
+  });
+
   it('searches only name phone and email and supports archived/all status filters', async () => {
     const seed = await seedWorkspace('org_customers_filters', 'user_customers_filters', ['reservations.manage']);
     useClerk(seed);
@@ -125,6 +152,12 @@ describe('Customers read routes', async () => {
          VALUES ($1, $2, $3, $4::jsonb)`,
         [tenant.id, id, membershipId, JSON.stringify(permissions)],
       );
+      await client.query(
+        `INSERT INTO fitting_settings
+           (tenant_id, branch_id, enabled, capacity, duration_minutes, fee_minor, currency, version)
+         VALUES ($1, $2, true, 10, 60, 0, 'PHP', 1)`,
+        [tenant.id, id],
+      );
       const plan = await client.query<{ id: string }>(`SELECT id FROM plan WHERE code = 'starter' AND version = 1 AND active LIMIT 1`);
       const planId = plan.rows[0]?.id;
       if (!planId) throw new Error('starter plan missing');
@@ -136,6 +169,87 @@ describe('Customers read routes', async () => {
       return id;
     });
     return { tenantId: tenant.id, clerkOrgId: tenant.clerkOrgId, principalId, branchId };
+  }
+
+  async function seedFitting(
+    seed: { tenantId: string; principalId: string; branchId: string },
+    customerId: string,
+    status: 'confirmed' | 'completed' | 'no_show',
+    startOffsetHours: number,
+    businessKey: string,
+  ): Promise<void> {
+    const start = new Date(Date.now() + startOffsetHours * 60 * 60 * 1000);
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const inserted = await client.query<{ id: string }>(
+        `INSERT INTO fitting_appointment
+           (tenant_id, branch_id, customer_id, booking_channel, status, period,
+            timezone_snapshot, currency, fee_minor, business_key, version)
+         VALUES ($1, $2, $3, 'staff', 'pending',
+                 tstzrange($4::timestamptz, $5::timestamptz, '[)'),
+                 'Asia/Manila', 'PHP', 0, $6, 1)
+         RETURNING id`,
+        [seed.tenantId, seed.branchId, customerId, start.toISOString(), end.toISOString(), businessKey],
+      );
+      const fittingId = inserted.rows[0]?.id;
+      if (!fittingId) throw new Error('fitting insert returned no row');
+      const product = await client.query<{ id: string }>(
+        `INSERT INTO product (tenant_id, code, name, status)
+         VALUES ($1, $2, 'Summary Garment', 'active') RETURNING id`,
+        [seed.tenantId, `P-${businessKey}`],
+      );
+      const productId = product.rows[0]?.id;
+      if (!productId) throw new Error('product insert returned no row');
+      const variant = await client.query<{ id: string }>(
+        `INSERT INTO product_variant
+           (tenant_id, product_id, sku, size_label, measurements, measurement_unit, measurement_mode,
+            rental_price_minor, security_deposit_minor, currency, pricing_mode,
+            included_duration_minutes, extra_day_price_minor, prep_minutes, turnaround_minutes, status)
+         VALUES ($1, $2, $3, 'M', '{}'::jsonb, 'cm', 'none', 1000, 0, 'PHP',
+                 'fixed_duration', 1440, 0, 0, 0, 'active') RETURNING id`,
+        [seed.tenantId, productId, `SKU-${businessKey}`],
+      );
+      const variantId = variant.rows[0]?.id;
+      if (!variantId) throw new Error('variant insert returned no row');
+      await client.query(
+        `INSERT INTO fitting_line (tenant_id, fitting_id, variant_id, asset_id, garment_guaranteed)
+         VALUES ($1, $2, $3, NULL, false)`,
+        [seed.tenantId, fittingId, variantId],
+      );
+      const slot = await client.query<{ id: string }>(
+        `INSERT INTO fitting_capacity_slot (tenant_id, branch_id, slot_number, active)
+         SELECT $1, $2, coalesce(max(slot_number), 0) + 1, true
+         FROM fitting_capacity_slot
+         WHERE tenant_id = $1 AND branch_id = $2
+         RETURNING id`,
+        [seed.tenantId, seed.branchId],
+      );
+      const slotId = slot.rows[0]?.id;
+      if (!slotId) throw new Error('fitting slot insert returned no row');
+      const allocation = await client.query<{ id: string }>(
+        `INSERT INTO fitting_slot_allocation (tenant_id, slot_id, fitting_id, period, is_blocking)
+         VALUES ($1, $2, $3, tstzrange($4::timestamptz, $5::timestamptz, '[)'), true)
+         RETURNING id`,
+        [seed.tenantId, slotId, fittingId, start.toISOString(), end.toISOString()],
+      );
+      const allocationId = allocation.rows[0]?.id;
+      if (!allocationId) throw new Error('fitting slot allocation insert returned no row');
+      await client.query(
+        `UPDATE fitting_appointment SET status = 'confirmed', version = version + 1 WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, fittingId],
+      );
+      if (status !== 'confirmed') {
+        await client.query(
+          `UPDATE fitting_slot_allocation SET is_blocking = false, released_at = now()
+           WHERE tenant_id = $1 AND id = $2`,
+          [seed.tenantId, allocationId],
+        );
+        await client.query(
+          `UPDATE fitting_appointment SET status = $3, version = version + 1 WHERE tenant_id = $1 AND id = $2`,
+          [seed.tenantId, fittingId, status],
+        );
+      }
+    });
   }
 
   async function seedCustomer(
