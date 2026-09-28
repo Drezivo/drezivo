@@ -244,63 +244,63 @@ Build the customer API around the already-existing `customer`, `reservation`, an
 
 ## 14. Customer lifecycle schema
 
-- [ ] Add operational archive state with a forward migration, preferably `customer.archived_at timestamptz NULL`.
-- [ ] Do not overload `anonymized_at`; it remains separate privacy/deletion lifecycle state.
-- [ ] Add indexes required by the final list/search/sort plan after checking `EXPLAIN`/query shape.
-- [ ] Preserve tenant ownership and RLS behavior.
-- [ ] Add an optimistic concurrency field or use the repository's established `updated_at`/expected timestamp convention consistently for Edit and Archive.
-- [ ] No migration may introduce cascading deletion of Reservation/Fitting history.
+- [x] Add operational archive state with a forward migration, preferably `customer.archived_at timestamptz NULL`.
+- [x] Do not overload `anonymized_at`; it remains separate privacy/deletion lifecycle state.
+- [x] Add indexes required by the final list/search/sort plan after checking `EXPLAIN`/query shape.
+- [x] Preserve tenant ownership and RLS behavior.
+- [x] Add an optimistic concurrency field or use the repository's established `updated_at`/expected timestamp convention consistently for Edit and Archive.
+- [x] No migration may introduce cascading deletion of Reservation/Fitting history.
 
 ## 15. Customer contracts
 
-- [ ] Add a dedicated `contracts/src/customers/` contract surface.
-- [ ] Define customer list query/response.
-- [ ] Define summary response.
-- [ ] Define customer detail response.
-- [ ] Define customer Reservation history response.
-- [ ] Define customer Fitting history response.
-- [ ] Define Edit request/response.
-- [ ] Define Archive request/response.
-- [ ] All responses use existing branded IDs, money strings, ISO timestamps, status schemas, and page-meta conventions.
-- [ ] Update generated OpenAPI from the contract generator; do not hand-maintain a drifting OpenAPI shape.
+- [x] Add a dedicated `contracts/src/customers/` contract surface.
+- [x] Define customer list query/response.
+- [x] Define summary response.
+- [x] Define customer detail response.
+- [x] Define customer Reservation history response.
+- [x] Define customer Fitting history response.
+- [x] Define Edit request/response.
+- [x] Define Archive request/response.
+- [x] All responses use existing branded IDs, money strings, ISO timestamps, status schemas, and page-meta conventions.
+- [x] Update generated OpenAPI from the contract generator; do not hand-maintain a drifting OpenAPI shape.
 
 ## 16. `GET /api/v1/customers`
 
-- [ ] Tenant-safe staff-only customer list.
-- [ ] Query supports:
+- [x] Tenant-safe staff-only customer list.
+- [x] Query supports:
   - `search`.
   - `status=active|archived|all`.
   - `cursor`.
   - bounded `limit`.
-- [ ] Frontend requests `limit=10`.
-- [ ] Search only:
+- [x] Frontend requests `limit=10`.
+- [x] Search only:
   - name.
   - phone.
   - email.
-- [ ] Stable keyset pagination; avoid offset pagination for the production list.
-- [ ] Default sort should be deterministic, such as `lower(full_name), id` unless another approved customer sort is chosen.
-- [ ] Response includes only safe directory fields plus derived aggregates required by the table.
-- [ ] Derive Reservation count and Fitting count without N+1 queries.
-- [ ] Derive Last Activity across both modules.
-- [ ] Derive Next Activity across both modules.
-- [ ] Default excludes anonymized profiles and defaults to non-archived profiles.
+- [x] Stable keyset pagination; avoid offset pagination for the production list.
+- [x] Default sort should be deterministic, such as `lower(full_name), id` unless another approved customer sort is chosen.
+- [x] Response includes only safe directory fields plus derived aggregates required by the table.
+- [x] Derive Reservation count and Fitting count without N+1 queries.
+- [x] Derive Last Activity across both modules.
+- [x] Derive Next Activity across both modules.
+- [x] Default excludes anonymized profiles and defaults to non-archived profiles.
 
 ## 17. `GET /api/v1/customers/summary`
 
-- [ ] Return:
+- [x] Return:
   - `all_customers`.
   - `new_this_month`.
   - `returning_customers`.
   - `upcoming_customers`.
-- [ ] Use active branch timezone for monthly boundary calculations.
-- [ ] Returning Customers requires at least two completed qualifying engagements.
-- [ ] Upcoming Customers is a distinct-customer count, not a booking count.
-- [ ] Keep the query bounded/aggregated; no per-customer loop from the service layer.
+- [x] Use active branch timezone for monthly boundary calculations.
+- [x] Returning Customers requires at least two completed qualifying engagements.
+- [x] Upcoming Customers is a distinct-customer count, not a booking count.
+- [x] Keep the query bounded/aggregated; no per-customer loop from the service layer.
 
 ## 18. `GET /api/v1/customers/:customerId`
 
-- [ ] Conceal foreign/unauthorized customer IDs as not found.
-- [ ] Return live profile fields:
+- [x] Conceal foreign/unauthorized customer IDs as not found.
+- [x] Return live profile fields:
   - full name.
   - phone.
   - email.
@@ -309,25 +309,25 @@ Build the customer API around the already-existing `customer`, `reservation`, an
   - notes.
   - created/updated timestamps.
   - archived state.
-- [ ] Return bounded summary fields needed by the Sheet.
-- [ ] Do not return unrelated private payment/evidence/provider data.
+- [x] Return bounded summary fields needed by the Sheet.
+- [x] Do not return unrelated private payment/evidence/provider data.
 
 ## 19. `GET /api/v1/customers/:customerId/reservations`
 
-- [ ] Cursor-paginated customer Reservation history.
-- [ ] Default/bounded page size; frontend initially requests 10.
-- [ ] Tenant + authorized branch scope is explicit.
-- [ ] Use Reservation snapshot fields for historical facts.
-- [ ] Return only fields needed for customer history UI.
-- [ ] Stable newest-first ordering using created/pickup timestamp plus ID as tie-breaker.
+- [x] Cursor-paginated customer Reservation history.
+- [x] Default/bounded page size; frontend initially requests 10.
+- [x] Tenant + authorized branch scope is explicit.
+- [x] Use Reservation snapshot fields for historical facts.
+- [x] Return only fields needed for customer history UI.
+- [x] Stable newest-first ordering using created timestamp plus ID as tie-breaker.
 
 ## 20. `GET /api/v1/customers/:customerId/fittings`
 
-- [ ] Cursor-paginated Fitting history.
-- [ ] Default/bounded page size; frontend initially requests 10.
-- [ ] Tenant + authorized branch scope is explicit.
-- [ ] Return only fitting history fields needed by the Sheet.
-- [ ] Stable newest-first ordering using period start/created timestamp plus ID as tie-breaker.
+- [x] Cursor-paginated Fitting history.
+- [x] Default/bounded page size; frontend initially requests 10.
+- [x] Tenant + authorized branch scope is explicit.
+- [x] Return only fitting history fields needed by the Sheet.
+- [x] Stable newest-first ordering using period start/created timestamp plus ID as tie-breaker.
 
 ## 21. `PATCH /api/v1/customers/:customerId`
 

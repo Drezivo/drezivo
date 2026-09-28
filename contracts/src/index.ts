@@ -11,6 +11,7 @@ export * from './storefront';
 export * from './availability';
 export * from './reservations';
 export * from './fittings';
+export * from './customers';
 export * from './operations';
 export * from './finance';
 export * from './files';

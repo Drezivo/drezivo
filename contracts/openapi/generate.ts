@@ -24,6 +24,18 @@ import {
   catalogueQuery,
   centralPaymentsQuery,
   centralPaymentsResponse,
+  customerArchiveRequest,
+  customerArchiveResponse,
+  customerDetailResponse,
+  customerEditRequest,
+  customerEditResponse,
+  customerFittingHistoryResponse,
+  customerHistoryQuery,
+  customerListQuery,
+  customerListResponse,
+  customerParams,
+  customerReservationHistoryResponse,
+  customerSummaryResponse,
   changeSubscriptionPlanRequest,
   claimMembershipInvitationRequest,
   clerkWebhookInboxRecord,
@@ -756,6 +768,89 @@ registry.registerPath({
   },
 });
 
+// ---- customers -------------------------------------------------------
+registry.registerPath({
+  method: 'get',
+  path: '/customers',
+  tags: ['customers'],
+  summary: 'List live customer profiles for the active tenant with branch-scoped activity aggregates.',
+  request: { query: customerListQuery },
+  responses: {
+    200: {
+      description: 'Bounded customer directory page for authorized staff.',
+      content: { 'application/json': { schema: successEnvelope(customerListResponse) } },
+    },
+    403: jsonError('Reservation management permission is required.'),
+    422: jsonError('The customer list query or cursor is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/customers/summary',
+  tags: ['customers'],
+  summary: 'Read branch-aware operational customer summary counts.',
+  responses: {
+    200: {
+      description: 'Customer summary counts calculated from active profiles and authoritative activity.',
+      content: { 'application/json': { schema: successEnvelope(customerSummaryResponse) } },
+    },
+    403: jsonError('Reservation management permission is required.'),
+    404: jsonError('The active branch could not be found.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/customers/{customerId}',
+  tags: ['customers'],
+  summary: 'Read one live customer profile with active-branch activity aggregates.',
+  request: { params: customerParams },
+  responses: {
+    200: {
+      description: 'Authorized live customer profile without payment evidence or provider data.',
+      content: { 'application/json': { schema: successEnvelope(customerDetailResponse) } },
+    },
+    403: jsonError('Reservation management permission is required.'),
+    404: jsonError('The customer was not found for the active tenant.'),
+    422: jsonError('The customer id is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/customers/{customerId}/reservations',
+  tags: ['customers'],
+  summary: 'List bounded reservation history for one customer in the active branch.',
+  request: { params: customerParams, query: customerHistoryQuery },
+  responses: {
+    200: {
+      description: 'Cursor-paginated reservation history using immutable reservation snapshots.',
+      content: { 'application/json': { schema: successEnvelope(customerReservationHistoryResponse) } },
+    },
+    403: jsonError('Reservation management permission is required.'),
+    404: jsonError('The customer was not found for the active tenant.'),
+    422: jsonError('The customer history query or cursor is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/customers/{customerId}/fittings',
+  tags: ['customers'],
+  summary: 'List bounded fitting history for one customer in the active branch.',
+  request: { params: customerParams, query: customerHistoryQuery },
+  responses: {
+    200: {
+      description: 'Cursor-paginated fitting history with safe garment and fee/payment summaries.',
+      content: { 'application/json': { schema: successEnvelope(customerFittingHistoryResponse) } },
+    },
+    403: jsonError('Reservation management permission is required.'),
+    404: jsonError('The customer was not found for the active tenant.'),
+    422: jsonError('The customer history query or cursor is invalid.'),
+  },
+});
+
 // ---- operations ------------------------------------------------------
 registry.registerPath({
   method: 'get',
@@ -1273,6 +1368,20 @@ registry.registerPath({
     422: jsonError(`Validation failed — see ${filePurpose.options.join(', ')} for allowed purposes.`),
   },
 });
+
+// Customer components are published before the routes land in Phase 2. Keeping these late in
+// registration order avoids renumbering YAML anchors for unrelated existing components.
+registry.register('CustomerListQuery', customerListQuery);
+registry.register('CustomerListResponse', customerListResponse);
+registry.register('CustomerSummaryResponse', customerSummaryResponse);
+registry.register('CustomerDetailResponse', customerDetailResponse);
+registry.register('CustomerHistoryQuery', customerHistoryQuery);
+registry.register('CustomerReservationHistoryResponse', customerReservationHistoryResponse);
+registry.register('CustomerFittingHistoryResponse', customerFittingHistoryResponse);
+registry.register('CustomerEditRequest', customerEditRequest);
+registry.register('CustomerEditResponse', customerEditResponse);
+registry.register('CustomerArchiveRequest', customerArchiveRequest);
+registry.register('CustomerArchiveResponse', customerArchiveResponse);
 
 const generator = new OpenApiGeneratorV31(registry.definitions);
 const document = generator.generateDocument({

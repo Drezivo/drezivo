@@ -267,6 +267,7 @@ end-to-end: catalogue → booking → payment verification → pickup → return
 - **Acceptance criteria:**
   - [ ] Present emails are normalized (trim + lowercase) and deduplicated within the tenant only; staff-created customers may omit email.
   - [ ] Search covers name, phone, and email with keyset pagination and deterministic order.
+  - [x] Customer list, branch-aware summary, concealed detail, and bounded reservation/fitting history reads are implemented under the tenant-scoped staff boundary; history is projected from source transactions with no duplicated mutable totals.
   - [ ] Detail includes authorized notes (with author and timestamps) and paginated reservation/payment history projected from source transactions — no duplicated mutable totals.
   - [ ] Customer records are invisible across tenants; anonymization (erasure) preserves legally required reservation facts per the documented retention process.
   - [ ] New contract surfaces for customer endpoints are added to `contracts/src/` first.
