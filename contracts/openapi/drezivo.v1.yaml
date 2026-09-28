@@ -2431,7 +2431,7 @@ components:
                 format: email
               status:
                 type: string
-                enum: &a23
+                enum: &a22
                   - active
                   - archived
               reservation_count:
@@ -2440,38 +2440,6 @@ components:
               fitting_count:
                 type: integer
                 minimum: 0
-              last_activity:
-                type:
-                  - object
-                  - "null"
-                properties:
-                  type:
-                    type: string
-                    enum: &a22
-                      - reservation
-                      - fitting
-                  at:
-                    type: string
-                    format: date-time
-                required:
-                  - type
-                  - at
-                additionalProperties: false
-              next_activity:
-                type:
-                  - object
-                  - "null"
-                properties:
-                  type:
-                    type: string
-                    enum: *a22
-                  at:
-                    type: string
-                    format: date-time
-                required:
-                  - type
-                  - at
-                additionalProperties: false
               created_at:
                 type: string
                 format: date-time
@@ -2483,8 +2451,6 @@ components:
               - status
               - reservation_count
               - fitting_count
-              - last_activity
-              - next_activity
               - created_at
             additionalProperties: false
         page_meta:
@@ -2565,7 +2531,7 @@ components:
           maxLength: 2000
         status:
           type: string
-          enum: *a23
+          enum: *a22
         archived_at:
           type:
             - string
@@ -2587,7 +2553,9 @@ components:
           properties:
             type:
               type: string
-              enum: *a22
+              enum: &a23
+                - reservation
+                - fitting
             at:
               type: string
               format: date-time
@@ -2602,7 +2570,7 @@ components:
           properties:
             type:
               type: string
-              enum: *a22
+              enum: *a23
             at:
               type: string
               format: date-time
@@ -2871,7 +2839,7 @@ components:
               maxLength: 2000
             status:
               type: string
-              enum: *a23
+              enum: *a22
             archived_at:
               type:
                 - string
@@ -2893,7 +2861,7 @@ components:
               properties:
                 type:
                   type: string
-                  enum: *a22
+                  enum: *a23
                 at:
                   type: string
                   format: date-time
@@ -2908,7 +2876,7 @@ components:
               properties:
                 type:
                   type: string
-                  enum: *a22
+                  enum: *a23
                 at:
                   type: string
                   format: date-time
@@ -9744,43 +9712,13 @@ paths:
                               format: email
                             status:
                               type: string
-                              enum: *a23
+                              enum: *a22
                             reservation_count:
                               type: integer
                               minimum: 0
                             fitting_count:
                               type: integer
                               minimum: 0
-                            last_activity:
-                              type:
-                                - object
-                                - "null"
-                              properties:
-                                type:
-                                  type: string
-                                  enum: *a22
-                                at:
-                                  type: string
-                                  format: date-time
-                              required:
-                                - type
-                                - at
-                              additionalProperties: false
-                            next_activity:
-                              type:
-                                - object
-                                - "null"
-                              properties:
-                                type:
-                                  type: string
-                                  enum: *a22
-                                at:
-                                  type: string
-                                  format: date-time
-                              required:
-                                - type
-                                - at
-                              additionalProperties: false
                             created_at:
                               type: string
                               format: date-time
@@ -9792,8 +9730,6 @@ paths:
                             - status
                             - reservation_count
                             - fitting_count
-                            - last_activity
-                            - next_activity
                             - created_at
                           additionalProperties: false
                       page_meta:
@@ -10107,7 +10043,7 @@ paths:
                         maxLength: 2000
                       status:
                         type: string
-                        enum: *a23
+                        enum: *a22
                       archived_at:
                         type:
                           - string
@@ -10129,7 +10065,7 @@ paths:
                         properties:
                           type:
                             type: string
-                            enum: *a22
+                            enum: *a23
                           at:
                             type: string
                             format: date-time
@@ -10144,7 +10080,7 @@ paths:
                         properties:
                           type:
                             type: string
-                            enum: *a22
+                            enum: *a23
                           at:
                             type: string
                             format: date-time
@@ -10439,7 +10375,7 @@ paths:
                             maxLength: 2000
                           status:
                             type: string
-                            enum: *a23
+                            enum: *a22
                           archived_at:
                             type:
                               - string
@@ -10461,7 +10397,7 @@ paths:
                             properties:
                               type:
                                 type: string
-                                enum: *a22
+                                enum: *a23
                               at:
                                 type: string
                                 format: date-time
@@ -10476,7 +10412,7 @@ paths:
                             properties:
                               type:
                                 type: string
-                                enum: *a22
+                                enum: *a23
                               at:
                                 type: string
                                 format: date-time

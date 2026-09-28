@@ -50,8 +50,6 @@ const firstCustomer = customerListItem.parse({
   status: "active",
   reservation_count: 4,
   fitting_count: 2,
-  last_activity: { type: "reservation", at: "2026-09-27T02:00:00.000Z" },
-  next_activity: { type: "fitting", at: "2026-10-02T02:00:00.000Z" },
   created_at: "2026-08-14T02:00:00.000Z",
 });
 
@@ -63,8 +61,6 @@ const secondCustomer = customerListItem.parse({
   status: "active",
   reservation_count: 1,
   fitting_count: 0,
-  last_activity: null,
-  next_activity: null,
   created_at: "2026-09-01T02:00:00.000Z",
 });
 
@@ -108,8 +104,8 @@ function installDefaults() {
       reservation_count: 4,
       fitting_count: 2,
       completed_engagement_count: 3,
-      last_activity: firstCustomer.last_activity,
-      next_activity: firstCustomer.next_activity,
+      last_activity: { type: "reservation", at: "2026-09-27T02:00:00.000Z" },
+      next_activity: { type: "fitting", at: "2026-10-02T02:00:00.000Z" },
       created_at: firstCustomer.created_at,
       updated_at: "2026-09-27T03:00:00.000Z",
     },
@@ -147,8 +143,8 @@ function installDefaults() {
         reservation_count: 4,
         fitting_count: 2,
         completed_engagement_count: 3,
-        last_activity: firstCustomer.last_activity,
-        next_activity: firstCustomer.next_activity,
+        last_activity: { type: "reservation", at: "2026-09-27T02:00:00.000Z" },
+        next_activity: { type: "fitting", at: "2026-10-02T02:00:00.000Z" },
         created_at: firstCustomer.created_at,
         updated_at: "2026-09-27T04:00:00.000Z",
       },
@@ -173,6 +169,8 @@ describe("CustomersPage production wiring", () => {
     expect(screen.getByText("17")).toBeVisible();
     expect(screen.getByText("11")).toBeVisible();
     expect(screen.queryByText("Maria Santos")).not.toBeInTheDocument();
+    expect(screen.queryByText("Last Activity")).not.toBeInTheDocument();
+    expect(screen.queryByText("Next Activity")).not.toBeInTheDocument();
     expect(api.getCustomers).toHaveBeenCalledWith({ limit: 10, status: "active" });
     expect(api.getCustomerDetail).not.toHaveBeenCalled();
     expect(api.getCustomerReservations).not.toHaveBeenCalled();
@@ -331,6 +329,8 @@ describe("CustomersPage production wiring", () => {
     expect(api.getCustomerReservations).toHaveBeenCalledWith(firstCustomer.id, { limit: 10 });
     expect(api.getCustomerFittings).toHaveBeenCalledWith(firstCustomer.id, { limit: 10 });
     expect(screen.getByText("24 Sampaguita Street")).toBeVisible();
+    expect(screen.getByText("Last activity")).toBeVisible();
+    expect(screen.getByText("Next activity")).toBeVisible();
     expect(screen.getByRole("button", { name: "Edit" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByText("Contact Information")).not.toBeInTheDocument();

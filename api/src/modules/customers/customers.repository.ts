@@ -12,10 +12,6 @@ export interface CustomerListReadRow {
   archived_at: Date | null;
   reservation_count: number;
   fitting_count: number;
-  last_activity_type: 'reservation' | 'fitting' | null;
-  last_activity_at: Date | null;
-  next_activity_type: 'reservation' | 'fitting' | null;
-  next_activity_at: Date | null;
   created_at: Date;
 }
 
@@ -152,49 +148,11 @@ export async function listCustomersReadModel(
        c.archived_at,
        coalesce(r_stats.reservation_count, 0)::int AS reservation_count,
        coalesce(f_stats.fitting_count, 0)::int AS fitting_count,
-       CASE
-         WHEN r_stats.last_at IS NULL THEN CASE WHEN f_stats.last_at IS NULL THEN NULL ELSE 'fitting' END
-         WHEN f_stats.last_at IS NULL THEN 'reservation'
-         WHEN r_stats.last_at >= f_stats.last_at THEN 'reservation'
-         ELSE 'fitting'
-       END AS last_activity_type,
-       CASE
-         WHEN r_stats.last_at IS NULL THEN f_stats.last_at
-         WHEN f_stats.last_at IS NULL THEN r_stats.last_at
-         ELSE greatest(r_stats.last_at, f_stats.last_at)
-       END AS last_activity_at,
-       CASE
-         WHEN r_stats.next_at IS NULL THEN CASE WHEN f_stats.next_at IS NULL THEN NULL ELSE 'fitting' END
-         WHEN f_stats.next_at IS NULL THEN 'reservation'
-         WHEN r_stats.next_at <= f_stats.next_at THEN 'reservation'
-         ELSE 'fitting'
-       END AS next_activity_type,
-       CASE
-         WHEN r_stats.next_at IS NULL THEN f_stats.next_at
-         WHEN f_stats.next_at IS NULL THEN r_stats.next_at
-         ELSE least(r_stats.next_at, f_stats.next_at)
-       END AS next_activity_at,
        c.created_at
      FROM customer_page c
      LEFT JOIN LATERAL (
        SELECT
-         count(*)::int AS reservation_count,
-         max(
-           CASE
-             WHEN r.status = 'completed' THEN coalesce(r.completed_at, r.due_at, r.pickup_at, r.created_at)
-             WHEN r.status = 'returned' THEN r.due_at
-             WHEN r.status = 'picked_up' THEN r.pickup_at
-             WHEN r.status = 'confirmed' AND r.pickup_at <= now() THEN r.pickup_at
-             ELSE NULL
-           END
-         ) AS last_at,
-         min(
-           CASE
-             WHEN r.status = 'confirmed' AND r.pickup_at > now() THEN r.pickup_at
-             WHEN r.status IN ('confirmed', 'picked_up') AND r.due_at > now() THEN r.due_at
-             ELSE NULL
-           END
-         ) AS next_at
+         count(*)::int AS reservation_count
        FROM reservation r
        WHERE r.tenant_id = $1
          AND r.branch_id = $2
@@ -202,21 +160,7 @@ export async function listCustomersReadModel(
      ) r_stats ON true
      LEFT JOIN LATERAL (
        SELECT
-         count(*)::int AS fitting_count,
-         max(
-           CASE
-             WHEN fa.status IN ('confirmed', 'completed') AND lower(fa.period) <= now()
-               THEN lower(fa.period)
-             ELSE NULL
-           END
-         ) AS last_at,
-         min(
-           CASE
-             WHEN fa.status = 'confirmed' AND lower(fa.period) > now()
-               THEN lower(fa.period)
-             ELSE NULL
-           END
-         ) AS next_at
+         count(*)::int AS fitting_count
        FROM fitting_appointment fa
        WHERE fa.tenant_id = $1
          AND fa.branch_id = $2
