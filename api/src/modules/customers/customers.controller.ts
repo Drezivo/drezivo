@@ -1,15 +1,35 @@
 import type { Request, Response } from 'express';
 
+import type { CustomerArchiveRequest } from '@drezivo/contracts';
+
 import { ValidationError } from '../../shared/errors.js';
 import { sendSuccess } from '../../shared/response.js';
 import {
+  archiveCustomer,
   getCustomerDetail,
   getCustomerFittingHistory,
   getCustomerList,
   getCustomerReservationHistory,
   getCustomerSummary,
+  type CustomerCommandContext,
   type CustomerReadContext,
 } from './customers.service.js';
+
+export async function archiveCustomerController(req: Request, res: Response): Promise<void> {
+  const customerId = req.customerId;
+  const idempotencyKey = req.customerIdempotencyKey;
+  if (!customerId || !idempotencyKey) {
+    throw new ValidationError('A valid customer archive request is required.');
+  }
+  const context = requireCustomerCommandContext(req);
+  const result = await archiveCustomer({
+    ...context,
+    customerId,
+    idempotencyKey,
+    request: req.body as CustomerArchiveRequest,
+  });
+  res.status(result.status).json(result.body);
+}
 
 export async function listCustomersController(req: Request, res: Response): Promise<void> {
   const query = req.customerListQuery;
@@ -59,4 +79,11 @@ function requireCustomerContext(req: Request): CustomerReadContext {
     principalId,
     permissionCodes: context.permissionCodes,
   };
+}
+
+function requireCustomerCommandContext(req: Request): CustomerCommandContext {
+  const context = requireCustomerContext(req);
+  const membershipId = req.tenantContext?.membershipId;
+  if (!membershipId) throw new ValidationError('Workspace membership is required.');
+  return { ...context, membershipId, requestId: req.requestId };
 }

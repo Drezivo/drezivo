@@ -2,6 +2,7 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  customerArchiveResponse,
   customerDetailResponse,
   customerFittingHistoryResponse,
   customerListResponse,
@@ -157,6 +158,47 @@ describe('Customers read routes', async () => {
 
     const concealed = await request(createApp()).get(`/api/v1/customers/${foreignCustomerId}`);
     expect(concealed.status).toBe(404);
+  });
+
+  it('archives a customer idempotently and removes it from the active directory', async () => {
+    const seed = await seedWorkspace('org_customers_archive', 'user_customers_archive', ['reservations.manage']);
+    useClerk(seed);
+    const customerId = await seedCustomer(seed, 'Archive Customer', '09175550003', 'archive@example.test');
+    const updatedAt = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ updated_at: Date }>(
+        'SELECT updated_at FROM customer WHERE tenant_id = $1 AND id = $2::uuid',
+        [seed.tenantId, customerId],
+      );
+      const value = result.rows[0]?.updated_at;
+      if (!value) throw new Error('archive test customer has no updated_at');
+      return value.toISOString();
+    });
+    const idempotencyKey = 'customer-archive-integration-1';
+    const archive = await request(createApp())
+      .post(`/api/v1/customers/${customerId}/archive`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send({ expected_updated_at: updatedAt });
+
+    expect(archive.status).toBe(200);
+    const archiveBody = successEnvelope(customerArchiveResponse).parse(archive.body);
+    expect(archiveBody.data).toMatchObject({ id: customerId, status: 'archived' });
+
+    const replay = await request(createApp())
+      .post(`/api/v1/customers/${customerId}/archive`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send({ expected_updated_at: updatedAt });
+    expect(replay.status).toBe(200);
+    expect(replay.body).toEqual(archive.body);
+
+    const active = await request(createApp()).get('/api/v1/customers?limit=10');
+    expect(active.status).toBe(200);
+    const activeBody = successEnvelope(customerListResponse).parse(active.body);
+    expect(activeBody.data.items.some((item) => item.id === customerId)).toBe(false);
+
+    const archived = await request(createApp()).get('/api/v1/customers?limit=10&status=archived');
+    expect(archived.status).toBe(200);
+    const archivedBody = successEnvelope(customerListResponse).parse(archived.body);
+    expect(archivedBody.data.items.some((item) => item.id === customerId)).toBe(true);
   });
 
   it('paginates branch-scoped reservation history from immutable reservation snapshots', async () => {

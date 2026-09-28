@@ -4,6 +4,7 @@ import { requireStaffAuth } from '../../middleware/auth.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
 import {
+  archiveCustomerController,
   getCustomerDetailController,
   getCustomerSummaryController,
   listCustomerFittingsController,
@@ -11,7 +12,9 @@ import {
   listCustomersController,
 } from './customers.controller.js';
 import {
+  requireCustomerIdempotencyKey,
   requireCustomerReadPermission,
+  validateCustomerArchive,
   validateCustomerHistoryQuery,
   validateCustomerId,
   validateCustomerListQuery,
@@ -49,4 +52,13 @@ customersRouter.get(
   validateCustomerId,
   validateCustomerHistoryQuery,
   listCustomerFittingsController,
+);
+
+customersRouter.post(
+  '/customers/:customerId/archive',
+  ...customerRead,
+  validateCustomerId,
+  validateCustomerArchive,
+  requireCustomerIdempotencyKey,
+  archiveCustomerController,
 );

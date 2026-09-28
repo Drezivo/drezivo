@@ -1,9 +1,11 @@
 import type { RequestHandler } from 'express';
 
 import {
+  customerArchiveRequest,
   customerHistoryQuery,
   customerListQuery,
   customerParams,
+  idempotencyKey,
   type CustomerHistoryQuery,
   type CustomerListQuery,
 } from '@drezivo/contracts';
@@ -12,11 +14,22 @@ import { ForbiddenError, ValidationError } from '../../shared/errors.js';
 
 declare module 'express-serve-static-core' {
   interface Request {
+    customerIdempotencyKey?: string;
     customerListQuery?: CustomerListQuery;
     customerHistoryQuery?: CustomerHistoryQuery;
     customerId?: string;
   }
 }
+
+export const requireCustomerIdempotencyKey: RequestHandler = (req, _res, next): void => {
+  const parsed = idempotencyKey.safeParse(req.header('Idempotency-Key')?.trim());
+  if (!parsed.success) {
+    next(new ValidationError('A valid Idempotency-Key header is required.'));
+    return;
+  }
+  req.customerIdempotencyKey = parsed.data;
+  next();
+};
 
 export const requireCustomerReadPermission: RequestHandler = (req, _res, next): void => {
   if (!req.tenantContext?.permissionCodes.includes('reservations.manage')) {
@@ -33,6 +46,16 @@ export const validateCustomerId: RequestHandler = (req, _res, next): void => {
     return;
   }
   req.customerId = parsed.data.customerId;
+  next();
+};
+
+export const validateCustomerArchive: RequestHandler = (req, _res, next): void => {
+  const parsed = customerArchiveRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Customer archive request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
   next();
 };
 
