@@ -11381,7 +11381,8 @@ paths:
           in: query
       responses:
         "200":
-          description: Reservation pickup/return and fitting events for the active branch.
+          description: Reservation pickup/return and fitting events for the active branch. At most
+            2,000 events are returned; truncated is true when the bounded range contains more.
           content:
             application/json:
               schema:
@@ -11453,7 +11454,12 @@ paths:
                                   maxItems: 20
                                 status:
                                   type: string
-                                  enum: *a26
+                                  enum:
+                                    - pending_confirmation
+                                    - confirmed
+                                    - picked_up
+                                    - returned
+                                    - completed
                               required:
                                 - id
                                 - source
@@ -11507,7 +11513,11 @@ paths:
                                   maxItems: 20
                                 status:
                                   type: string
-                                  enum: *a1
+                                  enum:
+                                    - pending
+                                    - confirmed
+                                    - completed
+                                    - no_show
                               required:
                                 - id
                                 - source
@@ -11520,9 +11530,12 @@ paths:
                                 - status
                               additionalProperties: false
                         maxItems: 2000
+                      truncated:
+                        type: boolean
                     required:
                       - window
                       - events
+                      - truncated
                     additionalProperties: false
                   request_id:
                     type: string

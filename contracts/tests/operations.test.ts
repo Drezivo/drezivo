@@ -38,6 +38,7 @@ describe('BE-8 operational integration contracts', () => {
           start: '2026-09-01T00:00:00.000Z',
           end: '2026-10-01T00:00:00.000Z',
         },
+        truncated: false,
         events: [
           {
             id: `pickup:${ids.reservation}`,
@@ -70,6 +71,56 @@ describe('BE-8 operational integration contracts', () => {
         ],
       }).success,
     ).toBe(true);
+  });
+
+  it('keeps excluded lifecycle states out of Calendar event contracts', () => {
+    const baseReservationEvent = {
+      id: `pickup:${ids.reservation}`,
+      source: 'reservation' as const,
+      source_id: ids.reservation,
+      event_type: 'pickup' as const,
+      branch_id: ids.branch,
+      period: {
+        start: '2026-09-10T02:00:00.000Z',
+        end: '2026-09-10T02:30:00.000Z',
+      },
+      customer_name: 'Maria Santos',
+      item_names: ['Evening Gown'],
+    };
+    const baseFittingEvent = {
+      id: `fitting:${ids.fitting}`,
+      source: 'fitting' as const,
+      source_id: ids.fitting,
+      event_type: 'fitting' as const,
+      branch_id: ids.branch,
+      period: {
+        start: '2026-09-11T02:00:00.000Z',
+        end: '2026-09-11T03:00:00.000Z',
+      },
+      customer_name: 'Anna Cruz',
+      item_names: ['Filipiniana'],
+    };
+
+    expect(
+      operationalCalendarResponse.safeParse({
+        window: {
+          start: '2026-09-01T00:00:00.000Z',
+          end: '2026-10-01T00:00:00.000Z',
+        },
+        truncated: true,
+        events: [{ ...baseReservationEvent, status: 'held' }],
+      }).success,
+    ).toBe(false);
+    expect(
+      operationalCalendarResponse.safeParse({
+        window: {
+          start: '2026-09-01T00:00:00.000Z',
+          end: '2026-10-01T00:00:00.000Z',
+        },
+        truncated: false,
+        events: [{ ...baseFittingEvent, status: 'cancelled' }],
+      }).success,
+    ).toBe(false);
   });
 
   it('keeps Dashboard fitting summary operational and analytics-free', () => {

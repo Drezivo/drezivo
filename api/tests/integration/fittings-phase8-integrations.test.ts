@@ -408,27 +408,61 @@ describe('FIT-BE-080..083 cross-product integration', async () => {
       pickupAt: plus(seed.todayStart, 12),
       dueAt: plus(seed.todayStart, 36),
     });
+    await withAdmin(async (client) => {
+      await client.query(`UPDATE customer SET full_name = 'Live Customer Changed' WHERE id = $1`, [
+        seed.customerId,
+      ]);
+    });
 
     const calendar = await getOperationalCalendar(operationsContext(seed), {
       start: seed.todayStart.toISOString(),
       end: plus(seed.todayStart, 48),
     });
+    expect(calendar.truncated).toBe(false);
     expect(calendar.events).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ source: 'fitting', source_id: fittingId, event_type: 'fitting' }),
+        expect.objectContaining({
+          source: 'fitting',
+          source_id: fittingId,
+          event_type: 'fitting',
+          status: 'pending',
+          period: {
+            start: plus(seed.todayStart, 10),
+            end: plus(seed.todayStart, 11),
+          },
+        }),
         expect.objectContaining({
           source: 'reservation',
           source_id: reservation.reservationId,
           event_type: 'pickup',
+          status: 'confirmed',
+          period: {
+            start: plus(seed.todayStart, 12),
+            end: plus(seed.todayStart, 12.5),
+          },
         }),
         expect.objectContaining({
           source: 'reservation',
           source_id: reservation.reservationId,
           event_type: 'return',
+          status: 'confirmed',
+          period: {
+            start: plus(seed.todayStart, 36),
+            end: plus(seed.todayStart, 36.5),
+          },
         }),
       ]),
     );
-    expect(calendar.events.every((event) => event.customer_name === 'BE8 Customer')).toBe(true);
+    expect(
+      calendar.events
+        .filter((event) => event.source === 'reservation')
+        .every((event) => event.customer_name === 'BE8 Customer'),
+    ).toBe(true);
+    expect(
+      calendar.events
+        .filter((event) => event.source === 'fitting')
+        .every((event) => event.customer_name === 'Live Customer Changed'),
+    ).toBe(true);
 
     await expect(
       getOperationalCalendar(operationsContext(seed), {
@@ -436,6 +470,61 @@ describe('FIT-BE-080..083 cross-product integration', async () => {
         end: plus(seed.todayStart, 63 * 24),
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+
+  it('projects every eligible reservation state once and conceals excluded states', async () => {
+    const seed = await seedWorkspace('calendar-reservation-states');
+    const eligibleStatuses = [
+      'pending_confirmation',
+      'confirmed',
+      'picked_up',
+      'returned',
+      'completed',
+    ] as const;
+    const excludedStatuses = ['held', 'cancelled', 'expired', 'rejected'] as const;
+    const eligibleIds: string[] = [];
+    const excludedIds: string[] = [];
+
+    for (const status of eligibleStatuses) {
+      const reservation = await insertReservation(seed, {
+        pickupAt: plus(seed.todayStart, 12),
+        dueAt: plus(seed.todayStart, 36),
+      });
+      eligibleIds.push(reservation.reservationId);
+      await withAdmin(async (client) => {
+        await client.query('UPDATE reservation SET status = $1 WHERE id = $2', [
+          status,
+          reservation.reservationId,
+        ]);
+      });
+    }
+    for (const status of excludedStatuses) {
+      const reservation = await insertReservation(seed, {
+        pickupAt: plus(seed.todayStart, 12),
+        dueAt: plus(seed.todayStart, 36),
+      });
+      excludedIds.push(reservation.reservationId);
+      await withAdmin(async (client) => {
+        await client.query('UPDATE reservation SET status = $1 WHERE id = $2', [
+          status,
+          reservation.reservationId,
+        ]);
+      });
+    }
+
+    const calendar = await getOperationalCalendar(operationsContext(seed), {
+      start: seed.todayStart.toISOString(),
+      end: plus(seed.todayStart, 48),
+    });
+    const reservationEvents = calendar.events.filter((event) => event.source === 'reservation');
+
+    expect(reservationEvents).toHaveLength(eligibleIds.length * 2);
+    for (const reservationId of eligibleIds) {
+      expect(reservationEvents.filter((event) => event.source_id === reservationId)).toHaveLength(2);
+    }
+    for (const reservationId of excludedIds) {
+      expect(reservationEvents.some((event) => event.source_id === reservationId)).toBe(false);
+    }
   });
 
   it('derives bounded Dashboard fitting today/upcoming/pending-review counts from authoritative appointments', async () => {

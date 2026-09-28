@@ -1,224 +1,490 @@
 ---
-title: Schedule Calendar V1 End-to-End Checklist
+title: Rental Calendar End-to-End Implementation Checklist
 type: implementation-checklist
-status: planned
+status: in-progress
 owner: Drezivo team
-updated: 2026-09-20
-tags: [drezivo, v1, calendar, schedule, operations, checklist]
+updated: 2026-09-29
+tags: [drezivo, calendar, schedule, reservations, fittings, operations, checklist]
 ---
 
-# Schedule Calendar V1 End-to-End Checklist
+# Rental Calendar End-to-End Implementation Checklist
 
-**Status:** Planned; current `/calendar` Schedule UI, Day Agenda Sheet, and Reservation Details Sheet are prototype/mock-data driven.
-**Canonical specifications:** [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
-**Dependencies:** [[Reservations Checklist]] and [[Availability Checklist]].
+**Status:** Backend projection foundation already exists for Reservation pickup/return events and persisted Fitting appointments. The current `/calendar` Schedule UI is still driven by prototype/mock data and must be cut over only after the backend projection is verified and hardened. No backend checklist item is complete until the required PostgreSQL evidence passes; existing implementation code alone is not sufficient evidence.
 
-## How to use this checklist
+**Implementation order:** **Backend first → frontend API client → existing Calendar UI wiring → shared detail sheets → tests/release gate.**
 
-Implement in order. The Schedule Calendar is an operational projection over canonical reservation/custody/readiness data. It must not become a second store of booking state.
+**Canonical specifications:** [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), [ERD](../../architecture/Drezivo-ERD.dbml), [[Reservations Checklist]], [[Fittings Implementation Checklist]], and [[Availability Checklist]].
 
-Before marking a task complete:
+## Goal
 
-- Calendar reads are derived from authoritative reservation/allocation/custody records.
-- Date windows are bounded and timezone-safe.
-- Day/week/month views share one projection model instead of implementing inconsistent business logic per view.
-- Calendar event clicks resolve the actual reservation/activity source.
-- Frontend filters affect presentation/query only; they do not alter domain state.
-- Fitting agenda remains V1.1 unless canonical scope is explicitly changed.
-- Schedule mutations delegate to Reservation/Availability services, never duplicate them in the calendar module.
+The Rental Calendar must be one read-only operational projection over authoritative Reservation and Fitting records.
 
-## Non-negotiable outcomes
+For every selected Calendar range, it must show:
 
-- V1 Schedule answers: “What operational rental work happens on this date?”
-- Reservation, pickup, return, overdue/disruption, cleaning/maintenance work may be represented only from canonical sources.
-- Pickup/return event time uses booking/custody facts with explicit timezone interpretation.
-- Day Agenda Sheet and Reservation Details Sheet show the same records as `/reservations`.
-- Clicking a calendar event never opens a separate mock copy of a reservation.
-- Event type color is presentation only and remains theme-aware.
-- Fitting cards in the current prototype are placeholders for V1.1, not V1 backend commitments.
+- every eligible Reservation **Pickup** at its canonical `pickup_at`;
+- every eligible Reservation **Return** at its canonical `due_at`;
+- every eligible persisted **Fitting** over its canonical appointment period;
+- the same reservation/fitting status and source identity used by their owning modules;
+- the same source record when staff opens details from Calendar.
 
-## Phase 0: Schedule projection definition
+The Calendar must **not** store or invent a second copy of reservation, fitting, customer, clothing, payment, custody, or availability state.
 
-- [ ] **SCH-000 — Define canonical V1 schedule event taxonomy**
-  - **Depends on:** Reservation lifecycle model finalized.
-  - **Outcome:** One documented event taxonomy maps domain records to calendar activities.
+## Evidence boundary before implementation
+
+The repository already contains useful production evidence, but it does not close this checklist. Extend and rerun the existing operations integration suites before checking any backend item:
+
+- `api/tests/integration/fittings-phase8-integrations.test.ts` covers the current mixed Reservation/Fitting Calendar projection foundation.
+- `api/tests/integration/fittings-phase9-load-query-plan.test.ts` covers representative fitting load and query-plan behavior.
+- [[Fittings Implementation Checklist]] records the passed FIT-BE-080/BE-8 and BE-9 security, isolation, observability, and load evidence; Calendar-specific state, truncation, bounded reservation-line aggregation, and frontend cutover evidence remain open here.
+- `TEST_DATABASE_URL` is required for the PostgreSQL evidence gate. Existing code, unit tests, or a successful build must not be treated as a substitute.
+
+## Source-of-truth map
+
+```text
+Reservation
+  pickup_at ───────────────► Calendar Pickup event
+  due_at ──────────────────► Calendar Return event
+  status/customer/lines ───► Calendar display projection
+  id ──────────────────────► Reservation Details Sheet
+
+Fitting Appointment
+  period.start/end ─────────► Calendar Fitting event
+  status/customer/lines ────► Calendar display projection
+  id ──────────────────────► Fitting Details Sheet
+
+Calendar
+  stores no booking state
+  performs no calendar-specific booking mutation
+```
+
+## Calendar visibility rules
+
+The Calendar projection keeps the owning module's state machine and does not invent a Calendar-specific status. The current inclusion rules are:
+
+- Reservations emit Pickup and Return events only for `pending_confirmation`, `confirmed`, `picked_up`, `returned`, and `completed` records.
+- Reservation `held`, `cancelled`, `expired`, and `rejected` records are excluded from the operational projection.
+- Fittings emit events only for `pending`, `confirmed`, `completed`, and `no_show` appointments.
+- Fitting `cancelled` and `rejected` appointments are excluded. Hidden capacity slots and other non-customer appointments are never exposed.
+- Returned and completed historical records remain visible when their authoritative event instant is inside the requested range.
+- Pickup and Return event starts are authoritative `pickup_at` and `due_at` instants. Their 30-minute end periods are synthetic display windows only; they do not represent a stored custody duration or change the source record.
+
+These rules must be covered by the backend integration evidence before any Calendar checklist item is marked complete.
+
+## Non-negotiable rules
+
+- Tenant and active branch come from authenticated actor context, never browser-supplied authority fields.
+- Calendar range queries are bounded. The backend accepts validated UTC instants; the frontend derives Week, Month, and day boundaries from the active branch timezone before calling the endpoint.
+- Week, Month, and Day Agenda use the same event projection; no separate business logic per view.
+- Pickup is derived from Reservation `pickup_at`; Return is derived from Reservation `due_at`.
+- Fitting is derived from persisted `fitting_appointment.period`; FIT-BE-080 makes those persisted appointments production-authoritative. Removing prototype fitting data is still a frontend cutover task.
+- Calendar event `source_id` must resolve to the same Reservation/Fitting record shown on its owning page.
+- Calendar actions delegate to Reservation/Fitting command APIs and refetch authoritative state after success.
+- No production Calendar card may display fabricated customer contact data, prices, statuses, or timelines.
+- Clothing Availability remains a separate projection at `GET /api/v1/calendar/availability` and is not duplicated here.
+- The current hard-coded **Issues** count is hidden and deferred. This slice adds no issue/disruption table or endpoint; it must remain absent until a canonical definition and source identity are approved.
+
+---
+
+# Backend Phase BE-0 — Freeze Calendar contracts and source semantics
+
+- [ ] **CAL-BE-000 — Confirm the production Calendar event taxonomy**
+  - **Outcome:** One explicit mapping exists from owning modules to Calendar events.
   - **Acceptance:**
-    - [ ] Define Reservation/booking review event semantics if shown in V1.
-    - [ ] Define Pickup event from confirmed reservation pickup deadline/workflow.
-    - [ ] Define Return event from due deadline and actual returned state.
-    - [ ] Define overdue/disruption/issue projection where operationally useful.
-    - [ ] Define maintenance/cleaning operational events only when backed by canonical work/readiness data.
-    - [ ] Mark Fitting as V1.1 and keep it out of real V1 query contracts unless scope changes canonically.
-  - **Tests/evidence:** Product/architecture review; no conflicting event semantics.
+    - [ ] Reservation `pickup_at` produces exactly one `pickup` event for an eligible reservation.
+    - [ ] Reservation `due_at` produces exactly one `return` event for an eligible reservation.
+    - [ ] Fitting `period` produces exactly one `fitting` event for an eligible appointment.
+    - [ ] Reservation inclusion is limited to `pending_confirmation`, `confirmed`, `picked_up`, `returned`, and `completed`; `held`, `cancelled`, `expired`, and `rejected` are excluded.
+    - [ ] Fitting inclusion is limited to `pending`, `confirmed`, `completed`, and `no_show`; `cancelled` and `rejected` are excluded.
+    - [ ] Pickup and Return start at authoritative `pickup_at` and `due_at`; any 30-minute end period is display-only.
+    - [ ] Returned/completed historical events remain visible when their event instant falls inside the requested range.
+    - [ ] Calendar event color/type is presentation only and is not persisted domain state.
+  - **Evidence:** Contract/repository review against Reservations and Fittings state machines.
 
-- [ ] **SCH-001 — Define schedule contracts**
-  - **Depends on:** SCH-000.
-  - **Outcome:** Shared contracts own schedule/day-agenda queries.
+- [ ] **CAL-BE-001 — Confirm the bounded operational Calendar contract**
+  - **Outcome:** `@drezivo/contracts` fully owns the Schedule read contract.
   - **Acceptance:**
-    - [ ] Define bounded `from`/`to` query with timezone-safe semantics.
-    - [ ] Define event summary with source type, source ID, event type, timestamp, clothing/customer-safe display fields, and status projection.
-    - [ ] Define daily aggregate counts and optional issue counts.
-    - [ ] Define filters for activity type, clothing, and allowed status values.
-    - [ ] Reject tenant/branch authority fields from browser input.
-  - **Tests/evidence:** Contract validation and bounded-window tests.
+    - [ ] Query accepts required `start` and `end` ISO instants.
+    - [ ] Query rejects `start >= end`.
+    - [ ] Query enforces the approved maximum window.
+    - [ ] Response returns a stable event `id`, `source`, `source_id`, `event_type`, `branch_id`, `period`, customer display name, item names, and source status.
+    - [ ] Reservation and Fitting event shapes remain discriminated so status types cannot be mixed accidentally.
+    - [ ] Dense ranges expose explicit `truncated` metadata; the response never silently presents a partial range as complete.
+    - [ ] Browser input cannot supply `tenant_id`, authoritative `branch_id`, customer identity, or event state.
+  - **Existing foundation:** `contracts/src/operations/calendar.ts` already defines a 62-day bounded `operationalCalendarQuery` and normalized Reservation/Fitting event response.
 
-## Phase 1: Schedule read service
+---
 
-- [ ] **SCH-010 — Implement bounded schedule projection service**
-  - **Depends on:** SCH-001, Reservations read model.
-  - **Outcome:** Server returns operational events for a requested calendar range.
+# Backend Phase BE-1 — Reservation pickup and return projection
+
+- [x] **CAL-BE-010 — Verify all eligible Reservation pickup dates are projected**
+  - **Depends on:** CAL-BE-000, CAL-BE-001.
+  - **Outcome:** Calendar can show every pickup inside the requested range without querying the Reservations UI separately.
   - **Acceptance:**
-    - [ ] Resolve tenant/default branch through actor context.
-    - [ ] Query only records intersecting requested bounded date range.
-    - [ ] Convert stored UTC instants using reservation/branch timezone snapshot for display grouping.
-    - [ ] Deduplicate event projection so one domain fact does not appear twice.
-    - [ ] Return stable source IDs used for detail navigation.
-    - [ ] Keep customer/contact projection minimal and authorized.
-  - **Tests/evidence:** Date boundary, timezone, duplicate-source, cross-tenant tests.
+    - [x] Query is tenant scoped.
+    - [x] Query is active-branch scoped.
+    - [x] `pickup_at >= start AND pickup_at < end` defines event inclusion.
+    - [x] Event period starts at `pickup_at`; the synthetic 30-minute display end is not a custody fact.
+    - [x] Event `source = reservation`.
+    - [x] Event `source_id` equals the authoritative reservation ID.
+    - [x] Customer display name comes from the linked customer/snapshot policy already used by Reservations.
+    - [x] Item names come from authoritative reservation lines.
+    - [x] One reservation cannot emit duplicate pickup events for the same Calendar projection.
+  - **Existing foundation:** `readOperationalCalendarEvents()` already projects Reservation pickup events from `reservation.pickup_at`.
 
-- [ ] **SCH-011 — Implement daily agenda query**
-  - **Depends on:** SCH-010.
-  - **Outcome:** Clicking a day/date or `+ more` can load all operational activities for that local date.
+- [x] **CAL-BE-011 — Verify all eligible Reservation return dates are projected**
+  - **Depends on:** CAL-BE-010.
+  - **Outcome:** Calendar can show every scheduled return inside the requested range.
   - **Acceptance:**
-    - [ ] Query accepts one local date plus actor context/timezone, not a browser-computed untrusted UTC range alone.
-    - [ ] Results are chronological and bounded.
-    - [ ] Counts by event type equal the returned/filtered source set.
-    - [ ] Day navigation can request previous/next date without reopening unrelated state.
-  - **Tests/evidence:** Day boundary/DST/order/count tests.
+    - [x] `due_at >= start AND due_at < end` defines scheduled Return inclusion.
+    - [x] Event period starts at `due_at`; the synthetic 30-minute display end is not a custody fact.
+    - [x] Event `source = reservation`.
+    - [x] Event `source_id` equals the same Reservation source used by Pickup.
+    - [x] Return projection does not fabricate a second reservation or allocation record.
+    - [x] Actual late/early return custody facts do not rewrite the historical scheduled due instant in this projection.
+    - [x] Returned/completed reservations still show their scheduled Return when that due instant is in range.
+  - **Existing foundation:** `readOperationalCalendarEvents()` already projects Reservation return events from `reservation.due_at`.
 
-- [ ] **SCH-012 — Implement schedule aggregate metrics**
-  - **Depends on:** SCH-010.
-  - **Outcome:** Pickups/Returns/Issues summary cards use real data for the selected range.
+- [x] **CAL-BE-012 — Prove Reservation Calendar identity matches `/reservations`**
+  - **Depends on:** CAL-BE-010, CAL-BE-011.
+  - **Outcome:** Calendar never disagrees with Reservation detail for the same source.
   - **Acceptance:**
-    - [ ] Metric definition is explicit: period total vs today vs week.
-    - [ ] Counts use the same canonical predicates as schedule events.
-    - [ ] Fittings metric is removed/hidden for real V1 unless V1.1 is enabled canonically.
-  - **Tests/evidence:** Projection/count consistency tests.
+    - [x] Pickup/Return `source_id` can be fetched through `GET /api/v1/reservations/:reservationId`.
+    - [x] Calendar status equals the authoritative reservation status at read time.
+    - [x] Calendar customer/item summaries correspond to the same accepted reservation snapshot/lines.
+    - [x] Foreign-tenant and foreign-branch reservation IDs remain concealed.
+  - **Tests/evidence:** `fittings-phase8-integrations.test.ts` (5 passed) and `reservation-list-read-model.test.ts` (7 passed) against the disposable PostgreSQL database.
 
-## Phase 2: Week view integration
+---
 
-- [ ] **SCH-020 — Replace Week Schedule mock data**
-  - **Depends on:** SCH-010, SCH-012.
-  - **Outcome:** Current `/calendar` week grid displays real operational events.
+# Backend Phase BE-2 — Fitting schedule projection
+
+- [ ] **CAL-BE-020 — Verify persisted Fitting appointments are projected**
+  - **Depends on:** CAL-BE-000, CAL-BE-001, Fittings backend production gate.
+  - **Outcome:** Calendar consumes the Fittings module directly instead of Calendar prototype fixtures.
   - **Acceptance:**
-    - [ ] Previous/next week controls request real bounded ranges.
-    - [ ] Week header activity counts come from server projection.
-    - [ ] All Activity/Clothing/Status filters query or filter authoritative events consistently.
-    - [ ] `+ more` count reflects hidden events for that day.
-    - [ ] Loading, empty, partial/error states preserve grid usability.
-  - **Tests/evidence:** Component/browser tests with dense seeded week.
+    - [ ] Query reads persisted `fitting_appointment` rows only.
+    - [ ] Appointment inclusion uses overlap with the requested Calendar window.
+    - [ ] Event `source = fitting`.
+    - [ ] Event `source_id` equals the authoritative fitting ID.
+    - [ ] Event period uses the stored fitting appointment start/end exactly.
+    - [ ] Customer display name comes from the linked production customer.
+    - [ ] Item names come from active fitting lines.
+    - [ ] Hidden fitting capacity slots are never exposed to Calendar.
+    - [ ] No duplicate Calendar fitting store/table is introduced.
+  - **Existing foundation:** FIT-BE-080 is implemented and `readOperationalCalendarEvents()` already projects persisted fittings. Those persisted rows are the production authority; only removal of prototype fitting data from the Calendar UI remains for the frontend phase.
 
-- [ ] **SCH-021 — Connect individual event click to Reservation Details Sheet**
-  - **Depends on:** SCH-020, Reservations RSV-011.
-  - **Outcome:** Clicking a reservation/pickup/return event opens real reservation details.
+- [ ] **CAL-BE-021 — Prove Fitting Calendar identity matches `/fittings`**
+  - **Depends on:** CAL-BE-020.
+  - **Outcome:** Clicking a Calendar fitting resolves the same production appointment as `/fittings`.
   - **Acceptance:**
-    - [ ] Source reservation ID comes from server event projection.
-    - [ ] Details Sheet fetches/reuses the same reservation detail contract as `/reservations`.
-    - [ ] Calendar does not maintain a duplicate reservation-detail mock model.
-    - [ ] Stale/deleted/foreign source fails safely.
-  - **Tests/evidence:** Event-to-reservation identity tests.
+    - [ ] `source_id` can be fetched through `GET /api/v1/fittings/:id`.
+    - [ ] Calendar fitting status equals the authoritative fitting status at read time.
+    - [ ] Garment summary corresponds to active fitting lines.
+    - [ ] Preference-only fitting garments are display data only and do not imply physical allocation.
+    - [ ] Guaranteed fitting asset identities remain inside the Fitting detail contract, not Calendar event summaries.
+  - **Tests/evidence:** Cross-surface seeded integration tests.
 
-- [ ] **SCH-022 — Connect day header and `+ more` to Day Agenda Sheet**
-  - **Depends on:** SCH-011, SCH-020.
-  - **Outcome:** Current approved Day Agenda Sheet shows all real day activities.
+---
+
+# Backend Phase BE-3 — Range, timezone, ordering, and scale hardening
+
+- [ ] **CAL-BE-030 — Prove active-branch timezone range construction**
+  - **Outcome:** Week/month/day boundaries include the correct business-local events.
   - **Acceptance:**
-    - [ ] Day/date header and `+ more` open same day source.
-    - [ ] Activity type tabs use real counts.
-    - [ ] `View details` opens authoritative Reservation Details Sheet.
-    - [ ] Previous/next day navigation preserves calendar context.
-    - [ ] Sheet remains responsive/full-width enough on mobile.
-  - **Tests/evidence:** Header/more/filter/navigation/detail transition tests.
+    - [ ] Backend accepts only validated UTC `start/end` instants, enforces the approved window, and never treats a client-supplied timezone as authority.
+    - [ ] Frontend obtains the active branch IANA timezone from actor context and converts local Week/Month/day boundaries to UTC instants before calling Calendar.
+    - [ ] Tests cover Asia/Manila and at least one DST-observing timezone at the API boundary.
+    - [ ] Events around local midnight are grouped into the expected branch-local business date by the frontend mapper.
 
-## Phase 3: Month and Day views
-
-- [ ] **SCH-030 — Implement Month projection UI from same service**
-  - **Depends on:** SCH-010, SCH-011.
-  - **Outcome:** Month view summarizes daily activity without creating a new backend truth source.
+- [ ] **CAL-BE-031 — Verify deterministic event ordering and deduplication**
   - **Acceptance:**
-    - [ ] Month query is bounded to visible grid plus explicit spillover days only.
-    - [ ] Cells show a small bounded preview plus `+N more`.
-    - [ ] Clicking cell/date opens Day Agenda Sheet.
-    - [ ] Dense days do not render hundreds of DOM event cards.
-  - **Tests/evidence:** Dense-month rendering and day drill-down tests.
+    - [ ] Results order by event start then stable tie-breakers.
+    - [ ] One Reservation may legitimately produce Pickup + Return, but never two identical Pickup or two identical Return events.
+    - [ ] One Fitting produces one fitting event.
+    - [ ] Concurrent unrelated inserts do not make ordering unstable for equal timestamps.
 
-- [ ] **SCH-031 — Implement Day timeline view from daily agenda service**
-  - **Depends on:** SCH-011.
-  - **Outcome:** Day mode presents chronological operations with no duplicate query logic.
+- [ ] **CAL-BE-032 — Harden dense-range result limits**
+  - **Outcome:** Calendar never silently presents an incomplete month/week as complete.
   - **Acceptance:**
-    - [ ] Reuses daily agenda contract and event components where practical.
-    - [ ] Timezone/time labels match Week and Day Agenda Sheet.
-    - [ ] Event click opens same detail source.
-  - **Tests/evidence:** Week/Day consistency tests.
+    - [ ] Representative supported tenant scale is tested against the current event cap.
+    - [ ] The repository queries up to 2,001 ordered rows (`2000 + 1`) and returns at most 2,000 events.
+    - [ ] The response exposes `truncated: boolean`, set only when the extra row exists; no dense range is silently presented as complete.
+    - [ ] The frontend visibly warns or otherwise prevents a truncated range from appearing complete.
+    - [ ] Week and 42-day visible Month-grid windows remain supported within the server range limit.
+    - [ ] Reservation line aggregation is bounded to the candidate reservations that survive tenant, branch, status, and date filtering; all tenant reservation lines are not scanned before the bounded event page is selected.
+    - [ ] Queries use relevant reservation/fitting tenant/branch/time indexes.
+  - **Tests/evidence:** Representative load/query-plan evidence.
 
-## Phase 4: Operational actions from calendar
-
-- [ ] **SCH-040 — Wire allowed reservation actions through domain services**
-  - **Depends on:** Reservations mutation phases.
-  - **Outcome:** Calendar surfaces can trigger allowed pickup/return/etc. without implementing calendar-specific business writes.
+- [ ] **CAL-BE-033 — Verify Calendar authorization and isolation**
   - **Acceptance:**
-    - [ ] Reservation Details Sheet calls Reservation API commands only.
-    - [ ] Shared pending/idempotency guard used for mutations.
-    - [ ] Success refetches schedule, reservations, dashboard, and affected availability projections.
-    - [ ] Stale/conflict state prompts refresh rather than optimistic authority override.
-  - **Tests/evidence:** Calendar-triggered mutation integration tests.
-
-- [ ] **SCH-041 — Surface disruption/overdue operational cues**
-  - **Depends on:** Reservations RSV-051/052.
-  - **Outcome:** Schedule makes late/unready issues visible without altering underlying reservation facts.
-  - **Acceptance:**
-    - [ ] Overdue/due-soon rules are documented and derived from canonical dates/custody state.
-    - [ ] Threatened next booking links to disruption/reservation context.
-    - [ ] Actual return remains recordable even when late.
-  - **Tests/evidence:** Late return/disruption projection tests.
-
-## Phase 5: Mobile, accessibility, and performance
-
-- [ ] **SCH-050 — Complete responsive calendar behavior**
-  - **Depends on:** SCH-020 through SCH-031.
-  - **Outcome:** Calendar remains usable at 360px without requiring desktop-only hover behavior.
-  - **Acceptance:**
-    - [ ] Day/date, event, and `+ more` targets are keyboard and touch accessible.
-    - [ ] Horizontal scroll has clear context and does not trap page navigation.
-    - [ ] Sheets provide accessible titles/descriptions/focus handling.
-    - [ ] No essential action depends on hover.
-  - **Tests/evidence:** Keyboard/mobile browser walkthrough.
-
-- [ ] **SCH-051 — Validate schedule query/render scale**
-  - **Depends on:** SCH-010, SCH-030.
-  - **Outcome:** Dense operational periods remain fast and bounded.
-  - **Acceptance:**
-    - [ ] Calendar APIs enforce max range/row bounds.
-    - [ ] Month/week views cap preview payload and use day drill-down for dense data.
-    - [ ] Queries use reservation date/status indexes.
-    - [ ] UI avoids rendering hidden full-day datasets until requested.
-  - **Tests/evidence:** Representative load and render measurements.
-
-## Phase 6: Completion evidence
-
-- [ ] **SCH-060 — Complete schedule isolation and consistency tests**
-  - **Depends on:** All Schedule API tasks.
-  - **Outcome:** Calendar cannot leak data or disagree with Reservations.
-  - **Acceptance:**
-    - [ ] Foreign tenant events never appear.
+    - [ ] Staff authentication is required.
+    - [ ] Tenant context is required.
+    - [ ] Existing rental read policy is applied.
+    - [ ] `reservations.manage` operational permission is required.
     - [ ] Missing actor context fails closed.
-    - [ ] Schedule event source resolves to same reservation snapshot/status as `/reservations`.
-    - [ ] Counts remain consistent after create/reschedule/cancel/pickup/return.
-  - **Tests/evidence:** API/RLS/cross-surface integration suite.
+    - [ ] Cross-tenant Calendar reads return no foreign events.
+    - [ ] Active branch cannot read another branch's schedule.
 
-- [ ] **SCH-061 — Mark Schedule Calendar vertical slice complete**
-  - **Depends on:** SCH-050, SCH-051, SCH-060.
-  - **Outcome:** Schedule is a real operational projection of Drezivo rental state.
+---
+
+# Backend Phase BE-4 — API verification and release gate
+
+- [ ] **CAL-BE-040 — Complete Calendar contract tests**
   - **Acceptance:**
-    - [ ] Week + Day Agenda + Reservation Details use real API data.
-    - [ ] Month/Day modes use same canonical projection when enabled.
-    - [ ] No production mock agenda data remains.
-    - [ ] Calendar and Reservations stay consistent after mutations.
-    - [ ] Docs/checklist reflect implemented behavior.
-  - **Tests/evidence:** API/app/e2e suites, typecheck, lint, build, browser walkthrough.
+    - [ ] Valid Reservation Pickup event parses.
+    - [ ] Valid Reservation Return event parses.
+    - [ ] Valid Fitting event parses.
+    - [ ] Reservation status cannot be used in a Fitting event shape and vice versa.
+    - [ ] More-than-max range fails validation.
+    - [ ] Unknown/authority fields are rejected.
 
-## Deferred from Schedule V1
+- [ ] **CAL-BE-041 — Complete PostgreSQL Calendar integration tests**
+  - **Acceptance:**
+    - [ ] Seed one reservation and prove both Pickup and Return appear at the expected instants.
+    - [ ] Seed one fitting and prove its exact appointment period appears.
+    - [ ] Mixed Reservation + Fitting window returns all three expected event kinds.
+    - [ ] Reservation states `pending_confirmation`, `confirmed`, `picked_up`, `returned`, and `completed` follow CAL-BE-000 inclusion rules; `held`, `cancelled`, `expired`, and `rejected` do not appear.
+    - [ ] Fitting states `pending`, `confirmed`, `completed`, and `no_show` follow CAL-BE-000 inclusion rules; `cancelled` and `rejected` do not appear.
+    - [ ] Pickup and Return begin at `pickup_at` and `due_at`, with only a synthetic 30-minute display period.
+    - [ ] Tenant/branch isolation is falsified with at least two workspaces/branches.
+    - [ ] Midnight/timezone boundary coverage passes.
+    - [ ] Dense-range behavior from CAL-BE-032 is covered, including the 2,001-row probe, 2,000-row cap, and `truncated` flag.
+    - [ ] Reservation line aggregation is bounded to date-filtered candidate reservations and does not scan all tenant lines first.
+  - **Evidence references:** Existing `api/tests/integration/fittings-phase8-integrations.test.ts` covers the mixed Reservation/Fitting projection foundation; `api/tests/integration/fittings-phase9-load-query-plan.test.ts` covers representative fitting load/query-plan behavior. Extend those suites (or equivalent operations integration coverage) before checking this item.
 
-- Real fitting appointments and hidden branch-capacity-backed Fitting agenda events — V1.1, staged after the core fitting backend is production-ready per [[Fittings Backend Decision Record]].
-- Drag-and-drop rescheduling unless it can preserve the full atomic reschedule contract.
-- Multi-branch calendars — V2.
+- [ ] **CAL-BE-042 — Mark backend Calendar projection ready for frontend cutover**
+  - **Depends on:** CAL-BE-010 through CAL-BE-041.
+  - **Acceptance:**
+    - [ ] `GET /api/v1/calendar` is the one Schedule event read endpoint.
+    - [ ] Reservation Pickup and Return are authoritative.
+    - [ ] Fitting schedule is authoritative.
+    - [ ] OpenAPI matches implemented contracts/routes.
+    - [ ] No backend work is required to fabricate UI-only Calendar records.
+
+---
+
+# Frontend Phase FE-0 — Add the production Calendar API client
+
+- [ ] **CAL-FE-000 — Add `getOperationalCalendar()` to `app/src/lib/drezivo-api.ts`**
+  - **Depends on:** CAL-BE-042.
+  - **Outcome:** The app consumes the shared Calendar contract instead of handwritten response types.
+  - **Acceptance:**
+    - [ ] Import `operationalCalendarQuery` and `operationalCalendarResponse` from `@drezivo/contracts`.
+    - [ ] Serialize validated `start` and `end` query parameters.
+    - [ ] Validate the API envelope/response through the shared contract.
+    - [ ] Preserve the response `truncated` flag so the UI can warn or prevent a dense range from appearing complete.
+    - [ ] Add focused API-client unit coverage.
+
+- [ ] **CAL-FE-001 — Resolve active branch timezone and permissions**
+  - **Acceptance:**
+    - [ ] Calendar uses `GET /api/v1/actor-context` like other authenticated operational pages.
+    - [ ] Active branch timezone is the display/range basis.
+    - [ ] Browser timezone is fallback presentation only while context is unavailable; it is not business authority.
+    - [ ] Permission-restricted state is explicit.
+
+---
+
+# Frontend Phase FE-1 — Replace Calendar prototype data
+
+- [ ] **CAL-FE-010 — Create one production Calendar presentation mapper**
+  - **Depends on:** CAL-FE-000, CAL-FE-001.
+  - **Outcome:** Week, Month, Day Agenda, cards, and filters share one mapped event model.
+  - **Acceptance:**
+    - [ ] Map `pickup` → Pickup.
+    - [ ] Map `return` → Return.
+    - [ ] Map `fitting` → Fitting.
+    - [ ] Preserve `source`, `source_id`, status, customer name, item names, and exact event period.
+    - [ ] Derive event duration from `period.start/end`; do not restrict real fittings to only 30/60 minutes.
+    - [ ] Derive branch-local `dateKey` from the event start instant.
+
+- [ ] **CAL-FE-011 — Remove `CALENDAR_ACTIVITIES` as production authority**
+  - **Acceptance:**
+    - [ ] Delete production dependence on `CALENDAR_MOCK_TODAY`.
+    - [ ] Delete production dependence on fixed September 2026 dates.
+    - [ ] Remove fake Calendar reservation/customer/contact/payment data.
+    - [ ] Remove `Fitting · Prototype`, `Prototype fitting activity`, and mock-only fitting copy during the same controlled cutover.
+    - [ ] Keep only reusable visual constants/helpers in `calendar-schedule-data.ts`, or replace the file entirely if no longer needed.
+
+---
+
+# Frontend Phase FE-2 — Wire Week and Month views
+
+- [ ] **CAL-FE-020 — Wire Week Schedule to the production Calendar endpoint**
+  - **Acceptance:**
+    - [ ] Visible Monday–Sunday branch-local range becomes the API query range.
+    - [ ] Previous/next Week refetches that bounded range.
+    - [ ] `Today` jumps to the actual branch-local current week.
+    - [ ] Day header activity counts derive from the current production events.
+    - [ ] Existing side-by-side overlap layout remains functional for dense simultaneous activity.
+    - [ ] Events outside the normal visual-hour window are not silently lost.
+    - [ ] A truncated response is visibly marked and is never presented as a complete week.
+
+- [ ] **CAL-FE-021 — Wire Month view to the same production projection**
+  - **Acceptance:**
+    - [ ] Query covers only the visible Month grid including explicit spillover cells.
+    - [ ] A six-week grid fits within the backend range limit.
+    - [ ] Each day cell previews a bounded number of activities.
+    - [ ] `+N more` reflects the production event set for that day.
+    - [ ] Month never uses a second mock or alternate Calendar source.
+    - [ ] A truncated response is visibly marked and does not imply that the six-week grid is complete.
+
+---
+
+# Frontend Phase FE-3 — Summary cards and filters
+
+- [ ] **CAL-FE-030 — Wire real period summary cards**
+  - **Acceptance:**
+    - [ ] Pickups count = visible-range `pickup` events.
+    - [ ] Returns count = visible-range `return` events.
+    - [ ] Fittings count = visible-range `fitting` events.
+    - [ ] Loading does not display fake authoritative zeroes.
+    - [ ] Remove/hide the hard-coded `Issues = 3` until an approved issue projection exists.
+
+- [ ] **CAL-FE-031 — Wire Activity filter**
+  - **Acceptance:**
+    - [ ] `All Activity`, `Pickup`, `Return`, and `Fitting` operate on authoritative events.
+    - [ ] Filtering does not mutate backend/domain state.
+    - [ ] Day/Week/Month use consistent filtering semantics.
+
+- [ ] **CAL-FE-032 — Wire Clothing filter**
+  - **Acceptance:**
+    - [ ] Initial cutover may derive exact item-name options from the loaded authoritative event set.
+    - [ ] Filtering matches event `item_names` exactly/consistently.
+    - [ ] No hard-coded `Gowns/Barong/Filipiniana` options remain unless they come from authoritative catalogue facets.
+    - [ ] If product/category IDs are later required for scale, extend the shared contract instead of inventing client IDs.
+
+- [ ] **CAL-FE-033 — Wire Status filter**
+  - **Acceptance:**
+    - [ ] Filter supports the authoritative Reservation/Fitting states represented in the Calendar response.
+    - [ ] Human-friendly labels may group states, but raw domain states remain unchanged.
+    - [ ] Reservation state is never applied to a Fitting as if the state machines were identical.
+
+---
+
+# Frontend Phase FE-4 — Real Day Agenda
+
+- [ ] **CAL-FE-040 — Replace `CALENDAR_DAY_AGENDA` mock data**
+  - **Outcome:** Clicking a date opens the authoritative activities for that branch-local day.
+  - **Acceptance:**
+    - [ ] Group loaded events by branch-local `dateKey`.
+    - [ ] Agenda items are chronological.
+    - [ ] `All/Pickup/Return/Fitting` tab counts come from the real day event set.
+    - [ ] Day header and Month `+N more` open the same Day Agenda source.
+    - [ ] Previous/next day navigation preserves Calendar context and fetches a new range only when needed.
+    - [ ] Empty day state is explicit.
+
+---
+
+# Frontend Phase FE-5 — Authoritative Reservation and Fitting details
+
+- [ ] **CAL-FE-050 — Reuse the production Reservation Details Sheet**
+  - **Depends on:** CAL-FE-010, Reservations production detail API.
+  - **Outcome:** Calendar Reservation events open the same source/detail used by `/reservations`.
+  - **Acceptance:**
+    - [ ] Reservation event click uses `source_id`.
+    - [ ] Fetch through existing `getReservationDetail()`.
+    - [ ] Reuse `app/src/components/reservations/reservation-details-sheet.tsx`.
+    - [ ] Delete Calendar's fabricated `reservationDetailsFor()` implementation.
+    - [ ] No fake phone/email/price/status timeline remains.
+    - [ ] Reservation mutations use existing Reservation commands and shared submit/idempotency guards.
+    - [ ] Successful mutation refetches Calendar and detail state.
+
+- [ ] **CAL-FE-051 — Extract and reuse the production Fitting Details Sheet**
+  - **Depends on:** CAL-FE-010, Fittings production detail API.
+  - **Outcome:** Calendar Fitting events open the same appointment used by `/fittings`.
+  - **Acceptance:**
+    - [ ] Extract the current production Fitting Details Sheet from `fittings-page.tsx` into a reusable component.
+    - [ ] `/fittings` continues using the extracted component without behavior regression.
+    - [ ] Calendar fitting event click uses `source_id` and existing `getFittingDetail()`.
+    - [ ] Existing confirm/reject/cancel/complete/no-show/reschedule behavior remains delegated to Fittings APIs.
+    - [ ] Prototype fitting detail code is removed from Calendar.
+    - [ ] Successful mutation refetches Calendar and Fitting detail state.
+
+---
+
+# Frontend Phase FE-6 — Loading, empty, error, accessibility, and responsive states
+
+- [ ] **CAL-FE-060 — Add production loading/error/empty states**
+  - **Acceptance:**
+    - [ ] Initial loading state preserves the Calendar layout where practical.
+    - [ ] Range refetch state does not flash fake old-period counts as new-period authority.
+    - [ ] Empty period clearly states there are no scheduled activities.
+    - [ ] Empty filtered state differs from truly empty Calendar data.
+    - [ ] API errors provide retry.
+    - [ ] `403` explains restricted Calendar access.
+    - [ ] Detail-loading/detail-error states are handled by the shared detail components.
+
+- [ ] **CAL-FE-061 — Preserve responsive and accessible Calendar behavior**
+  - **Acceptance:**
+    - [ ] Week grid horizontal scroll remains understandable on narrow screens.
+    - [ ] Day headers, event cards, filters, and `+N more` are keyboard/touch accessible.
+    - [ ] No essential action depends only on hover.
+    - [ ] Sheets have accessible titles/descriptions and expected focus behavior.
+    - [ ] Semantic Pickup/Return/Fitting colors maintain dark/light theme contrast.
+
+---
+
+# Frontend Phase FE-7 — Tests and production cutover
+
+- [ ] **CAL-FE-070 — Replace prototype Calendar unit tests with API-backed behavior tests**
+  - **Acceptance:**
+    - [ ] Actor-context timezone resolution.
+    - [ ] Week query boundaries.
+    - [ ] Month visible-grid query boundaries.
+    - [ ] Previous/next navigation refetch.
+    - [ ] Pickup/Return/Fitting event mapping.
+    - [ ] Branch-local Today behavior.
+    - [ ] Activity/Clothing/Status filters.
+    - [ ] Day Agenda counts/filtering/navigation.
+    - [ ] Month `+N more` drill-down.
+    - [ ] Overlap layout with real-period durations.
+    - [ ] Reservation event → `getReservationDetail()` identity.
+    - [ ] Fitting event → `getFittingDetail()` identity.
+    - [ ] Mutation success → Calendar refetch.
+    - [ ] Loading/empty/error/403 states.
+    - [ ] No tests assert prototype-only Calendar labels or fake reservation numbers.
+
+- [ ] **CAL-FE-071 — Complete authenticated browser verification**
+  - **Acceptance:**
+    - [ ] Desktop Week view with seeded Pickup/Return/Fitting data.
+    - [ ] Desktop Month view with dense day overflow.
+    - [ ] Day Agenda drill-down.
+    - [ ] Reservation detail/action from Calendar.
+    - [ ] Fitting detail/action from Calendar.
+    - [ ] 360px usability.
+    - [ ] Keyboard walkthrough.
+    - [ ] Light and dark theme review.
+
+- [ ] **CAL-FE-072 — Remove all Schedule prototype production paths**
+  - **Acceptance:**
+    - [ ] No `CALENDAR_ACTIVITIES` production dependency remains.
+    - [ ] No fixed September 2026 Calendar authority remains.
+    - [ ] No prototype fitting labels remain.
+    - [ ] No fabricated Reservation Details Sheet remains inside Calendar.
+    - [ ] No hard-coded Issues count remains.
+
+---
+
+# Completion Gate
+
+- [ ] **CAL-REL-000 — Mark Rental Calendar end-to-end slice complete**
+  - **Depends on:** CAL-BE-042 and CAL-FE-072.
+  - **Acceptance:**
+    - [ ] Every eligible Reservation Pickup in the selected range appears at its authoritative `pickup_at`.
+    - [ ] Every eligible Reservation Return in the selected range appears at its authoritative `due_at`.
+    - [ ] Every eligible persisted Fitting in the selected range appears at its authoritative appointment period.
+    - [ ] Week, Month, and Day Agenda all consume one production Calendar projection.
+    - [ ] Reservation event drill-down opens the authoritative Reservation record.
+    - [ ] Fitting event drill-down opens the authoritative Fitting record.
+    - [ ] Calendar mutations delegate to owning modules and refetch authoritative data.
+    - [ ] Tenant/branch/timezone isolation tests pass.
+    - [ ] Contracts, API, app typecheck/lint/tests/build are green.
+    - [ ] OpenAPI is synchronized.
+    - [ ] Schedule/Fittings documentation reflects the production cutover with no stale “Fitting prototype only” language.
+
+## Deferred / separate follow-up
+
+- Canonical **Issues / disruption / overdue** summary and event cues. Define exact predicates and source IDs first; do not revive the hard-coded `Issues = 3` card.
+- Drag-and-drop rescheduling. Any future implementation must call the owning Reservation/Fitting reschedule commands and preserve their atomic concurrency rules.
+- Multi-branch combined Calendar — V2.
 - Predictive workload/analytics.

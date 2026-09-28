@@ -1,5 +1,11 @@
 import type { PoolClient } from 'pg';
 
+import {
+  OPERATIONAL_CALENDAR_FITTING_STATUSES,
+  OPERATIONAL_CALENDAR_MAX_EVENTS,
+  OPERATIONAL_CALENDAR_RESERVATION_STATUSES,
+} from '@drezivo/contracts';
+
 import { ValidationError } from '../../shared/errors.js';
 
 export interface CalendarEventRow {
@@ -12,7 +18,19 @@ export interface CalendarEventRow {
   ends_at: Date;
   customer_name: string;
   item_names: string[];
-  status: string;
+  status:
+    | 'pending_confirmation'
+    | 'confirmed'
+    | 'picked_up'
+    | 'returned'
+    | 'completed'
+    | 'pending'
+    | 'no_show';
+}
+
+export interface OperationalCalendarPage {
+  rows: CalendarEventRow[];
+  truncated: boolean;
 }
 
 export interface DashboardFittingSummaryRow {
@@ -27,13 +45,33 @@ export interface DashboardFittingSummaryRow {
 export async function readOperationalCalendarEvents(
   client: PoolClient,
   input: { tenantId: string; branchId: string; start: string; end: string },
-): Promise<CalendarEventRow[]> {
+): Promise<OperationalCalendarPage> {
   const result = await client.query<CalendarEventRow>(
-    `WITH reservation_items AS (
+    `WITH reservation_candidates AS MATERIALIZED (
+       SELECT r.id,
+              r.tenant_id,
+              r.branch_id,
+              r.customer_id,
+              r.customer_snapshot,
+              r.status,
+              r.pickup_at,
+              r.due_at
+         FROM reservation r
+        WHERE r.tenant_id = $1::uuid
+          AND r.branch_id = $2::uuid
+          AND r.status::text = ANY($5::text[])
+          AND (
+            (r.pickup_at >= $3::timestamptz AND r.pickup_at < $4::timestamptz)
+            OR (r.due_at >= $3::timestamptz AND r.due_at < $4::timestamptz)
+          )
+     ),
+     reservation_items AS (
        SELECT rl.tenant_id, rl.reservation_id,
               array_agg(rl.name_snapshot ORDER BY rl.line_number, rl.id) AS item_names
          FROM reservation_line rl
-        WHERE rl.tenant_id = $1::uuid
+         JOIN reservation_candidates rc
+           ON rc.tenant_id = rl.tenant_id
+          AND rc.id = rl.reservation_id
         GROUP BY rl.tenant_id, rl.reservation_id
      ),
      reservation_events AS (
@@ -45,16 +83,17 @@ export async function readOperationalCalendarEvents(
          r.branch_id,
          r.pickup_at AS starts_at,
          r.pickup_at + interval '30 minutes' AS ends_at,
-         COALESCE(c.full_name, r.customer_snapshot->>'full_name', 'Customer') AS customer_name,
+         COALESCE(
+           NULLIF(btrim(r.customer_snapshot->>'full_name'), ''),
+           NULLIF(btrim(c.full_name), ''),
+           'Customer'
+         ) AS customer_name,
          COALESCE(items.item_names, ARRAY[]::text[]) AS item_names,
          r.status::text AS status
-       FROM reservation r
+       FROM reservation_candidates r
        LEFT JOIN customer c ON c.tenant_id = r.tenant_id AND c.id = r.customer_id
        LEFT JOIN reservation_items items ON items.tenant_id = r.tenant_id AND items.reservation_id = r.id
-       WHERE r.tenant_id = $1::uuid
-         AND r.branch_id = $2::uuid
-         AND r.status IN ('pending_confirmation','confirmed','picked_up','returned','completed')
-         AND r.pickup_at >= $3::timestamptz
+       WHERE r.pickup_at >= $3::timestamptz
          AND r.pickup_at < $4::timestamptz
        UNION ALL
        SELECT
@@ -65,16 +104,17 @@ export async function readOperationalCalendarEvents(
          r.branch_id,
          r.due_at AS starts_at,
          r.due_at + interval '30 minutes' AS ends_at,
-         COALESCE(c.full_name, r.customer_snapshot->>'full_name', 'Customer') AS customer_name,
+         COALESCE(
+           NULLIF(btrim(r.customer_snapshot->>'full_name'), ''),
+           NULLIF(btrim(c.full_name), ''),
+           'Customer'
+         ) AS customer_name,
          COALESCE(items.item_names, ARRAY[]::text[]) AS item_names,
          r.status::text AS status
-       FROM reservation r
+       FROM reservation_candidates r
        LEFT JOIN customer c ON c.tenant_id = r.tenant_id AND c.id = r.customer_id
        LEFT JOIN reservation_items items ON items.tenant_id = r.tenant_id AND items.reservation_id = r.id
-       WHERE r.tenant_id = $1::uuid
-         AND r.branch_id = $2::uuid
-         AND r.status IN ('pending_confirmation','confirmed','picked_up','returned','completed')
-         AND r.due_at >= $3::timestamptz
+       WHERE r.due_at >= $3::timestamptz
          AND r.due_at < $4::timestamptz
      ),
      fitting_events AS (
@@ -102,17 +142,27 @@ export async function readOperationalCalendarEvents(
        ) items ON true
        WHERE fa.tenant_id = $1::uuid
          AND fa.branch_id = $2::uuid
-         AND fa.status IN ('pending','confirmed','completed','no_show')
+         AND fa.status::text = ANY($6::text[])
          AND fa.period && tstzrange($3::timestamptz, $4::timestamptz, '[)')
      )
      SELECT * FROM reservation_events
      UNION ALL
      SELECT * FROM fitting_events
      ORDER BY starts_at ASC, event_type ASC, id ASC
-     LIMIT 2000`,
-    [input.tenantId, input.branchId, input.start, input.end],
+     LIMIT ${OPERATIONAL_CALENDAR_MAX_EVENTS + 1}`,
+    [
+      input.tenantId,
+      input.branchId,
+      input.start,
+      input.end,
+      OPERATIONAL_CALENDAR_RESERVATION_STATUSES,
+      OPERATIONAL_CALENDAR_FITTING_STATUSES,
+    ],
   );
-  return result.rows;
+  return {
+    rows: result.rows,
+    truncated: result.rows.length > OPERATIONAL_CALENDAR_MAX_EVENTS,
+  };
 }
 
 export async function readDashboardFittingSummary(

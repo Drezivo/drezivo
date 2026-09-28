@@ -2,6 +2,7 @@ import {
   clothingAvailabilityTimelineQuery,
   clothingAvailabilityTimelineResponse,
   dashboardFittingSummaryResponse,
+  OPERATIONAL_CALENDAR_MAX_EVENTS,
   operationalCalendarQuery,
   operationalCalendarResponse,
   type ClothingAvailabilityTimelineAgenda,
@@ -45,7 +46,7 @@ export async function getOperationalCalendar(
   const query = parsed.data;
 
   return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
-    const rows = await readOperationalCalendarEvents(client, {
+    const page = await readOperationalCalendarEvents(client, {
       tenantId: context.tenantId,
       branchId: context.branchId,
       start: query.start,
@@ -53,7 +54,7 @@ export async function getOperationalCalendar(
     });
     return operationalCalendarResponse.parse({
       window: { start: query.start, end: query.end },
-      events: rows.map((row) => ({
+      events: page.rows.slice(0, OPERATIONAL_CALENDAR_MAX_EVENTS).map((row) => ({
         id: row.id,
         source: row.source,
         source_id: row.source_id,
@@ -64,6 +65,7 @@ export async function getOperationalCalendar(
         item_names: row.item_names,
         status: row.status,
       })),
+      truncated: page.truncated,
     });
   });
 }
