@@ -367,12 +367,24 @@ available.
 
 ## 23. Reservation/Fitting customer-selector behavior
 
+Implementation note (2026-09-28): Reservation and Fitting intake searches and existing-customer
+resolution now exclude operationally archived and anonymized profiles. Existing linked bookings
+remain readable through their authoritative history/detail paths. Focused PostgreSQL evidence passes
+for the customer, reservation-intake, and fitting-security suites; the broader suite still has
+unrelated timeout failures, so the acceptance items remain open until the baseline is green.
+
 - [ ] Update Reservation existing-customer lookup to exclude archived profiles.
 - [ ] Update Fitting existing-customer lookup to exclude archived profiles.
 - [ ] Continue excluding anonymized profiles.
 - [ ] Existing bookings linked to an archived profile remain readable and actionable.
 
 ## 24. Authorization boundary
+
+Implementation note (2026-09-28): customer directory, profile mutations, and Reservation/Fitting
+selectors reuse the existing `reservations.manage` capability under verified staff and tenant
+context. Customer history remains branch-scoped; no new customer permission was introduced.
+Focused PostgreSQL authorization and isolation evidence passes; the broader suite remains gated by
+unrelated timeout failures.
 
 - [ ] Keep the live customer profile tenant-scoped.
 - [ ] Reservation/Fitting history respects the authorized branch boundary.
@@ -381,6 +393,11 @@ available.
 - [ ] If `reservations.manage` remains the chosen permission, document that explicitly in contracts/API tests.
 
 ## 25. Backend tests
+
+Implementation note (2026-09-28): focused integration coverage now exercises archived-customer
+selector exclusion, direct-ID rejection, Front Desk authorization, reservation detail, and
+fitting/history readability after archive. Those focused PostgreSQL tests pass. The full suite
+still has unrelated timeout failures and remains the final baseline gate.
 
 - [ ] Customer list returns exactly the requested bounded page and no cross-tenant rows.
 - [ ] Cursor page 2 does not duplicate page 1.

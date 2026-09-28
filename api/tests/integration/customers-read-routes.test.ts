@@ -71,6 +71,18 @@ describe('Customers read routes', async () => {
     expect(response.status).toBe(403);
   });
 
+  it('allows an authorized Front Desk member to use the customer boundary', async () => {
+    const seed = await seedWorkspace(
+      'org_customers_frontdesk',
+      'user_customers_frontdesk',
+      ['reservations.manage'],
+      'frontdesk',
+    );
+    useClerk(seed);
+    const response = await request(createApp()).get('/api/v1/customers');
+    expect(response.status).toBe(200);
+  });
+
   it('paginates active customers deterministically and excludes other tenants', async () => {
     const seed = await seedWorkspace('org_customers_list', 'user_customers_list', ['reservations.manage']);
     const foreign = await seedWorkspace('org_customers_foreign', 'user_customers_foreign', ['reservations.manage']);
@@ -381,6 +393,12 @@ describe('Customers read routes', async () => {
     const seed = await seedWorkspace('org_customers_archive_api', 'user_customers_archive_api', ['reservations.manage']);
     useClerk(seed);
     const customerId = await seedCustomer(seed, 'Archive Me', '09170000031', null);
+    const reservationId = await seedReservationHistory(seed, customerId, {
+      referenceCode: 'RSV-ARCHIVE-HISTORY',
+      lineName: 'Archived Customer Snapshot',
+      createdOffsetHours: -24,
+    });
+    await seedFitting(seed, customerId, 'completed', -48, 'fit-archive-history');
     const current = await request(createApp()).get(`/api/v1/customers/${customerId}`);
     const currentBody = successEnvelope(customerDetailResponse).parse(current.body);
     const archived = await request(createApp())
@@ -402,11 +420,31 @@ describe('Customers read routes', async () => {
     const detail = await request(createApp()).get(`/api/v1/customers/${customerId}`);
     expect(detail.status).toBe(200);
     expect(successEnvelope(customerDetailResponse).parse(detail.body).data.status).toBe('archived');
+
+    const reservationHistory = await request(createApp()).get(
+      `/api/v1/customers/${customerId}/reservations?limit=10`,
+    );
+    expect(reservationHistory.status).toBe(200);
+    expect(successEnvelope(customerReservationHistoryResponse).parse(reservationHistory.body).data.items).toHaveLength(1);
+
+    const reservationDetail = await request(createApp()).get(`/api/v1/reservations/${reservationId}`);
+    expect(reservationDetail.status).toBe(200);
+
+    const fittingHistory = await request(createApp()).get(
+      `/api/v1/customers/${customerId}/fittings?limit=10`,
+    );
+    expect(fittingHistory.status).toBe(200);
+    expect(successEnvelope(customerFittingHistoryResponse).parse(fittingHistory.body).data.items).toHaveLength(1);
   });
 
-  async function seedWorkspace(clerkOrgId: string, principalId: string, permissions: string[]) {
+  async function seedWorkspace(
+    clerkOrgId: string,
+    principalId: string,
+    permissions: string[],
+    role: 'owner' | 'frontdesk' = 'owner',
+  ) {
     const tenant = await createTestTenant({ clerkOrgId });
-    const membershipId = await createTestMembership(tenant.id, principalId, 'owner');
+    const membershipId = await createTestMembership(tenant.id, principalId, role);
     const branchId = await withTenantTransaction(tenant.id, principalId, async (client) => {
       const branch = await client.query<{ id: string }>(
         `INSERT INTO branch (tenant_id, name, code, is_default, timezone, status)

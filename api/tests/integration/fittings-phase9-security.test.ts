@@ -351,6 +351,51 @@ describe('FIT-BE-090 fitting HTTP authorization matrix', async () => {
     expect(payments.status).toBe(403);
   });
 
+  it('excludes archived customers from fitting intake and existing-customer creation', async () => {
+    const seed = await seedWorkspace('archived-intake', 'frontdesk', ['reservations.manage']);
+    useClerk(seed);
+    const app = createApp();
+
+    await withAdmin(async (client) => {
+      await client.query(`UPDATE customer SET archived_at = now() WHERE tenant_id = $1 AND id = $2`, [
+        seed.tenantId,
+        seed.customerId,
+      ]);
+    });
+
+    const lookup = await request(app)
+      .get('/api/v1/fittings/intake-options')
+      .query({ customer_search: 'Security' });
+    expect(lookup.status).toBe(200);
+    expect(lookup.body).toMatchObject({ data: { customers: [] } });
+
+    const create = await request(app)
+      .post('/api/v1/fittings')
+      .set('Idempotency-Key', `fit9-archived-${randomUUID()}`)
+      .send({
+        customer: { source: 'existing', customer_id: seed.customerId },
+        starts_at: '2099-01-05T02:00:00.000Z',
+        garments: [{ variant_id: seed.variantId, garment_mode: 'preference' }],
+      });
+    expect(create.status).toBe(404);
+    expect(responseBody<ErrorBody>(create).error.code).toBe('NOT_FOUND');
+  });
+
+  it('keeps existing fitting details readable after customer archive', async () => {
+    const seed = await seedWorkspace('archived-history', 'frontdesk', ['reservations.manage']);
+    useClerk(seed);
+    await withAdmin(async (client) => {
+      await client.query(`UPDATE customer SET archived_at = now() WHERE tenant_id = $1 AND id = $2`, [
+        seed.tenantId,
+        seed.customerId,
+      ]);
+    });
+
+    const detail = await request(createApp()).get(`/api/v1/fittings/${seed.completedFittingId}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body).toHaveProperty('data');
+  });
+
   it('requires authentication and a valid branch operational grant on every fitting route', async () => {
     clerk.getAuth.mockReturnValue({ userId: null, orgId: null });
     const unauthenticated = await request(createApp()).get('/api/v1/fittings');

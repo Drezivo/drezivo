@@ -270,6 +270,7 @@ end-to-end: catalogue → booking → payment verification → pickup → return
   - [x] Customer list, branch-aware summary, concealed detail, and bounded reservation/fitting history reads are implemented under the tenant-scoped staff boundary; history is projected from source transactions with no duplicated mutable totals.
   - [ ] `PATCH /customers/:customerId` uses tenant idempotency, row locking, optimistic `updated_at`, redacted audit summaries, and never rewrites reservation snapshots; PostgreSQL integration evidence is pending.
   - [ ] `POST /customers/:customerId/archive` performs an idempotent operational archive without deleting or mutating reservations, fittings, payments, custody history, or snapshots; no customer DELETE route exists; PostgreSQL integration evidence is pending.
+  - [ ] Reservation and Fitting intake searches and existing-customer resolution exclude archived and anonymized profiles, while existing linked bookings remain readable; the existing `reservations.manage` capability remains authoritative; focused PostgreSQL evidence passes, while the broader baseline remains gated by unrelated timeout failures.
   - [ ] Detail includes authorized notes (with author and timestamps) and paginated reservation/payment history projected from source transactions — no duplicated mutable totals.
   - [ ] Customer records are invisible across tenants; anonymization (erasure) preserves legally required reservation facts per the documented retention process.
   - [ ] New contract surfaces for customer endpoints are added to `contracts/src/` first.

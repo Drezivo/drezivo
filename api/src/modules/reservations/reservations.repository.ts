@@ -650,6 +650,7 @@ export async function searchStaffReservationCustomerOptions(
      FROM customer c
      WHERE c.tenant_id = $1::uuid
        AND c.anonymized_at IS NULL
+       AND c.archived_at IS NULL
        AND (
          c.full_name ILIKE $2
          OR c.phone ILIKE $2

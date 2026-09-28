@@ -26,5 +26,11 @@ name/email/phone behavior. Address appears only in authorized reservation detail
 and social media appear only in authorized fitting detail. The schema bounds nonblank supplied
 addresses to 500 characters and social values to 320 characters.
 
+Customer profile and intake authorization use the existing `reservations.manage` capability under
+verified staff and tenant context. Operationally archived or anonymized profiles are excluded from
+Reservation/Fitting intake search and existing-customer resolution, but existing linked bookings
+remain readable through their branch-scoped history/detail projections. The live profile remains
+tenant-scoped and never replaces historical snapshots.
+
 See [[02-Architecture/Drezivo Architecture]] for the API and tenant boundary, and
 [[05-Operations/Reservations Checklist]] for the reservation lifecycle.
