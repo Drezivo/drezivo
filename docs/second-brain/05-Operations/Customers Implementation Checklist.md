@@ -244,12 +244,12 @@ Build the customer API around the already-existing `customer`, `reservation`, an
 
 ## 14. Customer lifecycle schema
 
-- [ ] Add operational archive state with a forward migration, preferably `customer.archived_at timestamptz NULL`.
-- [ ] Do not overload `anonymized_at`; it remains separate privacy/deletion lifecycle state.
-- [ ] Add indexes required by the final list/search/sort plan after checking `EXPLAIN`/query shape.
-- [ ] Preserve tenant ownership and RLS behavior.
-- [ ] Add an optimistic concurrency field or use the repository's established `updated_at`/expected timestamp convention consistently for Edit and Archive.
-- [ ] No migration may introduce cascading deletion of Reservation/Fitting history.
+- [x] Add operational archive state with a forward migration, preferably `customer.archived_at timestamptz NULL`.
+- [x] Do not overload `anonymized_at`; it remains separate privacy/deletion lifecycle state.
+- [x] Add indexes required by the final list/search/sort plan after checking `EXPLAIN`/query shape.
+- [x] Preserve tenant ownership and RLS behavior.
+- [x] Add an optimistic concurrency field or use the repository's established `updated_at`/expected timestamp convention consistently for Edit and Archive.
+- [x] No migration may introduce cascading deletion of Reservation/Fitting history.
 
 ## 15. Customer contracts
 

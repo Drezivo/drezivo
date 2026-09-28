@@ -17,7 +17,7 @@ import {
 import { physicalAsset, productVariant } from './catalogue.js';
 import { paymentMethod, policySnapshot, storefront } from './storefront.js';
 import { branch, membership } from './tenancy.js';
-import { idColumn, timestamps } from './_shared.js';
+import { idColumn, timestamps, updatableTimestamps } from './_shared.js';
 
 /**
  * Owns: reservation headers/lines, guest capability tokens, and append-only custody/
@@ -56,10 +56,19 @@ export const customer = pgTable(
     socialMedia: text('social_media'),
     notes: text('notes'),
     privacyNoticeVersion: integer('privacy_notice_version').notNull().default(1),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
     anonymizedAt: timestamp('anonymized_at', { withTimezone: true }),
-    ...timestamps,
+    ...updatableTimestamps,
   },
-  (table) => [unique('customer_tenant_id_id_key').on(table.tenantId, table.id)],
+  (table) => [
+    unique('customer_tenant_id_id_key').on(table.tenantId, table.id),
+    index('customer_tenant_name_sort_idx')
+      .on(table.tenantId, sql`lower(${table.fullName})`, table.id)
+      .where(sql`${table.anonymizedAt} IS NULL`),
+    index('customer_tenant_active_name_sort_idx')
+      .on(table.tenantId, sql`lower(${table.fullName})`, table.id)
+      .where(sql`${table.anonymizedAt} IS NULL AND ${table.archivedAt} IS NULL`),
+  ],
 );
 
 export const reservation = pgTable(
