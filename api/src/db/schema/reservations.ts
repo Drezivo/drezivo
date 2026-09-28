@@ -52,6 +52,8 @@ export const customer = pgTable(
     fullName: text('full_name').notNull(),
     email: text('email'),
     phone: text('phone'),
+    address: text('address'),
+    socialMedia: text('social_media'),
     notes: text('notes'),
     privacyNoticeVersion: integer('privacy_notice_version').notNull().default(1),
     anonymizedAt: timestamp('anonymized_at', { withTimezone: true }),

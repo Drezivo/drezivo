@@ -933,6 +933,8 @@ async function requireFittingDetail(
       full_name: row.customer_full_name,
       phone: row.customer_phone,
       email: row.customer_email,
+      address: row.customer_address,
+      social_media: row.customer_social_media,
     },
     garments: garments.map((raw) => {
       const line = raw as Record<string, unknown>;

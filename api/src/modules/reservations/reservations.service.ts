@@ -508,6 +508,7 @@ export async function getReservationDetail(
           full_name: header.customer_full_name,
           phone: header.customer_phone,
           email: header.customer_email,
+        address: header.customer_address,
         }
       : null;
 

@@ -120,12 +120,19 @@ describe("Drezivo reservations list API client", () => {
         storefront_id: "00000000-0000-4000-8000-000000000202",
         customer: {
           customer_id: "00000000-0000-4000-8000-000000000102",
-          snapshot: { full_name: "Maria Santos", phone: "09171234567", email: null },
+          snapshot: {
+            full_name: "Maria Santos",
+            phone: "09171234567",
+            email: null,
+            address: "123 Test Street",
+          },
         },
         lines: [
           {
             id: "00000000-0000-4000-8000-000000000103",
             variant_id: "00000000-0000-4000-8000-000000000104",
+            variant: { sku: "EMERALD-M", size_label: "M", color_label: "Emerald" },
+            current_asset_readiness: "ready",
             line_number: 1,
             name_snapshot: "Emerald Gown",
             measurements_snapshot: { bust_cm: 91 },
@@ -205,6 +212,7 @@ describe("Drezivo reservations list API client", () => {
             full_name: "Maria Santos",
             phone: "09171234567",
             email: null,
+            has_address: true,
           },
         ],
       })

@@ -72,6 +72,8 @@ const createdFitting = fittingDetail.parse({
     full_name: "Walk-in Customer",
     phone: "09171234567",
     email: null,
+    address: null,
+    social_media: null,
   },
   garments: [
     {
@@ -190,6 +192,8 @@ describe("NewFittingSheet production cutover", () => {
     fireEvent.change(screen.getByPlaceholderText("09XXXXXXXXX"), {
       target: { value: "09171234567" },
     });
+    expect(screen.queryByLabelText("Address (optional)")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Social media (optional)")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(await screen.findByRole("button", { name: /Test Gown/ })).toBeVisible();
@@ -215,10 +219,15 @@ describe("NewFittingSheet production cutover", () => {
     expect(request).toMatchObject({
       customer: {
         source: "new",
-        customer: { full_name: "Walk-in Customer", phone: "09171234567" },
+        customer: {
+          full_name: "Walk-in Customer",
+          phone: "09171234567",
+        },
       },
       garments: [{ variant_id: variantId, garment_mode: "guaranteed" }],
     });
+    expect(request.customer.customer).not.toHaveProperty("address");
+    expect(request.customer.customer).not.toHaveProperty("social_media");
     expect(request).toHaveProperty("starts_at");
     expect(request).not.toHaveProperty("duration_minutes");
     expect(request).not.toHaveProperty("fee_minor");

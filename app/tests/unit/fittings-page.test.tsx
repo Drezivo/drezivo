@@ -97,6 +97,8 @@ const detail = fittingDetail.parse({
     full_name: "Real Fitting Customer",
     phone: "09171234567",
     email: "real@example.test",
+    address: "123 Test Street",
+    social_media: "@realcustomer",
   },
   garments: [
     {
@@ -233,13 +235,15 @@ describe("FittingsPage production cutover", () => {
     expect(screen.getByText("Page 2 · 1 fittings loaded")).toBeVisible();
   });
 
-  it("fetches authoritative fitting detail and shows guaranteed asset results without capacity slots", async () => {
+  it("shows fitting details without profile address or social media", async () => {
     render(<FittingsPage />);
     fireEvent.click(
       await screen.findByRole("button", { name: /Open fitting for Real Fitting Customer/ })
     );
 
     expect(await screen.findByText("real@example.test")).toBeVisible();
+    expect(screen.queryByText("123 Test Street")).not.toBeInTheDocument();
+    expect(screen.queryByText("@realcustomer")).not.toBeInTheDocument();
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("Guaranteed garment")).toBeVisible();
     expect(within(dialog).getByText("Guaranteed asset GWN-0042")).toBeVisible();

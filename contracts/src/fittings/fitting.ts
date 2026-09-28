@@ -1,6 +1,7 @@
 /** Shared fitting wire projections for list/detail/create/action responses. */
 import { z } from 'zod';
 
+import { customerAddress, customerSocialMedia } from '../common/customer';
 import {
   branchId,
   customerId,
@@ -56,6 +57,8 @@ export const fittingCustomerDetail = fittingCustomerSummary
   .extend({
     phone: z.string().trim().min(1).max(80).nullable(),
     email: z.string().trim().email().max(320).nullable(),
+    address: customerAddress.nullable(),
+    social_media: customerSocialMedia.nullable(),
   })
   .strict();
 export type FittingCustomerDetail = z.infer<typeof fittingCustomerDetail>;

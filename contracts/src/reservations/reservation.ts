@@ -6,6 +6,7 @@
  */
 import { z } from 'zod';
 
+import { customerAddress, customerSocialMedia } from '../common/customer';
 import { branchId, paymentMethodId, productVariantId, reservationId, storefrontId } from '../common/ids';
 import { currencyCode, moneyString } from '../common/money';
 import { ianaTimezone, isoDate, isoInstant } from '../common/time';
@@ -21,6 +22,8 @@ export const customerDetails = z
     full_name: z.string().trim().min(1).max(200),
     phone: z.string().trim().min(1).max(32).optional(),
     email: z.string().trim().email(),
+    address: customerAddress,
+    social_media: customerSocialMedia.optional(),
   })
   .strict();
 export type CustomerDetails = z.infer<typeof customerDetails>;
@@ -35,6 +38,8 @@ export const staffCustomerDetails = z
     full_name: z.string().trim().min(1).max(200),
     phone: z.string().trim().regex(/^\d{11}$/, 'Phone number must contain exactly 11 digits.').optional(),
     email: z.string().trim().email().optional(),
+    address: customerAddress,
+    social_media: customerSocialMedia.optional(),
     notes: z.string().trim().max(2_000).optional(),
   })
   .strict()
@@ -55,6 +60,8 @@ export const reservationCustomerSnapshot = z
     full_name: z.string().trim().min(1).max(200),
     phone: z.string().trim().min(1).max(32).nullable(),
     email: z.string().trim().email().nullable(),
+    /** Null is reserved for historical reservations accepted before address collection. */
+    address: customerAddress.nullable(),
   })
   .strict();
 export type ReservationCustomerSnapshot = z.infer<typeof reservationCustomerSnapshot>;

@@ -42,7 +42,7 @@ legal, and product-improvement purposes.
 
 The exact fields depend on the feature and the business configuration. They may include:
 
-- name, email address, telephone number, business role, and account identifiers;
+- name, email address, telephone number, delivery/pickup address where collected for a reservation, an optional social-media handle or URL where supplied, business role, and account identifiers;
 - business name, branch, address, tax or billing details, and service-plan information;
 - reservation dates, garment selections, measurements, fitting notes, pickup and return details,
   customer messages, and status history;
@@ -76,10 +76,7 @@ basis may be:
 - protection of vital interests; or
 - legitimate interests, balanced against the data subject’s rights and freedoms.
 
-Examples include authenticating users, providing reservations and storefronts, sending service
-messages, securing accounts, preventing fraud and abuse, supporting customers, billing, keeping
-business records, improving reliability, and responding to lawful requests. We do not use personal
-information for a new incompatible purpose without the required notice or legal basis.
+Examples include authenticating users, providing reservations and storefronts, using a collected customer address for fulfillment and operational contact, sending service messages, securing accounts, preventing fraud and abuse, supporting customers, billing, keeping business records, improving reliability, and responding to lawful requests. An optional social-media field is retained only as the business's live customer-profile contact preference; it is not used for reservation search or copied into reservation history. We do not use personal information for a new incompatible purpose without the required notice or legal basis.
 
 ## 5. Marketing and cookies
 
@@ -123,8 +120,7 @@ This notice should be updated when a material transfer or processor changes.
 
 We keep information only as long as needed for the stated purpose, the account relationship, legal
 obligations, dispute resolution, security records, or the establishment or defence of legal claims.
-The final retention schedule must specify periods for account records, reservations, financial and
-tax records, payment evidence, support tickets, security logs, backups, and marketing preferences.
+The final retention schedule must specify periods for account records, reservations (including any address snapshot needed for the booking record), live customer addresses and optional social-media profiles, financial and tax records, payment evidence, support tickets, security logs, backups, and marketing preferences.
 When retention ends, information is securely deleted, anonymized, or irreversibly de-identified.
 The internal [Data Retention and Deletion Standard](Drezivo-Data-Retention-and-Deletion-Standard.md)
 requires an approved, documented schedule before production processing begins.

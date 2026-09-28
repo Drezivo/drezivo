@@ -267,7 +267,7 @@ resolve readiness after the garment is physically back.
 
 ### Hold transaction
 
-1. Validate published storefront, active tenant entitlement, branch, dates and input. Compute price and due-now amount; ignore client-sent totals.
+1. Validate published storefront, active tenant entitlement, branch, dates and input. Compute price and due-now amount; ignore client-sent totals. Before reservation customer create/submit, require a trimmed nonblank address (maximum 500 characters); an addressless selected live customer is locked and updated only as part of that idempotent reservation transaction.
 2. Lock candidate physical assets in deterministic ID order. All code paths that change their allocation/readiness use that lock order.
 3. Transition expired blocking holds under lock, using database time. Deny archived/unready assets for the requested fulfillment conditions.
 4. Insert the reservation, price/policy snapshots and one blocking allocation per selected physical asset. A PostgreSQL GiST exclusion constraint rejects overlapping blocking periods.
@@ -314,7 +314,7 @@ S3 presigned URLs can be reused until expiry and can overwrite an existing key. 
 
 Catalogue products allow at most five ordered photos per style, with display order zero as the cover. Each source image remains limited to 10 MB and each proof image to 5 MB. Serve optimized public derivatives only. Keep private evidence access short-lived (proposed five-minute downloads), no public ACLs, no indexing, no shared CDN cache. Use IAM roles, encryption at rest and TLS. Keep object versions in the retention/deletion inventory.
 
-Store minimum contact data. Identity evidence is opt-in by justified merchant policy, not a default checkout requirement. Define retention by purpose, legal obligation and dispute needs before launch; do not invent a universal statutory retention period. Erasure jobs must cover originals, derivatives, object versions and exports, while respecting documented legal holds. Restoring backups requires reapplying the deletion/hold register before customer access resumes.
+Store minimum contact data. A customer address is limited to reservation fulfillment/operational contact, is tenant-scoped, excluded from list/search projections and client persistence, and is retained in accepted reservation snapshots. One optional social-media handle or URL is a live-profile field only: it is not searched, logged, or copied into reservation snapshots. Identity evidence is opt-in by justified merchant policy, not a default checkout requirement. Define retention by purpose, legal obligation and dispute needs before launch; do not invent a universal statutory retention period. Erasure jobs must cover originals, derivatives, object versions and exports, while respecting documented legal holds. Restoring backups requires reapplying the deletion/hold register before customer access resumes.
 
 ## 8. Jobs, notifications, and integration safety
 
@@ -363,7 +363,7 @@ Creation is one transaction: validate branch settings/hours/closure, claim one h
 
 Reschedule is a dedicated command, not a generic period edit. It validates and obtains replacement capacity and guaranteed-garment claims before old claims are released; failure preserves the original appointment. Future pending/confirmed garment-plan changes use the same atomic replacement rule. Rejected/cancelled appointments release capacity/garments immediately; no-show may release after start; completed may release only at/after end.
 
-Every production fitting links to a real customer. Staff-created walk-ins require full name plus phone or email. Duplicate matching is advisory only; no auto-merge/reuse by contact alone. Owner and Front Desk may perform operational fitting commands, while only Owner mutates fitting configuration. A fitting may carry one bounded internal staff note. Normal staff operations never hard-delete fittings; meaningful mutations write the existing append-only audit log.
+Every production fitting links to a real customer. Staff-created walk-ins require full name plus phone or email and may optionally persist the bounded live customer address and social-media field; existing-customer fitting selection cannot edit either field. Duplicate matching is advisory only; no auto-merge/reuse by contact alone. Owner and Front Desk may perform operational fitting commands, while only Owner mutates fitting configuration. A fitting may carry one bounded internal staff note. Normal staff operations never hard-delete fittings; meaningful mutations write the existing append-only audit log.
 
 A positive branch fitting fee snapshots onto the appointment and creates an immutable `fitting_fee` charge. Payment/evidence lifecycle remains independent and never gates confirmation. Cancellation/rejection/no-show do not automatically refund; finance corrections remain explicit. The first fitting backend slice is staff-only and sends no customer-facing fitting notifications or reminders, though services remain safe to connect to the existing outbox later. Cross-product adoption is staged: `/fittings` and `/fittings/schedule`, then Calendar, Dashboard, Availability and Payments.
 

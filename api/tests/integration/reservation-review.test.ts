@@ -2,6 +2,7 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
+  CustomerId,
   FileObjectId,
   PaymentMethodId,
   PermissionCode,
@@ -413,6 +414,65 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       full_name: 'Owner Fast Customer',
       phone: '09170000032',
       email: null,
+      address: '123 Review Street, Quezon City',
+    });
+  });
+
+  it('requires an inline address to repair a held pre-change snapshot, then persists it atomically', async () => {
+    const seed = await seedWorkspace('org_rsv_address_legacy', 'user_rsv_address_legacy', 'cash');
+    const held = await createHold(seed, 'address-legacy');
+    const customer = await reservationCustomerState(seed, held.id);
+    expect(customer.customer_id).not.toBeNull();
+
+    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      await client.query(
+        `UPDATE reservation
+            SET customer_snapshot = customer_snapshot - 'address'
+          WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, held.id],
+      );
+      await client.query(
+        `UPDATE customer
+            SET address = NULL
+          WHERE tenant_id = $1 AND id = $2::uuid`,
+        [seed.tenantId, customer.customer_id],
+      );
+    });
+
+    const missing = await submitReservationForConfirmation(
+      reviewContext(seed, 'req-address-legacy-missing', 'idem-address-legacy-missing'),
+      held.id,
+      { version: held.version, terms_accepted: true },
+    );
+    expectFailure(missing, 'VALIDATION_FAILED');
+
+    const submitted = await submitReservationForConfirmation(
+      reviewContext(seed, 'req-address-legacy', 'idem-address-legacy'),
+      held.id,
+      {
+        version: held.version,
+        terms_accepted: true,
+        customer: {
+          source: 'existing',
+          customer_id: customer.customer_id as CustomerId,
+          address: '456 Legacy Address Avenue, Quezon City',
+        },
+      },
+    );
+    expect(submitted.status).toBe(200);
+
+    const repaired = await reservationCustomerState(seed, held.id);
+    expect(repaired.customer_snapshot).toMatchObject({
+      address: '456 Legacy Address Avenue, Quezon City',
+    });
+    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const profile = await client.query<{ address: string | null }>(
+        `SELECT address FROM customer WHERE tenant_id = $1 AND id = $2::uuid`,
+        [seed.tenantId, customer.customer_id],
+      );
+      expect(requireRow(profile.rows, 'legacy customer').address).toBe(
+        '456 Legacy Address Avenue, Quezon City',
+      );
     });
   });
 
@@ -2412,6 +2472,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       customer: {
         full_name: fullName,
         phone: '09170000032',
+        address: '123 Review Street, Quezon City',
       },
     };
   }
@@ -2424,6 +2485,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
           full_name: 'Review Customer',
           phone: '09171234567',
           email: 'review@example.test',
+          address: '123 Review Street, Quezon City',
         },
       },
       variant_id: seed.variantId as ProductVariantId,

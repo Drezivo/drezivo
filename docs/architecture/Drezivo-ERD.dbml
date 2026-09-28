@@ -199,6 +199,8 @@ Table customer {
   full_name varchar(200) [not null]
   email varchar(320)
   phone varchar(40)
+  address text
+  social_media text
   notes text
   privacy_notice_version varchar(50) [not null]
   anonymized_at timestamptz
@@ -208,7 +210,7 @@ Table customer {
     (tenant_id, email)
     (tenant_id, phone)
   }
-  Note: 'V1. At least one usable verified contact according to channel policy; guest checkout requires email. Do not merge people on phone alone.'
+  Note: 'V1. At least one usable verified contact according to channel policy; guest checkout requires email. address is optional for fitting walk-ins and legacy records, but reservation create/submit requires a nonblank bounded value and snapshots it. social_media is optional, live-profile-only, unindexed and not used for search. Do not merge people on phone alone.'
 }
 
 Table category {
@@ -439,7 +441,7 @@ Table reservation {
     (tenant_id, branch_id, status, pickup_at)
     (tenant_id, status, hold_expires_at)
   }
-  Note: 'V1. Customer/contact may be absent for anonymous short hold; required before pending_confirmation. Snapshot fields validated by state. Canonical reservation states in model doc.'
+  Note: 'V1. Customer/contact may be absent for anonymous short hold; nonblank address is required before pending_confirmation. customer_snapshot retains address for accepted reservation history; historical snapshots may have null address. Social media is never snapshotted. Canonical reservation states in model doc.'
 }
 
 Table reservation_line {

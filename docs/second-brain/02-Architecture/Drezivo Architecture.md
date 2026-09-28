@@ -4,7 +4,7 @@ type: architecture
 status: current
 owner: Drezivo team
 source: "../../architecture/Drezivo-TRD.md and ../../decisions/0009-supabase-managed-postgresql.md"
-updated: 2026-09-26
+updated: 2026-09-28
 tags: [drezivo, architecture, trd]
 ---
 
@@ -26,6 +26,9 @@ flowchart LR
 The API is the authority for authorization, tenant scope, money, availability, and state
 transitions. The browser is a client, never a trust boundary. The [TRD](../../architecture/Drezivo-TRD.md)
 and [data model](../../architecture/Drezivo-Data-Model.md) contain the complete technical contract.
+
+Customer address and optional social-profile handling follows the tenant-scoped, API-owned
+boundary described in [[02-Architecture/Customer Address and Social Profile Fields]].
 
 Supabase supplies managed PostgreSQL only. Clerk remains the identity provider, S3/MinIO remains
 the object-storage boundary, and browser clients never use Supabase database credentials or its

@@ -5,6 +5,7 @@ export interface ReservationCustomerSnapshotRow {
   full_name: string;
   phone: string | null;
   email: string | null;
+  address: string | null;
 }
 
 export interface ExpiredReservationHoldRow {
@@ -208,14 +209,15 @@ export async function readReservationCustomerForCreate(
   input: { tenantId: string; customerId: string },
 ): Promise<ReservationCustomerSnapshotRow | null> {
   const result = await client.query<ReservationCustomerSnapshotRow>(
-    `SELECT id, full_name, phone, lower(email) AS email
+    `SELECT id, full_name, phone, lower(email) AS email,
+            nullif(btrim(address), '') AS address
        FROM customer
       WHERE tenant_id = $1
         AND id = $2::uuid
         AND anonymized_at IS NULL
         AND (phone IS NOT NULL OR email IS NOT NULL)
       LIMIT 1
-      FOR SHARE`,
+      FOR UPDATE`,
     [input.tenantId, input.customerId],
   );
   return result.rows[0] ?? null;
@@ -228,18 +230,44 @@ export async function createReservationCustomer(
     fullName: string;
     phone: string | null;
     email: string | null;
+    address: string;
+    socialMedia: string | null;
     notes: string | null;
   },
 ): Promise<ReservationCustomerSnapshotRow> {
   const result = await client.query<ReservationCustomerSnapshotRow>(
-    `INSERT INTO customer (tenant_id, full_name, phone, email, notes)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING id, full_name, phone, lower(email) AS email`,
-    [input.tenantId, input.fullName, input.phone, input.email, input.notes],
+    `INSERT INTO customer (tenant_id, full_name, phone, email, address, social_media, notes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id, full_name, phone, lower(email) AS email, address`,
+    [
+      input.tenantId,
+      input.fullName,
+      input.phone,
+      input.email,
+      input.address,
+      input.socialMedia,
+      input.notes,
+    ],
   );
   const row = result.rows[0];
   if (!row) throw new Error('Reservation customer insert returned no row.');
   return row;
+}
+
+export async function fillReservationCustomerAddress(
+  client: PoolClient,
+  input: { tenantId: string; customerId: string; address: string },
+): Promise<string | null> {
+  const result = await client.query<{ address: string }>(
+    `UPDATE customer
+        SET address = $3
+      WHERE tenant_id = $1
+        AND id = $2::uuid
+        AND nullif(btrim(address), '') IS NULL
+      RETURNING address`,
+    [input.tenantId, input.customerId, input.address],
+  );
+  return result.rows[0]?.address ?? null;
 }
 
 export async function createReservationGraph(

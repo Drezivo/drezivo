@@ -315,7 +315,7 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
   return (
     <Sheet
       open={open}
-      onOpenChange={(nextOpen) => {
+      onOpenChange={(nextOpen: boolean) => {
         if (!nextOpen) closeAndReset();
         else onOpenChange(true);
       }}

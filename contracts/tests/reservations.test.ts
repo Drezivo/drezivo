@@ -102,7 +102,7 @@ describe('reservation contracts', () => {
           { id: ids.paymentMethod, name: 'Cash', rail: 'cash' },
         ],
         customers: [
-          { id: ids.customer, full_name: 'Maria Santos', phone: '09171234567', email: null },
+          { id: ids.customer, full_name: 'Maria Santos', phone: '09171234567', email: null, has_address: true },
         ],
       }).success,
     ).toBe(true);
@@ -158,7 +158,7 @@ describe('reservation contracts', () => {
         ...baseStaffCreate,
         customer: {
           source: 'new',
-          customer: { full_name: 'Walk-in Customer', phone: '09171234567' },
+          customer: { full_name: 'Walk-in Customer', phone: '09171234567', address: '123 Test Street' },
         },
       }).success,
     ).toBe(true);
@@ -168,7 +168,7 @@ describe('reservation contracts', () => {
         ...baseStaffCreate,
         customer: {
           source: 'new',
-          customer: { full_name: 'No Contact' },
+          customer: { full_name: 'No Contact', address: '123 Test Street' },
         },
       }).success,
     ).toBe(false);
@@ -177,7 +177,7 @@ describe('reservation contracts', () => {
         ...baseStaffCreate,
         customer: {
           source: 'new',
-          customer: { full_name: 'Too Short', phone: '0917123456' },
+          customer: { full_name: 'Too Short', phone: '0917123456', address: '123 Test Street' },
         },
       }).success,
     ).toBe(false);
@@ -186,7 +186,7 @@ describe('reservation contracts', () => {
         ...baseStaffCreate,
         customer: {
           source: 'new',
-          customer: { full_name: 'Too Long', phone: '091712345678' },
+          customer: { full_name: 'Too Long', phone: '091712345678', address: '123 Test Street' },
         },
       }).success,
     ).toBe(false);
@@ -195,7 +195,65 @@ describe('reservation contracts', () => {
         ...baseStaffCreate,
         customer: {
           source: 'new',
-          customer: { full_name: 'Non Numeric', phone: '0917ABC4567' },
+          customer: { full_name: 'Non Numeric', phone: '0917ABC4567', address: '123 Test Street' },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('requires a bounded address for new reservation customers and permits only an inline address for existing customers', () => {
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        customer: {
+          source: 'new',
+          customer: { full_name: 'Missing Address', phone: '09171234567' },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        customer: {
+          source: 'new',
+          customer: { full_name: 'Blank Address', phone: '09171234567', address: '   ' },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        customer: {
+          source: 'new',
+          customer: {
+            full_name: 'Long Address',
+            phone: '09171234567',
+            address: 'A'.repeat(501),
+          },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        customer: {
+          source: 'existing',
+          customer_id: ids.customer,
+          address: '123 Test Street',
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        customer: {
+          source: 'new',
+          customer: {
+            full_name: 'Long Social',
+            phone: '09171234567',
+            address: '123 Test Street',
+            social_media: 'S'.repeat(321),
+          },
         },
       }).success,
     ).toBe(false);
@@ -205,21 +263,21 @@ describe('reservation contracts', () => {
     expect(
       holdIntentRequest.safeParse({
         ...baseStaffCreate,
-        contact: { full_name: 'Guest', email: 'guest@example.test' },
+        contact: { full_name: 'Guest', email: 'guest@example.test', address: '123 Test Street' },
       }).success,
     ).toBe(true);
 
     expect(
       holdIntentRequest.safeParse({
         ...baseStaffCreate,
-        contact: { full_name: 'Guest', phone: '09171234567' },
+        contact: { full_name: 'Guest', phone: '09171234567', address: '123 Test Street' },
       }).success,
     ).toBe(false);
 
     expect(
       holdIntentRequest.safeParse({
         ...baseStaffCreate,
-        contact: { full_name: 'Guest', email: 'guest@example.test' },
+        contact: { full_name: 'Guest', email: 'guest@example.test', address: '123 Test Street' },
         allocation_id: '00000000-0000-4000-8000-000000000011',
       }).success,
     ).toBe(false);
@@ -249,7 +307,7 @@ describe('reservation contracts', () => {
       terms_accepted: true,
       customer: {
         source: 'new',
-        customer: { full_name: 'Walk-in Customer', phone: '09171234567' },
+        customer: { full_name: 'Walk-in Customer', phone: '09171234567', address: '123 Test Street' },
       },
     });
     expect(request.success).toBe(true);
@@ -362,7 +420,7 @@ describe('reservation contracts', () => {
       storefront_id: ids.storefront,
       customer: {
         customer_id: ids.customer,
-        snapshot: { full_name: 'Customer One', phone: '09171234567', email: null },
+        snapshot: { full_name: 'Customer One', phone: '09171234567', email: null, address: '123 Test Street' },
       },
       lines: [
         {
@@ -413,6 +471,50 @@ describe('reservation contracts', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it('keeps historical reservation snapshots readable when they predate address capture', () => {
+    expect(
+      reservationDetail.safeParse({
+        id: ids.reservation,
+        reference_code: 'RSV-LEGACY-1',
+        status: 'held',
+        branch_id: ids.branch,
+        storefront_id: ids.storefront,
+        customer: {
+          customer_id: ids.customer,
+          snapshot: { full_name: 'Legacy Customer', phone: null, email: 'legacy@example.test', address: null },
+        },
+        lines: [
+          {
+            id: ids.line,
+            variant_id: ids.variant,
+            variant: { sku: 'LEGACY-S', size_label: 'S', color_label: null },
+            current_asset_readiness: null,
+            line_number: 1,
+            name_snapshot: 'Legacy Dress',
+            measurements_snapshot: {},
+            pricing_snapshot: { rental_minor: '150000', deposit_minor: '50000', currency: 'PHP' },
+          },
+        ],
+        pickup_at: interval.start,
+        due_at: interval.end,
+        timezone_snapshot: 'Asia/Manila',
+        event_date: '2026-10-11',
+        delivery_snapshot: { fulfillment_method: 'pickup' },
+        price_snapshot: baseSummary.price_snapshot,
+        payment: null,
+        hold_acquired_at: '2026-10-09T02:00:00.000Z',
+        hold_expires_at: '2026-10-09T02:15:00.000Z',
+        terms_accepted_at: null,
+        submitted_at: null,
+        confirmed_at: null,
+        completed_at: null,
+        custody_timeline: [],
+        version: 1,
+        created_at: '2026-10-09T02:00:00.000Z',
+      }).success,
+    ).toBe(true);
   });
 
   it('does not expose an updated_at field that the reservation table does not persist', () => {

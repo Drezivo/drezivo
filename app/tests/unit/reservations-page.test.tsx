@@ -126,7 +126,10 @@ const reservationDetailRecord = reservationDetail.parse({
   status: "confirmed",
   branch_id: "00000000-0000-4000-8000-000000000203",
   storefront_id: "00000000-0000-4000-8000-000000000301",
-  customer: reservation.customer,
+  customer: {
+    customer_id: reservation.customer.customer_id,
+    snapshot: { ...reservation.customer.snapshot!, address: "123 Test Street" },
+  },
   lines: [
     {
       id: reservation.line.id,
@@ -187,7 +190,10 @@ const secondDetailRecord = reservationDetail.parse({
   ...reservationDetailRecord,
   id: secondReservation.id,
   reference_code: secondReservation.reference_code,
-  customer: secondReservation.customer,
+  customer: {
+    customer_id: secondReservation.customer.customer_id,
+    snapshot: { ...secondReservation.customer.snapshot!, address: "456 Test Street" },
+  },
   lines: [
     {
       ...reservationDetailRecord.lines[0],
@@ -436,6 +442,7 @@ describe("ReservationsPage", () => {
     await waitFor(() => expect(api.getReservationDetail).toHaveBeenCalledWith(reservation.id));
     expect(await screen.findByRole("heading", { name: "Reservation RSV-REAL-001" })).toBeVisible();
     expect(screen.getAllByText("Real Customer").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("123 Test Street")).toBeVisible();
     expect(screen.getByText("Medium · Emerald")).toBeVisible();
     expect(screen.getByText("EMERALD-M")).toBeVisible();
     expect(screen.getByText("Bust Cm: 91")).toBeVisible();

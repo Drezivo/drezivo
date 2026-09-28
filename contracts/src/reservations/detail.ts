@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { physicalAssetReadiness } from '../catalogue/staff';
 import {
   branchId,
+  customerId,
   physicalAssetId,
   productVariantId,
   reservationId,
@@ -12,9 +13,10 @@ import {
 } from '../common/ids';
 import { currencyCode, moneyString } from '../common/money';
 import { ianaTimezone, isoDate, isoInstant } from '../common/time';
-import { reservationPaymentProjection, reservationStaffCustomerProjection } from './list';
+import { reservationPaymentProjection } from './list';
 import {
   fulfillmentMethod,
+  reservationCustomerSnapshot,
   reservationMoneySnapshot,
 } from './reservation';
 import { reservationState } from './state';
@@ -56,6 +58,15 @@ export const reservationDeliverySnapshot = z
   .strict();
 export type ReservationDeliverySnapshot = z.infer<typeof reservationDeliverySnapshot>;
 
+export const reservationDetailCustomerProjection = z
+  .object({
+    customer_id: customerId.nullable(),
+    /** Historical address is retained with accepted reservation facts. */
+    snapshot: reservationCustomerSnapshot.nullable(),
+  })
+  .strict();
+export type ReservationDetailCustomerProjection = z.infer<typeof reservationDetailCustomerProjection>;
+
 export const reservationCustodyEvent = z
   .object({
     event_kind: z.enum(['pickup', 'return']),
@@ -74,7 +85,7 @@ export const reservationDetail = z
     status: reservationState,
     branch_id: branchId,
     storefront_id: storefrontId,
-    customer: reservationStaffCustomerProjection,
+    customer: reservationDetailCustomerProjection,
     lines: z.array(reservationLineDetail).min(1),
     pickup_at: isoInstant,
     due_at: isoInstant,

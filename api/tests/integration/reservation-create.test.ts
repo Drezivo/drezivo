@@ -131,6 +131,10 @@ describe('RSV-021/022 staff reservation creation', async () => {
             AND business_key = ('reservation:' || $2::text || ':initial-payment')`,
         [seed.tenantId, reservationId],
       );
+      const customer = await client.query<{ address: string | null; social_media: string | null }>(
+        `SELECT address, social_media FROM customer WHERE tenant_id = $1`,
+        [seed.tenantId],
+      );
       const audit = await client.query<{ count: number }>(
         `SELECT count(*)::int AS count FROM audit_event
           WHERE tenant_id = $1 AND entity_id = $2 AND action = 'reservation.created'`,
@@ -152,6 +156,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
         lineCount: lines.rows[0]?.count ?? 0,
         allocation: requireRow(allocation.rows, 'allocation'),
         payment: requireRow(payment.rows, 'payment intent'),
+        customer: requireRow(customer.rows, 'reservation customer'),
         auditCount: audit.rows[0]?.count ?? 0,
         outbox: requireRow(outbox.rows, 'reservation outbox'),
         idempotency: requireRow(idempotency.rows, 'idempotency'),
@@ -163,6 +168,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
       full_name: 'Walk-in Customer',
       phone: '09171234567',
       email: 'walkin@example.test',
+      address: '123 Test Street, Quezon City',
     });
     expect(persisted.reservation.delivery_snapshot).toEqual({
       fulfillment_method: 'delivery',
@@ -181,6 +187,10 @@ describe('RSV-021/022 staff reservation creation', async () => {
     expect(persisted.allocation.starts_at.toISOString()).toBe('2026-10-10T02:00:00.000Z');
     expect(persisted.allocation.ends_at.toISOString()).toBe('2026-10-14T02:00:00.000Z');
     expect(persisted.payment).toEqual({ status: 'pending', amount_minor: 225000 });
+    expect(persisted.customer).toEqual({
+      address: '123 Test Street, Quezon City',
+      social_media: '@walkin',
+    });
     expect(persisted.auditCount).toBe(1);
     expect(persisted.outbox).toEqual({
       event_type: 'reservation.held',
@@ -269,8 +279,8 @@ describe('RSV-021/022 staff reservation creation', async () => {
     const seed = await seedWorkspace('org_rsv021_existing', 'user_rsv021_existing', ['reservations.manage']);
     const customerId = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       const customer = await client.query<{ id: string }>(
-        `INSERT INTO customer (tenant_id, full_name, phone, email, notes)
-         VALUES ($1, 'Existing Customer', '09175550000', 'EXISTING@EXAMPLE.TEST', 'Private live note')
+        `INSERT INTO customer (tenant_id, full_name, phone, email, address, notes)
+         VALUES ($1, 'Existing Customer', '09175550000', 'EXISTING@EXAMPLE.TEST', '123 Existing Street, Quezon City', 'Private live note')
          RETURNING id`,
         [seed.tenantId],
       );
@@ -311,8 +321,78 @@ describe('RSV-021/022 staff reservation creation', async () => {
       full_name: 'Existing Customer',
       phone: '09175550000',
       email: 'existing@example.test',
+      address: '123 Existing Street, Quezon City',
     });
     expect(state.reservation.customer_snapshot).not.toHaveProperty('notes');
+  });
+
+  it('requires an inline address for an addressless existing customer, fills it once, and snapshots it atomically', async () => {
+    const seed = await seedWorkspace('org_rsv021_address_fill', 'user_rsv021_address_fill', [
+      'reservations.manage',
+    ]);
+    const customerId = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const customer = await client.query<{ id: string }>(
+        `INSERT INTO customer (tenant_id, full_name, phone, email)
+         VALUES ($1, 'Addressless Customer', '09175550001', 'addressless@example.test')
+         RETURNING id`,
+        [seed.tenantId],
+      );
+      return requireRow(customer.rows, 'addressless customer').id;
+    });
+    const base = createRequest(seed);
+    const missingAddress: StaffReservationCreateRequest = {
+      ...base,
+      customer: { source: 'existing', customer_id: customerId as CustomerId },
+    };
+    const rejected = await createStaffReservation(
+      commandContext(seed, 'req-address-missing', 'idem-address-missing'),
+      missingAddress,
+    );
+    expect(rejected).toMatchObject({
+      status: 422,
+      body: { success: false, error: { code: 'VALIDATION_FAILED' } },
+    });
+
+    const requestBody: StaffReservationCreateRequest = {
+      ...base,
+      customer: {
+        source: 'existing',
+        customer_id: customerId as CustomerId,
+        address: '456 Captured Street, Quezon City',
+      },
+    };
+    const first = await createStaffReservation(
+      commandContext(seed, 'req-address-fill-a', 'idem-address-fill'),
+      requestBody,
+    );
+    const replay = await createStaffReservation(
+      commandContext(seed, 'req-address-fill-b', 'idem-address-fill'),
+      requestBody,
+    );
+    expect(first.status).toBe(201);
+    expect(replay).toEqual(first);
+    const reservationId = successReservationId(first.body);
+
+    const state = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const customer = await client.query<{ address: string | null }>(
+        `SELECT address FROM customer WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, customerId],
+      );
+      const reservation = await client.query<{ customer_snapshot: Record<string, unknown> }>(
+        `SELECT customer_snapshot FROM reservation WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, reservationId],
+      );
+      return {
+        customer: requireRow(customer.rows, 'filled customer'),
+        reservation: requireRow(reservation.rows, 'address snapshot'),
+      };
+    });
+    expect(state.customer.address).toBe('456 Captured Street, Quezon City');
+    expect(state.reservation.customer_snapshot).toMatchObject({
+      full_name: 'Addressless Customer',
+      address: '456 Captured Street, Quezon City',
+    });
+    expect(await graphCounts(seed)).toMatchObject({ reservations: 1, customers: 1 });
   });
 
   it('replays the same intent exactly once and rejects the same key with a different canonical payload', async () => {
@@ -369,6 +449,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
           full_name: 'Second Walk-in',
           phone: '09170000002',
           email: 'second@example.test',
+          address: '123 Second Street, Quezon City',
         },
       },
     };
@@ -481,6 +562,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
             full_name: 'Maria Intake',
             phone: '09171234567',
             email: 'maria@example.test',
+            has_address: false,
           },
         ],
       },
@@ -966,6 +1048,8 @@ describe('RSV-021/022 staff reservation creation', async () => {
           full_name: 'Walk-in Customer',
           phone: '09171234567',
           email: 'WALKIN@EXAMPLE.TEST',
+          address: '123 Test Street, Quezon City',
+          social_media: '@walkin',
           notes: 'Internal staff note',
         },
       },

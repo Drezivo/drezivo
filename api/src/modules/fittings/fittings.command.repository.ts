@@ -60,13 +60,20 @@ export async function readFittingCustomerForCreate(
 
 export async function createFittingCustomer(
   client: PoolClient,
-  input: { tenantId: string; fullName: string; phone: string | null; email: string | null },
+  input: {
+    tenantId: string;
+    fullName: string;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+    socialMedia: string | null;
+  },
 ): Promise<FittingCreateCustomerRow> {
   const result = await client.query<FittingCreateCustomerRow>(
-    `INSERT INTO customer (tenant_id, full_name, phone, email)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO customer (tenant_id, full_name, phone, email, address, social_media)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING id, full_name, phone, lower(email) AS email`,
-    [input.tenantId, input.fullName, input.phone, input.email],
+    [input.tenantId, input.fullName, input.phone, input.email, input.address, input.socialMedia],
   );
   const row = result.rows[0];
   if (!row) throw new Error('Fitting customer insert returned no row.');
