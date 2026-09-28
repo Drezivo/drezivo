@@ -116,6 +116,8 @@ import {
   customerArchiveRequest,
   customerArchiveResponse,
   customerDetailResponse,
+  customerEditRequest,
+  customerEditResponse,
   customerHistoryQuery,
   customerFittingHistoryResponse,
   customerReservationHistoryResponse,
@@ -234,6 +236,8 @@ import {
   type CustomerArchiveRequest,
   type CustomerArchiveResponse,
   type CustomerDetailResponse,
+  type CustomerEditRequest,
+  type CustomerEditResponse,
   type CustomerHistoryQuery,
   type CustomerFittingHistoryResponse,
   type CustomerReservationHistoryResponse,
@@ -387,6 +391,19 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         responseSchema: apiEnvelope(customerFittingHistoryResponse),
       });
     },
+    updateCustomer: (
+      customerId: string,
+      input: CustomerEditRequest,
+      idempotencyKey: string
+    ) =>
+      request<CustomerEditResponse>({
+        getToken,
+        body: customerEditRequest.parse(input),
+        idempotencyKey,
+        method: "PATCH",
+        path: `/api/v1/customers/${encodeURIComponent(customerId)}`,
+        responseSchema: apiEnvelope(customerEditResponse),
+      }),
     archiveCustomer: (
       customerId: string,
       input: CustomerArchiveRequest,

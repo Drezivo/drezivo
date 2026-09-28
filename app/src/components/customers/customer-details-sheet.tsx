@@ -29,6 +29,7 @@ export function CustomerDetailsSheet({
   onFittingNext,
   onFittingPrevious,
   onFittingRetry,
+  onEdit,
   onOpenChange,
   onReservationNext,
   onReservationPrevious,
@@ -52,6 +53,7 @@ export function CustomerDetailsSheet({
   onFittingNext: () => void;
   onFittingPrevious: () => void;
   onFittingRetry: () => void;
+  onEdit: () => void;
   onOpenChange: (open: boolean) => void;
   onReservationNext: () => void;
   onReservationPrevious: () => void;
@@ -90,6 +92,7 @@ export function CustomerDetailsSheet({
             onFittingNext={onFittingNext}
             onFittingPrevious={onFittingPrevious}
             onFittingRetry={onFittingRetry}
+            onEdit={onEdit}
             onReservationNext={onReservationNext}
             onReservationPrevious={onReservationPrevious}
             onReservationRetry={onReservationRetry}
@@ -115,6 +118,7 @@ function CustomerDetails({
   onFittingNext,
   onFittingPrevious,
   onFittingRetry,
+  onEdit,
   onReservationNext,
   onReservationPrevious,
   onReservationRetry,
@@ -133,6 +137,7 @@ function CustomerDetails({
   onFittingNext: () => void;
   onFittingPrevious: () => void;
   onFittingRetry: () => void;
+  onEdit: () => void;
   onReservationNext: () => void;
   onReservationPrevious: () => void;
   onReservationRetry: () => void;
@@ -159,7 +164,7 @@ function CustomerDetails({
             </div>
             <SheetDescription className="mt-1">Customer since {formatDate(detail.created_at)}</SheetDescription>
           </div>
-          <Button type="button" variant="secondary" size="sm" disabled aria-disabled="true">
+          <Button type="button" variant="secondary" size="sm" onClick={onEdit}>
             Edit
           </Button>
         </div>
