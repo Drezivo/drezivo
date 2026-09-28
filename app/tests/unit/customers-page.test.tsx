@@ -168,4 +168,67 @@ describe("CustomersPage", () => {
     expect(screen.getByText("Page 1 · 1 customer loaded")).toBeVisible();
     expect(screen.getByRole("button", { name: "Previous customers page" })).toBeDisabled();
   });
+
+  it("renders summary and table loading states without changing the page structure", () => {
+    render(<CustomersPage prototypeState={{ summary: "loading", directory: "loading" }} />);
+
+    expect(screen.getByLabelText("Loading All Customers")).toBeVisible();
+    expect(screen.getByLabelText("Loading New This Month")).toBeVisible();
+    expect(screen.getByLabelText("Loading customers")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("textbox", { name: "Search customers" })).toBeVisible();
+  });
+
+  it("distinguishes the empty active directory from an empty filtered result", () => {
+    const { rerender } = render(<CustomersPage prototypeState={{ directory: "empty" }} />);
+    expect(screen.getByText("No active customers yet")).toBeVisible();
+
+    rerender(<CustomersPage />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Search customers" }), {
+      target: { value: "customer-that-does-not-exist" },
+    });
+    expect(screen.getByText("No customers match these filters")).toBeVisible();
+  });
+
+  it("renders a permission-restricted customer directory state", () => {
+    render(<CustomersPage prototypeState={{ directory: "permission" }} />);
+
+    expect(screen.getByText("Customer access restricted")).toBeVisible();
+    expect(screen.getByText(/do not have permission to view the customer directory/i)).toBeVisible();
+    expect(screen.queryByRole("table", { name: "Customers" })).not.toBeInTheDocument();
+  });
+
+  it("renders an API error state and can retry into the ready directory", () => {
+    render(<CustomersPage prototypeState={{ directory: "error" }} />);
+
+    expect(screen.getByText("Customers could not be loaded")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(screen.getByRole("table", { name: "Customers" })).toBeVisible();
+    expect(screen.queryByText("Customers could not be loaded")).not.toBeInTheDocument();
+  });
+
+  it("renders customer-detail loading and concealed not-found states", async () => {
+    const { rerender } = render(<CustomersPage prototypeState={{ detail: "loading" }} />);
+
+    let actions = screen.getByRole("button", { name: "Actions for Maria Santos" });
+    actions.focus();
+    fireEvent.keyDown(actions, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "View details" }));
+    expect(await screen.findByLabelText("Loading customer details")).toHaveAttribute("aria-busy", "true");
+
+    rerender(<CustomersPage prototypeState={{ detail: "not-found" }} />);
+    expect(await screen.findByText("Customer unavailable")).toBeVisible();
+    expect(screen.getByText(/could not be found or you no longer have access/i)).toBeVisible();
+  });
+
+  it("renders mutation pending, success, and failure states from the API-shaped state contract", () => {
+    const { rerender } = render(<CustomersPage prototypeState={{ mutation: "pending" }} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Saving customer changes…");
+
+    rerender(<CustomersPage prototypeState={{ mutation: "success" }} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Customer changes saved.");
+
+    rerender(<CustomersPage prototypeState={{ mutation: "failure" }} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Customer changes could not be saved");
+  });
 });

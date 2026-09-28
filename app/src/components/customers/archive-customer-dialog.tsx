@@ -10,11 +10,13 @@ import type { CustomerDetailPrototype } from "./customers-prototype-detail-data"
 export function ArchiveCustomerDialog({
   customer,
   isSubmitting,
+  mutationError,
   onArchive,
   onOpenChange,
 }: {
   customer: CustomerDetailPrototype | null;
   isSubmitting: boolean;
+  mutationError?: string | null;
   onArchive: () => Promise<void>;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -48,6 +50,12 @@ export function ArchiveCustomerDialog({
               </button>
             </Dialog.Close>
           </div>
+
+          {mutationError ? (
+            <div role="alert" className="mt-5 rounded-lg border border-dashboard-danger/30 bg-dashboard-danger/10 px-3 py-2.5 text-sm text-dashboard-danger">
+              {mutationError}
+            </div>
+          ) : null}
 
           <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Dialog.Close asChild>

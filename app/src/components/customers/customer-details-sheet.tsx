@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, CheckCircle2, Mail, MapPin, Pencil, Phone, UserRound } from "lucide-react";
+import { AlertCircle, CalendarDays, CheckCircle2, Mail, MapPin, Pencil, Phone, UserRound } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -16,26 +16,76 @@ import type {
   CustomerReservationHistoryPrototype,
 } from "./customers-prototype-detail-data";
 
+export type CustomerDetailViewState = "ready" | "loading" | "not-found";
+
 export function CustomerDetailsSheet({
   customer,
   mode,
   onEdit,
   onOpenChange,
+  open,
+  state = "ready",
 }: {
   customer: CustomerDetailPrototype | null;
   mode: "view" | "edit";
   onEdit: () => void;
   onOpenChange: (open: boolean) => void;
+  open?: boolean;
+  state?: CustomerDetailViewState;
 }) {
+  const isOpen = open ?? (customer !== null && mode === "view");
+
   return (
-    <Sheet open={customer !== null && mode === "view"} onOpenChange={onOpenChange}>
+    <Sheet open={isOpen && mode === "view"} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
         className="w-full gap-0 overflow-y-auto border-dashboard-border bg-dashboard-surface p-0 sm:max-w-xl lg:max-w-2xl"
       >
-        {customer ? <CustomerDetails customer={customer} onEdit={onEdit} /> : null}
+        {state === "loading" ? <CustomerDetailsLoading /> : null}
+        {state === "not-found" ? <CustomerDetailsNotFound /> : null}
+        {state === "ready" && customer ? <CustomerDetails customer={customer} onEdit={onEdit} /> : null}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function CustomerDetailsLoading() {
+  return (
+    <div aria-label="Loading customer details" className="flex min-h-full flex-col" aria-busy="true">
+      <header className="border-b border-dashboard-border px-5 py-5 pr-14 sm:px-6">
+        <div className="flex items-center gap-3">
+          <div className="h-11 w-11 animate-pulse rounded-full bg-dashboard-active" />
+          <div className="flex-1 space-y-2">
+            <div className="h-5 w-40 animate-pulse rounded bg-dashboard-active" />
+            <div className="h-3 w-28 animate-pulse rounded bg-dashboard-active" />
+          </div>
+        </div>
+      </header>
+      <div className="space-y-6 px-5 py-5 sm:px-6">
+        {[0, 1, 2, 3].map((section) => (
+          <div key={section} className="space-y-3">
+            <div className="h-4 w-32 animate-pulse rounded bg-dashboard-active" />
+            <div className="h-24 animate-pulse rounded-lg border border-dashboard-border bg-dashboard-canvas" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CustomerDetailsNotFound() {
+  return (
+    <div className="flex min-h-full items-center justify-center px-6 py-16">
+      <div className="max-w-sm text-center">
+        <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-dashboard-active text-dashboard-muted">
+          <AlertCircle className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <SheetTitle className="mt-4 text-lg">Customer unavailable</SheetTitle>
+        <SheetDescription className="mt-2 leading-6">
+          This customer could not be found or you no longer have access to the profile.
+        </SheetDescription>
+      </div>
+    </div>
   );
 }
 

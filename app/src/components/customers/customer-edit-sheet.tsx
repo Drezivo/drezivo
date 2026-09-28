@@ -21,11 +21,13 @@ export interface CustomerEditValues {
 export function CustomerEditSheet({
   customer,
   isSubmitting,
+  mutationError,
   onOpenChange,
   onSave,
 }: {
   customer: CustomerDetailPrototype | null;
   isSubmitting: boolean;
+  mutationError?: string | null;
   onOpenChange: (open: boolean) => void;
   onSave: (values: CustomerEditValues) => Promise<void>;
 }) {
@@ -95,9 +97,9 @@ export function CustomerEditSheet({
                 />
               </Field>
 
-              {error ? (
+              {error || mutationError ? (
                 <div role="alert" className="rounded-lg border border-dashboard-danger/30 bg-dashboard-danger/10 px-3 py-2.5 text-sm text-dashboard-danger">
-                  {error}
+                  {error ?? mutationError}
                 </div>
               ) : null}
             </div>

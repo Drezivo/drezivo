@@ -212,15 +212,15 @@ Build the complete customer-management UX first using API-shaped local prototype
 
 ## 12. Frontend states
 
-- [ ] Summary loading state.
-- [ ] Table loading state.
-- [ ] Empty active-customer state.
-- [ ] Empty filtered state.
-- [ ] Permission-restricted state.
-- [ ] API error/retry state.
-- [ ] Detail-sheet loading state.
-- [ ] Detail-sheet not-found/concealed state.
-- [ ] Mutation pending/success/failure states.
+- [x] Summary loading state.
+- [x] Table loading state.
+- [x] Empty active-customer state.
+- [x] Empty filtered state.
+- [x] Permission-restricted state.
+- [x] API error/retry state.
+- [x] Detail-sheet loading state.
+- [x] Detail-sheet not-found/concealed state.
+- [x] Mutation pending/success/failure states.
 - [x] Archive and Edit actions prevent duplicate submissions.
 
 ## 13. Frontend-first tests
