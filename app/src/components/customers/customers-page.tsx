@@ -3,6 +3,8 @@
 import {
   CalendarCheck2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Repeat2,
   Search,
   UserPlus,
@@ -34,13 +36,16 @@ import { cn } from "@/lib/utils";
 
 import {
   CUSTOMER_DASHBOARD_SUMMARY_PROTOTYPE,
-  CUSTOMER_LIST_PROTOTYPE,
+  getCustomerListPrototypePage,
   type CustomerActivityPrototype,
   type CustomerDashboardSummaryPrototype,
   type CustomerListItemPrototype,
+  type CustomerListStatusFilterPrototype,
 } from "./customers-prototype-data";
 
-type CustomerStatusFilter = "active" | "archived" | "all";
+type CustomerStatusFilter = CustomerListStatusFilterPrototype;
+
+const CUSTOMERS_PAGE_SIZE = 10;
 
 const CUSTOMER_STATUS_LABELS: Record<CustomerStatusFilter, string> = {
   active: "Active",
@@ -78,24 +83,56 @@ const SUMMARY_ITEMS = [
 export function CustomersPage() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<CustomerStatusFilter>("active");
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageCursors, setPageCursors] = useState<Array<string | null>>([null]);
   const hasActiveFilters = Boolean(query.trim() || status !== "active");
+  const currentCursor = pageCursors[pageIndex] ?? null;
 
-  const filteredCustomers = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase();
-    return CUSTOMER_LIST_PROTOTYPE.filter((customer) => {
-      const statusMatches = status === "all" || customer.status === status;
-      if (!statusMatches) return false;
-      if (!normalizedQuery) return true;
+  const page = useMemo(
+    () =>
+      getCustomerListPrototypePage({
+        cursor: currentCursor,
+        limit: CUSTOMERS_PAGE_SIZE,
+        search: query,
+        status,
+      }),
+    [currentCursor, query, status]
+  );
 
-      return [customer.full_name, customer.phone ?? "", customer.email ?? ""].some((value) =>
-        value.toLocaleLowerCase().includes(normalizedQuery)
-      );
-    });
-  }, [query, status]);
+  const resetPagination = () => {
+    setPageIndex(0);
+    setPageCursors([null]);
+  };
+
+  const updateQuery = (value: string) => {
+    setQuery(value);
+    resetPagination();
+  };
+
+  const updateStatus = (value: CustomerStatusFilter) => {
+    setStatus(value);
+    resetPagination();
+  };
 
   const clearFilters = () => {
     setQuery("");
     setStatus("active");
+    resetPagination();
+  };
+
+  const goNext = () => {
+    const nextCursor = page.page_meta.next_cursor;
+    if (!nextCursor) return;
+    setPageCursors((current) => {
+      const next = current.slice(0, pageIndex + 1);
+      next[pageIndex + 1] = nextCursor;
+      return next;
+    });
+    setPageIndex((current) => current + 1);
+  };
+
+  const goPrevious = () => {
+    setPageIndex((current) => Math.max(0, current - 1));
   };
 
   return (
@@ -118,11 +155,20 @@ export function CustomersPage() {
               query={query}
               status={status}
               hasActiveFilters={hasActiveFilters}
-              onQueryChange={setQuery}
-              onStatusChange={setStatus}
+              onQueryChange={updateQuery}
+              onStatusChange={updateStatus}
               onClearFilters={clearFilters}
             />
-            <CustomersTable customers={filteredCustomers} />
+            <CustomersTable customers={page.items} />
+            {page.items.length > 0 ? (
+              <CustomerPagination
+                pageIndex={pageIndex}
+                shown={page.items.length}
+                hasMore={page.page_meta.has_more}
+                onNext={goNext}
+                onPrevious={goPrevious}
+              />
+            ) : null}
           </CardContent>
         </Card>
       </div>
@@ -325,6 +371,55 @@ function CustomersTable({ customers }: { customers: readonly CustomerListItemPro
         ))}
       </TableBody>
     </Table>
+  );
+}
+
+function CustomerPagination({
+  hasMore,
+  onNext,
+  onPrevious,
+  pageIndex,
+  shown,
+}: {
+  hasMore: boolean;
+  onNext: () => void;
+  onPrevious: () => void;
+  pageIndex: number;
+  shown: number;
+}) {
+  return (
+    <div className="flex flex-col gap-3 border-t border-dashboard-border px-4 py-3 text-xs text-dashboard-muted sm:flex-row sm:items-center sm:justify-between">
+      <p>
+        Page {pageIndex + 1} · {shown} {shown === 1 ? "customer" : "customers"} loaded
+      </p>
+      <div className="flex items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Previous customers page"
+          disabled={pageIndex === 0}
+          onClick={onPrevious}
+          className="h-8 w-8"
+        >
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+        </Button>
+        <span className="min-w-8 px-2 text-center font-medium text-dashboard-navy">
+          {pageIndex + 1}
+        </span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Next customers page"
+          disabled={!hasMore}
+          onClick={onNext}
+          className="h-8 w-8"
+        >
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      </div>
+    </div>
   );
 }
 

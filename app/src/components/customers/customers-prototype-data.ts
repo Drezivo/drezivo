@@ -6,6 +6,7 @@ export interface CustomerDashboardSummaryPrototype {
 }
 
 export type CustomerProfileStatusPrototype = "active" | "archived";
+export type CustomerListStatusFilterPrototype = CustomerProfileStatusPrototype | "all";
 export type CustomerActivityKindPrototype = "reservation" | "fitting";
 
 export interface CustomerActivityPrototype {
@@ -24,6 +25,14 @@ export interface CustomerListItemPrototype {
   fitting_count: number;
   last_activity: CustomerActivityPrototype | null;
   next_activity: CustomerActivityPrototype | null;
+}
+
+export interface CustomerListPagePrototype {
+  items: readonly CustomerListItemPrototype[];
+  page_meta: {
+    next_cursor: string | null;
+    has_more: boolean;
+  };
 }
 
 export const CUSTOMER_DASHBOARD_SUMMARY_PROTOTYPE: CustomerDashboardSummaryPrototype = {
@@ -227,3 +236,42 @@ export const CUSTOMER_LIST_PROTOTYPE: readonly CustomerListItemPrototype[] = [
     next_activity: null,
   },
 ];
+
+export function getCustomerListPrototypePage(input: {
+  cursor: string | null;
+  limit: number;
+  search: string;
+  status: CustomerListStatusFilterPrototype;
+}): CustomerListPagePrototype {
+  const normalizedSearch = input.search.trim().toLocaleLowerCase();
+  const filtered = CUSTOMER_LIST_PROTOTYPE.filter((customer) => {
+    const statusMatches = input.status === "all" || customer.status === input.status;
+    if (!statusMatches) return false;
+    if (!normalizedSearch) return true;
+
+    return [customer.full_name, customer.phone ?? "", customer.email ?? ""].some((value) =>
+      value.toLocaleLowerCase().includes(normalizedSearch)
+    );
+  });
+
+  const start = decodePrototypeCursor(input.cursor);
+  const items = filtered.slice(start, start + input.limit);
+  const nextOffset = start + items.length;
+  const hasMore = nextOffset < filtered.length;
+
+  return {
+    items,
+    page_meta: {
+      next_cursor: hasMore ? `customer-prototype:${nextOffset}` : null,
+      has_more: hasMore,
+    },
+  };
+}
+
+function decodePrototypeCursor(cursor: string | null): number {
+  if (!cursor) return 0;
+  const match = /^customer-prototype:(\d+)$/.exec(cursor);
+  if (!match) return 0;
+  const offset = Number(match[1]);
+  return Number.isSafeInteger(offset) && offset >= 0 ? offset : 0;
+}

@@ -75,4 +75,39 @@ describe("CustomersPage", () => {
     expect(screen.getByText("Nicole Mendoza")).toBeVisible();
     expect(screen.queryByText("Maria Santos")).not.toBeInTheDocument();
   });
+
+  it("renders ten customers per page and keeps cursor-style previous and next navigation", () => {
+    render(<CustomersPage />);
+
+    const firstPageTable = screen.getByRole("table", { name: "Customers" });
+    expect(within(firstPageTable).getAllByRole("row")).toHaveLength(11);
+    expect(screen.getByText("Page 1 · 10 customers loaded")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Previous customers page" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next customers page" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next customers page" }));
+
+    expect(screen.getByText("Page 2 · 4 customers loaded")).toBeVisible();
+    expect(screen.getByText("Trisha Garcia")).toBeVisible();
+    expect(screen.queryByText("Maria Santos")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Previous customers page" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Next customers page" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Previous customers page" }));
+    expect(screen.getByText("Page 1 · 10 customers loaded")).toBeVisible();
+    expect(screen.getByText("Maria Santos")).toBeVisible();
+  });
+
+  it("resets pagination to page one when the directory filters change", () => {
+    render(<CustomersPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Next customers page" }));
+    expect(screen.getByText("Page 2 · 4 customers loaded")).toBeVisible();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Search customers" }), {
+      target: { value: "Maria" },
+    });
+    expect(screen.getByText("Page 1 · 1 customer loaded")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Previous customers page" })).toBeDisabled();
+  });
 });
