@@ -331,6 +331,11 @@ Build the customer API around the already-existing `customer`, `reservation`, an
 
 ## 21. `PATCH /api/v1/customers/:customerId`
 
+Implementation note (2026-09-28): the tenant-scoped route, middleware, controller, service,
+repository mutation, idempotency, optimistic timestamp check, and redacted audit record are
+implemented in the backend. The acceptance boxes below remain open until PostgreSQL integration
+evidence is available.
+
 - [ ] Requires authorized staff access.
 - [ ] Supports only live profile fields approved by the Edit UX.
 - [ ] Normalize email/contact fields consistently with current Reservation/Fitting customer creation.
@@ -342,6 +347,11 @@ Build the customer API around the already-existing `customer`, `reservation`, an
 - [ ] Audit the mutation with a safe redacted summary; never log notes/contact payloads unnecessarily.
 
 ## 22. `POST /api/v1/customers/:customerId/archive`
+
+Implementation note (2026-09-28): the explicit archive command is implemented as a soft archive
+with tenant idempotency, optimistic concurrency, immutable history preservation, and a redacted
+audit event. The acceptance boxes below remain open until PostgreSQL integration evidence is
+available.
 
 - [ ] Explicit archive command; do not implement `DELETE /api/v1/customers/:id`.
 - [ ] Requires idempotency key + optimistic concurrency guard.

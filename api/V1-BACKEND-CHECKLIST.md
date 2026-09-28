@@ -263,11 +263,13 @@ end-to-end: catalogue → booking → payment verification → pickup → return
 
 - **Depends on:** H03, H04.
 - **Basis:** PRD §4 (FR10 customers, privacy minimums); Data-Model §4/§12 (`customer`); migration 0004; ERD `customer`.
-- **Outcome:** owners and front desk create, find, view, and update tenant-scoped customer records with notes and history.
+- **Outcome:** owners and front desk create, find, view, update, and operationally archive tenant-scoped customer records with notes and history.
 - **Acceptance criteria:**
-  - [ ] Present emails are normalized (trim + lowercase) and deduplicated within the tenant only; staff-created customers may omit email.
+  - [ ] Present emails are normalized (trim + lowercase) and staff-created customers may omit email; the edit command rechecks the phone-or-email invariant.
   - [ ] Search covers name, phone, and email with keyset pagination and deterministic order.
   - [x] Customer list, branch-aware summary, concealed detail, and bounded reservation/fitting history reads are implemented under the tenant-scoped staff boundary; history is projected from source transactions with no duplicated mutable totals.
+  - [ ] `PATCH /customers/:customerId` uses tenant idempotency, row locking, optimistic `updated_at`, redacted audit summaries, and never rewrites reservation snapshots; PostgreSQL integration evidence is pending.
+  - [ ] `POST /customers/:customerId/archive` performs an idempotent operational archive without deleting or mutating reservations, fittings, payments, custody history, or snapshots; no customer DELETE route exists; PostgreSQL integration evidence is pending.
   - [ ] Detail includes authorized notes (with author and timestamps) and paginated reservation/payment history projected from source transactions — no duplicated mutable totals.
   - [ ] Customer records are invisible across tenants; anonymization (erasure) preserves legally required reservation facts per the documented retention process.
   - [ ] New contract surfaces for customer endpoints are added to `contracts/src/` first.

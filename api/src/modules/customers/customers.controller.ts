@@ -8,6 +8,9 @@ import {
   getCustomerList,
   getCustomerReservationHistory,
   getCustomerSummary,
+  archiveCustomer,
+  updateCustomer,
+  type CustomerMutationContext,
   type CustomerReadContext,
 } from './customers.service.js';
 
@@ -48,6 +51,30 @@ export async function listCustomerFittingsController(req: Request, res: Response
   );
 }
 
+export async function updateCustomerController(req: Request, res: Response): Promise<void> {
+  if (!req.customerId || !req.customerEditRequest || !req.customerIdempotencyKey) {
+    throw new ValidationError('A valid customer edit request is required.');
+  }
+  const result = await updateCustomer(
+    requireCustomerMutationContext(req),
+    req.customerId,
+    req.customerEditRequest,
+  );
+  res.status(result.status).json(result.body);
+}
+
+export async function archiveCustomerController(req: Request, res: Response): Promise<void> {
+  if (!req.customerId || !req.customerArchiveRequest || !req.customerIdempotencyKey) {
+    throw new ValidationError('A valid customer archive request is required.');
+  }
+  const result = await archiveCustomer(
+    requireCustomerMutationContext(req),
+    req.customerId,
+    req.customerArchiveRequest,
+  );
+  res.status(result.status).json(result.body);
+}
+
 function requireCustomerContext(req: Request): CustomerReadContext {
   const principalId = req.clerkPrincipal?.clerkUserId;
   const context = req.tenantContext;
@@ -58,5 +85,23 @@ function requireCustomerContext(req: Request): CustomerReadContext {
     branchId: context.activeBranchId,
     principalId,
     permissionCodes: context.permissionCodes,
+  };
+}
+
+function requireCustomerMutationContext(req: Request): CustomerMutationContext {
+  const context = req.tenantContext;
+  const principalId = req.clerkPrincipal?.clerkUserId;
+  if (!principalId || !context || !req.customerIdempotencyKey) {
+    throw new ValidationError('Workspace context is required.');
+  }
+  return {
+    tenantId: context.tenantId,
+    branchId: context.activeBranchId,
+    membershipId: context.membershipId,
+    principalId,
+    permissionCodes: context.permissionCodes,
+    effectiveTenantStatus: context.effectiveTenantStatus,
+    requestId: req.requestId,
+    idempotencyKey: req.customerIdempotencyKey,
   };
 }
