@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { requireStaffAuth } from '../../middleware/auth.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
+import { requireTenantAction } from '../tenancy/tenancy.service.js';
 import {
   archiveCustomerController,
   getCustomerDetailController,
@@ -10,11 +11,14 @@ import {
   listCustomerFittingsController,
   listCustomerReservationsController,
   listCustomersController,
+  updateCustomerController,
 } from './customers.controller.js';
 import {
   requireCustomerIdempotencyKey,
   requireCustomerReadPermission,
-  validateCustomerArchive,
+  requireCustomerWritePermission,
+  validateCustomerArchiveRequest,
+  validateCustomerEditRequest,
   validateCustomerHistoryQuery,
   validateCustomerId,
   validateCustomerListQuery,
@@ -36,6 +40,20 @@ const customerRead = [
   requireCustomerReadPermission,
 ] as const;
 
+const customerMutationRateLimit = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  keyOf: (req) =>
+    req.tenantContext?.tenantId ?? req.clerkPrincipal?.clerkUserId ?? req.ip ?? 'unknown',
+});
+
+const customerWrite = [
+  requireStaffAuth,
+  requireTenantContext,
+  customerMutationRateLimit,
+  requireCustomerWritePermission,
+] as const;
+
 customersRouter.get('/customers/summary', ...customerRead, getCustomerSummaryController);
 customersRouter.get('/customers', ...customerRead, validateCustomerListQuery, listCustomersController);
 customersRouter.get('/customers/:customerId', ...customerRead, validateCustomerId, getCustomerDetailController);
@@ -54,11 +72,22 @@ customersRouter.get(
   listCustomerFittingsController,
 );
 
+customersRouter.patch(
+  '/customers/:customerId',
+  ...customerWrite,
+  requireTenantAction('new_booking'),
+  validateCustomerId,
+  validateCustomerEditRequest,
+  requireCustomerIdempotencyKey,
+  updateCustomerController,
+);
+
 customersRouter.post(
   '/customers/:customerId/archive',
-  ...customerRead,
+  ...customerWrite,
+  requireTenantAction('new_booking'),
   validateCustomerId,
-  validateCustomerArchive,
+  validateCustomerArchiveRequest,
   requireCustomerIdempotencyKey,
   archiveCustomerController,
 );

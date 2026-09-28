@@ -50,7 +50,7 @@ export async function readFittingCustomerForCreate(
   const result = await client.query<FittingCreateCustomerRow>(
     `SELECT id, full_name, phone, lower(email) AS email
        FROM customer
-      WHERE tenant_id = $1 AND id = $2::uuid AND anonymized_at IS NULL
+      WHERE tenant_id = $1 AND id = $2::uuid AND anonymized_at IS NULL AND archived_at IS NULL
       LIMIT 1
       FOR SHARE`,
     [input.tenantId, input.customerId],

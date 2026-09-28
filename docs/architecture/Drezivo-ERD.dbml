@@ -203,6 +203,8 @@ Table customer {
   social_media text
   notes text
   privacy_notice_version varchar(50) [not null]
+  archived_at timestamptz
+  updated_at timestamptz [not null]
   anonymized_at timestamptz
   created_at timestamptz [not null]
   indexes {
@@ -210,7 +212,7 @@ Table customer {
     (tenant_id, email)
     (tenant_id, phone)
   }
-  Note: 'V1. At least one usable verified contact according to channel policy; guest checkout requires email. address is optional for fitting walk-ins and legacy records, but reservation create/submit requires a nonblank bounded value and snapshots it. social_media is optional, live-profile-only, unindexed and not used for search. Do not merge people on phone alone.'
+  Note: 'V1. At least one usable contact remains required. Staff edits normalize email and use tenant idempotency plus updated_at optimistic concurrency; historical reservation snapshots are immutable. archived_at is an operational archive flag, separate from anonymized_at, and archive never deletes reservations, fittings, payments, custody history, or snapshots.'
 }
 
 Table category {

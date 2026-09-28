@@ -199,8 +199,12 @@ Table customer {
   full_name varchar(200) [not null]
   email varchar(320)
   phone varchar(40)
+  address text
+  social_media text
   notes text
   privacy_notice_version varchar(50) [not null]
+  archived_at timestamptz
+  updated_at timestamptz [not null]
   anonymized_at timestamptz
   created_at timestamptz [not null]
   indexes {
@@ -208,7 +212,7 @@ Table customer {
     (tenant_id, email)
     (tenant_id, phone)
   }
-  Note: 'V1. At least one usable verified contact according to channel policy; guest checkout requires email. Do not merge people on phone alone.'
+  Note: 'V1. At least one usable contact remains required. Staff edits normalize email and use tenant idempotency plus updated_at optimistic concurrency; historical reservation snapshots are immutable. archived_at is an operational archive flag, separate from anonymized_at, and archive never deletes reservations, fittings, payments, custody history, or snapshots.'
 }
 
 Table category {

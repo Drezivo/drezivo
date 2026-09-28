@@ -215,6 +215,7 @@ export async function readReservationCustomerForCreate(
       WHERE tenant_id = $1
         AND id = $2::uuid
         AND anonymized_at IS NULL
+        AND archived_at IS NULL
         AND (phone IS NOT NULL OR email IS NOT NULL)
       LIMIT 1
       FOR UPDATE`,

@@ -4,6 +4,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import {
   customerArchiveResponse,
   customerDetailResponse,
+  customerEditResponse,
+  errorEnvelope,
   customerFittingHistoryResponse,
   customerListResponse,
   customerReservationHistoryResponse,
@@ -67,6 +69,18 @@ describe('Customers read routes', async () => {
     useClerk(seed);
     const response = await request(createApp()).get('/api/v1/customers');
     expect(response.status).toBe(403);
+  });
+
+  it('allows an authorized Front Desk member to use the customer boundary', async () => {
+    const seed = await seedWorkspace(
+      'org_customers_frontdesk',
+      'user_customers_frontdesk',
+      ['reservations.manage'],
+      'frontdesk',
+    );
+    useClerk(seed);
+    const response = await request(createApp()).get('/api/v1/customers');
+    expect(response.status).toBe(200);
   });
 
   it('paginates active customers deterministically and excludes other tenants', async () => {
@@ -362,9 +376,116 @@ describe('Customers read routes', async () => {
     expect(privateSearchBody.data.items).toEqual([]);
   });
 
-  async function seedWorkspace(clerkOrgId: string, principalId: string, permissions: string[]) {
+  it('updates a live profile with idempotent replay and preserves the original request snapshot boundary', async () => {
+    const seed = await seedWorkspace('org_customers_update', 'user_customers_update', ['reservations.manage']);
+    const foreign = await seedWorkspace('org_customers_update_foreign', 'user_customers_update_foreign', ['reservations.manage']);
+    useClerk(seed);
+    const customerId = await seedCustomer(seed, 'Before Update', '09170000021', 'before@example.test');
+    const foreignCustomerId = await seedCustomer(foreign, 'Foreign Update', '09170000022', null);
+
+    const current = await request(createApp()).get(`/api/v1/customers/${customerId}`);
+    const currentBody = successEnvelope(customerDetailResponse).parse(current.body);
+    const edit = {
+      full_name: 'After Update',
+      phone: '09170000021',
+      email: 'AFTER@EXAMPLE.TEST',
+      address: null,
+      social_media: '@after-update',
+      notes: 'Updated note',
+      expected_updated_at: currentBody.data.updated_at,
+    };
+
+    const updated = await request(createApp())
+      .patch(`/api/v1/customers/${customerId}`)
+      .set('Idempotency-Key', 'customer-update-001')
+      .send(edit);
+    expect(updated.status).toBe(200);
+    const updatedBody = successEnvelope(customerEditResponse).parse(updated.body);
+    expect(updatedBody.data.customer).toMatchObject({
+      id: customerId,
+      full_name: 'After Update',
+      email: 'after@example.test',
+      social_media: '@after-update',
+      notes: 'Updated note',
+    });
+
+    const replay = await request(createApp())
+      .patch(`/api/v1/customers/${customerId}`)
+      .set('Idempotency-Key', 'customer-update-001')
+      .send(edit);
+    expect(replay.status).toBe(200);
+    expect(replay.body).toEqual(updated.body);
+
+    const changedPayload = await request(createApp())
+      .patch(`/api/v1/customers/${customerId}`)
+      .set('Idempotency-Key', 'customer-update-001')
+      .send({ ...edit, full_name: 'Different Update' });
+    expect(changedPayload.status).toBe(409);
+    expect(errorEnvelope.parse(changedPayload.body).error.code).toBe('IDEMPOTENCY_KEY_REUSED');
+
+    const concealed = await request(createApp())
+      .patch(`/api/v1/customers/${foreignCustomerId}`)
+      .set('Idempotency-Key', 'customer-update-foreign')
+      .send(edit);
+    expect(concealed.status).toBe(404);
+  });
+
+  it('archives without deleting history and safely handles a repeated archive intent', async () => {
+    const seed = await seedWorkspace('org_customers_archive_api', 'user_customers_archive_api', ['reservations.manage']);
+    useClerk(seed);
+    const customerId = await seedCustomer(seed, 'Archive Me', '09170000031', null);
+    const reservationId = await seedReservationHistory(seed, customerId, {
+      referenceCode: 'RSV-ARCHIVE-HISTORY',
+      lineName: 'Archived Customer Snapshot',
+      createdOffsetHours: -24,
+    });
+    await seedFitting(seed, customerId, 'completed', -48, 'fit-archive-history');
+    const current = await request(createApp()).get(`/api/v1/customers/${customerId}`);
+    const currentBody = successEnvelope(customerDetailResponse).parse(current.body);
+    const archived = await request(createApp())
+      .post(`/api/v1/customers/${customerId}/archive`)
+      .set('Idempotency-Key', 'customer-archive-001')
+      .send({ expected_updated_at: currentBody.data.updated_at });
+
+    expect(archived.status).toBe(200);
+    const archivedBody = successEnvelope(customerArchiveResponse).parse(archived.body);
+    expect(archivedBody.data).toMatchObject({ id: customerId, status: 'archived' });
+
+    const repeated = await request(createApp())
+      .post(`/api/v1/customers/${customerId}/archive`)
+      .set('Idempotency-Key', 'customer-archive-002')
+      .send({ expected_updated_at: archivedBody.data.updated_at });
+    expect(repeated.status).toBe(200);
+    expect(successEnvelope(customerArchiveResponse).parse(repeated.body).data).toEqual(archivedBody.data);
+
+    const detail = await request(createApp()).get(`/api/v1/customers/${customerId}`);
+    expect(detail.status).toBe(200);
+    expect(successEnvelope(customerDetailResponse).parse(detail.body).data.status).toBe('archived');
+
+    const reservationHistory = await request(createApp()).get(
+      `/api/v1/customers/${customerId}/reservations?limit=10`,
+    );
+    expect(reservationHistory.status).toBe(200);
+    expect(successEnvelope(customerReservationHistoryResponse).parse(reservationHistory.body).data.items).toHaveLength(1);
+
+    const reservationDetail = await request(createApp()).get(`/api/v1/reservations/${reservationId}`);
+    expect(reservationDetail.status).toBe(200);
+
+    const fittingHistory = await request(createApp()).get(
+      `/api/v1/customers/${customerId}/fittings?limit=10`,
+    );
+    expect(fittingHistory.status).toBe(200);
+    expect(successEnvelope(customerFittingHistoryResponse).parse(fittingHistory.body).data.items).toHaveLength(1);
+  });
+
+  async function seedWorkspace(
+    clerkOrgId: string,
+    principalId: string,
+    permissions: string[],
+    role: 'owner' | 'frontdesk' = 'owner',
+  ) {
     const tenant = await createTestTenant({ clerkOrgId });
-    const membershipId = await createTestMembership(tenant.id, principalId, 'owner');
+    const membershipId = await createTestMembership(tenant.id, principalId, role);
     const branchId = await withTenantTransaction(tenant.id, principalId, async (client) => {
       const branch = await client.query<{ id: string }>(
         `INSERT INTO branch (tenant_id, name, code, is_default, timezone, status)

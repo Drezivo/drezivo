@@ -52,6 +52,19 @@ export interface CustomerDetailReadRow {
   updated_at: Date;
 }
 
+export interface CustomerMutationRow {
+  customer_id: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  social_media: string | null;
+  notes: string | null;
+  archived_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
 export interface CustomerReservationHistoryReadRow {
   id: string;
   reference_code: string;
@@ -394,6 +407,108 @@ export async function readCustomerDetailModel(
     [input.tenantId, input.branchId, input.customerId],
   );
   return result.rows[0] ?? null;
+}
+
+/** Locks a live, non-anonymized customer for an atomic profile mutation. */
+export async function readCustomerForMutation(
+  client: PoolClient,
+  input: { tenantId: string; customerId: string },
+): Promise<CustomerMutationRow | null> {
+  const result = await client.query<CustomerMutationRow>(
+    `SELECT id AS customer_id, full_name, phone, email, address, social_media, notes,
+            archived_at, created_at, updated_at
+       FROM customer
+      WHERE tenant_id = $1 AND id = $2::uuid AND anonymized_at IS NULL
+      FOR UPDATE`,
+    [input.tenantId, input.customerId],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function updateCustomerProfile(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    customerId: string;
+    fullName: string;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+    socialMedia: string | null;
+    notes: string | null;
+  },
+): Promise<CustomerMutationRow> {
+  const result = await client.query<CustomerMutationRow>(
+    `UPDATE customer
+        SET full_name = $3,
+            phone = $4,
+            email = $5,
+            address = $6,
+            social_media = $7,
+            notes = $8,
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1 AND id = $2::uuid AND anonymized_at IS NULL
+      RETURNING id AS customer_id, full_name, phone, email, address, social_media, notes,
+                archived_at, created_at, updated_at`,
+    [
+      input.tenantId,
+      input.customerId,
+      input.fullName,
+      input.phone,
+      input.email,
+      input.address,
+      input.socialMedia,
+      input.notes,
+    ],
+  );
+  const row = result.rows[0];
+  if (!row) throw new Error('Customer profile update returned no row.');
+  return row;
+}
+
+export async function archiveCustomerProfile(
+  client: PoolClient,
+  input: { tenantId: string; customerId: string },
+): Promise<CustomerMutationRow> {
+  const result = await client.query<CustomerMutationRow>(
+    `UPDATE customer
+        SET archived_at = clock_timestamp(),
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1 AND id = $2::uuid AND anonymized_at IS NULL AND archived_at IS NULL
+      RETURNING id AS customer_id, full_name, phone, email, address, social_media, notes,
+                archived_at, created_at, updated_at`,
+    [input.tenantId, input.customerId],
+  );
+  const row = result.rows[0];
+  if (!row) throw new Error('Customer archive returned no row.');
+  return row;
+}
+
+export async function appendCustomerAuditEvent(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    actorKey: string;
+    action: string;
+    customerId: string;
+    redactedSummary: Record<string, unknown>;
+    requestId: string;
+  },
+): Promise<void> {
+  await client.query(
+    `INSERT INTO audit_event
+       (tenant_id, actor_kind, actor_key, action, entity_type, entity_id,
+        redacted_summary, request_id, occurred_at, outcome)
+     VALUES ($1, 'staff', $2, $3, 'customer', $4, $5::jsonb, $6, now(), 'succeeded')`,
+    [
+      input.tenantId,
+      input.actorKey,
+      input.action,
+      input.customerId,
+      JSON.stringify(input.redactedSummary),
+      input.requestId,
+    ],
+  );
 }
 
 export async function listCustomerReservationHistory(

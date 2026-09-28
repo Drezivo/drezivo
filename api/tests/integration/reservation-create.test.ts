@@ -584,6 +584,42 @@ describe('RSV-021/022 staff reservation creation', async () => {
     expectSafeError(tooShort.body, 'VALIDATION_FAILED');
   });
 
+  it('excludes archived customers from reservation intake and existing-customer creation', async () => {
+    const seed = await seedWorkspace('org_rsv063_archived_customer', 'user_rsv063_archived_customer', [
+      'reservations.manage',
+    ]);
+    const archivedCustomerId = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const inserted = await client.query<{ id: string }>(
+        `INSERT INTO customer (tenant_id, full_name, phone, email, archived_at)
+         VALUES ($1, 'Archived Intake Customer', '09171234568', 'archived-intake@example.test', now())
+         RETURNING id`,
+        [seed.tenantId],
+      );
+      const id = inserted.rows[0]?.id;
+      if (!id) throw new Error('archived customer insert returned no row');
+      return id;
+    });
+    useClerk(seed);
+
+    const lookup = await request(createApp())
+      .get('/api/v1/reservations/intake-options')
+      .query({ customer_search: 'Archived Intake' });
+    expect(lookup.status).toBe(200);
+    expect(lookup.body).toMatchObject({ data: { customers: [] } });
+
+    const before = await graphCounts(seed);
+    const create = await request(createApp())
+      .post('/api/v1/reservations')
+      .set('Idempotency-Key', 'rsv063-archived-customer')
+      .send({
+        ...createRequest(seed),
+        customer: { source: 'existing', customer_id: archivedCustomerId },
+      });
+    expect(create.status).toBe(404);
+    expectSafeError(create.body, 'NOT_FOUND');
+    expect(await graphCounts(seed)).toEqual(before);
+  });
+
   it('returns a variant-aware calendar preview and exact timestamp availability without claiming capacity', async () => {
     const seed = await seedWorkspace('org_rsv063_calendar', 'user_rsv063_calendar', [
       'reservations.manage',

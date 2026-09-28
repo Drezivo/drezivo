@@ -128,6 +128,7 @@ export async function searchFittingIntakeCustomers(
        FROM customer
       WHERE tenant_id = $1
         AND anonymized_at IS NULL
+        AND archived_at IS NULL
         AND (phone IS NOT NULL OR email IS NOT NULL)
         AND (
           lower(full_name) LIKE lower($2) ESCAPE '\\'

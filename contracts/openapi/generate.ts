@@ -835,6 +835,50 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: 'patch',
+  path: '/customers/{customerId}',
+  tags: ['customers'],
+  summary: 'Update the live customer profile without rewriting historical snapshots.',
+  request: {
+    params: customerParams,
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: customerEditRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Updated customer profile with branch-scoped activity aggregates.',
+      content: { 'application/json': { schema: successEnvelope(customerEditResponse) } },
+    },
+    403: jsonError('Reservation management permission is required.'),
+    404: jsonError('The customer was not found for the active tenant.'),
+    409: jsonError('STALE_VERSION, STATE_CONFLICT, or IDEMPOTENCY_KEY_REUSED.'),
+    422: jsonError('The customer edit request is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/customers/{customerId}/archive',
+  tags: ['customers'],
+  summary: 'Archive a customer profile without deleting historical operational records.',
+  request: {
+    params: customerParams,
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: customerArchiveRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Archived customer projection.',
+      content: { 'application/json': { schema: successEnvelope(customerArchiveResponse) } },
+    },
+    403: jsonError('Reservation management permission is required.'),
+    404: jsonError('The customer was not found for the active tenant.'),
+    409: jsonError('STALE_VERSION, STATE_CONFLICT, or IDEMPOTENCY_KEY_REUSED.'),
+    422: jsonError('The customer archive request is invalid.'),
+  },
+});
+
+registry.registerPath({
   method: 'get',
   path: '/customers/{customerId}/fittings',
   tags: ['customers'],
