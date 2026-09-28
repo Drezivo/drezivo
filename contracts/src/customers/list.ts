@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { customerId } from '../common/ids';
 import { paginatedResponse, paginationRequest } from '../common/pagination';
 import { isoInstant } from '../common/time';
-import { customerActivity } from './customer';
 import { customerListStatus, customerProfileStatus } from './state';
 
 /** Search is limited to approved live identity/contact fields; tenant scope is server-owned. */
@@ -25,8 +24,6 @@ export const customerListItem = z
     status: customerProfileStatus,
     reservation_count: z.number().int().nonnegative(),
     fitting_count: z.number().int().nonnegative(),
-    last_activity: customerActivity.nullable(),
-    next_activity: customerActivity.nullable(),
     created_at: isoInstant,
   })
   .strict();

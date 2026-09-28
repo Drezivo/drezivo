@@ -57,26 +57,30 @@ describe('customer contracts', () => {
     ).toBe(false);
   });
 
-  it('validates the paginated directory response with shared activity and page-meta shapes', () => {
+  it('validates the paginated directory response without activity projections', () => {
+    const listResponse = {
+      items: [
+        {
+          id: ids.customer,
+          full_name: 'Maria Santos',
+          phone: '09175550101',
+          email: 'maria@example.test',
+          status: 'active' as const,
+          reservation_count: 4,
+          fitting_count: 2,
+          created_at: createdAt,
+        },
+      ],
+      page_meta: { next_cursor: 'customer-cursor', has_more: true },
+    };
+
+    expect(customerListResponse.safeParse(listResponse).success).toBe(true);
     expect(
       customerListResponse.safeParse({
-        items: [
-          {
-            id: ids.customer,
-            full_name: 'Maria Santos',
-            phone: '09175550101',
-            email: 'maria@example.test',
-            status: 'active',
-            reservation_count: 4,
-            fitting_count: 2,
-            last_activity: { type: 'reservation', at: '2026-09-24T06:00:00.000Z' },
-            next_activity: { type: 'fitting', at: '2026-10-03T05:00:00.000Z' },
-            created_at: createdAt,
-          },
-        ],
-        page_meta: { next_cursor: 'customer-cursor', has_more: true },
+        ...listResponse,
+        items: [{ ...listResponse.items[0], last_activity: activeDetail.last_activity }],
       }).success,
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('keeps summary metrics nonnegative and closed to unapproved fields', () => {

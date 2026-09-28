@@ -98,6 +98,10 @@ describe('Customers read routes', async () => {
     expect(first.status).toBe(200);
     const firstBody = successEnvelope(customerListResponse).parse(first.body);
     expect(firstBody.data.items.map((item) => item.id)).toEqual([annaId, beaId]);
+    for (const item of firstBody.data.items) {
+      expect(item).not.toHaveProperty('last_activity');
+      expect(item).not.toHaveProperty('next_activity');
+    }
     expect(firstBody.data.page_meta.has_more).toBe(true);
 
     const nextCursor = firstBody.data.page_meta.next_cursor;

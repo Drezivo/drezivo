@@ -2,7 +2,6 @@
 
 import { useAuth } from "@clerk/nextjs";
 import type {
-  CustomerActivity,
   CustomerDetailResponse,
   CustomerFittingHistoryItem,
   CustomerListItem,
@@ -764,14 +763,14 @@ function CustomerEmptyState({ filtered }: { filtered: boolean }) {
 function CustomersTableLoading() {
   return (
     <div aria-label="Loading customers" aria-busy="true">
-      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_repeat(2,minmax(5rem,0.65fr))_minmax(6rem,0.8fr)] gap-4 border-b border-dashboard-border px-4 py-3">
-        {[0, 1, 2, 3, 4].map((cell) => (
+      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_repeat(2,minmax(5rem,0.65fr))_minmax(6rem,0.8fr)_minmax(4rem,0.5fr)] gap-4 border-b border-dashboard-border px-4 py-3">
+        {[0, 1, 2, 3, 4, 5].map((cell) => (
           <div key={cell} className="h-3 animate-pulse rounded bg-dashboard-active" />
         ))}
       </div>
       {Array.from({ length: 6 }, (_, row) => (
-        <div key={row} className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_repeat(2,minmax(5rem,0.65fr))_minmax(6rem,0.8fr)] gap-4 border-b border-dashboard-border/70 px-4 py-4 last:border-b-0">
-          {[0, 1, 2, 3, 4].map((cell) => (
+        <div key={row} className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_repeat(2,minmax(5rem,0.65fr))_minmax(6rem,0.8fr)_minmax(4rem,0.5fr)] gap-4 border-b border-dashboard-border/70 px-4 py-4 last:border-b-0">
+          {[0, 1, 2, 3, 4, 5].map((cell) => (
             <div key={cell} className="h-4 animate-pulse rounded bg-dashboard-active" />
           ))}
         </div>
@@ -805,8 +804,6 @@ function CustomersTable({
           <TableHead>Contact</TableHead>
           <TableHead className="text-center">Reservations</TableHead>
           <TableHead className="text-center">Fittings</TableHead>
-          <TableHead className="hidden lg:table-cell">Last Activity</TableHead>
-          <TableHead className="hidden xl:table-cell">Next Activity</TableHead>
           <TableHead>Status</TableHead>
           <TableHead className="pr-4 text-right">Actions</TableHead>
         </TableRow>
@@ -846,12 +843,6 @@ function CustomersTable({
             </TableCell>
             <TableCell className="text-center align-top font-medium text-dashboard-navy">
               {customer.fitting_count}
-            </TableCell>
-            <TableCell className="hidden align-top lg:table-cell">
-              <ActivityCell activity={customer.last_activity} fallback="No activity yet" />
-            </TableCell>
-            <TableCell className="hidden align-top xl:table-cell">
-              <ActivityCell activity={customer.next_activity} fallback="None scheduled" />
             </TableCell>
             <TableCell className="align-top">
               <Badge
@@ -965,23 +956,6 @@ function CustomerPagination({
   );
 }
 
-function ActivityCell({
-  activity,
-  fallback,
-}: {
-  activity: CustomerActivity | null;
-  fallback: string;
-}) {
-  if (!activity) return <span className="text-xs text-dashboard-muted">{fallback}</span>;
-
-  return (
-    <div>
-      <p className="font-medium capitalize text-dashboard-navy">{activity.type}</p>
-      <p className="mt-1 text-xs text-dashboard-muted">{formatActivityDateTime(activity.at)}</p>
-    </div>
-  );
-}
-
 function initials(name: string): string {
   return name
     .split(/\s+/)
@@ -993,16 +967,6 @@ function initials(name: string): string {
 
 function formatCustomerSince(value: string): string {
   return new Intl.DateTimeFormat("en-PH", {
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
-function formatActivityDateTime(value: string): string {
-  return new Intl.DateTimeFormat("en-PH", {
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
     month: "short",
     year: "numeric",
   }).format(new Date(value));

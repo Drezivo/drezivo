@@ -20,8 +20,6 @@ function customer() {
     status: "active",
     reservation_count: 3,
     fitting_count: 1,
-    last_activity: { type: "reservation", at: "2026-09-27T02:00:00.000Z" },
-    next_activity: null,
     created_at: "2026-08-14T02:00:00.000Z",
   };
 }

@@ -94,8 +94,6 @@ Build the complete customer-management UX first using API-shaped local prototype
   - Contact.
   - Reservations.
   - Fittings.
-  - Last Activity.
-  - Next Activity.
   - Status.
   - Actions.
 - [x] Customer cell shows:
@@ -104,8 +102,6 @@ Build the complete customer-management UX first using API-shaped local prototype
   - `Customer since ...` using profile creation date.
 - [x] Contact cell shows phone and/or email only.
 - [x] Reservation/Fitting count cells show concise derived counts.
-- [x] Last Activity shows type + date/time.
-- [x] Next Activity shows type + date/time or `None scheduled`.
 - [x] Status uses the dashboard badge vocabulary for Active/Archived.
 - [x] Make lower-value columns responsive on smaller screens rather than forcing horizontal clutter.
 - [x] Do not expose address, social media, or notes in the table.
@@ -281,8 +277,6 @@ Build the customer API around the already-existing `customer`, `reservation`, an
 - [x] Default sort should be deterministic, such as `lower(full_name), id` unless another approved customer sort is chosen.
 - [x] Response includes only safe directory fields plus derived aggregates required by the table.
 - [x] Derive Reservation count and Fitting count without N+1 queries.
-- [x] Derive Last Activity across both modules.
-- [x] Derive Next Activity across both modules.
 - [x] Default excludes anonymized profiles and defaults to non-archived profiles.
 
 ## 17. `GET /api/v1/customers/summary`
@@ -404,8 +398,8 @@ still has unrelated timeout failures and remains the final baseline gate.
 - [ ] Search works for name/phone/email and not private fields.
 - [ ] Active/Archived/All status behavior is correct.
 - [ ] Summary metrics follow the approved definitions.
-- [ ] Last Activity selects the latest qualifying Reservation/Fitting event.
-- [ ] Next Activity selects the earliest qualifying upcoming Reservation/Fitting event.
+- [ ] Customer detail Last Activity selects the latest qualifying Reservation/Fitting event.
+- [ ] Customer detail Next Activity selects the earliest qualifying upcoming Reservation/Fitting event.
 - [ ] Customer detail conceals foreign IDs.
 - [ ] Reservation history remains snapshot-based.
 - [ ] Fitting history is branch/tenant safe.
