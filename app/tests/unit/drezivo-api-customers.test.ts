@@ -140,6 +140,63 @@ describe("Drezivo customer API client", () => {
     expect(init?.body).toBe(JSON.stringify({ expected_updated_at: updatedAt }));
   });
 
+  it("updates a customer profile with the expected timestamp and idempotency key", async () => {
+    const updatedAt = "2026-09-27T03:00:00.000Z";
+    fetchMock.mockResolvedValueOnce(
+      success({
+        customer: {
+          id: customerId,
+          full_name: "Updated Customer",
+          phone: "09171234567",
+          email: "updated@example.test",
+          address: null,
+          social_media: null,
+          notes: "Updated note",
+          status: "active",
+          archived_at: null,
+          reservation_count: 3,
+          fitting_count: 1,
+          completed_engagement_count: 0,
+          last_activity: null,
+          next_activity: null,
+          created_at: "2026-08-14T02:00:00.000Z",
+          updated_at: "2026-09-27T03:01:00.000Z",
+        },
+      }, "request-edit")
+    );
+
+    const client = createDrezivoApiClient(getToken);
+    const result = await client.updateCustomer(
+      customerId,
+      {
+        full_name: " Updated Customer ",
+        phone: "09171234567",
+        email: "UPDATED@EXAMPLE.TEST",
+        address: null,
+        social_media: null,
+        notes: "Updated note",
+        expected_updated_at: updatedAt,
+      },
+      "edit-intent-1"
+    );
+
+    expect(result.data.customer.full_name).toBe("Updated Customer");
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe(`https://api.example.test/api/v1/customers/${customerId}`);
+    expect(init?.method).toBe("PATCH");
+    expect((init?.headers as Headers).get("Authorization")).toBe("Bearer clerk-token");
+    expect((init?.headers as Headers).get("Idempotency-Key")).toBe("edit-intent-1");
+    expect(init?.body).toBe(JSON.stringify({
+      full_name: "Updated Customer",
+      phone: "09171234567",
+      email: "UPDATED@EXAMPLE.TEST",
+      address: null,
+      social_media: null,
+      notes: "Updated note",
+      expected_updated_at: updatedAt,
+    }));
+  });
+
   it("serializes an opaque cursor without changing the bounded page size", async () => {
     fetchMock.mockResolvedValueOnce(
       success({ items: [], page_meta: { next_cursor: null, has_more: false } })

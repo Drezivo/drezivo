@@ -460,14 +460,14 @@ Replace the isolated frontend prototype source with the production customer API 
 
 ## 30. Wire Edit
 
-- [ ] Submit `PATCH /customers/:id` with idempotency/concurrency fields.
-- [ ] Disable duplicate Save while pending.
-- [ ] On success refresh:
+- [x] Submit `PATCH /customers/:id` with idempotency/concurrency fields.
+- [x] Disable duplicate Save while pending.
+- [x] On success refresh:
   - selected customer detail.
   - affected list row.
   - summary only if a displayed metric can change.
-- [ ] Preserve Sheet position/state after successful edit where practical.
-- [ ] Stale-version response asks staff to refresh rather than silently overwriting another edit.
+- [x] Preserve Sheet position/state after successful edit where practical.
+- [x] Stale-version response asks staff to refresh rather than silently overwriting another edit.
 
 ## 31. Wire Archive
 

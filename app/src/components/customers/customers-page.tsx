@@ -48,9 +48,11 @@ import {
 } from "@/components/ui/table";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { cn } from "@/lib/utils";
+import { useSubmitGuard } from "@/lib/use-submit-guard";
 
 import { ArchiveCustomerDialog } from "./archive-customer-dialog";
 import { CustomerDetailsSheet } from "./customer-details-sheet";
+import { CustomerEditSheet, type CustomerEditValues } from "./customer-edit-sheet";
 
 type CustomerStatusFilter = CustomerListStatus;
 type CustomerPageMeta = { next_cursor: string | null; has_more: boolean };
@@ -111,9 +113,7 @@ export function CustomersPage() {
   const [summaryReloadVersion, setSummaryReloadVersion] = useState(0);
   const [directoryReloadVersion, setDirectoryReloadVersion] = useState(0);
   const [archiveCustomer, setArchiveCustomer] = useState<CustomerListItem | null>(null);
-  const [archiveIntentKey, setArchiveIntentKey] = useState<string | null>(null);
   const [archiveError, setArchiveError] = useState<DrezivoApiError | null>(null);
-  const [isArchiving, setIsArchiving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetailResponse | null>(null);
@@ -134,6 +134,10 @@ export function CustomersPage() {
   const [fittingLoading, setFittingLoading] = useState(false);
   const [fittingError, setFittingError] = useState<DrezivoApiError | null>(null);
   const [fittingReloadVersion, setFittingReloadVersion] = useState(0);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editError, setEditError] = useState<DrezivoApiError | null>(null);
+  const { isSubmitting: isArchiving, resetIntent: resetArchiveIntent, submit: submitArchive } = useSubmitGuard();
+  const { isSubmitting: isSaving, resetIntent: resetEditIntent, submit: submitEdit } = useSubmitGuard();
   const currentCursor = pageCursors[pageIndex] ?? null;
   const reservationCursor = reservationCursors[reservationPageIndex] ?? null;
   const fittingCursor = fittingCursors[fittingPageIndex] ?? null;
@@ -155,13 +159,16 @@ export function CustomersPage() {
 
   const requestArchive = useCallback((customer: CustomerListItem) => {
     setArchiveCustomer(customer);
-    setArchiveIntentKey(crypto.randomUUID());
+    resetArchiveIntent();
     setArchiveError(null);
-  }, []);
+  }, [resetArchiveIntent]);
 
-  const openCustomerDetails = useCallback((customer: CustomerListItem) => {
+  const openCustomerDetails = useCallback((customer: CustomerListItem, edit = false) => {
     setSelectedCustomerId(customer.id);
     setSelectedCustomer(null);
+    setIsEditing(edit);
+    setEditError(null);
+    resetEditIntent();
     setDetailError(null);
     setReservationHistory([]);
     setReservationMeta({ next_cursor: null, has_more: false });
@@ -173,46 +180,105 @@ export function CustomersPage() {
     setFittingCursors([null]);
     setFittingPageIndex(0);
     setFittingError(null);
-  }, []);
+  }, [resetEditIntent]);
+
+  const beginCustomerEdit = useCallback(() => {
+    if (!selectedCustomer) return;
+    setEditError(null);
+    resetEditIntent();
+    setIsEditing(true);
+  }, [resetEditIntent, selectedCustomer]);
+
+  const cancelCustomerEdit = useCallback(() => {
+    if (isSaving) return;
+    setEditError(null);
+    resetEditIntent();
+    setIsEditing(false);
+  }, [isSaving, resetEditIntent]);
+
+  const refreshCustomerForEdit = useCallback(() => {
+    setEditError(null);
+    resetEditIntent();
+    setDetailReloadVersion((value) => value + 1);
+  }, [resetEditIntent]);
+
+  const handleEditValuesChange = useCallback(() => {
+    setEditError(null);
+    resetEditIntent();
+  }, [resetEditIntent]);
 
   const closeCustomerDetails = useCallback(() => {
     setSelectedCustomerId(null);
     setSelectedCustomer(null);
+    setIsEditing(false);
+    setEditError(null);
+    resetEditIntent();
     setDetailError(null);
     setReservationHistory([]);
     setFittingHistory([]);
-  }, []);
+  }, [resetEditIntent]);
 
   const closeArchive = useCallback(() => {
     if (isArchiving) return;
     setArchiveCustomer(null);
-    setArchiveIntentKey(null);
+    resetArchiveIntent();
     setArchiveError(null);
-  }, [isArchiving]);
+  }, [isArchiving, resetArchiveIntent]);
 
   const confirmArchive = useCallback(async () => {
     if (!archiveCustomer || isArchiving) return;
-    setIsArchiving(true);
     setArchiveError(null);
     try {
-      const client = createDrezivoApiClient(getToken);
-      const detail = await client.getCustomerDetail(archiveCustomer.id);
-      await client.archiveCustomer(
-        archiveCustomer.id,
-        { expected_updated_at: detail.data.updated_at },
-        archiveIntentKey ?? crypto.randomUUID()
-      );
+      const result = await submitArchive(async (idempotencyKey) => {
+        const client = createDrezivoApiClient(getToken);
+        const detail = await client.getCustomerDetail(archiveCustomer.id);
+        return client.archiveCustomer(
+          archiveCustomer.id,
+          { expected_updated_at: detail.data.updated_at },
+          idempotencyKey
+        );
+      });
+      if (!result) return;
+      if (selectedCustomerId === archiveCustomer.id) closeCustomerDetails();
       setArchiveCustomer(null);
-      setArchiveIntentKey(null);
+      resetArchiveIntent();
       setNotice(`${archiveCustomer.full_name} was archived.`);
       retryDirectory();
       retrySummary();
     } catch (caughtError) {
-      setArchiveError(toDrezivoApiError(caughtError));
-    } finally {
-      setIsArchiving(false);
+      setArchiveError(toDrezivoApiError(caughtError, "Could not archive this customer. Please try again."));
     }
-  }, [archiveCustomer, archiveIntentKey, getToken, isArchiving, retryDirectory, retrySummary]);
+  }, [archiveCustomer, closeCustomerDetails, getToken, isArchiving, resetArchiveIntent, retryDirectory, retrySummary, selectedCustomerId, submitArchive]);
+
+  const saveCustomer = useCallback(async (values: CustomerEditValues) => {
+    if (!selectedCustomer || isSaving) return;
+    setEditError(null);
+
+    const input = {
+      full_name: values.full_name.trim(),
+      phone: values.phone.trim() || null,
+      email: values.email.trim() || null,
+      address: values.address.trim() || null,
+      social_media: values.social_media.trim() || null,
+      notes: values.notes.trim() || null,
+      expected_updated_at: selectedCustomer.updated_at,
+    };
+
+    try {
+      const result = await submitEdit((idempotencyKey) =>
+        createDrezivoApiClient(getToken).updateCustomer(selectedCustomer.id, input, idempotencyKey)
+      );
+      if (!result) return;
+      resetEditIntent();
+      setSelectedCustomer(result.data.customer);
+      setEditError(null);
+      setIsEditing(false);
+      retryDirectory();
+      setNotice(`${result.data.customer.full_name} was updated.`);
+    } catch (caughtError) {
+      setEditError(toDrezivoApiError(caughtError, "Could not update this customer. Please try again."));
+    }
+  }, [getToken, isSaving, resetEditIntent, retryDirectory, selectedCustomer, submitEdit]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -254,7 +320,7 @@ export function CustomersPage() {
   }, [detailReloadVersion, getToken, isLoaded, isSignedIn, selectedCustomerId]);
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || !selectedCustomerId) return;
+    if (!isLoaded || !isSignedIn || !selectedCustomerId || isEditing) return;
     let cancelled = false;
     setReservationLoading(true);
     setReservationError(null);
@@ -264,10 +330,10 @@ export function CustomersPage() {
       .catch((caughtError) => { if (!cancelled) { setReservationHistory([]); setReservationMeta({ next_cursor: null, has_more: false }); setReservationError(toDrezivoApiError(caughtError)); } })
       .finally(() => { if (!cancelled) setReservationLoading(false); });
     return () => { cancelled = true; };
-  }, [getToken, isLoaded, isSignedIn, reservationCursor, reservationReloadVersion, selectedCustomerId]);
+  }, [getToken, isEditing, isLoaded, isSignedIn, reservationCursor, reservationReloadVersion, selectedCustomerId]);
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || !selectedCustomerId) return;
+    if (!isLoaded || !isSignedIn || !selectedCustomerId || isEditing) return;
     let cancelled = false;
     setFittingLoading(true);
     setFittingError(null);
@@ -277,7 +343,7 @@ export function CustomersPage() {
       .catch((caughtError) => { if (!cancelled) { setFittingHistory([]); setFittingMeta({ next_cursor: null, has_more: false }); setFittingError(toDrezivoApiError(caughtError)); } })
       .finally(() => { if (!cancelled) setFittingLoading(false); });
     return () => { cancelled = true; };
-  }, [fittingCursor, fittingReloadVersion, getToken, isLoaded, isSignedIn, selectedCustomerId]);
+  }, [fittingCursor, fittingReloadVersion, getToken, isEditing, isLoaded, isSignedIn, selectedCustomerId]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -436,6 +502,7 @@ export function CustomersPage() {
                     customers={rows}
                     emptyFiltered={hasActiveFilters}
                     onArchive={requestArchive}
+                    onEdit={(customer) => openCustomerDetails(customer, true)}
                     onView={openCustomerDetails}
                   />
                 )}
@@ -457,7 +524,7 @@ export function CustomersPage() {
       <ArchiveCustomerDialog
         customer={archiveCustomer}
         isSubmitting={isArchiving}
-        mutationError={archiveError?.message ?? null}
+        mutationError={archiveError ? archiveErrorMessage(archiveError) : null}
         onArchive={confirmArchive}
         onOpenChange={(open) => {
           if (!open) closeArchive();
@@ -466,11 +533,12 @@ export function CustomersPage() {
       />
 
       <CustomerDetailsSheet
-        open={selectedCustomerId !== null}
+        open={selectedCustomerId !== null && !isEditing}
         detail={selectedCustomer}
         detailLoading={detailLoading}
         detailError={detailError}
         onRetryDetail={() => setDetailReloadVersion((value) => value + 1)}
+        onEdit={beginCustomerEdit}
         onOpenChange={(open) => { if (!open) closeCustomerDetails(); }}
         reservationHistory={reservationHistory}
         reservationLoading={reservationLoading}
@@ -488,6 +556,21 @@ export function CustomersPage() {
         onFittingNext={() => goHistoryNext("fitting")}
         onFittingPrevious={() => goHistoryPrevious("fitting")}
         fittingPageIndex={fittingPageIndex}
+      />
+
+      <CustomerEditSheet
+        open={selectedCustomerId !== null && isEditing}
+        customer={selectedCustomer}
+        detailLoading={detailLoading}
+        detailError={detailError}
+        error={editError}
+        isSubmitting={isSaving}
+        onCancel={cancelCustomerEdit}
+        onOpenChange={(open) => { if (!open) closeCustomerDetails(); }}
+        onRefresh={refreshCustomerForEdit}
+        onRetryDetail={refreshCustomerForEdit}
+        onSave={saveCustomer}
+        onValuesChange={handleEditValuesChange}
       />
     </div>
   );
@@ -701,11 +784,13 @@ function CustomersTable({
   customers,
   emptyFiltered,
   onArchive,
+  onEdit,
   onView,
 }: {
   customers: readonly CustomerListItem[];
   emptyFiltered: boolean;
   onArchive: (customer: CustomerListItem) => void;
+  onEdit: (customer: CustomerListItem) => void;
   onView: (customer: CustomerListItem) => void;
 }) {
   if (customers.length === 0) {
@@ -782,7 +867,7 @@ function CustomersTable({
               </Badge>
             </TableCell>
             <TableCell className="pr-4 text-right align-top">
-              <CustomerActions customer={customer} onArchive={onArchive} onView={onView} />
+              <CustomerActions customer={customer} onArchive={onArchive} onEdit={onEdit} onView={onView} />
             </TableCell>
           </TableRow>
         ))}
@@ -794,10 +879,12 @@ function CustomersTable({
 function CustomerActions({
   customer,
   onArchive,
+  onEdit,
   onView,
 }: {
   customer: CustomerListItem;
   onArchive: (customer: CustomerListItem) => void;
+  onEdit: (customer: CustomerListItem) => void;
   onView: (customer: CustomerListItem) => void;
 }) {
   return (
@@ -815,7 +902,7 @@ function CustomerActions({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onSelect={() => onView(customer)}>View details</DropdownMenuItem>
-        <DropdownMenuItem disabled>Edit</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onEdit(customer)}>Edit</DropdownMenuItem>
         {customer.status === "active" ? (
           <DropdownMenuItem
             className="text-dashboard-danger focus:text-dashboard-danger"
@@ -921,8 +1008,15 @@ function formatActivityDateTime(value: string): string {
   }).format(new Date(value));
 }
 
-function toDrezivoApiError(error: unknown): DrezivoApiError {
+function toDrezivoApiError(error: unknown, fallbackMessage = "Could not load customers. Please try again."): DrezivoApiError {
   return error instanceof DrezivoApiError
     ? error
-    : new DrezivoApiError("Could not load customers. Please try again.", { status: 503 });
+    : new DrezivoApiError(fallbackMessage, { status: 503 });
+}
+
+function archiveErrorMessage(error: DrezivoApiError): string {
+  if (error.code === "STALE_VERSION") {
+    return "This customer changed since the archive dialog opened. Refresh the customer and try again.";
+  }
+  return error.message;
 }

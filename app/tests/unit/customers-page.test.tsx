@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
   getCustomerReservations: vi.fn(),
   getCustomerSummary: vi.fn(),
   getCustomers: vi.fn(),
+  updateCustomer: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({ useAuth: clerk.useAuth }));
@@ -130,6 +131,29 @@ function installDefaults() {
       updated_at: "2026-09-27T03:00:00.000Z",
     },
     requestId: "request-archive",
+  });
+  api.updateCustomer.mockResolvedValue({
+    data: {
+      customer: {
+        id: firstCustomer.id,
+        full_name: "Updated Database Customer",
+        phone: "09171234567",
+        email: "updated.customer@example.test",
+        address: "24 Sampaguita Street",
+        social_media: "@updated.customer",
+        notes: "Updated note",
+        status: "active",
+        archived_at: null,
+        reservation_count: 4,
+        fitting_count: 2,
+        completed_engagement_count: 3,
+        last_activity: firstCustomer.last_activity,
+        next_activity: firstCustomer.next_activity,
+        created_at: firstCustomer.created_at,
+        updated_at: "2026-09-27T04:00:00.000Z",
+      },
+    },
+    requestId: "request-edit",
   });
 }
 
@@ -290,7 +314,7 @@ describe("CustomersPage production wiring", () => {
     await waitFor(() => expect(screen.queryByLabelText("Loading customers")).not.toBeInTheDocument());
   });
 
-  it("opens live details while keeping edit unavailable and archive enabled", async () => {
+  it("opens live details with edit enabled while keeping archive available", async () => {
     render(<CustomersPage />);
     await screen.findByText("Real Database Customer");
     const actions = screen.getByRole("button", { name: "Actions for Real Database Customer" });
@@ -299,7 +323,7 @@ describe("CustomersPage production wiring", () => {
 
     const menu = await screen.findByRole("menu");
     expect(within(menu).getByRole("menuitem", { name: "View details" })).not.toHaveAttribute("data-disabled");
-    expect(within(menu).getByRole("menuitem", { name: "Edit" })).toHaveAttribute("data-disabled");
+    expect(within(menu).getByRole("menuitem", { name: "Edit" })).not.toHaveAttribute("data-disabled");
     expect(within(menu).getByRole("menuitem", { name: "Archive" })).not.toHaveAttribute("data-disabled");
     fireEvent.click(within(menu).getByRole("menuitem", { name: "View details" }));
     expect(await screen.findByText("Contact Information")).toBeVisible();
@@ -307,10 +331,70 @@ describe("CustomersPage production wiring", () => {
     expect(api.getCustomerReservations).toHaveBeenCalledWith(firstCustomer.id, { limit: 10 });
     expect(api.getCustomerFittings).toHaveBeenCalledWith(firstCustomer.id, { limit: 10 });
     expect(screen.getByText("24 Sampaguita Street")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Edit" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByText("Contact Information")).not.toBeInTheDocument();
     return;
+  });
+
+  it("edits a live customer from the row action and refreshes the directory without refetching summary", async () => {
+    render(<CustomersPage />);
+    await screen.findByText("Real Database Customer");
+    const actions = screen.getByRole("button", { name: "Actions for Real Database Customer" });
+    actions.focus();
+    fireEvent.keyDown(actions, { key: "Enter", code: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+
+    expect(await screen.findByRole("heading", { name: "Edit Customer" })).toBeVisible();
+    fireEvent.change(screen.getByRole("textbox", { name: /Full name/ }), { target: { value: "Updated Database Customer" } });
+    const save = screen.getByRole("button", { name: "Save Customer" });
+    fireEvent.click(save);
+    fireEvent.click(save);
+
+    await waitFor(() =>
+      expect(api.updateCustomer).toHaveBeenCalledWith(
+        firstCustomer.id,
+        {
+          full_name: "Updated Database Customer",
+          phone: "09171234567",
+          email: "real.customer@example.test",
+          address: "24 Sampaguita Street",
+          social_media: "@real.customer",
+          notes: "Staff-only note",
+          expected_updated_at: "2026-09-27T03:00:00.000Z",
+        },
+        expect.any(String)
+      )
+    );
+    expect(api.updateCustomer).toHaveBeenCalledTimes(1);
+    expect(api.getCustomerSummary).toHaveBeenCalledTimes(1);
+    expect(api.getCustomers).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText("Updated Database Customer")).toBeVisible();
+  });
+
+  it("keeps stale edits open and offers an authoritative refresh", async () => {
+    api.updateCustomer.mockRejectedValueOnce(
+      new (await import("@/lib/drezivo-api")).DrezivoApiError("Customer changed.", {
+        code: "STALE_VERSION",
+        requestId: "request-stale-edit",
+        status: 409,
+      })
+    );
+
+    render(<CustomersPage />);
+    await screen.findByText("Real Database Customer");
+    const actions = screen.getByRole("button", { name: "Actions for Real Database Customer" });
+    actions.focus();
+    fireEvent.keyDown(actions, { key: "Enter", code: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+    expect(await screen.findByRole("heading", { name: "Edit Customer" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Save Customer" }));
+
+    expect(await screen.findByText(/changed while you were editing/i)).toBeVisible();
+    expect(screen.getByText("Request ID: request-stale-edit")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh latest values" }));
+    await waitFor(() => expect(api.getCustomerDetail).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("heading", { name: "Edit Customer" })).toBeVisible();
   });
 
   it("archives a customer with concurrency data and refreshes the list and summary", async () => {
@@ -320,7 +404,9 @@ describe("CustomersPage production wiring", () => {
     actions.focus();
     fireEvent.keyDown(actions, { key: "Enter", code: "Enter" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Archive" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Archive Customer" }));
+    const archiveButton = await screen.findByRole("button", { name: "Archive Customer" });
+    fireEvent.click(archiveButton);
+    fireEvent.click(archiveButton);
 
     await waitFor(() =>
       expect(api.archiveCustomer).toHaveBeenCalledWith(
@@ -329,6 +415,7 @@ describe("CustomersPage production wiring", () => {
         expect.any(String)
       )
     );
+    expect(api.archiveCustomer).toHaveBeenCalledTimes(1);
     await waitFor(() => {
       expect(api.getCustomers).toHaveBeenCalledTimes(2);
       expect(api.getCustomerSummary).toHaveBeenCalledTimes(2);
