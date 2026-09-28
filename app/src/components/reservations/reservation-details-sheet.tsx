@@ -21,6 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import type { DrezivoApiError } from "@/lib/drezivo-api";
+import { displaySizeLabel } from "@/lib/catalogue-display";
 import { cn } from "@/lib/utils";
 
 import {
@@ -123,6 +124,11 @@ function ReservationDetails({
 }) {
   const customer = detail.customer.snapshot;
   const effectiveTimeZone = detail.timezone_snapshot || timeZone;
+  const [failedImageLines, setFailedImageLines] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    setFailedImageLines(new Set());
+  }, [detail.id]);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -194,8 +200,24 @@ function ReservationDetails({
               <div key={line.id}>
                 {index > 0 ? <Separator className="mb-4" /> : null}
                 <div className="flex items-start gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-dashboard-active text-dashboard-accent">
-                    <Shirt className="h-5 w-5" aria-hidden="true" />
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
+                    {line.variant.image_url && !failedImageLines.has(line.id) ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- API-provided signed URLs are short-lived and dynamic.
+                      <img
+                        src={line.variant.image_url}
+                        alt={`${line.name_snapshot} cover image`}
+                        className="h-full w-full object-cover"
+                        onError={() =>
+                          setFailedImageLines((current) => {
+                            const next = new Set(current);
+                            next.add(line.id);
+                            return next;
+                          })
+                        }
+                      />
+                    ) : (
+                      <Shirt className="h-5 w-5" aria-hidden="true" />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold text-dashboard-navy">{line.name_snapshot}</p>
@@ -203,7 +225,7 @@ function ReservationDetails({
                     <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
                       <DetailValue
                         label="Variant"
-                        value={`${line.variant.size_label}${line.variant.color_label ? ` · ${line.variant.color_label}` : ""}`}
+                        value={`${displaySizeLabel(line.variant.size_label)}${line.variant.color_label ? ` · ${line.variant.color_label}` : ""}`}
                       />
                       <DetailValue label="SKU" value={line.variant.sku} />
                       <DetailValue

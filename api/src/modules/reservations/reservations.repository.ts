@@ -116,6 +116,8 @@ export interface ReservationDetailLineRow {
   variant_sku: string;
   variant_size_label: string | null;
   variant_color_label: string | null;
+  variant_cover_storage_key: string | null;
+  variant_cover_version_id: string | null;
   current_asset_readiness: 'ready' | 'needs_cleaning' | 'needs_repair' | 'unready' | null;
   line_number: number;
   name_snapshot: string;
@@ -471,6 +473,8 @@ export async function readReservationDetailModel(
        pv.sku AS variant_sku,
        pv.size_label AS variant_size_label,
        pv.color_label AS variant_color_label,
+       cover_image.storage_key AS variant_cover_storage_key,
+       cover_image.version_id AS variant_cover_version_id,
        asset_state.readiness AS current_asset_readiness,
        rl.line_number,
        rl.name_snapshot,
@@ -482,6 +486,22 @@ export async function readReservationDetailModel(
      JOIN product_variant pv
        ON pv.tenant_id = rl.tenant_id
       AND pv.id = rl.variant_id
+     LEFT JOIN LATERAL (
+       SELECT f.storage_key, f.version_id
+         FROM product_image pi
+         JOIN file_object f
+           ON f.tenant_id = pi.tenant_id
+          AND f.id = pi.file_id
+        WHERE pi.tenant_id = rl.tenant_id
+          AND pi.product_id = pv.product_id
+          AND pi.display_order = 0
+          AND f.purpose = 'catalogue_image'
+          AND f.lifecycle_status = 'accepted'
+          AND f.frozen_at IS NOT NULL
+          AND (f.version_id IS NOT NULL OR f.sha256 IS NOT NULL)
+          AND f.mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+        LIMIT 1
+     ) cover_image ON true
      LEFT JOIN LATERAL (
        SELECT pa.readiness
          FROM physical_asset pa

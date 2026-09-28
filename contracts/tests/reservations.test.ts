@@ -426,7 +426,12 @@ describe('reservation contracts', () => {
         {
           id: ids.line,
           variant_id: ids.variant,
-          variant: { sku: 'EMERALD-M', size_label: 'M', color_label: 'Emerald' },
+          variant: {
+            sku: 'EMERALD-M',
+            size_label: 'M',
+            color_label: 'Emerald',
+            image_url: 'https://reads.example.test/catalogue%2Femerald-gown.webp?version=cover-v1',
+          },
           current_asset_readiness: 'ready',
           line_number: 1,
           name_snapshot: 'Emerald Gown',
@@ -489,7 +494,7 @@ describe('reservation contracts', () => {
           {
             id: ids.line,
             variant_id: ids.variant,
-            variant: { sku: 'LEGACY-S', size_label: 'S', color_label: null },
+            variant: { sku: 'LEGACY-S', size_label: 'S', color_label: null, image_url: null },
             current_asset_readiness: null,
             line_number: 1,
             name_snapshot: 'Legacy Dress',

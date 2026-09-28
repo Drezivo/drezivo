@@ -134,7 +134,12 @@ const reservationDetailRecord = reservationDetail.parse({
     {
       id: reservation.line.id,
       variant_id: reservation.line.variant_id,
-      variant: { sku: "EMERALD-M", size_label: "Medium", color_label: "Emerald" },
+      variant: {
+        sku: "EMERALD-M",
+        size_label: "Medium",
+        color_label: "Emerald",
+        image_url: "https://reads.example.test/catalogue%2Femerald-gown.webp?version=cover-v1",
+      },
       current_asset_readiness: "ready",
       line_number: 1,
       name_snapshot: reservation.line.name_snapshot,
@@ -442,6 +447,7 @@ describe("ReservationsPage", () => {
     await waitFor(() => expect(api.getReservationDetail).toHaveBeenCalledWith(reservation.id));
     expect(await screen.findByRole("heading", { name: "Reservation RSV-REAL-001" })).toBeVisible();
     expect(screen.getAllByText("Real Customer").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("img", { name: "Real Emerald Gown cover image" })).toBeVisible();
     expect(screen.getByText("123 Test Street")).toBeVisible();
     expect(screen.getByText("Medium · Emerald")).toBeVisible();
     expect(screen.getByText("EMERALD-M")).toBeVisible();

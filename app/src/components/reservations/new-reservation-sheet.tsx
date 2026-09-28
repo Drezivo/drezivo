@@ -34,6 +34,7 @@ import { TimePickerField } from "@/components/ui/time-picker-field";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { displaySizeLabel } from "@/lib/catalogue-display";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
 
@@ -99,6 +100,7 @@ export function NewReservationSheet({
   const [selectedProduct, setSelectedProduct] = useState<ClothingListItem | null>(null);
   const [productDetail, setProductDetail] = useState<ClothingDetail | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<ProductVariantId | "">("");
+  const [variantSelectionError, setVariantSelectionError] = useState<string | null>(null);
   const [held, setHeld] = useState<HeldState | null>(null);
   const [cashAmountReceived, setCashAmountReceived] = useState("");
   const [cashReceived, setCashReceived] = useState(false);
@@ -203,6 +205,7 @@ export function NewReservationSheet({
     if (!selectedProduct) {
       setProductDetail(null);
       setSelectedVariantId("");
+      setVariantSelectionError(null);
       return;
     }
     let cancelled = false;
@@ -211,7 +214,21 @@ export function NewReservationSheet({
       .then((result) => {
         if (cancelled) return;
         setProductDetail(result.data);
-        setSelectedVariantId("");
+        setVariantSelectionError(null);
+        if (result.data.sizing_mode === "free_size") {
+          const activeFreeSizeVariants = result.data.variants.filter(
+            (variant) => variant.status === "active" && variant.size_label === null,
+          );
+          const [freeSizeVariant] = activeFreeSizeVariants;
+          if (activeFreeSizeVariants.length === 1 && freeSizeVariant) {
+            setSelectedVariantId(freeSizeVariant.id);
+          } else {
+            setSelectedVariantId("");
+            setVariantSelectionError("This free-size clothing item is not configured correctly.");
+          }
+        } else {
+          setSelectedVariantId("");
+        }
       })
       .catch((error) => {
         if (!cancelled) setNotice({ tone: "attention", text: toMessage(error) });
@@ -371,6 +388,7 @@ export function NewReservationSheet({
     setSelectedProduct(null);
     setProductDetail(null);
     setSelectedVariantId("");
+    setVariantSelectionError(null);
     setHeld(null);
     setCashAmountReceived("");
     setCashReceived(false);
@@ -734,6 +752,7 @@ export function NewReservationSheet({
                         setSelectedProduct(product);
                         setProductDetail(null);
                         setSelectedVariantId("");
+                        setVariantSelectionError(null);
                         setPickupDate("");
                         setDueDate("");
                         setPickupTime("");
@@ -774,39 +793,49 @@ export function NewReservationSheet({
                 <p className="mt-1 text-xs text-dashboard-muted">
                   Availability is calculated per variant because each size can have different serialized garments and bookings.
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {productDetail.variants
-                    .filter((variant) => variant.status === "active")
-                    .map((variant) => (
-                      <Button
-                        key={variant.id}
-                        type="button"
-                        size="sm"
-                        variant={selectedVariantId === variant.id ? "default" : "secondary"}
-                        onClick={() => {
-                          setSelectedVariantId(variant.id);
-                          setPickupDate("");
-                          setDueDate("");
-                          setPickupTime("");
-                          setDueTime("");
-                          setEventDate("");
-                          setCalendarAvailability(null);
-                          setExactAvailability(null);
-                          setExactAvailabilityError(null);
-                          reserveGuard.resetIntent();
-                        }}
-                      >
-                        {variant.size_label}
-                        {variant.color_label ? ` · ${variant.color_label}` : ""}
-                      </Button>
-                    ))}
-                </div>
+                {productDetail.sizing_mode === "free_size" ? (
+                  <div className="mt-3 rounded-lg border border-dashboard-border bg-dashboard-active/40 p-3 text-sm">
+                    <p className="font-medium text-dashboard-navy">Free size</p>
+                    <p className="mt-1 text-xs text-dashboard-muted">This clothing item has one rentable size.</p>
+                  </div>
+                ) : (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {productDetail.variants
+                      .filter((variant) => variant.status === "active")
+                      .map((variant) => (
+                        <Button
+                          key={variant.id}
+                          type="button"
+                          size="sm"
+                          variant={selectedVariantId === variant.id ? "default" : "secondary"}
+                          onClick={() => {
+                            setSelectedVariantId(variant.id);
+                            setPickupDate("");
+                            setDueDate("");
+                            setPickupTime("");
+                            setDueTime("");
+                            setEventDate("");
+                            setCalendarAvailability(null);
+                            setExactAvailability(null);
+                            setExactAvailabilityError(null);
+                            reserveGuard.resetIntent();
+                          }}
+                        >
+                          {displaySizeLabel(variant.size_label)}
+                          {variant.color_label ? ` · ${variant.color_label}` : ""}
+                        </Button>
+                      ))}
+                  </div>
+                )}
+                {variantSelectionError ? (
+                  <p className="mt-3 text-sm text-dashboard-danger">{variantSelectionError}</p>
+                ) : null}
                 {selectedVariant ? (
                   <div className="mt-3 rounded-lg bg-dashboard-active/50 p-3 text-sm">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <p className="font-medium text-dashboard-navy">
-                          {selectedVariant.size_label}
+                          {displaySizeLabel(selectedVariant.size_label)}
                           {selectedVariant.color_label ? ` · ${selectedVariant.color_label}` : ""}
                         </p>
                         <p className="mt-1 text-dashboard-muted">

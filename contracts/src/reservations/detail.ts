@@ -39,6 +39,7 @@ export const reservationLineDetail = z
         sku: z.string().trim().min(1).max(120),
         size_label: z.string().trim().min(1).max(40).nullable(),
         color_label: z.string().trim().min(1).max(80).nullable(),
+        image_url: z.string().url().nullable(),
       })
       .strict(),
     /** Live operational readiness of the physical garment allocated to this line, when one exists. */

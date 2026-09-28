@@ -52,6 +52,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { displayProductSizeCount, displayProductSizes } from "@/lib/catalogue-display";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
@@ -460,6 +461,15 @@ function ClothingRow({
   onArchived: Parameters<typeof ArchiveClothingDialog>[0]["onArchived"];
   onRestored: Parameters<typeof RestoreClothingDialog>[0]["onRestored"];
 }) {
+  const displayedSizes = displayProductSizes({
+    hasFreeSize: item.has_free_size,
+    sizeLabels: item.size_labels,
+  });
+  const displayedSizeCount = displayProductSizeCount({
+    hasFreeSize: item.has_free_size,
+    sizeLabels: item.size_labels,
+  });
+
   return (
     <TableRow>
       <TableCell className="px-2 sm:px-4">
@@ -503,7 +513,7 @@ function ClothingRow({
           <div className="min-w-0">
             <dt className="text-dashboard-muted">Sizes</dt>
             <dd className="mt-0.5 truncate font-medium text-dashboard-navy">
-              {item.size_labels.length > 0 ? item.size_labels.join(" · ") : "—"}
+              {displayedSizes.length > 0 ? displayedSizes.join(" · ") : "—"}
             </dd>
           </div>
           <div className="min-w-0">
@@ -529,10 +539,10 @@ function ClothingRow({
       <TableCell className="hidden text-dashboard-muted md:table-cell">{item.category?.name ?? "Uncategorized"}</TableCell>
       <TableCell className="hidden md:table-cell">
         <p className="text-sm font-medium text-dashboard-navy">
-          {item.size_labels.length > 0 ? item.size_labels.join(" · ") : "—"}
+          {displayedSizes.length > 0 ? displayedSizes.join(" · ") : "—"}
         </p>
         <p className="mt-1 text-xs text-dashboard-muted">
-          {item.size_labels.length} {item.size_labels.length === 1 ? "size" : "sizes"}
+          {displayedSizeCount} {displayedSizeCount === 1 ? "size" : "sizes"}
         </p>
       </TableCell>
       <TableCell className="hidden lg:table-cell">

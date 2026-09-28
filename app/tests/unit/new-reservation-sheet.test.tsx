@@ -193,6 +193,22 @@ const detail = clothingDetail.parse({
   updated_at: "2026-09-01T00:00:00.000Z",
 });
 
+const freeSizeProduct = clothingListItem.parse({
+  ...product,
+  sizing_mode: "free_size",
+  has_free_size: true,
+  size_labels: [],
+});
+
+const sizedVariant = detail.variants[0];
+if (!sizedVariant) throw new Error("The test detail must include a variant.");
+
+const freeSizeDetail = clothingDetail.parse({
+  ...detail,
+  sizing_mode: "free_size",
+  variants: [{ ...sizedVariant, size_label: null }],
+});
+
 const heldResponse = staffReservationCreateResponse.parse({
   reservation: {
     id: ids.reservation,
@@ -397,6 +413,24 @@ describe("NewReservationSheet", () => {
     fireEvent.click(variant);
     expect(await screen.findByText("Rental period")).toBeVisible();
     expect(screen.getByRole("button", { name: "Select Oct 10 to Oct 13" })).toBeVisible();
+    await waitFor(() =>
+      expect(api.getStaffReservationAvailabilityCalendar).toHaveBeenCalledWith({
+        variant_id: ids.variant,
+        start_date: "2026-10-01",
+        end_date: "2026-10-31",
+      })
+    );
+  });
+
+  it("automatically selects a free-size variant without rendering an empty size button", async () => {
+    api.getCatalogueClothing.mockResolvedValue(listPage([freeSizeProduct]));
+    api.getCatalogueClothingDetail.mockResolvedValue({ data: freeSizeDetail, requestId: "req-free-size-detail" });
+    renderSheet();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Emerald Gown/i }));
+
+    expect(await screen.findByText("Free size")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /^Free size$/i })).not.toBeInTheDocument();
     await waitFor(() =>
       expect(api.getStaffReservationAvailabilityCalendar).toHaveBeenCalledWith({
         variant_id: ids.variant,
