@@ -9,8 +9,10 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -20,11 +22,22 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
 import {
   CUSTOMER_DASHBOARD_SUMMARY_PROTOTYPE,
+  CUSTOMER_LIST_PROTOTYPE,
+  type CustomerActivityPrototype,
   type CustomerDashboardSummaryPrototype,
+  type CustomerListItemPrototype,
 } from "./customers-prototype-data";
 
 type CustomerStatusFilter = "active" | "archived" | "all";
@@ -67,6 +80,19 @@ export function CustomersPage() {
   const [status, setStatus] = useState<CustomerStatusFilter>("active");
   const hasActiveFilters = Boolean(query.trim() || status !== "active");
 
+  const filteredCustomers = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    return CUSTOMER_LIST_PROTOTYPE.filter((customer) => {
+      const statusMatches = status === "all" || customer.status === status;
+      if (!statusMatches) return false;
+      if (!normalizedQuery) return true;
+
+      return [customer.full_name, customer.phone ?? "", customer.email ?? ""].some((value) =>
+        value.toLocaleLowerCase().includes(normalizedQuery)
+      );
+    });
+  }, [query, status]);
+
   const clearFilters = () => {
     setQuery("");
     setStatus("active");
@@ -96,6 +122,7 @@ export function CustomersPage() {
               onStatusChange={setStatus}
               onClearFilters={clearFilters}
             />
+            <CustomersTable customers={filteredCustomers} />
           </CardContent>
         </Card>
       </div>
@@ -208,4 +235,138 @@ function CustomerToolbar({
       ) : null}
     </div>
   );
+}
+
+function CustomersTable({ customers }: { customers: readonly CustomerListItemPrototype[] }) {
+  if (customers.length === 0) {
+    return (
+      <div className="px-4 py-12 text-center">
+        <p className="font-semibold text-dashboard-navy">No customers match these filters</p>
+        <p className="mt-1 text-sm text-dashboard-muted">
+          Adjust the customer search or status filter to see other profiles.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <Table aria-label="Customers">
+      <TableHeader>
+        <TableRow className="bg-dashboard-surface hover:bg-dashboard-surface">
+          <TableHead className="pl-4">Customer</TableHead>
+          <TableHead>Contact</TableHead>
+          <TableHead className="text-center">Reservations</TableHead>
+          <TableHead className="text-center">Fittings</TableHead>
+          <TableHead className="hidden lg:table-cell">Last Activity</TableHead>
+          <TableHead className="hidden xl:table-cell">Next Activity</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead className="pr-4 text-right">Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {customers.map((customer) => (
+          <TableRow key={customer.id}>
+            <TableCell className="pl-4 align-top">
+              <div className="flex items-start gap-3">
+                <Avatar className="h-9 w-9 border border-dashboard-border">
+                  <AvatarFallback className="bg-dashboard-active text-xs font-semibold text-dashboard-accent">
+                    {initials(customer.full_name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="max-w-52 truncate font-semibold text-dashboard-navy">
+                    {customer.full_name}
+                  </p>
+                  <p className="mt-1 text-xs text-dashboard-muted">
+                    Customer since {formatCustomerSince(customer.created_at)}
+                  </p>
+                </div>
+              </div>
+            </TableCell>
+            <TableCell className="align-top">
+              <div className="space-y-1">
+                <p className="max-w-52 truncate font-medium text-dashboard-navy">
+                  {customer.phone ?? "No phone"}
+                </p>
+                <p className="max-w-52 truncate text-xs text-dashboard-muted">
+                  {customer.email ?? "No email"}
+                </p>
+              </div>
+            </TableCell>
+            <TableCell className="text-center align-top font-medium text-dashboard-navy">
+              {customer.reservation_count}
+            </TableCell>
+            <TableCell className="text-center align-top font-medium text-dashboard-navy">
+              {customer.fitting_count}
+            </TableCell>
+            <TableCell className="hidden align-top lg:table-cell">
+              <ActivityCell activity={customer.last_activity} fallback="No activity yet" />
+            </TableCell>
+            <TableCell className="hidden align-top xl:table-cell">
+              <ActivityCell activity={customer.next_activity} fallback="None scheduled" />
+            </TableCell>
+            <TableCell className="align-top">
+              <Badge
+                variant="outline"
+                className={cn(
+                  "font-medium",
+                  customer.status === "active"
+                    ? "dashboard-tone-mint border-transparent"
+                    : "border-dashboard-border bg-dashboard-canvas text-dashboard-muted"
+                )}
+              >
+                {customer.status === "active" ? "Active" : "Archived"}
+              </Badge>
+            </TableCell>
+            <TableCell className="pr-4 text-right align-top text-dashboard-muted" aria-label="Actions pending">
+              —
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+function ActivityCell({
+  activity,
+  fallback,
+}: {
+  activity: CustomerActivityPrototype | null;
+  fallback: string;
+}) {
+  if (!activity) return <span className="text-xs text-dashboard-muted">{fallback}</span>;
+
+  return (
+    <div>
+      <p className="font-medium capitalize text-dashboard-navy">{activity.type}</p>
+      <p className="mt-1 text-xs text-dashboard-muted">{formatActivityDateTime(activity.at)}</p>
+    </div>
+  );
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function formatCustomerSince(value: string): string {
+  return new Intl.DateTimeFormat("en-PH", {
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function formatActivityDateTime(value: string): string {
+  return new Intl.DateTimeFormat("en-PH", {
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
 }

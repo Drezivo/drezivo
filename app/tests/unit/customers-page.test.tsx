@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { CustomersPage } from "@/components/customers/customers-page";
@@ -47,5 +47,32 @@ describe("CustomersPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(search).toHaveValue("");
     expect(screen.getByRole("button", { name: "Status: Active" })).toBeVisible();
+  });
+
+  it("renders the customer directory table from approved list fields", () => {
+    render(<CustomersPage />);
+
+    const table = screen.getByRole("table", { name: "Customers" });
+    expect(within(table).getByText("Maria Santos")).toBeVisible();
+    expect(within(table).getByText("maria.santos@example.test")).toBeVisible();
+    expect(within(table).getByText("0917 555 0101")).toBeVisible();
+    expect(within(table).queryByText("Diana Ramos")).not.toBeInTheDocument();
+
+    const mariaRow = within(table).getByText("Maria Santos").closest("tr");
+    expect(mariaRow).not.toBeNull();
+    if (!mariaRow) return;
+    expect(within(mariaRow).getByText("4")).toBeVisible();
+    expect(within(mariaRow).getByText("2")).toBeVisible();
+    expect(within(mariaRow).getByText("Active")).toBeVisible();
+  });
+
+  it("filters the prototype table by customer name, phone, or email", () => {
+    render(<CustomersPage />);
+
+    const search = screen.getByRole("textbox", { name: "Search customers" });
+    fireEvent.change(search, { target: { value: "nicole.mendoza@example.test" } });
+
+    expect(screen.getByText("Nicole Mendoza")).toBeVisible();
+    expect(screen.queryByText("Maria Santos")).not.toBeInTheDocument();
   });
 });
