@@ -1,0 +1,6 @@
+[build]
+  command = "npm run build --workspace @drezivo/app"
+  publish = "app/.next"
+
+[build.environment]
+  NODE_VERSION = "24"

@@ -140,7 +140,7 @@ export function DashboardOverview() {
                         />
                         <span>{event.time}</span>
                       </div>
-                      <EventBadge type={event.type} prototype={event.prototype} />
+                      <EventBadge type={event.type} prototype={event.prototype ?? false} />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-dashboard-navy">
                           {event.customer}
