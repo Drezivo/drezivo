@@ -834,6 +834,23 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: 'get',
+  path: '/customers/{customerId}/fittings',
+  tags: ['customers'],
+  summary: 'List bounded fitting history for one customer in the active branch.',
+  request: { params: customerParams, query: customerHistoryQuery },
+  responses: {
+    200: {
+      description: 'Cursor-paginated fitting history with safe garment and fee/payment summaries.',
+      content: { 'application/json': { schema: successEnvelope(customerFittingHistoryResponse) } },
+    },
+    403: jsonError('Reservation management permission is required.'),
+    404: jsonError('The customer was not found for the active tenant.'),
+    422: jsonError('The customer history query or cursor is invalid.'),
+  },
+});
+
 // ---- operations ------------------------------------------------------
 registry.registerPath({
   method: 'get',

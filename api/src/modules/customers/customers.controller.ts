@@ -4,6 +4,7 @@ import { ValidationError } from '../../shared/errors.js';
 import { sendSuccess } from '../../shared/response.js';
 import {
   getCustomerDetail,
+  getCustomerFittingHistory,
   getCustomerList,
   getCustomerReservationHistory,
   getCustomerSummary,
@@ -33,6 +34,17 @@ export async function listCustomerReservationsController(req: Request, res: Resp
     req,
     res,
     await getCustomerReservationHistory(requireCustomerContext(req), customerId, query),
+  );
+}
+
+export async function listCustomerFittingsController(req: Request, res: Response): Promise<void> {
+  const customerId = req.customerId;
+  const query = req.customerHistoryQuery;
+  if (!customerId || !query) throw new ValidationError('A valid customer history request is required.');
+  sendSuccess(
+    req,
+    res,
+    await getCustomerFittingHistory(requireCustomerContext(req), customerId, query),
   );
 }
 

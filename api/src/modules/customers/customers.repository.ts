@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 
-import { customerId, reservationId, type CustomerListQuery } from '@drezivo/contracts';
+import { customerId, fittingId, reservationId, type CustomerListQuery } from '@drezivo/contracts';
 
 import { ValidationError } from '../../shared/errors.js';
 
@@ -61,6 +61,17 @@ export interface CustomerReservationHistoryReadRow {
   due_at: Date;
   rental_total_minor: string;
   currency: string;
+  created_at: Date;
+}
+
+export interface CustomerFittingHistoryReadRow {
+  id: string;
+  starts_at: Date;
+  status: string;
+  garment_summary: string | null;
+  fee_minor: string;
+  currency: string;
+  payment_status: string | null;
   created_at: Date;
 }
 
@@ -441,6 +452,70 @@ export async function listCustomerReservationHistory(
   };
 }
 
+export async function listCustomerFittingHistory(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    customerId: string;
+    limit: number;
+    cursor?: string;
+  },
+): Promise<CustomerHistoryReadPage<CustomerFittingHistoryReadRow> | null> {
+  if (!(await customerIsReadable(client, input.tenantId, input.customerId))) return null;
+
+  const values: unknown[] = [input.tenantId, input.branchId, input.customerId];
+  const cursor = decodeFittingHistoryCursor(input.cursor);
+  const cursorClause = cursor
+    ? `AND (lower(fa.period), fa.created_at, fa.id) < ($${values.push(cursor.startsAt)}::timestamptz, $${values.push(cursor.createdAt)}::timestamptz, $${values.push(cursor.fittingId)}::uuid)`
+    : '';
+  const limit = values.push(input.limit + 1);
+  const result = await client.query<CustomerFittingHistoryReadRow>(
+    `SELECT
+       fa.id,
+       lower(fa.period) AS starts_at,
+       fa.status,
+       garment.summary AS garment_summary,
+       fa.fee_minor::text AS fee_minor,
+       fa.currency,
+       payment_summary.status AS payment_status,
+       fa.created_at
+     FROM fitting_appointment fa
+     LEFT JOIN LATERAL (
+       SELECT string_agg(p.name, ', ' ORDER BY fl.created_at ASC, fl.id ASC) AS summary
+       FROM fitting_line fl
+       JOIN product_variant pv ON pv.tenant_id = fl.tenant_id AND pv.id = fl.variant_id
+       JOIN product p ON p.tenant_id = pv.tenant_id AND p.id = pv.product_id
+       WHERE fl.tenant_id = fa.tenant_id
+         AND fl.fitting_id = fa.id
+         AND fl.removed_at IS NULL
+     ) garment ON true
+     LEFT JOIN LATERAL (
+       SELECT p.status
+       FROM payment p
+       WHERE p.tenant_id = fa.tenant_id AND p.fitting_id = fa.id
+       ORDER BY p.created_at DESC, p.id DESC
+       LIMIT 1
+     ) payment_summary ON true
+     WHERE fa.tenant_id = $1
+       AND fa.branch_id = $2
+       AND fa.customer_id = $3::uuid
+       ${cursorClause}
+     ORDER BY lower(fa.period) DESC, fa.created_at DESC, fa.id DESC
+     LIMIT $${limit}`,
+    values,
+  );
+
+  const hasMore = result.rows.length > input.limit;
+  const rows = hasMore ? result.rows.slice(0, input.limit) : result.rows;
+  const last = rows.at(-1);
+  return {
+    rows,
+    hasMore,
+    nextCursor: hasMore && last ? encodeFittingHistoryCursor(last) : null,
+  };
+}
+
 async function customerIsReadable(
   client: PoolClient,
   tenantId: string,
@@ -484,6 +559,49 @@ function decodeReservationHistoryCursor(cursor: string | undefined): Reservation
     return { createdAt: parsed.createdAt, reservationId: parsedId.data };
   } catch {
     throw new ValidationError('Customer reservation history cursor is invalid.');
+  }
+}
+
+interface FittingHistoryCursor {
+  startsAt: string;
+  createdAt: string;
+  fittingId: string;
+}
+
+function encodeFittingHistoryCursor(row: CustomerFittingHistoryReadRow): string {
+  const cursor: FittingHistoryCursor = {
+    startsAt: row.starts_at.toISOString(),
+    createdAt: row.created_at.toISOString(),
+    fittingId: row.id,
+  };
+  return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+}
+
+function decodeFittingHistoryCursor(cursor: string | undefined): FittingHistoryCursor | null {
+  if (!cursor) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as {
+      startsAt?: unknown;
+      createdAt?: unknown;
+      fittingId?: unknown;
+    };
+    if (
+      typeof parsed.startsAt !== 'string' ||
+      Number.isNaN(Date.parse(parsed.startsAt)) ||
+      typeof parsed.createdAt !== 'string' ||
+      Number.isNaN(Date.parse(parsed.createdAt))
+    ) {
+      throw new Error('cursor');
+    }
+    const parsedId = fittingId.safeParse(parsed.fittingId);
+    if (!parsedId.success) throw new Error('cursor');
+    return {
+      startsAt: parsed.startsAt,
+      createdAt: parsed.createdAt,
+      fittingId: parsedId.data,
+    };
+  } catch {
+    throw new ValidationError('Customer fitting history cursor is invalid.');
   }
 }
 

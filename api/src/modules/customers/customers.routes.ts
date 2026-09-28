@@ -6,6 +6,7 @@ import { requireTenantContext } from '../../middleware/tenant-context.js';
 import {
   getCustomerDetailController,
   getCustomerSummaryController,
+  listCustomerFittingsController,
   listCustomerReservationsController,
   listCustomersController,
 } from './customers.controller.js';
@@ -41,4 +42,11 @@ customersRouter.get(
   validateCustomerId,
   validateCustomerHistoryQuery,
   listCustomerReservationsController,
+);
+customersRouter.get(
+  '/customers/:customerId/fittings',
+  ...customerRead,
+  validateCustomerId,
+  validateCustomerHistoryQuery,
+  listCustomerFittingsController,
 );

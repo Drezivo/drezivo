@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import {
   customerDetailResponse,
+  customerFittingHistoryResponse,
   customerListResponse,
   customerReservationHistoryResponse,
   customerSummaryResponse,
@@ -231,6 +232,74 @@ describe('Customers read routes', async () => {
     expect(concealed.status).toBe(404);
   });
 
+  it('paginates branch-scoped fitting history with safe operational summaries', async () => {
+    const seed = await seedWorkspace(
+      'org_customers_fitting_history',
+      'user_customers_fitting_history',
+      ['reservations.manage'],
+    );
+    const foreign = await seedWorkspace(
+      'org_customers_fitting_history_foreign',
+      'user_customers_fitting_history_foreign',
+      ['reservations.manage'],
+    );
+    useClerk(seed);
+    const customerId = await seedCustomer(seed, 'Fitting History Customer', '09177770001', null);
+    const foreignCustomerId = await seedCustomer(foreign, 'Foreign Fitting History', '09177770002', null);
+    const secondBranchId = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const branch = await client.query<{ id: string }>(
+        `INSERT INTO branch (tenant_id, name, code, timezone, status)
+         VALUES ($1, 'Fitting Other Branch', 'FITOTHER', 'Asia/Manila', 'active') RETURNING id`,
+        [seed.tenantId],
+      );
+      const id = branch.rows[0]?.id;
+      if (!id) throw new Error('fitting second branch insert returned no row');
+      await client.query(
+        `INSERT INTO fitting_settings
+           (tenant_id, branch_id, enabled, capacity, duration_minutes, fee_minor, currency, version)
+         VALUES ($1, $2, true, 10, 60, 0, 'PHP', 1)`,
+        [seed.tenantId, id],
+      );
+      return id;
+    });
+
+    await seedFitting(seed, customerId, 'completed', -72, 'history-fitting-oldest');
+    await seedFitting(seed, customerId, 'completed', -48, 'history-fitting-middle');
+    await seedFitting(seed, customerId, 'confirmed', 72, 'history-fitting-newest');
+    await seedFitting(
+      seed,
+      customerId,
+      'confirmed',
+      96,
+      'history-fitting-other-branch',
+      secondBranchId,
+    );
+
+    const first = await request(createApp()).get(`/api/v1/customers/${customerId}/fittings?limit=2`);
+    expect(first.status).toBe(200);
+    const firstBody = successEnvelope(customerFittingHistoryResponse).parse(first.body);
+    expect(firstBody.data.items.map((item) => item.status)).toEqual(['confirmed', 'completed']);
+    expect(firstBody.data.items.every((item) => item.garment_summary === 'Summary Garment')).toBe(true);
+    expect(firstBody.data.items.every((item) => item.fee.payment_status === null)).toBe(true);
+    expect(firstBody.data.page_meta.has_more).toBe(true);
+    expect(JSON.stringify(firstBody.data)).not.toContain('evidence');
+
+    const cursor = firstBody.data.page_meta.next_cursor;
+    if (!cursor) throw new Error('expected fitting history cursor');
+    const second = await request(createApp()).get(
+      `/api/v1/customers/${customerId}/fittings?limit=2&cursor=${encodeURIComponent(cursor)}`,
+    );
+    expect(second.status).toBe(200);
+    const secondBody = successEnvelope(customerFittingHistoryResponse).parse(second.body);
+    expect(secondBody.data.items).toHaveLength(1);
+    expect(secondBody.data.items[0]?.status).toBe('completed');
+
+    const concealed = await request(createApp()).get(
+      `/api/v1/customers/${foreignCustomerId}/fittings?limit=10`,
+    );
+    expect(concealed.status).toBe(404);
+  });
+
   it('searches only name phone and email and supports archived/all status filters', async () => {
     const seed = await seedWorkspace('org_customers_filters', 'user_customers_filters', ['reservations.manage']);
     useClerk(seed);
@@ -393,10 +462,12 @@ describe('Customers read routes', async () => {
     status: 'confirmed' | 'completed' | 'no_show',
     startOffsetHours: number,
     businessKey: string,
-  ): Promise<void> {
+    branchIdOverride?: string,
+  ): Promise<string> {
+    const branchId = branchIdOverride ?? seed.branchId;
     const start = new Date(Date.now() + startOffsetHours * 60 * 60 * 1000);
     const end = new Date(start.getTime() + 60 * 60 * 1000);
-    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+    return withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       const inserted = await client.query<{ id: string }>(
         `INSERT INTO fitting_appointment
            (tenant_id, branch_id, customer_id, booking_channel, status, period,
@@ -405,7 +476,7 @@ describe('Customers read routes', async () => {
                  tstzrange($4::timestamptz, $5::timestamptz, '[)'),
                  'Asia/Manila', 'PHP', 0, $6, 1)
          RETURNING id`,
-        [seed.tenantId, seed.branchId, customerId, start.toISOString(), end.toISOString(), businessKey],
+        [seed.tenantId, branchId, customerId, start.toISOString(), end.toISOString(), businessKey],
       );
       const fittingId = inserted.rows[0]?.id;
       if (!fittingId) throw new Error('fitting insert returned no row');
@@ -438,7 +509,7 @@ describe('Customers read routes', async () => {
          FROM fitting_capacity_slot
          WHERE tenant_id = $1 AND branch_id = $2
          RETURNING id`,
-        [seed.tenantId, seed.branchId],
+        [seed.tenantId, branchId],
       );
       const slotId = slot.rows[0]?.id;
       if (!slotId) throw new Error('fitting slot insert returned no row');
@@ -465,6 +536,7 @@ describe('Customers read routes', async () => {
           [seed.tenantId, fittingId, status],
         );
       }
+      return fittingId;
     });
   }
 

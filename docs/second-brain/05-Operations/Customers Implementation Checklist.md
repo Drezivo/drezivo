@@ -323,11 +323,11 @@ Build the customer API around the already-existing `customer`, `reservation`, an
 
 ## 20. `GET /api/v1/customers/:customerId/fittings`
 
-- [ ] Cursor-paginated Fitting history.
-- [ ] Default/bounded page size; frontend initially requests 10.
-- [ ] Tenant + authorized branch scope is explicit.
-- [ ] Return only fitting history fields needed by the Sheet.
-- [ ] Stable newest-first ordering using period start/created timestamp plus ID as tie-breaker.
+- [x] Cursor-paginated Fitting history.
+- [x] Default/bounded page size; frontend initially requests 10.
+- [x] Tenant + authorized branch scope is explicit.
+- [x] Return only fitting history fields needed by the Sheet.
+- [x] Stable newest-first ordering using period start/created timestamp plus ID as tie-breaker.
 
 ## 21. `PATCH /api/v1/customers/:customerId`
 

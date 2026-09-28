@@ -1,9 +1,11 @@
 import {
   customerDetailResponse,
+  customerFittingHistoryResponse,
   customerListResponse,
   customerReservationHistoryResponse,
   customerSummaryResponse,
   type CustomerDetailResponse,
+  type CustomerFittingHistoryResponse,
   type CustomerHistoryQuery,
   type CustomerListQuery,
   type CustomerListResponse,
@@ -15,6 +17,7 @@ import {
 import { withTenantTransaction } from '../../db/client.js';
 import { ForbiddenError, NotFoundError } from '../../shared/errors.js';
 import {
+  listCustomerFittingHistory,
   listCustomerReservationHistory,
   listCustomersReadModel,
   readCustomerDetailModel,
@@ -145,6 +148,42 @@ export async function getCustomerReservationHistory(
       due_at: row.due_at.toISOString(),
       rental_total_minor: row.rental_total_minor,
       currency: row.currency,
+    })),
+    page_meta: {
+      next_cursor: page.nextCursor,
+      has_more: page.hasMore,
+    },
+  });
+}
+
+export async function getCustomerFittingHistory(
+  context: CustomerReadContext,
+  customerId: string,
+  query: CustomerHistoryQuery,
+): Promise<CustomerFittingHistoryResponse> {
+  assertCustomerReadPermission(context.permissionCodes);
+  const page = await withTenantTransaction(context.tenantId, context.principalId, (client) =>
+    listCustomerFittingHistory(client, {
+      tenantId: context.tenantId,
+      branchId: context.branchId,
+      customerId,
+      limit: query.limit,
+      ...(query.cursor ? { cursor: query.cursor } : {}),
+    }),
+  );
+  if (!page) throw new NotFoundError('Customer could not be found.');
+
+  return customerFittingHistoryResponse.parse({
+    items: page.rows.map((row) => ({
+      id: row.id,
+      starts_at: row.starts_at.toISOString(),
+      status: row.status,
+      garment_summary: row.garment_summary,
+      fee: {
+        fee_minor: row.fee_minor,
+        currency: row.currency,
+        payment_status: row.payment_status,
+      },
     })),
     page_meta: {
       next_cursor: page.nextCursor,
