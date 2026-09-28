@@ -1,21 +1,28 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
+import type {
+  CustomerActivity,
+  CustomerListItem,
+  CustomerListStatus,
+  CustomerSummaryResponse,
+} from "@drezivo/contracts";
 import {
-  Archive,
+  AlertCircle,
   CalendarCheck2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Eye,
+  LockKeyhole,
   MoreHorizontal,
-  Pencil,
+  RefreshCw,
   Repeat2,
   Search,
   UserPlus,
   UsersRound,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useState } from "react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -36,25 +43,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { cn } from "@/lib/utils";
 
 import { ArchiveCustomerDialog } from "./archive-customer-dialog";
-import { CustomerDetailsSheet } from "./customer-details-sheet";
-import { CustomerEditSheet, type CustomerEditValues } from "./customer-edit-sheet";
-import {
-  getCustomerDetailPrototype,
-  type CustomerDetailPrototype,
-} from "./customers-prototype-detail-data";
-import {
-  CUSTOMER_DASHBOARD_SUMMARY_PROTOTYPE,
-  getCustomerListPrototypePage,
-  type CustomerActivityPrototype,
-  type CustomerDashboardSummaryPrototype,
-  type CustomerListItemPrototype,
-  type CustomerListStatusFilterPrototype,
-} from "./customers-prototype-data";
 
-type CustomerStatusFilter = CustomerListStatusFilterPrototype;
+type CustomerStatusFilter = CustomerListStatus;
+type CustomerPageMeta = { next_cursor: string | null; has_more: boolean };
 
 const CUSTOMERS_PAGE_SIZE = 10;
 
@@ -92,33 +87,157 @@ const SUMMARY_ITEMS = [
 ] as const;
 
 export function CustomersPage() {
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<CustomerStatusFilter>("active");
+  const deferredQuery = useDeferredValue(query.trim());
   const [pageIndex, setPageIndex] = useState(0);
   const [pageCursors, setPageCursors] = useState<Array<string | null>>([null]);
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetailPrototype | null>(null);
-  const [sheetMode, setSheetMode] = useState<"view" | "edit" | null>(null);
-  const [archiveCustomer, setArchiveCustomer] = useState<CustomerDetailPrototype | null>(null);
-  const [isMutating, setIsMutating] = useState(false);
+  const [rows, setRows] = useState<CustomerListItem[]>([]);
+  const [pageMeta, setPageMeta] = useState<CustomerPageMeta>({
+    next_cursor: null,
+    has_more: false,
+  });
+  const [summary, setSummary] = useState<CustomerSummaryResponse | null>(null);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState<DrezivoApiError | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<DrezivoApiError | null>(null);
+  const [summaryReloadVersion, setSummaryReloadVersion] = useState(0);
+  const [directoryReloadVersion, setDirectoryReloadVersion] = useState(0);
+  const [archiveCustomer, setArchiveCustomer] = useState<CustomerListItem | null>(null);
+  const [archiveIntentKey, setArchiveIntentKey] = useState<string | null>(null);
+  const [archiveError, setArchiveError] = useState<DrezivoApiError | null>(null);
+  const [isArchiving, setIsArchiving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const hasActiveFilters = Boolean(query.trim() || status !== "active");
   const currentCursor = pageCursors[pageIndex] ?? null;
+  const hasActiveFilters = Boolean(deferredQuery || status !== "active");
+  const permissionRestricted = error?.status === 403 || error?.code === "FORBIDDEN";
 
-  const page = useMemo(
-    () =>
-      getCustomerListPrototypePage({
-        cursor: currentCursor,
-        limit: CUSTOMERS_PAGE_SIZE,
-        search: query,
-        status,
-      }),
-    [currentCursor, query, status]
-  );
-
-  const resetPagination = () => {
+  const resetPagination = useCallback(() => {
     setPageIndex(0);
     setPageCursors([null]);
-  };
+  }, []);
+
+  const retrySummary = useCallback(() => {
+    setSummaryReloadVersion((value) => value + 1);
+  }, []);
+
+  const retryDirectory = useCallback(() => {
+    setDirectoryReloadVersion((value) => value + 1);
+  }, []);
+
+  const requestArchive = useCallback((customer: CustomerListItem) => {
+    setArchiveCustomer(customer);
+    setArchiveIntentKey(crypto.randomUUID());
+    setArchiveError(null);
+  }, []);
+
+  const closeArchive = useCallback(() => {
+    if (isArchiving) return;
+    setArchiveCustomer(null);
+    setArchiveIntentKey(null);
+    setArchiveError(null);
+  }, [isArchiving]);
+
+  const confirmArchive = useCallback(async () => {
+    if (!archiveCustomer || isArchiving) return;
+    setIsArchiving(true);
+    setArchiveError(null);
+    try {
+      const client = createDrezivoApiClient(getToken);
+      const detail = await client.getCustomerDetail(archiveCustomer.id);
+      await client.archiveCustomer(
+        archiveCustomer.id,
+        { expected_updated_at: detail.data.updated_at },
+        archiveIntentKey ?? crypto.randomUUID()
+      );
+      setArchiveCustomer(null);
+      setArchiveIntentKey(null);
+      setNotice(`${archiveCustomer.full_name} was archived.`);
+      retryDirectory();
+      retrySummary();
+    } catch (caughtError) {
+      setArchiveError(toDrezivoApiError(caughtError));
+    } finally {
+      setIsArchiving(false);
+    }
+  }, [archiveCustomer, archiveIntentKey, getToken, isArchiving, retryDirectory, retrySummary]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    let cancelled = false;
+
+    setIsSummaryLoading(true);
+    setSummaryError(null);
+
+    void createDrezivoApiClient(getToken)
+      .getCustomerSummary()
+      .then((result) => {
+        if (!cancelled) setSummary(result.data);
+      })
+      .catch((caughtError) => {
+        if (cancelled) return;
+        setSummary(null);
+        setSummaryError(toDrezivoApiError(caughtError));
+      })
+      .finally(() => {
+        if (!cancelled) setIsSummaryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, isLoaded, isSignedIn, summaryReloadVersion]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    let cancelled = false;
+
+    setIsLoading(true);
+    setError(null);
+
+    void createDrezivoApiClient(getToken)
+      .getCustomers({
+        limit: CUSTOMERS_PAGE_SIZE,
+        status,
+        ...(currentCursor ? { cursor: currentCursor } : {}),
+        ...(deferredQuery ? { search: deferredQuery } : {}),
+      })
+      .then((result) => {
+        if (cancelled) return;
+        if (result.data.items.length === 0 && pageIndex > 0) {
+          setRows([]);
+          setPageMeta({ next_cursor: null, has_more: false });
+          setPageCursors((current) => current.slice(0, pageIndex));
+          setPageIndex((current) => Math.max(0, current - 1));
+          return;
+        }
+        setRows(result.data.items);
+        setPageMeta(result.data.page_meta);
+      })
+      .catch((caughtError) => {
+        if (cancelled) return;
+        setRows([]);
+        setPageMeta({ next_cursor: null, has_more: false });
+        setError(toDrezivoApiError(caughtError));
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentCursor,
+    deferredQuery,
+    directoryReloadVersion,
+    getToken,
+    isLoaded,
+    isSignedIn,
+    status,
+  ]);
 
   const updateQuery = (value: string) => {
     setQuery(value);
@@ -137,7 +256,7 @@ export function CustomersPage() {
   };
 
   const goNext = () => {
-    const nextCursor = page.page_meta.next_cursor;
+    const nextCursor = pageMeta.next_cursor;
     if (!nextCursor) return;
     setPageCursors((current) => {
       const next = current.slice(0, pageIndex + 1);
@@ -149,47 +268,6 @@ export function CustomersPage() {
 
   const goPrevious = () => {
     setPageIndex((current) => Math.max(0, current - 1));
-  };
-
-  const openCustomer = (customerId: string, mode: "view" | "edit") => {
-    const detail = getCustomerDetailPrototype(customerId);
-    setSelectedCustomer(detail);
-    setSheetMode(detail ? mode : null);
-  };
-
-  const requestArchive = (customerId: string) => {
-    const detail = getCustomerDetailPrototype(customerId);
-    if (detail?.status === "active") setArchiveCustomer(detail);
-  };
-
-  const saveCustomer = async (values: CustomerEditValues) => {
-    if (!selectedCustomer || isMutating) return;
-    setIsMutating(true);
-    await Promise.resolve();
-    setSelectedCustomer({
-      ...selectedCustomer,
-      full_name: values.full_name.trim(),
-      phone: values.phone.trim() || null,
-      email: values.email.trim() || null,
-      address: values.address.trim() || null,
-      social_media: values.social_media.trim() || null,
-      notes: values.notes.trim() || null,
-    });
-    setIsMutating(false);
-    setSheetMode("view");
-    setNotice("Customer profile updated in the frontend prototype.");
-  };
-
-  const confirmArchive = async () => {
-    if (!archiveCustomer || isMutating) return;
-    setIsMutating(true);
-    await Promise.resolve();
-    setIsMutating(false);
-    setArchiveCustomer(null);
-    setSelectedCustomer((current) =>
-      current?.id === archiveCustomer.id ? { ...current, status: "archived" } : current
-    );
-    setNotice("Customer archived in the frontend prototype.");
   };
 
   return (
@@ -204,109 +282,147 @@ export function CustomersPage() {
           </p>
         </section>
 
-        <CustomerSummarySection summary={CUSTOMER_DASHBOARD_SUMMARY_PROTOTYPE} />
+        <CustomerSummarySection
+          error={summaryError}
+          loading={isSummaryLoading}
+          onRetry={retrySummary}
+          summary={summary}
+        />
 
         {notice ? (
-          <div role="status" className="rounded-lg border border-dashboard-border bg-dashboard-surface px-4 py-3 text-sm text-dashboard-navy">
+          <div role="status" aria-live="polite" className="rounded-lg border border-dashboard-border bg-dashboard-surface px-4 py-3 text-sm text-dashboard-muted">
             {notice}
           </div>
         ) : null}
 
         <Card className="gap-0 overflow-visible py-0">
           <CardContent className="p-0">
-            <CustomerToolbar
-              query={query}
-              status={status}
-              hasActiveFilters={hasActiveFilters}
-              onQueryChange={updateQuery}
-              onStatusChange={updateStatus}
-              onClearFilters={clearFilters}
-            />
-            <CustomersTable
-              customers={page.items}
-              onArchive={requestArchive}
-              onEdit={(customerId) => openCustomer(customerId, "edit")}
-              onView={(customerId) => openCustomer(customerId, "view")}
-            />
-            {page.items.length > 0 ? (
-              <CustomerPagination
-                pageIndex={pageIndex}
-                shown={page.items.length}
-                hasMore={page.page_meta.has_more}
-                onNext={goNext}
-                onPrevious={goPrevious}
+            {permissionRestricted ? (
+              <CustomerDirectoryState
+                icon={LockKeyhole}
+                title="Customer access restricted"
+                description="You do not have permission to view the customer directory for this workspace."
+                requestId={error?.requestId}
               />
-            ) : null}
+            ) : error ? (
+              <CustomerDirectoryState
+                icon={AlertCircle}
+                title="Customers could not be loaded"
+                description={error.message}
+                actionLabel="Try again"
+                onAction={retryDirectory}
+                requestId={error.requestId}
+              />
+            ) : (
+              <>
+                <CustomerToolbar
+                  query={query}
+                  status={status}
+                  hasActiveFilters={hasActiveFilters}
+                  onQueryChange={updateQuery}
+                  onStatusChange={updateStatus}
+                  onClearFilters={clearFilters}
+                />
+                {isLoading ? (
+                  <CustomersTableLoading />
+                ) : (
+                  <CustomersTable
+                    customers={rows}
+                    emptyFiltered={hasActiveFilters}
+                    onArchive={requestArchive}
+                  />
+                )}
+                {!isLoading && rows.length > 0 ? (
+                  <CustomerPagination
+                    pageIndex={pageIndex}
+                    shown={rows.length}
+                    hasMore={pageMeta.has_more}
+                    onNext={goNext}
+                    onPrevious={goPrevious}
+                  />
+                ) : null}
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      <CustomerDetailsSheet
-        customer={sheetMode === "view" ? selectedCustomer : null}
-        mode={sheetMode ?? "view"}
-        onEdit={() => setSheetMode("edit")}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSheetMode(null);
-            setSelectedCustomer(null);
-          }
-        }}
-      />
-      <CustomerEditSheet
-        customer={sheetMode === "edit" ? selectedCustomer : null}
-        isSubmitting={isMutating}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSheetMode(null);
-            setSelectedCustomer(null);
-          }
-        }}
-        onSave={saveCustomer}
-      />
       <ArchiveCustomerDialog
         customer={archiveCustomer}
-        isSubmitting={isMutating}
+        isSubmitting={isArchiving}
+        mutationError={archiveError?.message ?? null}
         onArchive={confirmArchive}
         onOpenChange={(open) => {
-          if (!open) setArchiveCustomer(null);
+          if (!open) closeArchive();
         }}
+        requestId={archiveError ? archiveError.requestId : null}
       />
     </div>
   );
 }
 
 function CustomerSummarySection({
+  error,
+  loading,
+  onRetry,
   summary,
 }: {
-  summary: CustomerDashboardSummaryPrototype;
+  error: DrezivoApiError | null;
+  loading: boolean;
+  onRetry: () => void;
+  summary: CustomerSummaryResponse | null;
 }) {
   return (
-    <section aria-label="Customer overview" className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-      {SUMMARY_ITEMS.map((item) => {
-        const Icon = item.icon;
-        return (
-          <Card key={item.key} className="gap-0 py-0">
-            <CardContent className="flex min-h-20 items-center gap-3 p-3">
-              <span
-                className={cn(
-                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
-                  item.tone
-                )}
-                aria-hidden="true"
-              >
-                <Icon className="h-4 w-4" />
-              </span>
-              <span>
-                <span className="block text-xl font-semibold leading-none text-dashboard-navy">
-                  {summary[item.key]}
+    <>
+      <section aria-label="Customer overview" className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {SUMMARY_ITEMS.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Card key={item.key} className="gap-0 py-0">
+              <CardContent className="flex min-h-20 items-center gap-3 p-3">
+                <span
+                  className={cn(
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+                    item.tone
+                  )}
+                  aria-hidden="true"
+                >
+                  <Icon className="h-4 w-4" />
                 </span>
-                <span className="mt-1 block text-xs text-dashboard-muted">{item.label}</span>
-              </span>
-            </CardContent>
-          </Card>
-        );
-      })}
-    </section>
+                <span>
+                  {loading ? (
+                    <span
+                      className="block h-5 w-10 animate-pulse rounded bg-dashboard-active"
+                      aria-label={`Loading ${item.label}`}
+                    />
+                  ) : (
+                    <span className="block text-xl font-semibold leading-none text-dashboard-navy">
+                      {summary?.[item.key] ?? "—"}
+                    </span>
+                  )}
+                  <span className="mt-1 block text-xs text-dashboard-muted">{item.label}</span>
+                </span>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </section>
+      {error ? (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-lg border border-dashboard-danger/30 bg-dashboard-danger/10 px-4 py-3 text-sm text-dashboard-danger sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div>
+            <p>{error.message}</p>
+            {error.requestId ? <p className="mt-1 text-xs">Request ID: {error.requestId}</p> : null}
+          </div>
+          <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            Try again
+          </Button>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -382,26 +498,84 @@ function CustomerToolbar({
   );
 }
 
+function CustomerDirectoryState({
+  actionLabel,
+  description,
+  icon: Icon,
+  onAction,
+  requestId,
+  title,
+}: {
+  actionLabel?: string;
+  description: string;
+  icon: typeof AlertCircle;
+  onAction?: () => void;
+  requestId?: string | null;
+  title: string;
+}) {
+  return (
+    <div className="px-4 py-14 text-center sm:px-6">
+      <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-dashboard-active text-dashboard-muted">
+        <Icon className="h-5 w-5" aria-hidden="true" />
+      </span>
+      <p className="mt-4 font-semibold text-dashboard-navy">{title}</p>
+      <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-dashboard-muted">{description}</p>
+      {requestId ? <p className="mt-2 text-xs text-dashboard-muted">Request ID: {requestId}</p> : null}
+      {actionLabel && onAction ? (
+        <Button type="button" variant="secondary" size="sm" className="mt-4" onClick={onAction}>
+          <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          {actionLabel}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function CustomerEmptyState({ filtered }: { filtered: boolean }) {
+  return (
+    <div className="px-4 py-12 text-center">
+      <p className="font-semibold text-dashboard-navy">
+        {filtered ? "No customers match these filters" : "No active customers yet"}
+      </p>
+      <p className="mx-auto mt-1 max-w-md text-sm text-dashboard-muted">
+        {filtered
+          ? "Adjust the customer search or status filter to see other profiles."
+          : "Customers will appear here after they are created through a reservation or fitting workflow."}
+      </p>
+    </div>
+  );
+}
+
+function CustomersTableLoading() {
+  return (
+    <div aria-label="Loading customers" aria-busy="true">
+      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_repeat(2,minmax(5rem,0.65fr))_minmax(6rem,0.8fr)] gap-4 border-b border-dashboard-border px-4 py-3">
+        {[0, 1, 2, 3, 4].map((cell) => (
+          <div key={cell} className="h-3 animate-pulse rounded bg-dashboard-active" />
+        ))}
+      </div>
+      {Array.from({ length: 6 }, (_, row) => (
+        <div key={row} className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_repeat(2,minmax(5rem,0.65fr))_minmax(6rem,0.8fr)] gap-4 border-b border-dashboard-border/70 px-4 py-4 last:border-b-0">
+          {[0, 1, 2, 3, 4].map((cell) => (
+            <div key={cell} className="h-4 animate-pulse rounded bg-dashboard-active" />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function CustomersTable({
   customers,
+  emptyFiltered,
   onArchive,
-  onEdit,
-  onView,
 }: {
-  customers: readonly CustomerListItemPrototype[];
-  onArchive: (customerId: string) => void;
-  onEdit: (customerId: string) => void;
-  onView: (customerId: string) => void;
+  customers: readonly CustomerListItem[];
+  emptyFiltered: boolean;
+  onArchive: (customer: CustomerListItem) => void;
 }) {
   if (customers.length === 0) {
-    return (
-      <div className="px-4 py-12 text-center">
-        <p className="font-semibold text-dashboard-navy">No customers match these filters</p>
-        <p className="mt-1 text-sm text-dashboard-muted">
-          Adjust the customer search or status filter to see other profiles.
-        </p>
-      </div>
-    );
+    return <CustomerEmptyState filtered={emptyFiltered} />;
   }
 
   return (
@@ -474,12 +648,7 @@ function CustomersTable({
               </Badge>
             </TableCell>
             <TableCell className="pr-4 text-right align-top">
-              <CustomerActions
-                customer={customer}
-                onArchive={onArchive}
-                onEdit={onEdit}
-                onView={onView}
-              />
+              <CustomerActions customer={customer} onArchive={onArchive} />
             </TableCell>
           </TableRow>
         ))}
@@ -491,13 +660,9 @@ function CustomersTable({
 function CustomerActions({
   customer,
   onArchive,
-  onEdit,
-  onView,
 }: {
-  customer: CustomerListItemPrototype;
-  onArchive: (customerId: string) => void;
-  onEdit: (customerId: string) => void;
-  onView: (customerId: string) => void;
+  customer: CustomerListItem;
+  onArchive: (customer: CustomerListItem) => void;
 }) {
   return (
     <DropdownMenu>
@@ -513,17 +678,13 @@ function CustomerActions({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={() => onView(customer.id)}>
-          <Eye className="h-4 w-4" aria-hidden="true" />
-          View details
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onEdit(customer.id)}>
-          <Pencil className="h-4 w-4" aria-hidden="true" />
-          Edit
-        </DropdownMenuItem>
+        <DropdownMenuItem disabled>View details</DropdownMenuItem>
+        <DropdownMenuItem disabled>Edit</DropdownMenuItem>
         {customer.status === "active" ? (
-          <DropdownMenuItem onSelect={() => onArchive(customer.id)} className="text-dashboard-danger focus:text-dashboard-danger">
-            <Archive className="h-4 w-4" aria-hidden="true" />
+          <DropdownMenuItem
+            className="text-dashboard-danger focus:text-dashboard-danger"
+            onSelect={() => onArchive(customer)}
+          >
             Archive
           </DropdownMenuItem>
         ) : null}
@@ -585,7 +746,7 @@ function ActivityCell({
   activity,
   fallback,
 }: {
-  activity: CustomerActivityPrototype | null;
+  activity: CustomerActivity | null;
   fallback: string;
 }) {
   if (!activity) return <span className="text-xs text-dashboard-muted">{fallback}</span>;
@@ -622,4 +783,10 @@ function formatActivityDateTime(value: string): string {
     month: "short",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function toDrezivoApiError(error: unknown): DrezivoApiError {
+  return error instanceof DrezivoApiError
+    ? error
+    : new DrezivoApiError("Could not load customers. Please try again.", { status: 503 });
 }

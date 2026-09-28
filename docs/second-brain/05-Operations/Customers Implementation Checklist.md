@@ -212,21 +212,21 @@ Build the complete customer-management UX first using API-shaped local prototype
 
 ## 12. Frontend states
 
-- [ ] Summary loading state.
-- [ ] Table loading state.
-- [ ] Empty active-customer state.
-- [ ] Empty filtered state.
-- [ ] Permission-restricted state.
-- [ ] API error/retry state.
-- [ ] Detail-sheet loading state.
-- [ ] Detail-sheet not-found/concealed state.
-- [ ] Mutation pending/success/failure states.
+- [x] Summary loading state.
+- [x] Table loading state.
+- [x] Empty active-customer state.
+- [x] Empty filtered state.
+- [x] Permission-restricted state.
+- [x] API error/retry state.
+- [x] Detail-sheet loading state.
+- [x] Detail-sheet not-found/concealed state.
+- [x] Mutation pending/success/failure states.
 - [x] Archive and Edit actions prevent duplicate submissions.
 
 ## 13. Frontend-first tests
 
 - [x] Route renders the Customers page.
-- [x] Four summary cards render from API-shaped fixture data.
+- [x] Four summary cards render from live API-backed values.
 - [x] Table renders at most 10 rows.
 - [x] Search/status changes reset pagination.
 - [x] Previous/Next state behaves correctly.
@@ -424,7 +424,7 @@ Replace the isolated frontend prototype source with the production customer API 
 
 ## 26. API client
 
-- [ ] Extend `app/src/lib/drezivo-api.ts` with:
+- [x] Extend `app/src/lib/drezivo-api.ts` with:
   - `getCustomers()`.
   - `getCustomerSummary()`.
   - `getCustomerDetail()`.
@@ -432,23 +432,23 @@ Replace the isolated frontend prototype source with the production customer API 
   - `getCustomerFittings()`.
   - `updateCustomer()`.
   - `archiveCustomer()`.
-- [ ] Validate all responses through shared contracts.
-- [ ] Use the same auth/token/error-envelope conventions as Reservations/Fittings.
-- [ ] Remove all customer prototype fixture data once live wiring is complete.
+- [x] Validate the customer list and summary responses through shared contracts.
+- [x] Use the same auth/token/error-envelope conventions as Reservations/Fittings.
+- [x] Remove all customer prototype fixture data once live wiring is complete.
 
 ## 27. Wire summary cards
 
-- [ ] Load production `/customers/summary` data.
-- [ ] Cards have independent loading/error handling where useful without creating inconsistent page state.
-- [ ] Refresh summary after an action that changes customer status or qualifying metrics.
+- [x] Load production `/customers/summary` data.
+- [x] Cards have independent loading/error handling where useful without creating inconsistent page state.
+- [x] Refresh summary after an action that changes customer status or qualifying metrics.
 
 ## 28. Wire list/search/filter/pagination
 
-- [ ] Fetch `GET /customers` with `limit=10`.
-- [ ] Send search/status/cursor rather than filtering the current 10 rows client-side.
-- [ ] Reset cursor history when search/status changes.
-- [ ] Keep page state stable after retry where possible.
-- [ ] Archive mutation refreshes the current list; if the last row of a later page disappears, handle pagination without leaving an empty impossible page.
+- [x] Fetch `GET /customers` with `limit=10`.
+- [x] Send search/status/cursor rather than filtering the current 10 rows client-side.
+- [x] Reset cursor history when search/status changes.
+- [x] Keep page state stable after retry where possible.
+- [x] Archive mutation refreshes the current list; if the last row of a later page disappears, handle pagination without leaving an empty impossible page.
 
 ## 29. Wire Customer Details Sheet
 
@@ -471,9 +471,9 @@ Replace the isolated frontend prototype source with the production customer API 
 
 ## 31. Wire Archive
 
-- [ ] Submit explicit archive command only after confirmation.
-- [ ] Disable duplicate Archive while pending.
-- [ ] On success:
+- [x] Submit explicit archive command only after confirmation.
+- [x] Disable duplicate Archive while pending.
+- [x] On success:
   - close/update the detail Sheet appropriately.
   - refresh list.
   - refresh summary cards.
@@ -483,13 +483,13 @@ Replace the isolated frontend prototype source with the production customer API 
 
 ## 32. Production UI tests
 
-- [ ] Mock contract-valid API responses rather than feature-local prototype data.
-- [ ] Confirm 10-row pagination wiring.
-- [ ] Confirm search/status query serialization.
+- [x] Mock contract-valid API responses rather than feature-local prototype data.
+- [x] Confirm 10-row pagination wiring.
+- [x] Confirm search/status query serialization.
 - [ ] Confirm details lazy loading.
 - [ ] Confirm independent Reservation/Fitting history pagination.
 - [ ] Confirm Edit payload and post-success refresh.
-- [ ] Confirm Archive payload and post-success refresh.
+- [x] Confirm Archive payload and post-success refresh.
 - [ ] Confirm no Delete action exists anywhere on the Customer page/sheet.
 
 ## 33. End-to-end/manual validation
@@ -524,9 +524,9 @@ Replace the isolated frontend prototype source with the production customer API 
 The Customers feature is complete only when all of the following are true:
 
 - [ ] `/customers` visually matches the Reservations/Fittings dashboard theme.
-- [ ] Four production summary cards are backed by authoritative data.
-- [ ] Customer table is server-paginated at 10 rows per page.
-- [ ] Search and Active/Archived/All filtering are production-backed.
+- [x] Four production summary cards are backed by authoritative data.
+- [x] Customer table is server-paginated at 10 rows per page.
+- [x] Search and Active/Archived/All filtering are production-backed.
 - [ ] Customer Details Sheet shows live profile plus bounded Reservation and Fitting history.
 - [ ] Edit changes only the live customer profile.
 - [ ] Existing Reservation snapshots remain historically unchanged.

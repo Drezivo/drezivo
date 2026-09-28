@@ -5,12 +5,12 @@ import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
 import {
+  archiveCustomerController,
   getCustomerDetailController,
   getCustomerSummaryController,
   listCustomerFittingsController,
   listCustomerReservationsController,
   listCustomersController,
-  archiveCustomerController,
   updateCustomerController,
 } from './customers.controller.js';
 import {

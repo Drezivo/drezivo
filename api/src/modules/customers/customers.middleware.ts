@@ -8,6 +8,7 @@ import {
   customerParams,
   type CustomerArchiveRequest,
   type CustomerEditRequest,
+  idempotencyKey,
   type CustomerHistoryQuery,
   type CustomerListQuery,
 } from '@drezivo/contracts';
@@ -16,14 +17,24 @@ import { ForbiddenError, ValidationError } from '../../shared/errors.js';
 
 declare module 'express-serve-static-core' {
   interface Request {
+    customerIdempotencyKey?: string;
     customerListQuery?: CustomerListQuery;
     customerHistoryQuery?: CustomerHistoryQuery;
     customerId?: string;
     customerEditRequest?: CustomerEditRequest;
     customerArchiveRequest?: CustomerArchiveRequest;
-    customerIdempotencyKey?: string;
   }
 }
+
+export const requireCustomerIdempotencyKey: RequestHandler = (req, _res, next): void => {
+  const parsed = idempotencyKey.safeParse(req.header('Idempotency-Key')?.trim());
+  if (!parsed.success) {
+    next(new ValidationError('A valid Idempotency-Key header is required.'));
+    return;
+  }
+  req.customerIdempotencyKey = parsed.data;
+  next();
+};
 
 export const requireCustomerReadPermission: RequestHandler = (req, _res, next): void => {
   if (!req.tenantContext?.permissionCodes.includes('reservations.manage')) {
@@ -41,16 +52,6 @@ export const requireCustomerWritePermission: RequestHandler = (req, _res, next):
   next();
 };
 
-export const requireCustomerIdempotencyKey: RequestHandler = (req, _res, next): void => {
-  const key = req.header('Idempotency-Key')?.trim();
-  if (!key || key.length < 8 || key.length > 255) {
-    next(new ValidationError('A valid Idempotency-Key header is required.'));
-    return;
-  }
-  req.customerIdempotencyKey = key;
-  next();
-};
-
 export const validateCustomerId: RequestHandler = (req, _res, next): void => {
   const parsed = customerParams.safeParse(req.params);
   if (!parsed.success) {
@@ -58,6 +59,16 @@ export const validateCustomerId: RequestHandler = (req, _res, next): void => {
     return;
   }
   req.customerId = parsed.data.customerId;
+  next();
+};
+
+export const validateCustomerArchive: RequestHandler = (req, _res, next): void => {
+  const parsed = customerArchiveRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Customer archive request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
   next();
 };
 

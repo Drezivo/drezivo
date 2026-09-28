@@ -111,6 +111,12 @@ import {
   fittingSettingsUpdateResponse,
   fittingWeeklyHoursUpdateRequest,
   fittingWeeklyHoursUpdateResponse,
+  customerListQuery,
+  customerListResponse,
+  customerArchiveRequest,
+  customerArchiveResponse,
+  customerDetailResponse,
+  customerSummaryResponse,
   type AbandonOwnerOnboardingRequest,
   type ActorContext,
   type BootstrapTenantRequest,
@@ -220,6 +226,12 @@ import {
   type FittingSettingsUpdateResponse,
   type FittingWeeklyHoursUpdateRequest,
   type FittingWeeklyHoursUpdateResponse,
+  type CustomerListQuery,
+  type CustomerListResponse,
+  type CustomerArchiveRequest,
+  type CustomerArchiveResponse,
+  type CustomerDetailResponse,
+  type CustomerSummaryResponse,
 } from "@drezivo/contracts";
 
 type TokenGetter = () => Promise<string | null>;
@@ -316,6 +328,49 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "GET",
         path: "/api/v1/actor-context",
         responseSchema: apiEnvelope(actorContext),
+      }),
+    getCustomers: (input: CustomerListQuery) => {
+      const query = customerListQuery.parse(input);
+      const searchParams = new URLSearchParams({
+        limit: String(query.limit),
+        status: query.status,
+      });
+      if (query.cursor) searchParams.set("cursor", query.cursor);
+      if (query.search) searchParams.set("search", query.search);
+
+      return request<CustomerListResponse>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/customers?${searchParams.toString()}`,
+        responseSchema: apiEnvelope(customerListResponse),
+      });
+    },
+    getCustomerSummary: () =>
+      request<CustomerSummaryResponse>({
+        getToken,
+        method: "GET",
+        path: "/api/v1/customers/summary",
+        responseSchema: apiEnvelope(customerSummaryResponse),
+      }),
+    getCustomerDetail: (customerId: string) =>
+      request<CustomerDetailResponse>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/customers/${encodeURIComponent(customerId)}`,
+        responseSchema: apiEnvelope(customerDetailResponse),
+      }),
+    archiveCustomer: (
+      customerId: string,
+      input: CustomerArchiveRequest,
+      idempotencyKey: string
+    ) =>
+      request<CustomerArchiveResponse>({
+        getToken,
+        body: customerArchiveRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/customers/${encodeURIComponent(customerId)}/archive`,
+        responseSchema: apiEnvelope(customerArchiveResponse),
       }),
     getPaymentMethodSettings: () =>
       request<PaymentMethodSettingsList>({
