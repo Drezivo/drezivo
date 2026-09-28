@@ -452,11 +452,11 @@ Replace the isolated frontend prototype source with the production customer API 
 
 ## 29. Wire Customer Details Sheet
 
-- [ ] Fetch customer detail only when a customer is selected.
-- [ ] Fetch Reservation/Fitting histories with bounded requests.
-- [ ] Do not require the table list response to expose private detail-only fields.
-- [ ] Keep history pagination independent for Reservations and Fittings.
-- [ ] Retry one failed history section without forcing unrelated successful sections to disappear when practical.
+- [x] Fetch customer detail only when a customer is selected.
+- [x] Fetch Reservation/Fitting histories with bounded requests.
+- [x] Do not require the table list response to expose private detail-only fields.
+- [x] Keep history pagination independent for Reservations and Fittings.
+- [x] Retry one failed history section without forcing unrelated successful sections to disappear when practical.
 
 ## 30. Wire Edit
 

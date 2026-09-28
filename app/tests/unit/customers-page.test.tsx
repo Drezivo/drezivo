@@ -12,7 +12,9 @@ const clerk = vi.hoisted(() => ({
 
 const api = vi.hoisted(() => ({
   archiveCustomer: vi.fn(),
+  getCustomerFittings: vi.fn(),
   getCustomerDetail: vi.fn(),
+  getCustomerReservations: vi.fn(),
   getCustomerSummary: vi.fn(),
   getCustomers: vi.fn(),
 }));
@@ -92,8 +94,33 @@ function installDefaults() {
   api.getCustomerSummary.mockResolvedValue({ data: summary, requestId: "request-summary" });
   api.getCustomers.mockResolvedValue(page());
   api.getCustomerDetail.mockResolvedValue({
-    data: { updated_at: "2026-09-27T03:00:00.000Z" },
+    data: {
+      id: firstCustomer.id,
+      full_name: firstCustomer.full_name,
+      phone: firstCustomer.phone,
+      email: firstCustomer.email,
+      address: "24 Sampaguita Street",
+      social_media: "@real.customer",
+      notes: "Staff-only note",
+      status: "active",
+      archived_at: null,
+      reservation_count: 4,
+      fitting_count: 2,
+      completed_engagement_count: 3,
+      last_activity: firstCustomer.last_activity,
+      next_activity: firstCustomer.next_activity,
+      created_at: firstCustomer.created_at,
+      updated_at: "2026-09-27T03:00:00.000Z",
+    },
     requestId: "request-detail",
+  });
+  api.getCustomerReservations.mockResolvedValue({
+    data: { items: [], page_meta: { next_cursor: null, has_more: false } },
+    requestId: "request-reservations",
+  });
+  api.getCustomerFittings.mockResolvedValue({
+    data: { items: [], page_meta: { next_cursor: null, has_more: false } },
+    requestId: "request-fittings",
   });
   api.archiveCustomer.mockResolvedValue({
     data: {
@@ -123,6 +150,9 @@ describe("CustomersPage production wiring", () => {
     expect(screen.getByText("11")).toBeVisible();
     expect(screen.queryByText("Maria Santos")).not.toBeInTheDocument();
     expect(api.getCustomers).toHaveBeenCalledWith({ limit: 10, status: "active" });
+    expect(api.getCustomerDetail).not.toHaveBeenCalled();
+    expect(api.getCustomerReservations).not.toHaveBeenCalled();
+    expect(api.getCustomerFittings).not.toHaveBeenCalled();
   });
 
   it("serializes search and status filters for the server and resets pagination", async () => {
@@ -260,7 +290,7 @@ describe("CustomersPage production wiring", () => {
     await waitFor(() => expect(screen.queryByLabelText("Loading customers")).not.toBeInTheDocument());
   });
 
-  it("keeps details and edit unavailable while enabling archive confirmation", async () => {
+  it("opens live details while keeping edit unavailable and archive enabled", async () => {
     render(<CustomersPage />);
     await screen.findByText("Real Database Customer");
     const actions = screen.getByRole("button", { name: "Actions for Real Database Customer" });
@@ -268,14 +298,19 @@ describe("CustomersPage production wiring", () => {
     fireEvent.keyDown(actions, { key: "Enter", code: "Enter" });
 
     const menu = await screen.findByRole("menu");
-    expect(within(menu).getByRole("menuitem", { name: "View details" })).toHaveAttribute(
-      "data-disabled"
-    );
+    expect(within(menu).getByRole("menuitem", { name: "View details" })).not.toHaveAttribute("data-disabled");
     expect(within(menu).getByRole("menuitem", { name: "Edit" })).toHaveAttribute("data-disabled");
     expect(within(menu).getByRole("menuitem", { name: "Archive" })).not.toHaveAttribute("data-disabled");
-    fireEvent.click(within(menu).getByRole("menuitem", { name: "Archive" }));
-    expect(await screen.findByText("Archive Real Database Customer?")).toBeVisible();
-    expect(screen.queryByText("Reservation history")).not.toBeInTheDocument();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "View details" }));
+    expect(await screen.findByText("Contact Information")).toBeVisible();
+    expect(api.getCustomerDetail).toHaveBeenCalledWith(firstCustomer.id);
+    expect(api.getCustomerReservations).toHaveBeenCalledWith(firstCustomer.id, { limit: 10 });
+    expect(api.getCustomerFittings).toHaveBeenCalledWith(firstCustomer.id, { limit: 10 });
+    expect(screen.getByText("24 Sampaguita Street")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByText("Contact Information")).not.toBeInTheDocument();
+    return;
   });
 
   it("archives a customer with concurrency data and refreshes the list and summary", async () => {

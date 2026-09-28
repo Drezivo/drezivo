@@ -3,8 +3,11 @@
 import { useAuth } from "@clerk/nextjs";
 import type {
   CustomerActivity,
+  CustomerDetailResponse,
+  CustomerFittingHistoryItem,
   CustomerListItem,
   CustomerListStatus,
+  CustomerReservationHistoryItem,
   CustomerSummaryResponse,
 } from "@drezivo/contracts";
 import {
@@ -47,11 +50,13 @@ import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { cn } from "@/lib/utils";
 
 import { ArchiveCustomerDialog } from "./archive-customer-dialog";
+import { CustomerDetailsSheet } from "./customer-details-sheet";
 
 type CustomerStatusFilter = CustomerListStatus;
 type CustomerPageMeta = { next_cursor: string | null; has_more: boolean };
 
 const CUSTOMERS_PAGE_SIZE = 10;
+const CUSTOMER_HISTORY_PAGE_SIZE = 10;
 
 const CUSTOMER_STATUS_LABELS: Record<CustomerStatusFilter, string> = {
   active: "Active",
@@ -110,7 +115,28 @@ export function CustomersPage() {
   const [archiveError, setArchiveError] = useState<DrezivoApiError | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetailResponse | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<DrezivoApiError | null>(null);
+  const [detailReloadVersion, setDetailReloadVersion] = useState(0);
+  const [reservationHistory, setReservationHistory] = useState<CustomerReservationHistoryItem[]>([]);
+  const [reservationMeta, setReservationMeta] = useState<CustomerPageMeta>({ next_cursor: null, has_more: false });
+  const [reservationCursors, setReservationCursors] = useState<Array<string | null>>([null]);
+  const [reservationPageIndex, setReservationPageIndex] = useState(0);
+  const [reservationLoading, setReservationLoading] = useState(false);
+  const [reservationError, setReservationError] = useState<DrezivoApiError | null>(null);
+  const [reservationReloadVersion, setReservationReloadVersion] = useState(0);
+  const [fittingHistory, setFittingHistory] = useState<CustomerFittingHistoryItem[]>([]);
+  const [fittingMeta, setFittingMeta] = useState<CustomerPageMeta>({ next_cursor: null, has_more: false });
+  const [fittingCursors, setFittingCursors] = useState<Array<string | null>>([null]);
+  const [fittingPageIndex, setFittingPageIndex] = useState(0);
+  const [fittingLoading, setFittingLoading] = useState(false);
+  const [fittingError, setFittingError] = useState<DrezivoApiError | null>(null);
+  const [fittingReloadVersion, setFittingReloadVersion] = useState(0);
   const currentCursor = pageCursors[pageIndex] ?? null;
+  const reservationCursor = reservationCursors[reservationPageIndex] ?? null;
+  const fittingCursor = fittingCursors[fittingPageIndex] ?? null;
   const hasActiveFilters = Boolean(deferredQuery || status !== "active");
   const permissionRestricted = error?.status === 403 || error?.code === "FORBIDDEN";
 
@@ -131,6 +157,30 @@ export function CustomersPage() {
     setArchiveCustomer(customer);
     setArchiveIntentKey(crypto.randomUUID());
     setArchiveError(null);
+  }, []);
+
+  const openCustomerDetails = useCallback((customer: CustomerListItem) => {
+    setSelectedCustomerId(customer.id);
+    setSelectedCustomer(null);
+    setDetailError(null);
+    setReservationHistory([]);
+    setReservationMeta({ next_cursor: null, has_more: false });
+    setReservationCursors([null]);
+    setReservationPageIndex(0);
+    setReservationError(null);
+    setFittingHistory([]);
+    setFittingMeta({ next_cursor: null, has_more: false });
+    setFittingCursors([null]);
+    setFittingPageIndex(0);
+    setFittingError(null);
+  }, []);
+
+  const closeCustomerDetails = useCallback(() => {
+    setSelectedCustomerId(null);
+    setSelectedCustomer(null);
+    setDetailError(null);
+    setReservationHistory([]);
+    setFittingHistory([]);
   }, []);
 
   const closeArchive = useCallback(() => {
@@ -189,6 +239,45 @@ export function CustomersPage() {
       cancelled = true;
     };
   }, [getToken, isLoaded, isSignedIn, summaryReloadVersion]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !selectedCustomerId) return;
+    let cancelled = false;
+    setDetailLoading(true);
+    setDetailError(null);
+    void createDrezivoApiClient(getToken)
+      .getCustomerDetail(selectedCustomerId)
+      .then((result) => { if (!cancelled) setSelectedCustomer(result.data); })
+      .catch((caughtError) => { if (!cancelled) setDetailError(toDrezivoApiError(caughtError)); })
+      .finally(() => { if (!cancelled) setDetailLoading(false); });
+    return () => { cancelled = true; };
+  }, [detailReloadVersion, getToken, isLoaded, isSignedIn, selectedCustomerId]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !selectedCustomerId) return;
+    let cancelled = false;
+    setReservationLoading(true);
+    setReservationError(null);
+    void createDrezivoApiClient(getToken)
+      .getCustomerReservations(selectedCustomerId, { limit: CUSTOMER_HISTORY_PAGE_SIZE, ...(reservationCursor ? { cursor: reservationCursor } : {}) })
+      .then((result) => { if (!cancelled) { setReservationHistory(result.data.items); setReservationMeta(result.data.page_meta); } })
+      .catch((caughtError) => { if (!cancelled) { setReservationHistory([]); setReservationMeta({ next_cursor: null, has_more: false }); setReservationError(toDrezivoApiError(caughtError)); } })
+      .finally(() => { if (!cancelled) setReservationLoading(false); });
+    return () => { cancelled = true; };
+  }, [getToken, isLoaded, isSignedIn, reservationCursor, reservationReloadVersion, selectedCustomerId]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !selectedCustomerId) return;
+    let cancelled = false;
+    setFittingLoading(true);
+    setFittingError(null);
+    void createDrezivoApiClient(getToken)
+      .getCustomerFittings(selectedCustomerId, { limit: CUSTOMER_HISTORY_PAGE_SIZE, ...(fittingCursor ? { cursor: fittingCursor } : {}) })
+      .then((result) => { if (!cancelled) { setFittingHistory(result.data.items); setFittingMeta(result.data.page_meta); } })
+      .catch((caughtError) => { if (!cancelled) { setFittingHistory([]); setFittingMeta({ next_cursor: null, has_more: false }); setFittingError(toDrezivoApiError(caughtError)); } })
+      .finally(() => { if (!cancelled) setFittingLoading(false); });
+    return () => { cancelled = true; };
+  }, [fittingCursor, fittingReloadVersion, getToken, isLoaded, isSignedIn, selectedCustomerId]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -270,6 +359,23 @@ export function CustomersPage() {
     setPageIndex((current) => Math.max(0, current - 1));
   };
 
+  const goHistoryNext = (kind: "reservation" | "fitting") => {
+    if (kind === "reservation") {
+      if (!reservationMeta.has_more || !reservationMeta.next_cursor) return;
+      setReservationCursors((current) => [...current.slice(0, reservationPageIndex + 1), reservationMeta.next_cursor]);
+      setReservationPageIndex((current) => current + 1);
+    } else {
+      if (!fittingMeta.has_more || !fittingMeta.next_cursor) return;
+      setFittingCursors((current) => [...current.slice(0, fittingPageIndex + 1), fittingMeta.next_cursor]);
+      setFittingPageIndex((current) => current + 1);
+    }
+  };
+
+  const goHistoryPrevious = (kind: "reservation" | "fitting") => {
+    if (kind === "reservation") setReservationPageIndex((current) => Math.max(0, current - 1));
+    else setFittingPageIndex((current) => Math.max(0, current - 1));
+  };
+
   return (
     <div className="min-h-[calc(100svh-4.5rem)] overflow-x-hidden bg-dashboard-canvas px-3 py-5 sm:px-6 sm:py-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-5">
@@ -330,6 +436,7 @@ export function CustomersPage() {
                     customers={rows}
                     emptyFiltered={hasActiveFilters}
                     onArchive={requestArchive}
+                    onView={openCustomerDetails}
                   />
                 )}
                 {!isLoading && rows.length > 0 ? (
@@ -356,6 +463,31 @@ export function CustomersPage() {
           if (!open) closeArchive();
         }}
         requestId={archiveError ? archiveError.requestId : null}
+      />
+
+      <CustomerDetailsSheet
+        open={selectedCustomerId !== null}
+        detail={selectedCustomer}
+        detailLoading={detailLoading}
+        detailError={detailError}
+        onRetryDetail={() => setDetailReloadVersion((value) => value + 1)}
+        onOpenChange={(open) => { if (!open) closeCustomerDetails(); }}
+        reservationHistory={reservationHistory}
+        reservationLoading={reservationLoading}
+        reservationError={reservationError}
+        reservationMeta={reservationMeta}
+        onReservationRetry={() => setReservationReloadVersion((value) => value + 1)}
+        onReservationNext={() => goHistoryNext("reservation")}
+        onReservationPrevious={() => goHistoryPrevious("reservation")}
+        reservationPageIndex={reservationPageIndex}
+        fittingHistory={fittingHistory}
+        fittingLoading={fittingLoading}
+        fittingError={fittingError}
+        fittingMeta={fittingMeta}
+        onFittingRetry={() => setFittingReloadVersion((value) => value + 1)}
+        onFittingNext={() => goHistoryNext("fitting")}
+        onFittingPrevious={() => goHistoryPrevious("fitting")}
+        fittingPageIndex={fittingPageIndex}
       />
     </div>
   );
@@ -569,10 +701,12 @@ function CustomersTable({
   customers,
   emptyFiltered,
   onArchive,
+  onView,
 }: {
   customers: readonly CustomerListItem[];
   emptyFiltered: boolean;
   onArchive: (customer: CustomerListItem) => void;
+  onView: (customer: CustomerListItem) => void;
 }) {
   if (customers.length === 0) {
     return <CustomerEmptyState filtered={emptyFiltered} />;
@@ -648,7 +782,7 @@ function CustomersTable({
               </Badge>
             </TableCell>
             <TableCell className="pr-4 text-right align-top">
-              <CustomerActions customer={customer} onArchive={onArchive} />
+              <CustomerActions customer={customer} onArchive={onArchive} onView={onView} />
             </TableCell>
           </TableRow>
         ))}
@@ -660,9 +794,11 @@ function CustomersTable({
 function CustomerActions({
   customer,
   onArchive,
+  onView,
 }: {
   customer: CustomerListItem;
   onArchive: (customer: CustomerListItem) => void;
+  onView: (customer: CustomerListItem) => void;
 }) {
   return (
     <DropdownMenu>
@@ -678,7 +814,7 @@ function CustomerActions({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem disabled>View details</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onView(customer)}>View details</DropdownMenuItem>
         <DropdownMenuItem disabled>Edit</DropdownMenuItem>
         {customer.status === "active" ? (
           <DropdownMenuItem

@@ -153,6 +153,24 @@ describe("Drezivo customer API client", () => {
     );
   });
 
+  it("fetches independently paginated reservation and fitting histories", async () => {
+    fetchMock
+      .mockResolvedValueOnce(success({ items: [], page_meta: { next_cursor: "reservation-next", has_more: true } }))
+      .mockResolvedValueOnce(success({ items: [], page_meta: { next_cursor: null, has_more: false } }));
+
+    const client = createDrezivoApiClient(getToken);
+    await client.getCustomerReservations(customerId, { limit: 10 });
+    await client.getCustomerFittings(customerId, { limit: 10, cursor: "fitting-cursor" });
+
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      `https://api.example.test/api/v1/customers/${customerId}/reservations?limit=10`
+    );
+    expect(fetchMock.mock.calls[1]![0]).toBe(
+      `https://api.example.test/api/v1/customers/${customerId}/fittings?limit=10&cursor=fitting-cursor`
+    );
+    expect((fetchMock.mock.calls[0]![1]?.headers as Headers).get("Authorization")).toBe("Bearer clerk-token");
+  });
+
   it("surfaces safe API errors with their request id", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
