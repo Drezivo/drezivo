@@ -547,6 +547,7 @@ describe('RSV Phase 1 reservation read model', async () => {
       full_name: 'Original Customer Name',
       phone: null,
       email: 'original@example.test',
+      address: null,
     });
     expect(historical.lines[0]).toMatchObject({
       name_snapshot: 'Original Accepted Gown Name',

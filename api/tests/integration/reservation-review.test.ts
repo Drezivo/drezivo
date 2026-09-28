@@ -444,7 +444,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       held.id,
       { version: held.version, terms_accepted: true },
     );
-    expectFailure(missing, 'VALIDATION_FAILED');
+    expect(missing.status).toBe(422);
+    expect(missing.body).toMatchObject({
+      success: false,
+      error: { code: 'VALIDATION_FAILED' },
+    });
 
     const submitted = await submitReservationForConfirmation(
       reviewContext(seed, 'req-address-legacy', 'idem-address-legacy'),
