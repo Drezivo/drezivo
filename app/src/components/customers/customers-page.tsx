@@ -1,10 +1,14 @@
 "use client";
 
 import {
+  Archive,
   CalendarCheck2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  MoreHorizontal,
+  Pencil,
   Repeat2,
   Search,
   UserPlus,
@@ -34,6 +38,13 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
+import { ArchiveCustomerDialog } from "./archive-customer-dialog";
+import { CustomerDetailsSheet } from "./customer-details-sheet";
+import { CustomerEditSheet, type CustomerEditValues } from "./customer-edit-sheet";
+import {
+  getCustomerDetailPrototype,
+  type CustomerDetailPrototype,
+} from "./customers-prototype-detail-data";
 import {
   CUSTOMER_DASHBOARD_SUMMARY_PROTOTYPE,
   getCustomerListPrototypePage,
@@ -85,6 +96,11 @@ export function CustomersPage() {
   const [status, setStatus] = useState<CustomerStatusFilter>("active");
   const [pageIndex, setPageIndex] = useState(0);
   const [pageCursors, setPageCursors] = useState<Array<string | null>>([null]);
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetailPrototype | null>(null);
+  const [sheetMode, setSheetMode] = useState<"view" | "edit" | null>(null);
+  const [archiveCustomer, setArchiveCustomer] = useState<CustomerDetailPrototype | null>(null);
+  const [isMutating, setIsMutating] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const hasActiveFilters = Boolean(query.trim() || status !== "active");
   const currentCursor = pageCursors[pageIndex] ?? null;
 
@@ -135,6 +151,47 @@ export function CustomersPage() {
     setPageIndex((current) => Math.max(0, current - 1));
   };
 
+  const openCustomer = (customerId: string, mode: "view" | "edit") => {
+    const detail = getCustomerDetailPrototype(customerId);
+    setSelectedCustomer(detail);
+    setSheetMode(detail ? mode : null);
+  };
+
+  const requestArchive = (customerId: string) => {
+    const detail = getCustomerDetailPrototype(customerId);
+    if (detail?.status === "active") setArchiveCustomer(detail);
+  };
+
+  const saveCustomer = async (values: CustomerEditValues) => {
+    if (!selectedCustomer || isMutating) return;
+    setIsMutating(true);
+    await Promise.resolve();
+    setSelectedCustomer({
+      ...selectedCustomer,
+      full_name: values.full_name.trim(),
+      phone: values.phone.trim() || null,
+      email: values.email.trim() || null,
+      address: values.address.trim() || null,
+      social_media: values.social_media.trim() || null,
+      notes: values.notes.trim() || null,
+    });
+    setIsMutating(false);
+    setSheetMode("view");
+    setNotice("Customer profile updated in the frontend prototype.");
+  };
+
+  const confirmArchive = async () => {
+    if (!archiveCustomer || isMutating) return;
+    setIsMutating(true);
+    await Promise.resolve();
+    setIsMutating(false);
+    setArchiveCustomer(null);
+    setSelectedCustomer((current) =>
+      current?.id === archiveCustomer.id ? { ...current, status: "archived" } : current
+    );
+    setNotice("Customer archived in the frontend prototype.");
+  };
+
   return (
     <div className="min-h-[calc(100svh-4.5rem)] overflow-x-hidden bg-dashboard-canvas px-3 py-5 sm:px-6 sm:py-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-5">
@@ -149,6 +206,12 @@ export function CustomersPage() {
 
         <CustomerSummarySection summary={CUSTOMER_DASHBOARD_SUMMARY_PROTOTYPE} />
 
+        {notice ? (
+          <div role="status" className="rounded-lg border border-dashboard-border bg-dashboard-surface px-4 py-3 text-sm text-dashboard-navy">
+            {notice}
+          </div>
+        ) : null}
+
         <Card className="gap-0 overflow-visible py-0">
           <CardContent className="p-0">
             <CustomerToolbar
@@ -159,7 +222,12 @@ export function CustomersPage() {
               onStatusChange={updateStatus}
               onClearFilters={clearFilters}
             />
-            <CustomersTable customers={page.items} />
+            <CustomersTable
+              customers={page.items}
+              onArchive={requestArchive}
+              onEdit={(customerId) => openCustomer(customerId, "edit")}
+              onView={(customerId) => openCustomer(customerId, "view")}
+            />
             {page.items.length > 0 ? (
               <CustomerPagination
                 pageIndex={pageIndex}
@@ -172,6 +240,37 @@ export function CustomersPage() {
           </CardContent>
         </Card>
       </div>
+
+      <CustomerDetailsSheet
+        customer={sheetMode === "view" ? selectedCustomer : null}
+        mode={sheetMode ?? "view"}
+        onEdit={() => setSheetMode("edit")}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSheetMode(null);
+            setSelectedCustomer(null);
+          }
+        }}
+      />
+      <CustomerEditSheet
+        customer={sheetMode === "edit" ? selectedCustomer : null}
+        isSubmitting={isMutating}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSheetMode(null);
+            setSelectedCustomer(null);
+          }
+        }}
+        onSave={saveCustomer}
+      />
+      <ArchiveCustomerDialog
+        customer={archiveCustomer}
+        isSubmitting={isMutating}
+        onArchive={confirmArchive}
+        onOpenChange={(open) => {
+          if (!open) setArchiveCustomer(null);
+        }}
+      />
     </div>
   );
 }
@@ -283,7 +382,17 @@ function CustomerToolbar({
   );
 }
 
-function CustomersTable({ customers }: { customers: readonly CustomerListItemPrototype[] }) {
+function CustomersTable({
+  customers,
+  onArchive,
+  onEdit,
+  onView,
+}: {
+  customers: readonly CustomerListItemPrototype[];
+  onArchive: (customerId: string) => void;
+  onEdit: (customerId: string) => void;
+  onView: (customerId: string) => void;
+}) {
   if (customers.length === 0) {
     return (
       <div className="px-4 py-12 text-center">
@@ -364,13 +473,62 @@ function CustomersTable({ customers }: { customers: readonly CustomerListItemPro
                 {customer.status === "active" ? "Active" : "Archived"}
               </Badge>
             </TableCell>
-            <TableCell className="pr-4 text-right align-top text-dashboard-muted" aria-label="Actions pending">
-              —
+            <TableCell className="pr-4 text-right align-top">
+              <CustomerActions
+                customer={customer}
+                onArchive={onArchive}
+                onEdit={onEdit}
+                onView={onView}
+              />
             </TableCell>
           </TableRow>
         ))}
       </TableBody>
     </Table>
+  );
+}
+
+function CustomerActions({
+  customer,
+  onArchive,
+  onEdit,
+  onView,
+}: {
+  customer: CustomerListItemPrototype;
+  onArchive: (customerId: string) => void;
+  onEdit: (customerId: string) => void;
+  onView: (customerId: string) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={`Actions for ${customer.full_name}`}
+          className="h-8 w-8"
+        >
+          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => onView(customer.id)}>
+          <Eye className="h-4 w-4" aria-hidden="true" />
+          View details
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onEdit(customer.id)}>
+          <Pencil className="h-4 w-4" aria-hidden="true" />
+          Edit
+        </DropdownMenuItem>
+        {customer.status === "active" ? (
+          <DropdownMenuItem onSelect={() => onArchive(customer.id)} className="text-dashboard-danger focus:text-dashboard-danger">
+            <Archive className="h-4 w-4" aria-hidden="true" />
+            Archive
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { CustomersPage } from "@/components/customers/customers-page";
@@ -96,6 +96,64 @@ describe("CustomersPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Previous customers page" }));
     expect(screen.getByText("Page 1 · 10 customers loaded")).toBeVisible();
     expect(screen.getByText("Maria Santos")).toBeVisible();
+  });
+
+  it("exposes only the approved row actions and opens customer details with both histories", async () => {
+    render(<CustomersPage />);
+
+    const actions = screen.getByRole("button", { name: "Actions for Maria Santos" });
+    actions.focus();
+    fireEvent.keyDown(actions, { key: "ArrowDown" });
+
+    expect(await screen.findByRole("menuitem", { name: "View details" })).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: "Edit" })).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: "Archive" })).toBeVisible();
+    expect(screen.queryByText(/delete/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "View details" }));
+    expect(await screen.findByRole("heading", { name: "Maria Santos" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Reservation History" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Fitting History" })).toBeVisible();
+    expect(screen.getByText("RSV-260924-018")).toBeVisible();
+    expect(screen.getByText("Emerald Filipiniana Gown · Size S")).toBeVisible();
+  });
+
+  it("keeps address optional but requires at least one customer contact", async () => {
+    render(<CustomersPage />);
+
+    const actions = screen.getByRole("button", { name: "Actions for Maria Santos" });
+    actions.focus();
+    fireEvent.keyDown(actions, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+
+    const phone = await screen.findByDisplayValue("0917 555 0101");
+    const email = screen.getByDisplayValue("maria.santos@example.test");
+    const address = screen.getByDisplayValue("24 Sampaguita Street, Quezon City, Metro Manila");
+
+    fireEvent.change(address, { target: { value: "" } });
+    fireEvent.change(phone, { target: { value: "" } });
+    fireEvent.change(email, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Customer" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Add at least a phone number or email address.");
+
+    fireEvent.change(email, { target: { value: "maria.updated@example.test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Customer" }));
+    await waitFor(() => expect(screen.getByText("maria.updated@example.test")).toBeVisible());
+  });
+
+  it("uses preservation copy for archive and never presents a hard-delete action", async () => {
+    render(<CustomersPage />);
+
+    const actions = screen.getByRole("button", { name: "Actions for Maria Santos" });
+    actions.focus();
+    fireEvent.keyDown(actions, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Archive" }));
+
+    expect(await screen.findByText("Archive Maria Santos?")).toBeVisible();
+    expect(screen.getByText(/Reservation and fitting history will remain unchanged/i)).toBeVisible();
+    expect(screen.getByText(/no longer be selectable for new bookings/i)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Archive Customer" })).toBeVisible();
+    expect(screen.queryByText(/delete customer/i)).not.toBeInTheDocument();
   });
 
   it("resets pagination to page one when the directory filters change", () => {
