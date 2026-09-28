@@ -142,6 +142,76 @@ describe('BE-8 operational integration contracts', () => {
     ).toBe(false);
   });
 
+  it('rejects cross-source statuses and authority fields at the contract boundary', () => {
+    expect(
+      operationalCalendarQuery.safeParse({
+        start: '2026-09-01T00:00:00.000Z',
+        end: '2026-09-02T00:00:00.000Z',
+        tenant_id: ids.branch,
+      }).success,
+    ).toBe(false);
+
+    const reservationWithFittingStatus = {
+      id: `pickup:${ids.reservation}`,
+      source: 'reservation' as const,
+      source_id: ids.reservation,
+      event_type: 'pickup' as const,
+      branch_id: ids.branch,
+      period: {
+        start: '2026-09-10T02:00:00.000Z',
+        end: '2026-09-10T02:30:00.000Z',
+      },
+      customer_name: 'Maria Santos',
+      item_names: ['Evening Gown'],
+      status: 'no_show',
+    };
+    const fittingWithReservationStatus = {
+      id: `fitting:${ids.fitting}`,
+      source: 'fitting' as const,
+      source_id: ids.fitting,
+      event_type: 'fitting' as const,
+      branch_id: ids.branch,
+      period: {
+        start: '2026-09-11T02:00:00.000Z',
+        end: '2026-09-11T03:00:00.000Z',
+      },
+      customer_name: 'Anna Cruz',
+      item_names: ['Filipiniana'],
+      status: 'confirmed',
+    };
+
+    expect(
+      operationalCalendarResponse.safeParse({
+        window: {
+          start: '2026-09-01T00:00:00.000Z',
+          end: '2026-10-01T00:00:00.000Z',
+        },
+        truncated: false,
+        events: [reservationWithFittingStatus],
+      }).success,
+    ).toBe(false);
+    expect(
+      operationalCalendarResponse.safeParse({
+        window: {
+          start: '2026-09-01T00:00:00.000Z',
+          end: '2026-10-01T00:00:00.000Z',
+        },
+        truncated: false,
+        events: [{ ...fittingWithReservationStatus, status: 'pending_confirmation' }],
+      }).success,
+    ).toBe(false);
+    expect(
+      operationalCalendarResponse.safeParse({
+        window: {
+          start: '2026-09-01T00:00:00.000Z',
+          end: '2026-10-01T00:00:00.000Z',
+        },
+        truncated: false,
+        events: [{ ...fittingWithReservationStatus, tenant_id: ids.branch }],
+      }).success,
+    ).toBe(false);
+  });
+
   it('keeps Dashboard fitting summary operational and analytics-free', () => {
     const result = dashboardFittingSummaryResponse.safeParse({
       window: {

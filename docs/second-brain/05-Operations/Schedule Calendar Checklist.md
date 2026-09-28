@@ -87,30 +87,30 @@ These rules must be covered by the backend integration evidence before any Calen
 
 # Backend Phase BE-0 — Freeze Calendar contracts and source semantics
 
-- [ ] **CAL-BE-000 — Confirm the production Calendar event taxonomy**
+- [x] **CAL-BE-000 — Confirm the production Calendar event taxonomy**
   - **Outcome:** One explicit mapping exists from owning modules to Calendar events.
   - **Acceptance:**
-    - [ ] Reservation `pickup_at` produces exactly one `pickup` event for an eligible reservation.
-    - [ ] Reservation `due_at` produces exactly one `return` event for an eligible reservation.
-    - [ ] Fitting `period` produces exactly one `fitting` event for an eligible appointment.
-    - [ ] Reservation inclusion is limited to `pending_confirmation`, `confirmed`, `picked_up`, `returned`, and `completed`; `held`, `cancelled`, `expired`, and `rejected` are excluded.
-    - [ ] Fitting inclusion is limited to `pending`, `confirmed`, `completed`, and `no_show`; `cancelled` and `rejected` are excluded.
-    - [ ] Pickup and Return start at authoritative `pickup_at` and `due_at`; any 30-minute end period is display-only.
-    - [ ] Returned/completed historical events remain visible when their event instant falls inside the requested range.
-    - [ ] Calendar event color/type is presentation only and is not persisted domain state.
-  - **Evidence:** Contract/repository review against Reservations and Fittings state machines.
+    - [x] Reservation `pickup_at` produces exactly one `pickup` event for an eligible reservation.
+    - [x] Reservation `due_at` produces exactly one `return` event for an eligible reservation.
+    - [x] Fitting `period` produces exactly one `fitting` event for an eligible appointment.
+    - [x] Reservation inclusion is limited to `pending_confirmation`, `confirmed`, `picked_up`, `returned`, and `completed`; `held`, `cancelled`, `expired`, and `rejected` are excluded.
+    - [x] Fitting inclusion is limited to `pending`, `confirmed`, `completed`, and `no_show`; `cancelled` and `rejected` are excluded.
+    - [x] Pickup and Return start at authoritative `pickup_at` and `due_at`; any 30-minute end period is display-only.
+    - [x] Returned/completed historical events remain visible when their event instant falls inside the requested range.
+    - [x] Calendar event color/type is presentation only and is not persisted domain state.
+  - **Evidence:** `contracts/tests/operations.test.ts` and `api/tests/integration/fittings-phase8-integrations.test.ts` validate the source-specific status sets, exact instants, synthetic display periods, historical states, and duplicate-free event identity.
 
-- [ ] **CAL-BE-001 — Confirm the bounded operational Calendar contract**
+- [x] **CAL-BE-001 — Confirm the bounded operational Calendar contract**
   - **Outcome:** `@drezivo/contracts` fully owns the Schedule read contract.
   - **Acceptance:**
-    - [ ] Query accepts required `start` and `end` ISO instants.
-    - [ ] Query rejects `start >= end`.
-    - [ ] Query enforces the approved maximum window.
-    - [ ] Response returns a stable event `id`, `source`, `source_id`, `event_type`, `branch_id`, `period`, customer display name, item names, and source status.
-    - [ ] Reservation and Fitting event shapes remain discriminated so status types cannot be mixed accidentally.
-    - [ ] Dense ranges expose explicit `truncated` metadata; the response never silently presents a partial range as complete.
-    - [ ] Browser input cannot supply `tenant_id`, authoritative `branch_id`, customer identity, or event state.
-  - **Existing foundation:** `contracts/src/operations/calendar.ts` already defines a 62-day bounded `operationalCalendarQuery` and normalized Reservation/Fitting event response.
+    - [x] Query accepts required `start` and `end` ISO instants.
+    - [x] Query rejects `start >= end`.
+    - [x] Query enforces the approved maximum window.
+    - [x] Response returns a stable event `id`, `source`, `source_id`, `event_type`, `branch_id`, `period`, customer display name, item names, and source status.
+    - [x] Reservation and Fitting event shapes remain discriminated so status types cannot be mixed accidentally.
+    - [x] Dense ranges expose explicit `truncated` metadata; the response never silently presents a partial range as complete.
+    - [x] Browser input cannot supply `tenant_id`, authoritative `branch_id`, customer identity, or event state.
+  - **Evidence:** `contracts/src/operations/calendar.ts` owns the strict 62-day query and response schemas; `contracts/tests/operations.test.ts` covers valid events, cross-source status rejection, unknown authority fields, offset-bearing instants, range bounds, and truncation metadata.
 
 ---
 
@@ -231,37 +231,39 @@ These rules must be covered by the backend integration evidence before any Calen
 
 # Backend Phase BE-4 — API verification and release gate
 
-- [ ] **CAL-BE-040 — Complete Calendar contract tests**
+- [x] **CAL-BE-040 — Complete Calendar contract tests**
   - **Acceptance:**
-    - [ ] Valid Reservation Pickup event parses.
-    - [ ] Valid Reservation Return event parses.
-    - [ ] Valid Fitting event parses.
-    - [ ] Reservation status cannot be used in a Fitting event shape and vice versa.
-    - [ ] More-than-max range fails validation.
-    - [ ] Unknown/authority fields are rejected.
+    - [x] Valid Reservation Pickup event parses.
+    - [x] Valid Reservation Return event parses.
+    - [x] Valid Fitting event parses.
+    - [x] Reservation status cannot be used in a Fitting event shape and vice versa.
+    - [x] More-than-max range fails validation.
+    - [x] Unknown/authority fields are rejected.
+  - **Evidence:** `contracts/tests/operations.test.ts` passes with the full contracts suite (150 tests).
 
-- [ ] **CAL-BE-041 — Complete PostgreSQL Calendar integration tests**
+- [x] **CAL-BE-041 — Complete PostgreSQL Calendar integration tests**
   - **Acceptance:**
-    - [ ] Seed one reservation and prove both Pickup and Return appear at the expected instants.
-    - [ ] Seed one fitting and prove its exact appointment period appears.
-    - [ ] Mixed Reservation + Fitting window returns all three expected event kinds.
-    - [ ] Reservation states `pending_confirmation`, `confirmed`, `picked_up`, `returned`, and `completed` follow CAL-BE-000 inclusion rules; `held`, `cancelled`, `expired`, and `rejected` do not appear.
-    - [ ] Fitting states `pending`, `confirmed`, `completed`, and `no_show` follow CAL-BE-000 inclusion rules; `cancelled` and `rejected` do not appear.
-    - [ ] Pickup and Return begin at `pickup_at` and `due_at`, with only a synthetic 30-minute display period.
-    - [ ] Tenant/branch isolation is falsified with at least two workspaces/branches.
-    - [ ] Midnight/timezone boundary coverage passes.
-    - [ ] Dense-range behavior from CAL-BE-032 is covered, including the 2,001-row probe, 2,000-row cap, and `truncated` flag.
-    - [ ] Reservation line aggregation is bounded to date-filtered candidate reservations and does not scan all tenant lines first.
-  - **Evidence references:** Existing `api/tests/integration/fittings-phase8-integrations.test.ts` covers the mixed Reservation/Fitting projection foundation; `api/tests/integration/fittings-phase9-load-query-plan.test.ts` covers representative fitting load/query-plan behavior. Extend those suites (or equivalent operations integration coverage) before checking this item.
+    - [x] Seed one reservation and prove both Pickup and Return appear at the expected instants.
+    - [x] Seed one fitting and prove its exact appointment period appears.
+    - [x] Mixed Reservation + Fitting window returns all three expected event kinds.
+    - [x] Reservation states `pending_confirmation`, `confirmed`, `picked_up`, `returned`, and `completed` follow CAL-BE-000 inclusion rules; `held`, `cancelled`, `expired`, and `rejected` do not appear.
+    - [x] Fitting states `pending`, `confirmed`, `completed`, and `no_show` follow CAL-BE-000 inclusion rules; `cancelled` and `rejected` do not appear.
+    - [x] Pickup and Return begin at `pickup_at` and `due_at`, with only a synthetic 30-minute display period.
+    - [x] Tenant/branch isolation is falsified with at least two workspaces/branches.
+    - [x] Midnight/timezone boundary coverage passes.
+    - [x] Dense-range behavior from CAL-BE-032 is covered, including the 2,001-row probe, 2,000-row cap, and `truncated` flag.
+    - [x] Reservation line aggregation is bounded to date-filtered candidate reservations and does not scan all tenant lines first.
+  - **Evidence references:** `api/tests/integration/fittings-phase8-integrations.test.ts` (10 passing tests) covers the mixed projection, all eligible/terminal states, exact periods, identity, tenant/branch isolation, ordering, and a branch-local midnight boundary. `api/tests/integration/fittings-phase9-load-query-plan.test.ts` (1 passing test) covers 3,000 fitting appointments, the 2,001-row probe, 2,000-row cap, truncation, and intended indexes. The focused Calendar gate passed 11/11 against the disposable PostgreSQL database.
 
-- [ ] **CAL-BE-042 — Mark backend Calendar projection ready for frontend cutover**
+- [x] **CAL-BE-042 — Mark backend Calendar projection ready for frontend cutover**
   - **Depends on:** CAL-BE-010 through CAL-BE-041.
   - **Acceptance:**
-    - [ ] `GET /api/v1/calendar` is the one Schedule event read endpoint.
-    - [ ] Reservation Pickup and Return are authoritative.
-    - [ ] Fitting schedule is authoritative.
-    - [ ] OpenAPI matches implemented contracts/routes.
-    - [ ] No backend work is required to fabricate UI-only Calendar records.
+    - [x] `GET /api/v1/calendar` is the one Schedule event read endpoint.
+    - [x] Reservation Pickup and Return are authoritative.
+    - [x] Fitting schedule is authoritative.
+    - [x] OpenAPI matches implemented contracts/routes.
+    - [x] No backend work is required to fabricate UI-only Calendar records.
+  - **Evidence:** API typecheck, lint, build, unit tests (90 passing), focused Calendar PostgreSQL integration (11 passing), contracts typecheck/tests (150 passing), and `git diff --check` passed. Full-suite integration remains subject to the pre-existing catalogue-scale timeout cascade; no Calendar-specific failure was observed. Frontend-only boundary boxes under CAL-BE-030/CAL-BE-032 remain intentionally open for the FE phases.
 
 ---
 

@@ -528,6 +528,28 @@ describe('FIT-BE-080..083 cross-product integration', async () => {
     }
   });
 
+  it('preserves event identity across a branch-local midnight boundary', async () => {
+    const seed = await seedWorkspace('calendar-midnight');
+    await withAdmin(async (client) => {
+      await client.query(`UPDATE branch SET timezone = 'Asia/Manila' WHERE id = $1`, [seed.branchId]);
+    });
+    const reservation = await insertReservation(seed, {
+      pickupAt: '2026-09-27T00:15:00+08:00',
+      dueAt: '2026-09-27T23:45:00+08:00',
+    });
+
+    const calendar = await getOperationalCalendar(operationsContext(seed), {
+      start: '2026-09-26T16:00:00.000Z',
+      end: '2026-09-27T16:00:00.000Z',
+    });
+    const events = calendar.events.filter((event) => event.source_id === reservation.reservationId);
+
+    expect(events).toHaveLength(2);
+    expect(events.map((event) => event.event_type)).toEqual(['pickup', 'return']);
+    expect(events[0]?.period.start).toBe('2026-09-26T16:15:00.000Z');
+    expect(events[1]?.period.start).toBe('2026-09-27T15:45:00.000Z');
+  });
+
   it('projects every eligible fitting state once and excludes terminal appointments', async () => {
     const seed = await seedWorkspace('calendar-fitting-states');
     const eligibleStatuses = ['pending', 'confirmed', 'completed', 'no_show'] as const;
