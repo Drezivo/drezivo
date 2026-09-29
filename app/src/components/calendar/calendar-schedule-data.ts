@@ -7,6 +7,7 @@ export const CALENDAR_TOTAL_HEIGHT =
   (CALENDAR_END_HOUR - CALENDAR_START_HOUR) * CALENDAR_HOUR_HEIGHT;
 
 export type CalendarActivityType = "Pickup" | "Return" | "Fitting";
+export type CalendarActivityFilter = "All Activity" | CalendarActivityType;
 
 export type CalendarActivity = {
   id: string;
@@ -203,4 +204,20 @@ export function mapOperationalCalendarEvents(
       const byStart = Date.parse(left.startAt) - Date.parse(right.startAt);
       return byStart || left.id.localeCompare(right.id);
     });
+}
+
+export function filterCalendarActivities(
+  activities: CalendarActivity[],
+  filters: {
+    activity: CalendarActivityFilter;
+    categoryId: string | null;
+    statusKey: string | null;
+  }
+) {
+  return activities.filter(
+    (activity) =>
+      (filters.activity === "All Activity" || activity.type === filters.activity) &&
+      (!filters.categoryId || activity.categoryIds.includes(filters.categoryId)) &&
+      (!filters.statusKey || `${activity.source}:${activity.status}` === filters.statusKey)
+  );
 }

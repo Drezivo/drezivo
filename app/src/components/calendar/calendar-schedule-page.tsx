@@ -36,6 +36,7 @@ import {
   addCalendarMonths,
   calendarBoundaryInstant,
   calendarTodayDateKey,
+  filterCalendarActivities,
   CALENDAR_END_HOUR,
   CALENDAR_HOUR_HEIGHT,
   CALENDAR_START_HOUR,
@@ -47,6 +48,7 @@ import {
   mapOperationalCalendarEvents,
   startOfCalendarWeek,
   type CalendarActivity,
+  type CalendarActivityFilter,
   type CalendarActivityType,
   type CalendarCategory,
   type CalendarView,
@@ -67,7 +69,7 @@ const activityIcon: Record<CalendarActivityType, typeof RotateCcw> = {
 
 type ContextState = "loading" | "ready" | "signed_out" | "forbidden" | "error";
 type CalendarState = "idle" | "loading" | "ready" | "forbidden" | "error";
-type ActivityFilter = "All Activity" | CalendarActivityType;
+type ActivityFilter = CalendarActivityFilter;
 type CalendarStatusOption = {
   key: string;
   source: CalendarActivity["source"];
@@ -337,18 +339,20 @@ export function CalendarSchedulePage() {
       : "All Statuses";
   const categoryAndStatusActivities = useMemo(
     () =>
-      activities.filter(
-        (activity) =>
-          (!categoryFilter || activity.categoryIds.includes(categoryFilter)) &&
-          (!statusFilter || `${activity.source}:${activity.status}` === statusFilter)
-      ),
+      filterCalendarActivities(activities, {
+        activity: "All Activity",
+        categoryId: categoryFilter,
+        statusKey: statusFilter,
+      }),
     [activities, categoryFilter, statusFilter]
   );
   const visibleActivities = useMemo(
     () =>
-      activityFilter === "All Activity"
-        ? categoryAndStatusActivities
-        : categoryAndStatusActivities.filter((activity) => activity.type === activityFilter),
+      filterCalendarActivities(categoryAndStatusActivities, {
+        activity: activityFilter,
+        categoryId: null,
+        statusKey: null,
+      }),
     [activityFilter, categoryAndStatusActivities]
   );
   const weekDateKeys = useMemo(() => getCalendarWeekDateKeys(weekStart), [weekStart]);

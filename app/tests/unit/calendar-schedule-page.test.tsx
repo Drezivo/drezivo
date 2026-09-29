@@ -10,11 +10,15 @@ import type {
 import { CalendarSchedulePage } from "@/components/calendar/calendar-schedule-page";
 import { DrezivoApiError } from "@/lib/drezivo-api";
 import {
+  addCalendarMonths,
   addCalendarDays,
   calendarBoundaryInstant,
+  calendarDateKeyAt,
   calendarTodayDateKey,
   CALENDAR_HOUR_HEIGHT,
   CALENDAR_TOTAL_HEIGHT,
+  formatCalendarDate,
+  getCalendarMonthGridDateKeys,
   startOfCalendarWeek,
 } from "@/components/calendar/calendar-schedule-data";
 
@@ -255,6 +259,98 @@ describe("CalendarSchedulePage production details and states", () => {
     expect(screen.getByRole("button", { name: /Open reservation details: Pickup/ })).toBeVisible();
   });
 
+  it("resolves the active branch timezone and requests exact branch-local week boundaries", async () => {
+    api.getActorContext.mockResolvedValueOnce({
+      data: {
+        ...actorContext,
+        tenant: { timezone: "UTC" },
+        branches: [{ id: branchId, timezone: timeZone }],
+      },
+      requestId: "request-context-branch-zone",
+    });
+    render(<CalendarSchedulePage />);
+
+    await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    const branchToday = calendarTodayDateKey(timeZone);
+    const expectedWeekStart = startOfCalendarWeek(branchToday);
+    expect(api.getOperationalCalendar).toHaveBeenCalledWith({
+      start: calendarBoundaryInstant(expectedWeekStart, timeZone),
+      end: calendarBoundaryInstant(addCalendarDays(expectedWeekStart, 7), timeZone),
+    });
+  });
+
+  it("refetches exact week boundaries when navigating backward and forward", async () => {
+    render(<CalendarSchedulePage />);
+    await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    fireEvent.click(screen.getByRole("button", { name: "Previous period" }));
+
+    await waitFor(() => expect(api.getOperationalCalendar).toHaveBeenCalledTimes(2));
+    const previousWeek = addCalendarDays(weekStart, -7);
+    expect(api.getOperationalCalendar).toHaveBeenLastCalledWith({
+      start: calendarBoundaryInstant(previousWeek, timeZone),
+      end: calendarBoundaryInstant(addCalendarDays(previousWeek, 7), timeZone),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Next period" }));
+
+    await waitFor(() => expect(api.getOperationalCalendar).toHaveBeenCalledTimes(3));
+    expect(api.getOperationalCalendar).toHaveBeenLastCalledWith({
+      start: calendarBoundaryInstant(weekStart, timeZone),
+      end: calendarBoundaryInstant(addCalendarDays(weekStart, 7), timeZone),
+    });
+  });
+
+  it("requests the complete six-week month grid including spillover dates", async () => {
+    render(<CalendarSchedulePage />);
+    await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    fireEvent.click(screen.getByRole("button", { name: "Month view" }));
+
+    await screen.findByRole("region", { name: /Monthly schedule grid/ });
+    const today = calendarTodayDateKey(timeZone);
+    const monthStart = `${today.slice(0, 7)}-01`;
+    const visibleDates = getCalendarMonthGridDateKeys(monthStart);
+    const firstDate = visibleDates[0];
+    const lastDate = visibleDates.at(-1);
+    if (!firstDate || !lastDate) throw new Error("Expected six visible Calendar weeks.");
+    expect(visibleDates).toHaveLength(42);
+    expect(api.getOperationalCalendar).toHaveBeenLastCalledWith({
+      start: calendarBoundaryInstant(firstDate, timeZone),
+      end: calendarBoundaryInstant(addCalendarDays(lastDate, 1), timeZone),
+    });
+  });
+
+  it("refetches when navigating between months and Today returns to the active branch month", async () => {
+    render(<CalendarSchedulePage />);
+    await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    fireEvent.click(screen.getByRole("button", { name: "Month view" }));
+    await screen.findByRole("region", { name: /Monthly schedule grid/ });
+    fireEvent.click(screen.getByRole("button", { name: "Previous period" }));
+
+    await waitFor(() => expect(api.getOperationalCalendar).toHaveBeenCalledTimes(3));
+    const branchToday = calendarTodayDateKey(timeZone);
+    const currentMonth = `${branchToday.slice(0, 7)}-01`;
+    const visibleDates = getCalendarMonthGridDateKeys(currentMonth);
+    const firstDate = visibleDates[0];
+    const lastDate = visibleDates.at(-1);
+    if (!firstDate || !lastDate) throw new Error("Expected six visible Calendar weeks.");
+    const previousMonthDates = getCalendarMonthGridDateKeys(addCalendarMonths(currentMonth, -1));
+    const previousMonthFirst = previousMonthDates[0];
+    const previousMonthLast = previousMonthDates.at(-1);
+    if (!previousMonthFirst || !previousMonthLast) {
+      throw new Error("Expected six visible weeks in the previous month.");
+    }
+    expect(api.getOperationalCalendar).toHaveBeenLastCalledWith({
+      start: calendarBoundaryInstant(previousMonthFirst, timeZone),
+      end: calendarBoundaryInstant(addCalendarDays(previousMonthLast, 1), timeZone),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Today" }));
+
+    await waitFor(() => expect(api.getOperationalCalendar).toHaveBeenCalledTimes(4));
+    expect(api.getOperationalCalendar).toHaveBeenLastCalledWith({
+      start: calendarBoundaryInstant(firstDate, timeZone),
+      end: calendarBoundaryInstant(addCalendarDays(lastDate, 1), timeZone),
+    });
+  });
+
   it("uses 80px hourly rows with half-hour guides and time-aligned events", async () => {
     const { container } = render(<CalendarSchedulePage />);
 
@@ -317,24 +413,32 @@ describe("CalendarSchedulePage production details and states", () => {
     unmount();
   });
 
-  it("distinguishes a filtered-empty period and lets staff clear filters", async () => {
-    api.getOperationalCalendar.mockResolvedValueOnce({
-      data: {
-        window: { start: pickupAt, end: returnAt },
-        categories: [],
-        events: [calendarEvents[0]],
-        truncated: false,
-      },
-      requestId: "request-pickups-only",
-    });
+  it("exposes the production activity, category, and status filters", async () => {
     render(<CalendarSchedulePage />);
     await screen.findByRole("region", { name: /Weekly schedule grid/ });
-    fireEvent.keyDown(screen.getByRole("button", { name: "All Activity" }), { key: "ArrowDown" });
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Return" }));
+    expect(screen.getByRole("button", { name: "All Activity" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "All Categories" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "All Statuses" })).toBeVisible();
+  });
 
-    expect(await screen.findByText("No activities match these filters")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
-    expect(screen.getByRole("button", { name: /Open reservation details: Pickup/ })).toBeVisible();
+  it("warns when the API marks a dense range as truncated", async () => {
+    api.getOperationalCalendar.mockResolvedValueOnce({
+      data: {
+        window: {
+          start: calendarBoundaryInstant(weekStart, timeZone),
+          end: calendarBoundaryInstant(addCalendarDays(weekStart, 7), timeZone),
+        },
+        categories: [],
+        events: calendarEvents,
+        truncated: true,
+      },
+      requestId: "request-truncated-calendar",
+    });
+    render(<CalendarSchedulePage />);
+
+    expect(
+      await screen.findByText(/This range contains more activity than the calendar can display/)
+    ).toBeVisible();
   });
 
   it("hides old-period counts while the next range is loading", async () => {
@@ -465,6 +569,128 @@ describe("CalendarSchedulePage production details and states", () => {
     const detailSheet = await screen.findByRole("dialog");
     expect(await within(detailSheet).findByRole("heading", { name: /RSV-REAL-101/ })).toBeVisible();
     expect(api.getReservationDetail).toHaveBeenCalledWith(reservationId);
+  });
+
+  it("shows branch-local agenda counts, applies its activity tab, and navigates within the loaded week", async () => {
+    render(<CalendarSchedulePage />);
+    await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    const eventDate = calendarDateKeyAt(new Date(pickupAt), timeZone);
+    const eventDateLabel = formatCalendarDate(eventDate, {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+    fireEvent.click(screen.getByRole("button", { name: `Open ${eventDateLabel} agenda` }));
+
+    const agenda = screen.getByRole("dialog");
+    expect(within(agenda).getByRole("button", { name: /All 3/ })).toBeVisible();
+    expect(within(agenda).getByRole("button", { name: /Pickup 1/ })).toBeVisible();
+    expect(within(agenda).getByRole("button", { name: /Return 1/ })).toBeVisible();
+    expect(within(agenda).getByRole("button", { name: /Fitting 1/ })).toBeVisible();
+    fireEvent.click(within(agenda).getByRole("button", { name: /Fitting 1/ }));
+    expect(
+      within(agenda).getByRole("button", { name: /Open fitting details: Fitting/ })
+    ).toBeVisible();
+    expect(within(agenda).queryByRole("button", { name: /Open reservation details/ })).toBeNull();
+
+    fireEvent.click(within(agenda).getByRole("button", { name: "Next day" }));
+    expect(await within(agenda).findByText("No activity on this day.")).toBeVisible();
+    fireEvent.click(within(agenda).getByRole("button", { name: "Previous day" }));
+    expect(
+      await within(agenda).findByRole("button", { name: /Open fitting details: Fitting/ })
+    ).toBeVisible();
+    expect(api.getOperationalCalendar).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the full Day Agenda from Month overflow", async () => {
+    const pickupEvent = calendarEvents[0];
+    if (!pickupEvent) throw new Error("Expected a reservation Pickup fixture.");
+    const overflowEvents = [
+      ...calendarEvents,
+      {
+        ...pickupEvent,
+        id: "reservation-pickup-overflow-1",
+        period: {
+          start: new Date(Date.parse(pickupAt) + 20 * 60_000).toISOString(),
+          end: new Date(Date.parse(pickupAt) + 50 * 60_000).toISOString(),
+        },
+      },
+      {
+        ...pickupEvent,
+        id: "reservation-pickup-overflow-2",
+        period: {
+          start: new Date(Date.parse(pickupAt) + 40 * 60_000).toISOString(),
+          end: new Date(Date.parse(pickupAt) + 70 * 60_000).toISOString(),
+        },
+      },
+    ];
+    api.getOperationalCalendar.mockResolvedValue({
+      data: {
+        window: {
+          start: calendarBoundaryInstant(weekStart, timeZone),
+          end: calendarBoundaryInstant(addCalendarDays(weekStart, 7), timeZone),
+        },
+        categories: [],
+        events: overflowEvents,
+        truncated: false,
+      },
+      requestId: "request-overflow-events",
+    });
+    render(<CalendarSchedulePage />);
+    await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    fireEvent.click(screen.getByRole("button", { name: "Month view" }));
+    await screen.findByRole("region", { name: /Monthly schedule grid/ });
+    fireEvent.click(await screen.findByRole("button", { name: /\+\d+ more/ }));
+
+    const agenda = await screen.findByRole("dialog");
+    expect(within(agenda).getByRole("button", { name: /All 5/ })).toBeVisible();
+    expect(
+      within(agenda).getAllByRole("button", { name: /Open reservation details: Pickup/ })
+    ).toHaveLength(3);
+  });
+
+  it("lays out overlapping events in separate lanes using their actual durations", async () => {
+    const pickupEvent = calendarEvents[0];
+    const fittingEvent = calendarEvents[2];
+    if (!pickupEvent || !fittingEvent) throw new Error("Expected both Calendar event fixtures.");
+    const overlappingEvents: OperationalCalendarEvent[] = [
+      {
+        ...pickupEvent,
+        id: "reservation-long-pickup",
+        period: {
+          start: pickupAt,
+          end: new Date(Date.parse(pickupAt) + 120 * 60_000).toISOString(),
+        },
+      },
+      {
+        ...fittingEvent,
+        id: "fitting-overlapping-pickup",
+        period: {
+          start: new Date(Date.parse(pickupAt) + 30 * 60_000).toISOString(),
+          end: new Date(Date.parse(pickupAt) + 90 * 60_000).toISOString(),
+        },
+      },
+    ];
+    api.getOperationalCalendar.mockResolvedValueOnce({
+      data: {
+        window: {
+          start: calendarBoundaryInstant(weekStart, timeZone),
+          end: calendarBoundaryInstant(addCalendarDays(weekStart, 7), timeZone),
+        },
+        categories: [],
+        events: overlappingEvents,
+        truncated: false,
+      },
+      requestId: "request-overlapping-events",
+    });
+    render(<CalendarSchedulePage />);
+
+    await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    const pickup = screen.getByRole("button", { name: /Open reservation details: Pickup/ });
+    const fitting = screen.getByRole("button", { name: /Open fitting details: Fitting/ });
+    expect(pickup).toHaveStyle({ top: "163px", height: "154px", left: "0%", width: "50%" });
+    expect(fitting).toHaveStyle({ top: "203px", height: "74px", left: "50%", width: "50%" });
   });
 
   it("retries a transient Reservation detail failure and refreshes both projections after pickup", async () => {
