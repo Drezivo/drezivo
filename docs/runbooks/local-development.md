@@ -24,10 +24,18 @@ the [MinIO Compose example](https://github.com/minio/minio/blob/master/docs/orch
 ## Start and migrate
 
 1. Install Docker Desktop or another Docker engine that provides Docker Compose.
-2. Fill the credential entries in the ignored `api/.env` file. `MINIO_ROOT_PASSWORD` and
-   `S3_SECRET_ACCESS_KEY` must be the same value; use a unique local value. The API uses
-   `http://127.0.0.1:9000` with path-style addressing for MinIO; production leaves the endpoint
-   unset for AWS S3. Copy your Clerk development-instance values there as well. Generate separate
+2. Fill the credential entries in the ignored `api/.env` file. `MINIO_ROOT_USER` and
+   `OBJECT_STORAGE_ACCESS_KEY_ID` must match, as must `MINIO_ROOT_PASSWORD` and
+   `OBJECT_STORAGE_SECRET_ACCESS_KEY`; use unique local values. Existing legacy `AWS_REGION`/`S3_*`
+   MinIO variables are temporarily translated only when they point to loopback MinIO; production
+   ignores those aliases. Prefer the `OBJECT_STORAGE_*` names for new local configuration. Set
+   `OBJECT_STORAGE_ENDPOINT=http://127.0.0.1:9000`,
+   `OBJECT_STORAGE_REGION=us-east-1`,
+   `OBJECT_STORAGE_BUCKET_PRIVATE=drezivo-private`, and
+   `OBJECT_STORAGE_FORCE_PATH_STYLE=true`. The API has no AWS endpoint fallback. Staging and
+   production require explicit Cloudflare R2 endpoints and environment-specific credentials;
+   neither uses MinIO. Copy your
+   Clerk development-instance values there as well. Generate separate
    32-byte base64url values for `INVITATION_EMAIL_ENCRYPTION_KEY` and
    `INVITATION_EMAIL_DIGEST_KEY`. Do not commit any `.env*` file.
 3. Run `docker compose --env-file api/.env up -d` from the repository root. This is the supported
@@ -43,9 +51,11 @@ the [MinIO Compose example](https://github.com/minio/minio/blob/master/docs/orch
 7. Run `npm run db:migrate --workspace @drezivo/api`.
 8. Confirm the migration ledger reports all numbered SQL files and no migration error.
 
-The API's object-storage adapter is not wired in Phase 0. MinIO is present so its buckets and
-credentials can be exercised when the file-storage slice is implemented; do not claim the API
-uploads to MinIO before that adapter and its tests exist.
+The API upload/finalize flow uses the same S3-compatible storage boundary for MinIO locally and
+Cloudflare R2 in production. Direct uploads use short-lived signed URLs with a create-only
+condition. Finalization streams stored bytes through the API to verify the actual size, type,
+SHA-256, and file signature. The MinIO upload/finalize parity check still needs to be run after
+starting the local services.
 
 ## Stop and reset
 

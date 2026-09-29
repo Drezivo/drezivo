@@ -22,6 +22,10 @@ It has no database, UI, provider credentials, or authorization authority.
 Owns Express REST routes, Clerk verification, local tenant and branch authorization, Drizzle
 queries, reviewed SQL migrations, transaction rules, and the durable worker.
 
+The file-upload feature uses `api/src/integrations/storage/` through `ObjectStorage`. Production
+targets Cloudflare R2 through its S3-compatible endpoint; local development keeps MinIO. The
+adapter is not an AWS S3 runtime provider or default-host fallback. See [[04-Decisions/Cloudflare R2 Object Storage]].
+
 ## app and web
 
 `app` is the staff dashboard. `web` is marketing, public storefront, and guest booking. Both use

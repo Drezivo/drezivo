@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { uploadAuthorizedFile } from "@/lib/authorized-file-upload";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
 
@@ -391,14 +392,11 @@ export function EditClothingPage({ productId }: { productId: string }) {
         },
         photo.uploadKey
       );
-      const uploadResponse = await fetch(authorized.data.upload_url, {
-        method: "PUT",
-        headers: authorized.data.required_headers,
-        body: photo.file,
-      });
-      if (!uploadResponse.ok) {
-        throw new Error("Photo upload failed before Drezivo could accept the file.");
-      }
+      await uploadAuthorizedFile(
+        authorized.data,
+        photo.file,
+        "Photo upload failed before Drezivo could accept the file."
+      );
       const finalized = await client.finalizeUpload(
         authorized.data.file_id,
         photo.finalizeKey

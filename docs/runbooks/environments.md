@@ -21,7 +21,7 @@ Three environments, each with its own secrets/accounts or projects, least privil
   (same Node LTS, same Supabase PostgreSQL major and connection mode, same region where practical)
   so a migration or a deploy is rehearsed under realistic conditions before it reaches production.
 - **Production** — serves real tenants. Separate Clerk project, separate Supabase project, separate
-  S3 buckets, separate everything-with-a-credential from staging and development. Nothing in
+  R2 buckets, separate everything-with-a-credential from staging and development. Nothing in
   production is a "free tier" resource (TRD §1: "Do not use a free-tier suspension/retention
   assumption as a production recovery plan").
 
@@ -81,16 +81,36 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   tenant invitation recipient email before it is stored. Keep it separate from the digest key.
 - `INVITATION_EMAIL_DIGEST_KEY` — deployment-managed 32-byte base64url HMAC key used for exact
   tenant-local pending-recipient dedupe. It is never exposed to clients or logs.
-- `AWS_REGION` — region for S3 and any AWS-hosted dependency.
-- `S3_BUCKET_PRIVATE_EVIDENCE` — bucket name for private evidence (receipts, verification
-  documents). Originals are private; access is short-lived (TRD §7, proposed five-minute
+- `OBJECT_STORAGE_ENDPOINT` — required explicit S3-compatible API endpoint. Staging and production
+  use the HTTPS account-scoped Cloudflare R2 endpoint; local development uses the loopback MinIO
+  endpoint. Staging and production startup reject AWS endpoints and endpoints with a base path.
+- `OBJECT_STORAGE_REGION` — `auto` for staging/production R2; a local signing region such as
+  `us-east-1` for MinIO.
+- `OBJECT_STORAGE_BUCKET_PRIVATE` — required environment-specific private source/evidence bucket.
+  Originals remain private and access uses short-lived signed reads (TRD §7, proposed five-minute
   downloads).
-- `S3_BUCKET_PUBLIC_DERIVATIVES` — bucket (or bucket + CDN path) for optimized public catalogue
-  image derivatives.
-- AWS credentials for signing S3 presigned URLs — DECISION NEEDED: confirm whether these are
-  supplied via an IAM role attached to the compute environment (preferred, per TRD §7's "Use
-  IAM roles") rather than static access-key environment variables. If the chosen container host
-  cannot attach an IAM role, name the access-key variables here explicitly before launch.
+- `OBJECT_STORAGE_BUCKET_PUBLIC` — optional until Stage B public catalogue derivatives are
+  implemented. Keep public derivatives separate from source/evidence objects.
+- `OBJECT_STORAGE_ACCESS_KEY_ID` and `OBJECT_STORAGE_SECRET_ACCESS_KEY` — deployment-managed
+  Cloudflare R2 S3 API credentials, separately provisioned for staging and production and scoped
+  to only the required bucket. Local development uses MinIO credentials; developers do not need
+  Cloudflare credentials. These values never belong in `app` or `web`.
+- `OBJECT_STORAGE_FORCE_PATH_STYLE` — `false` for staging/production R2's virtual-hosted endpoint
+  and `true` for local MinIO path-style addressing.
+- `OBJECT_STORAGE_UPLOADS_ENABLED` — optional boolean; defaults to `false` in production and
+  `true` outside production. Explicitly set it to `true` only after the production R2 readiness and
+  reconciliation gates pass. Setting it to `false` stops new upload authorizations while preserving
+  finalization and signed reads on the configured provider. Use the migration runbook's
+  pre-deployment drain procedure before switching from a legacy production release to the R2-only
+  runtime.
+
+The API has no AWS endpoint/region fallback and does not use the AWS credential-provider chain.
+The AWS SDK is used only to speak the S3-compatible protocol. Bucket-scoped credentials do not
+enforce Drezivo tenant prefixes; tenant authorization and server-generated storage keys remain
+application responsibilities. Production R2 cutover is gated on the object inventory, migration/
+rollback design, R2 compatibility tests, selected host configuration, and privacy review in
+[ADR 0010](../decisions/0010-cloudflare-r2-object-storage.md).
+
 - `EMAIL_PROVIDER_*` — sender verification credentials for the email adapter (TRD §1 recommends
   an SES adapter, "subject to deliverability pilot"). DECISION NEEDED: exact variable names
   depend on the confirmed provider (TRD §12 lists "email sender and quotas" as a remaining

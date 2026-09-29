@@ -15,14 +15,16 @@ disagrees with it.
 | `api` server | Managed container host | One container image, HTTP server entrypoint |
 | worker | Same managed container host | Same container image, worker entrypoint (`docs/decisions/0004-worker-in-api-repository.md`) |
 | Database | Supabase PostgreSQL, Data API disabled | N/A — managed |
-| Files | S3 (private evidence bucket + public derivatives bucket) | N/A — managed |
+| Files | Cloudflare R2 (private source/evidence bucket; public derivatives are a later stage) | N/A — managed |
 
 DECISION NEEDED: confirm the specific managed container host and finalize the Next.js host
 selection (TRD §1 names Vercel as "a candidate," not a decision). Confirm region compatibility
 and pricing before selecting paid plans — TRD §1: "Prefer API, worker, database, and private
 storage in a nearby compatible region such as Singapore if all chosen services support the
 required configuration. Measure latency from Philippine mobile networks; geographical proximity
-is not a benchmark." Do not assume Singapore is confirmed without that measurement.
+is not a benchmark." Do not assume Singapore is confirmed without that measurement. R2's provider
+selection is recorded in [ADR 0010](../decisions/0010-cloudflare-r2-object-storage.md), but no
+production bucket, credential, object migration, or cutover is declared complete by this runbook.
 
 The API and worker deploy as ordinary PostgreSQL clients. They do not use Supabase Auth, Storage,
 Realtime, REST, GraphQL, or service-role keys. Before the first application deploy, apply migrations

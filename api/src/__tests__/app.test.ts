@@ -5,8 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 process.env.NODE_ENV = 'test'; process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test';
 process.env.CLERK_SECRET_KEY = 'test'; process.env.CLERK_PUBLISHABLE_KEY = 'test'; process.env.CLERK_WEBHOOK_SIGNING_SECRET = 'test';
-process.env.AWS_REGION = 'test'; process.env.S3_BUCKET_PRIVATE = 'private'; process.env.S3_BUCKET_PUBLIC = 'public';
-process.env.S3_ACCESS_KEY_ID = 'test'; process.env.S3_SECRET_ACCESS_KEY = 'test';
+process.env.OBJECT_STORAGE_REGION = 'test'; process.env.OBJECT_STORAGE_BUCKET_PRIVATE = 'private'; process.env.OBJECT_STORAGE_BUCKET_PUBLIC = 'public';
+process.env.OBJECT_STORAGE_ACCESS_KEY_ID = 'test'; process.env.OBJECT_STORAGE_SECRET_ACCESS_KEY = 'test';
 // Keep unit tests deterministic without weakening production authentication. The real Clerk
 // middleware is never bypassed by NODE_ENV; this test-only module mock is hoisted by Vitest.
 vi.mock('@clerk/express', () => ({
@@ -17,8 +17,8 @@ vi.mock('@clerk/express', () => ({
 /*
   process.env.NODE_ENV = 'test'; process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test';
   process.env.CLERK_SECRET_KEY = 'test'; process.env.CLERK_PUBLISHABLE_KEY = 'test'; process.env.CLERK_WEBHOOK_SIGNING_SECRET = 'test';
-  process.env.AWS_REGION = 'test'; process.env.S3_BUCKET_PRIVATE = 'private'; process.env.S3_BUCKET_PUBLIC = 'public';
-  process.env.S3_ACCESS_KEY_ID = 'test'; process.env.S3_SECRET_ACCESS_KEY = 'test';
+  process.env.OBJECT_STORAGE_REGION = 'test'; process.env.OBJECT_STORAGE_BUCKET_PRIVATE = 'private'; process.env.OBJECT_STORAGE_BUCKET_PUBLIC = 'public';
+  process.env.OBJECT_STORAGE_ACCESS_KEY_ID = 'test'; process.env.OBJECT_STORAGE_SECRET_ACCESS_KEY = 'test';
 */
 
 describe('API scaffold', async () => {

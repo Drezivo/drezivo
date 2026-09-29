@@ -42,8 +42,8 @@ docs       → defines intent, decisions, runbooks, and evidence for all of them
 - Side effects that must survive a crash go through the outbox/queue with lease, bounded retry,
   and terminal failure state. Never use fire-and-forget work.
 - Never log or return secrets, tokens, payment evidence, or personally identifiable information.
-- Keep Clerk secret keys, Supabase database URLs, S3 credentials, and environment values out of Git and the
-  Obsidian vault.
+- Keep Clerk secret keys, Supabase database URLs, object-storage credentials, and environment values
+  out of Git and the Obsidian vault.
 
 ## 4. How to trace a feature
 

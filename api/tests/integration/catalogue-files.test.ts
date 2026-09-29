@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -28,11 +30,11 @@ process.env.CLERK_WEBHOOK_SIGNING_SECRET ??= 'test';
 process.env.CORS_ALLOWED_ORIGINS ??= 'http://localhost:3000';
 process.env.INVITATION_EMAIL_ENCRYPTION_KEY ??= Buffer.alloc(32, 1).toString('base64url');
 process.env.INVITATION_EMAIL_DIGEST_KEY ??= Buffer.alloc(32, 2).toString('base64url');
-process.env.AWS_REGION ??= 'test';
-process.env.S3_BUCKET_PRIVATE ??= 'private';
-process.env.S3_BUCKET_PUBLIC ??= 'public';
-process.env.S3_ACCESS_KEY_ID ??= 'test';
-process.env.S3_SECRET_ACCESS_KEY ??= 'test';
+process.env.OBJECT_STORAGE_REGION ??= 'test';
+process.env.OBJECT_STORAGE_BUCKET_PRIVATE ??= 'private';
+process.env.OBJECT_STORAGE_BUCKET_PUBLIC ??= 'public';
+process.env.OBJECT_STORAGE_ACCESS_KEY_ID ??= 'test';
+process.env.OBJECT_STORAGE_SECRET_ACCESS_KEY ??= 'test';
 
 const PNG_PREFIX = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 const PDF_PREFIX = Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]);
@@ -43,7 +45,6 @@ class FakeStorage {
   readonly authorized: Array<{
     storageKey: string;
     contentType: string;
-    sha256: string;
     expiresInSeconds: number;
   }> = [];
   readonly inspected: string[] = [];
@@ -64,18 +65,13 @@ class FakeStorage {
   >();
   failInspection = false;
 
-  authorizeUpload(input: {
-    storageKey: string;
-    contentType: string;
-    sha256: string;
-    expiresInSeconds: number;
-  }) {
+  authorizeUpload(input: { storageKey: string; contentType: string; expiresInSeconds: number }) {
     this.authorized.push(input);
     return Promise.resolve({
       uploadUrl: `https://uploads.example.test/${encodeURIComponent(input.storageKey)}`,
       requiredHeaders: {
         'Content-Type': input.contentType,
-        'x-amz-checksum-sha256': input.sha256,
+        'If-None-Match': '*',
       },
       expiresAt: new Date('2026-09-21T00:00:00.000Z'),
     });
@@ -93,19 +89,32 @@ class FakeStorage {
     });
   }
 
-  inspectUploadedObject(storageKey: string) {
+  inspectUploadedObject(storageKey: string, maxByteSize: number) {
     this.inspected.push(storageKey);
     if (this.failInspection) {
       return Promise.reject(new Error('provider unavailable'));
     }
-    return Promise.resolve(this.objects.get(storageKey) ?? null);
+    const object = this.objects.get(storageKey) ?? null;
+    if (object && object.byteSize > maxByteSize) {
+      return Promise.resolve({ ...object, byteSize: maxByteSize + 1, sha256: null });
+    }
+    return Promise.resolve(object);
+  }
+
+  deleteObject() {
+    return Promise.resolve();
   }
 }
 
 describe('CLT-022 clothing file attachment flow', async () => {
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
-  const { authorizeUpload, finalizeUpload } = await import('../../src/modules/files/files.service.js');
-  const { getDefaultMeasurementGuide, replaceClothingImages } = await import('../../src/modules/catalogue/catalogue.service.js');
+  const { config } = await import('../../src/config/index.js');
+  const { S3CompatibleObjectStorage } =
+    await import('../../src/integrations/storage/s3-compatible-object-storage.js');
+  const { authorizeUpload, finalizeUpload } =
+    await import('../../src/modules/files/files.service.js');
+  const { getDefaultMeasurementGuide, replaceClothingImages } =
+    await import('../../src/modules/catalogue/catalogue.service.js');
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
 
   beforeAll(async () => {
@@ -141,7 +150,11 @@ describe('CLT-022 clothing file attachment flow', async () => {
          RETURNING id`,
         [seed.tenantId, fileRow.id],
       );
-      return { fileId: fileRow.id, storageKey: fileRow.storage_key, guideId: requireRow(guide.rows, 'guide').id };
+      return {
+        fileId: fileRow.id,
+        storageKey: fileRow.storage_key,
+        guideId: requireRow(guide.rows, 'guide').id,
+      };
     });
 
     const result = await getDefaultMeasurementGuide(seed.catalogueContext, storage);
@@ -182,10 +195,14 @@ describe('CLT-022 clothing file attachment flow', async () => {
     if (!authorization.body.success) throw new Error('Expected upload authorization success.');
     expect(authorization.body.data.required_headers).toEqual({
       'Content-Type': 'image/png',
-      'x-amz-checksum-sha256': SHA_A,
+      'If-None-Match': '*',
     });
-    expect(JSON.stringify(authorization.body)).not.toContain(process.env.S3_SECRET_ACCESS_KEY);
-    expect(JSON.stringify(authorization.body)).not.toContain(process.env.S3_ACCESS_KEY_ID);
+    expect(JSON.stringify(authorization.body)).not.toContain(
+      process.env.OBJECT_STORAGE_SECRET_ACCESS_KEY,
+    );
+    expect(JSON.stringify(authorization.body)).not.toContain(
+      process.env.OBJECT_STORAGE_ACCESS_KEY_ID,
+    );
 
     const fileId = authorization.body.data.file_id;
     const pending = await readFile(seed.tenantId, seed.principalId, fileId);
@@ -235,6 +252,162 @@ describe('CLT-022 clothing file attachment flow', async () => {
     expect(accepted.frozen_at).toBeInstanceOf(Date);
   });
 
+  const liveR2Enabled = process.env.OBJECT_STORAGE_LIVE_TESTS === 'true';
+  const liveMinioEnabled = process.env.OBJECT_STORAGE_LIVE_MINIO_TESTS === 'true';
+
+  it.skipIf(!liveR2Enabled && !liveMinioEnabled)(
+    'finalizes a file only after inspecting bytes uploaded through a live provider presigned URL',
+    async () => {
+      const endpoint = new URL(config.OBJECT_STORAGE_ENDPOINT);
+      const bucketName = config.OBJECT_STORAGE_BUCKET_PRIVATE.toLowerCase();
+      const isR2TestConfiguration =
+        endpoint.protocol === 'https:' &&
+        endpoint.hostname.endsWith('.r2.cloudflarestorage.com') &&
+        config.OBJECT_STORAGE_REGION === 'auto' &&
+        !config.OBJECT_STORAGE_FORCE_PATH_STYLE &&
+        bucketName.includes('test') &&
+        !bucketName.includes('prod') &&
+        process.env.OBJECT_STORAGE_LIVE_TEST_BUCKET_CONFIRM ===
+          config.OBJECT_STORAGE_BUCKET_PRIVATE;
+      const isMinioTestConfiguration =
+        endpoint.protocol === 'http:' &&
+        ['localhost', '127.0.0.1', '::1', '[::1]'].includes(endpoint.hostname) &&
+        config.OBJECT_STORAGE_FORCE_PATH_STYLE &&
+        !bucketName.includes('prod') &&
+        process.env.OBJECT_STORAGE_LIVE_MINIO_BUCKET_CONFIRM ===
+          config.OBJECT_STORAGE_BUCKET_PRIVATE;
+      if (
+        config.NODE_ENV !== 'test' ||
+        !config.OBJECT_STORAGE_UPLOADS_ENABLED ||
+        liveR2Enabled === liveMinioEnabled ||
+        !(liveR2Enabled ? isR2TestConfiguration : isMinioTestConfiguration) ||
+        config.OBJECT_STORAGE_ACCESS_KEY_ID === 'unit-test-key' ||
+        config.OBJECT_STORAGE_SECRET_ACCESS_KEY === 'unit-test-key' ||
+        config.OBJECT_STORAGE_ACCESS_KEY_ID === 'test' ||
+        config.OBJECT_STORAGE_SECRET_ACCESS_KEY === 'test'
+      ) {
+        throw new Error(
+          'Live finalization requires exactly one explicitly configured non-production test bucket.',
+        );
+      }
+
+      const seed = await seedTenant('org_clt022_r2_finalize', 'user_clt022_r2_finalize');
+      const storage = new S3CompatibleObjectStorage(config);
+      const bytes = Buffer.concat([Buffer.from(PNG_PREFIX), Buffer.from('synthetic-r2-test')]);
+      const sha256 = createHash('sha256').update(bytes).digest('base64');
+      const storageKeys: string[] = [];
+
+      try {
+        const authorization = await authorizeUpload(
+          {
+            ...seed.fileContext,
+            requestId: 'req-clt022-r2-finalize-authorize',
+            idempotencyKey: 'clt022-r2-finalize-authorize',
+            request: uploadAuthorizationRequest.parse({
+              purpose: 'catalogue_image',
+              content_type: 'image/png',
+              byte_size: bytes.byteLength,
+              sha256,
+            }),
+          },
+          storage,
+        );
+        if (!authorization.body.success)
+          throw new Error('Expected live provider upload authorization success.');
+        const fileId = authorization.body.data.file_id;
+        const storageKey = `tenant-files/${seed.tenantId}/${fileId}/source`;
+        storageKeys.push(storageKey);
+
+        const uploadResponse = await fetch(authorization.body.data.upload_url, {
+          method: 'PUT',
+          headers: authorization.body.data.required_headers,
+          body: bytes,
+        }).catch(() => {
+          throw new Error(
+            'Live provider upload failed; signed URL details were intentionally omitted.',
+          );
+        });
+        expect(uploadResponse.ok).toBe(true);
+
+        const pending = await readFile(seed.tenantId, seed.principalId, fileId);
+        expect(pending.storage_key).toBe(storageKey);
+        const finalized = await finalizeUpload(
+          {
+            ...seed.fileContext,
+            fileId,
+            requestId: 'req-clt022-r2-finalize',
+            idempotencyKey: 'clt022-r2-finalize',
+          },
+          storage,
+        );
+
+        expect(finalized.status).toBe(200);
+        if (!finalized.body.success)
+          throw new Error('Expected live provider finalization success.');
+        expect(finalized.body.data.file).toMatchObject({
+          file_id: fileId,
+          lifecycle_status: 'accepted',
+          content_type: 'image/png',
+          byte_size: bytes.byteLength,
+          sha256,
+        });
+
+        const accepted = await readFile(seed.tenantId, seed.principalId, fileId);
+        expect(accepted.version_id).toBeNull();
+        expect(accepted.frozen_at).toBeInstanceOf(Date);
+
+        const mismatchedAuthorization = await authorizeUpload(
+          {
+            ...seed.fileContext,
+            requestId: 'req-clt022-r2-mismatch-authorize',
+            idempotencyKey: 'clt022-r2-mismatch-authorize',
+            request: uploadAuthorizationRequest.parse({
+              purpose: 'catalogue_image',
+              content_type: 'image/png',
+              byte_size: bytes.byteLength,
+              sha256: SHA_B,
+            }),
+          },
+          storage,
+        );
+        if (!mismatchedAuthorization.body.success) {
+          throw new Error('Expected live provider mismatch-test authorization success.');
+        }
+        const mismatchedFileId = mismatchedAuthorization.body.data.file_id;
+        const mismatchedStorageKey = `tenant-files/${seed.tenantId}/${mismatchedFileId}/source`;
+        storageKeys.push(mismatchedStorageKey);
+
+        const mismatchedPut = await fetch(mismatchedAuthorization.body.data.upload_url, {
+          method: 'PUT',
+          headers: mismatchedAuthorization.body.data.required_headers,
+          body: bytes,
+        }).catch(() => {
+          throw new Error(
+            'Live provider mismatch-test upload failed; signed URL details were intentionally omitted.',
+          );
+        });
+        expect(mismatchedPut.ok).toBe(true);
+
+        const rejected = await finalizeUpload(
+          {
+            ...seed.fileContext,
+            fileId: mismatchedFileId,
+            requestId: 'req-clt022-r2-mismatch-finalize',
+            idempotencyKey: 'clt022-r2-mismatch-finalize',
+          },
+          storage,
+        );
+        expect(rejected.status).toBe(422);
+        if (rejected.body.success) throw new Error('Mismatched stored bytes must not be accepted.');
+        expect(
+          (await readFile(seed.tenantId, seed.principalId, mismatchedFileId)).lifecycle_status,
+        ).toBe('rejected');
+      } finally {
+        await Promise.all(storageKeys.map((storageKey) => storage.deleteObject(storageKey)));
+      }
+    },
+  );
+
   it('allows reservation/payment staff to upload a private payment receipt without granting catalogue file access', async () => {
     const seed = await seedTenant('org_clt022_receipt', 'user_clt022_receipt');
     const storage = new FakeStorage();
@@ -257,7 +430,8 @@ describe('CLT-022 clothing file attachment flow', async () => {
       storage,
     );
     expect(authorization.status).toBe(201);
-    if (!authorization.body.success) throw new Error('Expected payment receipt authorization success.');
+    if (!authorization.body.success)
+      throw new Error('Expected payment receipt authorization success.');
 
     const fileId = authorization.body.data.file_id;
     const pending = await readFile(seed.tenantId, seed.principalId, fileId);
@@ -308,7 +482,13 @@ describe('CLT-022 clothing file attachment flow', async () => {
   it('rejects mismatched uploaded bytes and never marks provider failures as accepted', async () => {
     const seed = await seedTenant('org_clt022_invalid', 'user_clt022_invalid');
     const storage = new FakeStorage();
-    const first = await authorizeCatalogueFile(seed, storage, 'clt022-invalid-authorize', SHA_A, 300);
+    const first = await authorizeCatalogueFile(
+      seed,
+      storage,
+      'clt022-invalid-authorize',
+      SHA_A,
+      300,
+    );
     const firstRow = await readFile(seed.tenantId, seed.principalId, first);
     storage.objects.set(firstRow.storage_key, {
       contentType: 'image/png',
@@ -329,9 +509,17 @@ describe('CLT-022 clothing file attachment flow', async () => {
     );
     expect(rejected.status).toBe(422);
     expectFailure(rejected.body, 'VALIDATION_FAILED');
-    expect((await readFile(seed.tenantId, seed.principalId, first)).lifecycle_status).toBe('rejected');
+    expect((await readFile(seed.tenantId, seed.principalId, first)).lifecycle_status).toBe(
+      'rejected',
+    );
 
-    const second = await authorizeCatalogueFile(seed, storage, 'clt022-provider-authorize', SHA_A, 320);
+    const second = await authorizeCatalogueFile(
+      seed,
+      storage,
+      'clt022-provider-authorize',
+      SHA_A,
+      320,
+    );
     storage.failInspection = true;
     await expect(
       finalizeUpload(
@@ -344,7 +532,9 @@ describe('CLT-022 clothing file attachment flow', async () => {
         storage,
       ),
     ).rejects.toThrow('provider unavailable');
-    expect((await readFile(seed.tenantId, seed.principalId, second)).lifecycle_status).toBe('pending_upload');
+    expect((await readFile(seed.tenantId, seed.principalId, second)).lifecycle_status).toBe(
+      'pending_upload',
+    );
   });
 
   it('conceals foreign uploads before storage inspection', async () => {
@@ -415,7 +605,9 @@ describe('CLT-022 clothing file attachment flow', async () => {
       storage,
     );
     expect(typeResult.status).toBe(422);
-    expect((await readFile(seed.tenantId, seed.principalId, wrongType)).lifecycle_status).toBe('rejected');
+    expect((await readFile(seed.tenantId, seed.principalId, wrongType)).lifecycle_status).toBe(
+      'rejected',
+    );
 
     const wrongSize = await authorizeCatalogueFile(seed, storage, 'clt022-wrong-size', SHA_B, 401);
     const wrongSizeRow = await readFile(seed.tenantId, seed.principalId, wrongSize);
@@ -436,7 +628,9 @@ describe('CLT-022 clothing file attachment flow', async () => {
       storage,
     );
     expect(sizeResult.status).toBe(422);
-    expect((await readFile(seed.tenantId, seed.principalId, wrongSize)).lifecycle_status).toBe('rejected');
+    expect((await readFile(seed.tenantId, seed.principalId, wrongSize)).lifecycle_status).toBe(
+      'rejected',
+    );
   });
 
   it('checks assets.manage before upload authorization or photo mutation', async () => {
@@ -521,7 +715,10 @@ describe('CLT-022 clothing file attachment flow', async () => {
 
   it('rejects duplicate, pending, and foreign photo references without altering the existing photo set', async () => {
     const seed = await seedTenant('org_clt022_attachment', 'user_clt022_attachment');
-    const foreign = await seedTenant('org_clt022_attachment_foreign', 'user_clt022_attachment_foreign');
+    const foreign = await seedTenant(
+      'org_clt022_attachment_foreign',
+      'user_clt022_attachment_foreign',
+    );
     const productId = await seedProduct(seed, 'IMG-002');
     const accepted = await seedAcceptedImage(seed, 'accepted-image', SHA_A);
     const pending = await seedPendingImage(seed, 'pending-image', SHA_B);
@@ -698,7 +895,10 @@ describe('CLT-022 clothing file attachment flow', async () => {
     });
   }
 
-  async function seedProduct(seed: Awaited<ReturnType<typeof seedTenant>>, code: string): Promise<string> {
+  async function seedProduct(
+    seed: Awaited<ReturnType<typeof seedTenant>>,
+    code: string,
+  ): Promise<string> {
     return withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       const category = await client.query<{ id: string }>(
         `INSERT INTO category (tenant_id, name, status, display_order)

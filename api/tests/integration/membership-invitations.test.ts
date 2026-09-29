@@ -17,11 +17,11 @@ process.env.DATABASE_POOL_MAX ??= '10';
 process.env.CLERK_SECRET_KEY ??= 'test';
 process.env.CLERK_PUBLISHABLE_KEY ??= 'test';
 process.env.CLERK_WEBHOOK_SIGNING_SECRET ??= 'test';
-process.env.AWS_REGION ??= 'test';
-process.env.S3_BUCKET_PRIVATE ??= 'private';
-process.env.S3_BUCKET_PUBLIC ??= 'public';
-process.env.S3_ACCESS_KEY_ID ??= 'test';
-process.env.S3_SECRET_ACCESS_KEY ??= 'test';
+process.env.OBJECT_STORAGE_REGION ??= 'test';
+process.env.OBJECT_STORAGE_BUCKET_PRIVATE ??= 'private';
+process.env.OBJECT_STORAGE_BUCKET_PUBLIC ??= 'public';
+process.env.OBJECT_STORAGE_ACCESS_KEY_ID ??= 'test';
+process.env.OBJECT_STORAGE_SECRET_ACCESS_KEY ??= 'test';
 
 describe('TBF-040 membership invitations', async () => {
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');

@@ -241,7 +241,8 @@ describe("AddClothingPage", () => {
         digest: vi.fn().mockResolvedValue(new Uint8Array(32).buffer),
       },
     });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
     Object.defineProperty(URL, "createObjectURL", {
       configurable: true,
       value: vi.fn(() => "blob:guide.png"),
@@ -264,7 +265,7 @@ describe("AddClothingPage", () => {
         upload_method: "PUT",
         required_headers: {
           "Content-Type": "image/png",
-          "x-amz-checksum-sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+          "If-None-Match": "*",
         },
         expires_at: "2026-09-21T02:00:00.000Z",
       },
@@ -313,6 +314,11 @@ describe("AddClothingPage", () => {
       name: "Luna Standard Size Guide",
       file_id: "00000000-0000-4000-8000-000000000096",
       make_default: true,
+    });
+    expect(fetchMock).toHaveBeenCalledWith("https://uploads.example/guide", {
+      method: "PUT",
+      headers: { "Content-Type": "image/png", "If-None-Match": "*" },
+      body: guideFile,
     });
 
     expect(await screen.findByText("Luna Standard Size Guide")).toBeVisible();
@@ -585,7 +591,8 @@ describe("AddClothingPage", () => {
         digest: vi.fn().mockResolvedValue(new Uint8Array(32).buffer),
       },
     });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
     Object.defineProperty(URL, "createObjectURL", {
       configurable: true,
       value: vi.fn((file: File) => `blob:${file.name}`),
@@ -611,7 +618,7 @@ describe("AddClothingPage", () => {
           upload_method: "PUT",
           required_headers: {
             "Content-Type": "image/png",
-            "x-amz-checksum-sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            "If-None-Match": "*",
           },
           expires_at: "2026-09-21T02:00:00.000Z",
         },
@@ -669,6 +676,15 @@ describe("AddClothingPage", () => {
         (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`
       )
     );
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    for (const [uploadUrl, uploadOptions] of fetchMock.mock.calls) {
+      expect(uploadUrl).toMatch(/^https:\/\/uploads\.example\//);
+      expect(uploadOptions).toMatchObject({
+        method: "PUT",
+        headers: { "Content-Type": "image/png", "If-None-Match": "*" },
+      });
+      expect(uploadOptions?.body).toBeInstanceOf(File);
+    }
     await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("/inventory"));
     expect(navigation.push).not.toHaveBeenCalled();
     expect(sessionStorage.getItem("drezivo:inventory-notice")).toBe("clothing-added");

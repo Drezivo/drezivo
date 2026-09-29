@@ -42,7 +42,7 @@ export const uploadContentType = z.enum([
 ]);
 export type UploadContentType = z.infer<typeof uploadContentType>;
 
-/** Standard base64 SHA-256 digest used by S3 `x-amz-checksum-sha256`. */
+/** Standard base64 SHA-256 digest verified against the actual stored bytes during finalization. */
 export const sha256Base64 = z
   .string()
   .regex(/^[A-Za-z0-9+/]{43}=$/, 'must be a standard base64 SHA-256 digest');

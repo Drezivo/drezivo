@@ -15,11 +15,10 @@ import { idColumn, timestamps } from './_shared.js';
  * Owns: upload sessions, scanning/finalization state, and the immutable-once-accepted object
  * record. Governed by TRD §2 (Files row), §7 (files/privacy); Data-Model §8.
  *
- * TRD §7: a presigned upload URL can be reused until expiry and can overwrite a key, so a
- * successful upload is NOT automatically immutable evidence. `versionId`/`sha256` +
- * `frozenAt` record the exact accepted bytes; a later reuse of the same upload URL must not
- * change what a merchant already approved. This module must never let a client flip
- * `isPrivate` to make evidence public.
+ * TRD §7: upload authorization uses a signed create-only condition, and finalization verifies
+ * the actual stored bytes. `sha256` + `frozenAt` identify accepted content without relying on
+ * provider versioning; historical version IDs still require explicit migration reconciliation.
+ * This module must never let a client flip `isPrivate` to make evidence public.
  */
 
 export const fileLifecycleEnum = pgEnum('file_lifecycle_status', [

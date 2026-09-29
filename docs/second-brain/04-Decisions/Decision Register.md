@@ -13,6 +13,7 @@ tags: [drezivo, decisions, adr]
 - [[Monorepo Consolidation]] - one root Git repository with five deployable workspaces.
 - [[Drizzle and PostgreSQL]] - Drizzle plus reviewed SQL for PostgreSQL constraints and RLS.
 - [[Supabase Managed PostgreSQL]] - Supabase hosts PostgreSQL only; Drezivo keeps Clerk, Express authorization, restricted runtime roles, and S3/MinIO.
+- [[Cloudflare R2 Object Storage]] - R2 is the selected production object-storage target; production cutover remains gated by inventory, cost, migration, privacy, and provider evidence.
 - [[Shared Contracts Package]] - workspace package `@drezivo/contracts` as the API contract authority.
 - [[Obsidian Second Brain]] - project-only linked notes, Canvas, and Bases with no secrets.
 

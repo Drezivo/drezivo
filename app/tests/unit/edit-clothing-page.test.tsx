@@ -404,6 +404,77 @@ describe("EditClothingPage", () => {
     expect(navigation.replace).not.toHaveBeenCalled();
   });
 
+  it("uploads an added catalogue photo with the API-required headers before replacing images", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("crypto", {
+      randomUUID: () => "00000000-0000-4000-8000-000000000201",
+      subtle: { digest: vi.fn().mockResolvedValue(new Uint8Array(32).buffer) },
+    });
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:new-photo.png"),
+    });
+    if (!("arrayBuffer" in File.prototype)) {
+      Object.defineProperty(File.prototype, "arrayBuffer", {
+        configurable: true,
+        value: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
+      });
+    }
+
+    const uploadedFileId = "00000000-0000-4000-8000-000000000202";
+    const requiredHeaders = { "Content-Type": "image/png", "If-None-Match": "*" };
+    api.authorizeUpload.mockResolvedValue({
+      data: {
+        file_id: uploadedFileId,
+        upload_url: "https://uploads.example.test/edit-photo",
+        upload_method: "PUT",
+        required_headers: requiredHeaders,
+        expires_at: "2026-09-29T00:10:00.000Z",
+      },
+      requestId: "req-edit-photo-authorize",
+    });
+    api.finalizeUpload.mockResolvedValue({
+      data: {
+        file: {
+          file_id: uploadedFileId,
+          purpose: "catalogue_image",
+          lifecycle_status: "accepted",
+          content_type: "image/png",
+          byte_size: 3,
+          sha256: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+          frozen_at: "2026-09-29T00:00:00.000Z",
+        },
+      },
+      requestId: "req-edit-photo-finalize",
+    });
+    api.replaceClothingImages.mockResolvedValue({
+      data: { images: [] },
+      requestId: "req-edit-images",
+    });
+
+    render(<EditClothingPage productId={productId} />);
+    await screen.findByRole("heading", { name: "Edit Clothing" });
+    fireEvent.change(screen.getByLabelText("Add clothing photos"), {
+      target: {
+        files: [new File([new Uint8Array([1, 2, 3])], "new-photo.png", { type: "image/png" })],
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(api.finalizeUpload).toHaveBeenCalledTimes(1));
+    expect(api.replaceClothingImages).toHaveBeenCalledWith(
+      productId,
+      { file_ids: [fileId, uploadedFileId] },
+      expect.any(String)
+    );
+    expect(fetchMock).toHaveBeenCalledWith("https://uploads.example.test/edit-photo", {
+      method: "PUT",
+      headers: requiredHeaders,
+      body: expect.any(File),
+    });
+  });
+
   it("saves changed product and variant fields with backend concurrency tokens and one intent family", async () => {
     render(<EditClothingPage productId={productId} />);
     await screen.findByRole("heading", { name: "Edit Clothing" });

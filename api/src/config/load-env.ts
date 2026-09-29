@@ -8,9 +8,10 @@ import { parseEnv } from 'node:util';
  *
  * Precedence is intentionally deterministic and fails closed: host/CI variables win over every
  * file; then the selected `.env.<NODE_ENV>` and shared `.env` values are considered for local
- * development/test. Production deliberately skips `.env`, which is the developer's local file,
- * so its MinIO endpoint and credentials cannot leak into a deployment.
- * Values are parsed only; this module never logs a path's contents or any secret.
+ * development/test. Production and staging skip the shared developer `.env`, which may contain
+ * local MinIO settings; only explicitly selected
+ * `.env.<mode>` files are loaded in those environments. Values are parsed only; this module never
+ * logs a path's contents or any secret.
  */
 const apiRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -32,8 +33,9 @@ function parseFile(filename: string): Record<string, string> {
 
 const shared = parseFile('.env');
 const mode = process.env.NODE_ENV ?? shared.NODE_ENV ?? 'development';
+process.env.NODE_ENV ??= mode;
 const layered = {
-  ...(mode === 'production' ? {} : shared),
+  ...(mode === 'production' || mode === 'staging' ? {} : shared),
   ...parseFile(`.env.${mode}`),
 };
 

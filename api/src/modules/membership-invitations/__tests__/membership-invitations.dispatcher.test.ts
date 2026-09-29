@@ -8,11 +8,11 @@ process.env.CLERK_PUBLISHABLE_KEY = 'test';
 process.env.CLERK_WEBHOOK_SIGNING_SECRET = 'test';
 process.env.INVITATION_EMAIL_ENCRYPTION_KEY = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 process.env.INVITATION_EMAIL_DIGEST_KEY = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
-process.env.AWS_REGION = 'test';
-process.env.S3_BUCKET_PRIVATE = 'private';
-process.env.S3_BUCKET_PUBLIC = 'public';
-process.env.S3_ACCESS_KEY_ID = 'test';
-process.env.S3_SECRET_ACCESS_KEY = 'test';
+process.env.OBJECT_STORAGE_REGION = 'test';
+process.env.OBJECT_STORAGE_BUCKET_PRIVATE = 'private';
+process.env.OBJECT_STORAGE_BUCKET_PUBLIC = 'public';
+process.env.OBJECT_STORAGE_ACCESS_KEY_ID = 'test';
+process.env.OBJECT_STORAGE_SECRET_ACCESS_KEY = 'test';
 
 const { createMembershipInvitationDispatchHandler } = await import('../membership-invitations.dispatcher.js');
 const { clerkInvitationDispatchSource } = await import('../../../integrations/clerk/clerk.adapter.js');

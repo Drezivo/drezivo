@@ -21,7 +21,6 @@ export interface ObjectStorage {
   authorizeUpload(input: {
     storageKey: string;
     contentType: string;
-    sha256: string;
     expiresInSeconds: number;
   }): Promise<UploadAuthorization>;
   authorizeRead(input: {
@@ -29,5 +28,9 @@ export interface ObjectStorage {
     versionId?: string | null;
     expiresInSeconds: number;
   }): Promise<ReadAuthorization>;
-  inspectUploadedObject(storageKey: string): Promise<UploadedObjectMetadata | null>;
+  inspectUploadedObject(
+    storageKey: string,
+    maxByteSize: number,
+  ): Promise<UploadedObjectMetadata | null>;
+  deleteObject(storageKey: string): Promise<void>;
 }

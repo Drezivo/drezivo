@@ -34,6 +34,7 @@ import { TimePickerField } from "@/components/ui/time-picker-field";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { uploadAuthorizedFile } from "@/lib/authorized-file-upload";
 import { displaySizeLabel } from "@/lib/catalogue-display";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
@@ -516,12 +517,11 @@ export function NewReservationSheet({
         },
         idempotencyKey
       );
-      const uploaded = await fetch(authorized.data.upload_url, {
-        method: "PUT",
-        headers: authorized.data.required_headers,
-        body: receiptFile,
-      });
-      if (!uploaded.ok) throw new Error("The payment receipt upload did not finish successfully.");
+      await uploadAuthorizedFile(
+        authorized.data,
+        receiptFile,
+        "The payment receipt upload did not finish successfully."
+      );
       const finalized = await client.finalizeUpload(authorized.data.file_id, idempotencyKey);
       return client.attachReservationPaymentReceipt(
         held.reservation.id,

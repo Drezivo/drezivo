@@ -7,9 +7,11 @@ transactional reservation service is complete.
 
 The worker is disabled by default (`WORKER_ENABLED=false`). Notification delivery remains
 unavailable until a provider and delivery-state integration are configured, so queued events fail
-closed rather than being acknowledged as delivered. The object-storage adapter is also not wired
-yet; local MinIO is provisioned for the upcoming storage slice, but the API does not upload files
-to it today.
+closed rather than being acknowledged as delivered. Staff file uploads use the provider-neutral
+`ObjectStorage` boundary: local development points it at MinIO, while production configuration is
+restricted to the Cloudflare R2 S3-compatible endpoint. Uploads are presigned, create-only, and
+finalization verifies actual stored bytes. A production R2 cutover still requires object inventory,
+legacy-object reconciliation, privacy review, and live provider evidence.
 
 Owner invitation state is persisted locally with tenant RLS, keyed recipient lookup, encrypted
 recipient material, seven-day database-time expiry, and pending-seat reservations. TBF-040 writes
@@ -126,11 +128,16 @@ npm run start:worker    # Run the compiled worker
 
 ## Environment and production
 
-The API loader reads host/process variables first, then `.env.<NODE_ENV>`, with `.env` as the
-shared local fallback for non-production modes. Production deliberately does not load the local
-`.env`; deploy `DATABASE_URL`, Clerk keys, AWS region/bucket names, and credentials through the
-deployment secret manager instead. Leave `S3_ENDPOINT` unset for AWS S3. For local MinIO,
-`S3_ENDPOINT=http://127.0.0.1:9000` and `S3_FORCE_PATH_STYLE=true` are used.
+The API loader reads host/process variables first, then `.env.<NODE_ENV>`; `.env` is the shared
+local fallback only for development and test. Staging and production do not load the shared local
+`.env`; deploy `DATABASE_URL`, Clerk keys, and `OBJECT_STORAGE_*` values through their
+environment-specific secret managers instead. Staging and production require an HTTPS Cloudflare
+R2 S3 API endpoint, region `auto`,
+an explicit private bucket and R2 credentials, and virtual-hosted addressing. Local MinIO uses
+`OBJECT_STORAGE_ENDPOINT=http://127.0.0.1:9000` and
+`OBJECT_STORAGE_FORCE_PATH_STYLE=true`; set its region, private bucket, access key ID, and secret
+to the matching local MinIO values. `OBJECT_STORAGE_BUCKET_PUBLIC` remains optional until public
+catalogue derivatives are implemented.
 
 Runtime Clerk, object-storage, and database integrations require validated environment
 configuration. Invitation protection additionally requires separate 32-byte base64url
@@ -141,4 +148,3 @@ comma-separated list of exact browser origins; set `http://localhost:3000` for l
 ## License
 
 This repository is proprietary Drezivo software. Use is limited to the permission in [LICENSE.md](LICENSE.md); third-party dependencies retain their own licenses.
-

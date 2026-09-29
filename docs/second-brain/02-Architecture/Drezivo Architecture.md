@@ -3,7 +3,7 @@ title: Drezivo Architecture
 type: architecture
 status: current
 owner: Drezivo team
-source: "../../architecture/Drezivo-TRD.md and ../../decisions/0009-supabase-managed-postgresql.md"
+source: "../../architecture/Drezivo-TRD.md, ../../decisions/0009-supabase-managed-postgresql.md, and ../../decisions/0010-cloudflare-r2-object-storage.md"
 updated: 2026-09-28
 tags: [drezivo, architecture, trd]
 ---
@@ -19,7 +19,8 @@ flowchart LR
   contracts -. exact version .-> api
   api --> supabase[(Supabase PostgreSQL)]
   api --> clerk[Clerk]
-  api --> s3[S3]
+  api --> r2[Cloudflare R2]
+  api --> minio[MinIO local development]
   worker[api worker] --> supabase
 ```
 
@@ -30,10 +31,12 @@ and [data model](../../architecture/Drezivo-Data-Model.md) contain the complete 
 Customer address and optional social-profile handling follows the tenant-scoped, API-owned
 boundary described in [[02-Architecture/Customer Address and Social Profile Fields]].
 
-Supabase supplies managed PostgreSQL only. Clerk remains the identity provider, S3/MinIO remains
-the object-storage boundary, and browser clients never use Supabase database credentials or its
-Data API. The API and worker connect as separate restricted roles; migration tooling uses the
-direct administrative connection. See [[Supabase Managed PostgreSQL]].
+Supabase supplies managed PostgreSQL only. Clerk remains the identity provider. Cloudflare R2 is
+the selected production object-storage target, while MinIO remains local; production cutover is
+still gated on the inventory, cost, migration/rollback, legal/privacy and live-provider checks in
+[[04-Decisions/Cloudflare R2 Object Storage]]. Browser clients never use Supabase database
+credentials or its Data API. The API and worker connect as separate restricted roles; migration
+tooling uses the direct administrative connection. See [[Supabase Managed PostgreSQL]].
 
 The backend follows explicit feature boundaries between routes, controllers, services,
 repositories, DTOs, and schemas. See [[02-Architecture/API Module Boundaries and Layering]] for

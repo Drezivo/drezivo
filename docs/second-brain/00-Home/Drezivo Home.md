@@ -24,6 +24,8 @@ The navigation hub for the Drezivo second brain.
 - [[03-Repositories/Repository Map]]
 - [[04-Decisions/Decision Register]]
 - [[04-Decisions/Supabase Managed PostgreSQL]]
+- [[04-Decisions/Cloudflare R2 Object Storage]]
+- [[05-Operations/Cloudflare R2 Migration Checklist]]
 - [[05-Operations/Operating Model]]
 - [[05-Operations/API Security Review 2026-09-23]]
 - [[06-Research/Research Register]]

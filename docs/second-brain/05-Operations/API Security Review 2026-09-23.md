@@ -10,6 +10,10 @@ tags: [drezivo, security, api, backend, remediation]
 
 # API Security Review 2026-09-23
 
+> [!warning] Historical snapshot
+> Findings describe the reviewed commit and working tree on 2026-09-23, not the current R2
+> implementation. Revalidate each item against current code before treating it as open remediation.
+
 > [!danger] Outcome
 > The API is not ready for a production-security certification. The review found three high-severity
 > issues and several medium/low hardening gaps. This is a source-level review, not proof of deployed
@@ -154,8 +158,9 @@ object, or query details.
 
 ### SEC-API-010 — Storage requests have no timeout
 
-[`s3-object-storage.ts`](../../../api/src/integrations/storage/s3-object-storage.ts) calls `fetch`
-without an abort deadline. Add bounded timeouts, safe retries, and dependency-unavailable mapping.
+At the reviewed commit, the pre-migration `s3-object-storage.ts` adapter called `fetch` without an
+abort deadline. That adapter was removed during the R2 implementation; recheck timeout behavior in
+the current SDK-backed adapter before tracking this as an open issue.
 
 ### SEC-API-011 — Production transport security is not validated in configuration
 

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { uploadAuthorizedFile } from "@/lib/authorized-file-upload";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 
 export function PaymentMethodSettingsPage() {
@@ -381,12 +382,11 @@ async function uploadQrImage(
     },
     intent.uploadKey
   );
-  const uploaded = await fetch(authorized.data.upload_url, {
-    method: "PUT",
-    headers: authorized.data.required_headers,
-    body: file,
-  });
-  if (!uploaded.ok) throw new Error("The QR image upload did not finish successfully.");
+  await uploadAuthorizedFile(
+    authorized.data,
+    file,
+    "The QR image upload did not finish successfully."
+  );
   const finalized = await client.finalizeUpload(authorized.data.file_id, intent.finalizeKey);
   return finalized.data.file.file_id;
 }

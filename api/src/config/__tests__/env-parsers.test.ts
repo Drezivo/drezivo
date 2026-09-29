@@ -14,7 +14,7 @@ describe('strictBooleanEnv', () => {
 
   it('uses the configured default when the variable is absent', () => {
     expect(strictBooleanEnv('WORKER_ENABLED').default(false).parse(undefined)).toBe(false);
-    expect(strictBooleanEnv('S3_FORCE_PATH_STYLE').default(true).parse(undefined)).toBe(true);
+    expect(strictBooleanEnv('OBJECT_STORAGE_FORCE_PATH_STYLE').default(true).parse(undefined)).toBe(true);
   });
 
   it('rejects ambiguous boolean values', () => {

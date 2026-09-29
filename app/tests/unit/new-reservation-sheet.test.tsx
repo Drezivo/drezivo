@@ -637,6 +637,91 @@ describe("NewReservationSheet", () => {
     expect(await screen.findByText("Reservation saved. Payment verification required.")).toBeVisible();
   });
 
+  it("uploads a reservation receipt with the API-required headers before attaching it", async () => {
+    api.getStaffReservationIntakeOptions.mockResolvedValue({
+      data: {
+        payment_methods: [
+          { id: ids.paymentMethod, name: "Cash", rail: "cash" },
+          { id: ids.gcashPaymentMethod, name: "GCash", rail: "manual_qr" },
+        ],
+        customers: [],
+      },
+      requestId: "req-receipt-intake",
+    });
+    api.createStaffReservation.mockResolvedValueOnce({
+      data: gcashHeldResponse,
+      requestId: "req-receipt-hold",
+    });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("crypto", {
+      randomUUID: () => "00000000-0000-4000-8000-000000000401",
+      subtle: { digest: vi.fn().mockResolvedValue(new Uint8Array(32).buffer) },
+    });
+    if (!("arrayBuffer" in File.prototype)) {
+      Object.defineProperty(File.prototype, "arrayBuffer", {
+        configurable: true,
+        value: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
+      });
+    }
+
+    const uploadedFileId = "00000000-0000-4000-8000-000000000402";
+    const requiredHeaders = { "Content-Type": "application/pdf", "If-None-Match": "*" };
+    api.authorizeUpload.mockResolvedValue({
+      data: {
+        file_id: uploadedFileId,
+        upload_url: "https://uploads.example.test/reservation-receipt",
+        upload_method: "PUT",
+        required_headers: requiredHeaders,
+        expires_at: "2026-09-29T00:10:00.000Z",
+      },
+      requestId: "req-receipt-authorize",
+    });
+    api.finalizeUpload.mockResolvedValue({
+      data: {
+        file: {
+          file_id: uploadedFileId,
+          purpose: "payment_receipt",
+          lifecycle_status: "accepted",
+          content_type: "application/pdf",
+          byte_size: 3,
+          sha256: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+          frozen_at: "2026-09-29T00:00:00.000Z",
+        },
+      },
+      requestId: "req-receipt-finalize",
+    });
+    api.attachReservationPaymentReceipt.mockResolvedValue({
+      data: { file_id: uploadedFileId },
+      requestId: "req-receipt-attach",
+    });
+
+    renderSheet();
+    await fillDatesAndSelectProduct();
+    fireEvent.click(screen.getByRole("button", { name: /GCash/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
+    await screen.findByText("RSV-WALKIN-001");
+    fireEvent.change(screen.getByLabelText("Choose receipt"), {
+      target: {
+        files: [new File([new Uint8Array([1, 2, 3])], "receipt.pdf", { type: "application/pdf" })],
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Upload receipt" }));
+
+    await waitFor(() => expect(api.attachReservationPaymentReceipt).toHaveBeenCalledTimes(1));
+    expect(api.attachReservationPaymentReceipt).toHaveBeenCalledWith(
+      ids.reservation,
+      { file_id: uploadedFileId },
+      expect.any(String)
+    );
+    expect(fetchMock).toHaveBeenCalledWith("https://uploads.example.test/reservation-receipt", {
+      method: "PUT",
+      headers: requiredHeaders,
+      body: expect.any(File),
+    });
+    expect(screen.getByRole("button", { name: "Receipt uploaded" })).toBeVisible();
+  });
+
   it("stops before creating a reservation when no single physical piece is free for the exact times", async () => {
     api.getStaffReservationAvailabilityCheck.mockResolvedValue({
       data: staffReservationAvailabilityCheckResponse.parse({

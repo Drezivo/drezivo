@@ -1,5 +1,9 @@
 # 0009. Supabase as the managed PostgreSQL provider
 
+> 29 September 2026 note: ADR 0010 supersedes the S3 production-provider wording below. This ADR
+> still governs Supabase as PostgreSQL only; Cloudflare R2 now owns the production object-storage
+> decision, with cutover gates tracked separately.
+
 **Status:** accepted
 **Date:** 26 September 2026
 **Owners:** product + API + platform owners

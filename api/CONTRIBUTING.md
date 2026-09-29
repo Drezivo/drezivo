@@ -36,6 +36,7 @@ refactor/finance-posting-service
 ```
 
 Rules:
+
 - Never commit directly to `main`. Branch protection enforces this; do not request an exemption.
 - Never force-push a branch someone else has reviewed or that CI has run against. Push a new
   commit instead — the review history is evidence.
@@ -275,14 +276,19 @@ the **same image** as `node dist/worker.js` (`npm run start:worker`). Both proce
 compiled domain/service layer and read the same validated config — only the entrypoint differs.
 Deploy them as two separate services/containers from that one image, not as separate builds.
 
-**Required environment variables (names only — see `docs/runbooks/environments.md` for
+**Environment variables (names only; see `docs/runbooks/environments.md` for
 meanings; never commit values).** `NODE_ENV`, `PORT`, `DATABASE_URL`, `DATABASE_POOL_MAX`,
 `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET`,
-`INVITATION_EMAIL_ENCRYPTION_KEY`, `INVITATION_EMAIL_DIGEST_KEY`, `AWS_REGION`,
-`S3_BUCKET_PRIVATE`, `S3_BUCKET_PUBLIC`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`,
+`CORS_ALLOWED_ORIGINS`, `INVITATION_EMAIL_ENCRYPTION_KEY`, `INVITATION_EMAIL_DIGEST_KEY`,
+`OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_REGION`, `OBJECT_STORAGE_BUCKET_PRIVATE`,
+`OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY`,
+`OBJECT_STORAGE_FORCE_PATH_STYLE`, `OBJECT_STORAGE_UPLOADS_ENABLED`,
 `LOG_LEVEL`, `WORKER_POLL_INTERVAL_MS`, `WORKER_LEASE_SECONDS`, `IDEMPOTENCY_RETENTION_DAYS`.
+`OBJECT_STORAGE_BUCKET_PUBLIC` is optional until Stage B public derivatives are implemented.
+`OBJECT_STORAGE_FORCE_PATH_STYLE` is optional and defaults to `false`.
+`OBJECT_STORAGE_UPLOADS_ENABLED` is optional and defaults to disabled in production and enabled
+outside production. The upload flag can pause new authorization without disabling finalization or
+reads on the configured provider.
 `src/config/index.ts` is the single source of truth: it validates every one of these with Zod
-at process startup and exits with a readable error if any is missing or malformed — it does
-not lazily validate on first use.
-
-
+at process startup, requiring mandatory values and rejecting optional values when malformed — it
+does not lazily validate on first use.

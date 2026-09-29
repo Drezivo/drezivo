@@ -83,7 +83,7 @@ import {
 
 import { withTenantTransaction } from '../../db/client.js';
 import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
-import { s3ObjectStorage } from '../../integrations/storage/s3-object-storage.js';
+import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
 import {
   assertPhysicalAssetCapacity,
   lockTenantQuotaScope,
@@ -233,7 +233,7 @@ export async function getCatalogueCategories(
 export async function getCatalogueClothingList(
   input: CatalogueContext,
   query: ClothingListQuery,
-  storage: ObjectStorage = s3ObjectStorage,
+  storage: ObjectStorage = objectStorage,
 ): Promise<ClothingListResponse> {
   assertCatalogueReadContext(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
@@ -309,7 +309,7 @@ export async function getCatalogueClothingList(
 export async function getCatalogueClothingDetail(
   input: CatalogueContext,
   productId: string,
-  storage: ObjectStorage = s3ObjectStorage,
+  storage: ObjectStorage = objectStorage,
 ): Promise<ClothingDetail> {
   assertCatalogueReadContext(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
@@ -645,7 +645,7 @@ export async function updateCatalogueCategoryStatus(
 
 export async function getDefaultMeasurementGuide(
   input: CatalogueContext,
-  storage: ObjectStorage = s3ObjectStorage,
+  storage: ObjectStorage = objectStorage,
 ): Promise<MeasurementGuideDefaultResponse> {
   assertCatalogueReadContext(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {

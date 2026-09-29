@@ -1,6 +1,6 @@
 # Security incident: leaked credential
 
-What to do when a secret — an API key, a database connection string, a Clerk secret key, an S3
+What to do when a secret — an API key, a database connection string, a Clerk secret key, an R2
 credential, a signing secret — reaches somewhere it should not have: a commit, a log line, a
 chat message, a public gist, a screenshot. This is a distinct procedure from
 `docs/runbooks/incident.md`'s general severity levels because the correct first action is
@@ -25,9 +25,12 @@ For each credential type, rotating means:
 - **Supabase PostgreSQL credential** — rotate the role's password (or create a new role and cut over,
   if the current tooling supports it more safely), redeploy `api` with the new
   `DATABASE_URL`/`DATABASE_URL_DIRECT`.
-- **AWS/S3 credential** — deactivate the leaked access key immediately in IAM, issue a new one
-  (or confirm the IAM-role-based approach from `docs/runbooks/environments.md` was in use and
-  no static key existed at all), redeploy `api`.
+- **Cloudflare R2 runtime credential** — revoke the exposed R2 S3 API token/access key in
+  Cloudflare, issue a replacement scoped to the same environment and required bucket only, update
+  the deployment secret manager, and redeploy `api`. Do not paste replacement credentials into
+  incident notes. Treat already-issued presigned URLs as bearer capabilities until their expiry;
+  individual URLs are not tracked as revocable application sessions, so contain upload exposure
+  by stopping new authorization and following the storage incident procedure.
 - **Webhook signing secret** (Clerk, payment/provider webhooks) — rotate at the provider,
   update `api`'s configured value. Note: rotating a webhook signing secret briefly risks
   rejecting legitimate in-flight webhook deliveries signed with the old secret — accept that
@@ -41,8 +44,8 @@ Once the credential itself is no longer valid, contain the blast radius of what 
 happened while it was:
 
 - Check access/audit logs for the exposed credential's actual usage during the exposure window,
-  if the credential type provides one (AWS CloudTrail for an IAM key, Clerk's own audit log,
-  Supabase's Postgres and pooler logs). Look specifically for activity that does not match Drezivo's own
+  if the credential type provides one (Cloudflare R2 audit/observability available for the
+  configured account, Clerk's own audit log, Supabase's Postgres and pooler logs). Look specifically for activity that does not match Drezivo's own
   known traffic pattern (unfamiliar IP ranges, unusual query patterns, access at unusual hours).
 - If the credential could have been used to read or write tenant data, treat this as a potential
   tenant-isolation incident as well — escalate to SEV1 per `docs/runbooks/incident.md` regardless

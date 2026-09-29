@@ -162,7 +162,7 @@ export class RateLimitedError extends AppError {
   }
 }
 
-/** 503 — a required downstream dependency (DB, Clerk, S3) is unavailable. Never expose internals. */
+/** 503 — a required downstream dependency (DB, Clerk, object storage) is unavailable. Never expose internals. */
 export class DependencyUnavailableError extends AppError {
   readonly status = 503;
   readonly code: ErrorCode = 'DEPENDENCY_UNAVAILABLE';

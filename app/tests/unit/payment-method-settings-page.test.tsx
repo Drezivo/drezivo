@@ -100,4 +100,72 @@ describe("PaymentMethodSettingsPage", () => {
       expect.any(String)
     );
   });
+
+  it("uploads a QR image using every API-required header before saving its file id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("crypto", {
+      randomUUID: () => "00000000-0000-4000-8000-000000000301",
+      subtle: { digest: vi.fn().mockResolvedValue(new Uint8Array(32).buffer) },
+    });
+    if (!("arrayBuffer" in File.prototype)) {
+      Object.defineProperty(File.prototype, "arrayBuffer", {
+        configurable: true,
+        value: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
+      });
+    }
+
+    const uploadedFileId = "00000000-0000-4000-8000-000000000302";
+    const requiredHeaders = { "Content-Type": "image/png", "If-None-Match": "*" };
+    api.authorizeUpload.mockResolvedValue({
+      data: {
+        file_id: uploadedFileId,
+        upload_url: "https://uploads.example.test/payment-qr",
+        upload_method: "PUT",
+        required_headers: requiredHeaders,
+        expires_at: "2026-09-29T00:10:00.000Z",
+      },
+      requestId: "req-qr-authorize",
+    });
+    api.finalizeUpload.mockResolvedValue({
+      data: {
+        file: {
+          file_id: uploadedFileId,
+          purpose: "storefront_asset",
+          lifecycle_status: "accepted",
+          content_type: "image/png",
+          byte_size: 3,
+          sha256: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+          frozen_at: "2026-09-29T00:00:00.000Z",
+        },
+      },
+      requestId: "req-qr-finalize",
+    });
+    api.updatePaymentMethodSettings.mockResolvedValue({
+      data: { ...methods[1], qr_file_id: uploadedFileId, version: 2 },
+      requestId: "req-qr-update",
+    });
+
+    render(<PaymentMethodSettingsPage />);
+    await screen.findByText("GCash");
+    fireEvent.change(screen.getByLabelText("QR image"), {
+      target: {
+        files: [new File([new Uint8Array([1, 2, 3])], "gcash-qr.png", { type: "image/png" })],
+      },
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[1]!);
+
+    await waitFor(() => expect(api.finalizeUpload).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.updatePaymentMethodSettings).toHaveBeenCalledTimes(1));
+    expect(api.updatePaymentMethodSettings).toHaveBeenCalledWith(
+      gcashId,
+      expect.objectContaining({ qr_file_id: uploadedFileId }),
+      expect.any(String)
+    );
+    expect(fetchMock).toHaveBeenCalledWith("https://uploads.example.test/payment-qr", {
+      method: "PUT",
+      headers: requiredHeaders,
+      body: expect.any(File),
+    });
+  });
 });
