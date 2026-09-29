@@ -292,6 +292,104 @@ describe('CLT-022 clothing file attachment flow', async () => {
     expect(accepted.frozen_at).toBeInstanceOf(Date);
   });
 
+  it('keeps a pending upload unaccepted while the object is not yet available', async () => {
+    const seed = await seedTenant('org_clt022_missing_object', 'user_clt022_missing_object');
+    const storage = new FakeStorage();
+    const fileId = await authorizeCatalogueFile(
+      seed,
+      storage,
+      'clt022-missing-object-authorize',
+      SHA_A,
+      512,
+    );
+    const pending = await readFile(seed.tenantId, seed.principalId, fileId);
+
+    const finalized = await finalizeUpload(
+      {
+        ...seed.fileContext,
+        fileId,
+        requestId: 'req-clt022-missing-object-finalize',
+        idempotencyKey: 'clt022-missing-object-finalize',
+      },
+      storage,
+    );
+
+    expect(finalized.status).toBe(409);
+    expect((await readFile(seed.tenantId, seed.principalId, fileId)).lifecycle_status).toBe(
+      'pending_upload',
+    );
+    expect(storage.inspected).toContain(pending.storage_key);
+  });
+
+  it('replays accepted finalization without a second storage inspection', async () => {
+    const seed = await seedTenant('org_clt022_finalize_replay', 'user_clt022_finalize_replay');
+    const storage = new FakeStorage();
+    const fileId = await authorizeCatalogueFile(
+      seed,
+      storage,
+      'clt022-finalize-replay-authorize',
+      SHA_A,
+      512,
+    );
+    const pending = await readFile(seed.tenantId, seed.principalId, fileId);
+    storage.objects.set(pending.storage_key, {
+      contentType: 'image/png',
+      byteSize: 512,
+      sha256: SHA_A,
+      versionId: null,
+      prefix: PNG_PREFIX,
+    });
+    const finalizeInput = {
+      ...seed.fileContext,
+      fileId,
+      requestId: 'req-clt022-finalize-replay',
+      idempotencyKey: 'clt022-finalize-replay',
+    };
+
+    const finalized = await finalizeUpload(finalizeInput, storage);
+    const replay = await finalizeUpload(finalizeInput, storage);
+
+    expect(finalized.status).toBe(200);
+    expect(replay).toEqual(finalized);
+    expect(storage.inspected).toEqual([pending.storage_key]);
+  });
+
+  it('rejects an upload whose actual bytes fail the declared file signature', async () => {
+    const seed = await seedTenant('org_clt022_bad_signature', 'user_clt022_bad_signature');
+    const storage = new FakeStorage();
+    const fileId = await authorizeCatalogueFile(
+      seed,
+      storage,
+      'clt022-bad-signature-authorize',
+      SHA_A,
+      512,
+    );
+    const pending = await readFile(seed.tenantId, seed.principalId, fileId);
+    storage.objects.set(pending.storage_key, {
+      contentType: 'image/png',
+      byteSize: 512,
+      sha256: SHA_A,
+      versionId: null,
+      prefix: Buffer.from('not a PNG signature'),
+    });
+
+    const finalized = await finalizeUpload(
+      {
+        ...seed.fileContext,
+        fileId,
+        requestId: 'req-clt022-bad-signature-finalize',
+        idempotencyKey: 'clt022-bad-signature-finalize',
+      },
+      storage,
+    );
+
+    expect(finalized.status).toBe(422);
+    expectFailure(finalized.body, 'VALIDATION_FAILED');
+    expect((await readFile(seed.tenantId, seed.principalId, fileId)).lifecycle_status).toBe(
+      'rejected',
+    );
+  });
+
   const liveR2Enabled = process.env.OBJECT_STORAGE_LIVE_TESTS === 'true';
   const liveMinioEnabled = process.env.OBJECT_STORAGE_LIVE_MINIO_TESTS === 'true';
 

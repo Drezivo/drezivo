@@ -384,7 +384,8 @@ Use **Standard** for V1: it is the default class for frequently accessed applica
     - [x] Existing AWS-backed version IDs are preserved until R2-006's exact-version copy/read-back reconciliation; R2 reads fail closed while a stale non-null ID remains.
     - [x] Existing validity checks accept either a version ID or the verified SHA-256.
     - [x] R2 signed reads omit `versionId`; attempts to use an unreconciled legacy ID fail closed.
-  - **Tests/evidence:** The focused adapter suite passes, proving an R2-returned version identifier is discarded and null-version R2 reads omit the query parameter. A database-backed test was added to prove verified versionless acceptance with a frozen SHA-256, but could not run because the local disposable PostgreSQL test service at `127.0.0.1:55432` refused the connection. The separate R2 live-provider assertion remains opt-in and unrun; R2-006 production reconciliation is still open.
+  - **Tests/evidence:** The focused adapter suite passes, proving an R2-returned version identifier is discarded and null-version R2 reads omit the query parameter. A database-backed test was added to prove verified versionless acceptance with a frozen SHA-256, but could not run because the local disposable PostgreSQL test service at `127.0.0.1:55432` refused the connection.
+    The separate R2 live-provider assertion remains opt-in and unrun; R2-006 production reconciliation is still open.
 
 ## Phase 4: R2 checksum and finalization compatibility
 
@@ -399,7 +400,8 @@ Use **Standard** for V1: it is the default class for frequently accessed applica
     - [ ] Do not treat client-supplied custom metadata containing a SHA-256 string as proof that R2 stored those bytes.
     - [x] Account for Cloudflare's current checksum matrix, where SHA-256 is not supported as `FULL_OBJECT` and is supported as `COMPOSITE`; do not infer compatibility from the algorithm name alone.
     - [x] Do not weaken finalization to size/MIME-only validation if the current checksum path is incompatible.
-  - **Repository evidence (reviewed 2026-09-29):** The lockfile pins `@aws-sdk/client-s3` 3.1142.0. The adapter explicitly sets request checksum calculation to `WHEN_REQUIRED`; its presigned `PutObject` has no body/checksum parameter and signs only `Content-Type` and `If-None-Match`. Unit coverage verifies that request shape, and the opt-in live matrix now asserts it for JPEG, PNG, WebP, and PDF uploads. AWS documents automatic CRC32 for direct SDK uploads beginning at 3.729.0; that default does not establish checksum behavior for this bodyless presigner/browser request. Cloudflare's [S3 compatibility matrix](https://developers.cloudflare.com/r2/api/s3/api/) lists SHA-256 as unsupported for `FULL_OBJECT` and supported for `COMPOSITE`. Drezivo does not consume a provider checksum: finalization hashes streamed GET bytes. These are code/documentation findings, not live R2 results.
+  - **Repository evidence (reviewed 2026-09-29):** The lockfile pins `@aws-sdk/client-s3` 3.1142.0. The adapter explicitly sets request checksum calculation to `WHEN_REQUIRED`; its presigned `PutObject` has no body/checksum parameter and signs only `Content-Type` and `If-None-Match`. Unit coverage verifies that request shape, and the opt-in live matrix now asserts it for JPEG, PNG, WebP, and PDF uploads.
+    AWS documents automatic CRC32 for direct SDK uploads beginning at 3.729.0; that default does not establish checksum behavior for this bodyless presigner/browser request. Cloudflare's [S3 compatibility matrix](https://developers.cloudflare.com/r2/api/s3/api/) lists SHA-256 as unsupported for `FULL_OBJECT` and supported for `COMPOSITE`. Drezivo does not consume a provider checksum: finalization hashes streamed GET bytes. These are code/documentation findings, not live R2 results.
   - **Tests/evidence:** Unit tests pass. The bounded live R2 test-bucket matrix covers the exact presigned request shape and JPEG/PNG/WebP/PDF fixtures, but requires a dedicated test-only bucket/credential and has not been run; R2's independent validation and HEAD/GET checksum behavior therefore remain unverified.
 
 - [x] **R2-041 — Select and implement a trustworthy stored-byte SHA-256 verification path**
@@ -412,24 +414,24 @@ Use **Standard** for V1: it is the default class for frequently accessed applica
     - [x] Client/request checksums are expectations only; provider checksums and custom metadata are not trust anchors.
     - [x] The extra R2 Class B finalization read is included in R2-005.
     - [x] Provider failures fail closed; an unavailable read never marks a file accepted.
-  - **Tests/evidence:** The focused adapter test verifies the SHA-256 is derived from streamed bytes even when returned checksum fields and custom metadata claim a different digest. Existing file-service integration coverage rejects mismatched bytes and leaves provider outages unaccepted; that PostgreSQL-backed suite could not run because the local disposable database was unavailable. Live R2 behavior remains an R2-040 gate.
+  - **Tests/evidence:** The focused adapter test verifies SHA-256 is derived from streamed bytes even when returned checksum fields and custom metadata claim a different digest. Existing file-service integration coverage rejects mismatched bytes and leaves provider outages unaccepted; that PostgreSQL-backed suite could not run because the local disposable database was unavailable.
+    Live R2 behavior remains an R2-040 gate.
 
-- [ ] **R2-042 — Make uploaded-object inspection provider-neutral and preserve finalization invariants**
+- [x] **R2-042 — Make uploaded-object inspection provider-neutral and preserve finalization invariants**
   - **Depends on:** R2-041.
   - **Outcome:** `inspectUploadedObject` (or a reviewed replacement) validates R2 objects without AWS-only assumptions and without weakening `files.service`.
   - **Acceptance:**
-    - [ ] Retrieve/verify actual byte size and content type.
-    - [ ] Use the trustworthy SHA-256 path selected in R2-041.
-    - [ ] Retrieve enough actual bytes for JPEG/PNG/WebP/PDF signature validation; combine this with the streaming verification read when practical to avoid redundant provider reads.
-    - [ ] Uploaded byte size must equal authorized byte size.
-    - [ ] Uploaded content type must equal authorized MIME type.
-    - [ ] Verified stored-byte SHA-256 must equal authorized SHA-256.
-    - [ ] Magic-byte/file-signature validation remains active.
-    - [ ] Missing object returns `null`/clean not-found rather than a false acceptance.
-    - [ ] Invalid upload becomes rejected and never accepted.
-    - [ ] Provider/network failure never marks the file accepted and maps to a typed dependency error where applicable.
-    - [ ] Finalize idempotency behavior remains unchanged.
-  - **Tests/evidence:** Existing file integration suite plus R2 adapter/provider tests for success, 404, mismatch, bad signature, and dependency outage.
+    - [x] Retrieve and validate actual streamed byte size and content type.
+    - [x] Use the streamed stored-byte SHA-256 path selected in R2-041.
+    - [x] Capture the signature prefix during the same stream used for hashing, avoiding a redundant provider read.
+    - [x] Require uploaded size, content type, and SHA-256 to equal the authorized values.
+    - [x] Keep JPEG/PNG/WebP/PDF magic-byte validation active.
+    - [x] Missing objects remain pending and cannot be falsely accepted.
+    - [x] Invalid uploads are rejected and never accepted.
+    - [x] Provider/network failures map to dependency errors and never mark files accepted.
+    - [x] Finalize idempotency and accepted-response replay code paths are unchanged.
+  - **Tests/evidence:** Adapter tests cover streamed success, missing object, checksum/metadata mismatch, and stream/dependency failure. Database integration cases cover size/MIME/hash/signature rejection, pending behavior when absent, accepted-finalization replay, and failure without acceptance. Adapter suite and API typecheck pass; the PostgreSQL-backed cases could not run because the local disposable database was unavailable.
+    Live R2 verification remains open under R2-040.
 
 ## Phase 5: API contracts and frontend upload flows
 

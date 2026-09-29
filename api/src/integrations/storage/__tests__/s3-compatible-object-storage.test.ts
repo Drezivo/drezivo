@@ -182,6 +182,22 @@ describe('S3-compatible object storage', () => {
     await expect(storage.adapter.inspectUploadedObject('tenant-files/file/source', 1024)).resolves.toBeNull();
   });
 
+  it('fails closed when the object stream ends with a provider error', async () => {
+    async function* failingObjectBody(): AsyncGenerator<Uint8Array> {
+      yield Buffer.from('partial object');
+      throw new Error('private stream failure');
+    }
+    const storage = createStorageWithResponse({
+      Body: Readable.from(failingObjectBody()) as unknown as NonNullable<GetObjectCommandOutput['Body']>,
+      ContentLength: 128,
+      ContentType: 'application/pdf',
+    });
+
+    await expect(
+      storage.adapter.inspectUploadedObject('tenant-files/file/source', 1024),
+    ).rejects.toBeInstanceOf(DependencyUnavailableError);
+  });
+
   it('maps storage failures to a safe dependency error', async () => {
     const storage = createStorageWithFailure(new Error('private provider detail'));
 
