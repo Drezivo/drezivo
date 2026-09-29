@@ -139,6 +139,28 @@ describe('S3-compatible object storage', () => {
     expect(actual?.sha256).toBe(createHash('sha256').update(bytes).digest('base64'));
   });
 
+  it('hashes streamed bytes instead of trusting provider checksums or custom metadata', async () => {
+    const storedBytes = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from('actual stored content'),
+    ]);
+    const claimedSha256 = createHash('sha256')
+      .update('client-claimed content')
+      .digest('base64');
+    const storage = createStorageWithResponse({
+      Body: Readable.from([storedBytes]) as unknown as NonNullable<GetObjectCommandOutput['Body']>,
+      ContentLength: storedBytes.byteLength,
+      ContentType: 'image/png',
+      ChecksumSHA256: claimedSha256,
+      Metadata: { sha256: claimedSha256 },
+    });
+
+    const actual = await storage.adapter.inspectUploadedObject('tenant-files/file/source', 1024);
+
+    expect(actual?.sha256).toBe(createHash('sha256').update(storedBytes).digest('base64'));
+    expect(actual?.sha256).not.toBe(claimedSha256);
+  });
+
   it('stops streaming after one byte beyond the configured upload limit', async () => {
     const body = Readable.from([Buffer.alloc(102), Buffer.alloc(100)]);
     const storage = createStorageWithResponse({

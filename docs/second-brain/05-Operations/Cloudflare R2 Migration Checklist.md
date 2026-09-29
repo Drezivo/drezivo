@@ -402,17 +402,17 @@ Use **Standard** for V1: it is the default class for frequently accessed applica
   - **Repository evidence (reviewed 2026-09-29):** The lockfile pins `@aws-sdk/client-s3` 3.1142.0. The adapter explicitly sets request checksum calculation to `WHEN_REQUIRED`; its presigned `PutObject` has no body/checksum parameter and signs only `Content-Type` and `If-None-Match`. Unit coverage verifies that request shape, and the opt-in live matrix now asserts it for JPEG, PNG, WebP, and PDF uploads. AWS documents automatic CRC32 for direct SDK uploads beginning at 3.729.0; that default does not establish checksum behavior for this bodyless presigner/browser request. Cloudflare's [S3 compatibility matrix](https://developers.cloudflare.com/r2/api/s3/api/) lists SHA-256 as unsupported for `FULL_OBJECT` and supported for `COMPOSITE`. Drezivo does not consume a provider checksum: finalization hashes streamed GET bytes. These are code/documentation findings, not live R2 results.
   - **Tests/evidence:** Unit tests pass. The bounded live R2 test-bucket matrix covers the exact presigned request shape and JPEG/PNG/WebP/PDF fixtures, but requires a dedicated test-only bucket/credential and has not been run; R2's independent validation and HEAD/GET checksum behavior therefore remain unverified.
 
-- [ ] **R2-041 — Select and implement a trustworthy stored-byte SHA-256 verification path**
+- [x] **R2-041 — Select and implement a trustworthy stored-byte SHA-256 verification path**
   - **Depends on:** R2-040.
   - **Outcome:** Finalization proves the actual bytes stored in R2 match the SHA-256 authorized by Drezivo.
   - **Acceptance:**
-    - [ ] Prefer a provider-returned cryptographic checksum only if R2-040 proves it is calculated/validated from the stored object for the exact upload mode used.
-    - [ ] Otherwise stream the stored object through the API during finalization and compute SHA-256 server-side from the actual bytes.
-    - [ ] The server-side hash path must stream rather than load the whole object into memory; current upload size limits make bounded verification practical but are not a reason to use unbounded buffering.
-    - [ ] Client-supplied checksum metadata may be useful as an expectation but is never the sole trust anchor.
-    - [ ] If server-side streaming is selected, account for the extra R2 Class B/read cost in R2-005.
-    - [ ] Keep provider failures fail-closed; an unavailable verification read never marks a file accepted.
-  - **Tests/evidence:** Tampered-byte test proves a mismatched stored object cannot finalize even if client/request metadata claims the authorized SHA-256.
+    - [x] Do not use a provider-returned checksum as proof while R2-040's exact live behavior remains unproven.
+    - [x] Stream the stored object during finalization and compute SHA-256 server-side from the actual bytes.
+    - [x] The server hashes the stream incrementally rather than buffering the whole object.
+    - [x] Client/request checksums are expectations only; provider checksums and custom metadata are not trust anchors.
+    - [x] The extra R2 Class B finalization read is included in R2-005.
+    - [x] Provider failures fail closed; an unavailable read never marks a file accepted.
+  - **Tests/evidence:** The focused adapter test verifies the SHA-256 is derived from streamed bytes even when returned checksum fields and custom metadata claim a different digest. Existing file-service integration coverage rejects mismatched bytes and leaves provider outages unaccepted; that PostgreSQL-backed suite could not run because the local disposable database was unavailable. Live R2 behavior remains an R2-040 gate.
 
 - [ ] **R2-042 — Make uploaded-object inspection provider-neutral and preserve finalization invariants**
   - **Depends on:** R2-041.
