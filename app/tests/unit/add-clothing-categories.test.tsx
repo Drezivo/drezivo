@@ -30,16 +30,6 @@ vi.mock("@/lib/drezivo-api", () => ({
   createDrezivoApiClient: () => api,
 }));
 
-vi.mock("@/components/settings/measurement-guide-context", () => ({
-  useMeasurementGuide: () => ({
-    guide: {
-      id: "00000000-0000-4000-8000-000000000099",
-      name: "Default Size Guide",
-      previewUrl: null,
-    },
-  }),
-}));
-
 describe("AddClothingPage categories", () => {
   beforeEach(() => {
     vi.clearAllMocks();

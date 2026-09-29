@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import type { ActorContext } from "@drezivo/contracts";
 
 import { Section } from "@/components/forms/form-kit";
+import { SECURITY_HASH, useLocationHash } from "@/components/settings/use-location-hash";
 import { createDrezivoApiClient } from "@/lib/drezivo-api";
 
 const ROLE_LABEL: Record<string, string> = { owner: "Business owner", frontdesk: "Front desk" };
@@ -18,6 +19,7 @@ const ROLE_LABEL: Record<string, string> = { owner: "Business owner", frontdesk:
  */
 export function AccountSettingsPage() {
   const { getToken } = useAuth();
+  const hash = useLocationHash();
   const [actor, setActor] = useState<ActorContext | null>(null);
 
   useEffect(() => {
@@ -35,9 +37,11 @@ export function AccountSettingsPage() {
 
   return (
     <div className="grid gap-4">
-      <Section icon={BadgeCheck} title="Your role" description={actor ? `In ${actor.tenant.name}` : undefined}>
-        <p className="text-sm font-medium text-dashboard-navy">{actor ? (ROLE_LABEL[actor.membership.role] ?? actor.membership.role) : "Loading…"}</p>
-      </Section>
+      {hash === SECURITY_HASH ? null : (
+        <Section icon={BadgeCheck} title="Your role" description={actor ? `In ${actor.tenant.name}` : undefined}>
+          <p className="text-sm font-medium text-dashboard-navy">{actor ? (ROLE_LABEL[actor.membership.role] ?? actor.membership.role) : "Loading…"}</p>
+        </Section>
+      )}
       <div className="overflow-hidden rounded-xl border border-dashboard-border bg-dashboard-surface">
         <UserProfile
           routing="hash"
@@ -45,6 +49,9 @@ export function AccountSettingsPage() {
             elements: {
               rootBox: { width: "100%" },
               cardBox: { width: "100%", maxWidth: "100%", boxShadow: "none", border: "none" },
+              // The settings menu on the left already switches between Profile and Security.
+              navbar: { display: "none" },
+              navbarMobileMenuRow: { display: "none" },
             },
           }}
         />

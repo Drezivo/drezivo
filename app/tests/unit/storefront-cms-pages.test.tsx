@@ -102,6 +102,9 @@ describe("storefront CMS pages", () => {
     );
     expect(await screen.findByRole("button", { name: "Publish storefront" })).toBeDisabled();
     expect(screen.getByText("Rental policy written")).toBeVisible();
+    // A draft's address would show "Page not found", so the owner is told why and gets no Open link.
+    expect(screen.getByText(/Not live yet/)).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Open" })).toBeNull();
   });
 
   it("publishes once when ready", async () => {
@@ -121,6 +124,8 @@ describe("storefront CMS pages", () => {
     await waitFor(() => expect(api.setStorefrontPublished).toHaveBeenCalledTimes(1));
     expect(api.setStorefrontPublished.mock.calls[0]?.slice(0, 2)).toEqual([true, 3]);
     expect(await screen.findByRole("button", { name: "Unpublish storefront" })).toBeEnabled();
+    expect(screen.getByRole("link", { name: "Open" })).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.queryByText(/Not live yet/)).toBeNull();
   });
 
   it("converts peso amounts to exact centavos and back", () => {

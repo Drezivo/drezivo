@@ -1,170 +1,122 @@
 "use client";
 
-import { Check, ImagePlus, Info, Ruler, Save, Upload } from "lucide-react";
-import { type ChangeEvent, useEffect, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { Ruler } from "lucide-react";
+import { useEffect, useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { saveMeasurementGuideRequest, type FileObjectId, type MeasurementGuide } from "@drezivo/contracts";
+
+import { ErrorState, Field, LoadingState, SaveBar, Section, type SaveState } from "@/components/forms/form-kit";
+import { ImageField } from "@/components/storefront/image-field";
 import { Input } from "@/components/ui/input";
-import { useMeasurementGuide } from "@/components/settings/measurement-guide-context";
+import { messageOf } from "@/components/settings/use-settings-resource";
+import { createDrezivoApiClient } from "@/lib/drezivo-api";
+import { useSubmitGuard } from "@/lib/use-submit-guard";
 
-const ACCEPTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+type Draft = { name: string; fileId: FileObjectId | null };
 
+/**
+ * The workspace's default measurement guide, stored by the catalogue API. New clothing sizes that
+ * choose "Default guide" reference it; saving a new one leaves existing clothing on its old guide.
+ */
 export function MeasurementGuideSettingsPage() {
-  const { guide, saveGuide: saveSharedGuide } = useMeasurementGuide();
-  const [pendingName, setPendingName] = useState(guide.name);
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [pendingPreviewUrl, setPendingPreviewUrl] = useState<string | null>(null);
-  const [pendingFileName, setPendingFileName] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const { getToken } = useAuth();
+  const guard = useSubmitGuard();
+  const [guide, setGuide] = useState<MeasurementGuide | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [state, setState] = useState<SaveState>({ kind: "idle" });
+  const [reloadToken, setReloadToken] = useState(0);
 
-  useEffect(
-    () => () => {
-      if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
-    },
-    [pendingPreviewUrl]
-  );
+  useEffect(() => {
+    let cancelled = false;
+    setLoadError(null);
+    createDrezivoApiClient(getToken)
+      .getDefaultMeasurementGuide()
+      .then((result) => {
+        if (cancelled) return;
+        setGuide(result.data.guide);
+        setDraft({ name: result.data.guide?.name ?? "", fileId: result.data.guide?.file_id ?? null });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setLoadError(messageOf(error, "Could not load your measurement guide."));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, reloadToken]);
 
-  const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    setSaved(false);
-    setError(null);
-    if (!file) return;
-    if (!ACCEPTED_IMAGE_TYPES.has(file.type)) {
-      setError("Use a JPG, PNG, or WebP image.");
-      event.target.value = "";
+  if (loadError) return <ErrorState message={loadError} onRetry={() => setReloadToken((token) => token + 1)} />;
+  if (!draft) return <LoadingState label="Loading your measurement guide…" />;
+
+  const dirty = draft.name.trim() !== (guide?.name ?? "") || draft.fileId !== (guide?.file_id ?? null);
+  const nameError = draft.name.trim() ? null : "Give the guide a name, for example Standard size guide.";
+
+  function update(patch: Partial<Draft>) {
+    setDraft((current) => (current ? { ...current, ...patch } : current));
+    guard.resetIntent();
+    setState({ kind: "idle" });
+  }
+
+  async function save() {
+    if (!draft) return;
+    const parsed = saveMeasurementGuideRequest.safeParse({ name: draft.name, file_id: draft.fileId, make_default: true });
+    if (!parsed.success) {
+      setState({ kind: "error", message: draft.fileId ? "Give the guide a name." : "Add the measurement guide image first." });
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setError("Measurement guide images must be 10 MB or smaller.");
-      event.target.value = "";
-      return;
+    try {
+      const saved = await guard.submit((key) => createDrezivoApiClient(getToken).saveMeasurementGuide(parsed.data, key));
+      if (!saved) return;
+      // Re-read so the preview comes back as a fresh signed URL for the saved image.
+      const refreshed = await createDrezivoApiClient(getToken).getDefaultMeasurementGuide().catch(() => null);
+      const current = refreshed?.data.guide ?? saved.data;
+      setGuide(current);
+      setDraft({ name: current.name, fileId: current.file_id });
+      guard.resetIntent();
+      setState({ kind: "saved" });
+    } catch (error) {
+      setState({ kind: "error", message: messageOf(error, "Could not save the measurement guide.") });
     }
-    if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
-    setPendingPreviewUrl(URL.createObjectURL(file));
-    setPendingFile(file);
-    setPendingFileName(file.name);
-  };
-
-  const saveGuide = () => {
-    const nextName = pendingName.trim();
-    if (!nextName) {
-      setError("Enter a name for the measurement guide.");
-      return;
-    }
-    saveSharedGuide({ name: nextName, ...(pendingFile ? { file: pendingFile } : {}) });
-    if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
-    setPendingPreviewUrl(null);
-    setPendingFile(null);
-    setPendingFileName(null);
-    setSaved(true);
-    setError(null);
-  };
-
-  const displayPreview = pendingPreviewUrl ?? guide.previewUrl;
+  }
 
   return (
-    <div>
-      <div className="w-full">
-        <div className="mb-5">
-          <h2 className="font-display text-2xl font-semibold tracking-tight text-dashboard-navy">
-            Default measurement guide
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm text-dashboard-muted">
-            Upload one reusable size or measurement image for clothing that follows your shop&apos;s standard guide.
+    <div className="grid gap-4">
+      <Section
+        icon={Ruler}
+        title="Default measurement guide"
+        description="One size or measurement chart that clothing can reuse instead of storing the same measurements on every size."
+      >
+        <div className="grid gap-5">
+          <Field label="Guide name" error={draft.name.length > 0 ? nameError : null} count={{ value: draft.name.length, max: 160 }}>
+            {(props) => (
+              <Input
+                {...props}
+                value={draft.name}
+                maxLength={160}
+                placeholder="Standard size guide"
+                onChange={(event) => update({ name: event.target.value })}
+              />
+            )}
+          </Field>
+          <ImageField
+            label="Guide image"
+            hint="JPG, PNG, or WebP, up to 10 MB. Renters see it on items that use this guide."
+            purpose="measurement_guide"
+            fit="contain"
+            aspect="aspect-[4/3]"
+            removable={false}
+            fileId={draft.fileId}
+            savedUrl={draft.fileId === guide?.file_id ? (guide?.image_url ?? null) : null}
+            onChange={(fileId) => update({ fileId })}
+          />
+          <p className="text-xs leading-5 text-dashboard-muted">
+            New sizes that choose &ldquo;Default guide&rdquo; use this one. Clothing you already added keeps the guide it had, and any
+            size can still use its own measurements.
           </p>
         </div>
-
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
-          <Card className="gap-0 py-0">
-            <CardContent className="space-y-5 p-5 sm:p-6">
-              <div>
-                <label htmlFor="measurement-guide-name" className="mb-2 block text-sm font-medium text-dashboard-navy">
-                  Guide Name
-                </label>
-                <Input
-                  id="measurement-guide-name"
-                  value={pendingName}
-                  onChange={(event) => {
-                    setPendingName(event.target.value);
-                    setSaved(false);
-                  }}
-                  placeholder="e.g. Standard Size Guide"
-                />
-              </div>
-
-              <div>
-                <span className="mb-2 block text-sm font-medium text-dashboard-navy">Measurement Image</span>
-                <label className="group flex min-h-64 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border border-dashed border-dashboard-border bg-dashboard-active/30 p-5 text-center transition-colors hover:bg-dashboard-active focus-within:ring-2 focus-within:ring-dashboard-accent/30">
-                  {displayPreview ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- temporary local object URL preview; accepted file bytes are uploaded through the API in the real flow.
-                    <img src={displayPreview} alt="Selected measurement guide preview" className="max-h-80 w-full object-contain" />
-                  ) : (
-                    <>
-                      <span className="flex h-14 w-14 items-center justify-center rounded-2xl dashboard-tone-blue">
-                        <ImagePlus className="h-6 w-6" aria-hidden="true" />
-                      </span>
-                      <p className="mt-3 text-sm font-semibold text-dashboard-navy">Add measurement guide image</p>
-                      <p className="mt-1 text-xs text-dashboard-muted">JPG, PNG, or WebP · up to 10 MB</p>
-                    </>
-                  )}
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    onChange={onFileChange}
-                    className="sr-only"
-                    aria-label="Upload measurement guide image"
-                  />
-                </label>
-                {pendingFileName ? (
-                  <p className="mt-2 text-xs text-dashboard-muted">Selected: {pendingFileName}</p>
-                ) : null}
-                {error ? <p className="mt-2 text-xs font-medium text-dashboard-danger">{error}</p> : null}
-              </div>
-
-              <div className="rounded-xl border border-dashboard-border bg-dashboard-active/40 p-4 text-xs leading-5 text-dashboard-muted">
-                <div className="flex gap-2">
-                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-dashboard-accent" aria-hidden="true" />
-                  <p>
-                    New clothing can reference this guide instead of storing duplicate measurements. A variant can still switch to custom measurements or no measurements when needed.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                <Button variant="ghost" className="border border-dashboard-border bg-dashboard-surface" onClick={() => document.querySelector<HTMLInputElement>('input[aria-label="Upload measurement guide image"]')?.click()}>
-                  <Upload className="h-4 w-4" aria-hidden="true" />
-                  Replace Image
-                </Button>
-                <Button onClick={saveGuide}>
-                  {saved ? <Check className="h-4 w-4" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />}
-                  {saved ? "Saved" : "Save Default Guide"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <aside className="space-y-4 lg:sticky lg:top-4">
-            <Card className="gap-0 py-0">
-              <CardContent className="p-5">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl dashboard-tone-blue">
-                  <Ruler className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <p className="mt-3 text-sm font-semibold text-dashboard-navy">Current default</p>
-                <p className="mt-1 text-sm text-dashboard-navy">{guide.name}</p>
-                <p className="mt-1 text-xs leading-5 text-dashboard-muted">
-                  Used automatically for new sizes that choose “Default guide.” Existing clothing keeps its previously referenced guide.
-                </p>
-              </CardContent>
-            </Card>
-
-            <div className="rounded-xl border border-dashboard-border bg-dashboard-surface p-4 text-xs leading-5 text-dashboard-muted">
-              One shared guide can support hundreds of clothing variants. You only need custom measurements for exceptions.
-            </div>
-          </aside>
-        </div>
-      </div>
+      </Section>
+      <SaveBar dirty={dirty} saving={guard.isSubmitting} state={state} onSave={() => void save()} label={guide ? "Save changes" : "Save guide"} />
     </div>
   );
 }

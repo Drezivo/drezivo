@@ -4,6 +4,7 @@ import type { PoolClient } from 'pg';
 
 import type { ConfirmGuestVerificationResponse, StartGuestVerificationResponse } from '@drezivo/contracts';
 
+import { config } from '../../config/index.js';
 import { emailEnabled } from '../../integrations/email/email-sender.js';
 import { DependencyUnavailableError, NotFoundError, UnauthenticatedError } from '../../shared/errors.js';
 import { digestRecipientEmail, keyedDigest } from '../../shared/protected-recipient.js';
@@ -33,10 +34,13 @@ export class GuestVerificationService {
   constructor(
     private readonly notifications: EmailNotifications = emailNotifications,
     private readonly isEmailEnabled: () => boolean = emailEnabled,
+    // Development only (config refuses it in production): no email is sent and any code passes.
+    private readonly acceptAnyCode: () => boolean = () => config.GUEST_VERIFICATION_MODE === 'dev_accept_any',
   ) {}
 
   async start(slug: string, email: string): Promise<StartGuestVerificationResponse> {
-    if (!this.isEmailEnabled()) {
+    const acceptAnyCode = this.acceptAnyCode();
+    if (!acceptAnyCode && !this.isEmailEnabled()) {
       throw new DependencyUnavailableError('Email verification is unavailable right now. Please contact the shop directly.');
     }
     const done = await withPublishedStore(slug, async (client, store) => {
@@ -55,6 +59,7 @@ export class GuestVerificationService {
          VALUES ($1, $2, $3, $4, statement_timestamp() + make_interval(secs => $5))`,
         [id, store.tenantId, digest, codeDigest(id, code).toString('hex'), CODE_TTL_SECONDS],
       );
+      if (acceptAnyCode) return true;
       const core = await readStoreCore(client, store);
       const storeName = core ? toDocument(core).branding.display_name : 'the shop';
       await this.notifications.verificationCode(client, { tenantId: store.tenantId, verificationId: id, storeName, email, code });
@@ -80,7 +85,8 @@ export class GuestVerificationService {
 
       const expected = Buffer.from(latest.code_hash, 'hex');
       const actual = codeDigest(latest.id, code);
-      if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+      const matches = expected.length === actual.length && timingSafeEqual(expected, actual);
+      if (!matches && !this.acceptAnyCode()) {
         // Committed on purpose: the failed attempt must count even though the request fails.
         await client.query('UPDATE guest_email_verification SET attempts = attempts + 1 WHERE tenant_id = $1 AND id = $2', [store.tenantId, latest.id]);
         return { ok: false as const };

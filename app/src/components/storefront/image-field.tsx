@@ -6,7 +6,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import type { FileObjectId } from "@drezivo/contracts";
 
-import { storefrontImageProblem, uploadStorefrontImage, type UploadIntent } from "@/lib/storefront-assets";
+import { storefrontImageProblem, uploadStorefrontImage, type ImageUploadPurpose, type UploadIntent } from "@/lib/storefront-assets";
 import { cn } from "@/lib/utils";
 
 /**
@@ -19,6 +19,9 @@ export function ImageField({
   fileId,
   savedUrl,
   aspect = "aspect-[16/9]",
+  purpose = "storefront_asset",
+  fit = "cover",
+  removable = true,
   onChange,
 }: {
   label: string;
@@ -26,6 +29,10 @@ export function ImageField({
   fileId: FileObjectId | null;
   savedUrl: string | null;
   aspect?: string;
+  purpose?: ImageUploadPurpose;
+  /** `contain` shows the whole image, for charts such as a measurement guide. */
+  fit?: "cover" | "contain";
+  removable?: boolean;
   onChange: (fileId: FileObjectId | null) => void;
 }) {
   const { getToken } = useAuth();
@@ -50,7 +57,7 @@ export function ImageField({
     setUploading(true);
     setLocalUrl(URL.createObjectURL(file));
     try {
-      onChange(await uploadStorefrontImage(file, getToken, intentRef));
+      onChange(await uploadStorefrontImage(file, getToken, intentRef, purpose));
       intentRef.current = null;
     } catch (caught) {
       setLocalUrl(null);
@@ -63,12 +70,13 @@ export function ImageField({
   const preview = localUrl ?? (fileId ? savedUrl : null);
 
   return (
-    <div>
+    // `relative` keeps the visually hidden file input inside this box; otherwise focusing it scrolls the whole app shell.
+    <div className="relative">
       <p className="text-sm font-medium text-dashboard-navy">{label}</p>
       <div className={cn("relative mt-1.5 overflow-hidden rounded-lg border border-dashed border-dashboard-border bg-dashboard-canvas", aspect)}>
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element -- local object URL or short-lived signed URL
-          <img src={preview} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <img src={preview} alt="" className={cn("absolute inset-0 h-full w-full", fit === "contain" ? "object-contain" : "object-cover")} />
         ) : (
           <label htmlFor={inputId} className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-2 text-sm text-dashboard-muted hover:bg-dashboard-active/50">
             <ImagePlus className="h-5 w-5" />
@@ -99,16 +107,18 @@ export function ImageField({
             <label htmlFor={inputId} className="cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-dashboard-accent hover:bg-dashboard-active">
               Replace
             </label>
-            <button
-              type="button"
-              onClick={() => {
-                setLocalUrl(null);
-                onChange(null);
-              }}
-              className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-dashboard-danger hover:bg-dashboard-danger/10"
-            >
-              <Trash2 className="mr-1 h-3.5 w-3.5" /> Remove
-            </button>
+            {removable ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setLocalUrl(null);
+                  onChange(null);
+                }}
+                className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-dashboard-danger hover:bg-dashboard-danger/10"
+              >
+                <Trash2 className="mr-1 h-3.5 w-3.5" /> Remove
+              </button>
+            ) : null}
           </span>
         ) : null}
       </div>

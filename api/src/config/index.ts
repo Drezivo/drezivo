@@ -13,7 +13,7 @@ import { parseCorsAllowedOrigins } from './cors-origins.js';
  * `env.example` (or `docs/runbooks/environments.md`) documents these names in prose. Never
  * put a real value here or in an example env file committed to the repo.
  */
-const envSchema = z.object({
+export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
 
@@ -71,7 +71,13 @@ const envSchema = z.object({
   // Public origin of the storefront app (e.g. https://drezivo.com), used for the private status
   // link in renter emails. Without it the emails omit the link.
   STOREFRONT_PUBLIC_ORIGIN: z.string().url().optional(),
+  // `dev_accept_any` skips sending guest verification codes and accepts any 6-digit code, so the
+  // storefront can be tested without an email provider. Refused in production.
+  GUEST_VERIFICATION_MODE: z.enum(['email', 'dev_accept_any']).default('email'),
 }).superRefine((env, ctx) => {
+  if (env.GUEST_VERIFICATION_MODE === 'dev_accept_any' && env.NODE_ENV === 'production') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['GUEST_VERIFICATION_MODE'], message: 'dev_accept_any is for development only' });
+  }
   if (env.EMAIL_PROVIDER === 'resend' && (!env.RESEND_API_KEY || !env.EMAIL_FROM)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['RESEND_API_KEY'], message: 'resend needs RESEND_API_KEY and EMAIL_FROM' });
   }

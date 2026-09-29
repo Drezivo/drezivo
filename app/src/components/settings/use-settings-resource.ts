@@ -9,7 +9,7 @@ import { useSubmitGuard } from "@/lib/use-submit-guard";
 
 type Client = ReturnType<typeof createDrezivoApiClient>;
 
-function messageOf(error: unknown, fallback: string): string {
+export function messageOf(error: unknown, fallback: string): string {
   if (error instanceof DrezivoApiError) {
     return error.code === "STALE_VERSION" ? "These settings changed elsewhere. Reload the page to see the latest values." : error.message;
   }

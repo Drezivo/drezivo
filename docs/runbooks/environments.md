@@ -67,6 +67,10 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 - `EMAIL_FILE_SINK_DIR` — local folder for `EMAIL_PROVIDER=file`; each message is one JSON file.
 - `STOREFRONT_PUBLIC_ORIGIN` — public origin of `web` (for example `https://drezivo.com`), used for
   the private request-status link in renter emails. Without it, emails omit the link.
+- `GUEST_VERIFICATION_MODE`: `email` (the default) or `dev_accept_any`.
+  - `dev_accept_any` sends no verification email and accepts any 6-digit code. Use it for local
+    testing of storefront reservations and fitting requests without an email provider.
+  - Config refuses it when `NODE_ENV=production`, so the API will not start with it there.
 - The worker must run for email to leave the outbox, including guest verification codes.
 
 ### Supabase database boundary

@@ -74,7 +74,7 @@ transfer plus a receipt), and customer accounts.
 - [x] `npm ci` succeeds (npm cache and temp on E:, because C: is full).
 - [x] Baseline `typecheck`, `lint`, and `test` recorded before any change, so pre-existing failures
       are not blamed on this work.
-- [ ] Local stack: embedded PostgreSQL with all migrations applied, local S3-compatible storage,
+- [x] Local stack: embedded PostgreSQL with all migrations applied, local S3-compatible storage,
       API, app, and web running against it. All data is local and disposable.
 - [x] Reference study: `arquila.store` and `velissegowns.com` (visual system) plus
       `RootResource/Storefront` and `RootResource/Business` (flows) captured and summarized.
@@ -305,7 +305,8 @@ MinIO community builds are no longer published, so a small local S3 stand-in out
     is called once, peso and centavo conversion is exact, and the business page saves once;
   - the full app suite is unchanged from the baseline (223 passed, the same 14 pre-existing
     failures).
-- [ ] Live browser walk-through on the local stack (Milestone 7, needs a Clerk sign-in).
+- [x] Live browser walk-through on the local stack. The owner signed in, onboarded "Vergel's Suit
+      Rental", and used the Storefront and Settings pages. Their findings are fixed in Milestone 9.
 
 > Pre-existing tooling gap: `eslint` for `app` and `web` fails on `main` before any change
 > (`eslint-config-next` cannot load `next/dist/compiled/babel/eslint-parser`). Typecheck and tests
@@ -400,7 +401,58 @@ MinIO community builds are no longer published, so a small local S3 stand-in out
   - web `API_ORIGIN`, `NEXT_PUBLIC_API_ORIGIN`, and `NEXT_PUBLIC_SITE_URL`.
 - [x] My docs are markdownlint-clean. The repo-wide `check:docs` fails on `main` before this work
       (115 table-style errors in other files, and a link to the private `SECURITY-FOUNDATION.md`).
-- [ ] Commit, push, and PR: waiting for the owner's approval.
+- [x] Commit and push, approved by the owner: `829512a` on `origin/feat/storefront-cms-settings`.
+      No PR opened and nothing merged.
+
+## Milestone 9 — Fixes from the owner's walk-through
+
+- [x] The storefront could not be tested without email delivery. `GUEST_VERIFICATION_MODE=dev_accept_any`
+      (development only) sends no code and accepts any 6-digit code. This covers reservations and
+      fitting requests alike.
+  - Config refuses the mode when `NODE_ENV=production`.
+  - A code is still bound to an address that asked for one, and to a published store.
+  - Tests: `api/src/config/__tests__/guest-verification-mode.test.ts` and a new case in
+    `storefront-guest-booking.test.ts`.
+- [x] The pickup and delivery tiles changed only a hairline border, so a click looked like nothing
+      happened. Both radio groups now use one `Choice` tile with a filled selected state and a
+      visible keyboard focus ring.
+- [x] Found while testing that: the calendar allowed ranges shorter than an item's minimum rental.
+  - The server then refused the hold, and every 409 was shown as "Someone just reserved this size".
+  - The calendar now enforces the same minimum the server does and says so in the dates step.
+  - Any 409 now shows the server's own reason.
+- [x] Clicking an image field on Storefront → Edit details scrolled the whole app shell up.
+  - Cause: a visually hidden file input had no positioned ancestor inside the scroll pane.
+  - Fixed in the field, and at the source: the shell's `main` scroller is now the positioning
+    context for all pages.
+- [x] Settings → Profile and Security showed the same Clerk panel, with its own duplicate menu.
+  - Clerk's menu is now hidden, and our menu switches Clerk's hash route.
+  - The highlight follows the page, and the role card shows on Profile only.
+- [x] Settings → Measurement guide showed "Luna's Standard Measurement Guide" for every business.
+  - The page kept its guide only in browser memory.
+  - It now loads and saves the workspace's real default guide through the catalogue API, with
+    one idempotency key per save and the upload done through the files module.
+  - The in-memory context was deleted.
+- [x] Storefront overview: a draft's address opened "Page not found" with no explanation.
+  - It now says the link works after publishing.
+  - Once the store is published, it offers an Open link.
+- [x] Onboarding could sit on "Creating your workspace…" indefinitely while Clerk switched
+      organizations.
+  - That code predates this work.
+  - After 20 seconds, the existing "Try loading workspace again" screen now appears. Retrying is
+    safe because the workspace already exists.
+  - Not reproduced locally: it needs a fresh Clerk sign-up.
+- [x] Verified:
+  - API, app, and web typecheck clean.
+  - API config unit tests 12/12; guest-booking integration 8/8 on a fresh test database.
+  - App unit tests: 232 passed. The same 14 failures fail on `main`, compared by name.
+  - Web: 10 passed plus the one failure that also fails on `main`.
+  - Playwright on the local store (`E:/UserStorage/drezivo-local/sf-dev-bypass.mjs`):
+    - any code verifies;
+    - a one-day range is refused with the minimum message;
+    - the delivery and pickup tiles switch;
+    - the hold reaches the payment step;
+    - a fitting request is sent;
+    - no page errors.
 
 ### Known gaps left as they are (outside this scope, recorded for follow-up)
 
@@ -437,3 +489,6 @@ MinIO community builds are no longer published, so a small local S3 stand-in out
 | 2026-09-29 | 6 | Garment size order in public reads; guest status link in renter emails | `api/src/modules/storefront/storefront.repository.ts`, `api/src/modules/notifications/email-notifications.ts`, `api/src/shared/guest-token.ts`, `api/src/config/index.ts` |
 | 2026-09-29 | 8 | Decision record and environment variables | `docs/decisions/0010-storefront-cms-and-guest-requests.md`, `docs/runbooks/environments.md` |
 | 2026-09-29 | 7 | Catalogue size expectation updated to garment order; full suite green on a fresh test database | `api/tests/integration/storefront-public-read.test.ts`, `docs/storefront-checklist.md` |
+| 2026-09-29 | 9 | Development accept-any-code guest verification, refused in production | `api/src/config/index.ts`, `api/src/modules/guest-booking/guest-verification.service.ts`, `api/src/config/__tests__/guest-verification-mode.test.ts`, `api/tests/integration/storefront-guest-booking.test.ts`, `docs/runbooks/environments.md` |
+| 2026-09-29 | 9 | Clear pickup/delivery tiles; minimum rental enforced in the calendar; real 409 reasons | `web/src/components/store/booking/booking-drawer.tsx`, `web/src/components/store/booking/availability-calendar.tsx` |
+| 2026-09-29 | 9 | Shell no longer shifts on image fields; Profile/Security split; real measurement guide; draft address note; onboarding timeout | `app/src/components/shell/dashboard-shell.tsx`, `app/src/components/storefront/image-field.tsx`, `app/src/lib/storefront-assets.ts`, `app/src/components/settings/{settings-nav.tsx,use-location-hash.ts,account-settings-page.tsx,measurement-guide-settings-page.tsx,use-settings-resource.ts}`, `app/src/app/(dashboard)/layout.tsx`, `app/src/components/storefront/storefront-overview-page.tsx`, `app/src/components/onboarding/onboarding-plan.tsx`, app unit tests |

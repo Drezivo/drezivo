@@ -54,7 +54,7 @@ describe('storefront guest booking', async () => {
       return Promise.resolve(found ? { ...found, versionId: 'v1', prefix: PNG } : null);
     },
   };
-  const verification = new GuestVerificationService(emailNotifications, () => true);
+  const verification = new GuestVerificationService(emailNotifications, () => true, () => false);
   const booking = new GuestBookingService(verification, storage);
   const pngSha = createHash('sha256').update(PNG).digest('base64');
 
@@ -145,9 +145,24 @@ describe('storefront guest booking', async () => {
     const count = await admin.query<Record<string, unknown>>('SELECT count(*)::int AS n FROM guest_email_verification WHERE tenant_id = $1', [ws.tenantId]);
     expect(count.rows[0]?.['n']).toBe(5);
 
-    const disabled = new GuestVerificationService(emailNotifications, () => false);
+    const disabled = new GuestVerificationService(emailNotifications, () => false, () => false);
     await expect(disabled.start(ws.slug, 'x@example.test')).rejects.toMatchObject({ status: 503 });
     await expect(verification.start('no-such-store', 'x@example.test')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('in development accept-any mode sends no email and accepts any code, still per store', async () => {
+    const ws = await liveStore('gv-dev');
+    const devMode = new GuestVerificationService(emailNotifications, () => false, () => true);
+    await devMode.start(ws.slug, 'dev@example.test');
+    const sent = await admin.query<Record<string, unknown>>(`SELECT count(*)::int AS n FROM outbox_event WHERE tenant_id = $1 AND event_type = 'notification.email'`, [ws.tenantId]);
+    expect(sent.rows[0]?.['n']).toBe(0);
+
+    const { verification_token: token } = await devMode.confirm(ws.slug, 'dev@example.test', '123456');
+    const hold = await new GuestBookingService(devMode, storage).createReservation(ws.slug, { requestId: 'r-dev', idempotencyKey: 'gv-dev-hold' }, holdRequest(ws, token, 'dev@example.test'));
+    expect(hold.status).toBe(201);
+    // Still bound to an address that asked for a code, and to a real store.
+    await expect(devMode.confirm(ws.slug, 'never-asked@example.test', '123456')).rejects.toMatchObject({ status: 401 });
+    await expect(devMode.start('no-such-store', 'dev@example.test')).rejects.toMatchObject({ status: 404 });
   });
 
   it('creates one hold per key, replays the same token, and isolates guest links', async () => {

@@ -145,7 +145,22 @@ function OverviewCard({ settings }: { settings: StorefrontSettings }) {
               >
                 <Copy className="h-3.5 w-3.5" /> {copied ? "Copied" : "Copy"}
               </button>
+              {settings.status === "published" ? (
+                <a
+                  href={fullUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-dashboard-border px-2 text-xs text-dashboard-navy hover:bg-dashboard-active"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" /> Open
+                </a>
+              ) : null}
             </dd>
+            {settings.status === "published" ? null : (
+              <p className="mt-1.5 text-xs leading-5 text-dashboard-muted">
+                Not live yet. This link shows &ldquo;Page not found&rdquo; until you publish your storefront.
+              </p>
+            )}
           </div>
           <div>
             <dt className="text-xs font-medium text-dashboard-muted">Last saved</dt>

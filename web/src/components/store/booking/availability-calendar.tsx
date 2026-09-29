@@ -46,6 +46,7 @@ export function AvailabilityCalendar({
   slug,
   variantId,
   today,
+  minDays,
   maxDays,
   value,
   onChange,
@@ -53,6 +54,8 @@ export function AvailabilityCalendar({
   slug: string;
   variantId: string;
   today: string;
+  /** Fixed-duration pieces rent for at least their included days; the server enforces the same rule. */
+  minDays: number;
   maxDays: number;
   value: DateRange | null;
   onChange: (range: DateRange | null, message?: string) => void;
@@ -101,6 +104,11 @@ export function AvailabilityCalendar({
       return;
     }
     const length = daysBetween(anchor, date);
+    if (length < minDays) {
+      // The pickup day stays chosen, so the renter only has to pick a later return day.
+      onChange(null, `This piece rents for at least ${minDays} days. Choose a later return date.`);
+      return;
+    }
     if (length > maxDays) {
       onChange(null, `The longest rental is ${maxDays} day${maxDays === 1 ? '' : 's'}.`);
       return;

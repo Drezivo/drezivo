@@ -71,7 +71,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <DashboardSidebar identity={identity} />
       <SidebarInset className="h-svh min-h-0 overflow-hidden">
         <DashboardHeader identity={identity} />
-        <main className="min-h-0 flex-1 overflow-y-auto bg-dashboard-canvas">{children}</main>
+        {/* `relative` makes this scroller the containing block for absolutely positioned content (such as
+            visually hidden inputs), so focusing them scrolls this pane instead of shifting the whole shell. */}
+        <main className="relative min-h-0 flex-1 overflow-y-auto bg-dashboard-canvas">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   );

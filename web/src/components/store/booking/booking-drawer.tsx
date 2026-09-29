@@ -74,8 +74,12 @@ function reducer(state: State, action: Action): State {
 /** Display-only estimate before the hold; the exact amount comes back from the server on the pay step. */
 function estimateRentalMinor(variant: CatalogueVariant, days: number): bigint {
   if (variant.pricing_mode === 'daily') return BigInt(variant.rental_price_minor) * BigInt(days);
-  const included = Math.max(1, Math.ceil(variant.included_duration_minutes / 1440));
-  return BigInt(variant.rental_price_minor) + BigInt(Math.max(0, days - included)) * BigInt(variant.extra_day_price_minor);
+  return BigInt(variant.rental_price_minor) + BigInt(Math.max(0, days - minimumRentalDays(variant))) * BigInt(variant.extra_day_price_minor);
+}
+
+/** A fixed-duration price covers its included days, which is also the shortest rental the server accepts. */
+function minimumRentalDays(variant: CatalogueVariant): number {
+  return variant.pricing_mode === 'fixed_duration' ? Math.max(1, Math.ceil(variant.included_duration_minutes / 1440)) : 1;
 }
 
 const STEPS: Array<{ key: Step; label: string }> = [
@@ -176,7 +180,8 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
       dispatch({ type: 'held', reservation: created.reservation, token: created.guest_token });
     } catch (caught) {
       if (caught instanceof StorefrontApiError && caught.status === 409) {
-        dispatch({ type: 'range', range: null, notice: 'Someone just reserved this size for those dates. Choose other dates.' });
+        // The server says why the dates were refused (taken meanwhile, minimum length, notice period).
+        dispatch({ type: 'range', range: null, notice: caught.message });
         dispatch({ type: 'error', message: null, step: 'dates' });
       } else if (caught instanceof StorefrontApiError && caught.status === 401) {
         dispatch({ type: 'verified', value: null });
@@ -235,12 +240,14 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                 <h3 className="font-sf-display text-2xl">Choose your dates</h3>
                 <p className="mt-1 text-sm text-sf-muted">
                   Tap your pickup date, then your return date. Handover is at {formatTime(store.checkout.handover_time)}.
+                  {minimumRentalDays(variant) > 1 ? ` Rentals are at least ${minimumRentalDays(variant)} days.` : ''}
                 </p>
               </div>
               <AvailabilityCalendar
                 slug={store.slug}
                 variantId={variant.variant_id}
                 today={today}
+                minDays={minimumRentalDays(variant)}
                 maxDays={store.checkout.max_rental_days}
                 value={state.range}
                 onChange={(range, notice) => dispatch({ type: 'range', range, notice })}
@@ -282,10 +289,9 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                   <legend className="mb-2 text-sm font-medium">Pickup or delivery</legend>
                   <div className="grid grid-cols-2 gap-2">
                     {(['pickup', 'delivery'] as const).map((method) => (
-                      <label key={method} className={`cursor-pointer border px-4 py-3 text-sm ${state.fulfillment === method ? 'border-sf-ink' : 'border-sf-line'}`}>
-                        <input type="radio" name="fulfillment" className="sr-only" checked={state.fulfillment === method} onChange={() => dispatch({ type: 'set', patch: { fulfillment: method } })} />
+                      <Choice key={method} name="fulfillment" checked={state.fulfillment === method} onSelect={() => dispatch({ type: 'set', patch: { fulfillment: method } })}>
                         {method === 'pickup' ? 'Pick up at the shop' : `Delivery${store.fulfillment.delivery_fee_minor !== '0' ? ` · ${formatMinor(store.fulfillment.delivery_fee_minor)}` : ''}`}
-                      </label>
+                      </Choice>
                     ))}
                   </div>
                 </fieldset>
@@ -296,10 +302,9 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                   <legend className="mb-2 text-sm font-medium">Payment method</legend>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {store.payment_methods.map((method) => (
-                      <label key={method.id} className={`cursor-pointer border px-4 py-3 text-sm ${state.paymentMethodId === method.id ? 'border-sf-ink' : 'border-sf-line'}`}>
-                        <input type="radio" name="payment" className="sr-only" checked={state.paymentMethodId === method.id} onChange={() => dispatch({ type: 'set', patch: { paymentMethodId: method.id } })} />
+                      <Choice key={method.id} name="payment" checked={state.paymentMethodId === method.id} onSelect={() => dispatch({ type: 'set', patch: { paymentMethodId: method.id } })}>
                         {method.name}
-                      </label>
+                      </Choice>
                     ))}
                   </div>
                 </fieldset>
@@ -403,6 +408,20 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
         ) : null}
       </div>
     </div>
+  );
+}
+
+/** A radio tile. The native input stays in the label, so clicks, arrow keys, and screen readers work. */
+function Choice({ name, checked, onSelect, children }: { name: string; checked: boolean; onSelect: () => void; children: React.ReactNode }) {
+  return (
+    <label
+      className={`relative flex min-h-12 cursor-pointer items-center border px-4 py-3 text-sm transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-sf-accent ${
+        checked ? 'border-sf-ink bg-sf-ink text-sf-bg' : 'border-sf-line hover:border-sf-ink'
+      }`}
+    >
+      <input type="radio" name={name} className="sr-only" checked={checked} onChange={onSelect} />
+      {children}
+    </label>
   );
 }
 

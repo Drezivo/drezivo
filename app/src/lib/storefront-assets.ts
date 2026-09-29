@@ -6,6 +6,7 @@ export const STOREFRONT_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] 
 export const STOREFRONT_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 
 type ImageType = (typeof STOREFRONT_IMAGE_TYPES)[number];
+export type ImageUploadPurpose = "storefront_asset" | "measurement_guide";
 
 /** One upload intent per chosen file, so a retry after a network error replays instead of duplicating. */
 export interface UploadIntent {
@@ -28,20 +29,21 @@ export async function uploadStorefrontImage(
   file: File,
   getToken: () => Promise<string | null>,
   intentRef: { current: UploadIntent | null },
+  purpose: ImageUploadPurpose = "storefront_asset",
 ): Promise<FileObjectId> {
   const problem = storefrontImageProblem(file);
   if (problem) throw new Error(problem);
 
-  const fingerprint = `${file.name}|${file.type}|${file.size}|${file.lastModified}`;
+  const fingerprint = `${purpose}|${file.name}|${file.type}|${file.size}|${file.lastModified}`;
   const intent =
     intentRef.current?.fingerprint === fingerprint
       ? intentRef.current
-      : { fingerprint, uploadKey: intentKey("storefront_upload"), finalizeKey: intentKey("storefront_finalize") };
+      : { fingerprint, uploadKey: intentKey(`${purpose}_upload`), finalizeKey: intentKey(`${purpose}_finalize`) };
   intentRef.current = intent;
 
   const client = createDrezivoApiClient(getToken);
   const authorized = await client.authorizeUpload(
-    { purpose: "storefront_asset", content_type: file.type as ImageType, byte_size: file.size, sha256: await sha256Base64(file) },
+    { purpose, content_type: file.type as ImageType, byte_size: file.size, sha256: await sha256Base64(file) },
     intent.uploadKey,
   );
   const uploaded = await fetch(authorized.data.upload_url, { method: "PUT", headers: authorized.data.required_headers, body: file });
