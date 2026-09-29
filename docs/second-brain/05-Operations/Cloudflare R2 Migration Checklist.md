@@ -471,6 +471,12 @@ Use **Standard** for V1: it is the default class for frequently accessed applica
     - [ ] Private evidence is not converted to a permanent public URL.
     - [ ] Expired signed URLs fail safely and are refreshed through normal API reads.
   - **Tests/evidence:** API/service tests and browser image-load tests.
+    Added repeat-read URL-renewal cases for catalogue, reservation detail, and operations projections,
+    plus UI failure-fallback coverage for clothing list/detail/edit, operations thumbnails, reservation
+    detail, and measurement-guide previews. The guide preview can request a fresh signed link through
+    the normal API read. Six focused app tests, app/API typechecks, and targeted API test lint pass.
+    The DB-backed API read-model suites could not run because PostgreSQL at `127.0.0.1:55432` refused
+    the connection; the real API + private-store browser image walkthrough remains open.
 
 ## Phase 6: R2 infrastructure and pre-cutover readiness
 

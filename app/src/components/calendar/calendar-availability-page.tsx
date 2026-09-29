@@ -1074,6 +1074,9 @@ function ClothingThumbnail({
   compact?: boolean;
   item: ClothingAvailabilityTimelineRow;
 }) {
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+  const imageUrl = item.product.primary_image_url;
+
   return (
     <span
       className={cn(
@@ -1081,14 +1084,15 @@ function ClothingThumbnail({
         compact ? "hidden h-12 w-10 text-xs sm:flex" : "flex h-20 w-16 text-sm"
       )}
     >
-      {item.product.primary_image_url ? (
+      {imageUrl && failedImageUrl !== imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element -- catalogue images use short-lived signed URLs that cannot be configured as stable Next.js image hosts.
         <img
-          src={item.product.primary_image_url}
+          src={imageUrl}
           alt={`${item.product.name} catalogue photo`}
           loading="lazy"
           decoding="async"
           className="h-full w-full object-cover"
+          onError={() => setFailedImageUrl(imageUrl)}
         />
       ) : (
         initials(item.product.name)

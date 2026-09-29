@@ -1563,8 +1563,10 @@ export function AddClothingPage() {
           name: defaultGuide?.name ?? "Default measurement guide",
           previewUrl: defaultGuide?.image_url ?? null,
         }}
+        isRefreshing={guideLoading}
         open={measurementGuideOpen}
         onOpenChange={setMeasurementGuideOpen}
+        onRefresh={() => void loadDefaultGuide()}
       />
 
       <Dialog.Root open={discardDialogOpen} onOpenChange={handleDiscardDialogOpenChange}>
@@ -1594,14 +1596,19 @@ export function AddClothingPage() {
 
 function MeasurementGuideSheet({
   guide,
+  isRefreshing,
   open,
   onOpenChange,
+  onRefresh,
 }: {
   guide: { name: string; previewUrl: string | null };
+  isRefreshing: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onRefresh: () => void;
 }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [failedPreviewUrl, setFailedPreviewUrl] = useState<string | null>(null);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -1619,7 +1626,7 @@ function MeasurementGuideSheet({
         <div className="border-y border-dashboard-border bg-dashboard-canvas p-5">
           <div className="overflow-hidden rounded-2xl border border-dashboard-border bg-dashboard-surface shadow-sm">
             <div className="flex min-h-40 items-center justify-center bg-dashboard-active/40 p-6 text-center">
-              {guide.previewUrl ? (
+              {guide.previewUrl && failedPreviewUrl !== guide.previewUrl ? (
                 <button
                   type="button"
                   onClick={() => setLightboxOpen(true)}
@@ -1631,6 +1638,7 @@ function MeasurementGuideSheet({
                     src={guide.previewUrl}
                     alt={`${guide.name} preview`}
                     className="max-h-96 w-full object-contain transition duration-200 group-hover:scale-[1.01]"
+                    onError={() => setFailedPreviewUrl(guide.previewUrl)}
                   />
                   <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/45 to-transparent px-3 pb-2.5 pt-10 text-right text-[11px] font-medium text-white/90 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                     Click to enlarge
@@ -1642,7 +1650,21 @@ function MeasurementGuideSheet({
                     <Ruler className="h-6 w-6" aria-hidden="true" />
                   </span>
                   <p className="mt-3 text-sm font-semibold text-dashboard-navy">Preview unavailable</p>
-                  <p className="mt-1 text-xs text-dashboard-muted">The saved size guide image could not be loaded.</p>
+                  <p className="mt-1 text-xs text-dashboard-muted">
+                    The saved size guide image could not be loaded. Refresh it to request a current private image link.
+                  </p>
+                  {guide.previewUrl ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="mt-3"
+                      disabled={isRefreshing}
+                      onClick={onRefresh}
+                    >
+                      {isRefreshing ? "Refreshing…" : "Refresh preview"}
+                    </Button>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -1663,7 +1685,11 @@ function MeasurementGuideSheet({
         </div>
       </SheetContent>
       <ImageLightbox
-        images={guide.previewUrl ? [{ src: guide.previewUrl, alt: `${guide.name} full-size preview` }] : []}
+        images={
+          guide.previewUrl && failedPreviewUrl !== guide.previewUrl
+            ? [{ src: guide.previewUrl, alt: `${guide.name} full-size preview` }]
+            : []
+        }
         open={lightboxOpen}
         onOpenChange={setLightboxOpen}
         activeIndex={0}

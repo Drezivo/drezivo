@@ -461,6 +461,7 @@ function ClothingRow({
   onArchived: Parameters<typeof ArchiveClothingDialog>[0]["onArchived"];
   onRestored: Parameters<typeof RestoreClothingDialog>[0]["onRestored"];
 }) {
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const displayedSizes = displayProductSizes({
     hasFreeSize: item.has_free_size,
     sizeLabels: item.size_labels,
@@ -469,19 +470,21 @@ function ClothingRow({
     hasFreeSize: item.has_free_size,
     sizeLabels: item.size_labels,
   });
+  const imageUrl = item.primary_image_url;
 
   return (
     <TableRow>
       <TableCell className="px-2 sm:px-4">
         <div className="flex h-12 w-10 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-xs font-semibold text-dashboard-accent">
-          {item.primary_image_url ? (
+          {imageUrl && failedImageUrl !== imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- signed catalogue URLs are dynamic and are not configured as stable next/image remote patterns.
             <img
-              src={item.primary_image_url}
+              src={imageUrl}
               alt={`${item.name} catalogue photo`}
               loading="lazy"
               decoding="async"
               className="h-full w-full object-cover"
+              onError={() => setFailedImageUrl(imageUrl)}
             />
           ) : (
             initials(item.name)

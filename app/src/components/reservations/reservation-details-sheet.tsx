@@ -132,10 +132,10 @@ function ReservationDetails({
 }) {
   const customer = detail.customer.snapshot;
   const effectiveTimeZone = detail.timezone_snapshot || timeZone;
-  const [failedImageLines, setFailedImageLines] = useState<Set<string>>(() => new Set());
+  const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
-    setFailedImageLines(new Set());
+    setFailedImageUrls(new Set());
   }, [detail.id]);
 
   return (
@@ -209,16 +209,17 @@ function ReservationDetails({
                 {index > 0 ? <Separator className="mb-4" /> : null}
                 <div className="flex items-start gap-3">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
-                    {line.variant.image_url && !failedImageLines.has(line.id) ? (
+                    {line.variant.image_url && !failedImageUrls.has(line.variant.image_url) ? (
                       // eslint-disable-next-line @next/next/no-img-element -- API-provided signed URLs are short-lived and dynamic.
                       <img
                         src={line.variant.image_url}
                         alt={`${line.name_snapshot} cover image`}
                         className="h-full w-full object-cover"
                         onError={() =>
-                          setFailedImageLines((current) => {
+                          setFailedImageUrls((current) => {
                             const next = new Set(current);
-                            next.add(line.id);
+                            const failedUrl = line.variant.image_url;
+                            if (failedUrl) next.add(failedUrl);
                             return next;
                           })
                         }

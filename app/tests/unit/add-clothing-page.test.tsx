@@ -213,6 +213,56 @@ describe("AddClothingPage", () => {
     expect(screen.queryByText("Default measurement image preview")).not.toBeInTheDocument();
   });
 
+  it("refreshes an expired measurement-guide preview through the normal API read", async () => {
+    api.getDefaultMeasurementGuide
+      .mockResolvedValueOnce({
+        data: {
+          guide: {
+            id: "00000000-0000-4000-8000-000000000099",
+            file_id: "00000000-0000-4000-8000-000000000098",
+            name: "Default Size Guide",
+            image_url: "https://images.example.test/default-size-guide?signature=expired",
+            status: "active",
+            is_default: true,
+            created_at: "2026-09-21T00:00:00.000Z",
+            updated_at: "2026-09-21T00:00:00.000Z",
+          },
+        },
+        requestId: "req-expired-guide",
+      })
+      .mockResolvedValueOnce({
+        data: {
+          guide: {
+            id: "00000000-0000-4000-8000-000000000099",
+            file_id: "00000000-0000-4000-8000-000000000098",
+            name: "Default Size Guide",
+            image_url: "https://images.example.test/default-size-guide?signature=fresh",
+            status: "active",
+            is_default: true,
+            created_at: "2026-09-21T00:00:00.000Z",
+            updated_at: "2026-09-21T00:00:00.000Z",
+          },
+        },
+        requestId: "req-fresh-guide",
+      });
+
+    renderPage();
+
+    expect(await screen.findByText("Default Size Guide")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "View Measurement" }));
+    const expiredImage = await screen.findByRole("img", { name: "Default Size Guide preview" });
+    fireEvent.error(expiredImage);
+
+    expect(screen.getByText("Preview unavailable")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh preview" }));
+
+    expect(await screen.findByRole("img", { name: "Default Size Guide preview" })).toHaveAttribute(
+      "src",
+      "https://images.example.test/default-size-guide?signature=fresh"
+    );
+    expect(api.getDefaultMeasurementGuide).toHaveBeenCalledTimes(2);
+  });
+
   it("lets a first-time user create and immediately use a persisted default size guide", async () => {
     api.getDefaultMeasurementGuide
       .mockResolvedValueOnce({

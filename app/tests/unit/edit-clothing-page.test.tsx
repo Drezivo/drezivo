@@ -246,6 +246,16 @@ describe("EditClothingPage", () => {
     });
   });
 
+  it("shows a safe fallback when a signed catalogue preview expires", async () => {
+    render(<EditClothingPage productId={productId} />);
+
+    const image = await screen.findByRole("img", { name: "Current cover photo" });
+    fireEvent.error(image);
+
+    expect(screen.queryByRole("img", { name: "Current cover photo" })).not.toBeInTheDocument();
+    expect(screen.getByText("Photo unavailable")).toBeVisible();
+  });
+
   it("prefills the edit form from the authoritative clothing detail response", async () => {
     render(<EditClothingPage productId={productId} />);
 

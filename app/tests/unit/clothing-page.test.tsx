@@ -298,6 +298,9 @@ describe("ClothingPage", () => {
       "src",
       "https://reads.example.test/catalogue%2Fblack-satin-gown.webp?version=cover-v1",
     );
+    fireEvent.error(image);
+    expect(screen.queryByRole("img", { name: "Real Black Satin Gown catalogue photo" })).not.toBeInTheDocument();
+    expect(screen.getByText("RB")).toBeVisible();
 
     api.getCatalogueClothing.mockResolvedValue({
       data: {

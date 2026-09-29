@@ -132,6 +132,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [variants, setVariants] = useState<VariantDraft[]>([]);
   const [photos, setPhotos] = useState<EditablePhoto[]>([]);
+  const [failedPhotoPreviewUrls, setFailedPhotoPreviewUrls] = useState<Set<string>>(() => new Set());
   const [isDirty, setIsDirty] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
@@ -183,6 +184,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
             previewUrl: image.image_url,
           }))
       );
+      setFailedPhotoPreviewUrls(new Set());
       setCategories(categoriesResult.data.items);
       setDefaultGuide(guideResult?.data.guide ?? null);
       setIsDirty(false);
@@ -591,12 +593,17 @@ export function EditClothingPage({ productId }: { productId: string }) {
                       )}
                     >
                       <div className="aspect-[4/5]">
-                        {photo.previewUrl ? (
+                        {photo.previewUrl && !failedPhotoPreviewUrls.has(photo.previewUrl) ? (
                           // eslint-disable-next-line @next/next/no-img-element -- signed API URL or local object URL.
                           <img
                             src={photo.previewUrl}
                             alt={index === 0 ? "Current cover photo" : `Clothing photo ${index + 1}`}
                             className="h-full w-full object-cover"
+                            onError={() =>
+                              setFailedPhotoPreviewUrls((current) =>
+                                new Set(current).add(photo.previewUrl!)
+                              )
+                            }
                           />
                         ) : (
                           <div className="flex h-full items-center justify-center text-xs text-dashboard-muted">

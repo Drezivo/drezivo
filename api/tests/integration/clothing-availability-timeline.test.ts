@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { clothingAvailabilityTimelineQuery, type PermissionCode } from '@drezivo/contracts';
+import type { ObjectStorage } from '../../src/integrations/storage/object-storage.js';
 
 import '../../src/config/load-env.js';
 import {
@@ -34,6 +35,40 @@ const WINDOW = {
   start_date: '2026-09-27',
   end_date: '2026-10-04',
 } as const;
+
+class RenewingTimelineReadStorage implements ObjectStorage {
+  private readNumber = 0;
+
+  readonly authorizedReads: Array<{
+    storageKey: string;
+    versionId?: string | null;
+    expiresInSeconds: number;
+  }> = [];
+
+  authorizeUpload() {
+    return Promise.reject(new Error('Upload authorization is not used by operations reads.'));
+  }
+
+  authorizeRead(input: {
+    storageKey: string;
+    versionId?: string | null;
+    expiresInSeconds: number;
+  }) {
+    this.authorizedReads.push(input);
+    return Promise.resolve({
+      readUrl: `https://reads.example.test/operations-image?read=${++this.readNumber}`,
+      expiresAt: new Date('2026-09-21T00:10:00.000Z'),
+    });
+  }
+
+  inspectUploadedObject() {
+    return Promise.reject(new Error('Object inspection is not used by operations reads.'));
+  }
+
+  deleteObject() {
+    return Promise.resolve();
+  }
+}
 
 describe('OPS-063 clothing availability timeline', async () => {
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
@@ -142,6 +177,62 @@ describe('OPS-063 clothing availability timeline', async () => {
         expect(agenda.type).not.toBe('return');
       }
     }
+  });
+
+  it('renews private cover-image URLs through normal operations reads', async () => {
+    const tenant = await createTestTenant({ clerkOrgId: 'org_ops063_signed_image' });
+    const fixture = await seedTimelineFixture(tenant.id, 'user_ops063_signed_image');
+    const storageKey = `tenant-files/${tenant.id}/operations-cover/source`;
+    await withTenantTransaction(tenant.id, 'user_ops063_signed_image', async (client) => {
+      const file = await client.query<{ id: string }>(
+        `INSERT INTO file_object
+           (tenant_id, purpose, storage_key, version_id, sha256, mime_type, byte_size,
+            lifecycle_status, is_private, upload_expires_at, frozen_at)
+         VALUES ($1, 'catalogue_image', $2, 'operations-cover-v1', 'operations-cover-sha',
+                 'image/webp', 512, 'accepted', true, now() + interval '10 minutes', now())
+         RETURNING id`,
+        [tenant.id, storageKey],
+      );
+      const insertedImage = requireId(file.rows[0]?.id, 'operations cover file');
+      await client.query(
+        `INSERT INTO product_image (tenant_id, product_id, file_id, display_order)
+         VALUES ($1, $2, $3, 0)`,
+        [tenant.id, fixture.productId, insertedImage],
+      );
+    });
+
+    const storage = new RenewingTimelineReadStorage();
+    const firstRead = await getClothingAvailabilityTimeline(
+      availabilityContext(tenant.id, fixture.branchId, 'user_ops063_signed_image'),
+      timelineQuery(WINDOW),
+      storage,
+    );
+    const secondRead = await getClothingAvailabilityTimeline(
+      availabilityContext(tenant.id, fixture.branchId, 'user_ops063_signed_image'),
+      timelineQuery(WINDOW),
+      storage,
+    );
+
+    expect(firstRead.rows.length).toBeGreaterThan(0);
+    expect(new Set(firstRead.rows.map((row) => row.product.primary_image_url))).toEqual(
+      new Set(['https://reads.example.test/operations-image?read=1']),
+    );
+    expect(new Set(secondRead.rows.map((row) => row.product.primary_image_url))).toEqual(
+      new Set(['https://reads.example.test/operations-image?read=2']),
+    );
+    expect(storage.authorizedReads).toEqual([
+      {
+        storageKey,
+        versionId: 'operations-cover-v1',
+        expiresInSeconds: 600,
+      },
+      {
+        storageKey,
+        versionId: 'operations-cover-v1',
+        expiresInSeconds: 600,
+      },
+    ]);
+    expect(JSON.stringify(firstRead)).not.toContain(storageKey);
   });
 
   it('returns filtered idle assets, isolates branch data, and keeps agenda pagination bounded to asset lanes', async () => {
@@ -424,6 +515,7 @@ describe('OPS-063 clothing availability timeline', async () => {
       return {
         branchId,
         categoryId,
+        productId,
         variantId,
         reservedAssetId,
         reservedReservationId: reserved.reservationId,

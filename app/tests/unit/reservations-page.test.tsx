@@ -460,6 +460,29 @@ describe("ReservationsPage", () => {
   });
 
   it("refetches the authoritative list and detail after a successful lifecycle mutation", async () => {
+    const expiredImageDetail = reservationDetail.parse({
+      ...reservationDetailRecord,
+      lines: reservationDetailRecord.lines.map((line) => ({
+        ...line,
+        variant: {
+          ...line.variant,
+          image_url: "https://reads.example.test/reservation-cover?signature=old",
+        },
+      })),
+    });
+    const refreshedImageDetail = reservationDetail.parse({
+      ...expiredImageDetail,
+      lines: expiredImageDetail.lines.map((line) => ({
+        ...line,
+        variant: {
+          ...line.variant,
+          image_url: "https://reads.example.test/reservation-cover?signature=fresh",
+        },
+      })),
+    });
+    api.getReservationDetail
+      .mockResolvedValueOnce({ data: expiredImageDetail, requestId: "req-old-image" })
+      .mockResolvedValueOnce({ data: refreshedImageDetail, requestId: "req-fresh-image" });
     api.pickupReservation.mockResolvedValueOnce({
       data: { reservation: { status: "picked_up" } },
       requestId: "req-pickup",
@@ -469,11 +492,22 @@ describe("ReservationsPage", () => {
     await screen.findByText("RSV-REAL-001");
     fireEvent.click(screen.getByRole("button", { name: "Open reservation RSV-REAL-001" }));
     await screen.findByRole("heading", { name: "Reservation RSV-REAL-001" });
+    const expiredImage = screen.getByRole("img", { name: "Real Emerald Gown cover image" });
+    expect(expiredImage).toHaveAttribute(
+      "src",
+      "https://reads.example.test/reservation-cover?signature=old"
+    );
+    fireEvent.error(expiredImage);
+    expect(screen.queryByRole("img", { name: "Real Emerald Gown cover image" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Pick Up" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm Pick Up" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Pickup recorded.");
+    expect(await screen.findByRole("img", { name: "Real Emerald Gown cover image" })).toHaveAttribute(
+      "src",
+      "https://reads.example.test/reservation-cover?signature=fresh"
+    );
     await waitFor(() => expect(api.getReservationDetail).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(api.getReservations).toHaveBeenCalledTimes(2));
   });

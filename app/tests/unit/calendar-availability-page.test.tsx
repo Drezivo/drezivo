@@ -56,6 +56,7 @@ function timelineResponse(
     name?: string;
     nextCursor?: string | null;
     readiness?: "ready" | "needs_cleaning" | "needs_repair" | "unready";
+    imageUrl?: string;
   } = {}
 ) {
   const name = options.name ?? "Emerald Evening Gown";
@@ -75,7 +76,7 @@ function timelineResponse(
         product: {
           id: "00000000-0000-4000-8000-000000000206",
           name,
-          primary_image_url: null,
+          primary_image_url: options.imageUrl ?? null,
         },
         variant: {
           id: "00000000-0000-4000-8000-000000000207",
@@ -163,6 +164,32 @@ describe("CalendarAvailabilityPage", () => {
     expect(input.end_date).toBe(addCalendarDays(input.start_date, 13));
     expect(input.limit).toBe(25);
     expect(await screen.findByText("Emerald Evening Gown")).toBeVisible();
+  });
+
+  it("falls back to the product initials when a short-lived timeline image fails", async () => {
+    api.getClothingAvailabilityTimeline.mockImplementationOnce(
+      async (input: { start_date: string; end_date: string }) => ({
+        data: timelineResponse(input.start_date, input.end_date, {
+          imageUrl: "https://reads.example.test/operations-cover?signature=old",
+        }),
+      })
+    );
+
+    render(<CalendarAvailabilityPage />);
+
+    const image = await screen.findByRole("img", {
+      name: "Emerald Evening Gown catalogue photo",
+    });
+    expect(image).toHaveAttribute(
+      "src",
+      "https://reads.example.test/operations-cover?signature=old"
+    );
+    fireEvent.error(image);
+
+    expect(
+      screen.queryByRole("img", { name: "Emerald Evening Gown catalogue photo" })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("EE")).toBeVisible();
   });
 
   it("lets a short timeline shrink to its content while capping larger lists", async () => {

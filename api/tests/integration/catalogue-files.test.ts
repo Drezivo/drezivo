@@ -6,6 +6,7 @@ import {
   fileObjectId,
   replaceClothingImagesRequest,
   uploadAuthorizationRequest,
+  uploadFinalizeResponse,
   type FileObjectId,
   type PermissionCode,
 } from '@drezivo/contracts';
@@ -42,6 +43,10 @@ const SHA_A = Buffer.alloc(32, 1).toString('base64');
 const SHA_B = Buffer.alloc(32, 2).toString('base64');
 
 class FakeStorage {
+  constructor(private readonly renewReadUrls = false) {}
+
+  private readNumber = 0;
+
   readonly authorized: Array<{
     storageKey: string;
     contentType: string;
@@ -83,8 +88,9 @@ class FakeStorage {
     expiresInSeconds: number;
   }) {
     this.authorizedReads.push(input);
+    const readNumber = this.renewReadUrls ? `&read=${++this.readNumber}` : '';
     return Promise.resolve({
-      readUrl: `https://reads.example.test/${encodeURIComponent(input.storageKey)}?version=${encodeURIComponent(input.versionId ?? '')}`,
+      readUrl: `https://reads.example.test/${encodeURIComponent(input.storageKey)}?version=${encodeURIComponent(input.versionId ?? '')}${readNumber}`,
       expiresAt: new Date('2026-09-21T00:05:00.000Z'),
     });
   }
@@ -132,7 +138,7 @@ describe('CLT-022 clothing file attachment flow', async () => {
 
   it('returns a short-lived signed image URL for the accepted default measurement guide', async () => {
     const seed = await seedTenant('org_clt022_guide_view', 'user_clt022_guide_view');
-    const storage = new FakeStorage();
+    const storage = new FakeStorage(true);
     const seeded = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       const file = await client.query<{ id: string; storage_key: string }>(
         `INSERT INTO file_object
@@ -170,6 +176,12 @@ describe('CLT-022 clothing file attachment flow', async () => {
         expiresInSeconds: 300,
       },
     ]);
+
+    const refreshed = await getDefaultMeasurementGuide(seed.catalogueContext, storage);
+    expect(refreshed.guide?.image_url).toBe(
+      `https://reads.example.test/${encodeURIComponent(seeded.storageKey)}?version=guide-version-1&read=2`,
+    );
+    expect(storage.authorizedReads).toHaveLength(2);
   });
 
   it('authorizes a bounded private catalogue upload and accepts only the verified frozen object', async () => {
@@ -241,15 +253,27 @@ describe('CLT-022 clothing file attachment flow', async () => {
     );
     expect(finalized.status).toBe(200);
     if (!finalized.body.success) throw new Error('Expected upload finalization success.');
-    expect(finalized.body.data.file).toEqual({
+    const finalizedFile = uploadFinalizeResponse.parse(finalized.body.data).file;
+    expect(finalizedFile).toEqual({
       file_id: fileId,
       purpose: 'catalogue_image',
       lifecycle_status: 'accepted',
       content_type: 'image/png',
       byte_size: 512,
       sha256: SHA_A,
-      frozen_at: expect.any(String),
     });
+    expect(Object.keys(finalizedFile).sort()).toEqual(
+      [
+        'file_id',
+        'purpose',
+        'lifecycle_status',
+        'content_type',
+        'byte_size',
+        'sha256',
+        'frozen_at',
+      ].sort(),
+    );
+    expect(Date.parse(finalizedFile.frozen_at)).not.toBeNaN();
 
     const accepted = await readFile(seed.tenantId, seed.principalId, fileId);
     expect(accepted.lifecycle_status).toBe('accepted');

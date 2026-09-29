@@ -2,6 +2,7 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PermissionCode } from '@drezivo/contracts';
+import type { ObjectStorage } from '../../src/integrations/storage/object-storage.js';
 
 import '../../src/config/load-env.js';
 import {
@@ -78,6 +79,40 @@ interface SeedReservationInput {
     status: 'pending' | 'partially_paid' | 'paid' | 'failed' | 'refunded';
     amountMinor: number;
   };
+}
+
+class RenewingReservationReadStorage implements ObjectStorage {
+  private readNumber = 0;
+
+  readonly authorizedReads: Array<{
+    storageKey: string;
+    versionId?: string | null;
+    expiresInSeconds: number;
+  }> = [];
+
+  authorizeUpload() {
+    return Promise.reject(new Error('Upload authorization is not used by reservation reads.'));
+  }
+
+  authorizeRead(input: {
+    storageKey: string;
+    versionId?: string | null;
+    expiresInSeconds: number;
+  }) {
+    this.authorizedReads.push(input);
+    return Promise.resolve({
+      readUrl: `https://reads.example.test/reservation-image?read=${++this.readNumber}`,
+      expiresAt: new Date('2026-09-21T00:05:00.000Z'),
+    });
+  }
+
+  inspectUploadedObject() {
+    return Promise.reject(new Error('Object inspection is not used by reservation reads.'));
+  }
+
+  deleteObject() {
+    return Promise.resolve();
+  }
 }
 
 describe('RSV Phase 1 reservation read model', async () => {
@@ -480,6 +515,72 @@ describe('RSV Phase 1 reservation read model', async () => {
     expect(JSON.stringify(detail)).not.toContain('PRIVATE CUSTOMER NOTE');
     expect(JSON.stringify(detail)).not.toContain('PRIVATE VERIFICATION NOTE');
     expect(JSON.stringify(detail)).not.toContain('private/rsv011/payment-proof.png');
+  });
+
+  it('renews private catalogue image reads on each reservation detail request', async () => {
+    const seed = await seedWorkspace('org_rsv011_signed_image', 'user_rsv011_signed_image', [
+      'reservations.manage',
+    ]);
+    const reservationId = await seedReservation(seed, {
+      referenceCode: 'RSV-SIGNED-IMAGE',
+      status: 'confirmed',
+      pickupAt: '2026-12-12T02:00:00.000Z',
+      dueAt: '2026-12-13T02:00:00.000Z',
+      lineName: 'Private Image Snapshot',
+      customer: { fullName: 'Image Read Customer' },
+    });
+    const storageKey = `tenant-files/${seed.tenantId}/reservation-cover/source`;
+    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const file = await client.query<{ id: string }>(
+        `INSERT INTO file_object
+           (tenant_id, purpose, storage_key, version_id, sha256, mime_type, byte_size,
+            lifecycle_status, is_private, upload_expires_at, frozen_at)
+         VALUES ($1, 'catalogue_image', $2, 'cover-reservation-v1', 'cover-reservation-sha',
+                 'image/webp', 512, 'accepted', true, now() + interval '10 minutes', now())
+         RETURNING id`,
+        [seed.tenantId, storageKey],
+      );
+      const insertedImage = requireRow(file.rows, 'reservation image file');
+      await client.query(
+        `INSERT INTO product_image (tenant_id, product_id, file_id, display_order)
+         SELECT $1, pv.product_id, $2, 0
+           FROM product_variant pv
+          WHERE pv.tenant_id = $1
+            AND pv.id = $3`,
+        [seed.tenantId, insertedImage.id, seed.variantId],
+      );
+    });
+
+    const storage = new RenewingReservationReadStorage();
+    const firstRead = await getReservationDetail(
+      reservationContext(seed),
+      reservationId,
+      storage,
+    );
+    const secondRead = await getReservationDetail(
+      reservationContext(seed),
+      reservationId,
+      storage,
+    );
+
+    expect(firstRead.lines[0]?.variant.image_url).toBe(
+      'https://reads.example.test/reservation-image?read=1',
+    );
+    expect(secondRead.lines[0]?.variant.image_url).toBe(
+      'https://reads.example.test/reservation-image?read=2',
+    );
+    expect(storage.authorizedReads).toEqual([
+      {
+        storageKey,
+        versionId: 'cover-reservation-v1',
+        expiresInSeconds: 300,
+      },
+      {
+        storageKey,
+        versionId: 'cover-reservation-v1',
+        expiresInSeconds: 300,
+      },
+    ]);
   });
 
   it('keeps accepted customer/clothing snapshots after live edits and conceals foreign tenant or branch ids', async () => {
