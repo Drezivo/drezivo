@@ -7,7 +7,6 @@ import {
   CalendarDays,
   ChevronDown,
   ClipboardList,
-  CreditCard,
   HelpCircle,
   LayoutDashboard,
   Ruler,
@@ -35,7 +34,6 @@ const NAV_ITEMS = [
   { href: "/inventory", label: "Clothing", icon: Shirt },
   { href: "/customers", label: "Customers", icon: UsersRound },
   { href: "/fittings", label: "Fittings", icon: Ruler },
-  { href: "/payments", label: "Payments", icon: CreditCard },
   { href: "/storefront", label: "Storefront", icon: Store },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;

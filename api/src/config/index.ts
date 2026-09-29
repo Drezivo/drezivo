@@ -3,6 +3,7 @@ import './load-env.js';
 import { z } from 'zod';
 
 import { parseCorsAllowedOrigins } from './cors-origins.js';
+import { strictBooleanEnv } from './env-parsers.js';
 
 /**
  * Every environment variable the application reads is declared and validated HERE, once, at
@@ -46,14 +47,14 @@ const envSchema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().min(1, 'S3_SECRET_ACCESS_KEY is required'),
   // Optional for AWS; set to the local MinIO API URL and enable path-style addressing in dev.
   S3_ENDPOINT: z.string().url('S3_ENDPOINT must be a valid URL').optional(),
-  S3_FORCE_PATH_STYLE: z.coerce.boolean().default(false),
+  S3_FORCE_PATH_STYLE: strictBooleanEnv('S3_FORCE_PATH_STYLE').default(false),
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 
   // Worker tuning — TRD §8: bounded polling, lease claim, bounded retry to a terminal state.
   WORKER_POLL_INTERVAL_MS: z.coerce.number().int().min(250).default(2000),
   WORKER_LEASE_SECONDS: z.coerce.number().int().min(5).default(60),
-  WORKER_ENABLED: z.coerce.boolean().default(false),
+  WORKER_ENABLED: strictBooleanEnv('WORKER_ENABLED').default(false),
 
   // TRD §4: proposed seven-day retention window for idempotency records.
   IDEMPOTENCY_RETENTION_DAYS: z.coerce.number().int().min(1).default(7),
