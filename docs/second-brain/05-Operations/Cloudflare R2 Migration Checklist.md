@@ -120,15 +120,48 @@ reach the npm registry. No production infrastructure, object, secret, or deploym
     - [x] No unrelated catalogue, payment, reservation, or calendar behavior is changed.
   - **Tests/evidence:** Reviewed implementation scope in PR description/checklist.
 
-- [ ] **R2-002 — Establish before-change behavior evidence**
+- [x] **R2-002 — Establish before-change behavior evidence**
   - **Depends on:** R2-001.
   - **Outcome:** Existing upload invariants are captured before provider code changes.
   - **Acceptance:**
-    - [ ] Existing file integration tests pass or existing failures are documented before edits.
-    - [ ] Record current response contract for `POST /api/v1/uploads` and `POST /api/v1/uploads/:fileId/finalize`.
-    - [ ] Record the current upload callers: catalogue image, measurement guide, payment receipt, and payment QR/storefront asset.
-    - [ ] Record all direct imports/usages of `s3ObjectStorage`.
-  - **Tests/evidence:** Baseline test output and code-reference inventory.
+    - [x] Existing file integration tests passed before the provider adapter changes.
+    - [x] Record current response contract for `POST /api/v1/uploads` and `POST /api/v1/uploads/:fileId/finalize`.
+    - [x] Record the current upload callers: catalogue image, measurement guide, payment receipt, and payment QR/storefront asset.
+    - [x] Record all direct imports/usages of `s3ObjectStorage`.
+  - **Baseline test evidence:** Backend CI passed on pre-migration `main` commit
+    `5586a08e6dd42e43de174b9a5f82eb0f95fc8efc` on 2026-09-29. Its
+    `catalogue-files.test.ts` integration file passed all 10 tests; the API integration
+    step completed with 54 test files passing. [Run 36540231853](https://github.com/Drezivo/drezivo/actions/runs/36540231853).
+  - **Pre-change endpoint contract:** `POST /api/v1/uploads` requires staff auth, tenant
+    context, upload permission, a valid `Idempotency-Key`, and a strict body
+    `{ purpose, content_type, byte_size, sha256 }` (`byte_size` is 1–10 MiB; `sha256`
+    is standard Base64). It returns HTTP 201 with the success envelope
+    `success`, `data`, and `request_id`; `data` contains `file_id`, `upload_url`,
+    `upload_method: "PUT"`, `required_headers`, and `expires_at`. Callers must forward
+    `required_headers` unchanged.
+    `POST /api/v1/uploads/:fileId/finalize` requires the same authorization and
+    idempotency boundary plus a strict empty body `{}`. It returns HTTP 200 with
+    the same success envelope, with `data.file` containing `file_id`, `purpose`,
+    `lifecycle_status: "accepted"`, `content_type`, `byte_size`, `sha256`, and
+    `frozen_at`. Failures use `success: false`, `error` (`code`, `message`, optional
+    `fields`), and `request_id`.
+  - **Pre-change upload callers:** `app/src/components/inventory/add-clothing-page.tsx`
+    has catalogue-photo and measurement-guide uploads;
+    `app/src/components/inventory/edit-clothing-page.tsx` uploads catalogue photos;
+    `app/src/components/reservations/new-reservation-sheet.tsx` uploads reservation
+    receipts; `app/src/components/settings/payment-method-settings-page.tsx` uploads
+    payment QR images. The purpose enum includes `storefront_asset`, but no direct
+    app/web upload caller for that purpose was found at the baseline commit.
+  - **Pre-change `s3ObjectStorage` imports/usages:** Four API modules imported the
+    singleton: `catalogue.service.ts` (defaults in `getCatalogueClothingList`,
+    `getCatalogueClothingDetail`, `getDefaultMeasurementGuide`), `files.service.ts`
+    (`authorizeUpload`, `finalizeUpload`), `operations.service.ts`
+    (`getClothingAvailabilityTimeline`), and `reservations.service.ts`
+    (`getReservationDetail`). This was four imports and seven default-injection usages.
+  - **Tests/evidence:** Route, contract, and caller references above are from
+    pre-migration commit `5586a08`. CI run
+    [36540231853](https://github.com/Drezivo/drezivo/actions/runs/36540231853)
+    records the baseline integration output before adapter changes.
 
 - [ ] **R2-003 — Inventory existing stored objects before choosing the migration path**
   - **Depends on:** R2-002.
