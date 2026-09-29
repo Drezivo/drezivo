@@ -149,6 +149,8 @@ import {
   transferOwnershipRequest,
   uploadAuthorizationRequest,
   uploadAuthorizationResponse,
+  uploadFinalizeRequest,
+  uploadFinalizeResponse,
   verifyOnboardingPaymentRequest,
 } from '../src';
 
@@ -1411,6 +1413,30 @@ registry.registerPath({
       content: { 'application/json': { schema: successEnvelope(uploadAuthorizationResponse) } },
     },
     422: jsonError(`Validation failed — see ${filePurpose.options.join(', ')} for allowed purposes.`),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/uploads/{fileId}/finalize',
+  tags: ['files'],
+  summary: 'Finalize and accept a verified private upload (TRD §4, §7).',
+  request: {
+    params: z.object({ fileId: z.string().uuid() }),
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: uploadFinalizeRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Upload finalized and accepted, or an identical finalization replayed.',
+      content: { 'application/json': { schema: successEnvelope(uploadFinalizeResponse) } },
+    },
+    403: jsonError('File upload permission is required.'),
+    404: jsonError('The uploaded file could not be found for this workspace.'),
+    409: jsonError('The uploaded object is unavailable or can no longer be finalized.'),
+    422: jsonError('The finalization request or uploaded object is invalid.'),
+    429: jsonError('File upload rate limit exceeded.'),
+    503: jsonError('Object storage is unavailable for upload finalization.'),
   },
 });
 

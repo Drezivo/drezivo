@@ -435,15 +435,15 @@ Use **Standard** for V1: it is the default class for frequently accessed applica
 
 ## Phase 5: API contracts and frontend upload flows
 
-- [ ] **R2-050 — Confirm no external upload contract break is needed**
+- [x] **R2-050 — Confirm no external upload contract break is needed**
   - **Depends on:** R2-030, R2-042.
   - **Outcome:** Provider migration stays behind the existing upload contract when possible.
   - **Acceptance:**
-    - [ ] `POST /api/v1/uploads` still returns `file_id`, `upload_url`, `upload_method`, `required_headers`, and `expires_at`.
-    - [ ] `POST /api/v1/uploads/:fileId/finalize` response remains provider-neutral.
-    - [ ] `required_headers` carries any new conditional/checksum header without adding Cloudflare-specific fields.
-    - [ ] If a contract change is truly required, land the contracts change before API/app consumers per repository workflow.
-  - **Tests/evidence:** Contract parsing and route/integration tests.
+    - [x] `POST /api/v1/uploads` still returns `file_id`, `upload_url`, `upload_method`, `required_headers`, and `expires_at`.
+    - [x] `POST /api/v1/uploads/:fileId/finalize` response remains provider-neutral.
+    - [x] `required_headers` carries the conditional `If-None-Match` header through its generic map without adding Cloudflare-specific fields.
+    - [x] No wire-shape change was required; the existing finalize route was added to generated OpenAPI before any API/app consumer change.
+  - **Tests/evidence:** Contract parsing passes (2 tests), contracts typecheck passes, API typecheck and upload-gate unit test pass. The API service integration test now asserts exact authorization/finalization response keys, but could not run locally because PostgreSQL at `127.0.0.1:55432` refused the connection (15 tests skipped). `contracts/openapi/drezivo.v1.yaml` now documents the already-implemented finalize endpoint.
 
 - [ ] **R2-051 — Verify all existing staff upload callers without R2-specific branching**
   - **Depends on:** R2-050.

@@ -193,6 +193,11 @@ describe('CLT-022 clothing file attachment flow', async () => {
     );
     expect(authorization.status).toBe(201);
     if (!authorization.body.success) throw new Error('Expected upload authorization success.');
+    expect(Object.keys(authorization.body.data).sort()).toEqual(
+      ['file_id', 'upload_url', 'upload_method', 'required_headers', 'expires_at'].sort(),
+    );
+    expect(authorization.body.data.upload_url).toMatch(/^https:\/\//);
+    expect(authorization.body.data.upload_method).toBe('PUT');
     expect(authorization.body.data.required_headers).toEqual({
       'Content-Type': 'image/png',
       'If-None-Match': '*',
@@ -236,15 +241,15 @@ describe('CLT-022 clothing file attachment flow', async () => {
     );
     expect(finalized.status).toBe(200);
     if (!finalized.body.success) throw new Error('Expected upload finalization success.');
-    expect(finalized.body.data.file).toMatchObject({
+    expect(finalized.body.data.file).toEqual({
       file_id: fileId,
       purpose: 'catalogue_image',
       lifecycle_status: 'accepted',
       content_type: 'image/png',
       byte_size: 512,
       sha256: SHA_A,
+      frozen_at: expect.any(String),
     });
-    expect(finalized.body.data.file.frozen_at).toEqual(expect.any(String));
 
     const accepted = await readFile(seed.tenantId, seed.principalId, fileId);
     expect(accepted.lifecycle_status).toBe('accepted');
