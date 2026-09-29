@@ -183,7 +183,7 @@ describe('S3-compatible object storage', () => {
   });
 
   it('fails closed when the object stream ends with a provider error', async () => {
-    async function* failingObjectBody(): AsyncGenerator<Uint8Array> {
+    function* failingObjectBody(): Generator<Uint8Array> {
       yield Buffer.from('partial object');
       throw new Error('private stream failure');
     }
