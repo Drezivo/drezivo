@@ -26,6 +26,13 @@ is not a benchmark." Do not assume Singapore is confirmed without that measureme
 selection is recorded in [ADR 0010](../decisions/0010-cloudflare-r2-object-storage.md), but no
 production bucket, credential, object migration, or cutover is declared complete by this runbook.
 
+**Host decision status (2026-09-29): no V1/pilot API or worker container host has been approved
+or provisioned.** Keep this runbook and the R2 migration instructions host-neutral until that
+decision is recorded. Vercel remains a named Next.js candidate only; Render is not a confirmed
+deployment provider. The API and worker continue to use the ordinary Node/container entrypoints
+below, with secrets supplied by whichever host is later selected; the storage adapter does not
+depend on a deployment-host SDK or provider-specific behavior.
+
 The API and worker deploy as ordinary PostgreSQL clients. They do not use Supabase Auth, Storage,
 Realtime, REST, GraphQL, or service-role keys. Before the first application deploy, apply migrations
 through `DATABASE_URL_DIRECT`, assign deployment-managed passwords to `drezivo_app` and

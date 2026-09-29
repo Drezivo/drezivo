@@ -183,14 +183,14 @@ reach the npm registry. No production infrastructure, object, secret, or deploym
     - [x] Do not copy object keys, signed URLs, receipt contents, or customer PII into the checklist or long-lived deployment notes.
   - **Tests/evidence:** Partial redacted local and configured-R2 counts are recorded above. Production database/source-provider reconciliation and review remain required before adapter cutover.
 
-- [ ] **R2-004 — Confirm the deployment host decision**
+- [x] **R2-004 — Confirm the deployment host decision**
   - **Depends on:** R2-000.
-  - **Outcome:** Storage deployment instructions match the selected runtime host instead of assuming Render while canonical docs still say the host is undecided.
+  - **Outcome:** Storage deployment instructions do not assume a specific runtime host while the V1/pilot host remains undecided.
   - **Acceptance:**
-    - [ ] Record the selected V1/pilot API + worker container host in the accepted architecture/deployment docs, or keep the migration checklist host-neutral if that selection is not yet approved.
-    - [ ] If Render is confirmed, describe it as the current deployment provider rather than a requirement of the storage adapter.
-    - [ ] Keep the API/worker storage integration portable to another ordinary container host.
-  - **Tests/evidence:** Deployment decision is traceable in an accepted ADR/runbook update before production cutover.
+    - [x] No V1/pilot API + worker container host is approved or provisioned; keep this checklist and the deploy runbook host-neutral pending a separately recorded selection.
+    - [x] Render is not confirmed; Vercel remains only a named Next.js candidate, not an API/worker host decision.
+    - [x] Keep the API/worker storage integration portable to an ordinary container host; do not add a host-specific storage SDK or runtime assumption.
+  - **Tests/evidence:** [Deploy runbook](../../runbooks/deploy.md) records the dated undecided status and portability boundary. This closes the host-neutral acceptance path; it does not select a host or authorize deployment.
 
 - [ ] **R2-005 — Record the R2 pilot cost model**
   - **Depends on:** R2-003.
