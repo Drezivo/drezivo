@@ -76,6 +76,15 @@ export const OPERATIONAL_CALENDAR_FITTING_STATUSES = [
 export const operationalCalendarFittingStatus = z.enum(OPERATIONAL_CALENDAR_FITTING_STATUSES);
 export type OperationalCalendarFittingStatus = z.infer<typeof operationalCalendarFittingStatus>;
 
+export const operationalCalendarCategory = z
+  .object({
+    id: categoryId,
+    name: z.string().trim().min(1).max(120),
+    status: z.enum(['active', 'inactive']),
+  })
+  .strict();
+export type OperationalCalendarCategory = z.infer<typeof operationalCalendarCategory>;
+
 export const operationalCalendarEvent = z.discriminatedUnion('source', [
   z
     .object({
@@ -87,6 +96,7 @@ export const operationalCalendarEvent = z.discriminatedUnion('source', [
       period: instantInterval,
       customer_name: z.string().min(1),
       item_names: z.array(z.string().min(1)).max(20),
+      category_ids: z.array(categoryId).max(20),
       status: operationalCalendarReservationStatus,
     })
     .strict(),
@@ -100,6 +110,7 @@ export const operationalCalendarEvent = z.discriminatedUnion('source', [
       period: instantInterval,
       customer_name: z.string().min(1),
       item_names: z.array(z.string().min(1)).max(20),
+      category_ids: z.array(categoryId).max(20),
       status: operationalCalendarFittingStatus,
     })
     .strict(),
@@ -109,6 +120,7 @@ export type OperationalCalendarEvent = z.infer<typeof operationalCalendarEvent>;
 export const operationalCalendarResponse = z
   .object({
     window: instantInterval,
+    categories: z.array(operationalCalendarCategory),
     events: z.array(operationalCalendarEvent).max(OPERATIONAL_CALENDAR_MAX_EVENTS),
     truncated: z.boolean(),
   })

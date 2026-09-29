@@ -18,6 +18,7 @@ export interface CalendarEventRow {
   ends_at: Date;
   customer_name: string;
   item_names: string[];
+  category_ids: string[];
   status:
     | 'pending_confirmation'
     | 'confirmed'
@@ -31,6 +32,26 @@ export interface CalendarEventRow {
 export interface OperationalCalendarPage {
   rows: CalendarEventRow[];
   truncated: boolean;
+}
+
+export interface OperationalCalendarCategoryRow {
+  id: string;
+  name: string;
+  status: 'active' | 'inactive';
+}
+
+export async function readOperationalCalendarCategories(
+  client: PoolClient,
+  tenantId: string,
+): Promise<OperationalCalendarCategoryRow[]> {
+  const result = await client.query<OperationalCalendarCategoryRow>(
+    `SELECT id, name, status
+       FROM category
+      WHERE tenant_id = $1::uuid
+      ORDER BY display_order ASC, lower(name) ASC, id ASC`,
+    [tenantId],
+  );
+  return result.rows;
 }
 
 export interface DashboardFittingSummaryRow {
@@ -126,13 +147,24 @@ export async function readOperationalCalendarEvents(
      ),
      reservation_items AS (
        SELECT rl.tenant_id, rl.reservation_id,
-              array_agg(rl.name_snapshot ORDER BY rl.line_number, rl.id) AS item_names
+              array_agg(rl.name_snapshot ORDER BY rl.line_number, rl.id) AS item_names,
+              COALESCE(
+                array_agg(DISTINCT p.category_id ORDER BY p.category_id)
+                  FILTER (WHERE p.category_id IS NOT NULL),
+                ARRAY[]::uuid[]
+              ) AS category_ids
          FROM reservation_line rl
          JOIN (
            SELECT DISTINCT source_id
              FROM bounded_events
             WHERE source = 'reservation'
          ) selected ON selected.source_id = rl.reservation_id
+         JOIN product_variant pv
+           ON pv.tenant_id = rl.tenant_id
+          AND pv.id = rl.variant_id
+         JOIN product p
+           ON p.tenant_id = pv.tenant_id
+          AND p.id = pv.product_id
         WHERE rl.tenant_id = $1::uuid
         GROUP BY rl.tenant_id, rl.reservation_id
      ),
@@ -150,6 +182,7 @@ export async function readOperationalCalendarEvents(
                 'Customer'
               ) AS customer_name,
               COALESCE(items.item_names, ARRAY[]::text[]) AS item_names,
+              COALESCE(items.category_ids, ARRAY[]::uuid[]) AS category_ids,
               be.status
          FROM bounded_events be
          LEFT JOIN customer c
@@ -171,6 +204,7 @@ export async function readOperationalCalendarEvents(
               be.ends_at,
               c.full_name AS customer_name,
               COALESCE(items.item_names, ARRAY[]::text[]) AS item_names,
+              COALESCE(items.category_ids, ARRAY[]::uuid[]) AS category_ids,
               be.status
          FROM bounded_events be
          JOIN customer c
@@ -178,7 +212,12 @@ export async function readOperationalCalendarEvents(
           AND c.tenant_id = $1::uuid
           AND c.id = be.customer_id
          LEFT JOIN LATERAL (
-           SELECT array_agg(p.name ORDER BY fl.created_at, fl.id) AS item_names
+           SELECT array_agg(p.name ORDER BY fl.created_at, fl.id) AS item_names,
+                  COALESCE(
+                    array_agg(DISTINCT p.category_id ORDER BY p.category_id)
+                      FILTER (WHERE p.category_id IS NOT NULL),
+                    ARRAY[]::uuid[]
+                  ) AS category_ids
              FROM fitting_line fl
              JOIN product_variant pv ON pv.tenant_id = fl.tenant_id AND pv.id = fl.variant_id
              JOIN product p ON p.tenant_id = pv.tenant_id AND p.id = pv.product_id

@@ -11381,8 +11381,10 @@ paths:
           in: query
       responses:
         "200":
-          description: Reservation pickup/return and fitting events for the active branch. At most
-            2,000 events are returned; truncated is true when the bounded range contains more.
+          description: Reservation pickup/return and fitting events for the active branch,
+            with tenant category facets and category IDs for associated event
+            items. At most 2,000 events are returned; truncated is true when the
+            bounded range contains more.
           content:
             application/json:
               schema:
@@ -11407,6 +11409,28 @@ paths:
                         required:
                           - start
                           - end
+                      categories:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              format: uuid
+                            name:
+                              type: string
+                              minLength: 1
+                              maxLength: 120
+                            status:
+                              type: string
+                              enum:
+                                - active
+                                - inactive
+                          required:
+                            - id
+                            - name
+                            - status
+                          additionalProperties: false
                       events:
                         type: array
                         items:
@@ -11452,6 +11476,12 @@ paths:
                                     type: string
                                     minLength: 1
                                   maxItems: 20
+                                category_ids:
+                                  type: array
+                                  items:
+                                    type: string
+                                    format: uuid
+                                  maxItems: 20
                                 status:
                                   type: string
                                   enum:
@@ -11469,6 +11499,7 @@ paths:
                                 - period
                                 - customer_name
                                 - item_names
+                                - category_ids
                                 - status
                               additionalProperties: false
                             - type: object
@@ -11511,6 +11542,12 @@ paths:
                                     type: string
                                     minLength: 1
                                   maxItems: 20
+                                category_ids:
+                                  type: array
+                                  items:
+                                    type: string
+                                    format: uuid
+                                  maxItems: 20
                                 status:
                                   type: string
                                   enum:
@@ -11527,6 +11564,7 @@ paths:
                                 - period
                                 - customer_name
                                 - item_names
+                                - category_ids
                                 - status
                               additionalProperties: false
                         maxItems: 2000
@@ -11534,6 +11572,7 @@ paths:
                         type: boolean
                     required:
                       - window
+                      - categories
                       - events
                       - truncated
                     additionalProperties: false

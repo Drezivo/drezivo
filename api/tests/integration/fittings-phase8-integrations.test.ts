@@ -473,6 +473,68 @@ describe('FIT-BE-080..083 cross-product integration', async () => {
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
   });
 
+  it('returns tenant-scoped category facets and category IDs for calendar event items', async () => {
+    const seed = await seedWorkspace('calendar-category-filter');
+    const foreignSeed = await seedWorkspace('calendar-category-foreign');
+    const category = await withAdmin(async (client) => {
+      const id = requireId(
+        (
+          await client.query<{ id: string }>(
+            `INSERT INTO category (tenant_id,name,status,display_order)
+             VALUES ($1,'Evening Wear','active',0) RETURNING id`,
+            [seed.tenantId],
+          )
+        ).rows,
+        'calendar category',
+      );
+      await client.query(
+        `UPDATE product p
+            SET category_id = $2
+           FROM product_variant pv
+          WHERE p.tenant_id = $1
+            AND p.id = pv.product_id
+            AND pv.tenant_id = p.tenant_id
+            AND pv.id = $3`,
+        [seed.tenantId, id, seed.variantId],
+      );
+      await client.query(
+        `INSERT INTO category (tenant_id,name,status,display_order)
+         VALUES ($1,'Foreign Category','active',0)`,
+        [foreignSeed.tenantId],
+      );
+      return id;
+    });
+    const fittingId = await insertFitting(seed, {
+      startsAt: plus(seed.todayStart, 10),
+      endsAt: plus(seed.todayStart, 11),
+    });
+    const reservation = await insertReservation(seed, {
+      pickupAt: plus(seed.todayStart, 12),
+      dueAt: plus(seed.todayStart, 36),
+    });
+
+    const calendar = await getOperationalCalendar(operationsContext(seed), {
+      start: seed.todayStart.toISOString(),
+      end: plus(seed.todayStart, 48),
+    });
+
+    expect(calendar.categories).toContainEqual({
+      id: category,
+      name: 'Evening Wear',
+      status: 'active',
+    });
+    expect(calendar.categories.some((item) => item.name === 'Foreign Category')).toBe(false);
+    expect(
+      calendar.events.find((event) => event.source === 'fitting' && event.source_id === fittingId)
+        ?.category_ids,
+    ).toContain(category);
+    expect(
+      calendar.events.find(
+        (event) => event.source === 'reservation' && event.source_id === reservation.reservationId,
+      )?.category_ids,
+    ).toContain(category);
+  });
+
   it('projects every eligible reservation state once and conceals excluded states', async () => {
     const seed = await seedWorkspace('calendar-reservation-states');
     const eligibleStatuses = [

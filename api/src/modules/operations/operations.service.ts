@@ -20,6 +20,7 @@ import { s3ObjectStorage } from '../../integrations/storage/s3-object-storage.js
 import { ForbiddenError, NotFoundError, ValidationError } from '../../shared/errors.js';
 import {
   listClothingAvailabilityTimelineAssets,
+  readOperationalCalendarCategories,
   readDashboardFittingSummary,
   readClothingAvailabilityTimelineAgendas,
   readClothingAvailabilityTimelineFacets,
@@ -52,8 +53,10 @@ export async function getOperationalCalendar(
       start: query.start,
       end: query.end,
     });
+    const categories = await readOperationalCalendarCategories(client, context.tenantId);
     return operationalCalendarResponse.parse({
       window: { start: query.start, end: query.end },
+      categories,
       events: page.rows.slice(0, OPERATIONAL_CALENDAR_MAX_EVENTS).map((row) => ({
         id: row.id,
         source: row.source,
@@ -63,6 +66,7 @@ export async function getOperationalCalendar(
         period: { start: row.starts_at.toISOString(), end: row.ends_at.toISOString() },
         customer_name: row.customer_name,
         item_names: row.item_names,
+        category_ids: row.category_ids,
         status: row.status,
       })),
       truncated: page.truncated,

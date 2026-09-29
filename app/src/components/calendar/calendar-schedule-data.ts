@@ -1,4 +1,4 @@
-import type { OperationalCalendarEvent } from "@drezivo/contracts";
+import type { OperationalCalendarEvent, OperationalCalendarResponse } from "@drezivo/contracts";
 
 export const CALENDAR_START_HOUR = 7;
 export const CALENDAR_END_HOUR = 21;
@@ -22,7 +22,10 @@ export type CalendarActivity = {
   durationMinutes: number;
   customerName: string | null;
   itemNames: string[];
+  categoryIds: string[];
 };
+
+export type CalendarCategory = OperationalCalendarResponse["categories"][number];
 
 export type CalendarView = "week" | "month";
 
@@ -194,6 +197,7 @@ export function mapOperationalCalendarEvents(
       durationMinutes: (Date.parse(event.period.end) - Date.parse(event.period.start)) / 60_000,
       customerName: event.customer_name,
       itemNames: event.item_names,
+      categoryIds: event.category_ids,
     }))
     .sort((left, right) => {
       const byStart = Date.parse(left.startAt) - Date.parse(right.startAt);

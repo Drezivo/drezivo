@@ -9,7 +9,7 @@ tags: [drezivo, calendar, schedule, reservations, fittings, operations, checklis
 
 # Rental Calendar End-to-End Implementation Checklist
 
-**Status:** Backend Calendar projection and its PostgreSQL verification gate are complete. FE-0 through FE-2 now resolve the active branch context and render Week/Month from the production Calendar endpoint; summary cards, remaining filters, shared detail sheets, and the final frontend test/release gate remain open. No backend checklist item is complete until the required PostgreSQL evidence passes; existing implementation code alone is not sufficient evidence.
+**Status:** Backend Calendar projection and its PostgreSQL verification gate are complete. FE-0 through FE-4 now resolve the active branch context, render Week/Month from the production Calendar endpoint, provide real period summaries and filters, and show the live branch-local Day Agenda. Shared detail sheets and the final frontend test/release gate remain open. No backend checklist item is complete until the required PostgreSQL evidence passes; existing implementation code alone is not sufficient evidence.
 
 **Implementation order:** **Backend first → frontend API client → existing Calendar UI wiring → shared detail sheets → tests/release gate.**
 
@@ -106,7 +106,7 @@ These rules must be covered by the backend integration evidence before any Calen
     - [x] Query accepts required `start` and `end` ISO instants.
     - [x] Query rejects `start >= end`.
     - [x] Query enforces the approved maximum window.
-    - [x] Response returns a stable event `id`, `source`, `source_id`, `event_type`, `branch_id`, `period`, customer display name, item names, and source status.
+    - [x] Response returns a stable event `id`, `source`, `source_id`, `event_type`, `branch_id`, `period`, customer display name, item names, category IDs, source status, and tenant category facets.
     - [x] Reservation and Fitting event shapes remain discriminated so status types cannot be mixed accidentally.
     - [x] Dense ranges expose explicit `truncated` metadata; the response never silently presents a partial range as complete.
     - [x] Browser input cannot supply `tenant_id`, authoritative `branch_id`, customer identity, or event state.
@@ -340,46 +340,51 @@ These rules must be covered by the backend integration evidence before any Calen
 
 # Frontend Phase FE-3 — Summary cards and filters
 
-- [ ] **CAL-FE-030 — Wire real period summary cards**
+- [x] **CAL-FE-030 — Wire real period summary cards**
   - **Acceptance:**
-    - [ ] Pickups count = visible-range `pickup` events.
-    - [ ] Returns count = visible-range `return` events.
-    - [ ] Fittings count = visible-range `fitting` events.
-    - [ ] Loading does not display fake authoritative zeroes.
+    - [x] Pickups count = visible-range `pickup` events.
+    - [x] Returns count = visible-range `return` events.
+    - [x] Fittings count = visible-range `fitting` events.
+    - [x] Loading does not display fake authoritative zeroes.
     - [x] Remove/hide the hard-coded `Issues = 3` until an approved issue projection exists.
+  - **Evidence:** `CalendarSummaryCards` counts the loaded production events by `eventType` and is rendered only after a successful range response; loading, forbidden, and error states do not show authoritative-looking zeroes. UI behavior tests remain scheduled for CAL-FE-070.
 
-- [ ] **CAL-FE-031 — Wire Activity filter**
+- [x] **CAL-FE-031 — Wire Activity filter**
   - **Acceptance:**
-    - [ ] `All Activity`, `Pickup`, `Return`, and `Fitting` operate on authoritative events.
-    - [ ] Filtering does not mutate backend/domain state.
-    - [ ] Day/Week/Month use consistent filtering semantics.
+    - [x] `All Activity`, `Pickup`, `Return`, and `Fitting` operate on authoritative events.
+    - [x] Filtering does not mutate backend/domain state.
+    - [x] Day/Week/Month use consistent filtering semantics.
+  - **Evidence:** The global activity filter selects from the shared mapped response for Week/Month and the same day-scoped source list for Day Agenda; day tabs update the shared selection.
 
-- [ ] **CAL-FE-032 — Wire Clothing filter**
+- [x] **CAL-FE-032 — Wire Category filter**
   - **Acceptance:**
-    - [ ] Initial cutover may derive exact item-name options from the loaded authoritative event set.
-    - [ ] Filtering matches event `item_names` exactly/consistently.
-    - [ ] No hard-coded `Gowns/Barong/Filipiniana` options remain unless they come from authoritative catalogue facets.
-    - [ ] If product/category IDs are later required for scale, extend the shared contract instead of inventing client IDs.
+    - [x] Category options come from tenant-scoped Calendar facets, not one dropdown entry per garment.
+    - [x] Filtering matches event `category_ids`; a reservation/fitting with items in multiple categories remains visible when any line belongs to the selected category.
+    - [x] Category names, IDs, and active/inactive status are authoritative API data; no category values are inferred from item names.
+    - [x] Category filtering uses the Calendar permission boundary and does not require a separate catalogue request.
+  - **Evidence:** `GET /api/v1/calendar` returns tenant category facets and category IDs for reservation/fitting event lines. The app selects by category ID and filters events by membership in that ID list, avoiding up to 200 product-name options. App typecheck passed; UI interaction tests remain scheduled for CAL-FE-070.
 
-- [ ] **CAL-FE-033 — Wire Status filter**
+- [x] **CAL-FE-033 — Wire Status filter**
   - **Acceptance:**
-    - [ ] Filter supports the authoritative Reservation/Fitting states represented in the Calendar response.
-    - [ ] Human-friendly labels may group states, but raw domain states remain unchanged.
-    - [ ] Reservation state is never applied to a Fitting as if the state machines were identical.
+    - [x] Filter supports the authoritative Reservation/Fitting states represented in the Calendar response.
+    - [x] Human-friendly labels may group states, but raw domain states remain unchanged.
+    - [x] Reservation state is never applied to a Fitting as if the state machines were identical.
+  - **Evidence:** Status options are derived from returned events, keyed by `source:status`, and labeled with their owning source; filtering compares both source and raw status.
 
 ---
 
 # Frontend Phase FE-4 — Real Day Agenda
 
-- [ ] **CAL-FE-040 — Replace `CALENDAR_DAY_AGENDA` mock data**
+- [x] **CAL-FE-040 — Replace `CALENDAR_DAY_AGENDA` mock data**
   - **Outcome:** Clicking a date opens the authoritative activities for that branch-local day.
   - **Acceptance:**
     - [x] Group loaded events by branch-local `dateKey`.
     - [x] Agenda items are chronological.
-    - [ ] `All/Pickup/Return/Fitting` tab counts come from the real day event set.
+    - [x] `All/Pickup/Return/Fitting` tab counts come from the real day event set after current clothing/status filters.
     - [x] Day header and Month `+N more` open the same Day Agenda source.
-    - [ ] Previous/next day navigation preserves Calendar context and fetches a new range only when needed.
+    - [x] Previous/next day navigation preserves Calendar context and fetches a new range only when needed.
     - [x] Empty day state is explicit.
+  - **Evidence:** `DayAgendaSheet` renders chronologically sorted production events, count-bearing All/Pickup/Return/Fitting tabs, explicit loading/error/empty/filtered-empty states, and previous/next controls. Navigation reuses the loaded range for visible dates and shifts the existing Week/Month range only when crossing its boundary. App typecheck passed; UI interaction tests remain scheduled for CAL-FE-070.
 
 ---
 

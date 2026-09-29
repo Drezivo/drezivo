@@ -39,6 +39,7 @@ import {
   startOfCalendarWeek,
   type CalendarActivity,
   type CalendarActivityType,
+  type CalendarCategory,
   type CalendarView,
 } from "./calendar-schedule-data";
 
@@ -56,6 +57,33 @@ const activityIcon: Record<CalendarActivityType, typeof RotateCcw> = {
 
 type ContextState = "loading" | "ready" | "signed_out" | "forbidden" | "error";
 type CalendarState = "idle" | "loading" | "ready" | "forbidden" | "error";
+type ActivityFilter = "All Activity" | CalendarActivityType;
+type CalendarStatusOption = {
+  key: string;
+  source: CalendarActivity["source"];
+  status: string;
+};
+
+function calendarStatusLabel(option: CalendarStatusOption) {
+  const sourceLabel = option.source === "reservation" ? "Reservation" : "Fitting";
+  return `${sourceLabel} · ${humanizeCalendarStatus(option.status)}`;
+}
+
+function calendarStatusKeyLabel(key: string) {
+  const [source, ...statusParts] = key.split(":");
+  const sourceLabel = source === "reservation" ? "Reservation" : "Fitting";
+  return `${sourceLabel} · ${humanizeCalendarStatus(statusParts.join(":"))}`;
+}
+
+function humanizeCalendarStatus(status: string) {
+  return status
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function calendarCategoryLabel(category: CalendarCategory) {
+  return category.status === "inactive" ? `${category.name} (inactive)` : category.name;
+}
 
 export function CalendarSchedulePage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
@@ -72,13 +100,14 @@ export function CalendarSchedulePage() {
   const [monthStart, setMonthStart] = useState(() =>
     `${calendarTodayDateKey(fallbackTimeZone).slice(0, 7)}-01`
   );
-  const [activityFilter, setActivityFilter] = useState<"All Activity" | CalendarActivityType>(
-    "All Activity"
-  );
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("All Activity");
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [calendarState, setCalendarState] = useState<CalendarState>("idle");
   const [calendarError, setCalendarError] = useState<string | null>(null);
   const [activities, setActivities] = useState<CalendarActivity[]>([]);
+  const [categories, setCategories] = useState<CalendarCategory[]>([]);
   const [truncated, setTruncated] = useState(false);
   const [reloadVersion, setReloadVersion] = useState(0);
   const [contextReloadVersion, setContextReloadVersion] = useState(0);
@@ -115,6 +144,9 @@ export function CalendarSchedulePage() {
         const today = calendarTodayDateKey(resolvedTimeZone);
         setActiveBranchId(branch.id);
         setTimeZone(resolvedTimeZone);
+        setCategoryFilter(null);
+        setStatusFilter(null);
+        setCategories([]);
         setWeekStart(startOfCalendarWeek(today));
         setMonthStart(`${today.slice(0, 7)}-01`);
         setContextState("ready");
@@ -174,6 +206,10 @@ export function CalendarSchedulePage() {
       .then(({ data }) => {
         if (cancelled) return;
         setActivities(mapOperationalCalendarEvents(data.events, timeZone));
+        setCategories(data.categories);
+        setCategoryFilter((selected) =>
+          selected && data.categories.some((category) => category.id === selected) ? selected : null
+        );
         setTruncated(data.truncated);
         setCalendarState("ready");
       })
@@ -196,12 +232,38 @@ export function CalendarSchedulePage() {
     };
   }, [activeBranchId, contextState, getToken, reloadVersion, requestRange, timeZone]);
 
+  const statusOptions = useMemo(() => {
+    const options = new Map<string, CalendarStatusOption>();
+    for (const activity of activities) {
+      const key = `${activity.source}:${activity.status}`;
+      options.set(key, { key, source: activity.source, status: activity.status });
+    }
+    return [...options.values()].sort(
+      (left, right) =>
+        left.source.localeCompare(right.source) || left.status.localeCompare(right.status)
+    );
+  }, [activities]);
+  const selectedStatusOption = statusOptions.find((option) => option.key === statusFilter) ?? null;
+  const statusFilterLabel = selectedStatusOption
+    ? calendarStatusLabel(selectedStatusOption)
+    : statusFilter
+      ? calendarStatusKeyLabel(statusFilter)
+      : "All Statuses";
+  const categoryAndStatusActivities = useMemo(
+    () =>
+      activities.filter(
+        (activity) =>
+          (!categoryFilter || activity.categoryIds.includes(categoryFilter)) &&
+          (!statusFilter || `${activity.source}:${activity.status}` === statusFilter)
+      ),
+    [activities, categoryFilter, statusFilter]
+  );
   const visibleActivities = useMemo(
     () =>
       activityFilter === "All Activity"
-        ? activities
-        : activities.filter((activity) => activity.type === activityFilter),
-    [activities, activityFilter]
+        ? categoryAndStatusActivities
+        : categoryAndStatusActivities.filter((activity) => activity.type === activityFilter),
+    [activityFilter, categoryAndStatusActivities]
   );
   const weekDateKeys = useMemo(() => getCalendarWeekDateKeys(weekStart), [weekStart]);
   const firstWeekDay = weekDateKeys[0] ?? weekStart;
@@ -230,19 +292,39 @@ export function CalendarSchedulePage() {
   };
 
   const openDayAgenda = (dateKey: string) => setSelectedDateKey(dateKey);
+  const navigateAgendaDay = (direction: -1 | 1) => {
+    if (!selectedDateKey) return;
+    const nextDateKey = addCalendarDays(selectedDateKey, direction);
+    setSelectedDateKey(nextDateKey);
+    if (visibleDateKeys.includes(nextDateKey)) return;
+    if (view === "week") {
+      setWeekStart(startOfCalendarWeek(nextDateKey));
+      return;
+    }
+    setMonthStart(`${nextDateKey.slice(0, 7)}-01`);
+  };
 
   return (
     <div className="min-h-full bg-dashboard-canvas px-3 py-5 sm:px-4 lg:px-5">
       <div className="flex w-full max-w-none flex-col gap-4">
         <CalendarHeading />
+        {contextState === "ready" && calendarState === "ready" ? (
+          <CalendarSummaryCards activities={activities} />
+        ) : null}
         <CalendarControls
           activityFilter={activityFilter}
+          categoryFilter={categoryFilter}
+          categories={categories}
           dateLabel={periodLabel}
           onActivityFilterChange={setActivityFilter}
+          onCategoryFilterChange={setCategoryFilter}
           onNavigate={navigate}
+          onStatusFilterChange={setStatusFilter}
           onToday={goToday}
           onViewChange={setView}
           showTodayAction={!currentPeriodContainsToday}
+          statusFilterLabel={statusFilterLabel}
+          statusOptions={statusOptions}
           view={view}
           disabled={contextState !== "ready"}
         />
@@ -301,9 +383,18 @@ export function CalendarSchedulePage() {
       </div>
 
       <DayAgendaSheet
-        activities={visibleActivities.filter((activity) => activity.dateKey === selectedDateKey)}
+        activities={categoryAndStatusActivities.filter((activity) => activity.dateKey === selectedDateKey)}
+        activityFilter={activityFilter}
         dateKey={selectedDateKey}
+        isLoading={
+          calendarState === "loading" ||
+          (selectedDateKey !== null && !visibleDateKeys.includes(selectedDateKey))
+        }
+        error={calendarState === "error" ? calendarError : null}
         timeZone={timeZone}
+        onActivityFilterChange={setActivityFilter}
+        onNavigateDay={navigateAgendaDay}
+        onRetry={() => setReloadVersion((value) => value + 1)}
         onOpenChange={(open) => {
           if (!open) setSelectedDateKey(null);
         }}
@@ -349,27 +440,87 @@ function CalendarHeading() {
   );
 }
 
+function CalendarSummaryCards({ activities }: { activities: CalendarActivity[] }) {
+  const metrics = [
+    {
+      label: "Pickups",
+      value: activities.filter((activity) => activity.eventType === "pickup").length,
+      icon: RotateCcw,
+      tone: "dashboard-tone-blue",
+    },
+    {
+      label: "Returns",
+      value: activities.filter((activity) => activity.eventType === "return").length,
+      icon: RotateCcw,
+      tone: "dashboard-tone-mint",
+    },
+    {
+      label: "Fittings",
+      value: activities.filter((activity) => activity.eventType === "fitting").length,
+      icon: Ruler,
+      tone: "dashboard-tone-purple",
+    },
+  ] as const;
+
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" aria-label="Calendar activity summary">
+      {metrics.map((metric) => {
+        const Icon = metric.icon;
+        return (
+          <Card key={metric.label} className="gap-0 py-0">
+            <CardContent className="flex min-h-16 items-center gap-3 p-3">
+              <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", metric.tone)}>
+                <Icon className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <span>
+                <span className="block text-xl font-semibold leading-none text-dashboard-navy">
+                  {metric.value}
+                </span>
+                <span className="mt-1 block text-xs text-dashboard-muted">{metric.label}</span>
+              </span>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 function CalendarControls({
   activityFilter,
+  categoryFilter,
+  categories,
   dateLabel,
   onActivityFilterChange,
+  onCategoryFilterChange,
   onNavigate,
+  onStatusFilterChange,
   onToday,
   onViewChange,
   showTodayAction,
+  statusFilterLabel,
+  statusOptions,
   view,
   disabled,
 }: {
-  activityFilter: "All Activity" | CalendarActivityType;
+  activityFilter: ActivityFilter;
+  categoryFilter: string | null;
+  categories: CalendarCategory[];
   dateLabel: string;
-  onActivityFilterChange: (value: "All Activity" | CalendarActivityType) => void;
+  onActivityFilterChange: (value: ActivityFilter) => void;
+  onCategoryFilterChange: (value: string | null) => void;
   onNavigate: (direction: -1 | 1) => void;
+  onStatusFilterChange: (value: string | null) => void;
   onToday: () => void;
   onViewChange: (nextView: CalendarView) => void;
   showTodayAction: boolean;
+  statusFilterLabel: string;
+  statusOptions: CalendarStatusOption[];
   view: CalendarView;
   disabled: boolean;
 }) {
+  const selectedCategory = categories.find((category) => category.id === categoryFilter);
+
   return (
     <Card className="gap-0 py-0">
       <CardContent className="flex flex-col gap-3 p-3 lg:flex-row lg:items-center lg:justify-between">
@@ -399,6 +550,36 @@ function CalendarControls({
               {(["All Activity", "Pickup", "Return", "Fitting"] as const).map((option) => (
                 <DropdownMenuItem key={option} onClick={() => onActivityFilterChange(option)}>
                   {option}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" disabled={disabled} className="max-w-52 truncate border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active">
+                {selectedCategory ? calendarCategoryLabel(selectedCategory) : "All Categories"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+              <DropdownMenuItem onClick={() => onCategoryFilterChange(null)}>All Categories</DropdownMenuItem>
+              {categories.map((category) => (
+                <DropdownMenuItem key={category.id} onClick={() => onCategoryFilterChange(category.id)}>
+                  {calendarCategoryLabel(category)}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" disabled={disabled} className="max-w-52 truncate border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active">
+                {statusFilterLabel}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+              <DropdownMenuItem onClick={() => onStatusFilterChange(null)}>All Statuses</DropdownMenuItem>
+              {statusOptions.map((option) => (
+                <DropdownMenuItem key={option.key} onClick={() => onStatusFilterChange(option.key)}>
+                  {calendarStatusLabel(option)}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -776,37 +957,124 @@ function MonthGrid({
 
 function DayAgendaSheet({
   activities,
+  activityFilter,
   dateKey,
+  isLoading,
+  error,
   timeZone,
+  onActivityFilterChange,
+  onNavigateDay,
+  onRetry,
   onOpenChange,
 }: {
   activities: CalendarActivity[];
+  activityFilter: ActivityFilter;
   dateKey: string | null;
+  isLoading: boolean;
+  error: string | null;
   timeZone: string;
+  onActivityFilterChange: (value: ActivityFilter) => void;
+  onNavigateDay: (direction: -1 | 1) => void;
+  onRetry: () => void;
   onOpenChange: (open: boolean) => void;
 }) {
   const open = dateKey !== null;
   const sortedActivities = [...activities].sort(
     (left, right) => Date.parse(left.startAt) - Date.parse(right.startAt)
   );
+  const tabs: { label: ActivityFilter; count: number }[] = [
+    { label: "All Activity", count: sortedActivities.length },
+    ...(["Pickup", "Return", "Fitting"] as const).map((type) => ({
+      label: type,
+      count: sortedActivities.filter((activity) => activity.type === type).length,
+    })),
+  ];
+  const filteredActivities =
+    activityFilter === "All Activity"
+      ? sortedActivities
+      : sortedActivities.filter((activity) => activity.type === activityFilter);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-y-auto border-l border-dashboard-border bg-dashboard-canvas p-0 text-dashboard-navy sm:max-w-xl">
         <div className="border-b border-dashboard-border p-5">
-          <SheetTitle className="text-dashboard-navy">
-            {dateKey ? formatCalendarDate(dateKey, { weekday: "long", month: "long", day: "numeric", year: "numeric" }) : "Daily agenda"}
-          </SheetTitle>
-          <SheetDescription className="mt-1 text-dashboard-muted">
-            {activities.length} calendar {activities.length === 1 ? "event" : "events"} from the active branch schedule.
-          </SheetDescription>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <SheetTitle className="text-dashboard-navy">
+                {dateKey ? formatCalendarDate(dateKey, { weekday: "long", month: "long", day: "numeric", year: "numeric" }) : "Daily agenda"}
+              </SheetTitle>
+              <SheetDescription className="mt-1 text-dashboard-muted">
+                {activities.length} {activities.length === 1 ? "event" : "events"} match the current category and status filters.
+              </SheetDescription>
+            </div>
+            <div className="flex shrink-0 gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Previous day"
+                disabled={!dateKey}
+                onClick={() => onNavigateDay(-1)}
+                className="border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Next day"
+                disabled={!dateKey}
+                onClick={() => onNavigateDay(1)}
+                className="border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+              >
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </div>
+          </div>
+        </div>
+        <div className="border-b border-dashboard-border px-5 py-3">
+          <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Day agenda activity">
+            {tabs.map((tab) => {
+              const selected = activityFilter === tab.label;
+              return (
+                <button
+                  key={tab.label}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => onActivityFilterChange(tab.label)}
+                  className={cn(
+                    "shrink-0 rounded-lg border px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30",
+                    selected
+                      ? "border-dashboard-accent bg-dashboard-active text-dashboard-accent"
+                      : "border-dashboard-border bg-dashboard-surface text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy"
+                  )}
+                >
+                  {tab.label === "All Activity" ? "All" : tab.label} <span className="ml-1">{tab.count}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div className="space-y-3 p-5">
-          {sortedActivities.length === 0 ? (
+          {isLoading ? (
+            <div role="status" className="rounded-lg border border-dashboard-border bg-dashboard-surface p-8 text-center text-sm text-dashboard-muted">
+              Loading activity for this day…
+            </div>
+          ) : error ? (
+            <div role="alert" className="rounded-lg border border-dashboard-border bg-dashboard-surface p-6 text-center">
+              <p className="text-sm text-dashboard-muted">{error}</p>
+              <Button variant="secondary" onClick={onRetry} className="mt-3">Try again</Button>
+            </div>
+          ) : activities.length === 0 ? (
             <div className="rounded-lg border border-dashed border-dashboard-border p-8 text-center text-sm text-dashboard-muted">
               No activity on this day.
             </div>
+          ) : filteredActivities.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-dashboard-border p-8 text-center text-sm text-dashboard-muted">
+              No {activityFilter.toLowerCase()} events match the current category and status filters.
+            </div>
           ) : (
-            sortedActivities.map((activity) => {
+            filteredActivities.map((activity) => {
               const Icon = activityIcon[activity.type];
               return (
                 <div key={activity.id} className="flex gap-3 rounded-lg border border-dashboard-border bg-dashboard-surface p-3">

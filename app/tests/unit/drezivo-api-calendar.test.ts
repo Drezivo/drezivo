@@ -5,6 +5,7 @@ import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 const reservationId = "00000000-0000-4000-8000-000000000201";
 const fittingId = "00000000-0000-4000-8000-000000000202";
 const branchId = "00000000-0000-4000-8000-000000000203";
+const categoryId = "00000000-0000-4000-8000-000000000204";
 
 function success(data: unknown) {
   return new Response(
@@ -33,6 +34,7 @@ describe("Drezivo operational Calendar API client", () => {
           start: "2026-09-26T16:00:00.000Z",
           end: "2026-09-27T16:00:00.000Z",
         },
+        categories: [{ id: categoryId, name: "Gowns", status: "active" }],
         truncated: true,
         events: [
           {
@@ -47,6 +49,7 @@ describe("Drezivo operational Calendar API client", () => {
             },
             customer_name: "Calendar Customer",
             item_names: ["Evening Gown"],
+            category_ids: [categoryId],
             status: "confirmed",
           },
           {
@@ -61,6 +64,7 @@ describe("Drezivo operational Calendar API client", () => {
             },
             customer_name: "Fitting Customer",
             item_names: ["Filipiniana"],
+            category_ids: [categoryId],
             status: "pending",
           },
         ],
@@ -90,6 +94,7 @@ describe("Drezivo operational Calendar API client", () => {
           start: "2026-09-27T00:00:00.000Z",
           end: "2026-09-28T00:00:00.000Z",
         },
+        categories: [{ id: categoryId, name: "Gowns", status: "active" }],
         truncated: false,
         events: [
           {
@@ -104,6 +109,7 @@ describe("Drezivo operational Calendar API client", () => {
             },
             customer_name: "Fitting Customer",
             item_names: ["Filipiniana"],
+            category_ids: [categoryId],
             status: "confirmed",
             tenant_id: "not-authority",
           },

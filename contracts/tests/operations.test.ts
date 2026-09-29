@@ -15,6 +15,7 @@ const ids = {
   reservation: '00000000-0000-4000-8000-000000000202',
   fitting: '00000000-0000-4000-8000-000000000203',
   payment: '00000000-0000-4000-8000-000000000204',
+  category: '00000000-0000-4000-8000-000000000205',
 };
 
 describe('BE-8 operational integration contracts', () => {
@@ -38,6 +39,7 @@ describe('BE-8 operational integration contracts', () => {
           start: '2026-09-01T00:00:00.000Z',
           end: '2026-10-01T00:00:00.000Z',
         },
+        categories: [{ id: ids.category, name: 'Gowns', status: 'active' }],
         truncated: false,
         events: [
           {
@@ -52,6 +54,7 @@ describe('BE-8 operational integration contracts', () => {
             },
             customer_name: 'Maria Santos',
             item_names: ['Evening Gown'],
+            category_ids: [ids.category],
             status: 'confirmed',
           },
           {
@@ -66,6 +69,7 @@ describe('BE-8 operational integration contracts', () => {
             },
             customer_name: 'Anna Cruz',
             item_names: ['Filipiniana'],
+            category_ids: [ids.category],
             status: 'pending',
           },
         ],
@@ -105,6 +109,7 @@ describe('BE-8 operational integration contracts', () => {
       },
       customer_name: 'Maria Santos',
       item_names: ['Evening Gown'],
+      category_ids: [ids.category],
     };
     const baseFittingEvent = {
       id: `fitting:${ids.fitting}`,
@@ -118,6 +123,7 @@ describe('BE-8 operational integration contracts', () => {
       },
       customer_name: 'Anna Cruz',
       item_names: ['Filipiniana'],
+      category_ids: [ids.category],
     };
 
     expect(
@@ -126,6 +132,7 @@ describe('BE-8 operational integration contracts', () => {
           start: '2026-09-01T00:00:00.000Z',
           end: '2026-10-01T00:00:00.000Z',
         },
+        categories: [{ id: ids.category, name: 'Gowns', status: 'active' }],
         truncated: true,
         events: [{ ...baseReservationEvent, status: 'held' }],
       }).success,
@@ -136,6 +143,7 @@ describe('BE-8 operational integration contracts', () => {
           start: '2026-09-01T00:00:00.000Z',
           end: '2026-10-01T00:00:00.000Z',
         },
+        categories: [{ id: ids.category, name: 'Gowns', status: 'active' }],
         truncated: false,
         events: [{ ...baseFittingEvent, status: 'cancelled' }],
       }).success,
@@ -163,6 +171,7 @@ describe('BE-8 operational integration contracts', () => {
       },
       customer_name: 'Maria Santos',
       item_names: ['Evening Gown'],
+      category_ids: [ids.category],
       status: 'no_show',
     };
     const fittingWithReservationStatus = {
@@ -177,6 +186,7 @@ describe('BE-8 operational integration contracts', () => {
       },
       customer_name: 'Anna Cruz',
       item_names: ['Filipiniana'],
+      category_ids: [ids.category],
       status: 'confirmed',
     };
 
@@ -186,6 +196,7 @@ describe('BE-8 operational integration contracts', () => {
           start: '2026-09-01T00:00:00.000Z',
           end: '2026-10-01T00:00:00.000Z',
         },
+        categories: [{ id: ids.category, name: 'Gowns', status: 'active' }],
         truncated: false,
         events: [reservationWithFittingStatus],
       }).success,
@@ -196,6 +207,7 @@ describe('BE-8 operational integration contracts', () => {
           start: '2026-09-01T00:00:00.000Z',
           end: '2026-10-01T00:00:00.000Z',
         },
+        categories: [{ id: ids.category, name: 'Gowns', status: 'active' }],
         truncated: false,
         events: [{ ...fittingWithReservationStatus, status: 'pending_confirmation' }],
       }).success,
@@ -206,6 +218,7 @@ describe('BE-8 operational integration contracts', () => {
           start: '2026-09-01T00:00:00.000Z',
           end: '2026-10-01T00:00:00.000Z',
         },
+        categories: [{ id: ids.category, name: 'Gowns', status: 'active' }],
         truncated: false,
         events: [{ ...fittingWithReservationStatus, tenant_id: ids.branch }],
       }).success,
