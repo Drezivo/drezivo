@@ -9,7 +9,7 @@ tags: [drezivo, calendar, schedule, reservations, fittings, operations, checklis
 
 # Rental Calendar End-to-End Implementation Checklist
 
-**Status:** Backend Calendar projection and its PostgreSQL verification gate are complete. FE-0 through FE-6 now resolve the active branch context, render Week/Month and Day Agenda from the production Calendar endpoint, provide real summaries/filters, open authoritative Reservation/Fitting details, and include explicit loading, error, empty, responsive, and accessible states. FE-7's broader test matrix and authenticated browser/release review remain open. No backend checklist item is complete until the required PostgreSQL evidence passes; existing implementation code alone is not sufficient evidence.
+**Status:** Backend Calendar projection and its PostgreSQL verification gate are complete. FE-0 through FE-6 now resolve the active branch context, render Week/Month and Day Agenda from the production Calendar endpoint, provide real summaries/filters, open authoritative Reservation/Fitting details, and include explicit loading, error, empty, responsive, and accessible states. FE-070's API-backed Calendar test matrix is complete. FE-071 authenticated browser review and CAL-REL-000 remain open because this environment has no authenticated Clerk browser session, app-wide tests are not green, and the installed Next ESLint parser is missing. No backend checklist item is complete until the required PostgreSQL evidence passes; existing implementation code alone is not sufficient evidence.
 
 **Implementation order:** **Backend first → frontend API client → existing Calendar UI wiring → shared detail sheets → tests/release gate.**
 
@@ -443,23 +443,24 @@ These rules must be covered by the backend integration evidence before any Calen
 
 # Frontend Phase FE-7 — Tests and production cutover
 
-- [ ] **CAL-FE-070 — Replace prototype Calendar unit tests with API-backed behavior tests**
+- [x] **CAL-FE-070 — Replace prototype Calendar unit tests with API-backed behavior tests**
   - **Acceptance:**
-    - [ ] Actor-context timezone resolution.
-    - [ ] Week query boundaries.
-    - [ ] Month visible-grid query boundaries.
-    - [ ] Previous/next navigation refetch.
-    - [ ] Pickup/Return/Fitting event mapping.
-    - [ ] Branch-local Today behavior.
-    - [ ] Activity/Clothing/Status filters.
-    - [ ] Day Agenda counts/filtering/navigation.
-    - [ ] Month `+N more` drill-down.
-    - [ ] Overlap layout with real-period durations.
-    - [ ] Reservation event → `getReservationDetail()` identity.
-    - [ ] Fitting event → `getFittingDetail()` identity.
-    - [ ] Mutation success → Calendar refetch.
-    - [ ] Loading/empty/error/403 states.
-    - [ ] No tests assert prototype-only Calendar labels or fake reservation numbers.
+    - [x] Actor-context timezone resolution.
+    - [x] Week query boundaries.
+    - [x] Month visible-grid query boundaries.
+    - [x] Previous/next navigation refetch.
+    - [x] Pickup/Return/Fitting event mapping.
+    - [x] Branch-local Today behavior.
+    - [x] Activity/category/status filtering.
+    - [x] Day Agenda counts/filtering/navigation.
+    - [x] Month `+N more` drill-down.
+    - [x] Overlap layout with real-period durations.
+    - [x] Reservation event → `getReservationDetail()` identity.
+    - [x] Fitting event → `getFittingDetail()` identity.
+    - [x] Mutation success → Calendar refetch.
+    - [x] Loading/empty/error/403 states.
+    - [x] No tests assert prototype-only Calendar labels or fake reservation numbers.
+  - **Evidence:** `app/tests/unit/calendar-schedule-page.test.tsx` and `app/tests/unit/calendar-schedule-data.test.ts` pass together (28 tests). Coverage includes branch-local Week/Month boundaries, previous/next and Today navigation, source-aware activity/category/status filtering, Day Agenda and Month overflow, exact event-duration placement, authoritative detail IDs, mutation refetch, truncation warning, and loading/empty/error/403 states. App typecheck and production build pass. The full app unit suite still has 13 unrelated failing assertions plus 7 worker-start errors; the focused Calendar tests have no failures. App ESLint cannot load `next/dist/compiled/babel/eslint-parser` from the installed `eslint-config-next`. The test scan found no prototype-only labels or fake reservation numbers in Calendar tests.
 
 - [ ] **CAL-FE-071 — Complete authenticated browser verification**
   - **Acceptance:**
@@ -471,6 +472,7 @@ These rules must be covered by the backend integration evidence before any Calen
     - [ ] 360px usability.
     - [ ] Keyboard walkthrough.
     - [ ] Light and dark theme review.
+  - **Evidence / blocker:** A local Playwright visit to `/calendar` redirected to Clerk sign-in. Clerk could not resolve its handshake because the local environment could not fetch Clerk's JWKS, and no real signed-in browser session/test credentials are available. This does not count as authenticated browser verification; complete the desktop/mobile/keyboard/theme walkthrough with a real session before release.
 
 - [x] **CAL-FE-072 — Remove all Schedule prototype production paths**
   - **Acceptance:**
@@ -485,19 +487,20 @@ These rules must be covered by the backend integration evidence before any Calen
 # Completion Gate
 
 - [ ] **CAL-REL-000 — Mark Rental Calendar end-to-end slice complete**
-  - **Depends on:** CAL-BE-042 and CAL-FE-072.
+  - **Depends on:** CAL-BE-042 and CAL-FE-070 through CAL-FE-072.
   - **Acceptance:**
-    - [ ] Every eligible Reservation Pickup in the selected range appears at its authoritative `pickup_at`.
-    - [ ] Every eligible Reservation Return in the selected range appears at its authoritative `due_at`.
-    - [ ] Every eligible persisted Fitting in the selected range appears at its authoritative appointment period.
-    - [ ] Week, Month, and Day Agenda all consume one production Calendar projection.
-    - [ ] Reservation event drill-down opens the authoritative Reservation record.
-    - [ ] Fitting event drill-down opens the authoritative Fitting record.
-    - [ ] Calendar mutations delegate to owning modules and refetch authoritative data.
-    - [ ] Tenant/branch/timezone isolation tests pass.
+    - [x] Every eligible Reservation Pickup in the selected range appears at its authoritative `pickup_at`.
+    - [x] Every eligible Reservation Return in the selected range appears at its authoritative `due_at`.
+    - [x] Every eligible persisted Fitting in the selected range appears at its authoritative appointment period.
+    - [x] Week, Month, and Day Agenda all consume one production Calendar projection.
+    - [x] Reservation event drill-down opens the authoritative Reservation record.
+    - [x] Fitting event drill-down opens the authoritative Fitting record.
+    - [x] Calendar mutations delegate to owning modules and refetch authoritative data.
+    - [x] Tenant/branch/timezone isolation tests pass.
     - [ ] Contracts, API, app typecheck/lint/tests/build are green.
-    - [ ] OpenAPI is synchronized.
-    - [ ] Schedule/Fittings documentation reflects the production cutover with no stale “Fitting prototype only” language.
+    - [x] OpenAPI is synchronized.
+    - [x] Schedule/Fittings documentation reflects the production cutover with no stale “Fitting prototype only” language.
+  - **Current release blockers:** CAL-FE-071 authenticated browser evidence is outstanding. The full app unit suite is not green (13 unrelated test failures and 7 worker startup errors in this run), and app lint is blocked by the missing Next ESLint parser dependency. Do not mark the release gate complete until these checks are green and the authenticated walkthrough is recorded.
 
 ## Deferred / separate follow-up
 
