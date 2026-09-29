@@ -52,4 +52,23 @@ describe("uploadAuthorizedFile", () => {
       )
     ).rejects.toThrow("The receipt upload did not finish successfully.");
   });
+
+  it("replaces transport errors with the caller's safe message", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("private provider detail")));
+    const authorization = uploadAuthorizationResponse.parse({
+      file_id: "00000000-0000-4000-8000-000000000001",
+      upload_url: "https://uploads.example.test/synthetic",
+      upload_method: "PUT" as const,
+      required_headers: { "Content-Type": "application/pdf", "If-None-Match": "*" },
+      expires_at: "2026-09-29T00:00:00.000Z",
+    });
+
+    await expect(
+      uploadAuthorizedFile(
+        authorization,
+        new File(["synthetic upload"], "receipt.pdf", { type: "application/pdf" }),
+        "The receipt upload did not finish successfully."
+      )
+    ).rejects.toThrow("The receipt upload did not finish successfully.");
+  });
 });

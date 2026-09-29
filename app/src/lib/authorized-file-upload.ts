@@ -6,11 +6,16 @@ export async function uploadAuthorizedFile(
   file: Blob,
   failureMessage: string
 ): Promise<void> {
-  const response = await fetch(authorization.upload_url, {
-    method: authorization.upload_method,
-    headers: authorization.required_headers,
-    body: file,
-  });
+  let response: Response;
+  try {
+    response = await fetch(authorization.upload_url, {
+      method: authorization.upload_method,
+      headers: authorization.required_headers,
+      body: file,
+    });
+  } catch {
+    throw new Error(failureMessage);
+  }
 
   if (!response.ok) throw new Error(failureMessage);
 }

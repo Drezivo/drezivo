@@ -722,6 +722,63 @@ describe("NewReservationSheet", () => {
     expect(screen.getByRole("button", { name: "Receipt uploaded" })).toBeVisible();
   });
 
+  it("keeps a selected receipt available for retry after the direct upload fails", async () => {
+    api.getStaffReservationIntakeOptions.mockResolvedValue({
+      data: {
+        payment_methods: [
+          { id: ids.paymentMethod, name: "Cash", rail: "cash" },
+          { id: ids.gcashPaymentMethod, name: "GCash", rail: "manual_qr" },
+        ],
+        customers: [],
+      },
+      requestId: "req-receipt-failure-intake",
+    });
+    api.createStaffReservation.mockResolvedValueOnce({
+      data: gcashHeldResponse,
+      requestId: "req-receipt-failure-hold",
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+    vi.stubGlobal("crypto", {
+      randomUUID: () => "00000000-0000-4000-8000-000000000403",
+      subtle: { digest: vi.fn().mockResolvedValue(new Uint8Array(32).buffer) },
+    });
+    if (!("arrayBuffer" in File.prototype)) {
+      Object.defineProperty(File.prototype, "arrayBuffer", {
+        configurable: true,
+        value: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
+      });
+    }
+    api.authorizeUpload.mockResolvedValue({
+      data: {
+        file_id: "00000000-0000-4000-8000-000000000404",
+        upload_url: "https://uploads.example.test/failed-reservation-receipt",
+        upload_method: "PUT",
+        required_headers: { "Content-Type": "application/pdf", "If-None-Match": "*" },
+        expires_at: "2026-09-29T00:10:00.000Z",
+      },
+      requestId: "req-receipt-failure-authorize",
+    });
+
+    renderSheet();
+    await fillDatesAndSelectProduct();
+    fireEvent.click(screen.getByRole("button", { name: /GCash/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
+    await screen.findByText("RSV-WALKIN-001");
+    const receipt = new File([new Uint8Array([1, 2, 3])], "receipt.pdf", {
+      type: "application/pdf",
+    });
+    fireEvent.change(screen.getByLabelText("Choose receipt"), { target: { files: [receipt] } });
+    fireEvent.click(screen.getByRole("button", { name: "Upload receipt" }));
+
+    expect(
+      await screen.findByText("Could not complete this reservation action. Please try again.")
+    ).toBeVisible();
+    expect(screen.getByText("receipt.pdf")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Upload receipt" })).toBeEnabled();
+    expect(api.finalizeUpload).not.toHaveBeenCalled();
+    expect(api.attachReservationPaymentReceipt).not.toHaveBeenCalled();
+  });
+
   it("stops before creating a reservation when no single physical piece is free for the exact times", async () => {
     api.getStaffReservationAvailabilityCheck.mockResolvedValue({
       data: staffReservationAvailabilityCheckResponse.parse({

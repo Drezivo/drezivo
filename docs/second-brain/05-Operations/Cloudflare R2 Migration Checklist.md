@@ -454,11 +454,12 @@ Use **Standard** for V1: it is the default class for frequently accessed applica
     - [x] Measurement guide upload works.
     - [x] Reservation payment receipt upload works.
     - [x] Payment method QR/storefront-asset upload works.
-    - [ ] Existing pending/error UI remains usable when direct R2 PUT fails.
+    - [x] Existing pending/error UI remains usable when direct R2 PUT fails.
     - [x] In-flight/idempotency guards remain intact.
   - **Tests/evidence:** Component/browser walkthrough against API + test R2 or local MinIO as appropriate.
     Focused component tests pass for all five existing upload callers plus exact-header/error behavior
-    (7 tests); the API + test-provider browser walkthrough remains open.
+    (9 tests); a failed reservation receipt PUT keeps the selected file and re-enables retry. The API
+    + test-provider browser walkthrough remains open.
 
 - [ ] **R2-052 — Verify signed private read consumers**
   - **Depends on:** R2-041.
