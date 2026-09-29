@@ -35,9 +35,9 @@ export function ProductCard({ slug, item, priority = false }: { slug: string; it
 
 export function ProductGrid({ slug, items, priorityCount = 0 }: { slug: string; items: CatalogueCard[]; priorityCount?: number }) {
   return (
-    <ul className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-6 md:grid-cols-3 lg:grid-cols-4">
+    <ul data-reveal-group className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-6 md:grid-cols-3 lg:grid-cols-4">
       {items.map((item, index) => (
-        <li key={item.product_id}>
+        <li key={item.product_id} data-reveal-item>
           <ProductCard slug={slug} item={item} priority={index < priorityCount} />
         </li>
       ))}

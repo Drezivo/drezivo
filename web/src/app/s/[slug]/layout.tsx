@@ -2,6 +2,9 @@ import type { Metadata } from 'next';
 import { Jost, Newsreader } from 'next/font/google';
 import { notFound } from 'next/navigation';
 
+import 'lenis/dist/lenis.css';
+
+import { MotionRoot } from '@/components/store/motion/motion-root';
 import { StoreFooter } from '@/components/store/store-footer';
 import { StoreHeader } from '@/components/store/store-header';
 import { themeStyle } from '@/components/store/theme';
@@ -10,6 +13,8 @@ import { buildStorefrontMetadata } from '@/lib/seo';
 
 const display = Newsreader({ subsets: ['latin'], weight: ['300', '400'], style: ['normal', 'italic'], variable: '--font-newsreader', display: 'swap' });
 const body = Jost({ subsets: ['latin'], weight: ['400', '500'], variable: '--font-jost', display: 'swap' });
+
+const MOTION_BOOT = "if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.classList.add('sf-motion')";
 
 interface Props {
   children: React.ReactNode;
@@ -33,6 +38,9 @@ export default async function StorefrontLayout({ children, params }: Props) {
 
   return (
     <div className={`storefront-shell ${display.variable} ${body.variable} flex min-h-screen flex-col`} style={themeStyle(store.theme)}>
+      {/* Runs before the page paints, so reveal targets start hidden instead of flashing. */}
+      <script dangerouslySetInnerHTML={{ __html: MOTION_BOOT }} />
+      <MotionRoot />
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:bg-sf-surface focus:px-4 focus:py-2">
         Skip to content
       </a>

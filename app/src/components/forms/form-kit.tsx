@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertCircle, CheckCircle2, Loader2, Save } from "lucide-react";
-import { useId } from "react";
+import { useEffect, useId } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -140,6 +140,14 @@ export function SaveBar({
   onSave: () => void;
   label?: string;
 }) {
+  // Reloading or closing the tab with unsaved edits asks first. Every settings and storefront form uses this bar.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
   return (
     <div className="sticky bottom-0 z-10 mt-6 border-t border-dashboard-border bg-dashboard-canvas/95 py-3 backdrop-blur">
       <div className="flex w-full items-center justify-between gap-3">

@@ -168,9 +168,44 @@ body {
   border-color: #b3311f;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .sf-fade-in {
-    animation: sf-fade-in 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+/*
+ * Storefront motion (components/store/motion/motion-root.tsx). `html.sf-motion` is set before first
+ * paint only when reduced motion is not requested, so these starting states never hide content
+ * from people who opted out or run without JavaScript. If the motion script has not started after
+ * a moment, the fallback animation shows everything anyway.
+ */
+.sf-motion [data-reveal='text'],
+.sf-motion [data-reveal-item],
+.sf-motion [data-hero-fade] {
+  opacity: 0;
+}
+.sf-motion [data-reveal='image'] {
+  clip-path: inset(10% 6% 10% 6%);
+}
+.sf-motion [data-hero-line] {
+  transform: translateY(105%);
+}
+.sf-motion:not(.sf-motion-ready) :is([data-reveal], [data-reveal-item], [data-hero-fade], [data-hero-line]) {
+  animation: sf-motion-fallback 0s 2.5s forwards;
+}
+@keyframes sf-motion-fallback {
+  to {
+    opacity: 1;
+    clip-path: none;
+    transform: none;
+  }
+}
+
+[data-store-header] {
+  transition: transform 450ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+[data-store-header].is-tucked:not(:focus-within) {
+  transform: translateY(-100%);
+}
+
+@keyframes sf-photo-in {
+  from {
+    opacity: 0;
   }
 }
 
@@ -182,17 +217,6 @@ body {
   to {
     transform: none;
     opacity: 1;
-  }
-}
-
-@keyframes sf-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
   }
 }
 

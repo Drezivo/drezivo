@@ -8,8 +8,9 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
           <h1 className="font-display text-3xl font-semibold tracking-tight text-dashboard-navy sm:text-4xl">Settings</h1>
           <p className="mt-1.5 text-sm text-dashboard-muted">Your business details, payments, notifications, and account.</p>
         </div>
-        <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-          <aside className="lg:sticky lg:top-4 lg:self-start">
+        {/* Explicit minmax(0,1fr) on phones: an implicit column grows to the menu's full width. */}
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+          <aside className="min-w-0 lg:sticky lg:top-4 lg:self-start">
             <SettingsNav />
           </aside>
           <div className="min-w-0 pb-6">{children}</div>

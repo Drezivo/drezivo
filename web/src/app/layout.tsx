@@ -11,7 +11,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: the storefront's before-paint motion script adds a class here.
+    // data-scroll-behavior: lets Next.js switch CSS smooth scrolling off during route changes.
+    <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>
       <body>
         <QueryProvider>{children}</QueryProvider>
       </body>

@@ -456,13 +456,92 @@ MinIO community builds are no longer published, so a small local S3 stand-in out
 
 ### Known gaps left as they are (outside this scope, recorded for follow-up)
 
-- `reservation.pending_confirmation`, `reservation.rejected`, and `payment.verified` have no
-  worker handler on `main`, so the runner dead-letters them. The legacy `reservation.*`
-  notification handler throws because no provider existed. New email goes through
-  `notification.email` instead.
-- The worker runs only as a long-lived process. A scheduled "drain" mode (for a Cloud Run Job)
-  does not exist yet; the hosting guide specifies it.
 - `eslint` for `app` and `web` cannot run on `main` (`eslint-config-next` parser mismatch).
+- Two earlier gaps are now fixed in Milestone 10: dead-lettered domain events, and the missing
+  drain mode.
+
+## Milestone 10 — Worker hosting (Cloud Run Jobs, Stage 1)
+
+- [x] Domain events no longer dead-letter.
+  - The dispatcher that threw for every `reservation.*` event is removed.
+  - The 10 event types the API writes to the outbox (reservation lifecycle and
+    `payment.verified`) are acknowledged from one explicit list
+    (`api/src/worker/handlers/domain-events.ts`), because nothing subscribes to them. Emails travel
+    as `notification.email`.
+  - Unknown types still dead-letter.
+- [x] Drain mode: `WORKER_MODE=drain` runs the sweeps once, works through the outbox until it is
+      empty or `WORKER_DRAIN_BUDGET_MS` is spent (checked between batches), then exits.
+  - `WORKER_DRAIN_SCOPE=fast` only releases expired holds and sends email, for a 2-minute
+    schedule. Expired holds block their garment until swept.
+  - `SIGTERM` finishes the batch in hand.
+- [x] Config: `WORKER_ENABLED` and `S3_FORCE_PATH_STYLE` accepted any non-empty text as true, so
+      `WORKER_ENABLED=false` would have started the worker. They now accept only `true`/`false`.
+- [x] `DREZIVO_ENV_FILE`: all worker secrets can live in one mounted Secret Manager file. It is
+      read in every mode, real environment variables win, and a missing file stops startup.
+- [x] Cloud Build config (`api/cloudbuild.yaml`) and a root `.gcloudignore` that excludes every
+      `.env*`. The image can be built without local Docker, which crashes on this PC.
+- [x] Runbook: `docs/runbooks/worker-cloud-run.md`, with the checked free-tier numbers and the
+      PowerShell commands.
+- [x] Verified:
+  - API typecheck clean; `tests/integration/worker-drain.test.ts` 6/6 as `drezivo_worker`:
+    empty, scoped, budget, two overlapping runs handle each row once, acknowledged and unknown
+    types, stop; config unit tests 15/15.
+  - The compiled `dist/worker.js` ran with `NODE_ENV=production` and a mounted settings file,
+    and exited 0.
+  - Production refuses `GUEST_VERIFICATION_MODE=dev_accept_any`.
+  - Local Docker build not verified: Docker Desktop's engine crashed with `SIGBUS` on this
+    machine.
+- [ ] Owner creates the Google Cloud project and runs the runbook.
+
+## Milestone 11 — Motion, UI/UX polish, and owner-side QA
+
+Scope set by the owner on 2026-09-29: the business side (Settings and Storefront CMS) and the
+storefront itself (workflow, alignment, design). Calendars were left untouched, as asked.
+
+- [x] Storefront motion with GSAP (ScrollTrigger) and Lenis, all in
+      `web/src/components/store/motion/motion-root.tsx`. Pages stay server-rendered and only carry
+      `data-*` markers.
+  - The hero is the one orchestrated moment: the photo settles, the heading rises from a mask, and
+    the content fades as the visitor scrolls past it.
+  - Photos unveil with a clip reveal, text eases in once, and product grids arrive in staggered
+    batches.
+  - The header tucks away on scroll down and returns on scroll up.
+  - Route changes fade in, and item photos crossfade.
+  - Reduced motion or no JavaScript shows everything immediately, without Lenis.
+  - A shared scroll lock pauses Lenis for the menu and the booking drawer.
+- [x] Found and fixed while checking the motion:
+  - the hero heading stayed hidden, because GSAP kept the CSS start offset as pixels;
+  - a hydration warning on `<html>`;
+  - Next's smooth-scroll warning;
+  - the storefront and app had no favicon;
+  - the hero crop cut off faces;
+  - the size tiles had no keyboard focus ring.
+- [x] Owner-side walkthrough of all 12 Storefront and Settings pages at 1440 and 390 px, signed in
+      as the owner (`E:/UserStorage/drezivo-local/owner-walk.mjs`), plus reversible edits
+      (`owner-edit.mjs`). Found and fixed:
+  - `/workspaces` and `/actor-context` share a limit of 30 requests a minute, and one full page
+    load uses 4. After about seven reloads the whole dashboard showed "Workspace access needs
+    attention". The limit is now 120 a minute per user.
+  - The shell showed "Team Member" and "Workspace" when the actor context failed. It now shows
+    nothing until the role is known, and retries with backoff.
+  - Every Settings page overflowed on phones, because an implicit grid column took the menu's
+    width.
+  - On phones the Settings menu hid the current page off to the side. It now scrolls into view.
+  - The Clerk profile was a white card with its own mobile menu. It now uses the dark dashboard
+    tokens and has no duplicate menu.
+  - The rental policy page showed example text only as placeholders, which a new shop could
+    mistake for a written policy. A "Start from example text" button now fills it for editing.
+  - The store address input silently dropped spaces. It now turns them into hyphens.
+  - Unsaved changes were lost on reload. The shared save bar now asks first.
+- [x] Verified:
+  - `web`, `app`, and `api` typecheck clean.
+  - App unit tests: 232 passed, with only the 14 failures that also fail on `main`. Web: only the
+    1 failure that also fails on `main`.
+  - Walkthrough: zero console errors and no horizontal overflow on every page at both widths.
+  - Edits: a double-clicked save sent exactly one request; the tagline showed on the overview and
+    was restored; `Vergel Suit` became `vergel-suit`; reload with edits prompted; the policy
+    example filled the form and enabled Publish (nothing was published).
+  - Guest booking and fitting flow re-run green.
 
 ## Change log
 
@@ -492,3 +571,6 @@ MinIO community builds are no longer published, so a small local S3 stand-in out
 | 2026-09-29 | 9 | Development accept-any-code guest verification, refused in production | `api/src/config/index.ts`, `api/src/modules/guest-booking/guest-verification.service.ts`, `api/src/config/__tests__/guest-verification-mode.test.ts`, `api/tests/integration/storefront-guest-booking.test.ts`, `docs/runbooks/environments.md` |
 | 2026-09-29 | 9 | Clear pickup/delivery tiles; minimum rental enforced in the calendar; real 409 reasons | `web/src/components/store/booking/booking-drawer.tsx`, `web/src/components/store/booking/availability-calendar.tsx` |
 | 2026-09-29 | 9 | Shell no longer shifts on image fields; Profile/Security split; real measurement guide; draft address note; onboarding timeout | `app/src/components/shell/dashboard-shell.tsx`, `app/src/components/storefront/image-field.tsx`, `app/src/lib/storefront-assets.ts`, `app/src/components/settings/{settings-nav.tsx,use-location-hash.ts,account-settings-page.tsx,measurement-guide-settings-page.tsx,use-settings-resource.ts}`, `app/src/app/(dashboard)/layout.tsx`, `app/src/components/storefront/storefront-overview-page.tsx`, `app/src/components/onboarding/onboarding-plan.tsx`, app unit tests |
+| 2026-09-29 | 10 | Worker drain mode, acknowledged domain events, strict booleans, mounted env file, Cloud Build, runbook | `api/src/worker.ts`, `api/src/worker/runner.ts`, `api/src/worker/handlers/domain-events.ts`, `api/src/config/{index.ts,load-env.ts}`, `api/src/middleware/idempotency.ts`, `api/cloudbuild.yaml`, `.gcloudignore`, `api/tests/integration/worker-drain.test.ts`, `api/src/config/__tests__/worker-config.test.ts`, `docs/runbooks/{worker-cloud-run.md,environments.md}` |
+| 2026-09-29 | 11 | Storefront motion (GSAP, Lenis), favicon, hero and focus fixes | `web/src/components/store/motion/{motion-root.tsx,scroll.ts}`, `web/src/app/{layout.tsx,globals.css,icon.svg}`, `web/src/app/s/[slug]/layout.tsx`, `web/src/components/store/{home-sections,product-card,item-view,store-header}.tsx`, `web/src/components/store/booking/booking-drawer.tsx`, `web/package.json` |
+| 2026-09-29 | 11 | Owner-side QA fixes: rate limit, role fallback, settings layout, Clerk theme, policy starter, slug input, unsaved-changes prompt, app favicon | `api/src/modules/tenancy/tenancy.routes.ts`, `app/src/components/shell/dashboard-shell.tsx`, `app/src/app/(dashboard)/settings/layout.tsx`, `app/src/components/settings/{settings-nav,account-settings-page}.tsx`, `app/src/components/storefront/{storefront-policy-pages,storefront-details-page}.tsx`, `app/src/components/forms/form-kit.tsx`, `app/src/app/icon.png` |

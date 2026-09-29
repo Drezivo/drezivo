@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import type { FieldRequirement, StorefrontCheckout, StorefrontPolicyRules } from "@drezivo/contracts";
 
 import { ErrorState, Field, LoadingState, PageHeader, SaveBar, Section, Switch } from "@/components/forms/form-kit";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -37,6 +38,15 @@ export function minorToPesos(minor: string): string {
   return value % 100 === 0 ? String(value / 100) : (value / 100).toFixed(2);
 }
 
+/** Starter wording a new shop can publish as-is or edit. Also shown as each field's placeholder. */
+const EXAMPLE_TEXT = {
+  rental: "Rentals run 3 days from pickup. Pick up from 10 AM and return by 10 AM on your return date.",
+  deposit: "A refundable deposit is paid with your booking and returned within 3 days after inspection.",
+  cancellation: "Cancel at least 7 days before pickup for a full refund of the rental fee.",
+  damage: "Late returns are charged one extra day per day late. Damage beyond normal wear is charged at the cost of repair.",
+  privacy_notice: "We use your name, contact details, and address only to process this rental and contact you about it.",
+} as const;
+
 export function StorefrontPoliciesPage() {
   const editor = useStorefrontEditor();
   const saved = editor.settings?.policy.rules ?? null;
@@ -62,11 +72,12 @@ export function StorefrontPoliciesPage() {
   const feeMinor = pesosToMinor(fee);
   const next: StorefrontPolicyRules = { ...rules, delivery: { ...rules.delivery, fee_minor: feeMinor ?? "invalid" } };
   const dirty = JSON.stringify(next) !== JSON.stringify(saved ?? EMPTY_RULES);
-  const text = (key: "rental" | "deposit" | "cancellation" | "privacy_notice", label: string, hint: string, placeholder: string, max: number) => (
+  const text = (key: "rental" | "deposit" | "cancellation" | "privacy_notice", label: string, hint: string, max: number) => (
     <Field label={label} hint={hint} error={err(key)} count={{ value: rules[key].length, max }}>
-      {(props) => <Textarea {...props} rows={4} maxLength={max} placeholder={placeholder} value={rules[key]} onChange={(e) => update({ [key]: e.target.value })} />}
+      {(props) => <Textarea {...props} rows={4} maxLength={max} placeholder={EXAMPLE_TEXT[key]} value={rules[key]} onChange={(e) => update({ [key]: e.target.value })} />}
     </Field>
   );
+  const blank = !saved && !rules.rental && !rules.deposit && !rules.cancellation && !rules.damage && !rules.privacy_notice;
 
   return (
     <PageShell>
@@ -75,19 +86,26 @@ export function StorefrontPoliciesPage() {
         title="Rental policies"
         description="Renters accept these before they pay. Each save publishes a new version; existing bookings keep the version they accepted."
       />
-      <div className="mb-4 flex items-start gap-2 rounded-lg border border-dashboard-border bg-dashboard-surface px-4 py-3 text-sm text-dashboard-muted">
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-dashboard-border bg-dashboard-surface px-4 py-3 text-sm text-dashboard-muted">
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
-        {saved ? `You are editing version ${editor.settings.policy.version}.` : "You have not written a policy yet. Your storefront cannot go live without one."}
+        <span className="flex-1">
+          {saved ? `You are editing version ${editor.settings.policy.version}.` : "You have not written a policy yet. Your storefront cannot go live without one."}
+        </span>
+        {blank ? (
+          <Button type="button" variant="secondary" size="sm" className="shrink-0" onClick={() => update({ ...EXAMPLE_TEXT })}>
+            Start from example text
+          </Button>
+        ) : null}
       </div>
 
       <div className="grid gap-4">
         <Section icon={ShieldCheck} title="Rental terms">
           <div className="grid gap-4">
-            {text("rental", "How renting works", "Rental length, pickup and return, and what is included.", "Rentals run 3 days from pickup. Pick up from 10 AM and return by 10 AM on your return date.", 1500)}
-            {text("deposit", "Security deposit", "How much, when it is paid, and when it is returned.", "A refundable deposit is paid with your booking and returned within 3 days after inspection.", 1000)}
-            {text("cancellation", "Cancellation", "What happens if a renter cancels.", "Cancel at least 7 days before pickup for a full refund of the rental fee.", 1500)}
+            {text("rental", "How renting works", "Rental length, pickup and return, and what is included.", 1500)}
+            {text("deposit", "Security deposit", "How much, when it is paid, and when it is returned.", 1000)}
+            {text("cancellation", "Cancellation", "What happens if a renter cancels.", 1500)}
             <Field label="Damage and late returns" hint="Optional." error={err("damage")} count={{ value: rules.damage?.length ?? 0, max: 1000 }}>
-              {(props) => <Textarea {...props} rows={3} maxLength={1000} value={rules.damage ?? ""} onChange={(e) => update({ damage: e.target.value.trim() ? e.target.value : null })} />}
+              {(props) => <Textarea {...props} rows={3} maxLength={1000} placeholder={EXAMPLE_TEXT.damage} value={rules.damage ?? ""} onChange={(e) => update({ damage: e.target.value.trim() ? e.target.value : null })} />}
             </Field>
           </div>
         </Section>
@@ -107,7 +125,7 @@ export function StorefrontPoliciesPage() {
         </Section>
 
         <Section icon={ShieldCheck} title="Privacy notice" description="How you use renter details. Shown at checkout.">
-          {text("privacy_notice", "Privacy notice", "Keep it plain and specific.", "We use your name, contact details, and address only to process this rental and contact you about it.", 2000)}
+          {text("privacy_notice", "Privacy notice", "Keep it plain and specific.", 2000)}
         </Section>
       </div>
 

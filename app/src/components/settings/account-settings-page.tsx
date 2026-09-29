@@ -46,12 +46,24 @@ export function AccountSettingsPage() {
         <UserProfile
           routing="hash"
           appearance={{
+            // The dashboard is always dark; these mirror its tokens (.dashboard-theme-dark in globals.css).
+            variables: {
+              colorBackground: "#1a1a1a",
+              colorText: "#f5f1eb",
+              colorTextSecondary: "#aaa39b",
+              colorPrimary: "#d2a15b",
+              colorDanger: "#ff4d6d",
+              colorNeutral: "#f5f1eb",
+              colorInputBackground: "#141414",
+              colorInputText: "#f5f1eb",
+            },
             elements: {
               rootBox: { width: "100%" },
               cardBox: { width: "100%", maxWidth: "100%", boxShadow: "none", border: "none" },
-              // The settings menu on the left already switches between Profile and Security.
-              navbar: { display: "none" },
-              navbarMobileMenuRow: { display: "none" },
+              // The settings menu already switches between Profile and Security. Class names with
+              // `!` win over Clerk's own styles, which inline style objects did not on phones.
+              navbar: "!hidden",
+              navbarMobileMenuRow: "!hidden",
             },
           }}
         />

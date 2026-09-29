@@ -8,6 +8,7 @@ import type { CatalogueVariant, FulfillmentMethod, GuestReservationRequest, Gues
 import { createReservation, StorefrontApiError } from '@/lib/storefront-api';
 import { dateIn, daysBetween, formatDay, formatMinor, formatTime, zonedInstant } from '@/lib/storefront-format';
 
+import { lockPageScroll } from '../motion/scroll';
 import { AvailabilityCalendar, type DateRange } from './availability-calendar';
 import { EmailVerification, type VerifiedEmail } from './email-verification';
 import { MoneyBreakdown, PaymentStep } from './payment-step';
@@ -114,9 +115,9 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     panel.current?.focus();
-    document.body.style.overflow = 'hidden';
+    const unlock = lockPageScroll();
     return () => {
-      document.body.style.overflow = '';
+      unlock();
       previous?.focus();
     };
   }, []);

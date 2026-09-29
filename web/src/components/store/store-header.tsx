@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { PublicStorefront } from '@drezivo/contracts';
 
+import { lockPageScroll } from './motion/scroll';
 import { storeNav } from './store-nav';
 
 export function StoreHeader({ store }: { store: PublicStorefront }) {
@@ -25,10 +26,10 @@ export function StoreHeader({ store }: { store: PublicStorefront }) {
       }
     };
     document.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
+    const unlock = lockPageScroll();
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
+      unlock();
     };
   }, [open]);
 
@@ -37,7 +38,7 @@ export function StoreHeader({ store }: { store: PublicStorefront }) {
       {store.content.announcement ? (
         <p className="bg-sf-accent px-4 py-2 text-center text-xs tracking-wide text-sf-accent-ink">{store.content.announcement}</p>
       ) : null}
-      <header className="sticky top-0 z-30 border-b border-sf-line bg-sf-bg/95 backdrop-blur supports-[backdrop-filter]:bg-sf-bg/85">
+      <header data-store-header className="sticky top-0 z-30 border-b border-sf-line bg-sf-bg/95 backdrop-blur supports-[backdrop-filter]:bg-sf-bg/85">
         <div className="mx-auto flex h-[var(--storefront-header-height)] max-w-7xl items-center justify-between gap-6 px-5 sm:px-8">
           <Link href={home} className="flex min-w-0 items-center gap-3" aria-label={`${store.name} home`}>
             {store.logo_url ? (

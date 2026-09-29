@@ -3,6 +3,7 @@
 import { Bell, Building2, CreditCard, Ruler, ShieldCheck, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 
 import { PROFILE_HASH, SECURITY_HASH, useLocationHash } from "@/components/settings/use-location-hash";
 import { cn } from "@/lib/utils";
@@ -36,8 +37,16 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
 export function SettingsNav() {
   const pathname = usePathname();
   const hash = useLocationHash();
+  const nav = useRef<HTMLElement>(null);
+
+  // On phones the menu is one scrolling row; bring the current page into view so it is never
+  // hidden off to the side.
+  useEffect(() => {
+    nav.current?.querySelector<HTMLElement>('[aria-current="page"]')?.scrollIntoView?.({ block: "nearest", inline: "center" });
+  }, [pathname, hash]);
+
   return (
-    <nav aria-label="Settings" className="flex gap-1 overflow-x-auto pb-2 lg:flex-col lg:gap-5 lg:overflow-visible lg:pb-0">
+    <nav ref={nav} aria-label="Settings" className="flex gap-1 overflow-x-auto pb-2 lg:flex-col lg:gap-5 lg:overflow-visible lg:pb-0">
       {GROUPS.map((group) => (
         <div key={group.label} className="flex shrink-0 gap-1 lg:flex-col">
           <p className="hidden px-3 pb-1 text-xs font-medium text-dashboard-muted lg:block">{group.label}</p>

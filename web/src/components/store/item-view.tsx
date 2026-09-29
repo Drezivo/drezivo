@@ -36,15 +36,16 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
               ))}
             </ul>
           ) : null}
-          <div className={`order-1 aspect-[3/4] overflow-hidden bg-sf-line sm:order-2 ${item.image_urls.length > 1 ? '' : 'sm:col-span-2'}`}>
+          <div data-reveal="image" className={`order-1 aspect-[3/4] overflow-hidden bg-sf-line sm:order-2 ${item.image_urls.length > 1 ? '' : 'sm:col-span-2'}`}>
             {image ? (
+              // Keyed by URL so choosing another photo crossfades it in.
               // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-              <img src={image} alt={item.name} className="h-full w-full object-cover" fetchPriority="high" />
+              <img key={image} src={image} alt={item.name} className="h-full w-full object-cover motion-safe:animate-[sf-photo-in_500ms_ease-out]" fetchPriority="high" />
             ) : null}
           </div>
         </div>
 
-        <div className="lg:sticky lg:top-24 lg:self-start">
+        <div data-reveal="text" className="lg:sticky lg:top-24 lg:self-start">
           {item.category ? <p className="text-sm text-sf-muted">{item.category}</p> : null}
           <h1 className="mt-1 font-sf-display text-4xl font-light leading-tight sm:text-5xl">{item.name}</h1>
           {shown ? (
@@ -60,13 +61,13 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
               <legend className="mb-3 text-sm font-medium">Size</legend>
               <div className="flex flex-wrap gap-2">
                 {item.variants.map((entry) => (
-                  <label key={entry.variant_id} className={`flex h-11 min-w-14 cursor-pointer items-center justify-center border px-4 text-sm ${variantId === entry.variant_id ? 'border-sf-ink bg-sf-ink text-sf-bg' : 'border-sf-line hover:border-sf-ink'}`}>
+                  <label key={entry.variant_id} className={`flex h-11 min-w-14 cursor-pointer items-center justify-center border px-4 text-sm has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-sf-accent ${variantId === entry.variant_id ? 'border-sf-ink bg-sf-ink text-sf-bg' : 'border-sf-line hover:border-sf-ink'}`}>
                     <input type="radio" name="size" className="sr-only" checked={variantId === entry.variant_id} onChange={() => setVariantId(entry.variant_id)} />
                     {entry.size_label ?? 'One size'}
                   </label>
                 ))}
               </div>
-              {variant?.color_label ? <p className="mt-3 text-sm text-sf-muted">Colour: {variant.color_label}</p> : null}
+              {variant?.color_label ? <p className="mt-3 text-sm text-sf-muted">Color: {variant.color_label}</p> : null}
             </fieldset>
           ) : null}
 

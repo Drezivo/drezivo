@@ -94,7 +94,7 @@ export function StorefrontDetailsPage() {
                     autoCapitalize="none"
                     spellCheck={false}
                     onChange={(e) => {
-                      setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""));
+                      setSlug(e.target.value.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""));
                       editor.markEdited();
                     }}
                   />
