@@ -176,7 +176,9 @@ export class S3CompatibleObjectStorage implements ObjectStorage {
       contentType: normalizeContentType(response.ContentType),
       byteSize,
       sha256: exceedsLimit ? null : hash.digest('base64'),
-      versionId: response.VersionId ?? null,
+      versionId: isR2Endpoint(this.storageConfig.OBJECT_STORAGE_ENDPOINT)
+        ? null
+        : (response.VersionId ?? null),
       prefix: prefix.slice(0, prefixByteSize),
     };
   }

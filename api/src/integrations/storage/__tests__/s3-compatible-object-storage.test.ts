@@ -121,6 +121,21 @@ describe('S3-compatible object storage', () => {
     expect(storage.command?.input).toMatchObject({ Bucket: 'private-files', Key: 'tenant-files/file/source' });
   });
 
+  it('does not retain provider version identifiers returned for R2 objects', async () => {
+    const bytes = Buffer.from('synthetic R2 object');
+    const storage = createStorageWithResponse({
+      Body: Readable.from([bytes]) as unknown as NonNullable<GetObjectCommandOutput['Body']>,
+      ContentLength: bytes.byteLength,
+      ContentType: 'application/octet-stream',
+      VersionId: 'r2-provider-version',
+    });
+
+    const actual = await storage.adapter.inspectUploadedObject('tenant-files/file/source', 1024);
+
+    expect(actual?.versionId).toBeNull();
+    expect(actual?.sha256).toBe(createHash('sha256').update(bytes).digest('base64'));
+  });
+
   it('stops streaming after one byte beyond the configured upload limit', async () => {
     const body = Readable.from([Buffer.alloc(102), Buffer.alloc(100)]);
     const storage = createStorageWithResponse({

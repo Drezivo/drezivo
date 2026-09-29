@@ -252,6 +252,46 @@ describe('CLT-022 clothing file attachment flow', async () => {
     expect(accepted.frozen_at).toBeInstanceOf(Date);
   });
 
+  it('accepts a verified immutable-key file when the provider has no version identifier', async () => {
+    const seed = await seedTenant('org_clt022_versionless', 'user_clt022_versionless');
+    const storage = new FakeStorage();
+    const fileId = await authorizeCatalogueFile(
+      seed,
+      storage,
+      'clt022-versionless-authorize',
+      SHA_A,
+      512,
+    );
+    const pending = await readFile(seed.tenantId, seed.principalId, fileId);
+    storage.objects.set(pending.storage_key, {
+      contentType: 'image/png',
+      byteSize: 512,
+      sha256: SHA_A,
+      versionId: null,
+      prefix: PNG_PREFIX,
+    });
+
+    const finalized = await finalizeUpload(
+      {
+        ...seed.fileContext,
+        fileId,
+        requestId: 'req-clt022-versionless-finalize',
+        idempotencyKey: 'clt022-versionless-finalize',
+      },
+      storage,
+    );
+
+    expect(finalized.status).toBe(200);
+    if (!finalized.body.success) throw new Error('Expected versionless file finalization success.');
+    const accepted = await readFile(seed.tenantId, seed.principalId, fileId);
+    expect(accepted).toMatchObject({
+      lifecycle_status: 'accepted',
+      version_id: null,
+      sha256: SHA_A,
+    });
+    expect(accepted.frozen_at).toBeInstanceOf(Date);
+  });
+
   const liveR2Enabled = process.env.OBJECT_STORAGE_LIVE_TESTS === 'true';
   const liveMinioEnabled = process.env.OBJECT_STORAGE_LIVE_MINIO_TESTS === 'true';
 

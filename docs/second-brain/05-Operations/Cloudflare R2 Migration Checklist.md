@@ -374,17 +374,17 @@ Use **Standard** for V1: it is the default class for frequently accessed applica
     - [ ] CORS is documented as browser policy, not authorization.
   - **Tests/evidence:** Approved-origin preflight succeeds; unapproved-origin preflight fails.
 
-- [ ] **R2-032 — Remove new R2 accepted-file dependence on provider version IDs**
+- [x] **R2-032 — Remove new R2 accepted-file dependence on provider version IDs**
   - **Depends on:** R2-006, R2-030.
   - **Outcome:** New R2 accepted-file immutability remains valid without S3 bucket versioning while existing AWS-backed rows are handled explicitly.
   - **Acceptance:**
-    - [ ] `version_id` remains nullable unless a migration/provider-awareness design independently justifies a schema change.
-    - [ ] Newly accepted R2 objects may persist `version_id = null`.
-    - [ ] For new R2 objects, `sha256 + frozen_at + write-once key` is sufficient to identify/freeze accepted bytes after checksum verification succeeds.
-    - [ ] Existing AWS-backed rows with `version_id` follow the migration/read strategy selected in R2-006; do not silently discard version IDs before the referenced bytes are reconciled.
-    - [ ] Existing domain checks that allow `(version_id OR sha256)` remain valid or are clarified with provider-neutral naming/comments.
-    - [ ] R2 signed reads never append stale AWS `versionId` query parameters.
-  - **Tests/evidence:** New R2 object with null `version_id` remains readable and valid evidence; any migrated AWS fixture follows the approved version-ID reconciliation path.
+    - [x] `version_id` remains nullable; no schema change or backfill is introduced.
+    - [x] New R2 inspection discards provider `VersionId` values and accepted rows may persist `version_id = null`.
+    - [x] Verified actual-byte `sha256 + frozen_at + write-once key` identifies accepted R2 bytes without a provider version ID.
+    - [x] Existing AWS-backed version IDs are preserved until R2-006's exact-version copy/read-back reconciliation; R2 reads fail closed while a stale non-null ID remains.
+    - [x] Existing validity checks accept either a version ID or the verified SHA-256.
+    - [x] R2 signed reads omit `versionId`; attempts to use an unreconciled legacy ID fail closed.
+  - **Tests/evidence:** The focused adapter suite passes, proving an R2-returned version identifier is discarded and null-version R2 reads omit the query parameter. A database-backed test was added to prove verified versionless acceptance with a frozen SHA-256, but could not run because the local disposable PostgreSQL test service at `127.0.0.1:55432` refused the connection. The separate R2 live-provider assertion remains opt-in and unrun; R2-006 production reconciliation is still open.
 
 ## Phase 4: R2 checksum and finalization compatibility
 
