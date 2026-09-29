@@ -85,6 +85,8 @@ import {
   clothingAvailabilityTimelineQuery,
   clothingAvailabilityTimelineResponse,
   dashboardFittingSummaryResponse,
+  operationalCalendarQuery,
+  operationalCalendarResponse,
   fittingActionResponse,
   fittingCancelRequest,
   fittingCompleteRequest,
@@ -205,6 +207,8 @@ import {
   type ClothingAvailabilityTimelineQuery,
   type ClothingAvailabilityTimelineResponse,
   type DashboardFittingSummaryResponse,
+  type OperationalCalendarQuery,
+  type OperationalCalendarResponse,
   type FittingActionResponse,
   type FittingCancelRequest,
   type FittingCompleteRequest,
@@ -339,6 +343,17 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         path: "/api/v1/actor-context",
         responseSchema: apiEnvelope(actorContext),
       }),
+    getOperationalCalendar: (input: OperationalCalendarQuery) => {
+      const query = operationalCalendarQuery.parse(input);
+      const searchParams = new URLSearchParams({ start: query.start, end: query.end });
+
+      return request<OperationalCalendarResponse>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/calendar?${searchParams.toString()}`,
+        responseSchema: apiEnvelope(operationalCalendarResponse),
+      });
+    },
     getCustomers: (input: CustomerListQuery) => {
       const query = customerListQuery.parse(input);
       const searchParams = new URLSearchParams({

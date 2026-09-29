@@ -269,15 +269,16 @@ These rules must be covered by the backend integration evidence before any Calen
 
 # Frontend Phase FE-0 — Add the production Calendar API client
 
-- [ ] **CAL-FE-000 — Add `getOperationalCalendar()` to `app/src/lib/drezivo-api.ts`**
+- [x] **CAL-FE-000 — Add `getOperationalCalendar()` to `app/src/lib/drezivo-api.ts`**
   - **Depends on:** CAL-BE-042.
   - **Outcome:** The app consumes the shared Calendar contract instead of handwritten response types.
   - **Acceptance:**
-    - [ ] Import `operationalCalendarQuery` and `operationalCalendarResponse` from `@drezivo/contracts`.
-    - [ ] Serialize validated `start` and `end` query parameters.
-    - [ ] Validate the API envelope/response through the shared contract.
-    - [ ] Preserve the response `truncated` flag so the UI can warn or prevent a dense range from appearing complete.
-    - [ ] Add focused API-client unit coverage.
+    - [x] Import `operationalCalendarQuery` and `operationalCalendarResponse` from `@drezivo/contracts`.
+    - [x] Serialize validated `start` and `end` query parameters.
+    - [x] Validate the API envelope/response through the shared contract.
+    - [x] Preserve the response `truncated` flag so the UI can warn or prevent a dense range from appearing complete.
+    - [x] Add focused API-client unit coverage.
+  - **Evidence:** `app/src/lib/drezivo-api.ts` exposes the typed Calendar read method; `app/tests/unit/drezivo-api-calendar.test.ts` covers query serialization, envelope validation, and `truncated` preservation (2 passing tests). App typecheck and `git diff --check` passed.
 
 - [ ] **CAL-FE-001 — Resolve active branch timezone and permissions**
   - **Acceptance:**
