@@ -13,10 +13,9 @@ import { currencyCode, nonNegativeMoneyString } from '../common/money';
 import { pageMeta } from '../common/pagination';
 import { ianaTimezone, instantInterval, isoDate, isoInstant } from '../common/time';
 import { physicalAssetReadiness } from '../catalogue/staff';
-import { fittingState } from '../fittings/state';
-import { reservationState } from '../reservations/state';
 
-const CALENDAR_MAX_WINDOW_DAYS = 62;
+export const OPERATIONAL_CALENDAR_MAX_WINDOW_DAYS = 62;
+export const OPERATIONAL_CALENDAR_MAX_EVENTS = 2_000;
 const CLOTHING_AVAILABILITY_TIMELINE_MAX_WINDOW_DAYS = 31;
 const CLOTHING_AVAILABILITY_TIMELINE_DEFAULT_LIMIT = 25;
 const CLOTHING_AVAILABILITY_TIMELINE_MAX_LIMIT = 50;
@@ -38,15 +37,53 @@ export const operationalCalendarQuery = z
       });
       return;
     }
-    if (end - start > CALENDAR_MAX_WINDOW_DAYS * 24 * 60 * 60 * 1_000) {
+    if (end - start > OPERATIONAL_CALENDAR_MAX_WINDOW_DAYS * 24 * 60 * 60 * 1_000) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['end'],
-        message: `calendar window cannot exceed ${CALENDAR_MAX_WINDOW_DAYS} days.`,
+        message: `calendar window cannot exceed ${OPERATIONAL_CALENDAR_MAX_WINDOW_DAYS} days.`,
       });
     }
   });
 export type OperationalCalendarQuery = z.infer<typeof operationalCalendarQuery>;
+
+/**
+ * Calendar is an operational projection, not a second lifecycle. These are
+ * the only reservation states whose pickup/return facts may be projected.
+ * Held, cancelled, expired, and rejected reservations remain out of scope.
+ */
+export const OPERATIONAL_CALENDAR_RESERVATION_STATUSES = [
+  'pending_confirmation',
+  'confirmed',
+  'picked_up',
+  'returned',
+  'completed',
+] as const;
+export const operationalCalendarReservationStatus = z.enum(
+  OPERATIONAL_CALENDAR_RESERVATION_STATUSES,
+);
+export type OperationalCalendarReservationStatus = z.infer<
+  typeof operationalCalendarReservationStatus
+>;
+
+/** Persisted fitting states that are visible in the operational Calendar. */
+export const OPERATIONAL_CALENDAR_FITTING_STATUSES = [
+  'pending',
+  'confirmed',
+  'completed',
+  'no_show',
+] as const;
+export const operationalCalendarFittingStatus = z.enum(OPERATIONAL_CALENDAR_FITTING_STATUSES);
+export type OperationalCalendarFittingStatus = z.infer<typeof operationalCalendarFittingStatus>;
+
+export const operationalCalendarCategory = z
+  .object({
+    id: categoryId,
+    name: z.string().trim().min(1).max(120),
+    status: z.enum(['active', 'inactive']),
+  })
+  .strict();
+export type OperationalCalendarCategory = z.infer<typeof operationalCalendarCategory>;
 
 export const operationalCalendarEvent = z.discriminatedUnion('source', [
   z
@@ -59,7 +96,8 @@ export const operationalCalendarEvent = z.discriminatedUnion('source', [
       period: instantInterval,
       customer_name: z.string().min(1),
       item_names: z.array(z.string().min(1)).max(20),
-      status: reservationState,
+      category_ids: z.array(categoryId).max(20),
+      status: operationalCalendarReservationStatus,
     })
     .strict(),
   z
@@ -72,7 +110,8 @@ export const operationalCalendarEvent = z.discriminatedUnion('source', [
       period: instantInterval,
       customer_name: z.string().min(1),
       item_names: z.array(z.string().min(1)).max(20),
-      status: fittingState,
+      category_ids: z.array(categoryId).max(20),
+      status: operationalCalendarFittingStatus,
     })
     .strict(),
 ]);
@@ -81,7 +120,9 @@ export type OperationalCalendarEvent = z.infer<typeof operationalCalendarEvent>;
 export const operationalCalendarResponse = z
   .object({
     window: instantInterval,
-    events: z.array(operationalCalendarEvent).max(2_000),
+    categories: z.array(operationalCalendarCategory),
+    events: z.array(operationalCalendarEvent).max(OPERATIONAL_CALENDAR_MAX_EVENTS),
+    truncated: z.boolean(),
   })
   .strict();
 export type OperationalCalendarResponse = z.infer<typeof operationalCalendarResponse>;

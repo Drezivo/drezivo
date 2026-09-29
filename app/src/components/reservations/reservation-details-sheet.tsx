@@ -61,6 +61,8 @@ export function ReservationDetailsSheet({
   timeZone: string;
 }) {
   const open = reservationId !== null;
+  const isForbidden = error?.status === 403 || error?.code === "FORBIDDEN";
+  const isMissing = error?.status === 404;
   const [notice, setNotice] = useState<ReservationMutationNotice | null>(null);
 
   useEffect(() => {
@@ -81,13 +83,19 @@ export function ReservationDetailsSheet({
         ) : error ? (
           <DetailState
             title={
-              error.status === 404
-                ? "Reservation is no longer available"
-                : "Could not load reservation"
+              isForbidden
+                ? "Reservation access is restricted"
+                : isMissing
+                  ? "Reservation is no longer available"
+                  : "Could not load reservation"
             }
-            message={error.message}
+            message={
+              isForbidden
+                ? "Your current branch permissions do not allow access to this reservation. Ask a workspace owner to review your access."
+                : error.message
+            }
             requestId={error.requestId}
-            {...(error.status === 404 ? {} : { actionLabel: "Try again", onAction: onRetry })}
+            {...(!isForbidden && !isMissing ? { actionLabel: "Try again", onAction: onRetry } : {})}
           />
         ) : detail ? (
           <ReservationDetails

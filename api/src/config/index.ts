@@ -3,6 +3,7 @@ import './load-env.js';
 import { z } from 'zod';
 
 import { parseCorsAllowedOrigins } from './cors-origins.js';
+import { strictBooleanEnv } from './env-parsers.js';
 
 /**
  * Every environment variable the application reads is declared and validated HERE, once, at
@@ -46,14 +47,14 @@ export const envSchema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().min(1, 'S3_SECRET_ACCESS_KEY is required'),
   // Optional for AWS; set to the local MinIO API URL and enable path-style addressing in dev.
   S3_ENDPOINT: z.string().url('S3_ENDPOINT must be a valid URL').optional(),
-  S3_FORCE_PATH_STYLE: envBoolean('S3_FORCE_PATH_STYLE'),
+  S3_FORCE_PATH_STYLE: strictBooleanEnv('S3_FORCE_PATH_STYLE').default(false),
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 
   // Worker tuning — TRD §8: bounded polling, lease claim, bounded retry to a terminal state.
   WORKER_POLL_INTERVAL_MS: z.coerce.number().int().min(250).default(2000),
   WORKER_LEASE_SECONDS: z.coerce.number().int().min(5).default(60),
-  WORKER_ENABLED: envBoolean('WORKER_ENABLED'),
+  WORKER_ENABLED: strictBooleanEnv('WORKER_ENABLED').default(false),
   // `drain` runs every sweep once, works through the outbox until it is empty or the budget is
   // spent, then exits: for a scheduled job such as Cloud Run Jobs. `continuous` is a long-lived
   // process. WORKER_DRAIN_SCOPE=fast runs only the time-sensitive work (release expired holds,
@@ -94,17 +95,6 @@ export const envSchema = z.object({
 });
 
 export type Config = z.infer<typeof envSchema>;
-
-/**
- * Only the literal strings `true` and `false`. `z.coerce.boolean()` turns every non-empty string,
- * including "false", into true, so WORKER_ENABLED=false would have started the worker.
- */
-function envBoolean(name: string) {
-  return z
-    .enum(['true', 'false'], { errorMap: () => ({ message: `${name} must be true or false` }) })
-    .default('false')
-    .transform((value) => value === 'true');
-}
 
 function base64Key(name: string): z.ZodType<string> {
   return z

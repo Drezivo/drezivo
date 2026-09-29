@@ -108,6 +108,7 @@ components:
           type: string
           enum: &a35
             - staff
+            - storefront
         status:
           type: string
           enum: *a1
@@ -11781,7 +11782,10 @@ paths:
           in: query
       responses:
         "200":
-          description: Reservation pickup/return and fitting events for the active branch.
+          description: Reservation pickup/return and fitting events for the active branch,
+            with tenant category facets and category IDs for associated event
+            items. At most 2,000 events are returned; truncated is true when the
+            bounded range contains more.
           content:
             application/json:
               schema:
@@ -11806,6 +11810,28 @@ paths:
                         required:
                           - start
                           - end
+                      categories:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              format: uuid
+                            name:
+                              type: string
+                              minLength: 1
+                              maxLength: 120
+                            status:
+                              type: string
+                              enum:
+                                - active
+                                - inactive
+                          required:
+                            - id
+                            - name
+                            - status
+                          additionalProperties: false
                       events:
                         type: array
                         items:
@@ -11851,9 +11877,20 @@ paths:
                                     type: string
                                     minLength: 1
                                   maxItems: 20
+                                category_ids:
+                                  type: array
+                                  items:
+                                    type: string
+                                    format: uuid
+                                  maxItems: 20
                                 status:
                                   type: string
-                                  enum: *a28
+                                  enum:
+                                    - pending_confirmation
+                                    - confirmed
+                                    - picked_up
+                                    - returned
+                                    - completed
                               required:
                                 - id
                                 - source
@@ -11863,6 +11900,7 @@ paths:
                                 - period
                                 - customer_name
                                 - item_names
+                                - category_ids
                                 - status
                               additionalProperties: false
                             - type: object
@@ -11905,9 +11943,19 @@ paths:
                                     type: string
                                     minLength: 1
                                   maxItems: 20
+                                category_ids:
+                                  type: array
+                                  items:
+                                    type: string
+                                    format: uuid
+                                  maxItems: 20
                                 status:
                                   type: string
-                                  enum: *a1
+                                  enum:
+                                    - pending
+                                    - confirmed
+                                    - completed
+                                    - no_show
                               required:
                                 - id
                                 - source
@@ -11917,12 +11965,17 @@ paths:
                                 - period
                                 - customer_name
                                 - item_names
+                                - category_ids
                                 - status
                               additionalProperties: false
                         maxItems: 2000
+                      truncated:
+                        type: boolean
                     required:
                       - window
+                      - categories
                       - events
+                      - truncated
                     additionalProperties: false
                   request_id:
                     type: string
@@ -25376,13 +25429,10 @@ paths:
                         properties:
                           new_request:
                             type: boolean
-                          receipt_submitted:
-                            type: boolean
                           new_fitting_request:
                             type: boolean
                         required:
                           - new_request
-                          - receipt_submitted
                           - new_fitting_request
                         additionalProperties: false
                       version:
@@ -25544,13 +25594,10 @@ paths:
                   properties:
                     new_request:
                       type: boolean
-                    receipt_submitted:
-                      type: boolean
                     new_fitting_request:
                       type: boolean
                   required:
                     - new_request
-                    - receipt_submitted
                     - new_fitting_request
                   additionalProperties: false
                 version:
@@ -25604,13 +25651,10 @@ paths:
                         properties:
                           new_request:
                             type: boolean
-                          receipt_submitted:
-                            type: boolean
                           new_fitting_request:
                             type: boolean
                         required:
                           - new_request
-                          - receipt_submitted
                           - new_fitting_request
                         additionalProperties: false
                       version:
@@ -26259,6 +26303,7 @@ paths:
                   items:
                     type: string
                     format: uuid
+                  minItems: 1
                   maxItems: 3
                 note:
                   type:
