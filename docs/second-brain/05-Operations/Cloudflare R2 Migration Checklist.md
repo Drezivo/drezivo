@@ -10,7 +10,7 @@ tags: [drezivo, files, storage, cloudflare, r2, migration, checklist]
 
 # Cloudflare R2 Object Storage Migration Checklist
 
-**Status:** Repository implementation is in progress under the product owner's explicit R2 direction. Production cutover remains blocked on the object inventory, workload/cost model, migration/rollback design, privacy review, live provider tests, and deployment configuration below.
+**Status:** Repository implementation is in progress under the product owner's explicit R2 direction. A provisional pilot cost scenario is recorded below; production cutover remains blocked on completing the object inventory and reconciling that model, plus the migration/rollback design, privacy review, live provider tests, and deployment configuration below.
 **Decision direction:** Replace the AWS S3 production-storage design with Cloudflare R2 while keeping the existing provider-neutral upload API and local MinIO development workflow. CloudFront is not an implemented repository runtime dependency today; if external CloudFront infrastructure exists outside this repo, inventory and reconcile it explicitly rather than treating it as an assumed in-repo migration target.
 **Canonical specifications:** [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), [ERD](../../architecture/Drezivo-ERD.dbml), and [ADR 0010](../../decisions/0010-cloudflare-r2-object-storage.md). ADR 0010 records R2 as the selected target, not a completed production cutover.
 **Primary code:** `api/src/integrations/storage/`, `api/src/modules/files/`, `api/src/config/`, `contracts/src/files/uploads.ts`, and the staff upload callers under `app/src/`.
@@ -192,18 +192,50 @@ reach the npm registry. No production infrastructure, object, secret, or deploym
     - [x] Keep the API/worker storage integration portable to an ordinary container host; do not add a host-specific storage SDK or runtime assumption.
   - **Tests/evidence:** [Deploy runbook](../../runbooks/deploy.md) records the dated undecided status and portability boundary. This closes the host-neutral acceptance path; it does not select a host or authorize deployment.
 
-- [ ] **R2-005 — Record the R2 pilot cost model**
-  - **Depends on:** R2-003.
+- [x] **R2-005 — Record the R2 pilot cost model**
+  - **Depends on:** R2-003; this planning scenario may proceed on stated assumptions, but must be reconciled with the completed inventory before R2-007.
   - **Outcome:** The provider decision is justified by expected Drezivo workload, not by free egress alone.
   - **Acceptance:**
-    - [ ] Estimate stored object count, average object size, and total GB-month for the pilot.
-    - [ ] Estimate monthly Class A operations, including uploads and future derivative writes.
-    - [ ] Estimate monthly Class B operations, including signed reads, HEAD/inspection, range/verification reads, and storefront derivative reads where applicable.
-    - [ ] Include the additional reads required by the selected trustworthy checksum/finalization strategy.
-    - [ ] Use R2 Standard for V1 unless measured access patterns justify another class.
-    - [ ] Do not select Infrequent Access merely for a lower storage rate; account for its retrieval charges, operation pricing, minimum-duration behavior, and lack of the Standard free tier.
-    - [ ] Record a budget/usage threshold at which the team must re-evaluate the storage design.
-  - **Tests/evidence:** Reviewed pilot worksheet against current [R2 pricing](https://developers.cloudflare.com/r2/pricing/); results inform production readiness in R2-007, not the already owner-directed implementation target.
+    - [x] Estimate stored object count, average object size, and total GB-month for the stated pilot scenario.
+    - [x] Estimate monthly Class A operations, including uploads and future derivative writes.
+    - [x] Estimate monthly Class B operations, distinguishing actual signed-URL reads, HEAD/range calls, verification reads, and future storefront derivative reads.
+    - [x] Include the additional reads required by the current actual-byte checksum/finalization strategy.
+    - [x] Use R2 Standard for V1 unless measured access patterns justify another class.
+    - [x] Compare Infrequent Access including retrieval charges, operation pricing, minimum-duration behavior, and lack of the Standard free tier.
+    - [x] Record a budget/usage threshold at which the team must re-evaluate the storage design.
+  - **Tests/evidence:** Planning math reviewed against Cloudflare's [R2 pricing](https://developers.cloudflare.com/r2/pricing/) (last updated 2026-08-07; checked 2026-09-29) and [storage-class guidance](https://developers.cloudflare.com/r2/buckets/storage-classes/) (last updated 2026-04-21; checked 2026-09-29). This provisional scenario is not production approval and must be refreshed after R2-003 inventory reconciliation and measured pilot traffic.
+
+### R2-005 pilot worksheet (planning scenario; checked 2026-09-29)
+
+**Scope.** The proposed pilot gates in [Market Research §7](../../product/Drezivo-Market-Research.md) are: at least five shops onboard, at least 100 end-to-end rentals across the pilot, and at least three shops choose to pay. The source does not define the pilot duration, shop catalogue size, or access frequency. This worksheet deliberately places the 100 rentals into one 30-day month as a planning scenario, not as a product requirement or measured forecast. All other workload quantities below are assumptions to replace with onboarding and usage telemetry before R2-007.
+
+**Workload assumptions.**
+
+- Five pilot shops; 100 active styles per shop; three source photos per style at an average 2 MB each. This is 1,500 source photos, below the [TRD](../../architecture/Drezivo-TRD.md) limit of five ordered photos per style and the 10 MB source-image size cap.
+- One measurement-guide image per shop at 1 MB each (assumption). No canonical guide count or expected catalogue size is specified.
+- 100 rentals across the pilot in the scenario month, with one 1 MB receipt per rental (assumption; the current proof-image limit is 5 MB).
+- Ten new styles per shop in the scenario month, with three 2 MB source photos per style: 150 new source-photo objects and 0.300 GB.
+- Future Stage B only: one 0.2 MB derivative per catalogue source photo, including 1,500 initial derivatives and 150 derivatives for that month's new source photos. Assume 50,000 public derivative reads in the scenario month, each transferring one 0.2 MB derivative.
+- Assume no deletes/retention expiry during this single-month snapshot. Retention duration is not established, so this is not a multi-month storage forecast.
+
+**Stored objects and capacity.** Use decimal MB/GB for this estimate. Treating every month-end object as if it occupied storage for the full 30 days gives a conservative GB-month proxy; actual billing uses average daily storage and may be lower when objects arrive during the month.
+
+- Initial Stage A catalogue: 1,500 source photos × 2 MB + 5 guides × 1 MB = 1,505 objects / 3.005 GB.
+- Stage A after one scenario month: add 100 receipts × 1 MB and 150 source photos × 2 MB = 250 objects / 0.400 GB. Total: **1,755 objects, about 3.405 GB-month, averaging about 1.94 MB/object** under the full-month proxy.
+- Stage B after one scenario month: add 1,500 initial derivatives × 0.2 MB and 150 monthly derivatives × 0.2 MB = 1,650 objects / 0.330 GB. Total: **3,405 objects, about 3.735 GB-month, averaging about 1.10 MB/object** under the same proxy.
+- New source/evidence data adds about 0.400 GB/month in this scenario; Stage B derivatives add another 0.030 GB/month. These figures exclude any legacy AWS objects, production records not yet reconciled, local MinIO orphans, migration copies, and transient dual-provider overlap. R2-003 remains incomplete, so none of those unknowns may be treated as zero.
+
+**R2 request estimate.** Cloudflare classifies `PutObject` as Class A and `GetObject`/`HeadObject` as Class B. In the current adapter, upload authorization only signs the URL; the browser's actual PUT is one Class A write. Finalization streams one `GetObject` per uploaded object to hash and validate actual bytes. The adapter does not issue `HeadObject` or range requests today. A signed read URL is not itself a read operation; count one Class B operation when the client actually GETs the object.
+
+- Stage A recurring scenario month: **250 Class A** (100 receipts + 150 source-photo uploads); **500 Class B** (250 finalization verification GETs + 100 assumed receipt reads + 150 assumed staff source previews). Initial catalogue onboarding adds 1,505 PUTs and 1,505 verification GETs; including that bootstrap, the first scenario month is **1,755 Class A / 2,005 Class B**.
+- Stage B recurring scenario month: add 150 derivative PUTs and 150 source GETs for derivative generation, plus 50,000 assumed public derivative GETs. This yields **400 Class A / 50,650 Class B** recurring. Including the initial 1,505 source objects and 1,500 initial derivatives, the first scenario month is **3,405 Class A / 53,655 Class B**.
+- No range reads, HEAD inspections, or application-issued object-list requests are counted because the current upload/finalization/read path does not make them. Revisit this if implementation adds them. The 50,000 storefront reads are conservatively modeled as uncached R2 GETs; CDN cache hits would reduce R2 Class B reads. Any CDN/Workers/platform charges are outside this R2-only estimate.
+
+**Price comparison and V1 class.** At the pricing-page rates checked above, Standard is $0.015/GB-month, $4.50/million Class A, and $0.36/million Class B; its monthly included usage is 10 GB-month, 1 million Class A, and 10 million Class B, with no R2 egress charge. The Stage B first-scenario-month totals remain inside each allowance, so modeled incremental R2 charges are **$0.00 if the account's remaining Standard allowances cover this workload**. If the allowance is unavailable and this workload creates the next rounded billing increment, the conservative Stage B estimate is 4 GB × $0.015 + 1 million Class A × $4.50 + 1 million Class B × $0.36 = **about $4.92 for the month**. Cloudflare's billing example rounds operations to million-request units; actual invoice impact depends on combined account usage, average daily storage, and applicable taxes/currency, so verify the billing dashboard.
+
+Use **Standard** for V1: it is the default class for frequently accessed application/media data and includes the Standard free tier. Infrequent Access is not cheaper for this pilot workload: the same Stage B scenario rounds to approximately 4 GB × $0.01 storage + 1 million × $9 Class A + 1 million × $0.90 Class B + 18 GB × $0.01 retrieval for the modeled 17.105 GB of reads = **about $10.12**, before tax/currency. It has no free tier, charges for retrieval, and imposes a 30-day minimum storage duration even if an object is deleted or replaced earlier. Reconsider it only if measured access patterns and a fresh calculation justify it.
+
+**Re-evaluation threshold.** Review the design and actual billing when forecast R2 usage reaches 80% of any Standard allowance (8 GB-month, 800,000 Class A/month, or 8 million Class B/month), or when direct R2 charges exceed **$25 USD in a month**. Include other buckets/account usage in the comparison; separately review storefront cache-hit ratio before attributing high Class B use to R2 itself. Refresh this worksheet with actual shop/style counts, object-size distributions, retained-object totals, signed-read frequencies, and derivative cache behavior before R2-007.
 
 - [ ] **R2-006 — Choose the existing-object migration and rollback model**
   - **Depends on:** R2-003, R2-004.
