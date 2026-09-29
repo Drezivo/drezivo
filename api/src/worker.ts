@@ -115,7 +115,7 @@ if (!config.WORKER_ENABLED) {
 } else if (config.WORKER_MODE === 'continuous') {
   runContinuously();
 } else {
-  runOnce()
+  void runOnce()
     .catch((error: unknown) => {
       logger.error({ err: error }, 'worker drain crashed');
       return 1;

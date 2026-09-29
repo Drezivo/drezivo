@@ -51,7 +51,9 @@ describe('worker drain mode', async () => {
       `Drain ${suffix}`,
       `drain-${suffix}`,
     ]);
-    return row.rows[0]!.id;
+    const id = row.rows[0]?.id;
+    if (!id) throw new Error('tenant insert returned no row');
+    return id;
   }
 
   async function enqueue(tenantId: string, eventType: string, count = 1): Promise<void> {
@@ -126,7 +128,7 @@ describe('worker drain mode', async () => {
       new WorkerRunner({ 'test.event': handler }, 2000, 60, workerPool).drainOnce({ budgetMs: 60_000 }),
     ]);
 
-    expect(runs[0]!.processed + runs[1]!.processed).toBe(30);
+    expect(runs.reduce((total, run) => total + run.processed, 0)).toBe(30);
     expect(seen.size).toBe(30);
     expect([...seen.values()].every((count) => count === 1)).toBe(true);
   });
