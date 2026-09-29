@@ -166,14 +166,22 @@ reach the npm registry. No production infrastructure, object, secret, or deploym
 - [ ] **R2-003 — Inventory existing stored objects before choosing the migration path**
   - **Depends on:** R2-002.
   - **Outcome:** Cutover planning is based on real file/object state rather than assuming all buckets are empty.
+  - **Inventory evidence (2026-09-29; partial; not a cutover approval):**
+    - Local development DB (`DATABASE_URL_DIRECT`, loopback): a verified read-only query found 0 `file_object` rows across all purposes/statuses and 0 accepted rows with a non-null `version_id`. The table has forced RLS; the local role bypassed RLS, so this aggregate covered the whole local DB. The separate local test DB was unreachable; no test-DB count is claimed.
+    - Local MinIO (configured local private/public buckets): the private bucket contained 21 objects totaling 33,630,759 bytes and 0 incomplete multipart uploads; the public bucket contained 0 objects and 0 incomplete multipart uploads. The 21 private objects are unreferenced by the zero-row local DB snapshot; their origin/disposition is unknown. They were not read or deleted.
+    - The R2 endpoint and buckets configured in the ignored `api/.env.production` file were authenticated and listed read-only: private bucket 0 objects / 0 bytes / 0 incomplete multipart uploads; public bucket 0 objects / 0 bytes / 0 incomplete multipart uploads. This is evidence about those configured R2 buckets only; it does not establish the deployed runtime provider or prove that no legacy source objects exist.
+    - The production DB aggregate was not obtained: TLS verification failed with `SELF_SIGNED_CERT_IN_CHAIN`, including when using the Windows system trust store. TLS verification was not disabled. Consequently production `file_object` counts, accepted/version counts, customer-upload presence, and DB-to-R2 reconciliation remain unknown.
+    - The available production-file AWS/S3 source settings are placeholders, so no legacy AWS bucket/object or multipart inventory was possible. No staging environment configuration or provider inventory was available in this workspace. External CloudFront infrastructure was not assessed.
+    - Current [`file_object` schema](../../../api/src/db/schema/files.ts) stores `storage_key` and nullable `version_id`, but no provider/bucket identifier. Therefore provider provenance for accepted rows (including whether non-null version IDs are AWS versions) cannot be established from the schema alone. Do not infer that the empty R2 target means the source is empty or choose a zero-copy path from this partial evidence.
+    - To finish: obtain the approved trusted CA/connection path for a read-only production aggregate, read-only inventory access to the legacy AWS source buckets, and the staging inventory/configuration if staging can contain non-synthetic data; reconcile the local MinIO orphans separately before assigning their disposition.
   - **Acceptance:**
     - [ ] Count `file_object` rows by lifecycle status and purpose in every environment that can contain non-synthetic data.
     - [ ] Count accepted rows with non-null `version_id` and record whether those identifiers refer to AWS S3 object versions.
     - [ ] Identify which provider currently holds every accepted object that must remain readable after cutover.
     - [ ] Independently inventory provider-side objects and incomplete multipart uploads where supported; reconcile unreferenced/orphaned objects against database records and document their safe disposition.
     - [ ] Confirm whether any production/customer uploads exist; if none exist, record that evidence explicitly so an unnecessary dual-provider migration is not built.
-    - [ ] Do not copy object keys, signed URLs, receipt contents, or customer PII into the checklist or long-lived deployment notes.
-  - **Tests/evidence:** Redacted inventory counts and provider mapping reviewed before adapter cutover.
+    - [x] Do not copy object keys, signed URLs, receipt contents, or customer PII into the checklist or long-lived deployment notes.
+  - **Tests/evidence:** Partial redacted local and configured-R2 counts are recorded above. Production database/source-provider reconciliation and review remain required before adapter cutover.
 
 - [ ] **R2-004 — Confirm the deployment host decision**
   - **Depends on:** R2-000.
