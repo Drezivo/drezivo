@@ -10,7 +10,7 @@ tags: [drezivo, files, storage, cloudflare, r2, migration, checklist]
 
 # Cloudflare R2 Object Storage Migration Checklist
 
-**Status:** Repository implementation is in progress under the product owner's explicit R2 direction. A provisional pilot cost scenario is recorded below; production cutover remains blocked on completing the object inventory and reconciling that model, plus the migration/rollback design, privacy review, live provider tests, and deployment configuration below.
+**Status:** Repository implementation is in progress under the product owner's explicit R2 direction. A provisional pilot cost scenario and a single-provider copy-and-verify migration model are recorded below/in the object-storage runbook; production cutover remains blocked on completing the object inventory and executing the reviewed migration/rollback evidence, plus privacy review, live provider tests, and deployment configuration below.
 **Decision direction:** Replace the AWS S3 production-storage design with Cloudflare R2 while keeping the existing provider-neutral upload API and local MinIO development workflow. CloudFront is not an implemented repository runtime dependency today; if external CloudFront infrastructure exists outside this repo, inventory and reconcile it explicitly rather than treating it as an assumed in-repo migration target.
 **Canonical specifications:** [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), [ERD](../../architecture/Drezivo-ERD.dbml), and [ADR 0010](../../decisions/0010-cloudflare-r2-object-storage.md). ADR 0010 records R2 as the selected target, not a completed production cutover.
 **Primary code:** `api/src/integrations/storage/`, `api/src/modules/files/`, `api/src/config/`, `contracts/src/files/uploads.ts`, and the staff upload callers under `app/src/`.
@@ -241,22 +241,19 @@ Use **Standard** for V1: it is the default class for frequently accessed applica
   - **Depends on:** R2-003, R2-004.
   - **Outcome:** The cutover cannot orphan existing AWS objects or silently lose access to objects written after the switch.
   - **Acceptance:**
-    - [ ] If no durable AWS-backed objects exist, explicitly approve a clean cutover with no object migration.
-    - [ ] If existing objects do exist, choose and document one reviewed strategy before production cutover: migrate+verify all required objects before cutover, or temporarily support provider-aware reads until migration finishes.
-    - [ ] For every accepted AWS-backed object being migrated, copy the exact AWS object version referenced by `version_id` when one is recorded; never substitute the current/latest object at the same key without proving it is the accepted version.
-    - [ ] Verify each migrated accepted object individually against the database record: destination byte size must equal `byte_size`, and SHA-256 of the actual destination bytes must equal the recorded `sha256`.
-    - [ ] When an accepted legacy row has no usable recorded SHA-256, compute the hash from the exact accepted AWS source version/object and define a reviewed reconciliation/backfill step before declaring that object migrated; do not treat object-count equality as integrity proof.
-    - [ ] Define how stale AWS `version_id` values are reconciled so R2 reads never send unsupported/meaningless AWS version identifiers.
-    - [ ] Define a live-upload drain procedure around the current ten-minute upload authorization lifetime: keep the currently deployed legacy release and provider active, block only new upload-authorization requests through a verified host-level route gate, keep old-provider finalize/read available, wait for all issued URLs to expire plus a recorded safety margin, then re-query every `pending_upload` row before final migration inventory. The R2-only release cannot be deployed against an AWS endpoint because production config intentionally rejects non-R2 endpoints.
-    - [ ] If temporary provider-aware reads are selected, add explicit per-file provider identity or an equally durable, unambiguous routing record, a reviewed schema/backfill plan, and tenant/integrity tests before implementation. The current `file_object` schema stores `storage_key` and nullable `version_id`, not provider identity, and the runtime currently selects one endpoint; never infer provider from a key or silently fall back between providers.
-    - [ ] If the selected host cannot block authorization while preserving finalize/read, do not cut over until a reviewed, tested drain mechanism is available.
-    - [ ] For each remaining `pending_upload`, explicitly choose the safe outcome: finalize/verify it on the old provider and migrate the resulting accepted object, migrate/reconcile it under a reviewed pending-upload procedure, or expire/cancel it only through an approved lifecycle path when no valid uploaded object exists.
-    - [ ] Do not reopen new upload authorization until the final accepted/pending reconciliation is complete for the chosen cutover model.
-    - [ ] Define rollback **before the first R2 production write**, when reverting code/config is still sufficient.
-    - [ ] Define rollback **after R2 has accepted new writes**, when AWS and R2 can contain divergent object sets and a blind provider switch is unsafe.
-    - [ ] Never point the runtime at a provider that does not contain every object referenced by the database for the active read path.
-    - [ ] Do not delete AWS credentials/resources until the approved rollback window closes and migration verification is complete.
-  - **Tests/evidence:** Reviewed cutover/rollback decision with an object-by-object integrity reconciliation plan and an explicit pending-upload authorization drain procedure.
+    - [ ] If R2-003 later proves there are no durable AWS-backed accepted objects or pending uploads, record the final inventory/reviewer and obtain explicit owner approval for a zero-copy clean cutover; current partial inventory does not support this approval.
+    - [x] If required objects exist, select copy-and-verify of all required objects before switching the single active endpoint; provider-aware reads/fallback are not selected.
+    - [x] Require the exact AWS object version referenced by `version_id` when present; never assume current/latest bytes are accepted.
+    - [x] Require per-object destination read-back and verification of actual byte size and SHA-256 against `file_object` or an approved reconciliation record; object counts alone are not proof.
+    - [x] Require a separately reviewed source-hash reconciliation/backfill when an accepted row lacks a usable SHA-256; stop if the exact accepted source cannot be established.
+    - [x] Reconcile the active R2 `version_id` to null only after verification and preserve old AWS version mappings in a restricted migration manifest for rollback.
+    - [x] Document a live-upload drain around the ten-minute authorization lifetime: keep the legacy release/provider available for finalize/read, block only new upload authorization through a tested host-level route gate, wait 600 seconds plus a recorded safety margin, and re-query every `pending_upload` before the final inventory. The R2-only release cannot run against an AWS endpoint.
+    - [x] Keep one provider active at a time; do not add provider identity or infer provider from keys. If the selected host cannot gate authorization while preserving finalize/read, stop before cutover.
+    - [x] Require every pending upload to be finalized/verified on the old provider and migrated, reconciled through a reviewed procedure, or expired/cancelled only by an approved lifecycle path. Do not reopen authorization before final reconciliation.
+    - [x] Define a pre-first-write rollback that restores saved AWS version mappings and the old app/config only after every DB reference is proven readable on AWS.
+    - [x] Define a post-first-write rollback that pauses authorization, copies/verifies R2-only objects to AWS, updates their AWS version mappings, and forbids a blind endpoint switch; otherwise keep R2 active and fix forward.
+    - [x] Require the rollback-window duration and approver to be recorded before the first R2 production write; retain AWS objects and credentials until the reviewed window closes.
+  - **Tests/evidence:** The selected model and stop conditions are in the [object-storage migration runbook](../../runbooks/object-storage-migration.md). No production inventory, object copy, host-level drain test, or rollback tabletop has run; R2-006 remains open until the zero-object approval path or required migration evidence is resolved.
 
 - [ ] **R2-007 — Approve or defer production-readiness preparation**
   - **Depends on:** R2-004, R2-005, R2-006, R2-040.

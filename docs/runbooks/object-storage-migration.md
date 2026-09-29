@@ -4,7 +4,7 @@ This runbook covers the repository's Cloudflare R2 target, local MinIO parity, a
 from any legacy production provider. The AWS SDK in `api` is only the S3-compatible protocol
 client. AWS is not a production runtime provider after cutover.
 
-**Status:** Not executed. Production cutover is blocked until the evidence gates in ADR 0010 and
+**Status:** Strategy recorded; not executed. Production cutover is blocked until the evidence gates in ADR 0010 and
 the [R2 migration checklist](../second-brain/05-Operations/Cloudflare%20R2%20Migration%20Checklist.md)
 are complete. This document authorizes no production infrastructure, data transfer, secret update,
 or deployment by itself.
@@ -80,6 +80,55 @@ SHA-256 against the authoritative row or an approved reconciliation record. Coun
 reads are not integrity proof. The repository does not yet include a production migration utility;
 do not switch the runtime until an approved tool/procedure performs this reconciliation.
 
+## Selected migration model (2026-09-29)
+
+Use **copy and verify all required objects before switching the single active storage endpoint**.
+Do not add provider-aware reads or automatic fallback between AWS and R2. The current database has
+no provider column and the runtime selects one endpoint; a mixed-provider read path would require a
+separate schema, backfill, authorization, and integrity design that is not selected here.
+
+This is an operational design decision, not approval to run a migration. R2-003 is still partial:
+the production database aggregate could not be read with verified TLS, and the legacy AWS source
+and staging inventories remain unavailable. The empty configured R2 buckets do not prove that the
+source or database is empty. Therefore no zero-copy/clean-cutover approval is recorded. If a
+complete reviewed inventory later proves there are no accepted objects, no pending uploads, no
+incomplete source multipart uploads, and no unresolved physical objects, record the query date and
+reviewer and obtain explicit owner approval for that clean cutover before R2-064. Otherwise, use the
+copy-and-verify sequence below.
+
+For a non-empty inventory:
+
+1. Finish the legacy-provider upload drain below, then take the final redacted database/source
+   inventory. Resolve every `pending_upload` before freezing the object set.
+2. Prepare a restricted, encrypted, access-controlled migration manifest for the operator tool.
+   It may contain the object key, database-row identifier, exact source provider/version, and
+   expected integrity metadata needed for the one-time copy. Keep it outside Git, tickets, and
+   general logs; retain it only under the approved rollback/reconciliation procedure. It is not an
+   application routing table and must never enable cross-provider fallback.
+3. Read the exact recorded AWS `version_id` when present. For an accepted row without a usable
+   recorded SHA-256, compute the hash from the exact accepted source bytes and complete a separately
+   reviewed reconciliation/backfill. If the accepted source identity cannot be established, stop;
+   do not substitute the latest bytes at a key by assumption.
+4. Copy to the private R2 destination without overwriting an existing key. If a destination key
+   already exists, compare its actual bytes to the expected size and SHA-256; any mismatch or
+   unexplained object is a stop condition, not permission to replace it.
+5. Read back every destination object and compute size and SHA-256 from the actual R2 bytes. Require
+   exact equality with the authoritative `file_object` values or the reviewed reconciliation
+   record. An object-count match is only a supplementary check.
+6. Only after an object's R2 bytes pass verification, reconcile its active R2 `version_id` to null
+   so the R2 adapter never receives a stale AWS version identifier. Preserve the original AWS
+   version mapping in the restricted migration manifest until the rollback window closes; rehearse
+   restoring it before the first R2 production write.
+7. Before deploying the R2-only runtime, prove every accepted row resolves to verified R2 bytes,
+   no unresolved accepted/pending row remains, and the old AWS objects/credentials are still
+   available for rollback. Deploy with upload authorization disabled and run the read-only checks
+   below before any production R2 write.
+
+No production migration utility or production-host route gate has been verified yet. R2-063 must
+provide and test the controlled copy/reconciliation and drain procedures, including restoration of
+the preserved version mapping. Until then, this section records the selected model and its stop
+conditions only; it does not authorize data transfer or cutover.
+
 ## Drain pending uploads
 
 The API's upload authorization lifetime is ten minutes. Drain on the currently deployed legacy
@@ -141,16 +190,30 @@ loopback MinIO and local-only credentials.
 
 ## Cutover and rollback
 
-Before the first R2 production write, rollback may restore the previous provider configuration only
-if every database reference remains readable there. Keep the old credentials and source objects
-available through the recorded rollback window.
+Set and record the rollback-window duration and the operator/approver in the cutover record before
+the first R2 production write; if they are not recorded, do not enable production uploads. Keep the
+old AWS objects and credentials available until that window has elapsed and reconciliation is
+reviewed.
 
-After the first R2 production write, do not blindly point the application back at the old provider.
-Pause new upload authorization, compare redacted object counts and per-object integrity, and either
-copy/reconcile every R2-only object to the rollback provider or keep R2 active and fix forward. Do
-not mark database rows readable under a provider that does not contain the exact accepted bytes.
-Never remove old credentials or objects until migration verification and the approved rollback
-window have closed.
+**Before the first R2 production write:** pause R2 upload authorization, restore the prior AWS
+`version_id` values from the protected migration manifest for rows changed for R2, and restore the
+previous application/configuration. Switch only after read checks prove every active database
+reference resolves to the exact accepted AWS bytes. If the manifest or any source object is
+unavailable, do not flip providers; keep uploads paused and recover the missing evidence first.
+
+**After the first R2 production write:** never blindly point the application back at AWS. Pause new
+upload authorization and reconcile the database-referenced objects on both providers. For every
+R2-only object that must remain available, copy its actual accepted bytes to AWS without
+overwriting an unexplained key, read back and verify size/SHA-256, and record the AWS version ID
+returned by the copy (or null if the source provider does not version objects). Restore the saved
+AWS version mappings for objects migrated before cutover. Switch the single active endpoint only
+after every database reference resolves to the verified AWS bytes and pending uploads have a safe
+disposition. If any object cannot be reconciled, keep R2 active and fix forward; do not introduce
+provider-aware fallback as an emergency shortcut.
+
+The rollback window closes only after its pre-recorded duration, the chosen observation checks,
+and object reconciliation have all passed review. Never remove AWS credentials or source objects
+before then. A rollback-window expiry by itself does not prove migration integrity.
 
 The current adapter deliberately fails closed when an R2 read is requested with a legacy non-null
 `version_id`. This prevents a stale AWS version identifier from being ignored and the current key
