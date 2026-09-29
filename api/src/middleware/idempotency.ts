@@ -162,7 +162,7 @@ function finalizeOnResponse(
     // this ever runs). A failure here just leaves the record `in_progress` until its TTL
     // expires — the worst case is one retry window has degraded replay, not a lost or
     // duplicated business effect, so this is not the fire-and-forget the non-negotiable rule
-    // is aimed at (outbox rows are; see worker/handlers/outbox-dispatcher.ts for that path).
+    // is aimed at (outbox rows are; see worker/runner.ts for that path).
     void withTenantTransaction(tenantId, principalKey, async (client) => {
       await client.query(
         `UPDATE idempotency_record SET status = $5, response_code = $6, safe_response = $7

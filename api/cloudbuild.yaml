@@ -1,0 +1,11 @@
+# Builds the API/worker image in Google Cloud Build, so no local Docker is needed.
+# Run from the repository root (see docs/runbooks/worker-cloud-run.md, step 5):
+#   gcloud builds submit --config=api/cloudbuild.yaml --substitutions=_IMAGE=<region>-docker.pkg.dev/<project>/drezivo/api:<tag> .
+# The upload is filtered by the root .gcloudignore, which excludes every .env* file.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ['build', '-f', 'api/Dockerfile', '-t', '${_IMAGE}', '.']
+images:
+  - '${_IMAGE}'
+options:
+  logging: CLOUD_LOGGING_ONLY

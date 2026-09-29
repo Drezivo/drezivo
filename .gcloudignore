@@ -1,0 +1,13 @@
+# What `gcloud builds submit` must NOT upload. Secrets never leave this machine this way:
+# the worker reads them from Secret Manager at run time.
+.git
+.github
+**/.env*
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/*.log
+graphify-out/
+RootResource/
+docs/second-brain/

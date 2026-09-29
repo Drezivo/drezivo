@@ -72,6 +72,21 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
     testing of storefront reservations and fitting requests without an email provider.
   - Config refuses it when `NODE_ENV=production`, so the API will not start with it there.
 - The worker must run for email to leave the outbox, including guest verification codes.
+- `WORKER_ENABLED`: `true` or `false` (the default is `false`). Only these two words are accepted;
+  any other value stops startup. `S3_FORCE_PATH_STYLE` follows the same rule.
+- `WORKER_MODE`: `continuous` (the default) or `drain`.
+  - `continuous` is a long-lived process.
+  - `drain` runs once and exits, for a scheduled job. See `docs/runbooks/worker-cloud-run.md`.
+- `WORKER_DRAIN_SCOPE`: `all` (the default) or `fast`.
+  - `all` runs every sweep, then the whole outbox.
+  - `fast` only releases expired holds and sends queued email, for a frequent schedule.
+- `WORKER_DRAIN_BUDGET_MS`: the longest a drain run keeps claiming work, from 1000 to 3300000.
+  The default is 600000 (10 minutes). Keep it below the job's task timeout.
+- `DREZIVO_ENV_FILE`: an absolute path to one mounted secret file, in `KEY=value` lines, for
+  example Cloud Run's Secret Manager volume.
+  - It is read in every mode.
+  - Real environment variables take precedence over it.
+  - A path that does not exist stops startup.
 
 ### Supabase database boundary
 
