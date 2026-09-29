@@ -9,7 +9,8 @@ export const fittingState = z.enum(['pending', 'confirmed', 'completed', 'reject
 export type FittingState = z.infer<typeof fittingState>;
 
 /** First production slice is staff-created only; the field is server-owned. */
-export const fittingBookingChannel = z.enum(['staff']);
+/** `storefront` marks a fitting a guest requested from the public storefront. */
+export const fittingBookingChannel = z.enum(['staff', 'storefront']);
 export type FittingBookingChannel = z.infer<typeof fittingBookingChannel>;
 
 /** Preference-only never claims inventory; guaranteed must own one real asset allocation. */

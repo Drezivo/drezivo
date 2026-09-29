@@ -778,6 +778,7 @@ export async function createFittingAppointmentBase(
     feeMinor: number;
     internalNote: string | null;
     businessKey: string;
+    bookingChannel?: 'staff' | 'storefront';
     garments: Array<{
       lineId: string;
       variantId: string;
@@ -791,7 +792,7 @@ export async function createFittingAppointmentBase(
     `INSERT INTO fitting_appointment
        (id, tenant_id, branch_id, customer_id, booking_channel, status, period,
         timezone_snapshot, currency, fee_minor, internal_note, business_key, version)
-     VALUES ($1,$2,$3,$4,'staff','pending',tstzrange($5::timestamptz,$6::timestamptz,'[)'),$7,$8,$9,$10,$11,1)`,
+     VALUES ($1,$2,$3,$4,$12,'pending',tstzrange($5::timestamptz,$6::timestamptz,'[)'),$7,$8,$9,$10,$11,1)`,
     [
       input.fittingId,
       input.tenantId,
@@ -804,6 +805,7 @@ export async function createFittingAppointmentBase(
       input.feeMinor,
       input.internalNote,
       input.businessKey,
+      input.bookingChannel ?? 'staff',
     ],
   );
 
@@ -839,18 +841,20 @@ export async function appendFittingCreateAudit(
     fittingId: string;
     branchId: string;
     requestId: string;
+    actorKind?: 'staff' | 'guest';
   },
 ): Promise<void> {
   await client.query(
     `INSERT INTO audit_event
        (tenant_id, actor_kind, actor_key, action, entity_type, entity_id, redacted_summary, request_id, occurred_at, outcome)
-     VALUES ($1,'staff',$2,'fitting.created','fitting',$3::uuid,$4::jsonb,$5,statement_timestamp(),'succeeded')`,
+     VALUES ($1,$6,$2,'fitting.created','fitting',$3::uuid,$4::jsonb,$5,statement_timestamp(),'succeeded')`,
     [
       input.tenantId,
       input.actorKey,
       input.fittingId,
       JSON.stringify({ status: 'pending', branch_id: input.branchId }),
       input.requestId,
+      input.actorKind ?? 'staff',
     ],
   );
 }

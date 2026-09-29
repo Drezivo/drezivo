@@ -57,6 +57,27 @@ const envSchema = z.object({
 
   // TRD §4: proposed seven-day retention window for idempotency records.
   IDEMPOTENCY_RETENTION_DAYS: z.coerce.number().int().min(1).default(7),
+  // Number of reverse proxies in front of the API. 0 ignores X-Forwarded-For entirely, so a client
+  // cannot spoof its address to dodge per-IP rate limits; set it to the real hop count when deployed
+  // behind a load balancer, or every anonymous visitor shares the balancer's address.
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+  // Transactional email for guest verification codes and notifications. `none` disables guest
+  // email verification (it answers 503) rather than pretending codes were sent. `file` writes
+  // messages to EMAIL_FILE_SINK_DIR for local development and is refused in production.
+  EMAIL_PROVIDER: z.enum(['none', 'file', 'resend']).default('none'),
+  EMAIL_FROM: z.string().min(3).max(200).optional(),
+  RESEND_API_KEY: z.string().min(10).optional(),
+  EMAIL_FILE_SINK_DIR: z.string().min(1).optional(),
+  // Public origin of the storefront app (e.g. https://drezivo.com), used for the private status
+  // link in renter emails. Without it the emails omit the link.
+  STOREFRONT_PUBLIC_ORIGIN: z.string().url().optional(),
+}).superRefine((env, ctx) => {
+  if (env.EMAIL_PROVIDER === 'resend' && (!env.RESEND_API_KEY || !env.EMAIL_FROM)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['RESEND_API_KEY'], message: 'resend needs RESEND_API_KEY and EMAIL_FROM' });
+  }
+  if (env.EMAIL_PROVIDER === 'file' && (env.NODE_ENV === 'production' || !env.EMAIL_FILE_SINK_DIR)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['EMAIL_PROVIDER'], message: 'file email is for development only and needs EMAIL_FILE_SINK_DIR' });
+  }
 });
 
 export type Config = z.infer<typeof envSchema>;

@@ -126,7 +126,7 @@ export const fittingAppointment = pgTable(
       foreignColumns: [customer.tenantId, customer.id],
       name: 'fitting_appointment_customer_same_tenant_fk',
     }).onDelete('restrict'),
-    check('fitting_appointment_booking_channel_check', sql`${table.bookingChannel} = 'staff'`),
+    check('fitting_appointment_booking_channel_check', sql`${table.bookingChannel} IN ('staff', 'storefront')`),
     check(
       'fitting_appointment_status_check',
       sql`${table.status} IN ('pending', 'confirmed', 'completed', 'rejected', 'cancelled', 'no_show')`,

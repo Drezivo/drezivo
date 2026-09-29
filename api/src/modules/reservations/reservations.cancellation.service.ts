@@ -8,6 +8,7 @@ import {
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
+import { emailNotifications } from '../notifications/email-notifications.js';
 import {
   HoldExpiredError,
   IdempotencyKeyReusedError,
@@ -157,6 +158,7 @@ export async function cancelReservationByStaff(
           financialFollowupRequired,
         },
       });
+      await emailNotifications.reservationEvent(client, context.tenantId, reservationId, 'request_cancelled');
 
       const data = reservationCancelResponse.parse({
         reservation: await requireMutationSummary(client, context, reservationId),

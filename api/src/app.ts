@@ -1,3 +1,4 @@
+import { config } from './config/index.js';
 import express, { type Express } from 'express';
 import pinoHttpExport from 'pino-http';
 
@@ -7,6 +8,9 @@ import { errorHandler } from './middleware/error-handler.js';
 import { requestId } from './middleware/request-id.js';
 import { reservationsRouter } from './modules/reservations/reservations.routes.js';
 import { storefrontRouter } from './modules/storefront/storefront.routes.js';
+import { storefrontCmsRouter } from './modules/storefront-cms/storefront-cms.routes.js';
+import { settingsRouter } from './modules/settings/settings.routes.js';
+import { guestBookingRouter } from './modules/guest-booking/guest-booking.routes.js';
 import { clerkWebhookRouter } from './modules/webhooks/clerk.routes.js';
 import { onboardingRouter } from './modules/onboarding/onboarding.routes.js';
 import { tenancyRouter } from './modules/tenancy/tenancy.routes.js';
@@ -50,6 +54,7 @@ export function createApp(options: AppOptions = {}): Express {
   const app = express();
 
   app.disable('x-powered-by');
+  app.set('trust proxy', config.TRUST_PROXY_HOPS);
   app.use(requestId);
   app.use(
     pinoHttp({
@@ -97,6 +102,18 @@ export function createApp(options: AppOptions = {}): Express {
     });
   });
 
+  // Anonymous storefront and guest writes are tiny; a small limit bounds what strangers can send.
+  const guestJson = express.json({ limit: '16kb', type: 'application/json' });
+  app.use(['/api/v1/public', '/api/v1/guest'], (req, res, next) => {
+    if (req.method !== 'POST') {
+      next();
+      return;
+    }
+    guestJson(req, res, (error: unknown) => {
+      mapJsonBodyError(error, next);
+    });
+  });
+
   app.use(clerkContext);
   app.use(clerkWebhookRouter);
   const globalJson = express.json({ limit: '256kb' });
@@ -127,6 +144,9 @@ export function createApp(options: AppOptions = {}): Express {
   // prefix without a naming collision as long as their concrete route patterns do not overlap.
   const v1 = express.Router();
   v1.use(storefrontRouter);
+  v1.use(storefrontCmsRouter);
+  v1.use(settingsRouter);
+  v1.use(guestBookingRouter);
   v1.use(reservationsRouter);
   v1.use(onboardingRouter);
   v1.use(tenancyRouter);

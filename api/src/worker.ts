@@ -9,6 +9,8 @@ import { reconcileDueClerkWebhooks } from './worker/handlers/clerk-webhook-recon
 import { cleanupAbandonedClerkOrganizations } from './worker/handlers/clerk-organization-cleanup.js';
 import { promoteElapsedRecoveryReadinessForAllTenants } from './worker/handlers/recovery-readiness.js';
 import { WorkerRunner } from './worker/runner.js';
+import { createEmailDeliveryHandler } from './worker/handlers/email-delivery.js';
+import { EMAIL_EVENT_TYPE } from './modules/notifications/email-notifications.js';
 import { logger } from './shared/logger.js';
 
 /**
@@ -25,6 +27,7 @@ import { logger } from './shared/logger.js';
  */
 const runner = new WorkerRunner({
   'tenant.bootstrapped': handleTenantBootstrapped,
+  [EMAIL_EVENT_TYPE]: createEmailDeliveryHandler(),
   'reservation.held': outboxDispatcher,
   'reservation.confirmed': outboxDispatcher,
   'reservation.picked_up': outboxDispatcher,

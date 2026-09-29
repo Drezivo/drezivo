@@ -23,7 +23,7 @@ import { idColumn, timestamps } from './_shared.js';
  *
  * This module is a projection layer: it depends on catalogue for style/variant facts and on
  * availability for open capacity, but it never allows a public read to reveal fields that
- * are not part of the published projection (see storefront.dto.ts for the explicit allowlist).
+ * are not part of the published projection (see storefront.service.ts and the contracts package for the explicit allowlist).
  */
 
 export const storefrontStatusEnum = pgEnum('storefront_status', ['draft', 'published', 'suspended']);

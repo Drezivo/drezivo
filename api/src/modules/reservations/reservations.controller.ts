@@ -3,13 +3,12 @@ import type { Request, Response } from 'express';
 import type { PermissionCode, TenantStatus } from '@drezivo/contracts';
 
 import { ValidationError } from '../../shared/errors.js';
-import { sendError, sendSuccess } from '../../shared/response.js';
+import { sendSuccess } from '../../shared/response.js';
 import {
   attachReservationReceipt,
   cancelReservation,
   completeStaffReservation,
   confirmReservation,
-  createPublicHold,
   createStaffReservation,
   getReservationDetail,
   getReservationList,
@@ -253,17 +252,6 @@ export async function rejectReservationController(req: Request, res: Response): 
     request,
   );
   res.status(result.status).json(result.body);
-}
-
-export function createPublicHoldController(req: Request, res: Response): void {
-  createPublicHold();
-  sendError(
-    res,
-    501,
-    'NOT_IMPLEMENTED',
-    'Reservation holds are not available in this scaffold.',
-    req.requestId,
-  );
 }
 
 function requireContext(req: Request): {

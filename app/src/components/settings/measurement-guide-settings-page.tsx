@@ -1,7 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, ImagePlus, Info, Ruler, Save, Upload } from "lucide-react";
-import Link from "next/link";
+import { Check, ImagePlus, Info, Ruler, Save, Upload } from "lucide-react";
 import { type ChangeEvent, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -66,25 +65,12 @@ export function MeasurementGuideSettingsPage() {
   const displayPreview = pendingPreviewUrl ?? guide.previewUrl;
 
   return (
-    <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto w-full max-w-5xl">
-        <div className="mb-5 flex flex-wrap items-center gap-2 text-sm">
-          <Link
-            href="/settings"
-            className="inline-flex items-center gap-2 text-dashboard-muted transition-colors hover:text-dashboard-navy"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            Settings
-          </Link>
-          <span className="text-dashboard-muted">/</span>
-          <span className="font-medium text-dashboard-navy">Measurement Guide</span>
-        </div>
-
+    <div>
+      <div className="w-full">
         <div className="mb-5">
-          <p className="text-xs font-medium uppercase tracking-[0.12em] text-dashboard-muted">Clothing defaults</p>
-          <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight text-dashboard-navy sm:text-4xl">
-            Default Measurement Guide
-          </h1>
+          <h2 className="font-display text-2xl font-semibold tracking-tight text-dashboard-navy">
+            Default measurement guide
+          </h2>
           <p className="mt-1 max-w-2xl text-sm text-dashboard-muted">
             Upload one reusable size or measurement image for clothing that follows your shop&apos;s standard guide.
           </p>

@@ -70,6 +70,15 @@ import {
   onboardingActorContext,
   organizationOnboarding,
   paymentMethodSettingsItem,
+  businessSettings,
+  notificationSettings,
+  publishStorefrontPolicyRequest,
+  storefrontSettings,
+  storefrontTransitionRequest,
+  updateBusinessSettingsRequest,
+  updateNotificationSettingsRequest,
+  updateStorefrontRequest,
+  updateStorefrontSlugRequest,
   paymentMethodSettingsList,
   tenantBootstrapResponse,
   updatePaymentMethodSettingsRequest,
@@ -190,6 +199,14 @@ import {
   type OnboardingActorContext,
   type OrganizationOnboarding,
   type PaymentMethodSettingsItem,
+  type BusinessSettings,
+  type NotificationSettings,
+  type PublishStorefrontPolicyRequest,
+  type StorefrontSettings,
+  type UpdateBusinessSettingsRequest,
+  type UpdateNotificationSettingsRequest,
+  type UpdateStorefrontRequest,
+  type UpdateStorefrontSlugRequest,
   type PaymentMethodSettingsList,
   type TenantBootstrapResponse,
   type UpdatePaymentMethodSettingsRequest,
@@ -1090,6 +1107,66 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "PATCH",
         path: `/api/v1/catalogue/categories/${encodeURIComponent(categoryId)}/status`,
         responseSchema: apiEnvelope(catalogueCategory),
+      }),
+    getStorefront: () =>
+      request<StorefrontSettings>({ getToken, method: "GET", path: "/api/v1/storefront", responseSchema: apiEnvelope(storefrontSettings) }),
+    updateStorefront: (input: UpdateStorefrontRequest, idempotencyKey: string) =>
+      request<StorefrontSettings>({
+        getToken,
+        body: updateStorefrontRequest.parse(input),
+        idempotencyKey,
+        method: "PATCH",
+        path: "/api/v1/storefront",
+        responseSchema: apiEnvelope(storefrontSettings),
+      }),
+    updateStorefrontSlug: (input: UpdateStorefrontSlugRequest, idempotencyKey: string) =>
+      request<StorefrontSettings>({
+        getToken,
+        body: updateStorefrontSlugRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/storefront/slug",
+        responseSchema: apiEnvelope(storefrontSettings),
+      }),
+    setStorefrontPublished: (published: boolean, version: number, idempotencyKey: string) =>
+      request<StorefrontSettings>({
+        getToken,
+        body: storefrontTransitionRequest.parse({ version }),
+        idempotencyKey,
+        method: "POST",
+        path: published ? "/api/v1/storefront/publish" : "/api/v1/storefront/unpublish",
+        responseSchema: apiEnvelope(storefrontSettings),
+      }),
+    publishStorefrontPolicy: (input: PublishStorefrontPolicyRequest, idempotencyKey: string) =>
+      request<StorefrontSettings>({
+        getToken,
+        body: publishStorefrontPolicyRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/storefront/policies",
+        responseSchema: apiEnvelope(storefrontSettings),
+      }),
+    getBusinessSettings: () =>
+      request<BusinessSettings>({ getToken, method: "GET", path: "/api/v1/settings/business", responseSchema: apiEnvelope(businessSettings) }),
+    updateBusinessSettings: (input: UpdateBusinessSettingsRequest, idempotencyKey: string) =>
+      request<BusinessSettings>({
+        getToken,
+        body: updateBusinessSettingsRequest.parse(input),
+        idempotencyKey,
+        method: "PATCH",
+        path: "/api/v1/settings/business",
+        responseSchema: apiEnvelope(businessSettings),
+      }),
+    getNotificationSettings: () =>
+      request<NotificationSettings>({ getToken, method: "GET", path: "/api/v1/settings/notifications", responseSchema: apiEnvelope(notificationSettings) }),
+    updateNotificationSettings: (input: UpdateNotificationSettingsRequest, idempotencyKey: string) =>
+      request<NotificationSettings>({
+        getToken,
+        body: updateNotificationSettingsRequest.parse(input),
+        idempotencyKey,
+        method: "PATCH",
+        path: "/api/v1/settings/notifications",
+        responseSchema: apiEnvelope(notificationSettings),
       }),
   };
 }

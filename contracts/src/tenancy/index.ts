@@ -2,3 +2,4 @@
 export * from './tenant';
 export * from './actor-context';
 export * from './onboarding';
+export * from './settings';

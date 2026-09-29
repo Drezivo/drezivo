@@ -3,9 +3,9 @@
 /*
  * Design tokens for the Drezivo public surface (marketing site + tenant
  * storefronts). Per .claude/rules/frontend.md: never hardcode raw color/
- * spacing values in components — reference these tokens instead. Tenant
- * storefronts may layer a tenant accent color on top of these later (V1.1+);
- * V1 renders every storefront with this one shared, neutral system.
+ * spacing values in components — reference these tokens instead. Each tenant
+ * storefront sets its own palette (chosen in the CMS) through the --sf-*
+ * variables below; see src/components/store/theme.ts.
  */
 @theme {
   --color-background: #faf7f2;
@@ -25,25 +25,6 @@
   --color-warning-foreground: #fff6e8;
   --color-danger: #b3311f;
   --color-danger-foreground: #fdeeec;
-
-  /* Tenant storefront reference palette, independent from the semantic dark-mode tokens below. */
-  --color-storefront-background: #fbfaf7;
-  --color-storefront-paper: #ffffff;
-  --color-storefront-soft: #f4eee8;
-  --color-storefront-hero: #efe5dd;
-  --color-storefront-brand: #123f37;
-  --color-storefront-ink: #17324d;
-  --color-storefront-muted: #64748b;
-  --color-storefront-line: #e8e4df;
-  --color-storefront-footer: #0b493f;
-  --color-storefront-footer-muted: #d6e5df;
-  --color-storefront-accent: #215f53;
-  --color-storefront-selected: #f3dfac;
-  --color-storefront-selected-ink: #7b5a14;
-  --color-storefront-unavailable: #fde6e4;
-  --color-storefront-unavailable-ink: #b23a32;
-  --color-storefront-overlay: rgb(10 24 31 / 0.66);
-  --shadow-storefront-card: 0 6px 18px rgb(23 50 77 / 0.06);
 
   /* Marketing-only palette. Storefronts continue to use the semantic tokens above. */
   --color-marketing-cream: #f6f0e7;
@@ -91,12 +72,28 @@ body {
   font-family: var(--font-body);
 }
 
-.storefront-shell {
-  --storefront-header-height: 3.5rem;
+/* Tenant storefront: the palette arrives as --sf-* variables set on .storefront-shell. */
+@theme inline {
+  --color-sf-bg: var(--sf-bg);
+  --color-sf-surface: var(--sf-surface);
+  --color-sf-ink: var(--sf-ink);
+  --color-sf-muted: var(--sf-muted);
+  --color-sf-line: var(--sf-line);
+  --color-sf-accent: var(--sf-accent);
+  --color-sf-accent-ink: var(--sf-accent-ink);
+  --font-sf-display: var(--font-newsreader), 'Iowan Old Style', Georgia, serif;
+  --font-sf-body: var(--font-jost), ui-sans-serif, system-ui, sans-serif;
+}
 
-  color-scheme: light;
-  background: var(--color-storefront-background);
-  color: var(--color-storefront-ink);
+.storefront-shell {
+  --storefront-header-height: 4.5rem;
+
+  background: var(--sf-bg);
+  color: var(--sf-ink);
+  font-family: var(--font-sf-body);
+  font-size: 1rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
 }
 
 .storefront-shell [id] {
@@ -104,7 +101,99 @@ body {
 }
 
 .storefront-shell :focus-visible {
-  outline-color: var(--color-storefront-brand);
+  outline: 2px solid var(--sf-accent);
+  outline-offset: 3px;
+}
+
+.storefront-shell ::selection {
+  background: var(--sf-accent);
+  color: var(--sf-accent-ink);
+}
+
+/* Small tracked capitals are used only on buttons, as in the reference stores. */
+.sf-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0 1.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, opacity 160ms ease;
+}
+
+.sf-button-primary {
+  background: var(--sf-accent);
+  color: var(--sf-accent-ink);
+}
+
+.sf-button-primary:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.sf-button-outline {
+  border: 1px solid currentColor;
+}
+
+.sf-button-outline:hover:not(:disabled) {
+  background: var(--sf-ink);
+  border-color: var(--sf-ink);
+  color: var(--sf-bg);
+}
+
+.sf-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.sf-input {
+  width: 100%;
+  min-height: 2.75rem;
+  border: 1px solid var(--sf-line);
+  background: var(--sf-surface);
+  color: var(--sf-ink);
+  padding: 0.625rem 0.875rem;
+  font-size: 1rem;
+}
+
+.sf-input:focus {
+  border-color: var(--sf-ink);
+  outline: none;
+}
+
+.sf-input[aria-invalid='true'] {
+  border-color: #b3311f;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sf-fade-in {
+    animation: sf-fade-in 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+}
+
+@keyframes sf-drawer-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes sf-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 :focus-visible {

@@ -50,9 +50,8 @@ describe('CLT-078 catalogue lifecycle propagation', async () => {
   const { resolveReservationCatalogueSelection } = await import(
     '../../src/modules/catalogue/catalogue-allocation.service.js'
   );
-  const { computeAvailability, findPublishedStorefrontBySlug } = await import(
-    '../../src/modules/storefront/storefront.repository.js'
-  );
+  const { computeAvailability } = await import('../../src/modules/storefront/storefront.repository.js');
+  const { publicStorefrontService } = await import('../../src/modules/storefront/storefront.service.js');
   const { createTestTenant } = await import('./helpers/factories.js');
 
   beforeAll(async () => {
@@ -446,9 +445,9 @@ describe('CLT-078 catalogue lifecycle propagation', async () => {
   }
 
   async function publicVariantIds(slug: string, productId: string): Promise<string[]> {
-    const publicStorefront = await findPublishedStorefrontBySlug(slug);
-    const product = publicStorefront?.products.find((candidate) => candidate.id === productId);
-    return product ? product.variants.map((variant) => variant.id).sort() : [];
+    // A hidden product (or one with no active size) is a public 404, i.e. no public sizes.
+    const item = await publicStorefrontService.getItem(slug, productId).catch(() => null);
+    return item ? item.variants.map((variant) => variant.variant_id as string).sort() : [];
   }
 
   async function availableUnits(slug: string, variantId: string): Promise<number> {

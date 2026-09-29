@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { itemDetail, MAX_CLOTHING_PHOTOS } from '../src';
+import {
+  businessInformation,
+  catalogueQuery,
+  defaultStorefrontDocument,
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  itemDetail,
+  MAX_CLOTHING_PHOTOS,
+  notificationPreferences,
+  publicAvailabilityQuery,
+  storefrontDocument,
+  storefrontPolicyRules,
+  storefrontSlug,
+} from '../src';
 
 const productId = '00000000-0000-4000-8000-000000000001';
 
@@ -12,27 +24,106 @@ describe('catalogue storefront contract', () => {
     const base = {
       product_id: productId,
       name: 'Photo Gown',
-      description: '',
+      description: null,
       category: 'Gowns',
       variants: [
         {
           variant_id: '00000000-0000-4000-8000-000000000002',
-          sku: 'GOWN-M',
           size_label: 'M',
           color_label: null,
-          measurements: {},
-          measurement_unit: 'cm' as const,
           rental_price_minor: '30000',
           security_deposit_minor: '50000',
-          currency: 'PHP' as const,
           pricing_mode: 'daily' as const,
           included_duration_minutes: 1440,
           extra_day_price_minor: '0',
+          measurement: { mode: 'none' as const },
         },
       ],
     };
 
     expect(itemDetail.safeParse({ ...base, image_urls: imageUrls.slice(0, MAX_CLOTHING_PHOTOS) }).success).toBe(true);
     expect(itemDetail.safeParse({ ...base, image_urls: imageUrls }).success).toBe(false);
+  });
+
+  it('bounds catalogue paging and rejects unknown filters', () => {
+    expect(catalogueQuery.parse({})).toMatchObject({ page: 1, page_size: 24, sort: 'featured' });
+    expect(catalogueQuery.safeParse({ page_size: '49' }).success).toBe(false);
+    expect(catalogueQuery.safeParse({ tenant_id: 'x' }).success).toBe(false);
+  });
+
+  it('keeps availability windows bounded and ordered', () => {
+    const variant_id = '00000000-0000-4000-8000-000000000002';
+    expect(publicAvailabilityQuery.safeParse({ variant_id, from: '2026-10-01', to: '2026-10-31' }).success).toBe(true);
+    expect(publicAvailabilityQuery.safeParse({ variant_id, from: '2026-10-31', to: '2026-10-01' }).success).toBe(false);
+    expect(publicAvailabilityQuery.safeParse({ variant_id, from: '2026-10-01', to: '2027-01-31' }).success).toBe(false);
+  });
+});
+
+describe('storefront CMS contract', () => {
+  const valid = defaultStorefrontDocument('Luna Gown Rentals');
+
+  it('accepts the default document for a new storefront', () => {
+    expect(storefrontDocument.safeParse(valid).success).toBe(true);
+  });
+
+  it('rejects control characters and line breaks in single-line text', () => {
+    const withNull = { ...valid, branding: { ...valid.branding, display_name: 'Luna\u0000' } };
+    const withBreak = { ...valid, content: { ...valid.content, hero: { ...valid.content.hero, heading: 'One\nTwo' } } };
+    expect(storefrontDocument.safeParse(withNull).success).toBe(false);
+    expect(storefrontDocument.safeParse(withBreak).success).toBe(false);
+  });
+
+  it('allows line breaks in long-form text', () => {
+    const multi = { ...valid, branding: { ...valid.branding, description: 'Line one\nLine two' } };
+    expect(storefrontDocument.safeParse(multi).success).toBe(true);
+  });
+
+  it('stores social profiles as handles, never as URLs', () => {
+    const withHandle = { ...valid, contact: { ...valid.contact, instagram: '@luna.gowns' } };
+    expect(storefrontDocument.parse(withHandle).contact.instagram).toBe('luna.gowns');
+    const withUrl = { ...valid, contact: { ...valid.contact, instagram: 'javascript:alert(1)' } };
+    expect(storefrontDocument.safeParse(withUrl).success).toBe(false);
+  });
+
+  it('fails closed on unknown themes, keys, and repeated featured items', () => {
+    expect(storefrontDocument.safeParse({ ...valid, branding: { ...valid.branding, theme: 'neon' } }).success).toBe(false);
+    expect(storefrontDocument.safeParse({ ...valid, css: 'body{}' }).success).toBe(false);
+    const repeated = { ...valid, content: { ...valid.content, featured_product_ids: [productId, productId] } };
+    expect(storefrontDocument.safeParse(repeated).success).toBe(false);
+  });
+
+  it('normalizes slugs and refuses reserved or malformed ones', () => {
+    expect(storefrontSlug.parse('Luna-Gowns')).toBe('luna-gowns');
+    expect(storefrontSlug.safeParse('admin').success).toBe(false);
+    expect(storefrontSlug.safeParse('a--b').success).toBe(false);
+    expect(storefrontSlug.safeParse('-luna').success).toBe(false);
+    expect(storefrontSlug.safeParse('lu').success).toBe(false);
+  });
+
+  it('keeps delivery fees within integer minor units', () => {
+    const rules = {
+      rental: 'Three-day rental.',
+      deposit: 'Refundable deposit.',
+      cancellation: 'Cancel 48 hours before pickup.',
+      damage: null,
+      delivery: { enabled: true, fee_minor: '15000', notes: null },
+      privacy_notice: 'We only use your details for this rental.',
+    };
+    expect(storefrontPolicyRules.safeParse(rules).success).toBe(true);
+    expect(storefrontPolicyRules.safeParse({ ...rules, delivery: { ...rules.delivery, fee_minor: '-1' } }).success).toBe(false);
+    expect(storefrontPolicyRules.safeParse({ ...rules, delivery: { ...rules.delivery, fee_minor: '99999999999' } }).success).toBe(false);
+  });
+});
+
+describe('business settings contract', () => {
+  it('validates business information strictly', () => {
+    const info = { business_name: 'Luna Gown Rentals', business_email: 'Hello@Luna.test', business_phone: '+63 917 123 4567', business_address: null };
+    expect(businessInformation.parse(info).business_email).toBe('hello@luna.test');
+    expect(businessInformation.safeParse({ ...info, currency: 'USD' }).success).toBe(false);
+    expect(businessInformation.safeParse({ ...info, business_phone: 'call me' }).success).toBe(false);
+  });
+
+  it('ships defaults that satisfy the notification schema', () => {
+    expect(notificationPreferences.safeParse(DEFAULT_NOTIFICATION_PREFERENCES).success).toBe(true);
   });
 });

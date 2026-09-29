@@ -2,3 +2,5 @@
 export * from './storefront';
 export * from './payment-methods';
 export * from './catalogue';
+export * from './cms';
+export * from './guest-booking';

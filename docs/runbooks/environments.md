@@ -56,6 +56,19 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   role via the connection string's credentials, not a separate variable that could drift from
   it.
 
+- `TRUST_PROXY_HOPS` — number of reverse proxies in front of the API (default `0`). Set it to the
+  real hop count on Render, Cloud Run, or behind a load balancer, or every anonymous visitor shares
+  the proxy's address for per-IP rate limits. Never set it higher than the real count, or clients
+  can spoof `X-Forwarded-For`.
+- `EMAIL_PROVIDER` — `none` (default), `file`, or `resend`. `none` makes guest email verification
+  answer 503 instead of pretending to send. `file` is for local development only and is refused in
+  production.
+- `EMAIL_FROM` and `RESEND_API_KEY` — required when `EMAIL_PROVIDER=resend`. The key is a secret.
+- `EMAIL_FILE_SINK_DIR` — local folder for `EMAIL_PROVIDER=file`; each message is one JSON file.
+- `STOREFRONT_PUBLIC_ORIGIN` — public origin of `web` (for example `https://drezivo.com`), used for
+  the private request-status link in renter emails. Without it, emails omit the link.
+- The worker must run for email to leave the outbox, including guest verification codes.
+
 ### Supabase database boundary
 
 - Disable the Supabase Data API. Drezivo uses Clerk plus the Express API and does not authorize
@@ -132,11 +145,18 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   for each request.
 - `NEXT_PUBLIC_APP_ENV` — surfaces the environment name in client UI (e.g., a staging banner)
   without leaking anything sensitive.
+- `NEXT_PUBLIC_STOREFRONT_ORIGIN` — public origin of `web`, used by the Storefront pages to show
+  and copy the full store address. Without it, the app shows the `/s/<slug>` path only.
 
 ## `web` (Next.js marketing site + public tenant storefronts)
 
-- `API_BASE_URL` — same rule as `app`: the public storefront calls the API for catalogue,
-  availability, and hold creation; it does not talk to the database directly.
+- `API_ORIGIN` — server-side API origin for server-rendered storefront pages (may be an internal
+  address). Falls back to `NEXT_PUBLIC_API_ORIGIN`.
+- `NEXT_PUBLIC_API_ORIGIN` — browser-reachable API origin for availability, verification, holds,
+  receipts, and fitting requests. Must be listed in the API's `CORS_ALLOWED_ORIGINS` origin set
+  alongside the `web` origin.
+- `NEXT_PUBLIC_SITE_URL` — canonical public origin used for metadata, canonical links, and the
+  sitemap.
 - `NEXT_PUBLIC_APP_ENV` — same as `app`.
 - Guest capability handling needs no client secret: TRD §3 requires bearer capability links kept
   out of logs, analytics, referrers, and shared caches — this is a handling rule for `web`'s

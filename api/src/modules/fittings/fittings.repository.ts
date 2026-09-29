@@ -27,7 +27,7 @@ export interface FittingListReadPage {
 
 export interface FittingDetailReadRow extends FittingListReadRow {
   branch_id: string;
-  booking_channel: 'staff';
+  booking_channel: 'staff' | 'storefront';
   timezone_snapshot: string;
   customer_phone: string | null;
   customer_email: string | null;
