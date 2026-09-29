@@ -904,7 +904,8 @@ registry.registerPath({
   request: { query: operationalCalendarQuery },
   responses: {
     200: {
-      description: 'Reservation pickup/return and fitting events for the active branch.',
+      description:
+        'Reservation pickup/return and fitting events for the active branch, with tenant category facets and category IDs for associated event items. At most 2,000 events are returned; truncated is true when the bounded range contains more.',
       content: { 'application/json': { schema: successEnvelope(operationalCalendarResponse) } },
     },
     403: jsonError('Operational schedule access is required.'),

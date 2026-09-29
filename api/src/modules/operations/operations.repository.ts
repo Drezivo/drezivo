@@ -1,5 +1,11 @@
 import type { PoolClient } from 'pg';
 
+import {
+  OPERATIONAL_CALENDAR_FITTING_STATUSES,
+  OPERATIONAL_CALENDAR_MAX_EVENTS,
+  OPERATIONAL_CALENDAR_RESERVATION_STATUSES,
+} from '@drezivo/contracts';
+
 import { ValidationError } from '../../shared/errors.js';
 
 export interface CalendarEventRow {
@@ -12,7 +18,40 @@ export interface CalendarEventRow {
   ends_at: Date;
   customer_name: string;
   item_names: string[];
-  status: string;
+  category_ids: string[];
+  status:
+    | 'pending_confirmation'
+    | 'confirmed'
+    | 'picked_up'
+    | 'returned'
+    | 'completed'
+    | 'pending'
+    | 'no_show';
+}
+
+export interface OperationalCalendarPage {
+  rows: CalendarEventRow[];
+  truncated: boolean;
+}
+
+export interface OperationalCalendarCategoryRow {
+  id: string;
+  name: string;
+  status: 'active' | 'inactive';
+}
+
+export async function readOperationalCalendarCategories(
+  client: PoolClient,
+  tenantId: string,
+): Promise<OperationalCalendarCategoryRow[]> {
+  const result = await client.query<OperationalCalendarCategoryRow>(
+    `SELECT id, name, status
+       FROM category
+      WHERE tenant_id = $1::uuid
+      ORDER BY display_order ASC, lower(name) ASC, id ASC`,
+    [tenantId],
+  );
+  return result.rows;
 }
 
 export interface DashboardFittingSummaryRow {
@@ -27,34 +66,40 @@ export interface DashboardFittingSummaryRow {
 export async function readOperationalCalendarEvents(
   client: PoolClient,
   input: { tenantId: string; branchId: string; start: string; end: string },
-): Promise<CalendarEventRow[]> {
+): Promise<OperationalCalendarPage> {
   const result = await client.query<CalendarEventRow>(
-    `WITH reservation_items AS (
-       SELECT rl.tenant_id, rl.reservation_id,
-              array_agg(rl.name_snapshot ORDER BY rl.line_number, rl.id) AS item_names
-         FROM reservation_line rl
-        WHERE rl.tenant_id = $1::uuid
-        GROUP BY rl.tenant_id, rl.reservation_id
+    `WITH reservation_candidates AS MATERIALIZED (
+       SELECT r.id,
+              r.tenant_id,
+              r.branch_id,
+              r.customer_id,
+              r.customer_snapshot,
+              r.status,
+              r.pickup_at,
+              r.due_at
+         FROM reservation r
+        WHERE r.tenant_id = $1::uuid
+          AND r.branch_id = $2::uuid
+          AND r.status::text = ANY($5::text[])
+          AND (
+            (r.pickup_at >= $3::timestamptz AND r.pickup_at < $4::timestamptz)
+            OR (r.due_at >= $3::timestamptz AND r.due_at < $4::timestamptz)
+          )
      ),
-     reservation_events AS (
+     reservation_event_candidates AS (
        SELECT
          ('pickup:' || r.id::text) AS id,
          'reservation'::text AS source,
          r.id AS source_id,
          'pickup'::text AS event_type,
          r.branch_id,
+         r.customer_id,
+         r.customer_snapshot,
          r.pickup_at AS starts_at,
          r.pickup_at + interval '30 minutes' AS ends_at,
-         COALESCE(c.full_name, r.customer_snapshot->>'full_name', 'Customer') AS customer_name,
-         COALESCE(items.item_names, ARRAY[]::text[]) AS item_names,
          r.status::text AS status
-       FROM reservation r
-       LEFT JOIN customer c ON c.tenant_id = r.tenant_id AND c.id = r.customer_id
-       LEFT JOIN reservation_items items ON items.tenant_id = r.tenant_id AND items.reservation_id = r.id
-       WHERE r.tenant_id = $1::uuid
-         AND r.branch_id = $2::uuid
-         AND r.status IN ('pending_confirmation','confirmed','picked_up','returned','completed')
-         AND r.pickup_at >= $3::timestamptz
+       FROM reservation_candidates r
+       WHERE r.pickup_at >= $3::timestamptz
          AND r.pickup_at < $4::timestamptz
        UNION ALL
        SELECT
@@ -63,56 +108,141 @@ export async function readOperationalCalendarEvents(
          r.id AS source_id,
          'return'::text AS event_type,
          r.branch_id,
+         r.customer_id,
+         r.customer_snapshot,
          r.due_at AS starts_at,
          r.due_at + interval '30 minutes' AS ends_at,
-         COALESCE(c.full_name, r.customer_snapshot->>'full_name', 'Customer') AS customer_name,
-         COALESCE(items.item_names, ARRAY[]::text[]) AS item_names,
          r.status::text AS status
-       FROM reservation r
-       LEFT JOIN customer c ON c.tenant_id = r.tenant_id AND c.id = r.customer_id
-       LEFT JOIN reservation_items items ON items.tenant_id = r.tenant_id AND items.reservation_id = r.id
-       WHERE r.tenant_id = $1::uuid
-         AND r.branch_id = $2::uuid
-         AND r.status IN ('pending_confirmation','confirmed','picked_up','returned','completed')
-         AND r.due_at >= $3::timestamptz
+       FROM reservation_candidates r
+       WHERE r.due_at >= $3::timestamptz
          AND r.due_at < $4::timestamptz
      ),
-     fitting_events AS (
+     fitting_event_candidates AS (
        SELECT
          ('fitting:' || fa.id::text) AS id,
          'fitting'::text AS source,
          fa.id AS source_id,
          'fitting'::text AS event_type,
          fa.branch_id,
+         fa.customer_id,
+         NULL::jsonb AS customer_snapshot,
          lower(fa.period) AS starts_at,
          upper(fa.period) AS ends_at,
-         c.full_name AS customer_name,
-         COALESCE(items.item_names, ARRAY[]::text[]) AS item_names,
          fa.status::text AS status
        FROM fitting_appointment fa
-       JOIN customer c ON c.tenant_id = fa.tenant_id AND c.id = fa.customer_id
-       LEFT JOIN LATERAL (
-         SELECT array_agg(p.name ORDER BY fl.created_at, fl.id) AS item_names
-           FROM fitting_line fl
-           JOIN product_variant pv ON pv.tenant_id = fl.tenant_id AND pv.id = fl.variant_id
-           JOIN product p ON p.tenant_id = pv.tenant_id AND p.id = pv.product_id
-          WHERE fl.tenant_id = fa.tenant_id
-            AND fl.fitting_id = fa.id
-            AND fl.removed_at IS NULL
-       ) items ON true
        WHERE fa.tenant_id = $1::uuid
          AND fa.branch_id = $2::uuid
-         AND fa.status IN ('pending','confirmed','completed','no_show')
+         AND fa.status::text = ANY($6::text[])
          AND fa.period && tstzrange($3::timestamptz, $4::timestamptz, '[)')
      )
-     SELECT * FROM reservation_events
-     UNION ALL
-     SELECT * FROM fitting_events
-     ORDER BY starts_at ASC, event_type ASC, id ASC
-     LIMIT 2000`,
-    [input.tenantId, input.branchId, input.start, input.end],
+     , bounded_events AS MATERIALIZED (
+       SELECT *
+         FROM (
+           SELECT * FROM reservation_event_candidates
+           UNION ALL
+           SELECT * FROM fitting_event_candidates
+         ) candidates
+        ORDER BY starts_at ASC, event_type ASC, id ASC
+        LIMIT ${OPERATIONAL_CALENDAR_MAX_EVENTS + 1}
+     ),
+     reservation_items AS (
+       SELECT rl.tenant_id, rl.reservation_id,
+              array_agg(rl.name_snapshot ORDER BY rl.line_number, rl.id) AS item_names,
+              COALESCE(
+                array_agg(DISTINCT p.category_id ORDER BY p.category_id)
+                  FILTER (WHERE p.category_id IS NOT NULL),
+                ARRAY[]::uuid[]
+              ) AS category_ids
+         FROM reservation_line rl
+         JOIN (
+           SELECT DISTINCT source_id
+             FROM bounded_events
+            WHERE source = 'reservation'
+         ) selected ON selected.source_id = rl.reservation_id
+         JOIN product_variant pv
+           ON pv.tenant_id = rl.tenant_id
+          AND pv.id = rl.variant_id
+         JOIN product p
+           ON p.tenant_id = pv.tenant_id
+          AND p.id = pv.product_id
+        WHERE rl.tenant_id = $1::uuid
+        GROUP BY rl.tenant_id, rl.reservation_id
+     ),
+     projected_events AS (
+       SELECT be.id,
+              be.source,
+              be.source_id,
+              be.event_type,
+              be.branch_id,
+              be.starts_at,
+              be.ends_at,
+              COALESCE(
+                NULLIF(btrim(be.customer_snapshot->>'full_name'), ''),
+                NULLIF(btrim(c.full_name), ''),
+                'Customer'
+              ) AS customer_name,
+              COALESCE(items.item_names, ARRAY[]::text[]) AS item_names,
+              COALESCE(items.category_ids, ARRAY[]::uuid[]) AS category_ids,
+              be.status
+         FROM bounded_events be
+         LEFT JOIN customer c
+           ON be.source = 'reservation'
+          AND c.tenant_id = $1::uuid
+          AND c.id = be.customer_id
+         LEFT JOIN reservation_items items
+           ON be.source = 'reservation'
+          AND items.tenant_id = $1::uuid
+          AND items.reservation_id = be.source_id
+        WHERE be.source = 'reservation'
+       UNION ALL
+       SELECT be.id,
+              be.source,
+              be.source_id,
+              be.event_type,
+              be.branch_id,
+              be.starts_at,
+              be.ends_at,
+              c.full_name AS customer_name,
+              COALESCE(items.item_names, ARRAY[]::text[]) AS item_names,
+              COALESCE(items.category_ids, ARRAY[]::uuid[]) AS category_ids,
+              be.status
+         FROM bounded_events be
+         JOIN customer c
+           ON be.source = 'fitting'
+          AND c.tenant_id = $1::uuid
+          AND c.id = be.customer_id
+         LEFT JOIN LATERAL (
+           SELECT array_agg(p.name ORDER BY fl.created_at, fl.id) AS item_names,
+                  COALESCE(
+                    array_agg(DISTINCT p.category_id ORDER BY p.category_id)
+                      FILTER (WHERE p.category_id IS NOT NULL),
+                    ARRAY[]::uuid[]
+                  ) AS category_ids
+             FROM fitting_line fl
+             JOIN product_variant pv ON pv.tenant_id = fl.tenant_id AND pv.id = fl.variant_id
+             JOIN product p ON p.tenant_id = pv.tenant_id AND p.id = pv.product_id
+            WHERE fl.tenant_id = $1::uuid
+              AND fl.fitting_id = be.source_id
+              AND fl.removed_at IS NULL
+         ) items ON true
+        WHERE be.source = 'fitting'
+     )
+     SELECT *
+       FROM projected_events
+      ORDER BY starts_at ASC, event_type ASC, id ASC`,
+    [
+      input.tenantId,
+      input.branchId,
+      input.start,
+      input.end,
+      OPERATIONAL_CALENDAR_RESERVATION_STATUSES,
+      OPERATIONAL_CALENDAR_FITTING_STATUSES,
+    ],
   );
-  return result.rows;
+  return {
+    rows: result.rows,
+    truncated: result.rows.length > OPERATIONAL_CALENDAR_MAX_EVENTS,
+  };
 }
 
 export async function readDashboardFittingSummary(

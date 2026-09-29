@@ -145,8 +145,8 @@ async function seedRepresentativeLoad(count = 3000): Promise<LoadSeed> {
               currency,fee_minor,business_key,version)
            SELECT gen_random_uuid(),$1,$2,$3,'staff','pending',
                   tstzrange(
-                    '2098-01-01T00:00:00Z'::timestamptz + gs * interval '1 hour',
-                    '2098-01-01T00:00:00Z'::timestamptz + (gs + 1) * interval '1 hour',
+                    '2098-01-01T00:00:00Z'::timestamptz + gs * interval '30 minutes',
+                    '2098-01-01T00:00:00Z'::timestamptz + (gs + 1) * interval '30 minutes',
                     '[)'
                   ),
                   'Asia/Manila','PHP',0,'load:' || gs::text,1
@@ -234,8 +234,17 @@ describe('FIT-BE-094 representative fitting load and query plans', async () => {
       start: '2098-01-01T00:00:00.000Z',
       end: '2098-01-02T00:00:00.000Z',
     });
-    expect(calendar.events).toHaveLength(24);
+    expect(calendar.events).toHaveLength(48);
     expect(calendar.events.every((event) => event.source === 'fitting')).toBe(true);
+
+    const denseCalendar = await getOperationalCalendar(readContext, {
+      start: '2098-01-01T00:00:00.000Z',
+      end: '2098-03-04T00:00:00.000Z',
+    });
+    expect(denseCalendar.events).toHaveLength(2_000);
+    expect(denseCalendar.truncated).toBe(true);
+    expect(denseCalendar.events[0]?.period.start).toBe('2098-01-01T00:00:00.000Z');
+    expect(denseCalendar.events.at(-1)?.period.start).toBe('2098-02-11T15:30:00.000Z');
 
     await withAdmin(async (client) => {
       const orderedPlan = await client.query<{ 'QUERY PLAN': unknown }>(
