@@ -55,6 +55,7 @@ liveDescribe('live Cloudflare R2 object storage', () => {
         contentType: 'image/png',
         expiresInSeconds: 600,
       });
+      assertPresignedPutShape(upload.uploadUrl, upload.requiredHeaders, 'image/png');
 
       const allowedPreflight = await safeFetch(upload.uploadUrl, {
         method: 'OPTIONS',
@@ -121,6 +122,11 @@ liveDescribe('live Cloudflare R2 object storage', () => {
         contentType: 'image/png',
         expiresInSeconds: 600,
       });
+      assertPresignedPutShape(
+        concurrentUpload.uploadUrl,
+        concurrentUpload.requiredHeaders,
+        'image/png',
+      );
       const concurrentPuts = await Promise.all([
         safeFetch(concurrentUpload.uploadUrl, {
           method: 'PUT',
@@ -167,6 +173,7 @@ liveMinioDescribe('live local MinIO object storage', () => {
         contentType: 'image/png',
         expiresInSeconds: 600,
       });
+      assertPresignedPutShape(upload.uploadUrl, upload.requiredHeaders, 'image/png');
       const firstPut = await safeFetch(upload.uploadUrl, {
         method: 'PUT',
         headers: upload.requiredHeaders,
@@ -200,6 +207,11 @@ liveMinioDescribe('live local MinIO object storage', () => {
         contentType: 'image/png',
         expiresInSeconds: 600,
       });
+      assertPresignedPutShape(
+        concurrentUpload.uploadUrl,
+        concurrentUpload.requiredHeaders,
+        'image/png',
+      );
       const concurrentPuts = await Promise.all([
         safeFetch(concurrentUpload.uploadUrl, {
           method: 'PUT',
@@ -313,6 +325,11 @@ async function uploadAndVerifyFixture(
     contentType: fixture.contentType,
     expiresInSeconds: 600,
   });
+  assertPresignedPutShape(
+    authorization.uploadUrl,
+    authorization.requiredHeaders,
+    fixture.contentType,
+  );
   const upload = await safeFetch(authorization.uploadUrl, {
     method: 'PUT',
     headers: authorization.requiredHeaders,
@@ -327,4 +344,24 @@ async function uploadAndVerifyFixture(
     sha256: createHash('sha256').update(fixture.bytes).digest('base64'),
   });
   expect(Array.from(inspected?.prefix ?? [])).toEqual(Array.from(fixture.bytes.slice(0, 16)));
+}
+
+function assertPresignedPutShape(
+  uploadUrl: string,
+  requiredHeaders: Record<string, string>,
+  contentType: string,
+): void {
+  const url = new URL(uploadUrl);
+  const signedHeaders = (url.searchParams.get('X-Amz-SignedHeaders') ?? '')
+    .split(';')
+    .sort();
+
+  expect(signedHeaders).toEqual(['content-type', 'host', 'if-none-match']);
+  expect(requiredHeaders).toEqual({
+    'Content-Type': contentType,
+    'If-None-Match': '*',
+  });
+  expect(
+    [...url.searchParams.keys()].some((parameter) => parameter.toLowerCase().includes('checksum')),
+  ).toBe(false);
 }

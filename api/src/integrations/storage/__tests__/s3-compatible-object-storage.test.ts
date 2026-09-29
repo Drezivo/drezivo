@@ -49,6 +49,9 @@ describe('S3-compatible object storage', () => {
       'Content-Type': 'image/png',
       'If-None-Match': '*',
     });
+    expect(
+      [...url.searchParams.keys()].some((parameter) => parameter.toLowerCase().includes('checksum')),
+    ).toBe(false);
     expect(url.searchParams.has('x-amz-checksum-sha256')).toBe(false);
     expect(authorization.uploadUrl).not.toContain(r2Config.OBJECT_STORAGE_SECRET_ACCESS_KEY);
   });

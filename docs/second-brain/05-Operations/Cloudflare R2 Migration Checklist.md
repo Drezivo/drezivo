@@ -397,9 +397,10 @@ Use **Standard** for V1: it is the default class for frequently accessed applica
     - [ ] Test the browser-generated standard base64 SHA-256 value against the exact presigned `PutObject` request shape Drezivo plans to ship.
     - [ ] Record whether R2 independently validates that checksum for this request shape and whether HEAD/GET exposes a checksum that is cryptographic proof of the stored bytes.
     - [ ] Do not treat client-supplied custom metadata containing a SHA-256 string as proof that R2 stored those bytes.
-    - [ ] Account for Cloudflare's current checksum matrix, where SHA-256 is not supported as `FULL_OBJECT` and is supported as `COMPOSITE`; do not infer compatibility from the algorithm name alone.
-    - [ ] Do not weaken finalization to size/MIME-only validation if the current checksum path is incompatible.
-  - **Tests/evidence:** Bounded live R2 test-bucket matrix using JPEG/PNG/WebP/PDF fixtures and the production SDK/presigner configuration.
+    - [x] Account for Cloudflare's current checksum matrix, where SHA-256 is not supported as `FULL_OBJECT` and is supported as `COMPOSITE`; do not infer compatibility from the algorithm name alone.
+    - [x] Do not weaken finalization to size/MIME-only validation if the current checksum path is incompatible.
+  - **Repository evidence (reviewed 2026-09-29):** The lockfile pins `@aws-sdk/client-s3` 3.1142.0. The adapter explicitly sets request checksum calculation to `WHEN_REQUIRED`; its presigned `PutObject` has no body/checksum parameter and signs only `Content-Type` and `If-None-Match`. Unit coverage verifies that request shape, and the opt-in live matrix now asserts it for JPEG, PNG, WebP, and PDF uploads. AWS documents automatic CRC32 for direct SDK uploads beginning at 3.729.0; that default does not establish checksum behavior for this bodyless presigner/browser request. Cloudflare's [S3 compatibility matrix](https://developers.cloudflare.com/r2/api/s3/api/) lists SHA-256 as unsupported for `FULL_OBJECT` and supported for `COMPOSITE`. Drezivo does not consume a provider checksum: finalization hashes streamed GET bytes. These are code/documentation findings, not live R2 results.
+  - **Tests/evidence:** Unit tests pass. The bounded live R2 test-bucket matrix covers the exact presigned request shape and JPEG/PNG/WebP/PDF fixtures, but requires a dedicated test-only bucket/credential and has not been run; R2's independent validation and HEAD/GET checksum behavior therefore remain unverified.
 
 - [ ] **R2-041 — Select and implement a trustworthy stored-byte SHA-256 verification path**
   - **Depends on:** R2-040.
