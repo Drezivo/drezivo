@@ -38,6 +38,9 @@ COPY --from=build /app/api/dist ./api/dist
 COPY --from=build /app/contracts/package.json ./contracts/package.json
 COPY --from=build /app/contracts/node_modules ./contracts/node_modules
 COPY --from=build /app/contracts/dist ./contracts/dist
+# The contracts package declares zod as a peer dependency. Keep it resolvable from
+# contracts/dist even when npm's production install nests the API's copy separately.
+COPY --from=build /app/api/node_modules/zod ./contracts/node_modules/zod
 USER drezivo
 WORKDIR /app/api
 EXPOSE 3000
