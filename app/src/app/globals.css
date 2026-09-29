@@ -49,6 +49,7 @@
 
   --color-dashboard-gold-soft: #f3e7d4;
   --color-dashboard-gold-text: #9a6423;
+  --color-dashboard-calendar-fitting-text: #805216;
   --color-dashboard-green-soft: #e5f8f1;
   --color-dashboard-green-text: #159a72;
   --color-dashboard-neutral-soft: #edf1f8;
@@ -80,6 +81,7 @@ html[data-dashboard-theme="dark"] {
   --color-dashboard-overlay: #000000;
   --color-dashboard-gold-soft: #322819;
   --color-dashboard-gold-text: #e2ad61;
+  --color-dashboard-calendar-fitting-text: #e2ad61;
   --color-dashboard-green-soft: #193126;
   --color-dashboard-green-text: #72d89e;
   --color-dashboard-neutral-soft: #292929;
@@ -172,6 +174,24 @@ html[data-dashboard-theme="dark"] .dashboard-button-secondary:hover {
   border-color: transparent;
   background: #edf1f8;
   color: #516282;
+}
+
+.calendar-activity-pickup {
+  border-color: transparent;
+  background: #e8f2ff;
+  color: #2366d8;
+}
+
+.calendar-activity-return {
+  border-color: transparent;
+  background: #f1edff;
+  color: #5f39d2;
+}
+
+.calendar-activity-fitting {
+  border-color: transparent;
+  background: var(--color-dashboard-gold-soft);
+  color: var(--color-dashboard-calendar-fitting-text);
 }
 .dashboard-status-confirmed {
   border-color: transparent;
@@ -313,6 +333,27 @@ html[data-dashboard-theme="dark"] .dashboard-event-pickup {
   border-color: rgb(96 165 250 / 0.32);
   background: rgb(59 130 246 / 0.15);
   color: #93c5fd;
+}
+
+.dashboard-theme-dark .calendar-activity-pickup,
+html[data-dashboard-theme="dark"] .calendar-activity-pickup {
+  border-color: rgb(96 165 250 / 0.32);
+  background: rgb(59 130 246 / 0.15);
+  color: #93c5fd;
+}
+
+.dashboard-theme-dark .calendar-activity-return,
+html[data-dashboard-theme="dark"] .calendar-activity-return {
+  border-color: rgb(167 139 250 / 0.32);
+  background: rgb(139 92 246 / 0.15);
+  color: #c4b5fd;
+}
+
+.dashboard-theme-dark .calendar-activity-fitting,
+html[data-dashboard-theme="dark"] .calendar-activity-fitting {
+  border-color: rgb(226 173 97 / 0.32);
+  background: var(--color-dashboard-gold-soft);
+  color: var(--color-dashboard-calendar-fitting-text);
 }
 
 .dashboard-theme-dark .dashboard-event-return,

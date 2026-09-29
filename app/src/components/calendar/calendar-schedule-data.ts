@@ -1,8 +1,8 @@
 import type { OperationalCalendarEvent, OperationalCalendarResponse } from "@drezivo/contracts";
 
-export const CALENDAR_START_HOUR = 7;
-export const CALENDAR_END_HOUR = 21;
-export const CALENDAR_HOUR_HEIGHT = 56;
+export const CALENDAR_START_HOUR = 8;
+export const CALENDAR_END_HOUR = 20;
+export const CALENDAR_HOUR_HEIGHT = 80;
 export const CALENDAR_TOTAL_HEIGHT =
   (CALENDAR_END_HOUR - CALENDAR_START_HOUR) * CALENDAR_HOUR_HEIGHT;
 
@@ -158,7 +158,7 @@ export function calendarBoundaryInstant(dateKey: string, timeZone: string) {
       parts.hour,
       parts.minute,
       0,
-      0,
+      0
     );
     const correction = desiredWallTime - representedWallTime;
     if (correction === 0) return new Date(candidate).toISOString();
@@ -180,7 +180,7 @@ function labelForEvent(event: OperationalCalendarEvent): CalendarActivityType {
 
 export function mapOperationalCalendarEvents(
   events: OperationalCalendarEvent[],
-  timeZone: string,
+  timeZone: string
 ): CalendarActivity[] {
   return events
     .map((event) => ({

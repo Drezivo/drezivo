@@ -9,7 +9,7 @@ tags: [drezivo, calendar, schedule, reservations, fittings, operations, checklis
 
 # Rental Calendar End-to-End Implementation Checklist
 
-**Status:** Backend Calendar projection and its PostgreSQL verification gate are complete. FE-0 through FE-4 now resolve the active branch context, render Week/Month from the production Calendar endpoint, provide real period summaries and filters, and show the live branch-local Day Agenda. Shared detail sheets and the final frontend test/release gate remain open. No backend checklist item is complete until the required PostgreSQL evidence passes; existing implementation code alone is not sufficient evidence.
+**Status:** Backend Calendar projection and its PostgreSQL verification gate are complete. FE-0 through FE-6 now resolve the active branch context, render Week/Month and Day Agenda from the production Calendar endpoint, provide real summaries/filters, open authoritative Reservation/Fitting details, and include explicit loading, error, empty, responsive, and accessible states. FE-7's broader test matrix and authenticated browser/release review remain open. No backend checklist item is complete until the required PostgreSQL evidence passes; existing implementation code alone is not sufficient evidence.
 
 **Implementation order:** **Backend first → frontend API client → existing Calendar UI wiring → shared detail sheets → tests/release gate.**
 
@@ -334,7 +334,7 @@ These rules must be covered by the backend integration evidence before any Calen
     - [x] `+N more` reflects the production event set for that day.
     - [x] Month never uses a second mock or alternate Calendar source.
     - [x] A truncated response is visibly marked and does not imply that the six-week grid is complete.
-  - **Implementation:** App typecheck passed. Calendar unit tests have not been run; the existing prototype assertions are expected to be replaced during CAL-FE-070.
+  - **Evidence:** App typecheck and the focused Calendar component suite pass. Tests verify the production week query, Month view, live event controls, and range-loading behavior; the full navigation/boundary acceptance matrix remains open under CAL-FE-070.
 
 ---
 
@@ -347,7 +347,7 @@ These rules must be covered by the backend integration evidence before any Calen
     - [x] Fittings count = visible-range `fitting` events.
     - [x] Loading does not display fake authoritative zeroes.
     - [x] Remove/hide the hard-coded `Issues = 3` until an approved issue projection exists.
-  - **Evidence:** `CalendarSummaryCards` counts the loaded production events by `eventType` and is rendered only after a successful range response; loading, forbidden, and error states do not show authoritative-looking zeroes. UI behavior tests remain scheduled for CAL-FE-070.
+  - **Evidence:** `CalendarSummaryCards` counts loaded production events by `eventType` and is rendered only after a successful range response; loading, forbidden, and error states do not show authoritative-looking zeroes. Focused tests cover summary visibility during range refresh and activity-filtered empty behavior; the complete activity/category/status matrix remains open under CAL-FE-070.
 
 - [x] **CAL-FE-031 — Wire Activity filter**
   - **Acceptance:**
@@ -384,56 +384,60 @@ These rules must be covered by the backend integration evidence before any Calen
     - [x] Day header and Month `+N more` open the same Day Agenda source.
     - [x] Previous/next day navigation preserves Calendar context and fetches a new range only when needed.
     - [x] Empty day state is explicit.
-  - **Evidence:** `DayAgendaSheet` renders chronologically sorted production events, count-bearing All/Pickup/Return/Fitting tabs, explicit loading/error/empty/filtered-empty states, and previous/next controls. Navigation reuses the loaded range for visible dates and shifts the existing Week/Month range only when crossing its boundary. App typecheck passed; UI interaction tests remain scheduled for CAL-FE-070.
+  - **Evidence:** `DayAgendaSheet` renders chronologically sorted production events, count-bearing All/Pickup/Return/Fitting tabs, explicit loading/error/empty/filtered-empty states, and previous/next controls. Navigation reuses the loaded range for visible dates and shifts the existing Week/Month range only when crossing its boundary. Focused tests verify live Day Agenda drill-down to the authoritative reservation; the broader counts/filter/navigation matrix remains open under CAL-FE-070.
 
 ---
 
 # Frontend Phase FE-5 — Authoritative Reservation and Fitting details
 
-- [ ] **CAL-FE-050 — Reuse the production Reservation Details Sheet**
+- [x] **CAL-FE-050 — Reuse the production Reservation Details Sheet**
   - **Depends on:** CAL-FE-010, Reservations production detail API.
   - **Outcome:** Calendar Reservation events open the same source/detail used by `/reservations`.
   - **Acceptance:**
-    - [ ] Reservation event click uses `source_id`.
-    - [ ] Fetch through existing `getReservationDetail()`.
-    - [ ] Reuse `app/src/components/reservations/reservation-details-sheet.tsx`.
-    - [ ] Delete Calendar's fabricated `reservationDetailsFor()` implementation.
-    - [ ] No fake phone/email/price/status timeline remains.
-    - [ ] Reservation mutations use existing Reservation commands and shared submit/idempotency guards.
-    - [ ] Successful mutation refetches Calendar and detail state.
+    - [x] Reservation event click uses `source_id`.
+    - [x] Fetch through existing `getReservationDetail()`.
+    - [x] Reuse `app/src/components/reservations/reservation-details-sheet.tsx`.
+    - [x] Delete Calendar's fabricated `reservationDetailsFor()` implementation.
+    - [x] No fake phone/email/price/status timeline remains.
+    - [x] Reservation mutations use existing Reservation commands and shared submit/idempotency guards.
+    - [x] Successful mutation refetches Calendar and detail state.
+  - **Evidence:** Calendar event activation loads the exact `source_id` through the production API client and presents the shared Reservation Details Sheet. Pickup and other existing commands remain delegated to that component; success refreshes both Calendar and reservation detail. Calendar unit tests cover event identity, transient detail retry, restricted access, and mutation refetch.
 
-- [ ] **CAL-FE-051 — Extract and reuse the production Fitting Details Sheet**
+- [x] **CAL-FE-051 — Extract and reuse the production Fitting Details Sheet**
   - **Depends on:** CAL-FE-010, Fittings production detail API.
   - **Outcome:** Calendar Fitting events open the same appointment used by `/fittings`.
   - **Acceptance:**
-    - [ ] Extract the current production Fitting Details Sheet from `fittings-page.tsx` into a reusable component.
-    - [ ] `/fittings` continues using the extracted component without behavior regression.
-    - [ ] Calendar fitting event click uses `source_id` and existing `getFittingDetail()`.
-    - [ ] Existing confirm/reject/cancel/complete/no-show/reschedule behavior remains delegated to Fittings APIs.
-    - [ ] Prototype fitting detail code is removed from Calendar.
-    - [ ] Successful mutation refetches Calendar and Fitting detail state.
+    - [x] Extract the current production Fitting Details Sheet from `fittings-page.tsx` into a reusable component.
+    - [x] `/fittings` continues using the extracted component without behavior regression.
+    - [x] Calendar fitting event click uses `source_id` and existing `getFittingDetail()`.
+    - [x] Existing confirm/reject/cancel/complete/no-show/reschedule behavior remains delegated to Fittings APIs.
+    - [x] Prototype fitting detail code is removed from Calendar.
+    - [x] Successful mutation refetches Calendar and Fitting detail state.
+  - **Evidence:** Both `/fittings` and Calendar import the extracted `FittingDetailsSheet`. It retains the production action/reschedule flow; Calendar loads by event `source_id` and refetches both projections after successful actions. The Fittings page regression suite and Calendar detail/action tests pass.
 
 ---
 
 # Frontend Phase FE-6 — Loading, empty, error, accessibility, and responsive states
 
-- [ ] **CAL-FE-060 — Add production loading/error/empty states**
+- [x] **CAL-FE-060 — Add production loading/error/empty states**
   - **Acceptance:**
-    - [ ] Initial loading state preserves the Calendar layout where practical.
-    - [ ] Range refetch state does not flash fake old-period counts as new-period authority.
-    - [ ] Empty period clearly states there are no scheduled activities.
-    - [ ] Empty filtered state differs from truly empty Calendar data.
-    - [ ] API errors provide retry.
-    - [ ] `403` explains restricted Calendar access.
-    - [ ] Detail-loading/detail-error states are handled by the shared detail components.
+    - [x] Initial loading state preserves the Calendar layout where practical.
+    - [x] Range refetch state does not flash fake old-period counts as new-period authority.
+    - [x] Empty period clearly states there are no scheduled activities.
+    - [x] Empty filtered state differs from truly empty Calendar data.
+    - [x] API errors provide retry.
+    - [x] `403` explains restricted Calendar access.
+    - [x] Detail-loading/detail-error states are handled by the shared detail components.
+  - **Evidence:** The Calendar preserves its heading during initial load, hides stale range summaries while refetching, distinguishes true/filtered empty states, and exposes retryable API errors and restricted-access messages. Shared detail sheets provide loading/error/403/404 handling. Calendar unit tests cover these states; authenticated browser/release checks remain in CAL-FE-071.
 
-- [ ] **CAL-FE-061 — Preserve responsive and accessible Calendar behavior**
+- [x] **CAL-FE-061 — Preserve responsive and accessible Calendar behavior**
   - **Acceptance:**
-    - [ ] Week grid horizontal scroll remains understandable on narrow screens.
-    - [ ] Day headers, event cards, filters, and `+N more` are keyboard/touch accessible.
-    - [ ] No essential action depends only on hover.
-    - [ ] Sheets have accessible titles/descriptions and expected focus behavior.
-    - [ ] Semantic Pickup/Return/Fitting colors maintain dark/light theme contrast.
+    - [x] Week grid horizontal scroll remains understandable on narrow screens.
+    - [x] Day headers, event cards, filters, and `+N more` are keyboard/touch accessible.
+    - [x] No essential action depends only on hover.
+    - [x] Sheets have accessible titles/descriptions and expected focus behavior.
+    - [x] Semantic Pickup/Return/Fitting colors maintain dark/light theme contrast.
+  - **Evidence:** Week and Month grids expose labelled, focusable scroll regions; Calendar actions use semantic buttons with accessible names and visible focus styles, including date drill-down and overflow controls. Radix Dialog-backed sheets supply focus management and labelled titles/descriptions. Calendar activity classes keep Pickup blue, Return purple, and Fitting yellow in light and dark themes. The 360px/keyboard/theme browser walkthrough remains explicitly open under CAL-FE-071.
 
 ---
 
