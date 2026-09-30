@@ -259,6 +259,20 @@ describe("CalendarSchedulePage production details and states", () => {
     expect(screen.getByRole("button", { name: /Open reservation details: Pickup/ })).toBeVisible();
   });
 
+  it("removes the date selector and highlights the entire current-day week column in gold", async () => {
+    render(<CalendarSchedulePage />);
+
+    const scheduleGrid = await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    expect(screen.queryByLabelText("Visible calendar period")).not.toBeInTheDocument();
+
+    const todayHeader = scheduleGrid.querySelector('[aria-current="date"]');
+    expect(todayHeader).toHaveClass("bg-dashboard-gold-soft/70");
+
+    const todaySchedule = scheduleGrid.querySelector('[data-today-column="true"]');
+    expect(todaySchedule).not.toBeNull();
+    expect(todaySchedule?.parentElement).toHaveClass("bg-dashboard-gold-soft/40");
+  });
+
   it("resolves the active branch timezone and requests exact branch-local week boundaries", async () => {
     api.getActorContext.mockResolvedValueOnce({
       data: {
@@ -279,9 +293,11 @@ describe("CalendarSchedulePage production details and states", () => {
     });
   });
 
-  it("refetches exact week boundaries when navigating backward and forward", async () => {
+  it("refetches exact week boundaries and offers Today beside the view switcher when today is off-screen", async () => {
     render(<CalendarSchedulePage />);
     await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    expect(screen.queryByRole("button", { name: "Today" })).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: "Previous period" }));
 
     await waitFor(() => expect(api.getOperationalCalendar).toHaveBeenCalledTimes(2));
@@ -290,13 +306,22 @@ describe("CalendarSchedulePage production details and states", () => {
       start: calendarBoundaryInstant(previousWeek, timeZone),
       end: calendarBoundaryInstant(addCalendarDays(previousWeek, 7), timeZone),
     });
-    fireEvent.click(screen.getByRole("button", { name: "Next period" }));
+
+    const todayButton = screen.getByRole("button", { name: "Today" });
+    const viewControls = todayButton.parentElement;
+    if (!viewControls) throw new Error("Expected Today to share the view-switcher control group.");
+    expect(within(viewControls).getByRole("button", { name: "Week view" })).toBeVisible();
+    expect(within(viewControls).getByRole("button", { name: "Month view" })).toBeVisible();
+
+    fireEvent.click(todayButton);
 
     await waitFor(() => expect(api.getOperationalCalendar).toHaveBeenCalledTimes(3));
     expect(api.getOperationalCalendar).toHaveBeenLastCalledWith({
       start: calendarBoundaryInstant(weekStart, timeZone),
       end: calendarBoundaryInstant(addCalendarDays(weekStart, 7), timeZone),
     });
+    expect(await screen.findByRole("region", { name: /Weekly schedule grid/ })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Today" })).not.toBeInTheDocument();
   });
 
   it("requests the complete six-week month grid including spillover dates", async () => {
@@ -307,6 +332,9 @@ describe("CalendarSchedulePage production details and states", () => {
     await screen.findByRole("region", { name: /Monthly schedule grid/ });
     const today = calendarTodayDateKey(timeZone);
     const monthStart = `${today.slice(0, 7)}-01`;
+    const monthLabel = formatCalendarDate(monthStart, { month: "long", year: "numeric" });
+    expect(screen.getByText(monthLabel)).toBeVisible();
+    expect(screen.queryByRole("button", { name: monthLabel })).not.toBeInTheDocument();
     const visibleDates = getCalendarMonthGridDateKeys(monthStart);
     const firstDate = visibleDates[0];
     const lastDate = visibleDates.at(-1);
@@ -318,7 +346,7 @@ describe("CalendarSchedulePage production details and states", () => {
     });
   });
 
-  it("refetches when navigating between months and Today returns to the active branch month", async () => {
+  it("returns from an off-screen month to the week containing Today", async () => {
     render(<CalendarSchedulePage />);
     await screen.findByRole("region", { name: /Weekly schedule grid/ });
     fireEvent.click(screen.getByRole("button", { name: "Month view" }));
@@ -327,11 +355,8 @@ describe("CalendarSchedulePage production details and states", () => {
 
     await waitFor(() => expect(api.getOperationalCalendar).toHaveBeenCalledTimes(3));
     const branchToday = calendarTodayDateKey(timeZone);
+    const currentWeek = startOfCalendarWeek(branchToday);
     const currentMonth = `${branchToday.slice(0, 7)}-01`;
-    const visibleDates = getCalendarMonthGridDateKeys(currentMonth);
-    const firstDate = visibleDates[0];
-    const lastDate = visibleDates.at(-1);
-    if (!firstDate || !lastDate) throw new Error("Expected six visible Calendar weeks.");
     const previousMonthDates = getCalendarMonthGridDateKeys(addCalendarMonths(currentMonth, -1));
     const previousMonthFirst = previousMonthDates[0];
     const previousMonthLast = previousMonthDates.at(-1);
@@ -342,13 +367,16 @@ describe("CalendarSchedulePage production details and states", () => {
       start: calendarBoundaryInstant(previousMonthFirst, timeZone),
       end: calendarBoundaryInstant(addCalendarDays(previousMonthLast, 1), timeZone),
     });
+
     fireEvent.click(screen.getByRole("button", { name: "Today" }));
 
     await waitFor(() => expect(api.getOperationalCalendar).toHaveBeenCalledTimes(4));
     expect(api.getOperationalCalendar).toHaveBeenLastCalledWith({
-      start: calendarBoundaryInstant(firstDate, timeZone),
-      end: calendarBoundaryInstant(addCalendarDays(lastDate, 1), timeZone),
+      start: calendarBoundaryInstant(currentWeek, timeZone),
+      end: calendarBoundaryInstant(addCalendarDays(currentWeek, 7), timeZone),
     });
+    expect(await screen.findByRole("region", { name: /Weekly schedule grid/ })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Week view" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("uses 80px hourly rows with half-hour guides and time-aligned events", async () => {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -77,6 +77,7 @@ const reservation = reservationListItem.parse({
     id: "00000000-0000-4000-8000-000000000103",
     variant_id: "00000000-0000-4000-8000-000000000104",
     name_snapshot: "Real Emerald Gown",
+    image_url: "https://reads.example.test/catalogue%2Femerald-gown.webp?version=list-cover-v1",
     rental_minor: "150000",
     deposit_minor: "50000",
     currency: "PHP",
@@ -336,6 +337,8 @@ describe("ReservationsPage", () => {
     expect(await screen.findByText("RSV-REAL-001")).toBeVisible();
     expect(screen.getByText("Real Customer")).toBeVisible();
     expect(screen.getAllByText("Real Emerald Gown")).toHaveLength(2);
+    expect(screen.getAllByRole("img", { name: "Real Emerald Gown cover image" })).toHaveLength(2);
+    expect(screen.queryByText("RC")).not.toBeInTheDocument();
     expect(screen.getByText("Paid")).toBeVisible();
     expect(screen.getByText("Verified")).toBeVisible();
     expect(screen.getByText("Customer not added yet")).toBeVisible();
@@ -447,7 +450,12 @@ describe("ReservationsPage", () => {
     await waitFor(() => expect(api.getReservationDetail).toHaveBeenCalledWith(reservation.id));
     expect(await screen.findByRole("heading", { name: "Reservation RSV-REAL-001" })).toBeVisible();
     expect(screen.getAllByText("Real Customer").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByRole("img", { name: "Real Emerald Gown cover image" })).toBeVisible();
+    const detailSheet = screen.getByRole("dialog");
+    const garmentImage = within(detailSheet).getByRole("img", {
+      name: "Real Emerald Gown cover image",
+    });
+    expect(garmentImage).toBeVisible();
+    expect(garmentImage.parentElement).toHaveClass("h-20", "w-20");
     expect(screen.getByText("123 Test Street")).toBeVisible();
     expect(screen.getByText("Medium · Emerald")).toBeVisible();
     expect(screen.getByText("EMERALD-M")).toBeVisible();
