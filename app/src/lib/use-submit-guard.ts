@@ -2,6 +2,8 @@
 
 import { useCallback, useRef, useState } from "react";
 
+import { DrezivoApiError } from "@/lib/drezivo-api";
+
 type SubmitOperation<T> = (idempotencyKey: string) => Promise<T>;
 
 export function useSubmitGuard() {
@@ -21,7 +23,16 @@ export function useSubmitGuard() {
     idempotencyKeyRef.current ??= createIdempotencyKey();
 
     try {
-      return await operation(idempotencyKeyRef.current);
+      const result = await operation(idempotencyKeyRef.current);
+      // The intent is done. Keeping the key would make the next save (often with a new version in
+      // the body) look like a changed replay, which the API rejects as IDEMPOTENCY_KEY_REUSED.
+      idempotencyKeyRef.current = null;
+      return result;
+    } catch (error) {
+      // Only a failure the same request could still fix (network, timeout, server error) keeps the
+      // key, so the retry replays instead of duplicating. A definite rejection ends the intent.
+      if (!isRetryable(error)) idempotencyKeyRef.current = null;
+      throw error;
     } finally {
       isSubmittingRef.current = false;
       setIsSubmitting(false);
@@ -29,6 +40,11 @@ export function useSubmitGuard() {
   }, []);
 
   return { isSubmitting, resetIntent, submit };
+}
+
+function isRetryable(error: unknown): boolean {
+  if (!(error instanceof DrezivoApiError)) return true;
+  return error.status >= 500 || error.status === 408 || error.status === 429;
 }
 
 function createIdempotencyKey(): string {
