@@ -95,6 +95,7 @@ import {
   clothingAvailabilityTimelineQuery,
   clothingAvailabilityTimelineResponse,
   dashboardFittingSummaryResponse,
+  dashboardOverviewResponse,
   operationalCalendarQuery,
   operationalCalendarResponse,
   fittingActionResponse,
@@ -226,6 +227,7 @@ import {
   type ClothingAvailabilityTimelineQuery,
   type ClothingAvailabilityTimelineResponse,
   type DashboardFittingSummaryResponse,
+  type DashboardOverviewResponse,
   type OperationalCalendarQuery,
   type OperationalCalendarResponse,
   type FittingActionResponse,
@@ -373,6 +375,13 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         responseSchema: apiEnvelope(operationalCalendarResponse),
       });
     },
+    getDashboardOverview: () =>
+      request<DashboardOverviewResponse>({
+        getToken,
+        method: "GET",
+        path: "/api/v1/dashboard/overview",
+        responseSchema: apiEnvelope(dashboardOverviewResponse),
+      }),
     getCustomers: (input: CustomerListQuery) => {
       const query = customerListQuery.parse(input);
       const searchParams = new URLSearchParams({
