@@ -15,7 +15,7 @@ disagrees with it.
 | `api` server | Managed container host | One container image, HTTP server entrypoint |
 | worker | Same managed container host | Same container image, worker entrypoint (`docs/decisions/0004-worker-in-api-repository.md`) |
 | Database | Supabase PostgreSQL, Data API disabled | N/A — managed |
-| Files | S3 (private evidence bucket + public derivatives bucket) | N/A — managed |
+| Files | Cloudflare R2 private object storage; public derivatives remain a separate gate | N/A — managed |
 
 DECISION NEEDED: confirm the specific managed container host and finalize the Next.js host
 selection (TRD §1 names Vercel as "a candidate," not a decision). Confirm region compatibility

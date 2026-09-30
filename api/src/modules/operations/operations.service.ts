@@ -16,7 +16,7 @@ import {
 
 import { withTenantTransaction } from '../../db/client.js';
 import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
-import { s3ObjectStorage } from '../../integrations/storage/s3-object-storage.js';
+import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../shared/errors.js';
 import {
   listClothingAvailabilityTimelineAssets,
@@ -77,7 +77,7 @@ export async function getOperationalCalendar(
 export async function getClothingAvailabilityTimeline(
   context: OperationsReadContext,
   queryInput: ClothingAvailabilityTimelineQuery,
-  storage: ObjectStorage = s3ObjectStorage,
+  storage: ObjectStorage = objectStorage,
 ): Promise<ClothingAvailabilityTimelineResponse> {
   const parsed = clothingAvailabilityTimelineQuery.safeParse(queryInput);
   if (!parsed.success) throw new ValidationError('Clothing availability query is invalid.');

@@ -15,11 +15,13 @@ import {
   type GuestReservationView,
 } from '@drezivo/contracts';
 
+import { config } from '../../config/index.js';
 import { pool, withTenantTransaction } from '../../db/client.js';
 import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
-import { s3ObjectStorage } from '../../integrations/storage/s3-object-storage.js';
+import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
 import {
   CapacityConflictError,
+  DependencyUnavailableError,
   HoldExpiredError,
   NotFoundError,
   ScheduleConflictError,
@@ -79,6 +81,7 @@ const STORE_NOT_FOUND = 'This store is not available.';
 const GUEST_NOT_FOUND = 'This booking link is not valid or has expired.';
 const GUEST_TOKEN_DAYS_AFTER_RETURN = 30;
 const RECEIPT_UPLOAD_SECONDS = 10 * 60;
+const RECEIPT_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 const EXCLUSION_VIOLATION = '23P01';
 
 const guestActorKey = (email: string): string => `guest:${digestRecipientEmail(email).slice(0, 16)}`;
@@ -91,7 +94,7 @@ export interface GuestRequestMeta {
 export class GuestBookingService {
   constructor(
     private readonly verification: GuestVerificationService = guestVerificationService,
-    private readonly storage: ObjectStorage = s3ObjectStorage,
+    private readonly storage: ObjectStorage = objectStorage,
   ) {}
 
   /** Verified guest places a 15-minute hold on one size for whole days, then pays and uploads a receipt. */
@@ -186,6 +189,9 @@ export class GuestBookingService {
   }
 
   async authorizeReceiptUpload(reservationId: string, bearer: string, request: GuestReceiptUploadRequest): Promise<GuestReceiptUploadResponse> {
+    if (!config.OBJECT_STORAGE_UPLOADS_ENABLED) {
+      throw new DependencyUnavailableError('File uploads are temporarily unavailable.');
+    }
     const tenantId = await this.resolveGuestTenant(reservationId, bearer);
     return withTenantTransaction(tenantId, 'guest', async (client) => {
       await this.requireScope(client, tenantId, reservationId, bearer, 'submit_evidence');
@@ -198,7 +204,6 @@ export class GuestBookingService {
       const authorization = await this.storage.authorizeUpload({
         storageKey,
         contentType: request.content_type,
-        sha256: request.sha256,
         expiresInSeconds: RECEIPT_UPLOAD_SECONDS,
       });
       await insertPendingFile(client, {
@@ -227,7 +232,9 @@ export class GuestBookingService {
     if (!before || !before.storage_key.startsWith(receiptStorageKey(tenantId, reservationId, ''))) {
       throw new ValidationError('Upload the receipt again before submitting.');
     }
-    const uploaded = before.lifecycle_status === 'accepted' ? null : await this.storage.inspectUploadedObject(before.storage_key);
+    const uploaded = before.lifecycle_status === 'accepted'
+      ? null
+      : await this.storage.inspectUploadedObject(before.storage_key, RECEIPT_UPLOAD_MAX_BYTES);
     if (before.lifecycle_status !== 'accepted' && !uploaded) {
       throw new StateConflictError('The receipt upload has not finished yet. Try again in a moment.');
     }

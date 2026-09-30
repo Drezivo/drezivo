@@ -21,8 +21,8 @@ async function sha256Base64(file: File): Promise<string> {
 }
 
 /**
- * Authorize → PUT straight to storage with the checksum → submit. The server re-checks size, type,
- * checksum, and file signature, and binds the file to this booking before accepting it.
+ * Authorize → create-only PUT straight to storage → submit. The server re-checks size, type,
+ * SHA-256, and file signature, and binds the file to this booking before accepting it.
  * `idempotencyKey` is per chosen file, so a retry after a timeout cannot submit twice.
  */
 export async function uploadReceipt(reservationId: string, token: string, file: File, idempotencyKey: string): Promise<GuestReservationView> {
@@ -40,6 +40,10 @@ export async function uploadReceipt(reservationId: string, token: string, file: 
   } catch {
     throw new StorefrontApiError('The upload was interrupted. Check your connection and try again.', 503, 'NETWORK');
   }
-  if (!uploaded.ok) throw new StorefrontApiError('The upload did not finish. Try again.', uploaded.status, 'UPLOAD_FAILED');
+  // A retry can receive 412 when the first create-only PUT succeeded but its response was lost.
+  // Continue to submission so the API can verify the exact stored bytes against the expected hash.
+  if (!uploaded.ok && uploaded.status !== 412) {
+    throw new StorefrontApiError('The upload did not finish. Try again.', uploaded.status, 'UPLOAD_FAILED');
+  }
   return submitReceipt(reservationId, token, authorized.file_id, idempotencyKey);
 }

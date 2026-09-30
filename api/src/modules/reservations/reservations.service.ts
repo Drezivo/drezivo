@@ -48,7 +48,7 @@ import {
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
-import { s3ObjectStorage } from '../../integrations/storage/s3-object-storage.js';
+import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
 import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
 import {
   ForbiddenError,
@@ -457,23 +457,40 @@ export async function rejectReservation(
 export async function getReservationList(
   input: ReservationReadContext,
   query: ReservationListQuery,
+  storage: ObjectStorage = s3ObjectStorage,
 ): Promise<ReservationListResponse> {
   assertReservationReadContext(input);
 
-  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
-    const page = await listReservationsReadModel(client, {
+  const page = await withTenantTransaction(input.tenantId, input.principalId, async (client) =>
+    listReservationsReadModel(client, {
       tenantId: input.tenantId,
       branchId: input.branchId,
       query,
-    });
+    }),
+  );
+  const imageUrls = await Promise.all(
+    page.rows.map(async (row) => {
+      if (!row.line_cover_storage_key) return null;
+      try {
+        return (
+          await storage.authorizeRead({
+            storageKey: row.line_cover_storage_key,
+            versionId: row.line_cover_version_id,
+            expiresInSeconds: 5 * 60,
+          })
+        ).readUrl;
+      } catch {
+        return null;
+      }
+    }),
+  );
 
-    return reservationListResponse.parse({
-      items: page.rows.map(toReservationListItem),
-      page_meta: {
-        next_cursor: page.nextCursor,
-        has_more: page.hasMore,
-      },
-    });
+  return reservationListResponse.parse({
+    items: page.rows.map((row, index) => toReservationListItem(row, imageUrls[index] ?? null)),
+    page_meta: {
+      next_cursor: page.nextCursor,
+      has_more: page.hasMore,
+    },
   });
 }
 
@@ -481,7 +498,7 @@ export async function getReservationList(
 export async function getReservationDetail(
   input: ReservationReadContext,
   reservationId: string,
-  storage: ObjectStorage = s3ObjectStorage,
+  storage: ObjectStorage = objectStorage,
 ): Promise<ReservationDetail> {
   assertReservationReadContext(input);
 
@@ -585,7 +602,10 @@ export async function getReservationDetail(
   });
 }
 
-function toReservationListItem(row: ReservationListReadRow): ReservationListItem {
+function toReservationListItem(
+  row: ReservationListReadRow,
+  imageUrl: string | null,
+): ReservationListItem {
   if (
     !row.line_id ||
     !row.variant_id ||
@@ -619,6 +639,7 @@ function toReservationListItem(row: ReservationListReadRow): ReservationListItem
       id: row.line_id,
       variant_id: row.variant_id,
       name_snapshot: row.line_name_snapshot,
+      image_url: imageUrl,
       rental_minor: String(row.line_rental_minor),
       deposit_minor: String(row.line_deposit_minor),
       currency: row.line_currency,

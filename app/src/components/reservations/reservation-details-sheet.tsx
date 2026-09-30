@@ -208,7 +208,7 @@ function ReservationDetails({
               <div key={line.id}>
                 {index > 0 ? <Separator className="mb-4" /> : null}
                 <div className="flex items-start gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
+                  <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
                     {line.variant.image_url && !failedImageLines.has(line.id) ? (
                       // eslint-disable-next-line @next/next/no-img-element -- API-provided signed URLs are short-lived and dynamic.
                       <img

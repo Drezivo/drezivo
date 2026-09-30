@@ -8,8 +8,8 @@ import { parseEnv } from 'node:util';
  *
  * Precedence is intentionally deterministic and fails closed: host/CI variables win over every
  * file; then a mounted DREZIVO_ENV_FILE; then the selected `.env.<NODE_ENV>` and shared `.env`
- * values are considered for local development/test. Production deliberately skips `.env`, which is the developer's local file,
- * so its MinIO endpoint and credentials cannot leak into a deployment.
+ * values are considered for local development/test. Production and staging deliberately skip the
+ * shared developer `.env`, so local MinIO or test-R2 credentials cannot leak into deployment.
  * Values are parsed only; this module never logs a path's contents or any secret.
  */
 const apiRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -47,8 +47,9 @@ function mountedFile(): Record<string, string> {
 
 const shared = parseFile('.env');
 const mode = process.env.NODE_ENV ?? shared.NODE_ENV ?? 'development';
+process.env.NODE_ENV ??= mode;
 const layered = {
-  ...(mode === 'production' ? {} : shared),
+  ...(mode === 'production' || mode === 'staging' ? {} : shared),
   ...parseFile(`.env.${mode}`),
   ...mountedFile(),
 };

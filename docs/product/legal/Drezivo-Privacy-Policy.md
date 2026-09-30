@@ -96,8 +96,8 @@ analytics, advertising, or preference technology is enabled.
 ## 6. Disclosure and processors
 
 We may disclose information to the business that controls a reservation, staff members authorized
-by that business, identity provider Clerk, database provider Supabase, object storage provider Amazon
-S3, email and messaging providers, security and monitoring providers, payment providers selected
+by that business, identity provider Clerk, database provider Supabase, object storage provider
+Cloudflare R2, email and messaging providers, security and monitoring providers, payment providers selected
 for a feature, professional advisers, and public authorities when legally required. We do not sell
 personal information.
 

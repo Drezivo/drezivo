@@ -56,7 +56,7 @@ export default function PrivacyPage() {
       <h2>5. Disclosure and international processing</h2>
       <p>
         We may disclose information to the business controlling a reservation, authorized staff,
-        Clerk, Supabase, Amazon S3, email providers, security and monitoring providers, payment
+        Clerk, Supabase, Cloudflare R2, email providers, security and monitoring providers, payment
         providers used for a feature, advisers, and public authorities when legally required. We do
         not sell personal information.
       </p>

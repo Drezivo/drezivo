@@ -52,6 +52,6 @@ Codex capabilities.
 
 This is a development scaffold. Unimplemented business endpoints must return explicit errors. SQL
 migrations require an isolated Supabase staging rehearsal, row-level security and concurrency tests, and review.
-Worker delivery, session lifecycle controls, Clerk, Supabase PostgreSQL, S3, monitoring, and recovery need dedicated
-implementation and integration evidence before serving business traffic. A green build is not a
+Worker delivery, session lifecycle controls, Clerk, Supabase PostgreSQL, Cloudflare R2 object storage,
+monitoring, and recovery need dedicated implementation and integration evidence before serving business traffic. A green build is not a
 production-readiness claim.

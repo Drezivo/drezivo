@@ -3,8 +3,8 @@ title: Drezivo Architecture
 type: architecture
 status: current
 owner: Drezivo team
-source: "../../architecture/Drezivo-TRD.md and ../../decisions/0009-supabase-managed-postgresql.md"
-updated: 2026-09-28
+source: "../../architecture/Drezivo-TRD.md, ../../decisions/0009-supabase-managed-postgresql.md, and ../../decisions/0010-cloudflare-r2-object-storage.md"
+updated: 2026-09-30
 tags: [drezivo, architecture, trd]
 ---
 
@@ -19,7 +19,7 @@ flowchart LR
   contracts -. exact version .-> api
   api --> supabase[(Supabase PostgreSQL)]
   api --> clerk[Clerk]
-  api --> s3[S3]
+  api --> r2[Cloudflare R2]
   worker[api worker] --> supabase
 ```
 
@@ -30,10 +30,11 @@ and [data model](../../architecture/Drezivo-Data-Model.md) contain the complete 
 Customer address and optional social-profile handling follows the tenant-scoped, API-owned
 boundary described in [[02-Architecture/Customer Address and Social Profile Fields]].
 
-Supabase supplies managed PostgreSQL only. Clerk remains the identity provider, S3/MinIO remains
-the object-storage boundary, and browser clients never use Supabase database credentials or its
-Data API. The API and worker connect as separate restricted roles; migration tooling uses the
-direct administrative connection. See [[Supabase Managed PostgreSQL]].
+Supabase supplies managed PostgreSQL only. Clerk remains the identity provider. Production object
+storage targets Cloudflare R2 while local development keeps MinIO through the same S3-compatible
+`ObjectStorage` boundary. Browser clients never use Supabase database or object-storage credentials.
+The API and worker connect as separate restricted roles; migration tooling uses the direct
+administrative connection. See [[Supabase Managed PostgreSQL]].
 
 The backend follows explicit feature boundaries between routes, controllers, services,
 repositories, DTOs, and schemas. See [[02-Architecture/API Module Boundaries and Layering]] for

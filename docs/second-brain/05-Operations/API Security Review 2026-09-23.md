@@ -154,8 +154,9 @@ object, or query details.
 
 ### SEC-API-010 — Storage requests have no timeout
 
-[`s3-object-storage.ts`](../../../api/src/integrations/storage/s3-object-storage.ts) calls `fetch`
-without an abort deadline. Add bounded timeouts, safe retries, and dependency-unavailable mapping.
+The former `s3-object-storage.ts` implementation called `fetch` without an abort deadline. The
+current storage implementation is [`s3-compatible-object-storage.ts`](../../../api/src/integrations/storage/s3-compatible-object-storage.ts);
+retain bounded timeouts, safe retries, and dependency-unavailable mapping as the hardening target.
 
 ### SEC-API-011 — Production transport security is not validated in configuration
 

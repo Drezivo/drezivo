@@ -127,10 +127,11 @@ npm run start:worker    # Run the compiled worker
 ## Environment and production
 
 The API loader reads host/process variables first, then `.env.<NODE_ENV>`, with `.env` as the
-shared local fallback for non-production modes. Production deliberately does not load the local
-`.env`; deploy `DATABASE_URL`, Clerk keys, AWS region/bucket names, and credentials through the
-deployment secret manager instead. Leave `S3_ENDPOINT` unset for AWS S3. For local MinIO,
-`S3_ENDPOINT=http://127.0.0.1:9000` and `S3_FORCE_PATH_STYLE=true` are used.
+shared local fallback for development/test. Production and staging deliberately do not load the local
+`.env`; deploy `DATABASE_URL`, Clerk keys, and `OBJECT_STORAGE_*` values through the deployment
+secret manager instead. Production/staging use Cloudflare R2's HTTPS S3 endpoint with region `auto`
+and virtual-hosted addressing. Local MinIO uses `http://127.0.0.1:9000`, region `us-east-1`, and
+`OBJECT_STORAGE_FORCE_PATH_STYLE=true`.
 
 Runtime Clerk, object-storage, and database integrations require validated environment
 configuration. Invitation protection additionally requires separate 32-byte base64url

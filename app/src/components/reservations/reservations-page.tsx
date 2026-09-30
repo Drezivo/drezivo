@@ -8,7 +8,6 @@ import {
   Plus,
   Search,
   Shirt,
-  UserRound,
   X,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -21,7 +20,6 @@ import type {
   ReservationState,
 } from "@drezivo/contracts";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -583,9 +581,7 @@ function ReservationTable({
             </TableCell>
             <TableCell className="align-top">
               <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-dashboard-active text-dashboard-accent">
-                  <Shirt className="h-4 w-4" aria-hidden="true" />
-                </div>
+                <ReservationClothingThumbnail reservation={reservation} />
                 <div className="min-w-0">
                   <p className="max-w-52 truncate font-medium text-dashboard-navy">
                     {reservation.line.name_snapshot}
@@ -629,31 +625,40 @@ function CustomerCell({ reservation }: { reservation: ReservationListItem }) {
   const customer = reservation.customer.snapshot;
   if (!customer) {
     return (
-      <div className="flex items-start gap-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-dashboard-border bg-dashboard-active text-dashboard-muted">
-          <UserRound className="h-4 w-4" aria-hidden="true" />
-        </div>
-        <div>
-          <p className="font-medium text-dashboard-navy">Customer not added yet</p>
-          <p className="mt-1 text-xs text-dashboard-muted">Short staff hold</p>
-        </div>
+      <div>
+        <p className="font-medium text-dashboard-navy">Customer not added yet</p>
+        <p className="mt-1 text-xs text-dashboard-muted">Short staff hold</p>
       </div>
     );
   }
 
   return (
-    <div className="flex items-start gap-3">
-      <Avatar className="h-8 w-8 border border-dashboard-border">
-        <AvatarFallback className="bg-dashboard-active text-xs font-semibold text-dashboard-accent">
-          {initials(customer.full_name)}
-        </AvatarFallback>
-      </Avatar>
-      <div className="min-w-0">
-        <p className="max-w-48 truncate font-semibold text-dashboard-navy">{customer.full_name}</p>
-        <p className="mt-1 max-w-48 truncate text-xs text-dashboard-muted">
-          {customer.phone ?? customer.email ?? "Contact unavailable"}
-        </p>
-      </div>
+    <div className="min-w-0">
+      <p className="max-w-48 truncate font-semibold text-dashboard-navy">{customer.full_name}</p>
+      <p className="mt-1 max-w-48 truncate text-xs text-dashboard-muted">
+        {customer.phone ?? customer.email ?? "Contact unavailable"}
+      </p>
+    </div>
+  );
+}
+
+function ReservationClothingThumbnail({ reservation }: { reservation: ReservationListItem }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const imageUrl = reservation.line.image_url;
+
+  return (
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
+      {imageUrl && !imageFailed ? (
+        // eslint-disable-next-line @next/next/no-img-element -- API-provided signed URLs are short-lived and dynamic.
+        <img
+          src={imageUrl}
+          alt={`${reservation.line.name_snapshot} cover image`}
+          className="h-full w-full object-cover"
+          onError={() => setImageFailed(true)}
+        />
+      ) : (
+        <Shirt className="h-4 w-4" aria-hidden="true" />
+      )}
     </div>
   );
 }
@@ -925,15 +930,6 @@ function formatMinorMoney(value: string, currency: string): string {
     maximumFractionDigits: 0,
     style: "currency",
   }).format(Number(value) / 100);
-}
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
 }
 
 function toDrezivoApiError(error: unknown): DrezivoApiError {

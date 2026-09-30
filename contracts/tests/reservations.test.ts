@@ -391,6 +391,7 @@ describe('reservation contracts', () => {
             id: ids.line,
             variant_id: ids.variant,
             name_snapshot: 'Emerald Gown',
+            image_url: 'https://reads.example.test/catalogue/emerald-gown.webp?version=cover-v1',
             rental_minor: '150000',
             deposit_minor: '50000',
             currency: 'PHP',

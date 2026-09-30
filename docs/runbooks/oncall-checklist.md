@@ -13,7 +13,7 @@ body, phone number, or evidence image (TRD §12).
 **What it means:** TRD §11's targets are p95 availability reads ≤500 ms, p95 ordinary mutations
 ≤1 s, excluding binary upload/provider email time (measured separately). A sustained breach
 means either the database is slow (query plan regression, missing index, lock contention) or a
-downstream dependency (Clerk, S3, email provider) is slow and the request path isn't timing out
+downstream dependency (Clerk, Cloudflare R2/object storage, email provider) is slow and the request path isn't timing out
 around it.
 
 **First thing to check:** is the elevated latency isolated to one endpoint/one tenant, or
