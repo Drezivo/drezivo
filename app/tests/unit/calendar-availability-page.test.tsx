@@ -1,10 +1,14 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { clothingAvailabilityTimelineResponse } from "@drezivo/contracts";
 
 import { CalendarAvailabilityPage } from "@/components/calendar/calendar-availability-page";
-import { addCalendarDays } from "@/components/calendar/calendar-availability-data";
+import {
+  addCalendarDays,
+  buildAvailabilityDays,
+  todayInTimeZone,
+} from "@/components/calendar/calendar-availability-data";
 
 const clerk = vi.hoisted(() => ({
   getToken: vi.fn(),
@@ -74,6 +78,7 @@ function timelineResponse(
     name?: string;
     nextCursor?: string | null;
     readiness?: "ready" | "needs_cleaning" | "needs_repair" | "unready";
+    timezone?: string;
     unavailable?: boolean;
   } = {}
 ) {
@@ -82,7 +87,7 @@ function timelineResponse(
   const agendaEndDate = addCalendarDays(startDate, 4);
 
   return clothingAvailabilityTimelineResponse.parse({
-    timezone: "Asia/Manila",
+    timezone: options.timezone ?? "Asia/Manila",
     window: { start_date: startDate, end_date: endDate },
     facets: {
       categories: [{ id: categoryId, name: "Gowns" }],
@@ -140,6 +145,10 @@ function timelineResponse(
 }
 
 describe("CalendarAvailabilityPage", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     api.getCatalogueClothingDetail.mockReset();
@@ -207,6 +216,56 @@ describe("CalendarAvailabilityPage", () => {
     expect(input.end_date).toBe(addCalendarDays(input.start_date, 13));
     expect(input.limit).toBe(25);
     expect(await screen.findByText("Emerald Evening Gown")).toBeVisible();
+  });
+
+  it("highlights today using the active branch date rather than the browser date", async () => {
+    vi.useFakeTimers();
+    const fixedInstant = new Date("2026-10-01T02:00:00.000Z");
+    vi.setSystemTime(fixedInstant);
+    const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const browserToday = todayInTimeZone(browserTimeZone, fixedInstant);
+    const branchTimeZone =
+      browserToday === "2026-10-01" ? "America/Los_Angeles" : "Asia/Manila";
+    const branchToday = todayInTimeZone(branchTimeZone, fixedInstant);
+    const branchTodayLabels = buildAvailabilityDays(branchToday)[0]!;
+    expect(branchToday).not.toBe(browserToday);
+    api.getActorContext.mockResolvedValueOnce({
+      data: {
+        active_branch_id: "00000000-0000-4000-8000-000000000201",
+        branches: [
+          {
+            id: "00000000-0000-4000-8000-000000000201",
+            timezone: branchTimeZone,
+          },
+        ],
+        tenant: { timezone: "Asia/Manila" },
+      },
+    });
+    api.getClothingAvailabilityTimeline.mockImplementationOnce(
+      async (input: { start_date: string; end_date: string }) => ({
+        data: timelineResponse(input.start_date, input.end_date, {
+          timezone: branchTimeZone,
+        }),
+      })
+    );
+
+    render(<CalendarAvailabilityPage />);
+
+    await act(async () => {
+      for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    });
+
+    expect(screen.getByText("Emerald Evening Gown")).toBeVisible();
+    expect(api.getClothingAvailabilityTimeline).toHaveBeenCalledWith(
+      expect.objectContaining({ start_date: branchToday })
+    );
+
+    const timeline = screen.getByLabelText("Clothing availability timeline");
+    const todayHeader = timeline.querySelector('[aria-current="date"]');
+    expect(todayHeader).toHaveTextContent(branchTodayLabels.label);
+    expect(todayHeader).toHaveTextContent(branchTodayLabels.dateLabel);
+    expect(todayHeader).toHaveClass("bg-dashboard-gold-soft/70");
+    expect(timeline.querySelector('[class~="bg-dashboard-active/40"]')).not.toBeNull();
   });
 
   it("lets a short timeline shrink to its content while capping larger lists", async () => {

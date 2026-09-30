@@ -375,6 +375,7 @@ export function CalendarAvailabilityPage() {
           pageSize={pageSize}
           permissionRestricted={permissionRestricted}
           rangeLabel={rangeLabel}
+          todayKey={todayInTimeZone(effectiveTimeZone)}
           timeZone={effectiveTimeZone}
           windowEnd={windowEnd}
           windowStart={windowStart}
@@ -649,6 +650,7 @@ function AvailabilityTimeline({
   pageSize,
   permissionRestricted,
   rangeLabel,
+  todayKey,
   timeZone,
   windowEnd,
   windowStart,
@@ -669,6 +671,7 @@ function AvailabilityTimeline({
   pageSize: 25 | 50;
   permissionRestricted: boolean;
   rangeLabel: string;
+  todayKey: string;
   timeZone: string;
   windowEnd: string | null;
   windowStart: string | null;
@@ -691,10 +694,28 @@ function AvailabilityTimeline({
               {days.map((day) => (
                 <div
                   key={day.date}
-                  className="border-r border-dashboard-border bg-dashboard-surface px-2 py-3 text-center last:border-r-0"
+                  aria-current={day.date === todayKey ? "date" : undefined}
+                  className={cn(
+                    "border-r border-dashboard-border bg-dashboard-surface px-2 py-3 text-center last:border-r-0",
+                    day.date === todayKey && "bg-dashboard-gold-soft/70"
+                  )}
                 >
-                  <p className="text-xs font-semibold text-dashboard-navy">{day.label}</p>
-                  <p className="mt-1 text-[0.7rem] text-dashboard-muted">{day.dateLabel}</p>
+                  <p
+                    className={cn(
+                      "text-xs font-semibold text-dashboard-navy",
+                      day.date === todayKey && "text-dashboard-gold-text"
+                    )}
+                  >
+                    {day.label}
+                  </p>
+                  <p
+                    className={cn(
+                      "mt-1 text-[0.7rem] text-dashboard-muted",
+                      day.date === todayKey && "font-semibold text-dashboard-gold-text"
+                    )}
+                  >
+                    {day.dateLabel}
+                  </p>
                 </div>
               ))}
             </div>
@@ -733,6 +754,7 @@ function AvailabilityTimeline({
                   hasCatalogueFilter={hasCatalogueFilter}
                   item={item}
                   rangeLabel={rangeLabel}
+                  todayKey={todayKey}
                   timeZone={timeZone}
                   windowEnd={windowEnd}
                   windowStart={windowStart}
@@ -806,6 +828,7 @@ function AvailabilityRow({
   item,
   onOpenAgenda,
   rangeLabel,
+  todayKey,
   timeZone,
   windowEnd,
   windowStart,
@@ -815,6 +838,7 @@ function AvailabilityRow({
   item: ClothingAvailabilityTimelineRow;
   onOpenAgenda: (assetId: string, agendaId: string) => void;
   rangeLabel: string;
+  todayKey: string;
   timeZone: string;
   windowEnd: string;
   windowStart: string;
@@ -856,6 +880,7 @@ function AvailabilityRow({
               key={`${item.asset.id}-${day.date}`}
               className={cn(
                 "border-r border-dashboard-border/70",
+                day.date === todayKey && "bg-dashboard-active/40",
                 index === days.length - 1 && "border-r-0"
               )}
             />
