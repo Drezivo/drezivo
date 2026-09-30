@@ -25,6 +25,8 @@ describe('payment method settings contracts', () => {
           instructions: 'Send the deposit and keep your receipt.',
         },
         qr_file_id: fileId,
+        presentation: 'details',
+        material: null,
       }).success,
     ).toBe(true);
   });
