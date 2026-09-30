@@ -28,6 +28,7 @@ process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = buildAppRoleDatabaseUrl(adminUrl);
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82]);
+const PNG_SHA = createHash('sha256').update(PNG).digest('base64');
 
 describe('storefront guest booking', async () => {
   const { createApp } = await import('../../src/app.js');
@@ -44,14 +45,18 @@ describe('storefront guest booking', async () => {
 
   const uploads = new Map<string, { contentType: string; byteSize: number; sha256: string }>();
   const storage = {
-    authorizeUpload: (input: { storageKey: string; contentType: string; sha256: string; expiresInSeconds: number }) => {
-      uploads.set(input.storageKey, { contentType: input.contentType, byteSize: PNG.length, sha256: input.sha256 });
-      return Promise.resolve({ uploadUrl: `https://uploads.test/${input.storageKey}`, requiredHeaders: { 'Content-Type': input.contentType }, expiresAt: new Date(Date.now() + 600_000) });
+    authorizeUpload: (input: { storageKey: string; contentType: string; expiresInSeconds: number }) => {
+      uploads.set(input.storageKey, { contentType: input.contentType, byteSize: PNG.length, sha256: PNG_SHA });
+      return Promise.resolve({
+        uploadUrl: `https://uploads.test/${input.storageKey}`,
+        requiredHeaders: { 'Content-Type': input.contentType, 'If-None-Match': '*' },
+        expiresAt: new Date(Date.now() + 600_000),
+      });
     },
     authorizeRead: (input: { storageKey: string }) => Promise.resolve({ readUrl: `https://files.test/${input.storageKey}`, expiresAt: new Date(Date.now() + 3_600_000) }),
-    inspectUploadedObject: (key: string) => {
+    inspectUploadedObject: (key: string, _maxByteSize: number) => {
       const found = uploads.get(key);
-      return Promise.resolve(found ? { ...found, versionId: 'v1', prefix: PNG } : null);
+      return Promise.resolve(found ? { ...found, versionId: null, prefix: PNG } : null);
     },
   };
   const verification = new GuestVerificationService(emailNotifications, () => true, () => false);
