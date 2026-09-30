@@ -39,13 +39,16 @@ export async function readFittingSettingsModel(
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(
            jsonb_build_object(
-             'weekday', fh.weekday,
-             'starts_local', to_char(fh.starts_local, 'HH24:MI'),
-             'ends_local', to_char(fh.ends_local, 'HH24:MI')
-           ) ORDER BY fh.weekday, fh.starts_local, fh.id
+             'weekday', day.weekday,
+             'starts_local', b.operating_hours->>'opens_local',
+             'ends_local', b.operating_hours->>'closes_local'
+           ) ORDER BY day.weekday
          ) AS items
-           FROM fitting_hours fh
-          WHERE fh.tenant_id = fs.tenant_id AND fh.branch_id = fs.branch_id
+           FROM generate_series(1, 7) AS day(weekday)
+          WHERE NOT (
+            b.operating_hours->'closed_weekdays'
+            ? (ARRAY['monday','tuesday','wednesday','thursday','friday','saturday','sunday'])[day.weekday]
+          )
        ) hours ON true
       WHERE fs.tenant_id = $1 AND fs.branch_id = $2
       LIMIT 1`,
@@ -60,22 +63,28 @@ export async function listFittingClosuresReadModel(
 ): Promise<{ rows: FittingClosureReadRow[]; nextCursor: string | null; hasMore: boolean }> {
   const values: unknown[] = [input.tenantId, input.branchId, input.query.period_start, input.query.period_end];
   const where = [
-    'fc.tenant_id = $1',
-    'fc.branch_id = $2',
-    `fc.period && tstzrange($3::timestamptz, $4::timestamptz, '[)')`,
+    'bc.tenant_id = $1',
+    'bc.branch_id = $2',
+    `(bc.local_date::timestamp AT TIME ZONE b.timezone) < $4::timestamptz`,
+    `((bc.local_date + 1)::timestamp AT TIME ZONE b.timezone) > $3::timestamptz`,
   ];
   if (input.query.cursor) {
     const cursor = decodeCursor(input.query.cursor);
     values.push(cursor.startsAt, cursor.id);
-    where.push(`(lower(fc.period), fc.id) > ($5::timestamptz, $6::uuid)`);
+    where.push(`((bc.local_date::timestamp AT TIME ZONE b.timezone), bc.id) > ($5::timestamptz, $6::uuid)`);
   }
   values.push(input.query.limit + 1);
   const result = await client.query<FittingClosureReadRow>(
-    `SELECT fc.id, lower(fc.period) AS starts_at, upper(fc.period) AS ends_at,
-            fc.timezone_snapshot, fc.reason, fc.created_at
-       FROM fitting_closure fc
+    `SELECT bc.id,
+            (bc.local_date::timestamp AT TIME ZONE b.timezone) AS starts_at,
+            ((bc.local_date + 1)::timestamp AT TIME ZONE b.timezone) AS ends_at,
+            b.timezone AS timezone_snapshot,
+            bc.reason,
+            bc.created_at
+       FROM branch_closure bc
+       JOIN branch b ON b.tenant_id = bc.tenant_id AND b.id = bc.branch_id
       WHERE ${where.join('\n        AND ')}
-      ORDER BY lower(fc.period) ASC, fc.id ASC
+      ORDER BY (bc.local_date::timestamp AT TIME ZONE b.timezone) ASC, bc.id ASC
       LIMIT $${values.length}`,
     values,
   );

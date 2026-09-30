@@ -68,7 +68,11 @@ import {
   type ScheduledFittingCapacityRow,
 } from './fittings.schedule.command.repository.js';
 import { recordFittingCommandFailure } from './fittings.observability.js';
-import { toFittingClosure, toFittingSettings } from './fittings.schedule.mapper.js';
+import {
+  toFittingClosure,
+  toFittingSettings,
+  toLegacyFittingScheduleSettings,
+} from './fittings.schedule.mapper.js';
 import { readFittingSettingsModel } from './fittings.schedule.repository.js';
 
 const SETTINGS_UPDATE_OPERATION = 'fitting.settings.update';
@@ -124,6 +128,7 @@ export async function updateFittingWeeklyHoursCommand(
 
   const request = parsed.data;
   const windows = normalizeWeeklyHours(request.weekly_hours);
+  assertLegacyScheduleRepresentable(windows);
   const payloadHash = canonicalRequestHash({ branch_id: context.branchId, ...request });
 
   return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
@@ -752,6 +757,28 @@ function normalizeWeeklyHours(weeklyHours: FittingWeeklyHours): FittingWeeklyWin
     });
 }
 
+function assertLegacyScheduleRepresentable(windows: FittingWeeklyWindowRow[]): void {
+  const weekdays = new Set<number>();
+  let sharedWindow: { starts_local: string; ends_local: string } | null = null;
+  for (const window of windows) {
+    if (weekdays.has(window.weekday)) {
+      throw new ValidationError(
+        'Business Hours support one opening and closing window per open weekday.',
+      );
+    }
+    weekdays.add(window.weekday);
+    sharedWindow ??= window;
+    if (
+      sharedWindow.starts_local !== window.starts_local ||
+      sharedWindow.ends_local !== window.ends_local
+    ) {
+      throw new ValidationError(
+        'Business Hours use the same opening and closing time on every open weekday.',
+      );
+    }
+  }
+}
+
 function maximumSimultaneousFittings(rows: ScheduledFittingCapacityRow[]): number {
   const events = rows.flatMap((row) => [
     { time: row.starts_at.getTime(), delta: 1 },
@@ -795,7 +822,9 @@ async function buildWeeklyHoursSuccess(
   if (!model) throw new Error('Updated fitting settings could not be read back.');
   return {
     success: true,
-    data: fittingWeeklyHoursUpdateResponse.parse({ settings: toFittingSettings(model) }),
+    data: fittingWeeklyHoursUpdateResponse.parse({
+      settings: toLegacyFittingScheduleSettings(model),
+    }),
     request_id: context.requestId,
   };
 }

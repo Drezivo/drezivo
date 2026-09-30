@@ -275,9 +275,13 @@ describe('storefront guest booking', async () => {
       doc.checkout.fitting_requests = true;
     });
     const date = addDays(localDate(new Date(), 'Asia/Manila'), 3);
-    const isoWeekday = ((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
     await admin.query<Record<string, unknown>>(`INSERT INTO fitting_settings (tenant_id, branch_id, enabled, capacity, duration_minutes, fee_minor, currency) VALUES ($1, $2, true, 1, 60, 0, 'PHP')`, [ws.tenantId, ws.branchId]);
-    await admin.query<Record<string, unknown>>(`INSERT INTO fitting_hours (tenant_id, branch_id, weekday, starts_local, ends_local) VALUES ($1, $2, $3, '10:00', '12:00')`, [ws.tenantId, ws.branchId, isoWeekday]);
+    await admin.query<Record<string, unknown>>(
+      `UPDATE branch
+          SET operating_hours = '{"opens_local":"10:00","closes_local":"12:00","closed_weekdays":[]}'::jsonb
+        WHERE tenant_id = $1 AND id = $2`,
+      [ws.tenantId, ws.branchId],
+    );
 
     const fittingRequest = (token: string, email: string) => guestFittingRequest.parse({
       verification_token: token,

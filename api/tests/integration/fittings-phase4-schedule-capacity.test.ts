@@ -80,16 +80,14 @@ async function seedBranch(client: Client, label: string): Promise<Seed> {
     [tenantId, branchId],
   );
   await client.query(
-    `INSERT INTO fitting_hours (tenant_id, branch_id, weekday, starts_local, ends_local)
-     SELECT $1, $2, weekday, '09:00'::time, '17:00'::time
-       FROM generate_series(1, 7) AS weekday`,
+    `UPDATE branch
+        SET operating_hours = '{"opens_local":"09:00","closes_local":"17:00","closed_weekdays":[]}'::jsonb
+      WHERE tenant_id = $1 AND id = $2`,
     [tenantId, branchId],
   );
   await client.query(
-    `INSERT INTO fitting_closure
-       (tenant_id, branch_id, period, timezone_snapshot, reason)
-     VALUES ($1, $2, tstzrange('2099-01-10T04:00:00Z', '2099-01-10T06:00:00Z', '[)'),
-             'Asia/Manila', 'Private event')`,
+    `INSERT INTO branch_closure (tenant_id, branch_id, local_date, reason)
+     VALUES ($1, $2, date '2099-01-10', 'Private event')`,
     [tenantId, branchId],
   );
 
@@ -127,7 +125,7 @@ describe('FIT-BE-041 fitting schedule and capacity validation', () => {
   beforeAll(async () => migrateTestDatabase(adminUrl));
   afterEach(async () => resetTestDatabase(adminUrl));
 
-  it('requires a future period wholly inside one weekly window and outside closures', async () => {
+  it('requires a future period wholly inside Business Hours and outside branch closed dates', async () => {
     const client = await openClient();
     try {
       const seed = await seedBranch(client, 'schedule');

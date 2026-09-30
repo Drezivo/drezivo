@@ -126,15 +126,14 @@ describe('TBF-030 tenant bootstrap', async () => {
            FROM fitting_settings
           LIMIT 1`,
       );
-      const fittingHours = await client.query<{
-        weekday: number;
-        starts_local: string;
-        ends_local: string;
+      const businessHours = await client.query<{
+        operating_hours: Record<string, unknown>;
+        operating_hours_version: string;
       }>(
-        `SELECT weekday, to_char(starts_local, 'HH24:MI') AS starts_local,
-                to_char(ends_local, 'HH24:MI') AS ends_local
-           FROM fitting_hours
-          ORDER BY weekday ASC, starts_local ASC`,
+        `SELECT operating_hours, operating_hours_version::text
+           FROM branch
+          WHERE is_default
+          LIMIT 1`,
       );
       return {
         subscription: subscription.rows[0],
@@ -142,7 +141,7 @@ describe('TBF-030 tenant bootstrap', async () => {
         categories: categories.rows,
         policy: policy.rows[0],
         fittingSettings: fittingSettings.rows[0],
-        fittingHours: fittingHours.rows,
+        businessHours: businessHours.rows[0],
       };
     });
     if (!tenantState.subscription) throw new Error('expected subscription');
@@ -175,14 +174,14 @@ describe('TBF-030 tenant bootstrap', async () => {
       currency: 'PHP',
       version: 1,
     });
-    expect(tenantState.fittingHours).toEqual([
-      { weekday: 1, starts_local: '08:00', ends_local: '20:00' },
-      { weekday: 2, starts_local: '08:00', ends_local: '20:00' },
-      { weekday: 3, starts_local: '08:00', ends_local: '20:00' },
-      { weekday: 4, starts_local: '08:00', ends_local: '20:00' },
-      { weekday: 5, starts_local: '08:00', ends_local: '20:00' },
-      { weekday: 6, starts_local: '08:00', ends_local: '20:00' },
-    ]);
+    expect(tenantState.businessHours).toEqual({
+      operating_hours: {
+        opens_local: '08:00',
+        closes_local: '20:00',
+        closed_weekdays: ['sunday'],
+      },
+      operating_hours_version: '1',
+    });
   });
 
   it('replays one committed graph for concurrent same-key requests', async () => {

@@ -161,7 +161,6 @@ describe('public storefront read API', async () => {
     });
     const app = createApp();
     const date = addDays(localDate(new Date(), 'Asia/Manila'), 3);
-    const isoWeekday = ((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
 
     expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/fitting-slots?date=${date}`)).status).toBe(404);
 
@@ -171,8 +170,10 @@ describe('public storefront read API', async () => {
       [ws.tenantId, ws.branchId],
     );
     await admin.query<Record<string, unknown>>(
-      `INSERT INTO fitting_hours (tenant_id, branch_id, weekday, starts_local, ends_local) VALUES ($1, $2, $3, '10:00', '12:00')`,
-      [ws.tenantId, ws.branchId, isoWeekday],
+      `UPDATE branch
+          SET operating_hours = '{"opens_local":"10:00","closes_local":"12:00","closed_weekdays":[]}'::jsonb
+        WHERE tenant_id = $1 AND id = $2`,
+      [ws.tenantId, ws.branchId],
     );
     const open = await request(app).get(`/api/v1/public/stores/${ws.slug}/fitting-slots?date=${date}`);
     expect(open.status).toBe(200);
@@ -184,15 +185,12 @@ describe('public storefront read API', async () => {
     ]);
 
     await admin.query<Record<string, unknown>>(
-      `INSERT INTO fitting_closure (tenant_id, branch_id, period, timezone_snapshot, reason)
-       VALUES ($1, $2, tstzrange($3::timestamptz, $4::timestamptz, '[)'), 'Asia/Manila', 'Staff training')`,
-      [ws.tenantId, ws.branchId, `${date}T10:00:00+08:00`, `${date}T10:30:00+08:00`],
+      `INSERT INTO branch_closure (tenant_id, branch_id, local_date, reason)
+       VALUES ($1, $2, $3::date, 'Staff training')`,
+      [ws.tenantId, ws.branchId, date],
     );
     const afterClosure = await request(app).get(`/api/v1/public/stores/${ws.slug}/fitting-slots?date=${date}`);
-    expect(dataOf<FittingSlotsResponse>(afterClosure).slots.map((slot) => slot.start_at)).toEqual([
-      `${date}T02:30:00.000Z`,
-      `${date}T03:00:00.000Z`,
-    ]);
+    expect(dataOf<FittingSlotsResponse>(afterClosure).slots).toEqual([]);
     const store = await request(app).get(`/api/v1/public/stores/${ws.slug}`);
     expect(dataOf<PublicStorefront>(store).fitting).toEqual({ enabled: true, duration_minutes: 60, fee_minor: '50000' });
     expect(dataOf<PublicStorefront>(store).content.sections.fitting).toBe(true);

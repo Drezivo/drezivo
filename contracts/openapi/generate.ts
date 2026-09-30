@@ -67,14 +67,6 @@ import {
   filePurpose,
   fittingActionResponse,
   fittingCancelRequest,
-  fittingClosureCreateRequest,
-  fittingClosureListQuery,
-  fittingClosureListResponse,
-  fittingClosureMutationResponse,
-  fittingClosureParams,
-  fittingClosureRemoveRequest,
-  fittingClosureRemoveResponse,
-  fittingClosureUpdateRequest,
   fittingCompleteRequest,
   fittingConfirmRequest,
   fittingCreateRequest,
@@ -102,8 +94,6 @@ import {
   fittingSettingsUpdateRequest,
   fittingSettingsUpdateResponse,
   fittingState,
-  fittingWeeklyHoursUpdateRequest,
-  fittingWeeklyHoursUpdateResponse,
   guestReservationView,
   dashboardFittingSummaryResponse,
   dashboardOverviewResponse,
@@ -130,6 +120,16 @@ import {
   publishStorefrontPolicyRequest,
   businessSettings,
   updateBusinessSettingsRequest,
+  branchBusinessHours,
+  updateBranchBusinessHoursRequest,
+  branchClosureListQuery,
+  branchClosureListResponse,
+  branchClosureCreateRequest,
+  branchClosureUpdateRequest,
+  branchClosureMutationResponse,
+  branchClosureRemoveRequest,
+  branchClosureRemoveResponse,
+  branchClosureParams,
   notificationSettings,
   updateNotificationSettingsRequest,
   itemDetail,
@@ -185,6 +185,8 @@ registry.register('FittingState', fittingState);
 registry.register('FittingDetail', fittingDetail);
 registry.register('FittingListResponse', fittingListResponse);
 registry.register('FittingSettings', fittingSettings);
+registry.register('BranchBusinessHours', branchBusinessHours);
+registry.register('BranchClosureListResponse', branchClosureListResponse);
 // These are public contract components for Phase 1 onboarding routes. Register
 // the boundary now without advertising paths that the API has not implemented.
 registry.register('OnboardingStatus', onboardingStatus);
@@ -1234,7 +1236,7 @@ registry.registerPath({
   method: 'get',
   path: '/fittings/settings',
   tags: ['fittings'],
-  summary: 'Read branch fitting enabled state, simultaneous capacity, strict duration, fee and weekly hours.',
+  summary: 'Read branch fitting enabled state, simultaneous capacity, strict duration and fee.',
   responses: {
     200: {
       description: 'Current branch fitting settings without hidden capacity-slot identities.',
@@ -1261,105 +1263,6 @@ registry.registerPath({
     403: jsonError('Only Owner may mutate fitting configuration.'),
     409: jsonError('STATE_CONFLICT, SCHEDULE_CONFLICT, STALE_VERSION, or IDEMPOTENCY_KEY_REUSED.'),
     422: jsonError('The fitting settings request is invalid.'),
-  },
-});
-
-registry.registerPath({
-  method: 'put',
-  path: '/fittings/settings/hours',
-  tags: ['fittings'],
-  summary: 'Owner-only full replacement of recurring branch fitting windows.',
-  request: {
-    headers: idempotencyKeyHeader,
-    body: { content: { 'application/json': { schema: fittingWeeklyHoursUpdateRequest } } },
-  },
-  responses: {
-    200: {
-      description: 'Weekly fitting windows updated; gaps represent recurring breaks.',
-      content: { 'application/json': { schema: successEnvelope(fittingWeeklyHoursUpdateResponse) } },
-    },
-    403: jsonError('Only Owner may mutate fitting configuration.'),
-    409: jsonError('SCHEDULE_CONFLICT, STALE_VERSION, or IDEMPOTENCY_KEY_REUSED.'),
-    422: jsonError('The weekly fitting-hours request is invalid.'),
-  },
-});
-
-registry.registerPath({
-  method: 'get',
-  path: '/fittings/closures',
-  tags: ['fittings'],
-  summary: 'List date-specific fitting closures in one bounded period window.',
-  request: { query: fittingClosureListQuery },
-  responses: {
-    200: {
-      description: 'Paginated date-specific fitting closures.',
-      content: { 'application/json': { schema: successEnvelope(fittingClosureListResponse) } },
-    },
-    403: jsonError('Fitting settings read permission is required.'),
-    422: jsonError('The closure list window is invalid.'),
-  },
-});
-
-registry.registerPath({
-  method: 'post',
-  path: '/fittings/closures',
-  tags: ['fittings'],
-  summary: 'Owner-only creation of a date-specific fitting closure.',
-  request: {
-    headers: idempotencyKeyHeader,
-    body: { content: { 'application/json': { schema: fittingClosureCreateRequest } } },
-  },
-  responses: {
-    201: {
-      description: 'Fitting closure created.',
-      content: { 'application/json': { schema: successEnvelope(fittingClosureMutationResponse) } },
-    },
-    403: jsonError('Only Owner may mutate fitting configuration.'),
-    409: jsonError('SCHEDULE_CONFLICT, STALE_VERSION, or IDEMPOTENCY_KEY_REUSED.'),
-    422: jsonError('The fitting closure request is invalid.'),
-  },
-});
-
-registry.registerPath({
-  method: 'put',
-  path: '/fittings/closures/{closureId}',
-  tags: ['fittings'],
-  summary: 'Owner-only update of one date-specific fitting closure.',
-  request: {
-    params: fittingClosureParams,
-    headers: idempotencyKeyHeader,
-    body: { content: { 'application/json': { schema: fittingClosureUpdateRequest } } },
-  },
-  responses: {
-    200: {
-      description: 'Fitting closure updated.',
-      content: { 'application/json': { schema: successEnvelope(fittingClosureMutationResponse) } },
-    },
-    403: jsonError('Only Owner may mutate fitting configuration.'),
-    404: jsonError('The fitting closure was not found for the active tenant/branch.'),
-    409: jsonError('SCHEDULE_CONFLICT, STALE_VERSION, or IDEMPOTENCY_KEY_REUSED.'),
-    422: jsonError('The fitting closure request is invalid.'),
-  },
-});
-
-registry.registerPath({
-  method: 'post',
-  path: '/fittings/closures/{closureId}/remove',
-  tags: ['fittings'],
-  summary: 'Owner-only removal of one date-specific fitting closure.',
-  request: {
-    params: fittingClosureParams,
-    headers: idempotencyKeyHeader,
-    body: { content: { 'application/json': { schema: fittingClosureRemoveRequest } } },
-  },
-  responses: {
-    200: {
-      description: 'Fitting closure removed.',
-      content: { 'application/json': { schema: successEnvelope(fittingClosureRemoveResponse) } },
-    },
-    403: jsonError('Only Owner may mutate fitting configuration.'),
-    404: jsonError('The fitting closure was not found for the active tenant/branch.'),
-    409: jsonError('STALE_VERSION or IDEMPOTENCY_KEY_REUSED.'),
   },
 });
 
@@ -1470,6 +1373,121 @@ const slugParams = z.object({ slug: z.string().min(1) });
 const guestIdParams = z.object({ id: z.string().uuid() });
 const guestAuthHeader = z.object({ authorization: z.string().regex(/^Bearer [A-Za-z0-9_-]{43}$/) });
 const jsonBody = (schema: z.ZodTypeAny) => ({ content: { 'application/json': { schema } } });
+
+registry.registerPath({
+  method: 'get',
+  path: '/settings/business-hours',
+  tags: ['settings'],
+  summary: 'Read authoritative Business Hours for the active branch.',
+  request: {},
+  responses: {
+    200: {
+      description: 'Active-branch Business Hours.',
+      content: { 'application/json': { schema: successEnvelope(branchBusinessHours) } },
+    },
+    403: jsonError('Business Hours read permission is required.'),
+  },
+});
+
+registry.registerPath({
+  method: 'patch',
+  path: '/settings/business-hours',
+  tags: ['settings'],
+  summary: 'Owner-only replacement of active-branch Business Hours.',
+  request: {
+    headers: idempotencyKeyHeader,
+    body: jsonBody(updateBranchBusinessHoursRequest),
+  },
+  responses: {
+    200: {
+      description: 'Business Hours updated.',
+      content: { 'application/json': { schema: successEnvelope(branchBusinessHours) } },
+    },
+    403: jsonError('Only an authorized owner may mutate Business Hours.'),
+    409: jsonError('SCHEDULE_CONFLICT, STALE_VERSION, or IDEMPOTENCY_KEY_REUSED.'),
+    422: jsonError('The Business Hours request is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/settings/business-hours/closures',
+  tags: ['settings'],
+  summary: 'List special whole-day closures for the active branch.',
+  request: { query: branchClosureListQuery },
+  responses: {
+    200: {
+      description: 'Paginated active-branch closed dates.',
+      content: { 'application/json': { schema: successEnvelope(branchClosureListResponse) } },
+    },
+    403: jsonError('Business Hours read permission is required.'),
+    422: jsonError('The closed-date list window is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/settings/business-hours/closures',
+  tags: ['settings'],
+  summary: 'Owner-only creation of a special whole-day branch closure.',
+  request: {
+    headers: idempotencyKeyHeader,
+    body: jsonBody(branchClosureCreateRequest),
+  },
+  responses: {
+    201: {
+      description: 'Branch closed date created.',
+      content: { 'application/json': { schema: successEnvelope(branchClosureMutationResponse) } },
+    },
+    403: jsonError('Only an authorized owner may mutate Business Hours.'),
+    409: jsonError('SCHEDULE_CONFLICT or IDEMPOTENCY_KEY_REUSED.'),
+    422: jsonError('The closed-date request is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'patch',
+  path: '/settings/business-hours/closures/{closureId}',
+  tags: ['settings'],
+  summary: 'Owner-only update of one special branch closed date.',
+  request: {
+    params: branchClosureParams,
+    headers: idempotencyKeyHeader,
+    body: jsonBody(branchClosureUpdateRequest),
+  },
+  responses: {
+    200: {
+      description: 'Branch closed date updated.',
+      content: { 'application/json': { schema: successEnvelope(branchClosureMutationResponse) } },
+    },
+    403: jsonError('Only an authorized owner may mutate Business Hours.'),
+    404: jsonError('The closed date was not found for the active branch.'),
+    409: jsonError('SCHEDULE_CONFLICT, STALE_VERSION, or IDEMPOTENCY_KEY_REUSED.'),
+    422: jsonError('The closed-date request is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/settings/business-hours/closures/{closureId}/remove',
+  tags: ['settings'],
+  summary: 'Owner-only removal of one special branch closed date.',
+  request: {
+    params: branchClosureParams,
+    headers: idempotencyKeyHeader,
+    body: jsonBody(branchClosureRemoveRequest),
+  },
+  responses: {
+    200: {
+      description: 'Branch closed date removed.',
+      content: { 'application/json': { schema: successEnvelope(branchClosureRemoveResponse) } },
+    },
+    403: jsonError('Only an authorized owner may mutate Business Hours.'),
+    404: jsonError('The closed date was not found for the active branch.'),
+    409: jsonError('STALE_VERSION or IDEMPOTENCY_KEY_REUSED.'),
+  },
+});
+
 const extraPaths: Array<{
   method: 'get' | 'post' | 'patch';
   path: string;

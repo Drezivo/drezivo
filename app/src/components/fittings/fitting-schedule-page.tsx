@@ -5,7 +5,12 @@ import { ArrowLeft, Ban, Clock3, Pencil, Plus, Save, Settings2, Trash2, X } from
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
-import type { FittingClosure, FittingSettings, FittingWeeklyHours } from "@drezivo/contracts";
+import type {
+  FittingClosure,
+  FittingSettings,
+  FittingWeeklyHours,
+  LegacyFittingScheduleSettings,
+} from "@drezivo/contracts";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -69,7 +74,7 @@ const FITTING_CLOSURE_LIST_LIMIT = 100;
 
 export function FittingSchedulePage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
-  const [settings, setSettings] = useState<FittingSettings | null>(null);
+  const [settings, setSettings] = useState<LegacyFittingScheduleSettings | null>(null);
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft | null>(null);
   const [hours, setHours] = useState<DayHours[]>([]);
   const [closures, setClosures] = useState<ScheduleClosure[]>([]);
@@ -86,7 +91,7 @@ export function FittingSchedulePage() {
   const hoursGuard = useSubmitGuard();
   const closureGuard = useSubmitGuard();
 
-  const applySettings = useCallback((nextSettings: FittingSettings) => {
+  const applySettings = useCallback((nextSettings: LegacyFittingScheduleSettings) => {
     setSettings(nextSettings);
     setSettingsDraft(settingsToDraft(nextSettings));
     setHours(settingsToDayHours(nextSettings));
@@ -181,7 +186,9 @@ export function FittingSchedulePage() {
           idempotencyKey
         )
       );
-      if (result) applySettings(result.data.settings);
+      if (result) {
+        applySettings({ ...result.data.settings, weekly_hours: settings.weekly_hours });
+      }
     } catch (caughtError) {
       setSettingsError(toDrezivoApiError(caughtError).message);
     }
@@ -994,7 +1001,7 @@ function settingsToDraft(settings: FittingSettings): SettingsDraft {
   };
 }
 
-function settingsToDayHours(settings: FittingSettings): DayHours[] {
+function settingsToDayHours(settings: LegacyFittingScheduleSettings): DayHours[] {
   const byWeekday = new Map(settings.weekly_hours.map((entry) => [entry.weekday, entry.windows]));
   return WEEKDAYS.map(({ day, weekday }) => {
     const windows = byWeekday.get(weekday) ?? [];

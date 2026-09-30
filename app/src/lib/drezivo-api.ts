@@ -119,7 +119,7 @@ import {
   fittingClosureRemoveRequest,
   fittingClosureRemoveResponse,
   fittingClosureUpdateRequest,
-  fittingSettings,
+  legacyFittingScheduleSettings,
   fittingSettingsUpdateRequest,
   fittingSettingsUpdateResponse,
   fittingWeeklyHoursUpdateRequest,
@@ -251,7 +251,7 @@ import {
   type FittingClosureRemoveRequest,
   type FittingClosureRemoveResponse,
   type FittingClosureUpdateRequest,
-  type FittingSettings,
+  type LegacyFittingScheduleSettings,
   type FittingSettingsUpdateRequest,
   type FittingSettingsUpdateResponse,
   type FittingWeeklyHoursUpdateRequest,
@@ -518,11 +518,11 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
       });
     },
     getFittingSettings: () =>
-      request<FittingSettings>({
+      request<LegacyFittingScheduleSettings>({
         getToken,
         method: "GET",
         path: "/api/v1/fittings/settings",
-        responseSchema: apiEnvelope(fittingSettings),
+        responseSchema: apiEnvelope(legacyFittingScheduleSettings),
       }),
     updateFittingSettings: (input: FittingSettingsUpdateRequest, idempotencyKey: string) =>
       request<FittingSettingsUpdateResponse>({

@@ -363,20 +363,28 @@ export async function readOpenFittingSlots(
 ): Promise<Array<{ start_at: Date; end_at: Date }>> {
   const result = await client.query<{ start_at: Date; end_at: Date }>(
     `WITH cfg AS (
-       SELECT fs.capacity, fs.duration_minutes, b.timezone
+       SELECT fs.capacity,
+              fs.duration_minutes,
+              b.timezone,
+              (b.operating_hours->>'opens_local')::time AS opens_local,
+              (b.operating_hours->>'closes_local')::time AS closes_local
          FROM fitting_settings fs
          JOIN branch b ON b.tenant_id = fs.tenant_id AND b.id = fs.branch_id
-        WHERE fs.tenant_id = $1 AND fs.branch_id = $2 AND fs.enabled
+        WHERE fs.tenant_id = $1
+          AND fs.branch_id = $2
+          AND fs.enabled
+          AND NOT (
+            b.operating_hours->'closed_weekdays'
+            ? lower(to_char($3::date, 'FMDay'))
+          )
      ),
      candidate AS (
-       SELECT (($3::date + fh.starts_local + make_interval(mins => step)) AT TIME ZONE cfg.timezone) AS start_at,
+       SELECT (($3::date + cfg.opens_local + make_interval(mins => step)) AT TIME ZONE cfg.timezone) AS start_at,
               cfg.duration_minutes, cfg.capacity
          FROM cfg
-         JOIN fitting_hours fh
-           ON fh.tenant_id = $1 AND fh.branch_id = $2 AND fh.weekday = extract(isodow FROM $3::date)::int
          CROSS JOIN LATERAL generate_series(
            0,
-           (extract(epoch FROM (fh.ends_local - fh.starts_local)) / 60)::int - cfg.duration_minutes,
+           (extract(epoch FROM (cfg.closes_local - cfg.opens_local)) / 60)::int - cfg.duration_minutes,
            30
          ) AS step
      )
@@ -384,9 +392,10 @@ export async function readOpenFittingSlots(
        FROM candidate
       WHERE candidate.start_at > statement_timestamp()
         AND NOT EXISTS (
-          SELECT 1 FROM fitting_closure fc
-           WHERE fc.tenant_id = $1 AND fc.branch_id = $2
-             AND fc.period && tstzrange(candidate.start_at, candidate.start_at + make_interval(mins => candidate.duration_minutes), '[)')
+          SELECT 1 FROM branch_closure bc
+           WHERE bc.tenant_id = $1
+             AND bc.branch_id = $2
+             AND bc.local_date = $3::date
         )
         AND (
           SELECT count(*)

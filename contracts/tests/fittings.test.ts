@@ -27,6 +27,7 @@ import {
   fittingState,
   fittingWeeklyHours,
   fittingWeeklyHoursUpdateRequest,
+  legacyFittingScheduleSettings,
   idempotentRequestHeaders,
   refundCreateRequest,
   refundResolveRequest,
@@ -559,8 +560,8 @@ describe('fitting contracts', () => {
     expect(result.success).toBe(false);
   });
 
-  it('returns complete branch fitting settings without exposing internal slots', () => {
-    const result = fittingSettings.safeParse({
+  it('returns fitting-specific settings without weekly schedule ownership', () => {
+    const scalarSettings = {
       branch_id: ids.branch,
       enabled: true,
       capacity: 3,
@@ -568,12 +569,15 @@ describe('fitting contracts', () => {
       fee_minor: '30000',
       currency: 'PHP',
       timezone: 'Asia/Manila',
-      weekly_hours: weeklyHours,
       version: 4,
       updated_at: '2026-10-01T00:00:00.000Z',
-    });
+    };
 
-    expect(result.success).toBe(true);
+    expect(fittingSettings.safeParse(scalarSettings).success).toBe(true);
+    expect(fittingSettings.safeParse({ ...scalarSettings, weekly_hours: weeklyHours }).success).toBe(false);
+    expect(
+      legacyFittingScheduleSettings.safeParse({ ...scalarSettings, weekly_hours: weeklyHours }).success,
+    ).toBe(true);
   });
 
   it('requires all seven weekdays on weekly-hours replacement', () => {

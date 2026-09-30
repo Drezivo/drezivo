@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   fittingClosure,
-  fittingSettings,
+  legacyFittingScheduleSettings,
   type CustomerId,
   type ProductVariantId,
 } from "@drezivo/contracts";
@@ -78,7 +78,7 @@ function detail(status: "pending" | "confirmed" = "pending", version = 1) {
 }
 
 function scheduleSettings(version = 1) {
-  return fittingSettings.parse({
+  return legacyFittingScheduleSettings.parse({
     branch_id: branchId,
     enabled: true,
     capacity: 2,
@@ -223,8 +223,9 @@ describe("Drezivo fittings API client", () => {
   });
 
   it("serializes settings, weekly-hours, and closure operations with guarded contract payloads", async () => {
+    const { weekly_hours: _weeklyHours, ...scalarSettings } = scheduleSettings(2);
     fetchMock
-      .mockResolvedValueOnce(success({ settings: scheduleSettings(2) }))
+      .mockResolvedValueOnce(success({ settings: scalarSettings }))
       .mockResolvedValueOnce(success({ settings: scheduleSettings(3) }))
       .mockResolvedValueOnce(
         success({ items: [closure], page_meta: { next_cursor: null, has_more: false } })

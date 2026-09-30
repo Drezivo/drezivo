@@ -1,9 +1,11 @@
 import {
   fittingClosure,
   fittingSettings,
+  legacyFittingScheduleSettings,
   type FittingClosure,
   type FittingSettings,
   type FittingWeeklyHours,
+  type LegacyFittingScheduleSettings,
 } from '@drezivo/contracts';
 
 import type { FittingClosureCommandRow } from './fittings.schedule.command.repository.js';
@@ -44,9 +46,17 @@ export function toFittingSettings(model: FittingSettingsReadModel): FittingSetti
     fee_minor: String(model.fee_minor),
     currency: model.currency,
     timezone: model.timezone,
-    weekly_hours: toWeeklyHours(model.hours),
     version: Number(model.version),
     updated_at: model.updated_at.toISOString(),
+  });
+}
+
+export function toLegacyFittingScheduleSettings(
+  model: FittingSettingsReadModel,
+): LegacyFittingScheduleSettings {
+  return legacyFittingScheduleSettings.parse({
+    ...toFittingSettings(model),
+    weekly_hours: toWeeklyHours(model.hours),
   });
 }
 

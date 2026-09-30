@@ -4,7 +4,6 @@ import {
   fittingIntakeResponse,
   fittingListItem,
   fittingListResponse,
-  fittingSettings,
   type FittingAction,
   type FittingClosureListQuery,
   type FittingClosureListResponse,
@@ -17,8 +16,7 @@ import {
   type FittingGarmentLineDetail,
   type FittingGarmentLineSummary,
   type FittingPaymentSummary,
-  type FittingSettings,
-  type FittingWeeklyHours,
+  type LegacyFittingScheduleSettings,
   type PermissionCode,
   type TenantStatus,
 } from '@drezivo/contracts';
@@ -31,7 +29,7 @@ import {
   searchFittingIntakeCustomers,
   type FittingListReadRow,
 } from './fittings.repository.js';
-import { toFittingClosure } from './fittings.schedule.mapper.js';
+import { toFittingClosure, toLegacyFittingScheduleSettings } from './fittings.schedule.mapper.js';
 import { listFittingClosuresReadModel, readFittingSettingsModel } from './fittings.schedule.repository.js';
 
 export interface FittingReadContext {
@@ -94,23 +92,12 @@ export async function getFittingDetail(input: FittingReadContext, fittingId: str
   });
 }
 
-export async function getFittingSettings(input: FittingReadContext): Promise<FittingSettings> {
+export async function getFittingSettings(input: FittingReadContext): Promise<LegacyFittingScheduleSettings> {
   assertFittingReadContext(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
     const model = await readFittingSettingsModel(client, { tenantId: input.tenantId, branchId: input.branchId });
     if (!model) throw new NotFoundError('Fitting settings could not be found.');
-    return fittingSettings.parse({
-      branch_id: model.branch_id,
-      enabled: model.enabled,
-      capacity: model.capacity,
-      duration_minutes: model.duration_minutes,
-      fee_minor: String(model.fee_minor),
-      currency: model.currency,
-      timezone: model.timezone,
-      weekly_hours: weeklyHours(model.hours),
-      version: Number(model.version),
-      updated_at: model.updated_at.toISOString(),
-    });
+    return toLegacyFittingScheduleSettings(model);
   });
 }
 
@@ -208,13 +195,6 @@ function allowedActions(status: FittingListReadRow['status'], startsAt: Date, en
     return actions;
   }
   return [];
-}
-
-const weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
-function weeklyHours(
-  hours: Array<{ weekday: number; starts_local: string; ends_local: string }>,
-): FittingWeeklyHours {
-  return weekdays.map((weekday, index) => ({ weekday, windows: hours.filter((row) => row.weekday === index + 1).map((row) => ({ starts_local: row.starts_local, ends_local: row.ends_local })) }));
 }
 
 function assertFittingReadContext(input: FittingReadContext): void {

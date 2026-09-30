@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { branchId, fittingClosureId } from '../common/ids';
 import { currencyCode, nonNegativeMoneyString } from '../common/money';
 import { paginatedResponse, paginationRequest } from '../common/pagination';
-import { ianaTimezone, instantInterval, isoInstant } from '../common/time';
+import { ianaTimezone, instantInterval, isoInstant, localTime, weekday } from '../common/time';
 
 export const FITTING_CAPACITY_MAX = 100;
 export const FITTING_DURATION_MAX_MINUTES = 24 * 60;
@@ -24,21 +24,12 @@ export const fittingDurationMinutes = z
   .refine((value) => value % 30 === 0, 'fitting duration must be a multiple of 30 minutes');
 export type FittingDurationMinutes = z.infer<typeof fittingDurationMinutes>;
 
-/** Local branch wall-clock time used only for recurring weekly windows. */
-export const fittingLocalTime = z
-  .string()
-  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'must be a local 24-hour time in HH:mm format');
+/** @deprecated Business Hours own branch-local time and weekdays. */
+export const fittingLocalTime = localTime;
 export type FittingLocalTime = z.infer<typeof fittingLocalTime>;
 
-export const fittingWeekday = z.enum([
-  'monday',
-  'tuesday',
-  'wednesday',
-  'thursday',
-  'friday',
-  'saturday',
-  'sunday',
-]);
+/** @deprecated Business Hours own recurring weekday availability. */
+export const fittingWeekday = weekday;
 export type FittingWeekday = z.infer<typeof fittingWeekday>;
 
 function localMinutes(value: string): number {
@@ -127,12 +118,21 @@ export const fittingSettings = z
     fee_minor: nonNegativeMoneyString,
     currency: currencyCode,
     timezone: ianaTimezone,
-    weekly_hours: fittingWeeklyHours,
     version: z.number().int().positive(),
     updated_at: isoInstant,
   })
   .strict();
 export type FittingSettings = z.infer<typeof fittingSettings>;
+
+/**
+ * Transitional response for the legacy Schedule & Availability page while Business Hours
+ * consumers are migrated. New fitting-specific code must use `FittingSettings` above.
+ * @deprecated Remove with the legacy fitting schedule surface.
+ */
+export const legacyFittingScheduleSettings = fittingSettings
+  .extend({ weekly_hours: fittingWeeklyHours })
+  .strict();
+export type LegacyFittingScheduleSettings = z.infer<typeof legacyFittingScheduleSettings>;
 
 /** Owner-only update of scalar branch fitting configuration. Currency/timezone stay server-owned. */
 export const fittingSettingsUpdateRequest = z
@@ -162,7 +162,9 @@ export const fittingWeeklyHoursUpdateRequest = z
   .strict();
 export type FittingWeeklyHoursUpdateRequest = z.infer<typeof fittingWeeklyHoursUpdateRequest>;
 
-export const fittingWeeklyHoursUpdateResponse = fittingSettingsUpdateResponse;
+export const fittingWeeklyHoursUpdateResponse = z
+  .object({ settings: legacyFittingScheduleSettings })
+  .strict();
 export type FittingWeeklyHoursUpdateResponse = z.infer<typeof fittingWeeklyHoursUpdateResponse>;
 
 const CLOSURE_MAX_WINDOW_MS = FITTING_CLOSURE_LIST_MAX_WINDOW_DAYS * 24 * 60 * 60 * 1_000;

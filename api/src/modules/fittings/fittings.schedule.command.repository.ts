@@ -124,13 +124,18 @@ export async function proposedClosureInvalidatesFutureFittings(
     `SELECT EXISTS (
        SELECT 1
          FROM fitting_appointment fa
+         JOIN branch b ON b.tenant_id = fa.tenant_id AND b.id = fa.branch_id
         WHERE fa.tenant_id = $1
           AND fa.branch_id = $2
           AND fa.status IN ('pending','confirmed')
           AND lower(fa.period) > statement_timestamp()
-          AND fa.period && tstzrange($3::timestamptz, $4::timestamptz, '[)')
+          AND fa.period && tstzrange(
+            ((($3::timestamptz AT TIME ZONE b.timezone)::date)::timestamp AT TIME ZONE b.timezone),
+            (((($3::timestamptz AT TIME ZONE b.timezone)::date + 1)::timestamp) AT TIME ZONE b.timezone),
+            '[)'
+          )
      ) AS invalidates`,
-    [input.tenantId, input.branchId, input.startsAt, input.endsAt],
+    [input.tenantId, input.branchId, input.startsAt],
   );
   return result.rows[0]?.invalidates ?? false;
 }
@@ -140,12 +145,17 @@ export async function lockFittingClosureForCommand(
   input: { tenantId: string; branchId: string; closureId: string },
 ): Promise<FittingClosureCommandRow | null> {
   const result = await client.query<FittingClosureCommandRow>(
-    `SELECT fc.id, lower(fc.period) AS starts_at, upper(fc.period) AS ends_at,
-            fc.timezone_snapshot, fc.reason, fc.created_at
-       FROM fitting_closure fc
-      WHERE fc.tenant_id = $1 AND fc.branch_id = $2 AND fc.id = $3
+    `SELECT bc.id,
+            (bc.local_date::timestamp AT TIME ZONE b.timezone) AS starts_at,
+            ((bc.local_date + 1)::timestamp AT TIME ZONE b.timezone) AS ends_at,
+            b.timezone AS timezone_snapshot,
+            bc.reason,
+            bc.created_at
+       FROM branch_closure bc
+       JOIN branch b ON b.tenant_id = bc.tenant_id AND b.id = bc.branch_id
+      WHERE bc.tenant_id = $1 AND bc.branch_id = $2 AND bc.id = $3
       LIMIT 1
-      FOR UPDATE OF fc`,
+      FOR UPDATE OF bc`,
     [input.tenantId, input.branchId, input.closureId],
   );
   return result.rows[0] ?? null;
@@ -163,12 +173,20 @@ export async function createFittingClosure(
   },
 ): Promise<FittingClosureCommandRow> {
   const result = await client.query<FittingClosureCommandRow>(
-    `INSERT INTO fitting_closure
-       (tenant_id, branch_id, period, timezone_snapshot, reason)
-     VALUES ($1, $2, tstzrange($3::timestamptz, $4::timestamptz, '[)'), $5, $6)
-     RETURNING id, lower(period) AS starts_at, upper(period) AS ends_at,
-               timezone_snapshot, reason, created_at`,
-    [input.tenantId, input.branchId, input.startsAt, input.endsAt, input.timezone, input.reason],
+    `WITH inserted AS (
+       INSERT INTO branch_closure (tenant_id, branch_id, local_date, reason)
+       VALUES ($1, $2, ($3::timestamptz AT TIME ZONE $4)::date, $5)
+       RETURNING id, tenant_id, branch_id, local_date, reason, created_at
+     )
+     SELECT i.id,
+            (i.local_date::timestamp AT TIME ZONE b.timezone) AS starts_at,
+            ((i.local_date + 1)::timestamp AT TIME ZONE b.timezone) AS ends_at,
+            b.timezone AS timezone_snapshot,
+            i.reason,
+            i.created_at
+       FROM inserted i
+       JOIN branch b ON b.tenant_id = i.tenant_id AND b.id = i.branch_id`,
+    [input.tenantId, input.branchId, input.startsAt, input.timezone, input.reason],
   );
   const row = result.rows[0];
   if (!row) throw new Error('Fitting closure insert returned no row.');
@@ -188,22 +206,24 @@ export async function updateFittingClosure(
   },
 ): Promise<FittingClosureCommandRow | null> {
   const result = await client.query<FittingClosureCommandRow>(
-    `UPDATE fitting_closure
-        SET period = tstzrange($4::timestamptz, $5::timestamptz, '[)'),
-            timezone_snapshot = $6,
-            reason = $7
-      WHERE tenant_id = $1 AND branch_id = $2 AND id = $3
-      RETURNING id, lower(period) AS starts_at, upper(period) AS ends_at,
-                timezone_snapshot, reason, created_at`,
-    [
-      input.tenantId,
-      input.branchId,
-      input.closureId,
-      input.startsAt,
-      input.endsAt,
-      input.timezone,
-      input.reason,
-    ],
+    `WITH updated AS (
+       UPDATE branch_closure
+          SET local_date = ($4::timestamptz AT TIME ZONE $5)::date,
+              reason = $6,
+              version = version + 1,
+              updated_at = statement_timestamp()
+        WHERE tenant_id = $1 AND branch_id = $2 AND id = $3
+        RETURNING id, tenant_id, branch_id, local_date, reason, created_at
+     )
+     SELECT u.id,
+            (u.local_date::timestamp AT TIME ZONE b.timezone) AS starts_at,
+            ((u.local_date + 1)::timestamp AT TIME ZONE b.timezone) AS ends_at,
+            b.timezone AS timezone_snapshot,
+            u.reason,
+            u.created_at
+       FROM updated u
+       JOIN branch b ON b.tenant_id = u.tenant_id AND b.id = u.branch_id`,
+    [input.tenantId, input.branchId, input.closureId, input.startsAt, input.timezone, input.reason],
   );
   return result.rows[0] ?? null;
 }
@@ -213,7 +233,7 @@ export async function removeFittingClosure(
   input: { tenantId: string; branchId: string; closureId: string },
 ): Promise<boolean> {
   const result = await client.query(
-    `DELETE FROM fitting_closure
+    `DELETE FROM branch_closure
       WHERE tenant_id = $1 AND branch_id = $2 AND id = $3`,
     [input.tenantId, input.branchId, input.closureId],
   );
@@ -228,21 +248,65 @@ export async function replaceFittingWeeklyHours(
     windows: FittingWeeklyWindowRow[];
   },
 ): Promise<void> {
-  await client.query(
-    `DELETE FROM fitting_hours
-      WHERE tenant_id = $1 AND branch_id = $2`,
+  const weekdayNames = [
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday',
+    'sunday',
+  ] as const;
+  const configuredByWeekday = new Map<number, FittingWeeklyWindowRow>();
+  for (const window of input.windows) {
+    if (configuredByWeekday.has(window.weekday)) {
+      throw new Error('Legacy fitting weekly hours must contain at most one window per weekday.');
+    }
+    configuredByWeekday.set(window.weekday, window);
+  }
+
+  const first = input.windows[0];
+  if (
+    first &&
+    input.windows.some(
+      (window) =>
+        window.starts_local !== first.starts_local || window.ends_local !== first.ends_local,
+    )
+  ) {
+    throw new Error('Legacy fitting weekly hours must use one shared Business Hours window.');
+  }
+
+  const closedWeekdays = weekdayNames.filter(
+    (_weekday, index) => !configuredByWeekday.has(index + 1),
+  );
+  const current = await client.query<{
+    opens_local: string;
+    closes_local: string;
+  }>(
+    `SELECT operating_hours->>'opens_local' AS opens_local,
+            operating_hours->>'closes_local' AS closes_local
+       FROM branch
+      WHERE tenant_id = $1 AND id = $2
+      LIMIT 1
+      FOR UPDATE`,
     [input.tenantId, input.branchId],
   );
-  if (input.windows.length === 0) return;
+  const existing = current.rows[0];
+  if (!existing) throw new Error('Active branch Business Hours could not be found.');
 
+  const opensLocal = first?.starts_local ?? existing.opens_local;
+  const closesLocal = first?.ends_local ?? existing.closes_local;
   await client.query(
-    `INSERT INTO fitting_hours
-       (tenant_id, branch_id, weekday, starts_local, ends_local)
-     SELECT $1, $2, proposed_window.weekday, proposed_window.starts_local, proposed_window.ends_local
-       FROM jsonb_to_recordset($3::jsonb)
-            AS proposed_window(weekday integer, starts_local time, ends_local time)
-      ORDER BY proposed_window.weekday ASC, proposed_window.starts_local ASC, proposed_window.ends_local ASC`,
-    [input.tenantId, input.branchId, JSON.stringify(input.windows)],
+    `UPDATE branch
+        SET operating_hours = jsonb_build_object(
+              'opens_local', $3::text,
+              'closes_local', $4::text,
+              'closed_weekdays', $5::jsonb
+            ),
+            operating_hours_version = operating_hours_version + 1,
+            operating_hours_updated_at = statement_timestamp()
+      WHERE tenant_id = $1 AND id = $2`,
+    [input.tenantId, input.branchId, opensLocal, closesLocal, JSON.stringify(closedWeekdays)],
   );
 }
 
@@ -394,7 +458,7 @@ export async function appendFittingClosureAudit(
     `INSERT INTO audit_event
        (tenant_id, actor_kind, actor_key, action, entity_type, entity_id,
         redacted_summary, request_id, occurred_at, outcome)
-     VALUES ($1,'staff',$2,$3,'fitting_closure',$4::uuid,$5::jsonb,$6,statement_timestamp(),'succeeded')`,
+     VALUES ($1,'staff',$2,$3,'branch_closure',$4::uuid,$5::jsonb,$6,statement_timestamp(),'succeeded')`,
     [
       input.tenantId,
       input.actorKey,

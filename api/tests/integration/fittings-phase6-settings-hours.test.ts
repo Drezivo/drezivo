@@ -131,9 +131,9 @@ async function seedTenant(
       ],
     );
     await client.query(
-      `INSERT INTO fitting_hours (tenant_id,branch_id,weekday,starts_local,ends_local)
-       SELECT $1,$2,weekday,'09:00'::time,'17:00'::time
-         FROM generate_series(1,7) AS weekday`,
+      `UPDATE branch
+          SET operating_hours = '{"opens_local":"09:00","closes_local":"17:00","closed_weekdays":[]}'::jsonb
+        WHERE tenant_id = $1 AND id = $2`,
       [tenantId, branchId],
     );
 
@@ -263,7 +263,7 @@ describe('FIT-BE-060..061 fitting weekly-hours and branch settings commands', as
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
-  it('replaces all seven weekdays, normalizes split windows, and represents a disabled day with zero rows', async () => {
+  it('replaces Business Hours through the legacy weekly shape and represents a closed weekday with zero windows', async () => {
     const seed = await seedTenant('hours-normalize');
     const key = randomUUID();
     const context = ownerContext(seed, key);
@@ -271,10 +271,7 @@ describe('FIT-BE-060..061 fitting weekly-hours and branch settings commands', as
     hours.reverse();
     const monday = hours.find((day) => day.weekday === 'monday');
     if (!monday) throw new Error('Monday missing.');
-    monday.windows = [
-      { starts_local: '13:00', ends_local: '17:00' },
-      { starts_local: '09:00', ends_local: '12:00' },
-    ];
+    monday.windows = [{ starts_local: '09:00', ends_local: '17:00' }];
     const tuesday = hours.find((day) => day.weekday === 'tuesday');
     if (!tuesday) throw new Error('Tuesday missing.');
     tuesday.windows = [];
@@ -288,10 +285,7 @@ describe('FIT-BE-060..061 fitting weekly-hours and branch settings commands', as
     expect(first.body.data.settings.version).toBe(2);
     expect(first.body.data.settings.weekly_hours[0]).toEqual({
       weekday: 'monday',
-      windows: [
-        { starts_local: '09:00', ends_local: '12:00' },
-        { starts_local: '13:00', ends_local: '17:00' },
-      ],
+      windows: [{ starts_local: '09:00', ends_local: '17:00' }],
     });
     expect(first.body.data.settings.weekly_hours[1]).toEqual({
       weekday: 'tuesday',
@@ -646,16 +640,9 @@ describe('FIT-BE-060..061 fitting weekly-hours and branch settings commands', as
     });
   });
 
-  it('uses split-window gaps and disabled weekdays as real scheduling constraints', async () => {
+  it('uses one shared Business Hours window and closed weekdays as real scheduling constraints', async () => {
     const seed = await seedTenant('weekly-schedule-validation');
-    const hours = weeklyHours();
-    hours[0] = {
-      weekday: 'monday',
-      windows: [
-        { starts_local: '09:00', ends_local: '12:00' },
-        { starts_local: '13:00', ends_local: '17:00' },
-      ],
-    };
+    const hours = weeklyHours([{ starts_local: '10:00', ends_local: '16:00' }]);
     hours[1] = { weekday: 'tuesday', windows: [] };
 
     const updated = await updateFittingWeeklyHoursCommand(ownerContext(seed), {
@@ -664,13 +651,13 @@ describe('FIT-BE-060..061 fitting weekly-hours and branch settings commands', as
     });
     expect(updated.status).toBe(200);
 
-    const gapAttempt = await createStaffFittingCommand(ownerContext(seed), {
+    const beforeOpening = await createStaffFittingCommand(ownerContext(seed), {
       customer: { source: 'existing', customer_id: seed.customerId as never },
-      starts_at: '2099-01-12T04:00:00.000Z',
+      starts_at: '2099-01-12T01:00:00.000Z',
       garments: [{ variant_id: seed.variantId as never, garment_mode: 'preference' }],
     });
-    expect(gapAttempt.status).toBe(409);
-    expect(gapAttempt.body).toMatchObject({
+    expect(beforeOpening.status).toBe(409);
+    expect(beforeOpening.body).toMatchObject({
       success: false,
       error: { code: 'SCHEDULE_CONFLICT' },
     });
@@ -702,6 +689,10 @@ describe('FIT-BE-060..061 fitting weekly-hours and branch settings commands', as
       period: { start: '2099-01-15T01:00:00.000Z', end: '2099-01-15T03:00:00.000Z' },
       reason: '  Private event  ',
     } as const;
+    const wholeBusinessDay = {
+      start: '2099-01-14T16:00:00.000Z',
+      end: '2099-01-15T16:00:00.000Z',
+    } as const;
 
     await expect(
       createFittingClosureCommand(frontdeskContext(seed), createRequest),
@@ -728,7 +719,7 @@ describe('FIT-BE-060..061 fitting weekly-hours and branch settings commands', as
     expect(created.body.data).toMatchObject({
       settings_version: 2,
       closure: {
-        period: { start: createRequest.period.start, end: createRequest.period.end },
+        period: wholeBusinessDay,
         timezone_snapshot: 'Asia/Manila',
         reason: 'Private event',
       },
@@ -742,7 +733,7 @@ describe('FIT-BE-060..061 fitting weekly-hours and branch settings commands', as
     expect(listed.items).toHaveLength(1);
     expect(listed.items[0]).toMatchObject({
       id: closureId,
-      period: createRequest.period,
+      period: wholeBusinessDay,
       timezone_snapshot: 'Asia/Manila',
       reason: 'Private event',
     });
@@ -773,7 +764,7 @@ describe('FIT-BE-060..061 fitting weekly-hours and branch settings commands', as
       expect(result.body.data.settings_version).toBe(3);
       expect(result.body.data.closure).toMatchObject({
         id: closureId,
-        period: updateRequest.period,
+        period: wholeBusinessDay,
         reason: updateRequest.reason,
       });
     }
@@ -831,7 +822,7 @@ describe('FIT-BE-060..061 fitting weekly-hours and branch settings commands', as
 
     const safeCreate = await createFittingClosureCommand(ownerContext(seed), {
       settings_version: 1,
-      period: { start: '2099-01-09T04:00:00.000Z', end: '2099-01-09T05:00:00.000Z' },
+      period: { start: '2099-01-10T04:00:00.000Z', end: '2099-01-10T05:00:00.000Z' },
       reason: 'Safe block',
     });
     expect(safeCreate.status).toBe(201);
@@ -855,13 +846,13 @@ describe('FIT-BE-060..061 fitting weekly-hours and branch settings commands', as
     expect(settings.version).toBe(2);
     expect((await getFittingDetail(readContext(seed), fitting.id)).status).toBe('pending');
     const closures = await getFittingClosures(readContext(seed), {
-      period_start: '2099-01-09T00:00:00.000Z',
-      period_end: '2099-01-10T00:00:00.000Z',
+      period_start: '2099-01-09T16:00:00.000Z',
+      period_end: '2099-01-10T16:00:00.000Z',
       limit: 20,
     });
     expect(closures.items[0]?.period).toEqual({
-      start: '2099-01-09T04:00:00.000Z',
-      end: '2099-01-09T05:00:00.000Z',
+      start: '2099-01-09T16:00:00.000Z',
+      end: '2099-01-10T16:00:00.000Z',
     });
   });
 
@@ -885,7 +876,7 @@ describe('FIT-BE-060..061 fitting weekly-hours and branch settings commands', as
       error: { code: 'SCHEDULE_CONFLICT' },
     });
 
-    const existing = await createPreference(seed, '2099-01-09T04:00:00.000Z');
+    const existing = await createPreference(seed, '2099-01-10T04:00:00.000Z');
     const blockedReschedule = await rescheduleFittingCommand(
       { ...ownerContext(seed), fittingId: existing.id },
       { version: existing.version, starts_at: '2099-01-09T02:00:00.000Z' },
@@ -911,7 +902,7 @@ describe('FIT-BE-060..061 fitting weekly-hours and branch settings commands', as
     expect(rescheduled.body.data.fitting.period.start).toBe('2099-01-09T02:00:00.000Z');
   });
 
-  it('preserves authoritative branch timezone across a DST boundary and uses half-open closure overlap', async () => {
+  it('preserves authoritative branch timezone when a whole-day closure crosses a DST boundary', async () => {
     const seed = await seedTenant('closure-dst', { timezone: 'America/New_York' });
     const hours = weeklyHours([{ starts_local: '00:00', ends_local: '04:00' }]);
     const hoursUpdated = await updateFittingWeeklyHoursCommand(ownerContext(seed), {
@@ -929,7 +920,7 @@ describe('FIT-BE-060..061 fitting weekly-hours and branch settings commands', as
     if (!closure.body.success) throw new Error('Expected DST closure creation.');
     expect(closure.body.data.closure).toMatchObject({
       timezone_snapshot: 'America/New_York',
-      period: { start: '2099-11-01T05:00:00.000Z', end: '2099-11-01T07:00:00.000Z' },
+      period: { start: '2099-11-01T04:00:00.000Z', end: '2099-11-02T05:00:00.000Z' },
     });
 
     const repeatedHourAttempt = await createStaffFittingCommand(ownerContext(seed), {
@@ -943,13 +934,13 @@ describe('FIT-BE-060..061 fitting weekly-hours and branch settings commands', as
       error: { code: 'SCHEDULE_CONFLICT' },
     });
 
-    const boundaryStart = await createStaffFittingCommand(ownerContext(seed), {
+    const nextBusinessDay = await createStaffFittingCommand(ownerContext(seed), {
       customer: { source: 'existing', customer_id: seed.customerId as never },
-      starts_at: '2099-11-01T07:00:00.000Z',
+      starts_at: '2099-11-02T05:00:00.000Z',
       garments: [{ variant_id: seed.variantId as never, garment_mode: 'preference' }],
     });
-    expect(boundaryStart.status).toBe(201);
-    if (!boundaryStart.body.success) throw new Error('Expected half-open boundary creation.');
-    expect(boundaryStart.body.data.fitting.period.start).toBe('2099-11-01T07:00:00.000Z');
+    expect(nextBusinessDay.status).toBe(201);
+    if (!nextBusinessDay.body.success) throw new Error('Expected next-day creation after closure.');
+    expect(nextBusinessDay.body.data.fitting.period.start).toBe('2099-11-02T05:00:00.000Z');
   });
 });

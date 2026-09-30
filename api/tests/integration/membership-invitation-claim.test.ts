@@ -56,7 +56,15 @@ describe('TBF-042 verified invitation claim', async () => {
     const branch = await withTenantTransaction(tenant.id, ownerUserId, async (client) => {
       const branchResult = await client.query<{ id: string }>(
         `INSERT INTO branch (tenant_id, name, code, is_default, timezone, address, operating_hours)
-         VALUES ($1, 'Main Branch', 'main', true, 'Asia/Manila', '{}'::jsonb, '{}'::jsonb)
+         VALUES (
+           $1,
+           'Main Branch',
+           'main',
+           true,
+           'Asia/Manila',
+           '{}'::jsonb,
+           '{"opens_local":"08:00","closes_local":"20:00","closed_weekdays":["sunday"]}'::jsonb
+         )
          RETURNING id`,
         [tenant.id],
       );

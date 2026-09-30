@@ -89,9 +89,9 @@ async function seedPreferenceTenant(label: string): Promise<Seed> {
       [tenantId, branchId],
     );
     await client.query(
-      `INSERT INTO fitting_hours (tenant_id, branch_id, weekday, starts_local, ends_local)
-       SELECT $1, $2, weekday, '09:00'::time, '17:00'::time
-         FROM generate_series(1, 7) AS weekday`,
+      `UPDATE branch
+          SET operating_hours = '{"opens_local":"09:00","closes_local":"17:00","closed_weekdays":[]}'::jsonb
+        WHERE tenant_id = $1 AND id = $2`,
       [tenantId, branchId],
     );
 
