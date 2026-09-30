@@ -1,10 +1,14 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { clothingAvailabilityTimelineResponse } from "@drezivo/contracts";
 
 import { CalendarAvailabilityPage } from "@/components/calendar/calendar-availability-page";
-import { addCalendarDays } from "@/components/calendar/calendar-availability-data";
+import {
+  addCalendarDays,
+  buildAvailabilityDays,
+  todayInTimeZone,
+} from "@/components/calendar/calendar-availability-data";
 
 const clerk = vi.hoisted(() => ({
   getToken: vi.fn(),
@@ -13,7 +17,9 @@ const clerk = vi.hoisted(() => ({
 
 const api = vi.hoisted(() => ({
   getActorContext: vi.fn(),
+  getCatalogueClothingDetail: vi.fn(),
   getClothingAvailabilityTimeline: vi.fn(),
+  updatePhysicalAssetState: vi.fn(),
 }));
 
 const apiErrors = vi.hoisted(() => {
@@ -47,6 +53,22 @@ vi.mock("@/lib/drezivo-api", () => ({
 
 const categoryId = "00000000-0000-4000-8000-000000000205";
 
+const managedAsset = {
+  id: "00000000-0000-4000-8000-000000000208",
+  branch_id: "00000000-0000-4000-8000-000000000201",
+  variant_id: "00000000-0000-4000-8000-000000000207",
+  asset_code: "AST-GOWN-001-M-01",
+  lifecycle_status: "active",
+  readiness: "needs_cleaning",
+  custody_kind: "at_branch",
+  condition_note: null,
+  measurement_overrides: null,
+  alteration_note: null,
+  version: 2,
+  created_at: "2026-09-01T00:00:00.000Z",
+  updated_at: "2026-09-25T03:00:00.000Z",
+} as const;
+
 function timelineResponse(
   startDate: string,
   endDate: string,
@@ -56,6 +78,8 @@ function timelineResponse(
     name?: string;
     nextCursor?: string | null;
     readiness?: "ready" | "needs_cleaning" | "needs_repair" | "unready";
+    timezone?: string;
+    unavailable?: boolean;
   } = {}
 ) {
   const name = options.name ?? "Emerald Evening Gown";
@@ -63,7 +87,7 @@ function timelineResponse(
   const agendaEndDate = addCalendarDays(startDate, 4);
 
   return clothingAvailabilityTimelineResponse.parse({
-    timezone: "Asia/Manila",
+    timezone: options.timezone ?? "Asia/Manila",
     window: { start_date: startDate, end_date: endDate },
     facets: {
       categories: [{ id: categoryId, name: "Gowns" }],
@@ -92,19 +116,23 @@ function timelineResponse(
           ? []
           : [
               {
-                id: "reservation:live:scheduled",
-                type: "reserved",
+                id: options.unavailable ? "allocation:recovery" : "reservation:live:scheduled",
+                type: options.unavailable ? "unavailable" : "reserved",
                 period: {
                   start: `${startDate}T02:00:00.000Z`,
                   end: `${agendaEndDate}T02:00:00.000Z`,
                 },
                 display_lane: 0,
-                source_type: "reservation",
+                source_type: options.unavailable ? "allocation" : "reservation",
                 source_id: "00000000-0000-4000-8000-000000000209",
-                customer_name: "Database Customer",
-                pickup: { date: startDate, at: `${startDate}T02:00:00.000Z` },
-                return: { date: returnDate, at: `${returnDate}T02:00:00.000Z` },
-                unavailable_reason: null,
+                customer_name: options.unavailable ? null : "Database Customer",
+                pickup: options.unavailable
+                  ? null
+                  : { date: startDate, at: `${startDate}T02:00:00.000Z` },
+                return: options.unavailable
+                  ? null
+                  : { date: returnDate, at: `${returnDate}T02:00:00.000Z` },
+                unavailable_reason: options.unavailable ? "recovery" : null,
               },
             ],
       },
@@ -117,8 +145,14 @@ function timelineResponse(
 }
 
 describe("CalendarAvailabilityPage", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    api.getCatalogueClothingDetail.mockReset();
+    api.updatePhysicalAssetState.mockReset();
     clerk.getToken.mockResolvedValue("test-session-token");
     clerk.useAuth.mockReturnValue({
       getToken: clerk.getToken,
@@ -142,6 +176,25 @@ describe("CalendarAvailabilityPage", () => {
         data: timelineResponse(input.start_date, input.end_date),
       })
     );
+    api.getCatalogueClothingDetail.mockResolvedValue({
+      data: {
+        variants: [
+          {
+            size_label: "M",
+            assets: [managedAsset],
+          },
+        ],
+      },
+      requestId: "req-clothing-detail",
+    });
+    api.updatePhysicalAssetState.mockResolvedValue({
+      data: {
+        asset: { ...managedAsset, readiness: "ready", version: 3 },
+        blocking_allocation_count: 0,
+        disruptions_created: 0,
+      },
+      requestId: "req-asset-state",
+    });
   });
 
   it("loads the active branch timeline with a bounded 14-day query", async () => {
@@ -163,6 +216,56 @@ describe("CalendarAvailabilityPage", () => {
     expect(input.end_date).toBe(addCalendarDays(input.start_date, 13));
     expect(input.limit).toBe(25);
     expect(await screen.findByText("Emerald Evening Gown")).toBeVisible();
+  });
+
+  it("highlights today using the active branch date rather than the browser date", async () => {
+    vi.useFakeTimers();
+    const fixedInstant = new Date("2026-10-01T02:00:00.000Z");
+    vi.setSystemTime(fixedInstant);
+    const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const browserToday = todayInTimeZone(browserTimeZone, fixedInstant);
+    const branchTimeZone =
+      browserToday === "2026-10-01" ? "America/Los_Angeles" : "Asia/Manila";
+    const branchToday = todayInTimeZone(branchTimeZone, fixedInstant);
+    const branchTodayLabels = buildAvailabilityDays(branchToday)[0]!;
+    expect(branchToday).not.toBe(browserToday);
+    api.getActorContext.mockResolvedValueOnce({
+      data: {
+        active_branch_id: "00000000-0000-4000-8000-000000000201",
+        branches: [
+          {
+            id: "00000000-0000-4000-8000-000000000201",
+            timezone: branchTimeZone,
+          },
+        ],
+        tenant: { timezone: "Asia/Manila" },
+      },
+    });
+    api.getClothingAvailabilityTimeline.mockImplementationOnce(
+      async (input: { start_date: string; end_date: string }) => ({
+        data: timelineResponse(input.start_date, input.end_date, {
+          timezone: branchTimeZone,
+        }),
+      })
+    );
+
+    render(<CalendarAvailabilityPage />);
+
+    await act(async () => {
+      for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    });
+
+    expect(screen.getByText("Emerald Evening Gown")).toBeVisible();
+    expect(api.getClothingAvailabilityTimeline).toHaveBeenCalledWith(
+      expect.objectContaining({ start_date: branchToday })
+    );
+
+    const timeline = screen.getByLabelText("Clothing availability timeline");
+    const todayHeader = timeline.querySelector('[aria-current="date"]');
+    expect(todayHeader).toHaveTextContent(branchTodayLabels.label);
+    expect(todayHeader).toHaveTextContent(branchTodayLabels.dateLabel);
+    expect(todayHeader).toHaveClass("bg-dashboard-gold-soft/70");
+    expect(timeline.querySelector('[class~="bg-dashboard-active/40"]')).toBeNull();
   });
 
   it("lets a short timeline shrink to its content while capping larger lists", async () => {
@@ -193,6 +296,132 @@ describe("CalendarAvailabilityPage", () => {
     expect(within(dialog).getByText("Pickup")).toBeVisible();
     expect(within(dialog).getByText("Return")).toBeVisible();
     expect(within(dialog).getByText("Reservations in this range")).toBeVisible();
+    expect(within(dialog).queryByRole("button", { name: "Manage readiness" })).not.toBeInTheDocument();
+  });
+
+  it("marks an unavailable non-ready piece through the existing guarded asset dialog", async () => {
+    api.getClothingAvailabilityTimeline.mockImplementation(
+      async (input: { start_date: string; end_date: string }) => ({
+        data: timelineResponse(input.start_date, input.end_date, {
+          readiness: "needs_cleaning",
+          unavailable: true,
+        }),
+      })
+    );
+
+    render(<CalendarAvailabilityPage />);
+    expect(await screen.findByText("Emerald Evening Gown")).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Emerald Evening Gown Unavailable details" })
+    );
+
+    const drawer = screen.getByRole("dialog", { name: "Emerald Evening Gown" });
+    fireEvent.click(within(drawer).getByRole("button", { name: "Manage readiness" }));
+
+    const readinessDialog = await screen.findByRole("dialog", { name: "Manage physical piece" });
+    expect(api.getCatalogueClothingDetail).toHaveBeenCalledWith(
+      "00000000-0000-4000-8000-000000000206"
+    );
+    expect(within(readinessDialog).getByText("AST-GOWN-001-M-01")).toBeVisible();
+    expect(within(readinessDialog).getByText("Size")).toBeVisible();
+    fireEvent.change(within(readinessDialog).getByRole("combobox", { name: "Readiness" }), {
+      target: { value: "ready" },
+    });
+    fireEvent.click(within(readinessDialog).getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(api.updatePhysicalAssetState).toHaveBeenCalledTimes(1));
+    expect(api.updatePhysicalAssetState).toHaveBeenCalledWith(
+      managedAsset.id,
+      { expected_version: 2, readiness: "ready" },
+      expect.any(String)
+    );
+    await waitFor(() => expect(api.getClothingAvailabilityTimeline).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "AST-GOWN-001-M-01 is now Ready."
+    );
+  });
+
+  it("does not show the readiness action when an unavailable piece is already ready", async () => {
+    api.getClothingAvailabilityTimeline.mockImplementation(
+      async (input: { start_date: string; end_date: string }) => ({
+        data: timelineResponse(input.start_date, input.end_date, {
+          readiness: "ready",
+          unavailable: true,
+        }),
+      })
+    );
+
+    render(<CalendarAvailabilityPage />);
+    expect(await screen.findByText("Emerald Evening Gown")).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Emerald Evening Gown Unavailable details" })
+    );
+
+    expect(screen.getByRole("dialog", { name: "Emerald Evening Gown" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Manage readiness" })).not.toBeInTheDocument();
+  });
+
+  it("fails closed if the asset is missing from the authoritative clothing detail", async () => {
+    api.getClothingAvailabilityTimeline.mockImplementation(
+      async (input: { start_date: string; end_date: string }) => ({
+        data: timelineResponse(input.start_date, input.end_date, {
+          readiness: "needs_cleaning",
+          unavailable: true,
+        }),
+      })
+    );
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: { variants: [] },
+      requestId: "req-missing-asset",
+    });
+
+    render(<CalendarAvailabilityPage />);
+    expect(await screen.findByText("Emerald Evening Gown")).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Emerald Evening Gown Unavailable details" })
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Manage readiness" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This physical piece could not be found. Refresh the calendar and try again."
+    );
+    expect(screen.queryByRole("dialog", { name: "Manage physical piece" })).not.toBeInTheDocument();
+    expect(api.updatePhysicalAssetState).not.toHaveBeenCalled();
+  });
+
+  it("surfaces backend readiness conflicts without refreshing or claiming success", async () => {
+    api.getClothingAvailabilityTimeline.mockImplementation(
+      async (input: { start_date: string; end_date: string }) => ({
+        data: timelineResponse(input.start_date, input.end_date, {
+          readiness: "needs_cleaning",
+          unavailable: true,
+        }),
+      })
+    );
+    api.updatePhysicalAssetState.mockRejectedValueOnce(
+      new apiErrors.MockDrezivoApiError("Close required cleaning work before marking Ready.", {
+        code: "STATE_CONFLICT",
+        status: 409,
+      })
+    );
+
+    render(<CalendarAvailabilityPage />);
+    expect(await screen.findByText("Emerald Evening Gown")).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Emerald Evening Gown Unavailable details" })
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Manage readiness" }));
+    const readinessDialog = await screen.findByRole("dialog", { name: "Manage physical piece" });
+    fireEvent.change(within(readinessDialog).getByRole("combobox", { name: "Readiness" }), {
+      target: { value: "ready" },
+    });
+    fireEvent.click(within(readinessDialog).getByRole("button", { name: "Save changes" }));
+
+    expect(await within(readinessDialog).findByRole("alert")).toHaveTextContent(
+      "Close required cleaning work before marking Ready."
+    );
+    expect(api.getClothingAvailabilityTimeline).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("uses opaque cursor pagination instead of client-side total pages", async () => {

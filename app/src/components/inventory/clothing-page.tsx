@@ -26,7 +26,6 @@ import {
 
 import type {
   CatalogueCategory,
-  ClothingAvailabilitySummary,
   ClothingListItem,
   ClothingListSort,
   ClothingProductLifecycle,
@@ -393,7 +392,6 @@ export function ClothingPage() {
                     <TableHead className="px-2 sm:px-4">Clothing</TableHead>
                     <TableHead className="hidden md:table-cell">Category</TableHead>
                     <TableHead className="hidden md:table-cell">Sizes</TableHead>
-                    <TableHead className="hidden lg:table-cell">Status</TableHead>
                     <TableHead className="hidden lg:table-cell">Availability</TableHead>
                     <TableHead className="hidden xl:table-cell">Rental Price</TableHead>
                     <TableHead className="hidden xl:table-cell">Active Pieces</TableHead>
@@ -528,12 +526,6 @@ function ClothingRow({
               {item.availability.available_assets}/{item.availability.active_assets} available
             </dd>
           </div>
-          <div className="col-span-2 min-w-0">
-            <dt className="text-dashboard-muted">Operational status</dt>
-            <dd className="mt-1">
-              <OperationalStatusSummary availability={item.availability} compact />
-            </dd>
-          </div>
         </dl>
       </TableCell>
       <TableCell className="hidden text-dashboard-muted md:table-cell">{item.category?.name ?? "Uncategorized"}</TableCell>
@@ -544,9 +536,6 @@ function ClothingRow({
         <p className="mt-1 text-xs text-dashboard-muted">
           {displayedSizeCount} {displayedSizeCount === 1 ? "size" : "sizes"}
         </p>
-      </TableCell>
-      <TableCell className="hidden lg:table-cell">
-        <OperationalStatusSummary availability={item.availability} />
       </TableCell>
       <TableCell className="hidden lg:table-cell">
         <p className="font-semibold text-dashboard-navy">
@@ -775,50 +764,6 @@ function SortMenu({
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-function OperationalStatusSummary({
-  availability,
-  compact = false,
-}: {
-  availability: ClothingAvailabilitySummary;
-  compact?: boolean;
-}) {
-  const signals = [
-    { count: availability.rented_assets, label: "Rented" },
-    { count: availability.reserved_assets, label: "Reserved" },
-    { count: availability.cleaning_assets, label: "Cleaning" },
-    { count: availability.maintenance_assets, label: "Maintenance" },
-    { count: availability.manual_blocked_assets, label: "Unavailable", title: "Manual block" },
-  ].filter((signal) => signal.count > 0);
-
-  if (signals.length === 0) {
-    const label =
-      availability.available_assets > 0
-        ? "Available"
-        : availability.unavailable_assets > 0
-          ? "Unavailable"
-          : "No active pieces";
-    return (
-      <span className="inline-flex rounded-full border border-dashboard-border bg-dashboard-active px-2 py-1 text-[0.68rem] font-medium text-dashboard-navy">
-        {label}
-      </span>
-    );
-  }
-
-  return (
-    <div className={cn("flex flex-wrap gap-1", compact && "gap-1.5")}>
-      {signals.map((signal) => (
-        <span
-          key={signal.label}
-          title={signal.title}
-          className="inline-flex rounded-full border border-dashboard-border bg-dashboard-active px-2 py-1 text-[0.68rem] font-medium text-dashboard-navy"
-        >
-          {signal.count} {signal.label}
-        </span>
-      ))}
-    </div>
   );
 }
 

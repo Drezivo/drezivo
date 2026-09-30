@@ -466,6 +466,9 @@ describe("ReservationsPage", () => {
     expect(await screen.findByRole("heading", { name: "Reservation RSV-REAL-001" })).toBeVisible();
     expect(screen.getAllByText("Real Customer").length).toBeGreaterThanOrEqual(1);
     const detailSheet = screen.getByRole("dialog");
+    expect(within(detailSheet).getByText("Customer")).toBeVisible();
+    expect(within(detailSheet).getByText("Name")).toBeVisible();
+    expect(within(detailSheet).queryByText("RC")).not.toBeInTheDocument();
     const garmentImage = within(detailSheet).getByRole("img", {
       name: "Real Emerald Gown cover image",
     });
