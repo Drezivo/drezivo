@@ -1,8 +1,15 @@
 "use client";
 
-import { Building2, CheckCircle2, CircleDashed, Globe2, Mail, MapPin, Phone } from "lucide-react";
+import { Building2, CheckCircle2, CircleDashed, Clock3, Globe2, Mail, MapPin, Phone } from "lucide-react";
 
-import { businessInformation, type BusinessInformation, type BusinessSettings } from "@drezivo/contracts";
+import {
+  branchOperatingHours,
+  businessInformation,
+  type BranchBusinessHours,
+  type BranchOperatingHours,
+  type BusinessInformation,
+  type BusinessSettings,
+} from "@drezivo/contracts";
 
 import { ErrorState, Field, LoadingState, SaveBar, Section } from "@/components/forms/form-kit";
 import { Input } from "@/components/ui/input";
@@ -16,6 +23,11 @@ const toDraft = (value: BusinessSettings): BusinessInformation => ({
   business_phone: value.business_phone,
   business_address: value.business_address,
 });
+const toHoursDraft = (value: BranchBusinessHours): BranchOperatingHours => ({
+  opens_local: value.opens_local,
+  closes_local: value.closes_local,
+  closed_weekdays: value.closed_weekdays,
+});
 const orNull = (text: string): string | null => (text.trim() === "" ? null : text);
 
 export function BusinessSettingsPage() {
@@ -23,6 +35,12 @@ export function BusinessSettingsPage() {
     load: (client) => client.getBusinessSettings(),
     save: (client, current, draft, key) => client.updateBusinessSettings({ version: current.version, ...businessInformation.parse(draft) }, key),
     toDraft,
+  });
+  const hours = useSettingsResource<BranchBusinessHours, BranchOperatingHours>({
+    load: (client) => client.getBusinessHours(),
+    save: (client, current, draft, key) =>
+      client.updateBusinessHours({ version: current.version, ...branchOperatingHours.parse(draft) }, key),
+    toDraft: toHoursDraft,
   });
 
   if (!resource.draft || !resource.value) {
@@ -51,6 +69,41 @@ export function BusinessSettingsPage() {
             {(props) => <Textarea {...props} rows={2} maxLength={300} value={draft.business_address ?? ""} onChange={(e) => resource.update({ business_address: orNull(e.target.value) })} />}
           </Field>
         </div>
+      </Section>
+
+      <Section
+        icon={Clock3}
+        title="Business Hours"
+        description="These active-branch hours are the source of truth for Calendar and fitting availability."
+      >
+        {!hours.draft || !hours.value ? (
+          hours.loadError ? (
+            <ErrorState message={hours.loadError} onRetry={hours.reload} />
+          ) : (
+            <LoadingState label="Loading Business Hours…" />
+          )
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <p className="text-xs font-medium text-dashboard-muted">Active branch</p>
+              <p className="mt-1 text-sm font-medium text-dashboard-navy">{hours.value.branch_name}</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-dashboard-muted">Open hours</p>
+              <p className="mt-1 text-sm font-medium text-dashboard-navy">
+                {formatLocalTime(hours.draft.opens_local)} – {formatLocalTime(hours.draft.closes_local)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-dashboard-muted">Recurring closed days</p>
+              <p className="mt-1 text-sm font-medium text-dashboard-navy">
+                {hours.draft.closed_weekdays.length > 0
+                  ? hours.draft.closed_weekdays.map(capitalize).join(", ")
+                  : "None"}
+              </p>
+            </div>
+          </div>
+        )}
       </Section>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -87,4 +140,16 @@ export function BusinessSettingsPage() {
       <SaveBar dirty={resource.dirty && parsed.success} saving={resource.saving} state={resource.state} onSave={() => void resource.save()} />
     </div>
   );
+}
+
+function formatLocalTime(value: string): string {
+  const [hoursText = "0", minutes = "00"] = value.split(":");
+  const hours = Number(hoursText);
+  const period = hours >= 12 ? "PM" : "AM";
+  const displayHours = hours % 12 || 12;
+  return `${displayHours}:${minutes} ${period}`;
+}
+
+function capitalize(value: string): string {
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }

@@ -135,7 +135,7 @@ describe('FIT-BE-041 fitting schedule and capacity validation', () => {
         startsAt: '2099-01-09T02:00:00.000Z',
         endsAt: '2099-01-09T03:00:00.000Z',
       });
-      expect(valid).toEqual({ is_future: true, within_weekly_hours: true, closure_free: true });
+      expect(valid).toEqual({ is_future: true, within_business_hours: true, closed_date_free: true });
 
       const outsideHours = await validateFittingScheduleForCreate(client as never, {
         tenantId: seed.tenantId,
@@ -143,7 +143,7 @@ describe('FIT-BE-041 fitting schedule and capacity validation', () => {
         startsAt: '2099-01-09T00:00:00.000Z',
         endsAt: '2099-01-09T01:00:00.000Z',
       });
-      expect(outsideHours.within_weekly_hours).toBe(false);
+      expect(outsideHours.within_business_hours).toBe(false);
 
       const closed = await validateFittingScheduleForCreate(client as never, {
         tenantId: seed.tenantId,
@@ -151,7 +151,7 @@ describe('FIT-BE-041 fitting schedule and capacity validation', () => {
         startsAt: '2099-01-10T04:30:00.000Z',
         endsAt: '2099-01-10T05:30:00.000Z',
       });
-      expect(closed.closure_free).toBe(false);
+      expect(closed.closed_date_free).toBe(false);
     } finally {
       await client.end();
     }

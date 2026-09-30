@@ -3,10 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import { fittingClosureListQuery, fittingListQuery } from '@drezivo/contracts';
+import { fittingListQuery } from '@drezivo/contracts';
 
 import { listFittingsReadModel, readFittingDetailModel } from '../../src/modules/fittings/fittings.repository.js';
-import { listFittingClosuresReadModel, readFittingSettingsModel } from '../../src/modules/fittings/fittings.schedule.repository.js';
+import { readFittingSettingsModel } from '../../src/modules/fittings/fittings.settings.repository.js';
 import { migrateTestDatabase, requireTestDatabaseUrl, resetTestDatabase } from './helpers/test-db.js';
 
 const adminUrl = requireTestDatabaseUrl();
@@ -110,17 +110,22 @@ describe('FIT-BE-030..033 fitting read repositories', () => {
     } finally { await client.end(); }
   });
 
-  it('reads fitting settings with Business Hours-derived windows and bounded branch closures without capacity-slot identity', async () => {
+  it('reads only fitting-specific scalar settings without schedule or capacity-slot identity', async () => {
     const client = await openClient();
     try {
-      const seeded = await seed(client, 'schedule');
+      const seeded = await seed(client, 'settings');
       const settings = await readFittingSettingsModel(client as never, seeded);
-      expect(settings).toMatchObject({ enabled: true, capacity: 2, duration_minutes: 60, timezone: 'Asia/Manila' });
-      expect(settings?.hours).toHaveLength(7);
+      expect(settings).toMatchObject({
+        enabled: true,
+        capacity: 2,
+        duration_minutes: 60,
+        timezone: 'Asia/Manila',
+      });
+      expect(JSON.stringify(settings)).not.toContain('hours');
+      expect(JSON.stringify(settings)).not.toContain('closure');
       expect(JSON.stringify(settings)).not.toContain('slot');
-      const closures = await listFittingClosuresReadModel(client as never, { ...seeded, query: fittingClosureListQuery.parse({ period_start: '2026-12-01T00:00:00.000Z', period_end: '2026-12-31T23:59:59.000Z' }) });
-      expect(closures.rows).toHaveLength(1);
-      expect(closures.rows[0]?.reason).toBe('Holiday');
-    } finally { await client.end(); }
+    } finally {
+      await client.end();
+    }
   });
 });

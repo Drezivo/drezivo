@@ -592,6 +592,10 @@ components:
         branch_id:
           type: string
           format: uuid
+        branch_name:
+          type: string
+          minLength: 1
+          maxLength: 120
         timezone:
           type: string
           pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
@@ -606,6 +610,7 @@ components:
         - closes_local
         - closed_weekdays
         - branch_id
+        - branch_name
         - timezone
         - version
         - updated_at
@@ -21252,6 +21257,10 @@ paths:
                       branch_id:
                         type: string
                         format: uuid
+                      branch_name:
+                        type: string
+                        minLength: 1
+                        maxLength: 120
                       timezone:
                         type: string
                         pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
@@ -21266,6 +21275,7 @@ paths:
                       - closes_local
                       - closed_weekdays
                       - branch_id
+                      - branch_name
                       - timezone
                       - version
                       - updated_at
@@ -21390,6 +21400,10 @@ paths:
                       branch_id:
                         type: string
                         format: uuid
+                      branch_name:
+                        type: string
+                        minLength: 1
+                        maxLength: 120
                       timezone:
                         type: string
                         pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
@@ -21404,6 +21418,7 @@ paths:
                       - closes_local
                       - closed_weekdays
                       - branch_id
+                      - branch_name
                       - timezone
                       - version
                       - updated_at

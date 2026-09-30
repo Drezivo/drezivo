@@ -1,12 +1,9 @@
 import {
-  fittingClosureListResponse,
   fittingDetail,
   fittingIntakeResponse,
   fittingListItem,
   fittingListResponse,
   type FittingAction,
-  type FittingClosureListQuery,
-  type FittingClosureListResponse,
   type FittingDetail,
   type FittingIntakeQuery,
   type FittingIntakeResponse,
@@ -16,7 +13,7 @@ import {
   type FittingGarmentLineDetail,
   type FittingGarmentLineSummary,
   type FittingPaymentSummary,
-  type LegacyFittingScheduleSettings,
+  type FittingSettings,
   type PermissionCode,
   type TenantStatus,
 } from '@drezivo/contracts';
@@ -29,8 +26,8 @@ import {
   searchFittingIntakeCustomers,
   type FittingListReadRow,
 } from './fittings.repository.js';
-import { toFittingClosure, toLegacyFittingScheduleSettings } from './fittings.schedule.mapper.js';
-import { listFittingClosuresReadModel, readFittingSettingsModel } from './fittings.schedule.repository.js';
+import { toFittingSettings } from './fittings.settings.mapper.js';
+import { readFittingSettingsModel } from './fittings.settings.repository.js';
 
 export interface FittingReadContext {
   tenantId: string;
@@ -92,23 +89,15 @@ export async function getFittingDetail(input: FittingReadContext, fittingId: str
   });
 }
 
-export async function getFittingSettings(input: FittingReadContext): Promise<LegacyFittingScheduleSettings> {
+export async function getFittingSettings(input: FittingReadContext): Promise<FittingSettings> {
   assertFittingReadContext(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
-    const model = await readFittingSettingsModel(client, { tenantId: input.tenantId, branchId: input.branchId });
-    if (!model) throw new NotFoundError('Fitting settings could not be found.');
-    return toLegacyFittingScheduleSettings(model);
-  });
-}
-
-export async function getFittingClosures(input: FittingReadContext, query: FittingClosureListQuery): Promise<FittingClosureListResponse> {
-  assertFittingReadContext(input);
-  return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
-    const page = await listFittingClosuresReadModel(client, { tenantId: input.tenantId, branchId: input.branchId, query });
-    return fittingClosureListResponse.parse({
-      items: page.rows.map(toFittingClosure),
-      page_meta: { next_cursor: page.nextCursor, has_more: page.hasMore },
+    const model = await readFittingSettingsModel(client, {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
     });
+    if (!model) throw new NotFoundError('Fitting settings could not be found.');
+    return toFittingSettings(model);
   });
 }
 

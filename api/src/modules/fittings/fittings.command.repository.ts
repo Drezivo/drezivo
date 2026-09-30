@@ -22,8 +22,8 @@ export interface FittingCreateVariantRow {
 
 export interface FittingScheduleValidationRow {
   is_future: boolean;
-  within_weekly_hours: boolean;
-  closure_free: boolean;
+  within_business_hours: boolean;
+  closed_date_free: boolean;
 }
 
 /** Locks settings so create/reschedule serialize with configuration and later capacity work. */
@@ -679,7 +679,7 @@ export async function validateFittingScheduleForCreate(
                 (b.operating_hours->>'opens_local')::time
             AND ($4::timestamptz AT TIME ZONE b.timezone)::time <=
                 (b.operating_hours->>'closes_local')::time
-       ) AS within_weekly_hours,
+       ) AS within_business_hours,
        NOT EXISTS (
          SELECT 1
            FROM branch_closure bc
@@ -687,7 +687,7 @@ export async function validateFittingScheduleForCreate(
           WHERE bc.tenant_id = $1
             AND bc.branch_id = $2
             AND bc.local_date = ($3::timestamptz AT TIME ZONE b.timezone)::date
-       ) AS closure_free`,
+       ) AS closed_date_free`,
     [input.tenantId, input.branchId, input.startsAt, input.endsAt],
   );
   const row = result.rows[0];

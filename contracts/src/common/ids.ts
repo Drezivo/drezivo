@@ -83,9 +83,6 @@ export type FittingId = z.infer<typeof fittingId>;
 export const fittingLineId = idSchema('FittingLineId');
 export type FittingLineId = z.infer<typeof fittingLineId>;
 
-export const fittingClosureId = idSchema('FittingClosureId');
-export type FittingClosureId = z.infer<typeof fittingClosureId>;
-
 export const branchClosureId = idSchema('BranchClosureId');
 export type BranchClosureId = z.infer<typeof branchClosureId>;
 

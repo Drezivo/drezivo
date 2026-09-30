@@ -9,21 +9,16 @@ import {
   cancelFittingController,
   completeFittingController,
   confirmFittingController,
-  createFittingClosureController,
   createFittingController,
   createFittingPaymentController,
   getFittingController,
   getFittingIntakeController,
   getFittingSettingsController,
-  listFittingClosuresController,
   listFittingsController,
   noShowFittingController,
   rejectFittingController,
-  removeFittingClosureController,
   rescheduleFittingController,
-  updateFittingClosureController,
   updateFittingGarmentsController,
-  updateFittingHoursController,
   updateFittingNoteController,
   updateFittingSettingsController,
   verifyFittingPaymentController,
@@ -34,11 +29,6 @@ import {
   requireFittingOperationalPermission,
   requireFittingPaymentVerificationPermission,
   validateFittingCancel,
-  validateFittingClosureCreate,
-  validateFittingClosureId,
-  validateFittingClosureListQuery,
-  validateFittingClosureRemove,
-  validateFittingClosureUpdate,
   validateFittingComplete,
   validateFittingConfirm,
   validateFittingCreate,
@@ -54,7 +44,6 @@ import {
   validateFittingReject,
   validateFittingReschedule,
   validateFittingSettingsUpdate,
-  validateFittingWeeklyHoursUpdate,
 } from './fittings.middleware.js';
 import { recordFittingCommandFailure } from './fittings.observability.js';
 
@@ -99,12 +88,6 @@ fittingsRouter.get(
   getFittingIntakeController,
 );
 fittingsRouter.get('/fittings/settings', ...staffRead, getFittingSettingsController);
-fittingsRouter.get(
-  '/fittings/closures',
-  ...staffRead,
-  validateFittingClosureListQuery,
-  listFittingClosuresController,
-);
 fittingsRouter.get('/fittings', ...staffRead, validateFittingListQuery, listFittingsController);
 fittingsRouter.get('/fittings/:id', ...staffRead, validateFittingId, getFittingController);
 
@@ -228,40 +211,6 @@ fittingsRouter.put(
   validateFittingSettingsUpdate,
   requireFittingIdempotencyKey,
   updateFittingSettingsController,
-);
-fittingsRouter.put(
-  '/fittings/settings/hours',
-  ...ownerWrite,
-  requireTenantAction('new_booking'),
-  validateFittingWeeklyHoursUpdate,
-  requireFittingIdempotencyKey,
-  updateFittingHoursController,
-);
-fittingsRouter.post(
-  '/fittings/closures',
-  ...ownerWrite,
-  requireTenantAction('new_booking'),
-  validateFittingClosureCreate,
-  requireFittingIdempotencyKey,
-  createFittingClosureController,
-);
-fittingsRouter.put(
-  '/fittings/closures/:closureId',
-  ...ownerWrite,
-  requireTenantAction('new_booking'),
-  validateFittingClosureId,
-  validateFittingClosureUpdate,
-  requireFittingIdempotencyKey,
-  updateFittingClosureController,
-);
-fittingsRouter.post(
-  '/fittings/closures/:closureId/remove',
-  ...ownerWrite,
-  requireTenantAction('new_booking'),
-  validateFittingClosureId,
-  validateFittingClosureRemove,
-  requireFittingIdempotencyKey,
-  removeFittingClosureController,
 );
 
 const FITTING_ROUTE_ID_PATTERN = /\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?=\/|$)/gi;

@@ -70,12 +70,21 @@ import {
   onboardingActorContext,
   organizationOnboarding,
   paymentMethodSettingsItem,
+  branchBusinessHours,
+  branchClosureCreateRequest,
+  branchClosureListQuery,
+  branchClosureListResponse,
+  branchClosureMutationResponse,
+  branchClosureRemoveRequest,
+  branchClosureRemoveResponse,
+  branchClosureUpdateRequest,
   businessSettings,
   notificationSettings,
   publishStorefrontPolicyRequest,
   storefrontPreviewLink,
   storefrontSettings,
   storefrontTransitionRequest,
+  updateBranchBusinessHoursRequest,
   updateBusinessSettingsRequest,
   updateNotificationSettingsRequest,
   updateStorefrontRequest,
@@ -112,18 +121,9 @@ import {
   fittingNoShowRequest,
   fittingRejectRequest,
   fittingRescheduleRequest,
-  fittingClosureCreateRequest,
-  fittingClosureListQuery,
-  fittingClosureListResponse,
-  fittingClosureMutationResponse,
-  fittingClosureRemoveRequest,
-  fittingClosureRemoveResponse,
-  fittingClosureUpdateRequest,
-  legacyFittingScheduleSettings,
+  fittingSettings,
   fittingSettingsUpdateRequest,
   fittingSettingsUpdateResponse,
-  fittingWeeklyHoursUpdateRequest,
-  fittingWeeklyHoursUpdateResponse,
   customerListQuery,
   customerListResponse,
   customerArchiveRequest,
@@ -203,11 +203,20 @@ import {
   type OnboardingActorContext,
   type OrganizationOnboarding,
   type PaymentMethodSettingsItem,
+  type BranchBusinessHours,
+  type BranchClosureCreateRequest,
+  type BranchClosureListQuery,
+  type BranchClosureListResponse,
+  type BranchClosureMutationResponse,
+  type BranchClosureRemoveRequest,
+  type BranchClosureRemoveResponse,
+  type BranchClosureUpdateRequest,
   type BusinessSettings,
   type NotificationSettings,
   type PublishStorefrontPolicyRequest,
   type StorefrontPreviewLink,
   type StorefrontSettings,
+  type UpdateBranchBusinessHoursRequest,
   type UpdateBusinessSettingsRequest,
   type UpdateNotificationSettingsRequest,
   type UpdateStorefrontRequest,
@@ -244,18 +253,9 @@ import {
   type FittingNoShowRequest,
   type FittingRejectRequest,
   type FittingRescheduleRequest,
-  type FittingClosureCreateRequest,
-  type FittingClosureListQuery,
-  type FittingClosureListResponse,
-  type FittingClosureMutationResponse,
-  type FittingClosureRemoveRequest,
-  type FittingClosureRemoveResponse,
-  type FittingClosureUpdateRequest,
-  type LegacyFittingScheduleSettings,
+  type FittingSettings,
   type FittingSettingsUpdateRequest,
   type FittingSettingsUpdateResponse,
-  type FittingWeeklyHoursUpdateRequest,
-  type FittingWeeklyHoursUpdateResponse,
   type CustomerListQuery,
   type CustomerListResponse,
   type CustomerArchiveRequest,
@@ -518,11 +518,11 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
       });
     },
     getFittingSettings: () =>
-      request<LegacyFittingScheduleSettings>({
+      request<FittingSettings>({
         getToken,
         method: "GET",
         path: "/api/v1/fittings/settings",
-        responseSchema: apiEnvelope(legacyFittingScheduleSettings),
+        responseSchema: apiEnvelope(fittingSettings),
       }),
     updateFittingSettings: (input: FittingSettingsUpdateRequest, idempotencyKey: string) =>
       request<FittingSettingsUpdateResponse>({
@@ -532,66 +532,6 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "PUT",
         path: "/api/v1/fittings/settings",
         responseSchema: apiEnvelope(fittingSettingsUpdateResponse),
-      }),
-    updateFittingWeeklyHours: (input: FittingWeeklyHoursUpdateRequest, idempotencyKey: string) =>
-      request<FittingWeeklyHoursUpdateResponse>({
-        getToken,
-        body: fittingWeeklyHoursUpdateRequest.parse(input),
-        idempotencyKey,
-        method: "PUT",
-        path: "/api/v1/fittings/settings/hours",
-        responseSchema: apiEnvelope(fittingWeeklyHoursUpdateResponse),
-      }),
-    getFittingClosures: (input: FittingClosureListQuery) => {
-      const query = fittingClosureListQuery.parse(input);
-      const searchParams = new URLSearchParams({
-        limit: String(query.limit),
-        period_start: query.period_start,
-        period_end: query.period_end,
-      });
-      if (query.cursor) searchParams.set("cursor", query.cursor);
-
-      return request<FittingClosureListResponse>({
-        getToken,
-        method: "GET",
-        path: `/api/v1/fittings/closures?${searchParams.toString()}`,
-        responseSchema: apiEnvelope(fittingClosureListResponse),
-      });
-    },
-    createFittingClosure: (input: FittingClosureCreateRequest, idempotencyKey: string) =>
-      request<FittingClosureMutationResponse>({
-        getToken,
-        body: fittingClosureCreateRequest.parse(input),
-        idempotencyKey,
-        method: "POST",
-        path: "/api/v1/fittings/closures",
-        responseSchema: apiEnvelope(fittingClosureMutationResponse),
-      }),
-    updateFittingClosure: (
-      closureId: string,
-      input: FittingClosureUpdateRequest,
-      idempotencyKey: string
-    ) =>
-      request<FittingClosureMutationResponse>({
-        getToken,
-        body: fittingClosureUpdateRequest.parse(input),
-        idempotencyKey,
-        method: "PUT",
-        path: `/api/v1/fittings/closures/${encodeURIComponent(closureId)}`,
-        responseSchema: apiEnvelope(fittingClosureMutationResponse),
-      }),
-    removeFittingClosure: (
-      closureId: string,
-      input: FittingClosureRemoveRequest,
-      idempotencyKey: string
-    ) =>
-      request<FittingClosureRemoveResponse>({
-        getToken,
-        body: fittingClosureRemoveRequest.parse(input),
-        idempotencyKey,
-        method: "POST",
-        path: `/api/v1/fittings/closures/${encodeURIComponent(closureId)}/remove`,
-        responseSchema: apiEnvelope(fittingClosureRemoveResponse),
       }),
     getFittingDashboardSummary: () =>
       request<DashboardFittingSummaryResponse>({
@@ -1184,6 +1124,72 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "PATCH",
         path: "/api/v1/settings/business",
         responseSchema: apiEnvelope(businessSettings),
+      }),
+    getBusinessHours: () =>
+      request<BranchBusinessHours>({
+        getToken,
+        method: "GET",
+        path: "/api/v1/settings/business-hours",
+        responseSchema: apiEnvelope(branchBusinessHours),
+      }),
+    updateBusinessHours: (input: UpdateBranchBusinessHoursRequest, idempotencyKey: string) =>
+      request<BranchBusinessHours>({
+        getToken,
+        body: updateBranchBusinessHoursRequest.parse(input),
+        idempotencyKey,
+        method: "PATCH",
+        path: "/api/v1/settings/business-hours",
+        responseSchema: apiEnvelope(branchBusinessHours),
+      }),
+    getBranchClosures: (input: BranchClosureListQuery) => {
+      const query = branchClosureListQuery.parse(input);
+      const searchParams = new URLSearchParams({
+        limit: String(query.limit),
+        date_start: query.date_start,
+        date_end: query.date_end,
+      });
+      if (query.cursor) searchParams.set("cursor", query.cursor);
+      return request<BranchClosureListResponse>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/settings/business-hours/closures?${searchParams.toString()}`,
+        responseSchema: apiEnvelope(branchClosureListResponse),
+      });
+    },
+    createBranchClosure: (input: BranchClosureCreateRequest, idempotencyKey: string) =>
+      request<BranchClosureMutationResponse>({
+        getToken,
+        body: branchClosureCreateRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/settings/business-hours/closures",
+        responseSchema: apiEnvelope(branchClosureMutationResponse),
+      }),
+    updateBranchClosure: (
+      closureId: string,
+      input: BranchClosureUpdateRequest,
+      idempotencyKey: string
+    ) =>
+      request<BranchClosureMutationResponse>({
+        getToken,
+        body: branchClosureUpdateRequest.parse(input),
+        idempotencyKey,
+        method: "PATCH",
+        path: `/api/v1/settings/business-hours/closures/${encodeURIComponent(closureId)}`,
+        responseSchema: apiEnvelope(branchClosureMutationResponse),
+      }),
+    removeBranchClosure: (
+      closureId: string,
+      input: BranchClosureRemoveRequest,
+      idempotencyKey: string
+    ) =>
+      request<BranchClosureRemoveResponse>({
+        getToken,
+        body: branchClosureRemoveRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/settings/business-hours/closures/${encodeURIComponent(closureId)}/remove`,
+        responseSchema: apiEnvelope(branchClosureRemoveResponse),
       }),
     getNotificationSettings: () =>
       request<NotificationSettings>({ getToken, method: "GET", path: "/api/v1/settings/notifications", responseSchema: apiEnvelope(notificationSettings) }),

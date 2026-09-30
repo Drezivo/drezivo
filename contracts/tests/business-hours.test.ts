@@ -59,6 +59,7 @@ describe('branch business hours contracts', () => {
     expect(
       branchBusinessHours.safeParse({
         branch_id: branchId,
+        branch_name: 'Main Branch',
         opens_local: '09:00',
         closes_local: '20:00',
         closed_weekdays: ['sunday'],

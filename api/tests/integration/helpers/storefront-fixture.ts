@@ -114,6 +114,7 @@ export async function createStorefrontWorkspace(label: string): Promise<Storefro
 
   const staff = (membershipId: string, principalId: string, permissionCodes: PermissionCode[]): StaffContext => ({
     tenantId: tenant.id,
+    branchId: seeded.branchId,
     membershipId,
     principalId,
     permissionCodes,

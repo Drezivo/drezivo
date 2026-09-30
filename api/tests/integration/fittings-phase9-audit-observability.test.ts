@@ -170,8 +170,8 @@ describe('FIT-BE-093 fitting audit and safe observability', async () => {
     await import('../../src/modules/fittings/fittings.command.service.js');
   const { confirmFittingCommand, rescheduleFittingCommand, updateFittingNoteCommand } =
     await import('../../src/modules/fittings/fittings.mutation.service.js');
-  const { updateFittingSettingsCommand, updateFittingWeeklyHoursCommand } =
-    await import('../../src/modules/fittings/fittings.schedule.command.service.js');
+  const { updateFittingSettingsCommand } =
+    await import('../../src/modules/fittings/fittings.settings.command.service.js');
   const { createFittingPaymentIntentCommand, verifyFittingPaymentCommand } =
     await import('../../src/modules/fittings/fittings.finance.service.js');
 
@@ -226,6 +226,7 @@ describe('FIT-BE-093 fitting audit and safe observability', async () => {
       {
         ...baseContext(seed),
         role: 'owner',
+        permissionCodes: ['reservations.manage'],
         effectiveTenantStatus: 'active',
       },
       { version: 1, enabled: true, capacity: 2, duration_minutes: 60, fee_minor: '700' },
@@ -233,24 +234,6 @@ describe('FIT-BE-093 fitting audit and safe observability', async () => {
     expect(settings.status).toBe(200);
     if (!settings.body.success) throw new Error('Expected settings update success.');
 
-    const weeklyHours = [
-      'monday',
-      'tuesday',
-      'wednesday',
-      'thursday',
-      'friday',
-      'saturday',
-      'sunday',
-    ].map((weekday) => ({ weekday, windows: [{ starts_local: '09:00', ends_local: '17:00' }] }));
-    const hours = await updateFittingWeeklyHoursCommand(
-      {
-        ...baseContext(seed),
-        role: 'owner',
-        effectiveTenantStatus: 'active',
-      },
-      { version: settings.body.data.settings.version, weekly_hours: weeklyHours as never },
-    );
-    expect(hours.status).toBe(200);
 
     const payment = await createFittingPaymentIntentCommand(
       {
@@ -297,7 +280,6 @@ describe('FIT-BE-093 fitting audit and safe observability', async () => {
             'fitting.note_updated',
             'fitting.confirmed',
             'fitting.settings_updated',
-            'fitting.hours_updated',
             'fitting.payment_created',
             'payment.verified',
           ],
@@ -310,7 +292,6 @@ describe('FIT-BE-093 fitting audit and safe observability', async () => {
           'fitting.note_updated',
           'fitting.confirmed',
           'fitting.settings_updated',
-          'fitting.hours_updated',
           'fitting.payment_created',
           'payment.verified',
         ].sort(),

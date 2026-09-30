@@ -9,6 +9,7 @@ import { sendSuccess } from '../shared/response.js';
 
 export interface StaffContext {
   tenantId: string;
+  branchId: string;
   membershipId: string;
   principalId: string;
   permissionCodes: PermissionCode[];
@@ -23,6 +24,7 @@ export function staffContextOf(req: Request): StaffContext {
   if (!principalId || !context) throw new ValidationError('Workspace context is required.');
   return {
     tenantId: context.tenantId,
+    branchId: context.activeBranchId,
     membershipId: context.membershipId,
     principalId,
     permissionCodes: context.permissionCodes,

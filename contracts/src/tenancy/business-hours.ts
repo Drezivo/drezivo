@@ -75,6 +75,7 @@ export type BranchOperatingHours = z.infer<typeof branchOperatingHours>;
 export const branchBusinessHours = branchOperatingHoursObject
   .extend({
     branch_id: branchId,
+    branch_name: z.string().trim().min(1).max(120),
     timezone: ianaTimezone,
     version: z.number().int().positive(),
     updated_at: isoInstant,
