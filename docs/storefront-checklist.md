@@ -571,6 +571,26 @@ storefront itself (workflow, alignment, design). Calendars were left untouched, 
   - The production build prerenders every dashboard page as static, with 170–256 kB of
     first-load JS.
 
+## Milestone 13 — Section links, motion robustness, save and upload fixes
+
+- [x] About and Contact links now scroll straight to their section.
+  - They land just below the header, in 0.7 s, from the same page, from another page, during a
+    scroll, and from the phone menu.
+  - Verified: section top at 80 px in every case, with and without reduced motion.
+- [x] The hero heading no longer sticks half-hidden after navigating. The storefront
+      `loading.tsx` was removed: streaming ran the motion code before the page existed and caused
+      a hydration warning.
+  - Any unbound reveal target now shows itself after 2.5 s.
+- [x] Saving the same form twice no longer fails with IDEMPOTENCY_KEY_REUSED (seen on fittings
+      settings). The shared guard clears the key after success and after definite rejections, and
+      keeps it only for retryable failures.
+  - Tests: `app/tests/unit/use-submit-guard.test.tsx`.
+- [x] Images with the wrong extension, such as a JPEG named `.png`, now upload. The real format is
+      read from the file's bytes. HEIC, AVIF, and GIF get a clear message, and a rejected upload
+      no longer loops on "can no longer be finalized".
+  - Tests: `app/tests/unit/storefront-assets.test.ts`.
+  - Verified end to end: finalize returned 200.
+
 ## Change log
 
 | Date | Milestone | Change | Files |
@@ -603,3 +623,4 @@ storefront itself (workflow, alignment, design). Calendars were left untouched, 
 | 2026-09-29 | 11 | Storefront motion (GSAP, Lenis), favicon, hero and focus fixes | `web/src/components/store/motion/{motion-root.tsx,scroll.ts}`, `web/src/app/{layout.tsx,globals.css,icon.svg}`, `web/src/app/s/[slug]/layout.tsx`, `web/src/components/store/{home-sections,product-card,item-view,store-header}.tsx`, `web/src/components/store/booking/booking-drawer.tsx`, `web/package.json` |
 | 2026-09-29 | 11 | Owner-side QA fixes: rate limit, role fallback, settings layout, Clerk theme, policy starter, slug input, unsaved-changes prompt, app favicon | `api/src/modules/tenancy/tenancy.routes.ts`, `app/src/components/shell/dashboard-shell.tsx`, `app/src/app/(dashboard)/settings/layout.tsx`, `app/src/components/settings/{settings-nav,account-settings-page}.tsx`, `app/src/components/storefront/{storefront-policy-pages,storefront-details-page}.tsx`, `app/src/components/forms/form-kit.tsx`, `app/src/app/icon.png` |
 | 2026-09-30 | 12 | Owner preview, sign-in resolve fix, sidebar default, address card, Turbopack, loading states, shared actor context | `api/src/modules/storefront/{storefront-preview,storefront.repository,storefront.service,storefront.routes}.ts`, `api/src/modules/storefront-cms/*`, `contracts/src/storefront/cms.ts`, `app/src/components/auth/post-auth-resolver.tsx`, `app/src/lib/resolve-staff-landing.ts`, `app/src/components/shell/*`, `app/src/components/storefront/{storefront-overview-page,storefront-preview-button}.tsx`, `app/src/components/ui/sidebar.tsx`, `web/src/app/s/[slug]/{layout.tsx,loading.tsx,preview/route.ts,preview/exit/route.ts}`, `web/src/lib/{storefront-api,storefront-preview}.ts` |
+| 2026-09-30 | 13 | Section links with Lenis, motion fallback, no storefront streaming, submit-guard key lifecycle, image type detection | `web/src/components/store/motion/{motion-root.tsx,scroll.ts}`, `web/src/app/globals.css`, `app/src/lib/{use-submit-guard,storefront-assets}.ts` |

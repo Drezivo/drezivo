@@ -7,7 +7,7 @@ import Lenis from 'lenis';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 
-import { registerLenis } from './scroll';
+import { registerLenis, scrollToSection, syncScrollPosition, whenScrollUnlocked } from './scroll';
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
@@ -31,7 +31,8 @@ function reducedMotion(): boolean {
  *
  * Initial hidden states come from CSS under `html.sf-motion`, which an inline script sets before
  * first paint only when the visitor has not asked for reduced motion. Without it, or without
- * JavaScript, everything is simply visible.
+ * JavaScript, everything is simply visible, and any target this component never binds reveals
+ * itself after a moment (see `data-motion-bound` in globals.css).
  */
 export function MotionRoot() {
   const pathname = usePathname();
@@ -39,11 +40,12 @@ export function MotionRoot() {
 
   useEffect(() => {
     if (reducedMotion()) return;
-    const headerHeight = document.querySelector<HTMLElement>('[data-store-header]')?.offsetHeight ?? 0;
     const lenis = new Lenis({
       lerp: 0.09,
       autoRaf: false,
-      anchors: { offset: -headerHeight },
+      // In-page links are handled below so they work the same for "#contact" and "/s/shop#about".
+      anchors: false,
+      stopInertiaOnNavigate: true,
       // Overlays and horizontal strips scroll natively.
       prevent: (node) => node.closest('[role="dialog"], [data-lenis-prevent]') !== null,
     });
@@ -59,10 +61,42 @@ export function MotionRoot() {
     };
   }, []);
 
+  // Links to a section of the page already open (About, Contact, How renting works) scroll there
+  // directly instead of going through the router, which would fight smooth scrolling.
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = (event.target as Element | null)?.closest?.('a[href]');
+      if (!(link instanceof HTMLAnchorElement) || link.target === '_blank') return;
+      const url = new URL(link.href, window.location.href);
+      if (url.origin !== window.location.origin || url.pathname !== window.location.pathname || !url.hash) return;
+      const target = document.getElementById(decodeURIComponent(url.hash.slice(1)));
+      if (!target) return;
+      // preventDefault alone: Next's Link then skips navigating, while the link's own onClick (for
+      // example closing the phone menu) still runs.
+      event.preventDefault();
+      if (url.hash !== window.location.hash) window.history.pushState(window.history.state, '', url.hash);
+      // From the phone menu, the page is still locked until the menu closes; scroll right after.
+      whenScrollUnlocked(() => scrollToSection(target));
+    };
+    // Capture phase, so this runs before the router's link handler sees the click.
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, []);
+
   useGSAP(
     () => {
       if (reducedMotion()) return;
-      document.documentElement.classList.add('sf-motion-ready');
+      // Mark what this run takes over. Anything a page adds later without being picked up keeps the
+      // CSS fallback and reveals itself, so content can never stay hidden.
+      document
+        .querySelectorAll('[data-reveal], [data-reveal-item], [data-hero-fade], [data-hero-line]')
+        .forEach((element) => element.setAttribute('data-motion-bound', ''));
+
+      // A page change can land while an earlier glide is still running; settle where the router put
+      // the page, or on the section named in the address (e.g. arriving at /s/shop#about).
+      const section = window.location.hash ? document.getElementById(decodeURIComponent(window.location.hash.slice(1))) : null;
+      requestAnimationFrame(() => (section ? scrollToSection(section, { immediate: true }) : syncScrollPosition()));
 
       if (pathname !== firstPath.current) {
         gsap.fromTo('#main', { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.5, ease: 'power2.out', clearProps: 'opacity,visibility' });
