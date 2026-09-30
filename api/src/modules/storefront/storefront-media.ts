@@ -6,7 +6,8 @@ import { objectStorage } from '../../integrations/storage/s3-compatible-object-s
 /** Signed image URLs outlive the public cache (`s-maxage` 300 s) with a wide margin. */
 export const STOREFRONT_IMAGE_URL_TTL_SECONDS = 3600;
 
-const DISPLAYABLE_PURPOSES = ['storefront_asset', 'catalogue_image', 'measurement_guide'];
+// `payment_method_material` is a business's own payment instructions, shown to its renters at checkout.
+const DISPLAYABLE_PURPOSES = ['storefront_asset', 'catalogue_image', 'measurement_guide', 'payment_method_material'];
 
 /**
  * Turns accepted file ids into short-lived signed read URLs in one query. Unknown, foreign,

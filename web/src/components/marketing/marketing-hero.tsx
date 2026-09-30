@@ -1,6 +1,6 @@
 import Image from 'next/image';
+import { SIGN_UP_URL } from '@/lib/site-urls';
 
-const SIGN_UP_URL = 'https://app.drezivo.com/sign-up';
 
 const DASHBOARD_DAYS = [
   { id: 'mon', label: 'M', tone: 'bg-marketing-gold/65' },

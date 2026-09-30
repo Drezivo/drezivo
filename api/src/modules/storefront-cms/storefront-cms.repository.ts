@@ -3,6 +3,7 @@ import type { PoolClient } from 'pg';
 import type { StorefrontDocument } from '@drezivo/contracts';
 
 import type { PolicySnapshotColumns } from '../storefront/storefront-policy.js';
+import { onlinePaymentMethodReadySql, paymentMethodFileJoinsSql } from '../payment-methods/payment-method-readiness.js';
 
 export interface StorefrontRow {
   id: string;
@@ -72,13 +73,9 @@ export async function readReadiness(client: PoolClient, tenantId: string): Promi
        EXISTS (
          SELECT 1
            FROM payment_method pm
-           LEFT JOIN file_object qr ON qr.tenant_id = pm.tenant_id AND qr.id = pm.qr_file_id
+           ${paymentMethodFileJoinsSql()}
           WHERE pm.tenant_id = $1
-            AND pm.active AND pm.storefront_enabled AND pm.rail <> 'cash'
-            AND (
-              (pm.rail = 'manual_qr' AND qr.lifecycle_status = 'accepted')
-              OR (pm.rail = 'manual_transfer' AND NULLIF(btrim(pm.destination_snapshot ->> 'account_number'), '') IS NOT NULL)
-            )
+            AND ${onlinePaymentMethodReadySql()}
        ) AS has_storefront_payment_method`,
     [tenantId],
   );

@@ -41,7 +41,7 @@ export function BusinessSettingsPage() {
           <Field label="Business name" className="sm:col-span-2" error={err("business_name")} count={{ value: draft.business_name.length, max: 120 }}>
             {(props) => <Input {...props} value={draft.business_name} maxLength={120} autoComplete="organization" onChange={(e) => resource.update({ business_name: e.target.value })} />}
           </Field>
-          <Field label="Business email" hint="Owner alerts about new requests go here." error={err("business_email")}>
+          <Field label="Business email" hint="New booking and fitting requests are emailed here. Customers always get their own booking emails." error={err("business_email")}>
             {(props) => <Input {...props} type="email" autoComplete="email" value={draft.business_email ?? ""} onChange={(e) => resource.update({ business_email: orNull(e.target.value) })} />}
           </Field>
           <Field label="Business phone" error={err("business_phone")}>

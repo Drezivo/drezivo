@@ -20,6 +20,7 @@ import {
   requireTestDatabaseUrl,
   resetTestDatabase,
 } from './helpers/test-db.js';
+import { STANDARD_PLAN } from './helpers/standard-plan.js';
 
 const adminUrl = requireTestDatabaseUrl();
 
@@ -164,7 +165,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
 
   it('collapses concurrent double-fire at the quota edge into one catalogue graph and one quota claim', async () => {
     const seed = await seedCommandTenant('org_clt020_concurrent', 'user_clt020_concurrent');
-    await seedQuotaAssets(seed.tenantId, seed.branchId, 'user_clt020_concurrent', 124);
+    await seedQuotaAssets(seed.tenantId, seed.branchId, 'user_clt020_concurrent', STANDARD_PLAN.physicalAssetsMax - 1);
     const request = makeRequest(seed.categoryId, { code: 'RACE-001' });
     const command = {
       ...seed.context,
@@ -196,7 +197,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
         return result.rows[0]?.count ?? -1;
       },
     );
-    expect(totalActiveAssets).toBe(125);
+    expect(totalActiveAssets).toBe(STANDARD_PLAN.physicalAssetsMax);
   });
 
   it('validates the closed create contract inside the service before opening a write transaction', async () => {
@@ -299,7 +300,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
 
   it('serializes competing creates at the physical-asset plan limit', async () => {
     const seed = await seedCommandTenant('org_clt020_quota', 'user_clt020_quota');
-    await seedQuotaAssets(seed.tenantId, seed.branchId, 'user_clt020_quota', 124);
+    await seedQuotaAssets(seed.tenantId, seed.branchId, 'user_clt020_quota', STANDARD_PLAN.physicalAssetsMax - 1);
 
     const [a, b] = await Promise.all([
       createClothing({
@@ -339,7 +340,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
         newProducts: newProducts.rows[0]?.count ?? -1,
       };
     });
-    expect(state).toEqual({ assets: 125, newProducts: 1 });
+    expect(state).toEqual({ assets: STANDARD_PLAN.physicalAssetsMax, newProducts: 1 });
   });
 
   it('keeps the exact measurement-guide reference when the tenant default later changes', async () => {
@@ -557,7 +558,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
   async function createSubscription(
     tenantId: string,
     principalId: string,
-    code: 'starter' | 'professional' | 'business',
+    code: 'starter',
   ) {
     await withTenantTransaction(tenantId, principalId, async (client) => {
       const plan = await client.query<{ id: string }>(

@@ -24,6 +24,7 @@ export function toActorContext(context: ResolvedActorContext): ActorContext {
     active_branch_id: context.active_branch_id,
     branch_grants: context.branch_grants,
     subscription: context.subscription,
+    access: context.access,
     entitlements: context.entitlements,
   };
 }

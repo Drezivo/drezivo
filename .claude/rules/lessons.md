@@ -28,3 +28,19 @@
   IDEMPOTENCY_KEY_REUSED. Keep the key only for network, 408, 429, and 5xx retries.
 - Browsers report an image's type from its extension. Detect JPEG/PNG/WebP from the first bytes
   before authorizing an upload; web images are often JPEGs named `.png`.
+
+## 2026-10-01
+
+- Building a response with `schema.parse({ ... })` hides missing fields from TypeScript, because
+  `parse` takes `unknown`. Add `satisfies TheType` to the object literal. A new `ActorContext.access`
+  field was missed this way in the invitation claim and crashed every staff join.
+- A timed-out integration test leaves its query running and holding locks, and the next run hangs
+  behind it. Terminate `drezivo_branch_test` backends, or recreate the database, before re-running.
+- Seed tests that bulk-insert then query should `ANALYZE` the tables. Stats sampled while a table
+  was empty produced a minutes-long nested-loop UPDATE.
+- `lpad(n::text, 3, '0')` truncates 1000 to "100". Size the pad to the largest seed count.
+- Retiring a plan must be refused at selection time. A later refusal (bootstrap) strands the owner
+  on an onboarding that can never finish.
+- Cross-repository signed formats (operator proof links) need one shared test vector in both
+  repositories. Allow clock skew when checking the expiry, because the hosts differ.
+

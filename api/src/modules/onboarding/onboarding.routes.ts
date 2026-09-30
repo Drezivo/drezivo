@@ -1,13 +1,19 @@
 import { Router } from 'express';
+import { z } from 'zod';
+
+import { startTrialRequest } from '@drezivo/contracts';
 
 import { requireVerifiedStaffAuth } from '../../middleware/auth.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
+import { validate } from '../../middleware/validate.js';
+
 import {
   abandonOnboardingController,
   bootstrapTenantController,
   createOnboardingController,
   getCurrentOnboardingController,
   selectOnboardingPlanController,
+  startTrialController,
 } from './onboarding.controller.js';
 import {
   requireOnboardingIdempotencyKey,
@@ -16,6 +22,8 @@ import {
   validateChooseOnboardingPlan,
   validateCreateOwnerOnboarding,
 } from './onboarding.middleware.js';
+
+const startTrialParams = z.object({ onboardingId: z.string().uuid() }).strict();
 
 export const onboardingRouter = Router();
 
@@ -67,6 +75,19 @@ onboardingRouter.post(
   validateAbandonOwnerOnboarding,
   requireOnboardingIdempotencyKey,
   abandonOnboardingController,
+);
+
+onboardingRouter.post(
+  '/onboarding/:onboardingId/start-trial',
+  requireVerifiedStaffAuth,
+  rateLimit({
+    windowMs: 60_000,
+    max: 5,
+    keyOf: (req) => req.clerkPrincipal?.clerkUserId ?? req.ip ?? 'unknown',
+  }),
+  validate({ params: startTrialParams, body: startTrialRequest }),
+  requireOnboardingIdempotencyKey,
+  startTrialController,
 );
 
 onboardingRouter.post(

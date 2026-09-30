@@ -36,6 +36,8 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { uploadAuthorizedFile } from "@/lib/authorized-file-upload";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { displaySizeLabel } from "@/lib/catalogue-display";
+import { useVerifiedActorContext } from "@/components/shell/dashboard-access-gate";
+import { claimHoldOwner, clearPendingHold, readHoldDraft, saveHoldDraft, savePendingHold } from "@/lib/pending-hold";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +51,18 @@ type HeldState = {
   paymentInstructions: PaymentInstructions;
 };
 
+/** Customer details typed while a hold is live, kept for this tab across a refresh. */
+type HoldDraft = {
+  customerMode: CustomerMode;
+  selectedCustomerId: string;
+  fullName: string;
+  phone: string;
+  email: string;
+  address: string;
+  socialMedia: string;
+  notes: string;
+};
+
 export function NewReservationSheet({
   open,
   onOpenChange,
@@ -56,7 +70,10 @@ export function NewReservationSheet({
   onViewReservation,
   permissionCodes,
   timeZone,
+  resumeReservationId = null,
 }: {
+  /** Reopen an existing live hold by id (after navigating away or refreshing). */
+  resumeReservationId?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onReservationChanged: (reservationId: string) => void;
@@ -154,6 +171,77 @@ export function NewReservationSheet({
     ? new Date(held.reservation.hold_expires_at).getTime() - now
     : null;
   const holdExpired = serverExpired || (holdRemainingMs !== null && holdRemainingMs <= 0);
+  const tenantId = useVerifiedActorContext()?.tenant.id ?? null;
+  const heldId = held?.reservation.id ?? null;
+  const liveHold = step === "held" && heldId !== null && !holdExpired;
+
+  // While the hold is live this sheet owns it, so the dashboard's pending-hold guard stays out of the way.
+  // Claim first, then record the pointer, so the guard never sees an unowned live hold and opens a second sheet.
+  useEffect(() => {
+    if (!liveHold || !heldId) return;
+    const release = claimHoldOwner();
+    if (tenantId) savePendingHold(tenantId, heldId);
+    return release;
+  }, [heldId, liveHold, tenantId]);
+
+  // The hold ended (completed, cancelled, or expired): forget it everywhere.
+  useEffect(() => {
+    if (tenantId && heldId && (step === "done" || holdExpired)) clearPendingHold(tenantId, heldId);
+  }, [heldId, holdExpired, step, tenantId]);
+
+  // Reloading or closing the tab with a live hold asks first.
+  useEffect(() => {
+    if (!liveHold) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [liveHold]);
+
+  // Keep what staff typed for this hold across a refresh (this tab only).
+  useEffect(() => {
+    if (!liveHold || !heldId) return;
+    saveHoldDraft<HoldDraft>(heldId, { customerMode, selectedCustomerId, fullName, phone, email, address, socialMedia, notes });
+  }, [address, customerMode, email, fullName, heldId, liveHold, notes, phone, selectedCustomerId, socialMedia]);
+
+  // Resume a live hold opened by the dashboard's pending-hold guard.
+  useEffect(() => {
+    if (!open || !resumeReservationId || held) return;
+    let cancelled = false;
+    createDrezivoApiClient(getToken)
+      .getReservationHold(resumeReservationId)
+      .then((result) => {
+        if (cancelled) return;
+        const draft = readHoldDraft<HoldDraft>(resumeReservationId);
+        if (draft) {
+          if (draft.customerMode) setCustomerMode(draft.customerMode);
+          if (draft.selectedCustomerId) setSelectedCustomerId(draft.selectedCustomerId as CustomerId);
+          setFullName(draft.fullName ?? "");
+          setPhone(draft.phone ?? "");
+          setEmail(draft.email ?? "");
+          setAddress(draft.address ?? "");
+          setSocialMedia(draft.socialMedia ?? "");
+          setNotes(draft.notes ?? "");
+        }
+        setHeld({ reservation: result.data.reservation, paymentInstructions: result.data.payment_instructions });
+        setCashAmountReceived(minorUnitsToMajorInput(result.data.reservation.price_snapshot.due_now_minor));
+        setStep("held");
+        setNow(Date.now());
+        setNotice({ tone: "attention", text: "This garment is still on hold. Complete the reservation or cancel the hold to close this." });
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        // Not held any more (completed, cancelled, or expired elsewhere): drop the pointer and close.
+        if (error instanceof DrezivoApiError && (error.status === 404 || error.status === 409)) {
+          if (tenantId) clearPendingHold(tenantId, resumeReservationId);
+          onOpenChange(false);
+          return;
+        }
+        setNotice({ tone: "attention", text: "Could not reload the garment hold. Check your connection; it stays on hold until it expires." });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, held, onOpenChange, open, resumeReservationId, tenantId]);
 
   useEffect(() => {
     if (!open) return;
@@ -1099,6 +1187,16 @@ export function NewReservationSheet({
                     {held.paymentInstructions.destination_note
                       ? ` · ${held.paymentInstructions.destination_note}`
                       : ""}
+                    {held.paymentInstructions.material_url ? (
+                      <a
+                        href={held.paymentInstructions.material_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-2 font-medium text-dashboard-accent underline underline-offset-2"
+                      >
+                        Show the customer the payment instructions
+                      </a>
+                    ) : null}
                   </div>
                   {held.paymentInstructions.rail === "cash" ? (
                     <label className="hidden items-center gap-2 rounded-md border border-dashboard-border px-3 py-2 text-sm text-dashboard-navy sm:flex">

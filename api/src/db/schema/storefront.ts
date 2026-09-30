@@ -103,6 +103,10 @@ export const paymentMethod = pgTable(
     qrFileId: uuid('qr_file_id').references(() => file.id),
     active: boolean('active').notNull().default(true),
     storefrontEnabled: boolean('storefront_enabled').notNull().default(false),
+    /** 'details' (typed account + optional QR) or 'material' (the business's own PDF/image). */
+    presentation: text('presentation').notNull().default('details'),
+    /** Composite FK (tenant_id, material_file_id) -> file_object in migration 0062. */
+    materialFileId: uuid('material_file_id'),
     version: integer('version').notNull().default(1),
     ...timestamps,
   },

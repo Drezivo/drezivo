@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { paginatedResponse } from '../common/pagination';
 import { isoInstant } from '../common/time';
 import { branch, branchGrant, membership, membershipRole, tenant } from './tenant';
+import { subscriptionAccess } from './billing';
 import { subscriptionSummary } from './onboarding';
 
 export const actorContext = z.object({
@@ -20,6 +21,8 @@ export const actorContext = z.object({
   active_branch_id: branch.shape.id,
   branch_grants: z.array(branchGrant).min(1),
   subscription: subscriptionSummary,
+  /** Derived at request time from the subscription; see ./billing.ts. */
+  access: subscriptionAccess,
   entitlements: z.object({
     physical_assets_max: z.number().int().positive(),
     frontdesk_seats_max: z.number().int().nonnegative(),

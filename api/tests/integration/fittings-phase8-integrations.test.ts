@@ -153,6 +153,13 @@ async function seedWorkspace(label: string): Promise<Seed> {
       ).rows,
       'asset',
     );
+    // A published storefront is online only while its subscription grants access (billing/access.ts).
+    await client.query(
+      `INSERT INTO subscription (tenant_id, plan_id, status, current_period_start, current_period_end)
+         SELECT $1, id, 'active', now(), now() + interval '30 days'
+           FROM plan WHERE code = 'starter' AND version = 1 AND active = true`,
+      [tenantId],
+    );
     const storefrontSlug = `be8-store-${suffix}`;
     const storefrontId = requireId(
       (

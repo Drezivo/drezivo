@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
 import { PROFILE_HASH, SECURITY_HASH, useLocationHash } from "@/components/settings/use-location-hash";
+import { SHOW_NOTIFICATION_SETTINGS } from "@/lib/features";
 import { cn } from "@/lib/utils";
 
 const ACCOUNT_PATH = "/settings/account";
@@ -21,10 +22,9 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
       { href: "/settings/measurement-guide", label: "Measurement guide", icon: Ruler },
     ],
   },
-  {
-    label: "Communication",
-    items: [{ href: "/settings/notifications", label: "Notifications", icon: Bell }],
-  },
+  ...(SHOW_NOTIFICATION_SETTINGS
+    ? [{ label: "Communication", items: [{ href: "/settings/notifications", label: "Notifications", icon: Bell }] }]
+    : []),
   {
     label: "You",
     items: [

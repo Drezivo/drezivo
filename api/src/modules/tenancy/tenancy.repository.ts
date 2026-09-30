@@ -17,6 +17,8 @@ import {
 import { StateConflictError, ValidationError } from '../../shared/errors.js';
 import { resolveTenantEntitlements } from '../entitlements/entitlements.service.js';
 import { reconcileTenantLifecycle } from '../billing/billing.service.js';
+import { SUBSCRIPTION_LIFECYCLE_SWEEP_ENABLED } from '../billing/billing.constants.js';
+import { accessOf } from '../billing/access.js';
 
 interface WorkspaceRow {
   tenant_id: string;
@@ -122,6 +124,9 @@ interface SubscriptionRow {
   status: 'trialing' | 'active' | 'past_due' | 'restricted' | 'cancelled';
   trial_ends_at: Date | null;
   grace_ends_at: Date | null;
+  current_period_end: Date;
+  pending_payment: boolean;
+  now: Date;
 }
 
 export type ResolveActorResult =
@@ -147,10 +152,13 @@ export async function resolveActorContext(input: {
 
     await context.setTenantContext(tenant.id);
     try {
-      await reconcileTenantLifecycle(context.client, tenant.id, {
-        actorKey: input.principalId,
-        requestId: input.requestId ?? 'request:actor-context',
-      });
+      // Off for the pilot: access is derived below from the subscription (billing/access.ts).
+      if (SUBSCRIPTION_LIFECYCLE_SWEEP_ENABLED) {
+        await reconcileTenantLifecycle(context.client, tenant.id, {
+          actorKey: input.principalId,
+          requestId: input.requestId ?? 'request:actor-context',
+        });
+      }
       const refreshedTenantResult = await context.client.query<TenantRow>(
         `SELECT id, clerk_org_id, name, slug, status, currency, timezone, created_at, updated_at
          FROM tenant WHERE id = $1 LIMIT 1`,
@@ -204,7 +212,13 @@ async function resolveInsideTenant(
   if (!selectedGrant) return { kind: 'not_found' };
 
   const subscriptionResult = await context.client.query<SubscriptionRow>(
-    `SELECT s.id, s.plan_id, p.code AS plan_code, s.status, s.trial_ends_at, s.grace_ends_at
+    `SELECT s.id, s.plan_id, p.code AS plan_code, s.status, s.trial_ends_at, s.grace_ends_at,
+            s.current_period_end,
+            EXISTS (
+              SELECT 1 FROM subscription_payment sp
+               WHERE sp.tenant_id = s.tenant_id AND sp.status = 'pending'
+            ) AS pending_payment,
+            statement_timestamp() AS now
      FROM subscription s
      JOIN plan p ON p.id = s.plan_id AND p.active = true
      WHERE s.tenant_id = $1
@@ -250,6 +264,7 @@ async function resolveInsideTenant(
         trial_ends_at: subscription.trial_ends_at?.toISOString() ?? null,
         grace_ends_at: subscription.grace_ends_at?.toISOString() ?? null,
       },
+      access: accessOf(subscription, subscription.now),
       entitlements: {
         physical_assets_max: entitlementSnapshot.physicalAssetsMax,
         frontdesk_seats_max: entitlementSnapshot.frontdeskSeatsMax,

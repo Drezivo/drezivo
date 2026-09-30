@@ -175,13 +175,27 @@ export class EmailNotifications {
       storeName: row.store_name ?? row.tenant_name,
       slug: row.slug,
       businessEmail: row.business_email,
-      preferences: preferencesOf(row.notification_preferences ?? {}),
+      // Pilot: every customer and owner email sends; saved toggles return with the setting below.
+      preferences: NOTIFICATION_PREFERENCES_ENFORCED ? preferencesOf(row.notification_preferences ?? {}) : allOn(preferencesOf({})),
     };
   }
 }
 
 function formatLocal(instant: Date, timeZone: string): string {
   return new Intl.DateTimeFormat('en-PH', { timeZone, dateStyle: 'medium', timeStyle: 'short' }).format(instant);
+}
+
+/**
+ * Owner email toggles (Settings → Notifications) are hidden during the pilot, and customers must
+ * always hear about their bookings, so saved toggles are ignored while this is false. Set it back
+ * to true together with app/src/lib/features.ts SHOW_NOTIFICATION_SETTINGS.
+ */
+export const NOTIFICATION_PREFERENCES_ENFORCED = false;
+
+function allOn<T>(preferences: T): T {
+  const flip = (value: unknown): unknown =>
+    typeof value === 'boolean' ? true : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, flip(inner)])) : value;
+  return flip(preferences) as T;
 }
 
 export const emailNotifications = new EmailNotifications();

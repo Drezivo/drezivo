@@ -100,6 +100,19 @@ export function PaymentStep({ reservation, token, onSubmitted }: { reservation: 
             <img src={instructions.qr_image_url} alt={`${instructions.method_name} QR code`} className="mx-auto w-56 border border-sf-line bg-white p-2" />
           ) : null}
           {instructions.destination_note ? <p className="whitespace-pre-line border border-sf-line bg-sf-surface px-4 py-3 text-sm leading-7">{instructions.destination_note}</p> : null}
+          {instructions.material_url ? (
+            instructions.material_content_type === 'application/pdf' ? (
+              <div className="space-y-2">
+                <iframe src={instructions.material_url} title={`${instructions.method_name} payment instructions`} className="h-[28rem] w-full border border-sf-line bg-white" />
+                <a href={instructions.material_url} target="_blank" rel="noopener noreferrer" className="text-sm underline underline-offset-4">
+                  Open the payment instructions (PDF)
+                </a>
+              </div>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
+              <img src={instructions.material_url} alt={`${instructions.method_name} payment instructions`} className="mx-auto w-full max-w-sm border border-sf-line bg-white" />
+            )
+          ) : null}
           <p className="text-xs text-sf-muted">Send exactly {formatMinor(reservation.money.due_now_minor)} and keep the receipt screenshot.</p>
         </section>
       ) : null}

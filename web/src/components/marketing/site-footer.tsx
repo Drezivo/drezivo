@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { BrandMark } from './brand-mark';
+import { CONTACT_EMAIL } from '@/lib/site-urls';
 
 export function SiteFooter() {
   return (
@@ -29,7 +30,7 @@ export function SiteFooter() {
           <div>
             <p className="text-sm font-semibold">Stay in touch</p>
             <p className="mt-3 text-sm leading-6 text-marketing-cream/70">Built for the people keeping every fitting, pickup, and return moving.</p>
-            <a href="mailto:hello@drezivo.com" className="mt-3 inline-block text-sm text-marketing-gold hover:text-marketing-cream">hello@drezivo.com</a>
+            <a href={`mailto:${CONTACT_EMAIL}`} className="mt-3 inline-block text-sm text-marketing-gold hover:text-marketing-cream">{CONTACT_EMAIL}</a>
           </div>
         </div>
         <p className="mt-12 border-t border-marketing-dark-line pt-5 text-xs text-marketing-cream/50">© {new Date().getFullYear()} Drezivo. All rights reserved.</p>

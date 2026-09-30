@@ -9,6 +9,7 @@ import {
   requireTestDatabaseUrl,
   resetTestDatabase,
 } from './helpers/test-db.js';
+import { STANDARD_PLAN } from './helpers/standard-plan.js';
 
 const adminUrl = requireTestDatabaseUrl();
 
@@ -44,48 +45,23 @@ describe('TBF-032 entitlement service', async () => {
     await closePool();
   });
 
-  it('resolves the authoritative v1 seed values for every plan', async () => {
-    const snapshots = await withGlobalTransaction('user_tbf032_plans', async (client) =>
-      Promise.all([
-        resolvePlanEntitlements(client, 'starter'),
-        resolvePlanEntitlements(client, 'professional'),
-        resolvePlanEntitlements(client, 'business'),
-      ]),
-    );
+  it('resolves the Standard seed values and refuses the retired plans', async () => {
+    const standard = await withGlobalTransaction('user_tbf032_plans', (client) => resolvePlanEntitlements(client, 'starter'));
+    expect({
+      code: standard.planCode,
+      version: standard.planVersion,
+      monthlyMinor: standard.monthlyMinor,
+      currency: standard.currency,
+      physicalAssetsMax: standard.physicalAssetsMax,
+      frontdeskSeatsMax: standard.frontdeskSeatsMax,
+    }).toEqual(STANDARD_PLAN);
 
-    expect(snapshots.map((snapshot) => ({
-      code: snapshot.planCode,
-      version: snapshot.planVersion,
-      monthlyMinor: snapshot.monthlyMinor,
-      currency: snapshot.currency,
-      physicalAssetsMax: snapshot.physicalAssetsMax,
-      frontdeskSeatsMax: snapshot.frontdeskSeatsMax,
-    }))).toEqual([
-      {
-        code: 'starter',
-        version: 1,
-        monthlyMinor: 30000,
-        currency: 'PHP',
-        physicalAssetsMax: 125,
-        frontdeskSeatsMax: 0,
-      },
-      {
-        code: 'professional',
-        version: 1,
-        monthlyMinor: 49900,
-        currency: 'PHP',
-        physicalAssetsMax: 300,
-        frontdeskSeatsMax: 2,
-      },
-      {
-        code: 'business',
-        version: 1,
-        monthlyMinor: 129900,
-        currency: 'PHP',
-        physicalAssetsMax: 1000,
-        frontdeskSeatsMax: 10,
-      },
-    ]);
+    // Migration 0062 deactivated them; nothing may start a new subscription on either.
+    for (const retired of ['professional', 'business'] as const) {
+      await expect(
+        withGlobalTransaction('user_tbf032_plans', (client) => resolvePlanEntitlements(client, retired)),
+      ).rejects.toMatchObject({ code: 'STATE_CONFLICT' });
+    }
   });
 
   it('resolves a tenant subscription through the shared entitlement service', async () => {
@@ -99,8 +75,8 @@ describe('TBF-032 entitlement service', async () => {
     expect(snapshot).toMatchObject({
       planCode: 'starter',
       planVersion: 1,
-      physicalAssetsMax: 125,
-      frontdeskSeatsMax: 0,
+      physicalAssetsMax: STANDARD_PLAN.physicalAssetsMax,
+      frontdeskSeatsMax: STANDARD_PLAN.frontdeskSeatsMax,
     });
   });
 
@@ -124,12 +100,13 @@ describe('TBF-032 entitlement service', async () => {
 
   it('allows exact asset capacity and rejects overage', async () => {
     const tenant = await createQuotaTenant('org_tbf032_asset_quota', 'user_tbf032_asset_quota');
-    await seedPhysicalAssets(tenant.id, 124);
+    const cap = STANDARD_PLAN.physicalAssetsMax;
+    await seedPhysicalAssets(tenant.id, cap - 1);
 
     const exact = await withTenantTransaction(tenant.id, 'user_tbf032_asset_quota', (client) =>
       assertPhysicalAssetCapacity(client, tenant.id, 1),
     );
-    expect(exact).toMatchObject({ resource: 'physical_assets', current: 124, requested: 1, limit: 125, remaining: 0 });
+    expect(exact).toMatchObject({ resource: 'physical_assets', current: cap - 1, requested: 1, limit: cap, remaining: 0 });
 
     await expect(
       withTenantTransaction(tenant.id, 'user_tbf032_asset_quota', (client) =>
@@ -140,7 +117,7 @@ describe('TBF-032 entitlement service', async () => {
 
   it('serializes concurrent asset claims so only one final write reaches the cap', async () => {
     const tenant = await createQuotaTenant('org_tbf032_asset_race', 'user_tbf032_asset_race');
-    await seedPhysicalAssets(tenant.id, 124);
+    await seedPhysicalAssets(tenant.id, STANDARD_PLAN.physicalAssetsMax - 1);
 
     const attempts = await Promise.allSettled(
       ['user_tbf032_asset_race_a', 'user_tbf032_asset_race_b'].map((principalId) =>
@@ -160,8 +137,12 @@ describe('TBF-032 entitlement service', async () => {
   });
 
   it('counts active Front Desk memberships, excludes the Owner, and serializes claims', async () => {
-    const tenant = await createQuotaTenant('org_tbf032_seat_race', 'user_tbf032_seat_owner', 'professional');
-    await createTestMembership(tenant.id, 'user_tbf032_existing_frontdesk', 'frontdesk');
+    const tenant = await createQuotaTenant('org_tbf032_seat_race', 'user_tbf032_seat_owner');
+    // Fill every seat but one, so exactly one of the two racing claims may win.
+    const existing = STANDARD_PLAN.frontdeskSeatsMax - 1;
+    for (let index = 0; index < existing; index += 1) {
+      await createTestMembership(tenant.id, `user_tbf032_existing_frontdesk_${index}`, 'frontdesk');
+    }
 
     const attempts = await Promise.allSettled(
       ['user_tbf032_seat_a', 'user_tbf032_seat_b'].map((principalId) =>
@@ -186,7 +167,7 @@ describe('TBF-032 entitlement service', async () => {
         [tenant.id],
       ),
     );
-    expect(result.rows[0]?.count).toBe(2);
+    expect(result.rows[0]?.count).toBe(STANDARD_PLAN.frontdeskSeatsMax);
   });
 
   it('keeps quota reads inside the authenticated tenant scope', async () => {
@@ -207,7 +188,7 @@ describe('TBF-032 entitlement service', async () => {
   });
 
   it('does not consume capacity when the caller rolls back after the guard', async () => {
-    const tenant = await createQuotaTenant('org_tbf032_rollback', 'user_tbf032_rollback', 'professional');
+    const tenant = await createQuotaTenant('org_tbf032_rollback', 'user_tbf032_rollback');
 
     await expect(
       withTenantTransaction(tenant.id, 'user_tbf032_rollback', async (client) => {
@@ -242,7 +223,7 @@ describe('TBF-032 entitlement service', async () => {
     });
   });
 
-  async function createSubscription(tenantId: string, code: 'starter' | 'professional' | 'business') {
+  async function createSubscription(tenantId: string, code: 'starter') {
     await withTenantTransaction(tenantId, `user_${code}_${tenantId}`, async (client) => {
       const plan = await client.query<{ id: string }>(
         `SELECT id FROM plan WHERE code = $1 AND version = 1 AND active = true`,
@@ -261,7 +242,7 @@ describe('TBF-032 entitlement service', async () => {
   async function createQuotaTenant(
     clerkOrgId: string,
     ownerPrincipal: string,
-    planCode: 'starter' | 'professional' = 'starter',
+    planCode: 'starter' = 'starter',
   ) {
     const tenant = await createTestTenant({ clerkOrgId });
     const membershipId = await createTestMembership(tenant.id, ownerPrincipal, 'owner');

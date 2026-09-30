@@ -2,27 +2,11 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { useAuth, useClerk } from "@clerk/nextjs";
-import {
-  ArrowRight,
-  BarChart3,
-  Check,
-  CheckCircle2,
-  Gem,
-  Package,
-  Sprout,
-  UsersRound,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowRight, CheckCircle2, Package, UsersRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import {
-  chooseOnboardingPlanRequest,
-  type OnboardingActorContext,
-  type OrganizationOnboarding,
-  type PlanCode,
-  type TenantBootstrapResponse,
-} from "@drezivo/contracts";
+import type { OnboardingActorContext, OrganizationOnboarding, TenantBootstrapResponse } from "@drezivo/contracts";
 
 import { AuthBrand } from "@/components/auth/auth-brand";
 import { AuthSplitLayout } from "@/components/auth/auth-split-layout";
@@ -33,63 +17,36 @@ import { RestartOnboardingDialog } from "@/components/onboarding/restart-onboard
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 
-type PlanDefinition = {
-  code: PlanCode;
-  name: string;
-  monthlyPrice: string;
-  assets: string;
-  seats: string;
-  icon: LucideIcon;
-};
-
 type LoadState =
   | { kind: "loading" }
   | { kind: "error"; error: DrezivoApiError }
   | { kind: "ready"; context: OnboardingActorContext };
 
-type ScreenMode = "select" | "review";
 type LaunchPhase = "idle" | "bootstrapping" | "resolving" | "context-error";
 
-// Display metadata only. The API accepts only `plan_code`; price and quota authority stays server-side.
-const PLAN_OPTIONS: readonly PlanDefinition[] = [
-  {
-    code: "starter",
-    name: "Starter",
-    monthlyPrice: "₱300",
-    assets: "125 active assets",
-    seats: "Owner only",
-    icon: Sprout,
-  },
-  {
-    code: "professional",
-    name: "Professional",
-    monthlyPrice: "₱499",
-    assets: "300 active assets",
-    seats: "2 Front Desk seats",
-    icon: Gem,
-  },
-  {
-    code: "business",
-    name: "Business",
-    monthlyPrice: "₱1,299",
-    assets: "1,000 active assets",
-    seats: "10 Front Desk seats",
-    icon: BarChart3,
-  },
-];
+/**
+ * Display copy for the only plan. The API decides the real price, limits, and trial length
+ * (internal plan code `starter`, shown as Standard).
+ */
+const STANDARD_PLAN = {
+  name: "Standard",
+  monthlyPrice: "₱300",
+  assets: "Up to 1,000 garments",
+  seats: "Up to 10 staff",
+} as const;
 
+/**
+ * The last onboarding step. There is one plan, so there is nothing to choose: the owner confirms
+ * "Start your 14-day trial?" and lands on the dashboard. The dialog opens on arrival; "Not yet"
+ * closes it and leaves a button to reopen it.
+ */
 export function OnboardingPlan() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const { setActive } = useClerk();
   const router = useRouter();
-  const planSubmit = useSubmitGuard();
   const launchSubmit = useSubmitGuard();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
-  const [selectedPlan, setSelectedPlan] = useState<PlanCode>("professional");
-  const [persistedPlan, setPersistedPlan] = useState<PlanCode | null>(null);
-  const [mode, setMode] = useState<ScreenMode>("select");
-  const [planError, setPlanError] = useState<DrezivoApiError | null>(null);
-  const [launchOpen, setLaunchOpen] = useState(false);
+  const [launchOpen, setLaunchOpen] = useState(true);
   const [launchPhase, setLaunchPhase] = useState<LaunchPhase>("idle");
   const [launchError, setLaunchError] = useState<DrezivoApiError | null>(null);
   const [bootstrapResult, setBootstrapResult] = useState<TenantBootstrapResponse | null>(null);
@@ -101,20 +58,10 @@ export function OnboardingPlan() {
     try {
       const result = await createDrezivoApiClient(getToken).getCurrentOnboarding();
       const onboarding = result.data.onboarding;
-
-      if (
-        !onboarding ||
-        result.data.has_current_owned_tenant ||
-        onboarding.status !== "incomplete"
-      ) {
+      if (!onboarding || result.data.has_current_owned_tenant || onboarding.status !== "incomplete") {
         router.replace("/onboarding");
         return;
       }
-
-      const initialPlan = onboarding.selected_plan_code ?? "professional";
-      setSelectedPlan(initialPlan);
-      setPersistedPlan(onboarding.selected_plan_code);
-      setMode(onboarding.selected_plan_code ? "review" : "select");
       setState({ kind: "ready", context: result.data });
     } catch (caughtError) {
       setState({ kind: "error", error: toDrezivoApiError(caughtError) });
@@ -126,7 +73,6 @@ export function OnboardingPlan() {
       router.replace("/sign-in");
       return;
     }
-
     void loadCurrent();
   }, [isLoaded, isSignedIn, loadCurrent, router]);
 
@@ -152,15 +98,12 @@ export function OnboardingPlan() {
     );
   }
 
-  const readyContext = state.context;
-  const onboarding = readyContext.onboarding;
+  const onboarding = state.context.onboarding;
   if (!onboarding) return <OnboardingStatusPage />;
   const activeOnboarding = onboarding;
 
-  const plan = PLAN_OPTIONS.find((option) => option.code === persistedPlan) ?? null;
-
   if (launchPhase === "resolving") {
-    return <ProvisioningState title="Creating your workspace…" description="Your workspace is ready. We’re loading your access and dashboard now." />;
+    return <ProvisioningState title="Creating your workspace…" description="Your trial has started. We’re opening your dashboard now." />;
   }
 
   if (launchPhase === "context-error" && bootstrapResult) {
@@ -171,16 +114,12 @@ export function OnboardingPlan() {
           <CheckCircle2 aria-hidden="true" className="mx-auto mt-10 h-12 w-12 text-auth-gold" />
           <h1 className="mt-6 font-display text-4xl text-auth-text">Your workspace was created</h1>
           <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-auth-dark-muted">
-            We couldn&apos;t finish loading your workspace access. Your trial has already started, so retrying here will only reload your workspace and will not launch it again.
+            We couldn&apos;t finish loading your workspace. Your trial has already started, so trying again only reloads your workspace.
           </p>
           {launchError?.requestId ? (
             <p className="mt-3 text-xs text-auth-dark-muted">Support reference: {launchError.requestId}</p>
           ) : null}
-          <button
-            type="button"
-            className={`${primaryButtonClass} mt-8`}
-            onClick={() => void resolveWorkspace(bootstrapResult)}
-          >
+          <button type="button" className={`${primaryButtonClass} mt-8`} onClick={() => void resolveWorkspace(bootstrapResult)}>
             Try loading workspace again
           </button>
         </section>
@@ -188,95 +127,17 @@ export function OnboardingPlan() {
     );
   }
 
-  if (mode === "review" && plan) {
-    return (
-      <LaunchReview
-        getToken={getToken}
-        onboarding={activeOnboarding}
-        plan={plan}
-        launchError={launchError}
-        launchOpen={launchOpen}
-        launchPhase={launchPhase}
-        onChangePlan={() => {
-          setPlanError(null);
-          setMode("select");
-        }}
-        onLaunchOpenChange={(open) => {
-          if (launchPhase === "bootstrapping") return;
-          if (open) {
-            launchSubmit.resetIntent();
-            setLaunchError(null);
-          }
-          setLaunchOpen(open);
-        }}
-        onConfirmLaunch={() => void handleLaunch()}
-        onRestarted={() => router.replace("/onboarding")}
-      />
-    );
-  }
-
-  const selectionIsPersisted = persistedPlan === selectedPlan;
-
-  function handlePlanChange(planCode: PlanCode) {
-    if (planSubmit.isSubmitting) return;
-    setSelectedPlan(planCode);
-    setPlanError(null);
-    planSubmit.resetIntent();
-  }
-
-  async function handlePlanSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (planSubmit.isSubmitting) return;
-
-    if (selectionIsPersisted) {
-      setMode("review");
-      return;
-    }
-
-    const parsed = chooseOnboardingPlanRequest.safeParse({ plan_code: selectedPlan });
-    if (!parsed.success) {
-      setPlanError(new DrezivoApiError("Choose a valid plan to continue.", { status: 422 }));
-      return;
-    }
-
-    setPlanError(null);
-    try {
-      const result = await planSubmit.submit((idempotencyKey) =>
-        createDrezivoApiClient(getToken).selectOnboardingPlan(activeOnboarding.id, parsed.data, idempotencyKey)
-      );
-      if (!result) return;
-
-      planSubmit.resetIntent();
-      if (result.data.status === "payment_pending") {
-        router.replace("/onboarding");
-        return;
-      }
-
-      setPersistedPlan(result.data.selected_plan_code);
-      setState({
-        kind: "ready",
-        context: { ...readyContext, onboarding: result.data },
-      });
-      setMode("review");
-    } catch (caughtError) {
-      setPlanError(toDrezivoApiError(caughtError));
-    }
-  }
-
-  async function handleLaunch() {
-    if (launchPhase === "bootstrapping" || !persistedPlan) return;
-
+  async function handleStartTrial() {
+    if (launchPhase === "bootstrapping") return;
     setLaunchError(null);
     setLaunchPhase("bootstrapping");
     try {
       const result = await launchSubmit.submit((idempotencyKey) =>
-        createDrezivoApiClient(getToken).bootstrapOnboarding(activeOnboarding.id, {}, idempotencyKey)
+        createDrezivoApiClient(getToken).startOnboardingTrial(activeOnboarding.id, idempotencyKey)
       );
       if (!result) return;
-
       setBootstrapResult(result.data);
       setLaunchOpen(false);
-      launchSubmit.resetIntent();
       await resolveWorkspace(result.data);
     } catch (caughtError) {
       setLaunchPhase("idle");
@@ -295,179 +156,74 @@ export function OnboardingPlan() {
           (item) => item.tenant.id === bootstrap.tenant.id || item.clerk_org_id === activeOnboarding.clerk_org_id
         );
         if (!workspace) {
-          throw new DrezivoApiError("Your workspace was created, but it is not available to load yet.", {
-            status: 409,
-          });
+          throw new DrezivoApiError("Your workspace was created, but it is not available to load yet.", { status: 409 });
         }
-
         await setActive({ organization: workspace.clerk_org_id });
         const actor = await api.getActorContext();
         if (actor.data.tenant.id !== bootstrap.tenant.id) {
-          throw new DrezivoApiError("Your workspace context did not match the workspace that was created.", {
-            status: 409,
-          });
+          throw new DrezivoApiError("Your workspace context did not match the workspace that was created.", { status: 409 });
         }
       });
-
-      router.replace("/");
+      // Full navigation: Clerk refreshes the router after switching organizations (see post-auth-resolver).
+      window.location.replace("/");
     } catch (caughtError) {
       setLaunchError(toDrezivoApiError(caughtError));
       setLaunchPhase("context-error");
     }
   }
 
-  return (
-    <PlanFrame getToken={getToken} onboarding={activeOnboarding}>
-      <section aria-labelledby="plan-heading" className="mx-auto w-full max-w-4xl py-8 sm:py-10">
-        <BrandHeader />
-        <div className="mx-auto mt-9 max-w-2xl">
-          <OnboardingProgress current="plan" />
-        </div>
-
-        <div className="mt-10 text-center">
-          <h1 id="plan-heading" className="font-display text-4xl leading-tight text-auth-text sm:text-5xl">
-            Choose your plan
-          </h1>
-          <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-auth-dark-muted sm:text-base">
-            Pick a plan for your rental business. All plans start with a 14-day trial.
-          </p>
-        </div>
-
-        <form className="mt-7" onSubmit={handlePlanSubmit}>
-          <fieldset>
-            <legend className="sr-only">Drezivo subscription plan</legend>
-            <div className="mx-auto max-w-[52rem]">
-              <div className="grid gap-3 xl:grid-cols-3">
-                {PLAN_OPTIONS.map((option) => (
-                  <PlanCard
-                    key={option.code}
-                    plan={option}
-                    selected={selectedPlan === option.code}
-                    disabled={planSubmit.isSubmitting}
-                    onSelect={() => handlePlanChange(option.code)}
-                  />
-                ))}
-              </div>
-            </div>
-          </fieldset>
-
-          <p className="mt-4 text-center text-xs leading-5 text-auth-dark-muted sm:text-sm">
-            All plans include core privacy, roles, exports, and safe financial lifecycle tools.
-          </p>
-
-          {planError ? <InlineError error={planError} /> : null}
-
-          <button type="submit" disabled={planSubmit.isSubmitting} className={`${primaryButtonClass} mt-5`}>
-            {planSubmit.isSubmitting ? "Saving plan…" : "Continue"}
-          </button>
-        </form>
-
-        <div className="mt-5 flex items-center gap-5">
-          <span aria-hidden="true" className="h-px flex-1 bg-auth-line" />
-          <button
-            type="button"
-            onClick={() => router.replace("/onboarding")}
-            className="text-sm font-medium text-auth-text transition-colors hover:text-auth-gold"
-          >
-            Back
-          </button>
-          <span aria-hidden="true" className="h-px flex-1 bg-auth-line" />
-        </div>
-      </section>
-    </PlanFrame>
-  );
-}
-
-function LaunchReview({
-  getToken,
-  launchError,
-  launchOpen,
-  launchPhase,
-  onboarding,
-  onChangePlan,
-  onConfirmLaunch,
-  onLaunchOpenChange,
-  onRestarted,
-  plan,
-}: {
-  getToken: () => Promise<string | null>;
-  launchError: DrezivoApiError | null;
-  launchOpen: boolean;
-  launchPhase: LaunchPhase;
-  onboarding: OrganizationOnboarding;
-  onChangePlan: () => void;
-  onConfirmLaunch: () => void;
-  onLaunchOpenChange: (open: boolean) => void;
-  onRestarted: () => void;
-  plan: PlanDefinition;
-}) {
   const isLaunching = launchPhase === "bootstrapping";
 
   return (
-    <PlanFrame getToken={getToken} onboarding={onboarding}>
-      <section aria-labelledby="launch-heading" className="mx-auto w-full max-w-[52rem] py-4 sm:py-5">
+    <PlanFrame getToken={getToken} onboarding={activeOnboarding}>
+      <section aria-labelledby="trial-heading" className="mx-auto w-full max-w-xl py-6 sm:py-8">
         <BrandHeader />
-        <div className="mx-auto mt-6 max-w-xl">
+        <div className="mx-auto mt-7 max-w-md">
           <OnboardingProgress current="launch" />
         </div>
 
-        <div className="mt-6 text-center">
-          <h1 id="launch-heading" className="font-display text-3xl leading-tight text-auth-text sm:text-4xl">
-            Review and launch
+        <div className="mt-8 text-center">
+          <h1 id="trial-heading" className="font-display text-3xl leading-tight text-auth-text sm:text-4xl">
+            Start your free trial
           </h1>
-          <p className="mt-2 text-sm text-auth-dark-muted">
-            Check your setup before creating your workspace.
-          </p>
+          <p className="mt-2 text-sm text-auth-dark-muted">Every feature is included for 14 days. No card needed.</p>
         </div>
 
-        <div className="mx-auto mt-5 max-w-[48rem] rounded-xl border border-auth-line px-4 sm:px-6">
-          <ReviewRow label="Organization">
+        <div className="mt-6 rounded-xl border border-auth-line px-4 sm:px-6">
+          <ReviewRow label="Business">
             <div className="min-w-0 flex-1">
-              <p className="font-display text-xl text-auth-text">{onboarding.organization_name}</p>
-              <p className="mt-1 truncate text-sm text-auth-dark-muted">
-                A storefront URL will be created automatically at launch.
-              </p>
+              <p className="font-display text-xl text-auth-text">{activeOnboarding.organization_name}</p>
+              <p className="mt-1 text-sm text-auth-dark-muted">Your storefront address is created automatically.</p>
             </div>
             <RestartOnboardingDialog
               getToken={getToken}
-              onboarding={onboarding}
-              onRestarted={onRestarted}
+              onboarding={activeOnboarding}
+              onRestarted={() => router.replace("/onboarding")}
               triggerClassName={changeButtonClass}
               triggerLabel="Change"
             />
           </ReviewRow>
-
-          <ReviewRow label="Plan">
-            <div className="min-w-0 flex-1">
-              <p className="font-display text-xl text-auth-text">{plan.name}</p>
-              <p className="mt-1 text-sm text-auth-dark-muted">{plan.monthlyPrice} / month · 14-day trial</p>
-            </div>
-            <button type="button" onClick={onChangePlan} className={changeButtonClass}>
-              Change
-            </button>
-          </ReviewRow>
-
-          <ReviewRow label="Limits">
-            <p className="text-sm text-auth-text sm:text-base">
-              {plan.assets} <span className="mx-2 text-auth-dark-muted">·</span> {plan.seats}
-            </p>
-          </ReviewRow>
-
-          <ReviewRow label="When you launch" last>
-            <div className="space-y-2.5 text-sm text-auth-dark-muted">
-              <LaunchEffect>Create your workspace</LaunchEffect>
-              <LaunchEffect>Start your 14-day trial</LaunchEffect>
-              <LaunchEffect>Continue to your dashboard</LaunchEffect>
-            </div>
+          <ReviewRow label="Plan" last>
+            <PlanSummary />
           </ReviewRow>
         </div>
 
         {launchError && !launchOpen ? <InlineError error={launchError} /> : null}
 
-        <Dialog.Root open={launchOpen} onOpenChange={onLaunchOpenChange}>
+        <Dialog.Root
+          open={launchOpen}
+          onOpenChange={(open: boolean) => {
+            if (isLaunching) return;
+            if (open) {
+              launchSubmit.resetIntent();
+              setLaunchError(null);
+            }
+            setLaunchOpen(open);
+          }}
+        >
           <Dialog.Trigger asChild>
-            <button type="button" className={`${launchButtonClass} mx-auto mt-4 max-w-[48rem]`}>
-              Launch Workspace <ArrowRight aria-hidden="true" className="h-5 w-5" />
+            <button type="button" className={`${launchButtonClass} mt-5`}>
+              Start 14-day trial <ArrowRight aria-hidden="true" className="h-5 w-5" />
             </button>
           </Dialog.Trigger>
           <Dialog.Portal>
@@ -475,48 +231,43 @@ function LaunchReview({
             <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-auth-line bg-auth-panel p-6 shadow-2xl outline-none sm:p-7">
               <Dialog.Title className="font-display text-3xl text-auth-text">Start your 14-day trial?</Dialog.Title>
               <Dialog.Description className="mt-3 text-sm leading-6 text-auth-dark-muted">
-                Launching your workspace starts your 14-day trial immediately. No credit card is required during the trial period, and your lifetime trial can only be used once.
+                Your trial starts now and gives you every feature for 14 days. After that, keep going for {STANDARD_PLAN.monthlyPrice} a month.
               </Dialog.Description>
-
-              <div className="mt-5 rounded-xl border border-auth-line bg-auth-page/30 p-4 text-sm text-auth-dark-muted">
-                <p className="font-semibold text-auth-text">{plan.name}</p>
-                <p className="mt-1">{plan.monthlyPrice} / month after the trial period.</p>
+              <div className="mt-5 rounded-xl border border-auth-line bg-auth-page/30 p-4">
+                <PlanSummary />
               </div>
-
               {launchError ? <InlineError error={launchError} /> : null}
-
               <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <Dialog.Close asChild>
                   <button type="button" disabled={isLaunching} className={dialogCancelButtonClass}>
                     Not yet
                   </button>
                 </Dialog.Close>
-                <button
-                  type="button"
-                  disabled={isLaunching}
-                  onClick={onConfirmLaunch}
-                  className={dialogLaunchButtonClass}
-                >
+                <button type="button" disabled={isLaunching} onClick={() => void handleStartTrial()} className={dialogLaunchButtonClass}>
                   {isLaunching ? "Starting trial…" : "Start 14-day trial"}
                 </button>
               </div>
             </Dialog.Content>
           </Dialog.Portal>
         </Dialog.Root>
-
-        <p className="mt-3 text-center text-xs text-auth-dark-muted">
-          Drezivo will load your workspace after launch.
-        </p>
-
-        <div className="mx-auto mt-4 flex max-w-[48rem] items-center gap-5">
-          <span aria-hidden="true" className="h-px flex-1 bg-auth-line" />
-          <button type="button" onClick={onChangePlan} className="text-sm font-medium text-auth-text hover:text-auth-gold">
-            Back
-          </button>
-          <span aria-hidden="true" className="h-px flex-1 bg-auth-line" />
-        </div>
       </section>
     </PlanFrame>
+  );
+}
+
+function PlanSummary() {
+  return (
+    <div className="min-w-0 flex-1 text-sm text-auth-dark-muted">
+      <p className="font-display text-xl text-auth-text">
+        {STANDARD_PLAN.name} <span className="text-base text-auth-gold">{STANDARD_PLAN.monthlyPrice} / month after the trial</span>
+      </p>
+      <p className="mt-2 flex items-center gap-2">
+        <Package aria-hidden="true" className="h-4 w-4 text-auth-text" /> {STANDARD_PLAN.assets}
+      </p>
+      <p className="mt-1 flex items-center gap-2">
+        <UsersRound aria-hidden="true" className="h-4 w-4 text-auth-text" /> {STANDARD_PLAN.seats}
+      </p>
+    </div>
   );
 }
 
@@ -534,17 +285,6 @@ function ReviewRow({
       <p className="text-sm font-medium text-auth-dark-muted sm:text-base">{label}</p>
       <div className="flex min-w-0 items-start justify-between gap-4">{children}</div>
     </div>
-  );
-}
-
-function LaunchEffect({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="flex items-center gap-3">
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-auth-gold text-auth-panel">
-        <Check aria-hidden="true" className="h-4 w-4" />
-      </span>
-      {children}
-    </p>
   );
 }
 
@@ -567,74 +307,6 @@ function BrandHeader() {
       <AuthBrand />
       <p className="mt-2 text-xs font-medium tracking-[0.35em] text-auth-dark-muted">FOR PROFESSIONALS</p>
     </div>
-  );
-}
-
-function PlanCard({
-  disabled,
-  onSelect,
-  plan,
-  selected,
-}: {
-  disabled: boolean;
-  onSelect: () => void;
-  plan: PlanDefinition;
-  selected: boolean;
-}) {
-  const Icon = plan.icon;
-
-  return (
-    <label
-      className={[
-        "relative flex min-h-56 cursor-pointer flex-col rounded-xl border p-4 transition",
-        selected
-          ? "border-auth-gold bg-auth-gold/10 shadow-[0_0_0_1px_var(--color-auth-gold)]"
-          : "border-auth-line bg-auth-panel/40 hover:border-auth-gold/60",
-        disabled ? "cursor-not-allowed opacity-70" : "",
-      ].join(" ")}
-    >
-      <input
-        type="radio"
-        name="plan"
-        value={plan.code}
-        checked={selected}
-        disabled={disabled}
-        onChange={onSelect}
-        aria-label={`${plan.name} ${plan.monthlyPrice} per month`}
-        className="sr-only"
-      />
-      <span
-        aria-hidden="true"
-        className={[
-          "absolute right-4 top-4 flex h-4.5 w-4.5 items-center justify-center rounded-full border",
-          selected ? "border-auth-gold" : "border-auth-dark-muted",
-        ].join(" ")}
-      >
-        {selected ? <span className="h-2 w-2 rounded-full bg-auth-text" /> : null}
-      </span>
-
-      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-auth-hover text-auth-gold">
-        <Icon aria-hidden="true" className="h-5 w-5" strokeWidth={1.7} />
-      </span>
-      <span className="mt-3 font-display text-xl text-auth-text">{plan.name}</span>
-      <span className="mt-1 font-display text-xl text-auth-gold">
-        {plan.monthlyPrice} <span className="text-sm">/ month</span>
-      </span>
-      <span className="mt-1 text-xs text-auth-text">14-day trial</span>
-
-      <span className="my-3 h-px bg-auth-line" />
-
-      <span className="mt-auto space-y-2 text-xs text-auth-dark-muted sm:text-sm">
-        <span className="flex items-center gap-2.5">
-          <Package aria-hidden="true" className="h-4 w-4 text-auth-text" />
-          {plan.assets}
-        </span>
-        <span className="flex items-center gap-2.5">
-          <UsersRound aria-hidden="true" className="h-4 w-4 text-auth-text" />
-          {plan.seats}
-        </span>
-      </span>
-    </label>
   );
 }
 

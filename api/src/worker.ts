@@ -10,8 +10,10 @@ import { cleanupAbandonedClerkOrganizations } from './worker/handlers/clerk-orga
 import { promoteElapsedRecoveryReadinessForAllTenants } from './worker/handlers/recovery-readiness.js';
 import { WorkerRunner, type EventHandler } from './worker/runner.js';
 import { createEmailDeliveryHandler } from './worker/handlers/email-delivery.js';
+import { createSubscriptionPaymentReviewedHandler, PAYMENT_REVIEWED_EVENT_TYPE } from './worker/handlers/subscription-payment-reviewed.js';
 import { EMAIL_EVENT_TYPE } from './modules/notifications/email-notifications.js';
 import { logger } from './shared/logger.js';
+import { SUBSCRIPTION_LIFECYCLE_SWEEP_ENABLED } from './modules/billing/billing.constants.js';
 
 /**
  * Durable worker entrypoint — a SEPARATE PROCESS from server.ts, sharing the same compiled
@@ -31,6 +33,7 @@ import { logger } from './shared/logger.js';
 const handlers: Record<string, EventHandler> = {
   'tenant.bootstrapped': handleTenantBootstrapped,
   [EMAIL_EVENT_TYPE]: createEmailDeliveryHandler(),
+  [PAYMENT_REVIEWED_EVENT_TYPE]: createSubscriptionPaymentReviewedHandler(),
   'clerk.invitation.dispatch_requested': handleMembershipInvitationDispatch,
   'clerk.invitation.revoke_requested': handleMembershipInvitationDispatch,
   ...Object.fromEntries(ACKNOWLEDGED_DOMAIN_EVENTS.map((eventType) => [eventType, acknowledgeDomainEvent])),
@@ -47,7 +50,10 @@ interface Sweep {
 
 const SWEEPS: readonly Sweep[] = [
   { name: 'hold expiry', run: expireDueHoldsForAllTenants, intervalMs: config.WORKER_POLL_INTERVAL_MS, fast: true },
-  { name: 'subscription lifecycle', run: reconcileDueSubscriptionsForAllTenants, intervalMs: config.WORKER_POLL_INTERVAL_MS },
+  // Off for the pilot: access is derived per request (modules/billing/access.ts). See the constant.
+  ...(SUBSCRIPTION_LIFECYCLE_SWEEP_ENABLED
+    ? [{ name: 'subscription lifecycle', run: reconcileDueSubscriptionsForAllTenants, intervalMs: config.WORKER_POLL_INTERVAL_MS }]
+    : []),
   { name: 'Clerk webhook reconciliation', run: reconcileDueClerkWebhooks, intervalMs: config.WORKER_POLL_INTERVAL_MS },
   { name: 'Clerk organization cleanup', run: cleanupAbandonedClerkOrganizations, intervalMs: config.WORKER_POLL_INTERVAL_MS },
   {

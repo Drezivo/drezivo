@@ -8,6 +8,7 @@ import {
   requireTestDatabaseUrl,
   resetTestDatabase,
 } from './helpers/test-db.js';
+import { STANDARD_PLAN } from './helpers/standard-plan.js';
 
 const adminUrl = requireTestDatabaseUrl();
 
@@ -159,8 +160,8 @@ describe('TBF-031 actor and workspace resolution', async () => {
       'reservations.manage',
     ]);
     expect(context.context.entitlements).toEqual({
-      physical_assets_max: 125,
-      frontdesk_seats_max: 0,
+      physical_assets_max: STANDARD_PLAN.physicalAssetsMax,
+      frontdesk_seats_max: STANDARD_PLAN.frontdeskSeatsMax,
     });
   });
 

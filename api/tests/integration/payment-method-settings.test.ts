@@ -104,7 +104,7 @@ describe('payment method settings', async () => {
     expect(result.status).toBe(422);
     expect(result.body).toMatchObject({
       success: false,
-      error: { message: 'GCash number must be exactly 11 digits.' },
+      error: { message: 'GCash numbers are 11 digits and start with 09.' },
     });
   });
 

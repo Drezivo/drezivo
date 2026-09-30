@@ -1,6 +1,5 @@
 import type { MetadataRoute } from 'next';
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://drezivo.com';
+import { SITE_URL } from '@/lib/site-urls';
 
 /**
  * Tenant storefronts (/s/<slug>) ARE allowed to be crawled — a published

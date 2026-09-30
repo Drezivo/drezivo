@@ -1,9 +1,14 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
+import { z } from 'zod';
 
 import { requireStaffAuth } from '../../middleware/auth.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { requireTenantAction } from '../tenancy/tenancy.service.js';
+import { validate } from '../../middleware/validate.js';
+import { ForbiddenError } from '../../shared/errors.js';
+import { sendSuccess } from '../../shared/response.js';
+import { readStaffReservationHold } from './reservations.hold-resume.service.js';
 import {
   attachReservationPaymentReceiptController,
   cancelReservationController,
@@ -49,6 +54,8 @@ import {
 
 export const reservationsRouter = Router();
 
+const holdResumeParams = z.object({ reservationId: z.string().uuid() }).strict();
+
 const readRateLimit = rateLimit({
   windowMs: 60_000,
   max: 60,
@@ -60,6 +67,25 @@ const writeRateLimit = rateLimit({
   max: 30,
   keyOf: (req) => req.tenantContext?.tenantId ?? req.clerkPrincipal?.clerkUserId ?? req.ip ?? 'unknown',
 });
+
+reservationsRouter.get(
+  '/reservations/:reservationId/hold',
+  requireStaffAuth,
+  requireTenantContext,
+  readRateLimit,
+  requireTenantAction('existing_rental_read'),
+  requireReservationManagePermission,
+  validate({ params: holdResumeParams }),
+  async (req: Request, res: Response) => {
+    const context = req.tenantContext;
+    if (!context) throw new ForbiddenError('Tenant context is required.');
+    const data = await readStaffReservationHold(
+      { tenantId: context.tenantId, branchId: context.activeBranchId, principalId: req.clerkPrincipal?.clerkUserId ?? 'unknown' },
+      (req.params as { reservationId: string }).reservationId,
+    );
+    sendSuccess(req, res, data);
+  },
+);
 
 reservationsRouter.get(
   '/reservations/availability-calendar',

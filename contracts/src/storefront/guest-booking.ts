@@ -19,7 +19,10 @@ const guestEmail = z.string().trim().toLowerCase().email().max(254);
 const opaqueToken = z.string().regex(/^[A-Za-z0-9_-]{43}$/, 'token is malformed');
 
 /** POST /public/stores/{slug}/verifications. The answer is identical whether or not a code was sent. */
-export const startGuestVerificationRequest = z.object({ email: guestEmail }).strict();
+/** `turnstile_token` is required whenever the API has a Cloudflare Turnstile secret configured. */
+export const startGuestVerificationRequest = z
+  .object({ email: guestEmail, turnstile_token: z.string().trim().min(1).max(2_048).optional() })
+  .strict();
 export type StartGuestVerificationRequest = z.infer<typeof startGuestVerificationRequest>;
 
 export const startGuestVerificationResponse = z

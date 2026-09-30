@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import { QueryProvider } from '@/components/ui/query-provider';
 import './globals.css';
+import { SITE_URL } from '@/lib/site-urls';
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://drezivo.com'),
+  metadataBase: new URL(SITE_URL),
   title: { default: 'Drezivo', template: '%s | Drezivo' },
   description:
     'Drezivo — clothing rental management software for Philippine businesses, and the storefronts they publish.',

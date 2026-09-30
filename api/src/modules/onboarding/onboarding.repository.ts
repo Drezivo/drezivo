@@ -59,6 +59,7 @@ export type ChooseOnboardingPlanResult =
   | { kind: 'updated'; onboarding: OwnerOnboardingRecord }
   | { kind: 'owned_tenant' }
   | { kind: 'not_selectable'; onboarding: OwnerOnboardingRecord }
+  | { kind: 'plan_unavailable' }
   | { kind: 'not_found_or_forbidden' };
 
 export type RecordOnboardingPaymentResult =
@@ -328,6 +329,15 @@ export async function chooseOnboardingPlanInTransaction(
   }
   if (row.status !== 'incomplete' && row.status !== 'payment_pending') {
     return { kind: 'not_selectable', onboarding: toOwnerOnboarding(row) };
+  }
+  // Retired plans (migration 0062) stay for existing subscriptions but must not be chosen: bootstrap
+  // would refuse them later and leave the owner stuck on an onboarding that can never finish.
+  const plan = await client.query<{ available: boolean }>(
+    'SELECT EXISTS (SELECT 1 FROM plan WHERE code = $1 AND active) AS available',
+    [planCode],
+  );
+  if (plan.rows[0]?.available !== true) {
+    return { kind: 'plan_unavailable' };
   }
 
   const nextStatus: OnboardingStatus = account.trial_consumed_at ? 'payment_pending' : 'incomplete';

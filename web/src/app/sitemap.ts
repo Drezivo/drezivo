@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next';
+import { SITE_URL } from '@/lib/site-urls';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://drezivo.com';
 
 /**
  * Only Drezivo's own marketing pages are enumerated here. Tenant storefront

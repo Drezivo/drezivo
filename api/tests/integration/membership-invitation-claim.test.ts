@@ -61,10 +61,10 @@ describe('TBF-042 verified invitation claim', async () => {
         [tenant.id],
       );
       const plan = await client.query<{ id: string }>(
-        `SELECT id FROM plan WHERE code = 'professional' AND version = 1 AND active = true`,
+        `SELECT id FROM plan WHERE code = 'starter' AND version = 1 AND active = true`,
       );
       const planId = plan.rows[0]?.id;
-      if (!planId) throw new Error('Professional plan seed is missing.');
+      if (!planId) throw new Error('Standard plan seed is missing.');
       await client.query(
         `INSERT INTO subscription (tenant_id, plan_id, status, trial_ends_at,
            current_period_start, current_period_end)

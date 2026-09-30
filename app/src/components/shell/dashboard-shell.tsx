@@ -4,7 +4,9 @@ import { useAuth, useUser } from "@clerk/nextjs";
 import type { ActorContext } from "@drezivo/contracts";
 import { useEffect, useMemo, useState } from "react";
 
-import { useVerifiedActorContext } from "@/components/shell/dashboard-access-gate";
+import { useRefreshVerifiedActor, useVerifiedActorContext } from "@/components/shell/dashboard-access-gate";
+import { SubscriptionBanner, SubscriptionProvider, SubscriptionWall } from "@/components/billing/subscription-status";
+import { PendingHoldGuard } from "@/components/reservations/pending-hold-guard";
 import { DashboardHeader } from "@/components/shell/dashboard-header";
 import { DashboardSidebar } from "@/components/shell/dashboard-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -31,6 +33,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const verifiedActor = useVerifiedActorContext();
   const [fetchedActor, setActorContext] = useState<ActorContext | null>(null);
   const actorContext = verifiedActor ?? fetchedActor;
+  const access = actorContext?.access ?? null;
+  const refreshActor = useRefreshVerifiedActor();
 
   useEffect(() => {
     // Inside the access gate the actor is already known; fetch only when rendered without it.
@@ -81,14 +85,22 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
+    <SubscriptionProvider access={access} onChanged={refreshActor}>
     <SidebarProvider className="dashboard-theme-dark h-svh min-h-0 overflow-hidden">
       <DashboardSidebar identity={identity} />
       <SidebarInset className="h-svh min-h-0 overflow-hidden">
         <DashboardHeader identity={identity} />
+        <SubscriptionBanner access={access} />
         {/* `relative` makes this scroller the containing block for absolutely positioned content (such as
             visually hidden inputs), so focusing them scrolls this pane instead of shifting the whole shell. */}
-        <main className="relative min-h-0 flex-1 overflow-y-auto bg-dashboard-canvas">{children}</main>
+        <main className="relative min-h-0 flex-1 overflow-y-auto bg-dashboard-canvas">
+          {/* Locked after the 30 view-only days: every page shows the Subscribe wall. The API enforces it too. */}
+          {access?.level === "locked" ? <SubscriptionWall access={access} /> : children}
+        </main>
+        {/* Reopens a live garment hold after navigation or refresh; see components/reservations/pending-hold-guard.tsx. */}
+        <PendingHoldGuard />
       </SidebarInset>
     </SidebarProvider>
+    </SubscriptionProvider>
   );
 }

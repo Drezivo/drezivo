@@ -7,7 +7,16 @@ export const STOREFRONT_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] 
 export const STOREFRONT_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 
 type ImageType = (typeof STOREFRONT_IMAGE_TYPES)[number];
-export type ImageUploadPurpose = "storefront_asset" | "measurement_guide";
+type UploadType = ImageType | "application/pdf";
+export type ImageUploadPurpose =
+  | "storefront_asset"
+  | "measurement_guide"
+  | "payment_method_material"
+  | "subscription_payment_proof";
+
+/** Purposes whose files may also be PDFs: a business's ready-made payment instructions, and payment proof. */
+const PDF_PURPOSES: ReadonlySet<ImageUploadPurpose> = new Set(["payment_method_material", "subscription_payment_proof"]);
+export const acceptsPdf = (purpose: ImageUploadPurpose): boolean => PDF_PURPOSES.has(purpose);
 
 /** One upload intent per chosen file, so a retry after a network error replays instead of duplicating. */
 export interface UploadIntent {
@@ -20,8 +29,11 @@ export interface UploadIntent {
  * Quick checks before reading the file. The real format is decided from the file's bytes during
  * upload (see detectImageType), because a file's extension and reported type are often wrong.
  */
-export function storefrontImageProblem(file: File): string | null {
-  if (file.type && !file.type.startsWith("image/")) return "Choose an image file: JPEG, PNG, or WebP.";
+export function storefrontImageProblem(file: File, purpose: ImageUploadPurpose = "storefront_asset"): string | null {
+  const pdf = acceptsPdf(purpose);
+  if (file.type && !file.type.startsWith("image/") && !(pdf && file.type === "application/pdf")) {
+    return pdf ? "Choose a PDF or an image file: JPEG, PNG, or WebP." : "Choose an image file: JPEG, PNG, or WebP.";
+  }
   if (file.size > STOREFRONT_IMAGE_MAX_BYTES) return "Images must be 10 MB or smaller.";
   return null;
 }
@@ -44,6 +56,15 @@ export async function detectImageType(file: File): Promise<ImageType> {
   throw new Error("This file is not a JPEG, PNG, or WebP image, even if its name says so. Save it as one of those and try again.");
 }
 
+/** Like detectImageType, and also recognises a PDF (`%PDF-`) when the purpose allows one. */
+export async function detectUploadType(file: File, purpose: ImageUploadPurpose): Promise<UploadType> {
+  if (acceptsPdf(purpose)) {
+    const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+    if (String.fromCharCode(...head) === "%PDF-") return "application/pdf";
+  }
+  return detectImageType(file);
+}
+
 /**
  * Authorize → direct create-only PUT to storage → finalize. The server re-checks size, type,
  * SHA-256, and file signature before the image can be referenced anywhere.
@@ -54,9 +75,9 @@ export async function uploadStorefrontImage(
   intentRef: { current: UploadIntent | null },
   purpose: ImageUploadPurpose = "storefront_asset",
 ): Promise<FileObjectId> {
-  const problem = storefrontImageProblem(file);
+  const problem = storefrontImageProblem(file, purpose);
   if (problem) throw new Error(problem);
-  const contentType = await detectImageType(file);
+  const contentType = await detectUploadType(file, purpose);
 
   const fingerprint = `${purpose}|${file.name}|${contentType}|${file.size}|${file.lastModified}`;
   const intent =
@@ -74,7 +95,7 @@ export async function uploadStorefrontImage(
     await uploadAuthorizedFile(
       authorized.data,
       file,
-      "The image upload did not finish. Try again.",
+      "The upload did not finish. Try again.",
     );
     const finalized = await client.finalizeUpload(authorized.data.file_id, intent.finalizeKey);
     return finalized.data.file.file_id;
