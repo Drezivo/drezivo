@@ -21,7 +21,7 @@ Three environments, each with its own secrets/accounts or projects, least privil
   (same Node LTS, same Supabase PostgreSQL major and connection mode, same region where practical)
   so a migration or a deploy is rehearsed under realistic conditions before it reaches production.
 - **Production** — serves real tenants. Separate Clerk project, separate Supabase project, separate
-  S3 buckets, separate everything-with-a-credential from staging and development. Nothing in
+  Cloudflare R2 buckets and credentials, separate everything-with-a-credential from staging and development. Nothing in
   production is a "free tier" resource (TRD §1: "Do not use a free-tier suspension/retention
   assumption as a production recovery plan").
 
@@ -73,7 +73,8 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   - Config refuses it when `NODE_ENV=production`, so the API will not start with it there.
 - The worker must run for email to leave the outbox, including guest verification codes.
 - `WORKER_ENABLED`: `true` or `false` (the default is `false`). Only these two words are accepted;
-  any other value stops startup. `S3_FORCE_PATH_STYLE` follows the same rule.
+  any other value stops startup. `OBJECT_STORAGE_FORCE_PATH_STYLE` and
+  `OBJECT_STORAGE_UPLOADS_ENABLED` follow the same strict boolean rule.
 - `WORKER_MODE`: `continuous` (the default) or `drain`.
   - `continuous` is a long-lived process.
   - `drain` runs once and exits, for a scheduled job. See `docs/runbooks/worker-cloud-run.md`.
@@ -113,16 +114,20 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   tenant invitation recipient email before it is stored. Keep it separate from the digest key.
 - `INVITATION_EMAIL_DIGEST_KEY` — deployment-managed 32-byte base64url HMAC key used for exact
   tenant-local pending-recipient dedupe. It is never exposed to clients or logs.
-- `AWS_REGION` — region for S3 and any AWS-hosted dependency.
-- `S3_BUCKET_PRIVATE_EVIDENCE` — bucket name for private evidence (receipts, verification
-  documents). Originals are private; access is short-lived (TRD §7, proposed five-minute
-  downloads).
-- `S3_BUCKET_PUBLIC_DERIVATIVES` — bucket (or bucket + CDN path) for optimized public catalogue
-  image derivatives.
-- AWS credentials for signing S3 presigned URLs — DECISION NEEDED: confirm whether these are
-  supplied via an IAM role attached to the compute environment (preferred, per TRD §7's "Use
-  IAM roles") rather than static access-key environment variables. If the chosen container host
-  cannot attach an IAM role, name the access-key variables here explicitly before launch.
+- `OBJECT_STORAGE_ENDPOINT` — required S3-compatible API endpoint. Staging/production must use
+  Cloudflare R2's HTTPS S3 endpoint; there is no AWS hostname fallback.
+- `OBJECT_STORAGE_REGION` — `auto` for Cloudflare R2. Local MinIO normally uses `us-east-1`.
+- `OBJECT_STORAGE_BUCKET_PRIVATE` — private source/evidence bucket for catalogue sources,
+  storefront assets, measurement guides, receipts, and future verification documents.
+- `OBJECT_STORAGE_BUCKET_PUBLIC` — optional reserved bucket for a separately reviewed public
+  derivative/CDN flow. The current private upload path does not require it.
+- `OBJECT_STORAGE_ACCESS_KEY_ID` and `OBJECT_STORAGE_SECRET_ACCESS_KEY` — deployment-managed,
+  bucket-scoped S3 API credentials. They stay in the API/worker environment only.
+- `OBJECT_STORAGE_FORCE_PATH_STYLE` — `false` for R2; `true` for loopback MinIO.
+- `OBJECT_STORAGE_UPLOADS_ENABLED` — production cutover gate for issuing new upload URLs. If omitted
+  in production it defaults to `false`; outside production it defaults to `true`.
+- Legacy `AWS_REGION`/`S3_*` variables are accepted only for loopback MinIO compatibility in local
+  development/test. They cannot select AWS or any other remote provider in staging/production.
 - `EMAIL_PROVIDER_*` — sender verification credentials for the email adapter (TRD §1 recommends
   an SES adapter, "subject to deliverability pilot"). DECISION NEEDED: exact variable names
   depend on the confirmed provider (TRD §12 lists "email sender and quotas" as a remaining

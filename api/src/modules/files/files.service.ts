@@ -11,10 +11,12 @@ import {
   type UploadFinalizeResponse,
 } from '@drezivo/contracts';
 
+import { config } from '../../config/index.js';
 import { withTenantTransaction } from '../../db/client.js';
 import type { ObjectStorage, UploadedObjectMetadata } from '../../integrations/storage/object-storage.js';
-import { s3ObjectStorage } from '../../integrations/storage/s3-object-storage.js';
+import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
 import {
+  DependencyUnavailableError,
   ForbiddenError,
   IdempotencyKeyReusedError,
   NotFoundError,
@@ -73,8 +75,11 @@ interface FileCommandContext extends FileContext {
 
 export async function authorizeUpload(
   input: FileCommandContext & { request: UploadAuthorizationRequest },
-  storage: ObjectStorage = s3ObjectStorage,
+  storage: ObjectStorage = objectStorage,
 ): Promise<FileCommandResponse<UploadAuthorizationResponse>> {
+  if (!config.OBJECT_STORAGE_UPLOADS_ENABLED) {
+    throw new DependencyUnavailableError('File uploads are temporarily unavailable.');
+  }
   const parsed = uploadAuthorizationRequest.safeParse(input.request);
   if (!parsed.success) throw new ValidationError('Upload authorization request is invalid.');
   const request = parsed.data;
@@ -99,7 +104,6 @@ export async function authorizeUpload(
       const authorization = await storage.authorizeUpload({
         storageKey,
         contentType: request.content_type,
-        sha256: request.sha256,
         expiresInSeconds: UPLOAD_EXPIRY_SECONDS,
       });
       await insertPendingFile(client, {
@@ -158,7 +162,7 @@ export async function authorizeUpload(
 
 export async function finalizeUpload(
   input: FileCommandContext & { fileId: string },
-  storage: ObjectStorage = s3ObjectStorage,
+  storage: ObjectStorage = objectStorage,
 ): Promise<FileCommandResponse<UploadFinalizeResponse>> {
   const payloadHash = canonicalRequestHash({ file_id: input.fileId });
 
@@ -176,7 +180,7 @@ export async function finalizeUpload(
     throw new StateConflictError('This upload can no longer be finalized.');
   }
 
-  const uploaded = await storage.inspectUploadedObject(before.storage_key);
+  const uploaded = await storage.inspectUploadedObject(before.storage_key, FILE_UPLOAD_MAX_BYTES);
   if (!uploaded) {
     throw new StateConflictError('The uploaded object is not available yet.');
   }

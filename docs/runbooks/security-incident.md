@@ -1,6 +1,6 @@
 # Security incident: leaked credential
 
-What to do when a secret — an API key, a database connection string, a Clerk secret key, an S3
+What to do when a secret — an API key, a database connection string, a Clerk secret key, an object-storage
 credential, a signing secret — reaches somewhere it should not have: a commit, a log line, a
 chat message, a public gist, a screenshot. This is a distinct procedure from
 `docs/runbooks/incident.md`'s general severity levels because the correct first action is
@@ -25,9 +25,10 @@ For each credential type, rotating means:
 - **Supabase PostgreSQL credential** — rotate the role's password (or create a new role and cut over,
   if the current tooling supports it more safely), redeploy `api` with the new
   `DATABASE_URL`/`DATABASE_URL_DIRECT`.
-- **AWS/S3 credential** — deactivate the leaked access key immediately in IAM, issue a new one
-  (or confirm the IAM-role-based approach from `docs/runbooks/environments.md` was in use and
-  no static key existed at all), redeploy `api`.
+- **Cloudflare R2 credential** — revoke the leaked R2 API/S3 credential immediately, issue a new
+  bucket-scoped credential with only the permissions Drezivo needs, update the deployment secret
+  manager, and redeploy `api`. Review R2 access/audit evidence and the affected bucket before
+  re-enabling uploads.
 - **Webhook signing secret** (Clerk, payment/provider webhooks) — rotate at the provider,
   update `api`'s configured value. Note: rotating a webhook signing secret briefly risks
   rejecting legitimate in-flight webhook deliveries signed with the old secret — accept that

@@ -106,8 +106,8 @@ Neither party may direct the other to process personal data unlawfully.
 
 ## 8. Third-party services
 
-Drezivo may use providers such as Clerk for identity, Supabase for hosted PostgreSQL, Amazon S3 for
-object storage, email providers, monitoring, and payment providers. Provider availability and
+Drezivo may use providers such as Clerk for identity, Supabase for hosted PostgreSQL, Cloudflare R2
+for object storage, email providers, monitoring, and payment providers. Provider availability and
 terms can change. Drezivo remains responsible for selecting processors, setting appropriate
 instructions, and managing vendor access, while each business remains responsible for its own
 customer-facing commitments.

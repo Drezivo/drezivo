@@ -30,8 +30,8 @@ describe('worker configuration', () => {
   });
 
   it('reads "false" as false, and refuses anything but true or false', () => {
-    const off = parse({ WORKER_ENABLED: 'false', S3_FORCE_PATH_STYLE: 'false' });
-    expect(off.success && [off.data.WORKER_ENABLED, off.data.S3_FORCE_PATH_STYLE]).toEqual([false, false]);
+    const off = parse({ WORKER_ENABLED: 'false', OBJECT_STORAGE_FORCE_PATH_STYLE: 'false' });
+    expect(off.success && [off.data.WORKER_ENABLED, off.data.OBJECT_STORAGE_FORCE_PATH_STYLE]).toEqual([false, false]);
     const on = parse({ WORKER_ENABLED: 'true' });
     expect(on.success && on.data.WORKER_ENABLED).toBe(true);
     expect(issuePaths({ WORKER_ENABLED: 'yes' })).toContain('WORKER_ENABLED');

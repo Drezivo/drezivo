@@ -31,9 +31,9 @@ flowchart LR
   APP --> API
   API --> DB[(Supabase PostgreSQL)]
   API --> CLERK[Clerk identity]
-  API --> S3[S3 private object storage]
+  API --> OBJ[Cloudflare R2 private object storage]
   WORKER[API worker process] --> DB
-  WORKER --> S3
+  WORKER --> OBJ
   WORKER --> MAIL[Email adapter]
   CONTRACTS[packages/contracts: Zod and OpenAPI] -. workspace import .-> API
   CONTRACTS -. workspace import .-> APP
@@ -44,8 +44,9 @@ The architecture is a modular monolith. One Express service owns business transa
 separately running worker consumes durable Postgres outbox jobs. Two Next.js applications render
 public and staff surfaces. Supabase PostgreSQL is the source of truth for tenant data, inventory,
 availability, reservations, money, and workflow state. Clerk proves identity; the API resolves
-membership, branch scope, permissions, and entitlements. S3 stores objects while the database stores
-metadata and lifecycle.
+membership, branch scope, permissions, and entitlements. Cloudflare R2 stores production objects
+through the S3-compatible API while the database stores metadata and lifecycle. Local development
+uses MinIO through the same `ObjectStorage` boundary.
 
 The scaffold is incomplete. A route may return an explicit HTTP 501 until its transaction is built.
 No live Supabase database, provider integration, production recovery, or payment correctness is implied
@@ -106,7 +107,7 @@ never trusted.
 Owns the authenticated staff experience: reservations, inventory, fittings, calendar, payment
 evidence review, settings, and branch selection. It calls the API and workspace contracts package.
 It may disable a button and show pending UI, but only the API and database decide whether a mutation
-wins. It never holds Supabase database, S3, or Clerk secret credentials.
+wins. It never holds Supabase database, object-storage, or Clerk secret credentials.
 
 ### `web/` application
 

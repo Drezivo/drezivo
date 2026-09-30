@@ -4,7 +4,7 @@ type: decision
 status: accepted
 owner: Drezivo product and platform owners
 source: "../../decisions/0009-supabase-managed-postgresql.md"
-updated: 2026-09-26
+updated: 2026-09-30
 tags: [drezivo, decisions, database, supabase, postgresql]
 ---
 
@@ -19,7 +19,7 @@ operations, not application authority.
 - The Express API authorizes accounts, tenants, branches, roles, permissions, and entitlements.
 - Drizzle and `node-postgres` execute reviewed PostgreSQL transactions and migrations.
 - `drezivo_app` and `drezivo_worker` remain restricted, non-owner, non-`BYPASSRLS` roles.
-- S3/MinIO remains the object-storage boundary.
+- Object storage remains outside Supabase; production now targets Cloudflare R2 and local development keeps MinIO. See [[Cloudflare R2 Object Storage]].
 
 ## Supabase boundary
 

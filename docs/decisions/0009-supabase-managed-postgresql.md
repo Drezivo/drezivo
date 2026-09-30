@@ -12,8 +12,9 @@ database boundary depends on reviewed SQL migrations, custom restricted login ro
 security (RLS), transaction-local tenant context, row and advisory locks, and PostgreSQL extensions.
 
 The team has selected Supabase for managed PostgreSQL. This is a provider change, not a change to
-the application authority model. Clerk remains the identity provider, the Express API remains the
-only business-data interface, and S3/MinIO remains the object-storage boundary.
+the application authority model. Clerk remains the identity provider and the Express API remains the
+only business-data interface. The later object-storage provider decision is recorded separately in
+ADR 0010; it does not change this PostgreSQL decision.
 
 ## Decision
 
