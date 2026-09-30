@@ -39,9 +39,11 @@ process.env.S3_SECRET_ACCESS_KEY ??= 'test';
 describe('CLT-032 clothing archive command', async () => {
   const { createApp } = await import('../../src/app.js');
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
-  const { computeAvailability, findPublishedStorefrontBySlug } = await import(
-    '../../src/modules/storefront/storefront.repository.js'
-  );
+  const { computeAvailability } = await import('../../src/modules/storefront/storefront.repository.js');
+  const { publicStorefrontService } = await import('../../src/modules/storefront/storefront.service.js');
+  const { catalogueQuery } = await import('@drezivo/contracts');
+  const publicProductIds = async (slug: string): Promise<string[]> =>
+    (await publicStorefrontService.getCatalogue(slug, catalogueQuery.parse({ page_size: 48 }))).items.map((item) => item.product_id);
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
 
   beforeAll(async () => {
@@ -65,8 +67,7 @@ describe('CLT-032 clothing archive command', async () => {
     const seed = await seedArchiveCatalogue('org_clt032_history', 'user_clt032_history');
     useClerk(seed);
 
-    const beforeStorefront = await findPublishedStorefrontBySlug(seed.storefrontSlug);
-    expect(beforeStorefront?.products.some((product) => product.id === seed.productId)).toBe(true);
+    expect(await publicProductIds(seed.storefrontSlug)).toContain(seed.productId);
 
     const previewInterval = futureInterval(20, 21);
     const beforeAvailability = await computeAvailability(
@@ -95,8 +96,7 @@ describe('CLT-032 clothing archive command', async () => {
       },
     });
 
-    const afterStorefront = await findPublishedStorefrontBySlug(seed.storefrontSlug);
-    expect(afterStorefront?.products.some((product) => product.id === seed.productId)).toBe(false);
+    expect(await publicProductIds(seed.storefrontSlug)).not.toContain(seed.productId);
 
     const activeStaffList = await request(createApp()).get(
       '/api/v1/catalogue/clothing?product_status=active&sort=name_asc&limit=20',

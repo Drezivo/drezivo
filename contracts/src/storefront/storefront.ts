@@ -1,53 +1,105 @@
 /**
- * TRD §4 — `/public/stores/{slug}` GET: "Published projection, bounded
- * public response." Data-Model §2 `storefront`, `policy_snapshot`.
+ * GET /public/stores/{slug} — the published, unauthenticated projection of one storefront.
  *
- * This is the ONLY module whose data is intentionally public with no
- * authentication (TRD §3 "Browsing a published tenant catalogue is
- * intentionally public"). The response is deliberately a narrow projection:
- * no tenant id, no membership data, no internal branch id — a public
- * visitor sees a storefront, not a tenant record.
+ * It is a narrow allowlist: no tenant id, branch id, asset id, customer data, or payment
+ * destination. Unpublished or unknown slugs are a 404, never a 403 that confirms existence.
  */
 import { z } from 'zod';
 
-import { currencyCode } from '../common/money';
-import { isoInstant } from '../common/time';
+import { paymentMethodId } from '../common/ids';
+import { currencyCode, moneyString } from '../common/money';
+import { ianaTimezone } from '../common/time';
+import { catalogueCard } from './catalogue';
+import { fieldRequirement, storefrontSections, storefrontTheme } from './cms';
 
-export const storefrontStatus = z.enum(['draft', 'published']);
-export type StorefrontStatus = z.infer<typeof storefrontStatus>;
+export const publicStorefrontContact = z
+  .object({
+    phone: z.string().nullable(),
+    email: z.string().email().nullable(),
+    address: z.string().nullable(),
+    instagram_url: z.string().url().nullable(),
+    facebook_url: z.string().url().nullable(),
+    tiktok_url: z.string().url().nullable(),
+  })
+  .strict();
+export type PublicStorefrontContact = z.infer<typeof publicStorefrontContact>;
 
-/**
- * Data-Model §2 `policy_snapshot`: "Immutable policy version once
- * referenced." Each field is merchant-authored prose/config the storefront
- * must show before checkout (PRD §11 "Policies must be visible before
- * checkout and snapshotted").
- */
-export const publishedPolicy = z.object({
-  version: z.number().int().positive(),
-  rental_rules: z.string(),
-  deposit_rules: z.string(),
-  cancellation_rules: z.string(),
-  delivery_rules: z.string(),
-  privacy_notice: z.string(),
-  effective_at: isoInstant,
-});
-export type PublishedPolicy = z.infer<typeof publishedPolicy>;
+export const publicStorefrontPolicy = z
+  .object({
+    version: z.number().int().positive(),
+    rental: z.string(),
+    deposit: z.string(),
+    cancellation: z.string(),
+    damage: z.string().nullable(),
+    delivery_notes: z.string().nullable(),
+    privacy_notice: z.string(),
+  })
+  .strict();
+export type PublicStorefrontPolicy = z.infer<typeof publicStorefrontPolicy>;
 
-export const storefrontContact = z.object({
-  phone: z.string().optional(),
-  email: z.string().email().optional(),
-  address: z.string().optional(),
-});
+export const publicCategory = z
+  .object({ id: z.string().uuid(), name: z.string().min(1), item_count: z.number().int().nonnegative() })
+  .strict();
+export type PublicCategory = z.infer<typeof publicCategory>;
 
-/** GET /public/stores/{slug} response body (wrapped in the success envelope). */
-export const publicStorefront = z.object({
-  slug: z.string().min(1),
-  name: z.string().min(1),
-  status: storefrontStatus,
-  currency: currencyCode,
-  timezone: z.string().min(1),
-  contact: storefrontContact,
-  policy: publishedPolicy,
-  published_at: isoInstant.nullable(),
-});
+export const publicPaymentMethod = z
+  .object({ id: paymentMethodId, name: z.string().min(1), rail: z.enum(['manual_qr', 'manual_transfer']) })
+  .strict();
+export type PublicPaymentMethod = z.infer<typeof publicPaymentMethod>;
+
+export const publicStorefront = z
+  .object({
+    slug: z.string().min(1),
+    name: z.string().min(1),
+    tagline: z.string().nullable(),
+    description: z.string().nullable(),
+    theme: storefrontTheme,
+    logo_url: z.string().url().nullable(),
+    cover_url: z.string().url().nullable(),
+    currency: currencyCode,
+    timezone: ianaTimezone,
+    contact: publicStorefrontContact,
+    content: z
+      .object({
+        announcement: z.string().nullable(),
+        hero: z
+          .object({ heading: z.string(), body: z.string().nullable(), image_url: z.string().url().nullable() })
+          .strict(),
+        about: z
+          .object({
+            heading: z.string().nullable(),
+            body: z.string().nullable(),
+            image_url: z.string().url().nullable(),
+          })
+          .strict(),
+        sections: storefrontSections,
+      })
+      .strict(),
+    categories: z.array(publicCategory).max(100),
+    featured: z.array(catalogueCard).max(12),
+    new_arrivals: z.array(catalogueCard).max(8),
+    policy: publicStorefrontPolicy,
+    fulfillment: z
+      .object({ pickup: z.literal(true), delivery: z.boolean(), delivery_fee_minor: moneyString })
+      .strict(),
+    payment_methods: z.array(publicPaymentMethod).max(20),
+    checkout: z
+      .object({
+        requirements: z
+          .object({ phone: fieldRequirement, social_handle: fieldRequirement, event_date: fieldRequirement })
+          .strict(),
+        handover_time: z.string(),
+        min_notice_days: z.number().int().nonnegative(),
+        max_rental_days: z.number().int().positive(),
+      })
+      .strict(),
+    fitting: z
+      .object({
+        enabled: z.boolean(),
+        duration_minutes: z.number().int().positive().nullable(),
+        fee_minor: moneyString.nullable(),
+      })
+      .strict(),
+  })
+  .strict();
 export type PublicStorefront = z.infer<typeof publicStorefront>;

@@ -9,7 +9,6 @@ import {
   cancelReservationController,
   completeStaffReservationController,
   confirmReservationController,
-  createPublicHoldController,
   createStaffReservationController,
   getReservationDetailController,
   getStaffReservationAvailabilityCalendarController,
@@ -272,4 +271,3 @@ reservationsRouter.get(
   getReservationDetailController,
 );
 
-reservationsRouter.post('/public/stores/:slug/holds', createPublicHoldController);

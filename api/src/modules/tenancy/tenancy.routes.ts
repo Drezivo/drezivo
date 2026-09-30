@@ -9,9 +9,12 @@ import { paginationQuerySchema } from './tenancy.schemas.js';
 
 export const tenancyRouter = Router();
 
+// Every full dashboard load reads workspaces and actor context several times, and both routes
+// share this bucket. 30 a minute locked owners out after about seven reloads or a few open tabs;
+// 120 still caps abuse of these cheap signed-in reads.
 const readRateLimit = rateLimit({
   windowMs: 60_000,
-  max: 30,
+  max: 120,
   keyOf: (req) => req.clerkPrincipal?.clerkUserId ?? req.ip ?? 'unknown',
 });
 

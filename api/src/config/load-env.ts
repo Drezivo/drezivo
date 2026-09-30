@@ -7,8 +7,8 @@ import { parseEnv } from 'node:util';
  * Loads API-local environment files before config validation.
  *
  * Precedence is intentionally deterministic and fails closed: host/CI variables win over every
- * file; then the selected `.env.<NODE_ENV>` and shared `.env` values are considered for local
- * development/test. Production deliberately skips `.env`, which is the developer's local file,
+ * file; then a mounted DREZIVO_ENV_FILE; then the selected `.env.<NODE_ENV>` and shared `.env`
+ * values are considered for local development/test. Production deliberately skips `.env`, which is the developer's local file,
  * so its MinIO endpoint and credentials cannot leak into a deployment.
  * Values are parsed only; this module never logs a path's contents or any secret.
  */
@@ -30,11 +30,27 @@ function parseFile(filename: string): Record<string, string> {
   return values;
 }
 
+/**
+ * A deployment can keep all of its secrets in ONE secret-manager entry mounted as a file (for
+ * example Cloud Run's Secret Manager volume at /secrets/worker.env) and point DREZIVO_ENV_FILE at
+ * it: one secret read per start instead of one per variable. Read in every mode. A named file
+ * that is missing stops startup, because silently running without its secrets would be worse.
+ */
+function mountedFile(): Record<string, string> {
+  const filePath = process.env.DREZIVO_ENV_FILE;
+  if (!filePath) return {};
+  if (!existsSync(filePath)) {
+    throw new Error('DREZIVO_ENV_FILE points at a file that does not exist.');
+  }
+  return parseFile(filePath);
+}
+
 const shared = parseFile('.env');
 const mode = process.env.NODE_ENV ?? shared.NODE_ENV ?? 'development';
 const layered = {
   ...(mode === 'production' ? {} : shared),
   ...parseFile(`.env.${mode}`),
+  ...mountedFile(),
 };
 
 for (const [key, value] of Object.entries(layered)) {

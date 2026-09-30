@@ -25,6 +25,7 @@ import {
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
+import { emailNotifications } from '../notifications/email-notifications.js';
 import {
   HoldExpiredError,
   IdempotencyKeyReusedError,
@@ -630,6 +631,7 @@ export async function confirmReservationByMerchant(
         eventType: 'reservation.confirmed',
         payload: { reservationId, reservationVersion: newVersion },
       });
+      await emailNotifications.reservationEvent(client, context.tenantId, reservationId, 'request_confirmed');
 
       const data = reservationConfirmResponse.parse({
         reservation: await requireMutationSummary(client, context, reservationId),
@@ -724,6 +726,7 @@ export async function rejectReservationByMerchant(
         eventType: 'reservation.rejected',
         payload: { reservationId, reservationVersion: newVersion },
       });
+      await emailNotifications.reservationEvent(client, context.tenantId, reservationId, 'request_rejected');
 
       const data = reservationRejectResponse.parse({
         reservation: await requireMutationSummary(client, context, reservationId),

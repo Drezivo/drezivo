@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { uploadStorefrontImage, type UploadIntent } from "@/lib/storefront-assets";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 
 export function PaymentMethodSettingsPage() {
@@ -40,13 +41,10 @@ export function PaymentMethodSettingsPage() {
   }, [getToken]);
 
   return (
-    <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto w-full max-w-4xl">
+    <div>
+      <div className="w-full">
         <div className="mb-5">
-          <p className="text-xs font-medium uppercase tracking-[0.12em] text-dashboard-muted">Workspace</p>
-          <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight text-dashboard-navy sm:text-4xl">
-            Payment Methods
-          </h1>
+          <h2 className="font-display text-2xl font-semibold tracking-tight text-dashboard-navy">Payment methods</h2>
           <p className="mt-1 max-w-2xl text-sm text-dashboard-muted">
             Choose what staff can use for reservations and which configured online methods may appear on the public storefront.
           </p>
@@ -98,7 +96,7 @@ function PaymentMethodEditor({
   const [qrFile, setQrFile] = useState<File | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const uploadIntentRef = useRef<{ fingerprint: string; uploadKey: string; finalizeKey: string } | null>(null);
+  const uploadIntentRef = useRef<UploadIntent | null>(null);
 
   const staffOnly = method.rail === "cash";
   const isQr = method.rail === "manual_qr";
@@ -120,7 +118,7 @@ function PaymentMethodEditor({
       let nextQrFileId = qrFileId;
       if (isQr && qrFile) {
         setUploading(true);
-        nextQrFileId = await uploadQrImage(qrFile, getToken, uploadIntentRef);
+        nextQrFileId = await uploadStorefrontImage(qrFile, getToken, uploadIntentRef);
         setQrFileId(nextQrFileId);
         setQrFile(null);
         setUploading(false);
@@ -355,55 +353,6 @@ function Field({ label, className = "", children }: { label: string; className?:
       <span className="mt-1 block">{children}</span>
     </label>
   );
-}
-
-async function uploadQrImage(
-  file: File,
-  getToken: () => Promise<string | null>,
-  intentRef: React.MutableRefObject<{ fingerprint: string; uploadKey: string; finalizeKey: string } | null>
-): Promise<FileObjectId> {
-  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-    throw new Error("QR images must be JPEG, PNG, or WebP.");
-  }
-  const fingerprint = `${file.name}|${file.type}|${file.size}|${file.lastModified}`;
-  const intent = intentRef.current?.fingerprint === fingerprint
-    ? intentRef.current
-    : { fingerprint, uploadKey: newIntentKey("payment_qr_upload"), finalizeKey: newIntentKey("payment_qr_finalize") };
-  intentRef.current = intent;
-
-  const client = createDrezivoApiClient(getToken);
-  const authorized = await client.authorizeUpload(
-    {
-      purpose: "storefront_asset",
-      content_type: file.type as "image/jpeg" | "image/png" | "image/webp",
-      byte_size: file.size,
-      sha256: await fileSha256Base64(file),
-    },
-    intent.uploadKey
-  );
-  const uploaded = await fetch(authorized.data.upload_url, {
-    method: "PUT",
-    headers: authorized.data.required_headers,
-    body: file,
-  });
-  if (!uploaded.ok) throw new Error("The QR image upload did not finish successfully.");
-  const finalized = await client.finalizeUpload(authorized.data.file_id, intent.finalizeKey);
-  return finalized.data.file.file_id;
-}
-
-function newIntentKey(prefix: string): string {
-  const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  return `${prefix}_${random.replaceAll("-", "_")}`;
-}
-
-async function fileSha256Base64(file: File): Promise<string> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const digest = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytes));
-  let binary = "";
-  digest.forEach((value) => {
-    binary += String.fromCharCode(value);
-  });
-  return btoa(binary);
 }
 
 function errorMessage(error: unknown, fallback: string): string {

@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
+import type { PoolClient } from 'pg';
+
 import {
   staffReservationCreateRequest,
   staffReservationCreateResponse,
@@ -81,146 +83,27 @@ export async function createStaffReservationCommand(
 
     let savepointOpen = false;
     try {
-      const quote = await resolveReservationQuote(client, {
+      const { quote, assetId } = await claimReservationAsset(client, {
         tenantId: context.tenantId,
         branchId: context.branchId,
+        requestId: context.requestId,
         request,
       });
-
-      const lockedAssetIds = await lockEligibleReservationAssets(client, {
-        tenantId: context.tenantId,
-        branchId: context.branchId,
-        variantId: request.variant_id,
-      });
-      if (lockedAssetIds.length === 0) {
-        throw new CapacityConflictError('No ready garment is available for this reservation.');
-      }
-
-      const expired = await releaseExpiredReservationHolds(client, {
-        tenantId: context.tenantId,
-        branchId: context.branchId,
-        assetIds: lockedAssetIds,
-      });
-      for (const row of expired) {
-        await appendReservationAuditEvent(client, {
-          tenantId: context.tenantId,
-          actorKind: 'system',
-          actorKey: 'system:reservation-expiry',
-          action: 'reservation.expired',
-          entityType: 'reservation',
-          entityId: row.reservation_id,
-          redactedSummary: { reason: 'hold_deadline_elapsed', version: row.version },
-          requestId: context.requestId,
-        });
-        await appendReservationOutboxEvent(client, {
-          tenantId: context.tenantId,
-          dedupeKey: `reservation-expired:${row.reservation_id}:${row.version}`,
-          eventType: 'reservation.hold_expired',
-          payload: {
-            reservationId: row.reservation_id,
-            reservationVersion: row.version,
-          },
-        });
-      }
-
-      const assetId = await chooseAvailableLockedAsset(client, {
-        tenantId: context.tenantId,
-        branchId: context.branchId,
-        variantId: request.variant_id,
-        assetIds: lockedAssetIds,
-        blockedStart: quote.blocked_interval.start,
-        blockedEnd: quote.blocked_interval.end,
-      });
-      if (!assetId) {
-        throw new CapacityConflictError('The requested garment is no longer available for those dates.');
-      }
 
       await client.query(`SAVEPOINT ${CREATE_EFFECTS_SAVEPOINT}`);
       savepointOpen = true;
 
       const customer = await resolveCustomer(client, context.tenantId, request);
-      const reservationId = randomUUID();
-      const reservationLineId = randomUUID();
-      const allocationId = randomUUID();
-      const paymentId = randomUUID();
-      const referenceCode = `RSV-${reservationId.toUpperCase()}`;
-      const rentalTotalMinor = Number(quote.price_snapshot.rental_total_minor);
-      const securityRequiredMinor = Number(quote.price_snapshot.security_required_minor);
-      const dueNowMinor = Number(quote.price_snapshot.due_now_minor);
-
-      const graph = await createReservationGraph(client, {
-        reservationId,
-        reservationLineId,
-        allocationId,
-        paymentId,
+      const { graph, referenceCode } = await createHeldReservation(client, {
         tenantId: context.tenantId,
         branchId: context.branchId,
-        customerId: customer?.id ?? null,
-        storefrontId: quote.storefront_id,
-        policySnapshotId: quote.policy_snapshot_id,
-        paymentMethodId: quote.payment_method_id,
-        referenceCode,
-        eventDate: request.event_date ?? null,
-        pickupAt: quote.pickup_at,
-        dueAt: quote.due_at,
-        timezoneSnapshot: quote.timezone_snapshot,
-        customerSnapshot: customer
-          ? {
-              full_name: customer.full_name,
-              phone: customer.phone,
-              email: customer.email,
-              address: customer.address,
-            }
-          : null,
-        deliverySnapshot: quote.delivery_snapshot,
-        priceSnapshot: quote.price_snapshot,
-        rentalTotalMinor,
-        securityRequiredMinor,
-        dueNowMinor,
-        variantId: quote.variant_id,
-        lineNameSnapshot: quote.line_snapshot.name,
-        measurementsSnapshot: quote.line_snapshot.measurements,
-        pricingSnapshot: {
-          rental_minor: quote.price_snapshot.rental_total_minor,
-          deposit_minor: quote.price_snapshot.security_required_minor,
-          currency: 'PHP',
-          pricing_mode: quote.price_snapshot.pricing_mode,
-          included_duration_minutes: quote.price_snapshot.included_duration_minutes,
-          extra_day_price_minor: quote.price_snapshot.extra_day_price_minor,
-          extra_day_count: quote.price_snapshot.extra_day_count,
-        },
-        assetId,
-        blockedStart: quote.blocked_interval.start,
-        blockedEnd: quote.blocked_interval.end,
-      });
-
-      await appendReservationAuditEvent(client, {
-        tenantId: context.tenantId,
-        actorKind: 'staff',
-        actorKey: context.principalId,
-        action: 'reservation.created',
-        entityType: 'reservation',
-        entityId: graph.reservation_id,
-        redactedSummary: {
-          status: 'held',
-          branch_id: context.branchId,
-          variant_id: quote.variant_id,
-          asset_id: assetId,
-          fulfillment_method: request.fulfillment_method,
-        },
         requestId: context.requestId,
-      });
-      await appendReservationOutboxEvent(client, {
-        tenantId: context.tenantId,
-        dedupeKey: `reservation-created:${graph.reservation_id}`,
-        eventType: 'reservation.held',
-        payload: {
-          reservationId: graph.reservation_id,
-          reservationVersion: graph.version,
-          branchId: context.branchId,
-          variantId: quote.variant_id,
-          assetId,
-        },
+        actor: { kind: 'staff', key: context.principalId },
+        eventDate: request.event_date ?? null,
+        fulfillmentMethod: request.fulfillment_method,
+        quote,
+        assetId,
+        customer,
       });
 
       const data = staffReservationCreateResponse.parse({
@@ -286,6 +169,179 @@ export async function createStaffReservationCommand(
   });
 }
 
+export type ReservationQuote = Awaited<ReturnType<typeof resolveReservationQuote>>;
+
+/**
+ * Capacity step shared by staff and guest booking: quote, lock the size's eligible garments,
+ * reclaim expired holds with database time, and choose a garment free for the blocked interval.
+ * The chosen garment is only a promise once `createHeldReservation` inserts its allocation.
+ */
+export async function claimReservationAsset(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    requestId: string;
+    request: Parameters<typeof resolveReservationQuote>[1]['request'];
+  },
+): Promise<{ quote: ReservationQuote; assetId: string }> {
+  const quote = await resolveReservationQuote(client, {
+    tenantId: input.tenantId,
+    branchId: input.branchId,
+    request: input.request,
+  });
+
+  const lockedAssetIds = await lockEligibleReservationAssets(client, {
+    tenantId: input.tenantId,
+    branchId: input.branchId,
+    variantId: input.request.variant_id,
+  });
+  if (lockedAssetIds.length === 0) {
+    throw new CapacityConflictError('No ready garment is available for this reservation.');
+  }
+
+  const expired = await releaseExpiredReservationHolds(client, {
+    tenantId: input.tenantId,
+    branchId: input.branchId,
+    assetIds: lockedAssetIds,
+  });
+  for (const row of expired) {
+    await appendReservationAuditEvent(client, {
+      tenantId: input.tenantId,
+      actorKind: 'system',
+      actorKey: 'system:reservation-expiry',
+      action: 'reservation.expired',
+      entityType: 'reservation',
+      entityId: row.reservation_id,
+      redactedSummary: { reason: 'hold_deadline_elapsed', version: row.version },
+      requestId: input.requestId,
+    });
+    await appendReservationOutboxEvent(client, {
+      tenantId: input.tenantId,
+      dedupeKey: `reservation-expired:${row.reservation_id}:${row.version}`,
+      eventType: 'reservation.hold_expired',
+      payload: {
+        reservationId: row.reservation_id,
+        reservationVersion: row.version,
+      },
+    });
+  }
+
+  const assetId = await chooseAvailableLockedAsset(client, {
+    tenantId: input.tenantId,
+    branchId: input.branchId,
+    variantId: input.request.variant_id,
+    assetIds: lockedAssetIds,
+    blockedStart: quote.blocked_interval.start,
+    blockedEnd: quote.blocked_interval.end,
+  });
+  if (!assetId) {
+    throw new CapacityConflictError('The requested garment is no longer available for those dates.');
+  }
+  return { quote, assetId };
+}
+
+/** Inserts the held reservation, its exclusion-protected allocation, audit, and outbox event. */
+export async function createHeldReservation(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    requestId: string;
+    actor: { kind: 'staff' | 'guest'; key: string };
+    eventDate: string | null;
+    fulfillmentMethod: StaffReservationCreateRequest['fulfillment_method'];
+    quote: ReservationQuote;
+    assetId: string;
+    customer: ReservationCustomerSnapshotRow | null;
+  },
+): Promise<{ graph: Awaited<ReturnType<typeof createReservationGraph>>; referenceCode: string }> {
+  const reservationId = randomUUID();
+  const reservationLineId = randomUUID();
+  const allocationId = randomUUID();
+  const paymentId = randomUUID();
+  const referenceCode = `RSV-${reservationId.toUpperCase()}`;
+  const rentalTotalMinor = Number(input.quote.price_snapshot.rental_total_minor);
+  const securityRequiredMinor = Number(input.quote.price_snapshot.security_required_minor);
+  const dueNowMinor = Number(input.quote.price_snapshot.due_now_minor);
+
+  const graph = await createReservationGraph(client, {
+    reservationId,
+    reservationLineId,
+    allocationId,
+    paymentId,
+    tenantId: input.tenantId,
+    branchId: input.branchId,
+    customerId: input.customer?.id ?? null,
+    storefrontId: input.quote.storefront_id,
+    policySnapshotId: input.quote.policy_snapshot_id,
+    paymentMethodId: input.quote.payment_method_id,
+    referenceCode,
+    eventDate: input.eventDate,
+    pickupAt: input.quote.pickup_at,
+    dueAt: input.quote.due_at,
+    timezoneSnapshot: input.quote.timezone_snapshot,
+    customerSnapshot: input.customer
+      ? {
+          full_name: input.customer.full_name,
+          phone: input.customer.phone,
+          email: input.customer.email,
+          address: input.customer.address,
+        }
+      : null,
+    deliverySnapshot: input.quote.delivery_snapshot,
+    priceSnapshot: input.quote.price_snapshot,
+    rentalTotalMinor,
+    securityRequiredMinor,
+    dueNowMinor,
+    variantId: input.quote.variant_id,
+    lineNameSnapshot: input.quote.line_snapshot.name,
+    measurementsSnapshot: input.quote.line_snapshot.measurements,
+    pricingSnapshot: {
+      rental_minor: input.quote.price_snapshot.rental_total_minor,
+      deposit_minor: input.quote.price_snapshot.security_required_minor,
+      currency: 'PHP',
+      pricing_mode: input.quote.price_snapshot.pricing_mode,
+      included_duration_minutes: input.quote.price_snapshot.included_duration_minutes,
+      extra_day_price_minor: input.quote.price_snapshot.extra_day_price_minor,
+      extra_day_count: input.quote.price_snapshot.extra_day_count,
+    },
+    assetId: input.assetId,
+    blockedStart: input.quote.blocked_interval.start,
+    blockedEnd: input.quote.blocked_interval.end,
+  });
+
+  await appendReservationAuditEvent(client, {
+    tenantId: input.tenantId,
+    actorKind: input.actor.kind,
+    actorKey: input.actor.key,
+    action: 'reservation.created',
+    entityType: 'reservation',
+    entityId: graph.reservation_id,
+    redactedSummary: {
+      status: 'held',
+      branch_id: input.branchId,
+      variant_id: input.quote.variant_id,
+      asset_id: input.assetId,
+      fulfillment_method: input.fulfillmentMethod,
+    },
+    requestId: input.requestId,
+  });
+  await appendReservationOutboxEvent(client, {
+    tenantId: input.tenantId,
+    dedupeKey: `reservation-created:${graph.reservation_id}`,
+    eventType: 'reservation.held',
+    payload: {
+      reservationId: graph.reservation_id,
+      reservationVersion: graph.version,
+      branchId: input.branchId,
+      variantId: input.quote.variant_id,
+      assetId: input.assetId,
+    },
+  });
+  return { graph, referenceCode };
+}
+
 async function resolveCustomer(
   client: Parameters<typeof readReservationCustomerForCreate>[0],
   tenantId: string,
@@ -339,7 +395,7 @@ async function fillMissingReservationAddress(
   return { ...customer, address: filledAddress };
 }
 
-function toPaymentInstructions(snapshot: {
+export function toPaymentInstructions(snapshot: {
   name: string;
   rail: 'cash' | 'manual_qr' | 'manual_transfer';
   destination_snapshot: Record<string, unknown>;
@@ -399,7 +455,7 @@ async function finalizeKnownFailure(
   return { status: error.status, body };
 }
 
-function isAllocationOverlapViolation(error: unknown): boolean {
+export function isAllocationOverlapViolation(error: unknown): boolean {
   return (
     typeof error === 'object' &&
     error !== null &&

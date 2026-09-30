@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   errorCode,
-  holdIntentRequest,
+  guestReservationRequest,
   paymentReceiptSubmitRequest,
   reservationCancelRequest,
   reservationCompleteRequest,
@@ -260,26 +260,25 @@ describe('reservation contracts', () => {
   });
 
   it('keeps guest checkout stricter than staff intake and rejects unknown authority fields', () => {
-    expect(
-      holdIntentRequest.safeParse({
-        ...baseStaffCreate,
-        contact: { full_name: 'Guest', email: 'guest@example.test', address: '123 Test Street' },
-      }).success,
-    ).toBe(true);
+    const guestRequest = {
+      verification_token: 'a'.repeat(43),
+      email: 'Guest@Example.test',
+      customer: { full_name: 'Guest Renter', phone: null, address: '123 Test Street', social_handle: null },
+      variant_id: baseStaffCreate.variant_id,
+      requested_interval: baseStaffCreate.requested_interval,
+      event_date: null,
+      fulfillment_method: 'pickup',
+      payment_method_id: baseStaffCreate.payment_method_id,
+    };
+    const parsed = guestReservationRequest.safeParse(guestRequest);
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.email).toBe('guest@example.test');
 
+    expect(guestReservationRequest.safeParse({ ...guestRequest, email: undefined }).success).toBe(false);
+    expect(guestReservationRequest.safeParse({ ...guestRequest, verification_token: 'short' }).success).toBe(false);
     expect(
-      holdIntentRequest.safeParse({
-        ...baseStaffCreate,
-        contact: { full_name: 'Guest', phone: '09171234567', address: '123 Test Street' },
-      }).success,
-    ).toBe(false);
-
-    expect(
-      holdIntentRequest.safeParse({
-        ...baseStaffCreate,
-        contact: { full_name: 'Guest', email: 'guest@example.test', address: '123 Test Street' },
-        allocation_id: '00000000-0000-4000-8000-000000000011',
-      }).success,
+      guestReservationRequest.safeParse({ ...guestRequest, allocation_id: '00000000-0000-4000-8000-000000000011' })
+        .success,
     ).toBe(false);
   });
 

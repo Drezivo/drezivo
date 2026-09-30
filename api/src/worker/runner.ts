@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
+import type { Pool } from 'pg';
+
 import { config } from '../config/index.js';
 import { pool } from '../db/client.js';
 import { logger } from '../shared/logger.js';
@@ -16,6 +18,13 @@ export interface OutboxRow {
 }
 
 export type EventHandler = (row: OutboxRow) => Promise<void>;
+
+export interface DrainResult {
+  processed: number;
+  stoppedBy: 'empty' | 'budget' | 'stopped';
+}
+
+const BATCH_SIZE = 10;
 
 /** Handler errors that cannot succeed on retry (malformed payload or permanently invalid state). */
 export class PermanentOutboxError extends Error {
@@ -45,12 +54,13 @@ export class WorkerRunner {
     private readonly handlers: Record<string, EventHandler>,
     private readonly pollIntervalMs = config.WORKER_POLL_INTERVAL_MS,
     private readonly leaseSeconds = config.WORKER_LEASE_SECONDS,
+    private readonly db: Pool = pool,
   ) {}
 
   async start(): Promise<void> {
     logger.info({ pollIntervalMs: this.pollIntervalMs }, 'worker runner starting');
     while (!this.stopped) {
-      const claimed = await this.claimBatch(10);
+      const claimed = await this.claimBatch(BATCH_SIZE);
       if (claimed.length === 0) {
         await sleep(this.pollIntervalMs);
         continue;
@@ -61,20 +71,42 @@ export class WorkerRunner {
     }
   }
 
+  /**
+   * Run-once mode for a scheduled job: work through due rows until the queue is empty, the time
+   * budget is spent, or `stop()` is called, then return so the process can exit. The budget and
+   * stop checks sit between batches, so a claimed batch is always finished, never abandoned.
+   * Overlapping runs are safe: `SKIP LOCKED` gives each run disjoint rows.
+   */
+  async drainOnce(options: { budgetMs: number; eventTypes?: readonly string[] }): Promise<DrainResult> {
+    const startedAt = Date.now();
+    let processed = 0;
+    for (;;) {
+      if (this.stopped) return { processed, stoppedBy: 'stopped' };
+      if (Date.now() - startedAt >= options.budgetMs) return { processed, stoppedBy: 'budget' };
+      const claimed = await this.claimBatch(BATCH_SIZE, options.eventTypes);
+      if (claimed.length === 0) return { processed, stoppedBy: 'empty' };
+      for (const row of claimed) {
+        await this.processOne(row);
+        processed += 1;
+      }
+    }
+  }
+
   stop(): void {
     this.stopped = true;
   }
 
-  private async claimBatch(limit: number): Promise<OutboxRow[]> {
+  private async claimBatch(limit: number, eventTypes?: readonly string[]): Promise<OutboxRow[]> {
     const leaseToken = randomUUID();
-    const client = await pool.connect();
+    const client = await this.db.connect();
     try {
       await client.query('BEGIN');
       const { rows } = await client.query<OutboxRow>(
         `WITH due AS (
            SELECT id FROM outbox_event
-           WHERE (status = 'pending' AND available_at <= now())
-              OR (status = 'leased' AND lease_until < now())
+           WHERE ((status = 'pending' AND available_at <= now())
+               OR (status = 'leased' AND lease_until < now()))
+             AND ($4::text[] IS NULL OR event_type = ANY($4::text[]))
            ORDER BY available_at
            FOR UPDATE SKIP LOCKED
            LIMIT $1
@@ -84,7 +116,7 @@ export class WorkerRunner {
          FROM due
          WHERE o.id = due.id
          RETURNING o.id, o.tenant_id, o.event_type, o.payload, o.attempts, o.max_attempts`,
-        [limit, leaseToken, this.leaseSeconds],
+        [limit, leaseToken, this.leaseSeconds, eventTypes ?? null],
       );
       await client.query('COMMIT');
       // Stamp the lease token onto each row locally so `complete`/`fail` below can verify it
@@ -115,7 +147,7 @@ export class WorkerRunner {
   }
 
   private async complete(row: OutboxRow): Promise<void> {
-    await pool.query(
+    await this.db.query(
       `UPDATE outbox_event SET status = 'succeeded', completed_at = now()
        WHERE id = $1 AND lease_token = $2`,
       [row.id, row._leaseToken],
@@ -136,7 +168,7 @@ export class WorkerRunner {
 
     // Exponential backoff with jitter, bounded by max_attempts (TRD §8).
     const backoffSeconds = Math.min(2 ** attempts, 3600) + Math.random() * 5;
-    await pool.query(
+    await this.db.query(
       `UPDATE outbox_event
        SET status = 'pending', attempts = $2, safe_last_error = $3,
            available_at = now() + make_interval(secs => $4), lease_token = NULL, lease_until = NULL
@@ -146,7 +178,7 @@ export class WorkerRunner {
   }
 
   private async markDead(row: OutboxRow, safeMessage: string): Promise<void> {
-    await pool.query(
+    await this.db.query(
       `UPDATE outbox_event
           SET status = 'dead', attempts = $3, safe_last_error = $4,
               lease_token = NULL, lease_until = NULL

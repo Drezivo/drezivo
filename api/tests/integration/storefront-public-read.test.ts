@@ -1,0 +1,200 @@
+import pg from 'pg';
+import request from 'supertest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+
+/**
+ * Public storefront reads against a real PostgreSQL with RLS: publish gating, projection allowlist,
+ * catalogue filters, item detail, day availability, and fitting slots.
+ */
+import '../../src/config/load-env.js';
+import {
+  buildAppRoleDatabaseUrl,
+  ensureAppRoleLogin,
+  migrateTestDatabase,
+  requireTestDatabaseUrl,
+  resetTestDatabase,
+} from './helpers/test-db.js';
+import type { CatalogueResponse, FittingSlotsResponse, ItemDetail, PublicAvailabilityResponse, PublicStorefront } from '@drezivo/contracts';
+
+vi.mock('@clerk/express', () => ({
+  clerkMiddleware: () => (_req: unknown, _res: unknown, next: (error?: unknown) => void) => next(),
+  getAuth: () => ({ userId: null, orgId: null }),
+}));
+
+/** Typed envelope data for supertest responses. */
+const dataOf = <T>(response: { body: unknown }): T => (response.body as { data: T }).data;
+
+const adminUrl = requireTestDatabaseUrl();
+process.env.NODE_ENV = 'test';
+process.env.DATABASE_URL = buildAppRoleDatabaseUrl(adminUrl);
+
+describe('public storefront read API', async () => {
+  const { createApp } = await import('../../src/app.js');
+  const { closePool } = await import('../../src/db/client.js');
+  const { storefrontCmsService: cms } = await import('../../src/modules/storefront-cms/storefront-cms.service.js');
+  const { addDays, localDate } = await import('../../src/modules/storefront/storefront.service.js');
+  const { createStorefrontWorkspace } = await import('./helpers/storefront-fixture.js');
+  const { defaultStorefrontDocument, productId } = await import('@drezivo/contracts');
+  const admin = new pg.Pool({ connectionString: adminUrl, max: 2 });
+
+  const rules = {
+    rental: 'Three-day rentals from pickup.',
+    deposit: 'Refundable deposit at pickup.',
+    cancellation: 'Free cancellation until 48 hours before pickup.',
+    damage: 'Minor wear is covered.',
+    delivery: { enabled: true, fee_minor: '15000', notes: 'Metro Manila only.' },
+    privacy_notice: 'Your details are used only for this rental.',
+  };
+
+  beforeAll(async () => {
+    await migrateTestDatabase(adminUrl);
+    await ensureAppRoleLogin(adminUrl);
+  });
+  afterEach(async () => {
+    await resetTestDatabase(adminUrl);
+  });
+  afterAll(async () => {
+    await admin.end();
+    await closePool();
+  });
+
+  async function publishedWorkspace(label: string, tweak: (doc: ReturnType<typeof defaultStorefrontDocument>) => void = () => undefined) {
+    const ws = await createStorefrontWorkspace(label);
+    const document = defaultStorefrontDocument('Luna Gown Rentals');
+    document.contact.email = 'hello@luna.test';
+    document.contact.instagram = 'luna.gowns';
+    document.content.featured_product_ids = [productId.parse(ws.productId)];
+    tweak(document);
+    expect((await cms.updateDocument(ws.owner, `${label}-doc`, { version: 1, document })).status).toBe(200);
+    expect((await cms.publishPolicy(ws.owner, `${label}-pol`, { expected_version: 1, rules })).status).toBe(200);
+    expect((await cms.publish(ws.owner, `${label}-pub`, 2)).status).toBe(200);
+    return ws;
+  }
+
+  it('hides drafts and exposes only the allowlisted projection once published', async () => {
+    const draft = await createStorefrontWorkspace('pub-draft');
+    const app = createApp();
+    expect((await request(app).get(`/api/v1/public/stores/${draft.slug}`)).status).toBe(404);
+    expect((await request(app).get('/api/v1/public/stores/no-such-store')).status).toBe(404);
+
+    const ws = await publishedWorkspace('pub-live');
+    const response = await request(app).get(`/api/v1/public/stores/${ws.slug}`);
+    expect(response.status).toBe(200);
+    expect(response.headers['cache-control']).toContain('s-maxage=300');
+    const store = dataOf<PublicStorefront>(response);
+    expect(store).toMatchObject({
+      name: 'Luna Gown Rentals',
+      contact: { email: 'hello@luna.test', instagram_url: 'https://www.instagram.com/luna.gowns/' },
+      fulfillment: { pickup: true, delivery: true, delivery_fee_minor: '15000' },
+      policy: { version: 2, rental: rules.rental },
+      fitting: { enabled: false },
+    });
+    expect(store.featured.map((card) => card.product_id)).toEqual([ws.productId]);
+    expect(store.featured[0]?.image_url).toMatch(/^https?:\/\//);
+    expect(store.categories).toEqual([{ id: expect.any(String) as string, name: 'Gowns', item_count: 1 }]);
+    expect(store.payment_methods).toEqual([{ id: ws.paymentMethodId, name: 'Bank transfer', rail: 'manual_transfer' }]);
+
+    // Signed image URLs carry the files module's object key (which includes the tenant id) and a
+    // short-lived signature; nothing else in the projection may reveal internal identifiers.
+    const withoutSignedUrls = JSON.stringify(store, (key, value: unknown) => (key.endsWith('_url') && typeof value === 'string' && value.startsWith('http') ? '[signed]' : value));
+    for (const secret of [ws.tenantId, ws.branchId, ws.storefrontId, '001234567890', 'tenant-files/']) {
+      expect(withoutSignedUrls).not.toContain(secret);
+    }
+
+    // Taking the store offline makes every public route a 404 again.
+    await cms.unpublish(ws.owner, 'pub-live-off', 3);
+    expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue`)).status).toBe(404);
+  });
+
+  it('filters, searches, and pages the catalogue without treating input as SQL wildcards', async () => {
+    const ws = await publishedWorkspace('pub-cat');
+    const app = createApp();
+    const all = await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue`);
+    expect(dataOf<CatalogueResponse>(all)).toMatchObject({ total: 1, page: 1, page_size: 24, sizes: ['M', 'L'] });
+    expect(dataOf<CatalogueResponse>(all).items[0]).toMatchObject({ name: 'Emerald Gown', price_from_minor: '180000', sizes: ['M', 'L'] });
+
+    expect(dataOf<CatalogueResponse>(await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue?search=emerald`)).total).toBe(1);
+    expect(dataOf<CatalogueResponse>(await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue?search=%25`)).total).toBe(0);
+    expect(dataOf<CatalogueResponse>(await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue?size=xl`)).total).toBe(0);
+    expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue?page_size=500`)).status).toBe(422);
+    expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue?tenant=x`)).status).toBe(422);
+  });
+
+  it('shows item detail with sizes and measurements, and hides archived items', async () => {
+    const ws = await publishedWorkspace('pub-item');
+    const app = createApp();
+    const item = await request(app).get(`/api/v1/public/stores/${ws.slug}/products/${ws.productId}`);
+    expect(item.status).toBe(200);
+    expect(dataOf<ItemDetail>(item).variants.map((v) => v.size_label)).toEqual(['M', 'L']);
+    expect(dataOf<ItemDetail>(item).variants[0]?.measurement).toEqual({
+      mode: 'custom',
+      unit: 'cm',
+      values: [{ label: 'Bust', value: '86 cm' }, { label: 'Waist', value: '66 cm' }],
+    });
+    await admin.query<Record<string, unknown>>(`UPDATE product SET status = 'archived' WHERE id = $1`, [ws.productId]);
+    expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/products/${ws.productId}`)).status).toBe(404);
+  });
+
+  it('reports day availability in store time, honouring minimum notice', async () => {
+    const ws = await publishedWorkspace('pub-avail');
+    const other = await createStorefrontWorkspace('pub-avail-other');
+    const app = createApp();
+    const today = localDate(new Date(), 'Asia/Manila');
+    const to = addDays(today, 6);
+    const response = await request(app).get(`/api/v1/public/stores/${ws.slug}/availability?variant_id=${ws.variantIds.m}&from=${today}&to=${to}`);
+    expect(response.status).toBe(200);
+    const days = dataOf<PublicAvailabilityResponse>(response).days;
+    expect(days).toHaveLength(7);
+    expect(days[0]).toEqual({ date: today, state: 'unavailable' }); // default notice is 1 day
+    expect(days.slice(1).every((day) => day.state === 'available')).toBe(true);
+
+    const foreign = await request(app).get(`/api/v1/public/stores/${ws.slug}/availability?variant_id=${other.variantIds.m}&from=${today}&to=${to}`);
+    expect(foreign.status).toBe(404);
+    const tooWide = await request(app).get(`/api/v1/public/stores/${ws.slug}/availability?variant_id=${ws.variantIds.m}&from=${today}&to=${addDays(today, 90)}`);
+    expect(tooWide.status).toBe(422);
+  });
+
+  it('offers fitting slots only when the owner opts in, within hours, capacity, and closures', async () => {
+    const ws = await publishedWorkspace('pub-fit', (doc) => {
+      doc.checkout.fitting_requests = true;
+      doc.content.sections.fitting = true;
+    });
+    const app = createApp();
+    const date = addDays(localDate(new Date(), 'Asia/Manila'), 3);
+    const isoWeekday = ((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
+
+    expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/fitting-slots?date=${date}`)).status).toBe(404);
+
+    await admin.query<Record<string, unknown>>(
+      `INSERT INTO fitting_settings (tenant_id, branch_id, enabled, capacity, duration_minutes, fee_minor, currency)
+       VALUES ($1, $2, true, 1, 60, 50000, 'PHP')`,
+      [ws.tenantId, ws.branchId],
+    );
+    await admin.query<Record<string, unknown>>(
+      `INSERT INTO fitting_hours (tenant_id, branch_id, weekday, starts_local, ends_local) VALUES ($1, $2, $3, '10:00', '12:00')`,
+      [ws.tenantId, ws.branchId, isoWeekday],
+    );
+    const open = await request(app).get(`/api/v1/public/stores/${ws.slug}/fitting-slots?date=${date}`);
+    expect(open.status).toBe(200);
+    expect(dataOf<FittingSlotsResponse>(open)).toMatchObject({ duration_minutes: 60, fee_minor: '50000' });
+    expect(dataOf<FittingSlotsResponse>(open).slots.map((slot) => slot.start_at)).toEqual([
+      `${date}T02:00:00.000Z`,
+      `${date}T02:30:00.000Z`,
+      `${date}T03:00:00.000Z`,
+    ]);
+
+    await admin.query<Record<string, unknown>>(
+      `INSERT INTO fitting_closure (tenant_id, branch_id, period, timezone_snapshot, reason)
+       VALUES ($1, $2, tstzrange($3::timestamptz, $4::timestamptz, '[)'), 'Asia/Manila', 'Staff training')`,
+      [ws.tenantId, ws.branchId, `${date}T10:00:00+08:00`, `${date}T10:30:00+08:00`],
+    );
+    const afterClosure = await request(app).get(`/api/v1/public/stores/${ws.slug}/fitting-slots?date=${date}`);
+    expect(dataOf<FittingSlotsResponse>(afterClosure).slots.map((slot) => slot.start_at)).toEqual([
+      `${date}T02:30:00.000Z`,
+      `${date}T03:00:00.000Z`,
+    ]);
+    const store = await request(app).get(`/api/v1/public/stores/${ws.slug}`);
+    expect(dataOf<PublicStorefront>(store).fitting).toEqual({ enabled: true, duration_minutes: 60, fee_minor: '50000' });
+    expect(dataOf<PublicStorefront>(store).content.sections.fitting).toBe(true);
+  });
+});

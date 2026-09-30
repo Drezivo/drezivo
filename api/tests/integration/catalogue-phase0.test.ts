@@ -29,7 +29,8 @@ process.env.S3_SECRET_ACCESS_KEY ??= 'test';
 describe('CLT-002 catalogue integrity', async () => {
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
   const { updateCatalogueCategoryStatus } = await import('../../src/modules/catalogue/catalogue.service.js');
-  const { findPublishedStorefrontBySlug } = await import('../../src/modules/storefront/storefront.repository.js');
+  const { publicStorefrontService } = await import('../../src/modules/storefront/storefront.service.js');
+  const { catalogueQuery } = await import('@drezivo/contracts');
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
 
   beforeAll(async () => {
@@ -392,9 +393,10 @@ describe('CLT-002 catalogue integrity', async () => {
       );
     });
 
-    const publicStorefront = await findPublishedStorefrontBySlug(slug);
-    expect(publicStorefront?.products.map((product) => product.name)).toEqual(['Public Gown']);
-    expect(publicStorefront?.paymentMethods).toEqual([{ name: 'GCash', rail: 'manual_qr' }]);
+    const catalogue = await publicStorefrontService.getCatalogue(slug, catalogueQuery.parse({}));
+    expect(catalogue.items.map((item) => item.name)).toEqual(['Public Gown']);
+    const publicStorefront = await publicStorefrontService.getStorefront(slug);
+    expect(publicStorefront.payment_methods.map(({ name, rail }) => ({ name, rail }))).toEqual([{ name: 'GCash', rail: 'manual_qr' }]);
   });
 
   it('keeps catalogue reads and writes isolated by forced RLS for drezivo_app', async () => {

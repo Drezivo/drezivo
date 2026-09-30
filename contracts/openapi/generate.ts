@@ -16,11 +16,9 @@ import { stringify as toYaml } from 'yaml';
 import { z } from 'zod';
 
 import {
-  availabilityQuery,
-  availabilityResult,
   clothingDetail,
   clothingImageFileIds,
-  catalogueItem,
+  catalogueResponse,
   catalogueQuery,
   centralPaymentsQuery,
   centralPaymentsResponse,
@@ -108,13 +106,32 @@ import {
   fittingWeeklyHoursUpdateResponse,
   guestReservationView,
   dashboardFittingSummaryResponse,
-  holdIntentRequest,
-  holdIntentResponse,
+  guestReservationRequest,
+  guestReservationCreated,
+  guestReceiptUploadRequest,
+  guestReceiptUploadResponse,
+  guestReceiptSubmitRequest,
+  guestFittingRequest,
+  guestFittingCreated,
+  startGuestVerificationRequest,
+  startGuestVerificationResponse,
+  confirmGuestVerificationRequest,
+  confirmGuestVerificationResponse,
+  publicAvailabilityQuery,
+  publicAvailabilityResponse,
+  fittingSlotsQuery,
+  fittingSlotsResponse,
+  storefrontSettings,
+  updateStorefrontRequest,
+  updateStorefrontSlugRequest,
+  storefrontTransitionRequest,
+  publishStorefrontPolicyRequest,
+  businessSettings,
+  updateBusinessSettingsRequest,
+  notificationSettings,
+  updateNotificationSettingsRequest,
   itemDetail,
-  paginatedResponse,
   paginationRequest,
-  paymentReceiptSubmitRequest,
-  paymentReceiptSubmitResponse,
   paymentMethodSettingsItem,
   paymentMethodSettingsList,
   updatePaymentMethodSettingsRequest,
@@ -535,7 +552,7 @@ registry.registerPath({
   responses: {
     200: {
       description: 'A page of catalogue items.',
-      content: { 'application/json': { schema: successEnvelope(paginatedResponse(catalogueItem)) } },
+      content: { 'application/json': { schema: successEnvelope(catalogueResponse) } },
     },
   },
 });
@@ -563,12 +580,12 @@ registry.registerPath({
   summary: 'Non-binding availability preview for one variant/date range (TRD §4).',
   request: {
     params: z.object({ slug: z.string().min(1) }),
-    query: availabilityQuery,
+    query: publicAvailabilityQuery,
   },
   responses: {
     200: {
-      description: 'Availability preview. Never a capacity guarantee (TRD §5).',
-      content: { 'application/json': { schema: successEnvelope(availabilityResult) } },
+      description: 'Day-level availability preview for one size. Never a capacity guarantee (TRD §5).',
+      content: { 'application/json': { schema: successEnvelope(publicAvailabilityResponse) } },
     },
   },
 });
@@ -582,13 +599,14 @@ registry.registerPath({
   request: {
     params: z.object({ slug: z.string().min(1) }),
     headers: idempotencyKeyHeader,
-    body: { content: { 'application/json': { schema: holdIntentRequest } } },
+    body: { content: { 'application/json': { schema: guestReservationRequest } } },
   },
   responses: {
     201: {
-      description: 'Hold created.',
-      content: { 'application/json': { schema: successEnvelope(holdIntentResponse) } },
+      description: 'Hold created; the guest token is returned once.',
+      content: { 'application/json': { schema: successEnvelope(guestReservationCreated) } },
     },
+    401: jsonError('The email verification is missing, expired, or for a different address.'),
     409: jsonError('The requested asset/interval is no longer available (CAPACITY_CONFLICT).'),
     422: jsonError('Validation failed.'),
   },
@@ -1366,12 +1384,12 @@ registry.registerPath({
   request: {
     params: z.object({ id: z.string().uuid() }),
     headers: idempotencyKeyHeader,
-    body: { content: { 'application/json': { schema: paymentReceiptSubmitRequest } } },
+    body: { content: { 'application/json': { schema: guestReceiptSubmitRequest } } },
   },
   responses: {
-    201: {
-      description: 'Evidence attached.',
-      content: { 'application/json': { schema: successEnvelope(paymentReceiptSubmitResponse) } },
+    200: {
+      description: 'Receipt attached; the request moves to owner review.',
+      content: { 'application/json': { schema: successEnvelope(guestReservationView) } },
     },
     409: jsonError('STATE_CONFLICT — hold already expired.'),
   },
@@ -1427,6 +1445,51 @@ registry.register('CustomerEditRequest', customerEditRequest);
 registry.register('CustomerEditResponse', customerEditResponse);
 registry.register('CustomerArchiveRequest', customerArchiveRequest);
 registry.register('CustomerArchiveResponse', customerArchiveResponse);
+
+// ---- storefront CMS, settings, and guest booking ---------------------------
+const slugParams = z.object({ slug: z.string().min(1) });
+const guestIdParams = z.object({ id: z.string().uuid() });
+const guestAuthHeader = z.object({ authorization: z.string().regex(/^Bearer [A-Za-z0-9_-]{43}$/) });
+const jsonBody = (schema: z.ZodTypeAny) => ({ content: { 'application/json': { schema } } });
+const extraPaths: Array<{
+  method: 'get' | 'post' | 'patch';
+  path: string;
+  tag: string;
+  summary: string;
+  request: Record<string, unknown>;
+  schema: z.ZodTypeAny;
+}> = [
+  { method: 'get', path: '/storefront', tag: 'storefront-cms', summary: 'Storefront document, status, policy, and publish readiness.', request: {}, schema: storefrontSettings },
+  { method: 'patch', path: '/storefront', tag: 'storefront-cms', summary: 'Replace the storefront document (version checked).', request: { headers: idempotencyKeyHeader, body: jsonBody(updateStorefrontRequest) }, schema: storefrontSettings },
+  { method: 'post', path: '/storefront/slug', tag: 'storefront-cms', summary: 'Change the public storefront address.', request: { headers: idempotencyKeyHeader, body: jsonBody(updateStorefrontSlugRequest) }, schema: storefrontSettings },
+  { method: 'post', path: '/storefront/publish', tag: 'storefront-cms', summary: 'Publish once readiness checks pass.', request: { headers: idempotencyKeyHeader, body: jsonBody(storefrontTransitionRequest) }, schema: storefrontSettings },
+  { method: 'post', path: '/storefront/unpublish', tag: 'storefront-cms', summary: 'Take the storefront offline.', request: { headers: idempotencyKeyHeader, body: jsonBody(storefrontTransitionRequest) }, schema: storefrontSettings },
+  { method: 'post', path: '/storefront/policies', tag: 'storefront-cms', summary: 'Publish a new immutable rental policy version.', request: { headers: idempotencyKeyHeader, body: jsonBody(publishStorefrontPolicyRequest) }, schema: storefrontSettings },
+  { method: 'get', path: '/settings/business', tag: 'settings', summary: 'Business information and fixed regional settings.', request: {}, schema: businessSettings },
+  { method: 'patch', path: '/settings/business', tag: 'settings', summary: 'Update business information (version checked).', request: { headers: idempotencyKeyHeader, body: jsonBody(updateBusinessSettingsRequest) }, schema: businessSettings },
+  { method: 'get', path: '/settings/notifications', tag: 'settings', summary: 'Email notification preferences.', request: {}, schema: notificationSettings },
+  { method: 'patch', path: '/settings/notifications', tag: 'settings', summary: 'Update email notification preferences (version checked).', request: { headers: idempotencyKeyHeader, body: jsonBody(updateNotificationSettingsRequest) }, schema: notificationSettings },
+  { method: 'post', path: '/public/stores/{slug}/verifications', tag: 'guest', summary: 'Send a 6-digit email code. The answer never reveals whether a code was sent.', request: { params: slugParams, body: jsonBody(startGuestVerificationRequest) }, schema: startGuestVerificationResponse },
+  { method: 'post', path: '/public/stores/{slug}/verifications/confirm', tag: 'guest', summary: 'Exchange a valid code for a short-lived verification token.', request: { params: slugParams, body: jsonBody(confirmGuestVerificationRequest) }, schema: confirmGuestVerificationResponse },
+  { method: 'get', path: '/public/stores/{slug}/fitting-slots', tag: 'guest', summary: 'Open fitting start times for one date.', request: { params: slugParams, query: fittingSlotsQuery }, schema: fittingSlotsResponse },
+  { method: 'post', path: '/public/stores/{slug}/fittings', tag: 'guest', summary: 'Verified guest requests a fitting; it starts pending for staff review.', request: { params: slugParams, headers: idempotencyKeyHeader, body: jsonBody(guestFittingRequest) }, schema: guestFittingCreated },
+  { method: 'post', path: '/guest/reservations/{id}/uploads', tag: 'guest', summary: 'Authorize one receipt upload for the guest reservation.', request: { params: guestIdParams, headers: guestAuthHeader, body: jsonBody(guestReceiptUploadRequest) }, schema: guestReceiptUploadResponse },
+];
+for (const entry of extraPaths) {
+  registry.registerPath({
+    method: entry.method,
+    path: entry.path,
+    tags: [entry.tag],
+    summary: entry.summary,
+    request: entry.request,
+    responses: {
+      200: { description: 'Success.', content: { 'application/json': { schema: successEnvelope(entry.schema) } } },
+      409: jsonError('A newer version exists or an identical request is in progress.'),
+      422: jsonError('Validation failed.'),
+    },
+  });
+}
+
 
 const generator = new OpenApiGeneratorV31(registry.definitions);
 const document = generator.generateDocument({

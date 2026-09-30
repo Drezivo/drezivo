@@ -2,7 +2,6 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AddClothingPage } from "@/components/inventory/add-clothing-page";
-import { MeasurementGuideProvider } from "@/components/settings/measurement-guide-context";
 
 const clerk = vi.hoisted(() => ({
   getToken: vi.fn(),
@@ -51,11 +50,7 @@ vi.mock("@/lib/drezivo-api", () => ({
 }));
 
 function renderPage() {
-  return render(
-    <MeasurementGuideProvider>
-      <AddClothingPage />
-    </MeasurementGuideProvider>
-  );
+  return render(<AddClothingPage />);
 }
 
 describe("AddClothingPage", () => {

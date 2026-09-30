@@ -16,10 +16,6 @@
  */
 import { z } from 'zod';
 
-import { productVariantId, reservationId } from '../common/ids';
-import { ianaTimezone, isoDate, isoInstant } from '../common/time';
-import { fulfillmentMethod, reservationMoneySnapshot, reservationState } from '../reservations';
-
 /**
  * The allowlisted actions a bearer token may perform, independent of which
  * scopes a given reservation's state currently permits (e.g. `cancel` is
@@ -28,20 +24,3 @@ import { fulfillmentMethod, reservationMoneySnapshot, reservationState } from '.
  */
 export const guestScopeCode = z.enum(['view_status', 'submit_evidence', 'cancel', 'reschedule']);
 export type GuestScopeCode = z.infer<typeof guestScopeCode>;
-
-/** GET /guest/reservations/{id} response body. `no-store` per TRD §4. */
-export const guestReservationView = z.object({
-  id: reservationId,
-  reference_code: z.string().min(1),
-  status: reservationState,
-  variant_id: productVariantId,
-  fulfillment_method: fulfillmentMethod,
-  pickup_at: isoInstant,
-  due_at: isoInstant,
-  timezone_snapshot: ianaTimezone,
-  event_date: isoDate.optional(),
-  price_snapshot: reservationMoneySnapshot,
-  hold_expires_at: isoInstant.nullable(),
-  scope_codes: z.array(guestScopeCode),
-});
-export type GuestReservationView = z.infer<typeof guestReservationView>;

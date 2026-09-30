@@ -17,6 +17,8 @@ export interface DashboardIdentity {
 }
 
 function roleLabel(role: ActorContext["membership"]["role"] | undefined) {
+  // Unknown until the actor context loads: show nothing rather than a guessed role.
+  if (!role) return "";
   if (role === "owner") return "Business Owner";
   if (role === "frontdesk") return "Front Desk";
   return "Team Member";
@@ -29,19 +31,26 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let active = true;
+    let retry: ReturnType<typeof setTimeout> | undefined;
     const api = createDrezivoApiClient(getToken);
 
-    void api
-      .getActorContext()
-      .then((result) => {
-        if (active) setActorContext(result.data);
-      })
-      .catch(() => {
-        if (active) setActorContext(null);
-      });
+    // A transient failure (rate limit, network blip) is retried with backoff so the header does
+    // not stay without the business name and role for the rest of the visit.
+    const load = (attempt: number): void => {
+      api
+        .getActorContext()
+        .then((result) => {
+          if (active) setActorContext(result.data);
+        })
+        .catch(() => {
+          if (active && attempt < 3) retry = setTimeout(() => load(attempt + 1), 1000 * 3 ** attempt);
+        });
+    };
+    load(0);
 
     return () => {
       active = false;
+      clearTimeout(retry);
     };
   }, [getToken]);
 
@@ -49,7 +58,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     const clerkName = [user?.firstName, user?.lastName].filter(Boolean).join(" ");
 
     return {
-      businessName: actorContext?.tenant.name ?? "Workspace",
+      businessName: actorContext?.tenant.name ?? "",
       roleLabel: roleLabel(actorContext?.membership.role),
       ...(user?.imageUrl ? { userImageUrl: user.imageUrl } : {}),
       userName:
@@ -71,7 +80,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <DashboardSidebar identity={identity} />
       <SidebarInset className="h-svh min-h-0 overflow-hidden">
         <DashboardHeader identity={identity} />
-        <main className="min-h-0 flex-1 overflow-y-auto bg-dashboard-canvas">{children}</main>
+        {/* `relative` makes this scroller the containing block for absolutely positioned content (such as
+            visually hidden inputs), so focusing them scrolls this pane instead of shifting the whole shell. */}
+        <main className="relative min-h-0 flex-1 overflow-y-auto bg-dashboard-canvas">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   );

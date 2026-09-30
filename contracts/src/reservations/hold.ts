@@ -8,35 +8,12 @@ import { z } from 'zod';
 import { customerAddress } from '../common/customer';
 import { customerId, paymentMethodId, productVariantId } from '../common/ids';
 import { paymentRail } from '../finance/payment-status';
-import { instantInterval, isoDate, isoInstant } from '../common/time';
+import { instantInterval, isoDate } from '../common/time';
 import {
-  customerDetails,
   fulfillmentMethod,
   reservationSummary,
   staffCustomerDetails,
 } from './reservation';
-
-/** POST /public/stores/{slug}/holds request body. */
-export const holdIntentRequest = z
-  .object({
-    variant_id: productVariantId,
-    requested_interval: instantInterval,
-    event_date: isoDate.optional(),
-    fulfillment_method: fulfillmentMethod,
-    payment_method_id: paymentMethodId,
-    contact: customerDetails,
-  })
-  .strict();
-export type HoldIntentRequest = z.infer<typeof holdIntentRequest>;
-
-/** Raw guest capability is returned once; persistence stores only its hash. */
-export const guestAccessGrant = z
-  .object({
-    token: z.string().min(16),
-    expires_at: isoInstant,
-  })
-  .strict();
-export type GuestAccessGrant = z.infer<typeof guestAccessGrant>;
 
 export const paymentInstructions = z
   .object({
@@ -47,15 +24,6 @@ export const paymentInstructions = z
   })
   .strict();
 export type PaymentInstructions = z.infer<typeof paymentInstructions>;
-
-export const holdIntentResponse = z
-  .object({
-    reservation: reservationSummary,
-    guest_access: guestAccessGrant,
-    payment_instructions: paymentInstructions,
-  })
-  .strict();
-export type HoldIntentResponse = z.infer<typeof holdIntentResponse>;
 
 /** Staff selects either an existing customer or enters a new one, never both. */
 export const staffReservationCustomerInput = z.discriminatedUnion('source', [

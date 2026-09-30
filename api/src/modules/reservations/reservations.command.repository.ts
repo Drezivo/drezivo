@@ -411,7 +411,7 @@ export async function appendReservationAuditEvent(
   client: PoolClient,
   input: {
     tenantId: string;
-    actorKind: 'staff' | 'system';
+    actorKind: 'staff' | 'guest' | 'system';
     actorKey: string;
     action: string;
     entityType: string;

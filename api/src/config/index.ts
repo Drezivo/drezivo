@@ -14,7 +14,7 @@ import { strictBooleanEnv } from './env-parsers.js';
  * `env.example` (or `docs/runbooks/environments.md`) documents these names in prose. Never
  * put a real value here or in an example env file committed to the repo.
  */
-const envSchema = z.object({
+export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
 
@@ -55,9 +55,43 @@ const envSchema = z.object({
   WORKER_POLL_INTERVAL_MS: z.coerce.number().int().min(250).default(2000),
   WORKER_LEASE_SECONDS: z.coerce.number().int().min(5).default(60),
   WORKER_ENABLED: strictBooleanEnv('WORKER_ENABLED').default(false),
+  // `drain` runs every sweep once, works through the outbox until it is empty or the budget is
+  // spent, then exits: for a scheduled job such as Cloud Run Jobs. `continuous` is a long-lived
+  // process. WORKER_DRAIN_SCOPE=fast runs only the time-sensitive work (release expired holds,
+  // which keep blocking garments until swept, and send queued email) for a frequent schedule.
+  WORKER_MODE: z.enum(['continuous', 'drain']).default('continuous'),
+  WORKER_DRAIN_SCOPE: z.enum(['all', 'fast']).default('all'),
+  WORKER_DRAIN_BUDGET_MS: z.coerce.number().int().min(1000).max(3_300_000).default(600_000),
 
   // TRD §4: proposed seven-day retention window for idempotency records.
   IDEMPOTENCY_RETENTION_DAYS: z.coerce.number().int().min(1).default(7),
+  // Number of reverse proxies in front of the API. 0 ignores X-Forwarded-For entirely, so a client
+  // cannot spoof its address to dodge per-IP rate limits; set it to the real hop count when deployed
+  // behind a load balancer, or every anonymous visitor shares the balancer's address.
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+  // Transactional email for guest verification codes and notifications. `none` disables guest
+  // email verification (it answers 503) rather than pretending codes were sent. `file` writes
+  // messages to EMAIL_FILE_SINK_DIR for local development and is refused in production.
+  EMAIL_PROVIDER: z.enum(['none', 'file', 'resend']).default('none'),
+  EMAIL_FROM: z.string().min(3).max(200).optional(),
+  RESEND_API_KEY: z.string().min(10).optional(),
+  EMAIL_FILE_SINK_DIR: z.string().min(1).optional(),
+  // Public origin of the storefront app (e.g. https://drezivo.com), used for the private status
+  // link in renter emails. Without it the emails omit the link.
+  STOREFRONT_PUBLIC_ORIGIN: z.string().url().optional(),
+  // `dev_accept_any` skips sending guest verification codes and accepts any 6-digit code, so the
+  // storefront can be tested without an email provider. Refused in production.
+  GUEST_VERIFICATION_MODE: z.enum(['email', 'dev_accept_any']).default('email'),
+}).superRefine((env, ctx) => {
+  if (env.GUEST_VERIFICATION_MODE === 'dev_accept_any' && env.NODE_ENV === 'production') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['GUEST_VERIFICATION_MODE'], message: 'dev_accept_any is for development only' });
+  }
+  if (env.EMAIL_PROVIDER === 'resend' && (!env.RESEND_API_KEY || !env.EMAIL_FROM)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['RESEND_API_KEY'], message: 'resend needs RESEND_API_KEY and EMAIL_FROM' });
+  }
+  if (env.EMAIL_PROVIDER === 'file' && (env.NODE_ENV === 'production' || !env.EMAIL_FILE_SINK_DIR)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['EMAIL_PROVIDER'], message: 'file email is for development only and needs EMAIL_FILE_SINK_DIR' });
+  }
 });
 
 export type Config = z.infer<typeof envSchema>;

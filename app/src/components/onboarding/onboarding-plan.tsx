@@ -288,24 +288,26 @@ export function OnboardingPlan() {
     setLaunchPhase("resolving");
     setLaunchError(null);
     try {
-      const api = createDrezivoApiClient(getToken);
-      const workspaces = await api.getWorkspaces();
-      const workspace = workspaces.data.items.find(
-        (item) => item.tenant.id === bootstrap.tenant.id || item.clerk_org_id === activeOnboarding.clerk_org_id
-      );
-      if (!workspace) {
-        throw new DrezivoApiError("Your workspace was created, but it is not available to load yet.", {
-          status: 409,
-        });
-      }
+      await withTimeout(async () => {
+        const api = createDrezivoApiClient(getToken);
+        const workspaces = await api.getWorkspaces();
+        const workspace = workspaces.data.items.find(
+          (item) => item.tenant.id === bootstrap.tenant.id || item.clerk_org_id === activeOnboarding.clerk_org_id
+        );
+        if (!workspace) {
+          throw new DrezivoApiError("Your workspace was created, but it is not available to load yet.", {
+            status: 409,
+          });
+        }
 
-      await setActive({ organization: workspace.clerk_org_id });
-      const actor = await api.getActorContext();
-      if (actor.data.tenant.id !== bootstrap.tenant.id) {
-        throw new DrezivoApiError("Your workspace context did not match the workspace that was created.", {
-          status: 409,
-        });
-      }
+        await setActive({ organization: workspace.clerk_org_id });
+        const actor = await api.getActorContext();
+        if (actor.data.tenant.id !== bootstrap.tenant.id) {
+          throw new DrezivoApiError("Your workspace context did not match the workspace that was created.", {
+            status: 409,
+          });
+        }
+      });
 
       router.replace("/");
     } catch (caughtError) {
@@ -670,6 +672,28 @@ function PlanFrame({
       <div className="flex flex-1 items-center">{children}</div>
     </AuthSplitLayout>
   );
+}
+
+const WORKSPACE_LOAD_TIMEOUT_MS = 20_000;
+
+/**
+ * Loading the new workspace waits on Clerk switching the active organization, which can stall.
+ * Past the limit the screen offers "Try loading workspace again" instead of spinning forever;
+ * retrying is safe because the workspace already exists and bootstrap is not repeated.
+ */
+async function withTimeout(work: () => Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new DrezivoApiError("Loading your workspace is taking too long. Try again.", { status: 504 })),
+      WORKSPACE_LOAD_TIMEOUT_MS,
+    );
+  });
+  try {
+    await Promise.race([work(), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function toDrezivoApiError(error: unknown): DrezivoApiError {

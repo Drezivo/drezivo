@@ -1,41 +1,53 @@
-import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { staticStorefrontClient } from '@/lib/static-storefront-client';
-import { buildStorefrontMetadata } from '@/lib/seo';
-import { StoreHeader } from '@/components/storefront/store-header';
-import { StoreFooter } from '@/components/storefront/store-footer';
+import { Jost, Newsreader } from 'next/font/google';
+import { notFound } from 'next/navigation';
 
-interface StorefrontLayoutProps {
+import 'lenis/dist/lenis.css';
+
+import { MotionRoot } from '@/components/store/motion/motion-root';
+import { StoreFooter } from '@/components/store/store-footer';
+import { StoreHeader } from '@/components/store/store-header';
+import { themeStyle } from '@/components/store/theme';
+import { getStore } from '@/lib/storefront-api';
+import { buildStorefrontMetadata } from '@/lib/seo';
+
+const display = Newsreader({ subsets: ['latin'], weight: ['300', '400'], style: ['normal', 'italic'], variable: '--font-newsreader', display: 'swap' });
+const body = Jost({ subsets: ['latin'], weight: ['400', '500'], variable: '--font-jost', display: 'swap' });
+
+const MOTION_BOOT = "if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.classList.add('sf-motion')";
+
+interface Props {
   children: React.ReactNode;
   params: Promise<{ slug: string }>;
 }
 
-export async function generateMetadata({ params }: StorefrontLayoutProps): Promise<Metadata> {
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const store = await staticStorefrontClient.getStore(slug);
-  if (!store) return {};
-  return buildStorefrontMetadata(store);
+  const store = await getStore(slug);
+  return store ? buildStorefrontMetadata(store) : {};
 }
 
 /**
- * Shared chrome for every page under /s/[slug]. A foreign or unpublished
- * store slug returns notFound() here, once, for the whole subtree — every
- * nested page inherits that behavior instead of re-implementing the check,
- * and (per Drezivo-TRD.md §3) the response is a generic 404, never an error
- * page that would confirm whether a store with that slug exists at all.
+ * Shared chrome for every page under /s/[slug]. An unknown, draft, or suspended store is one
+ * generic 404 for the whole subtree, never an error that confirms the slug exists.
  */
-export default async function StorefrontLayout({ children, params }: StorefrontLayoutProps) {
+export default async function StorefrontLayout({ children, params }: Props) {
   const { slug } = await params;
-  const store = await staticStorefrontClient.getStore(slug);
-
-  if (!store) {
-    notFound();
-  }
+  const store = await getStore(slug);
+  if (!store) notFound();
 
   return (
-    <div className="storefront-shell flex min-h-screen flex-col">
+    <div className={`storefront-shell ${display.variable} ${body.variable} flex min-h-screen flex-col`} style={themeStyle(store.theme)}>
+      {/* Runs before the page paints, so reveal targets start hidden instead of flashing. */}
+      <script dangerouslySetInnerHTML={{ __html: MOTION_BOOT }} />
+      <MotionRoot />
+      <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:bg-sf-surface focus:px-4 focus:py-2">
+        Skip to content
+      </a>
       <StoreHeader store={store} />
-      <main className="flex-1">{children}</main>
+      <main id="main" className="flex-1">
+        {children}
+      </main>
       <StoreFooter store={store} />
     </div>
   );

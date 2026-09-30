@@ -309,7 +309,8 @@ function assertSupportedFilePurpose(row: FileObjectRow): void {
   }
 }
 
-function validateUploadedObject(row: FileObjectRow, uploaded: UploadedObjectMetadata): string | null {
+/** Size, type, checksum, and magic-byte checks for an uploaded object against its authorization. */
+export function validateUploadedObject(row: FileObjectRow, uploaded: UploadedObjectMetadata): string | null {
   if (uploaded.byteSize !== row.byte_size) return 'Uploaded file size does not match the authorized size.';
   if (uploaded.contentType !== row.mime_type) return 'Uploaded file type does not match the authorized type.';
   if (!uploaded.sha256 || uploaded.sha256 !== row.sha256) {
