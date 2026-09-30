@@ -1,15 +1,15 @@
 ---
 title: Dashboard V1 End-to-End Checklist
 type: implementation-checklist
-status: planned
+status: in-progress
 owner: Drezivo team
-updated: 2026-09-20
+updated: 2026-09-30
 tags: [drezivo, v1, dashboard, operations, checklist]
 ---
 
 # Dashboard V1 End-to-End Checklist
 
-**Status:** Planned; current Dashboard overview is prototype/mock-data driven.
+**Status:** Partial implementation. `GET /api/v1/dashboard/overview` now supplies the visible operational metrics, today schedule, upcoming rentals, three-day fitting appointments, and month-over-month business performance. Focused API/PostgreSQL and dashboard component evidence passes. The full API integration run still has unrelated catalogue scale-test timeouts, and the full app suite has unrelated failures, so the dashboard release gate remains open.
 **Canonical specifications:** [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
 **Dependencies:** [[Reservations Checklist]], [[Availability Checklist]], and [[Schedule Calendar Checklist]].
 
@@ -24,12 +24,13 @@ Before marking a task complete:
 - Dashboard reads are bounded and indexed.
 - Clicking a dashboard item resolves to the same Reservation/Clothing source shown elsewhere.
 - Mutations triggered from dashboard delegate to domain services and use shared idempotency guards.
-- Fitting metrics/actions remain V1.1 unless canonical scope changes.
+- The fitting-today count and upcoming three-branch-local-day appointment table are in current scope; fitting mutations and specialized fitting work queues remain domain-page responsibilities.
+- Business performance is completed rental value (excluding deposits), not collected cash or accounting revenue.
 
 ## Non-negotiable outcomes
 
 - Dashboard answers “What needs attention in my rental business now?”
-- Pickups, returns, overdue/late issues, payment/evidence review, cleaning/maintenance, and reservation review derive from canonical source records.
+- Pickups, returns, fitting appointments, payment-evidence review, and completed rental performance derive from canonical source records. Overdue/late issues, cleaning/maintenance, and reservation-review queues remain deferred until their canonical work-queue projections are implemented.
 - Dashboard does not store its own copy of reservation status.
 - Same reservation has the same status/reference/customer/clothing facts across Dashboard, Reservations, and Calendar.
 - Restricted/cancelled tenant lifecycle applies the shared action-policy gate; dashboard must not accidentally enable blocked actions.
@@ -37,42 +38,41 @@ Before marking a task complete:
 
 ## Phase 0: Metric and queue definitions
 
-- [ ] **DSH-000 — Define V1 dashboard metric dictionary**
+- [x] **DSH-000 — Define the live overview metric dictionary**
   - **Depends on:** Reservation/Availability event taxonomy finalized.
   - **Outcome:** Each metric has one explicit query definition.
   - **Acceptance:**
-    - [ ] Define active rentals/picked-up count.
-    - [ ] Define pickups due today / upcoming window.
-    - [ ] Define returns due today / upcoming window.
-    - [ ] Define pending confirmation/evidence review count.
-    - [ ] Define overdue/late-return issue count.
-    - [ ] Define cleaning/maintenance/unready count where useful.
-    - [ ] Remove/defer fitting metrics from real V1 unless V1.1 is canonically enabled.
-    - [ ] Define timezone basis for “today”.
-  - **Tests/evidence:** Product/architecture review with no ambiguous metric names.
+    - [x] Active rentals count reservations in `picked_up` state for the active branch.
+    - [x] Pickups today count `pending_confirmation` and `confirmed` reservations whose pickup falls in the active branch’s local day.
+    - [x] Returns today count `picked_up` reservations due in the active branch’s local day.
+    - [x] Fittings today follows the existing fitting-summary state/date semantics; upcoming appointments include future `pending` and `confirmed` appointments from database time through the next three branch-local calendar days (today plus two days).
+    - [x] Payment review counts branch-linked payments whose latest receipt evidence is `uploaded` or `under_review`; this is not a count of every unpaid obligation.
+    - [x] Performance compares completed reservation rental totals (deposit excluded), completed counts/average, and active new-customer profiles between the current and previous branch-local calendar months. New customers are tenant-wide because customer profiles have no branch ownership.
+    - [x] Database time defines `as_of`; the active branch IANA timezone defines “today”, fitting windows, and month boundaries.
+    - [x] Issue/readiness and reservation-review counts are explicitly deferred rather than fabricated.
+  - **Tests/evidence:** Focused dashboard PostgreSQL integration verifies branch-local metrics and current/prior-month values; contract tests verify the response shape.
 
-- [ ] **DSH-001 — Define dashboard contracts**
+- [x] **DSH-001 — Define the dashboard overview contract**
   - **Depends on:** DSH-000.
   - **Outcome:** Shared contracts own dashboard summary and work-queue projections.
   - **Acceptance:**
-    - [ ] Define summary counts DTO.
-    - [ ] Define bounded “today/needs attention” item DTO with source IDs and safe display fields.
-    - [ ] Define optional range/window inputs with strict bounds.
-    - [ ] Reject browser-supplied tenant/branch authority.
-  - **Tests/evidence:** Contract tests and bounded input validation.
+    - [x] Define branch-local window metadata, strict metric values, and bounded schedule/rental/fitting projections with source IDs and safe display fields.
+    - [x] The endpoint has no client-supplied tenant or branch query/body inputs; both are resolved from authenticated tenant context.
+    - [x] Generate the OpenAPI path and response from the shared Zod contract.
+  - **Tests/evidence:** Dashboard contract tests pass; OpenAPI document was regenerated from source.
 
 ## Phase 1: Dashboard read service
 
-- [ ] **DSH-010 — Implement summary metric queries**
+- [x] **DSH-010 — Implement summary metric queries**
   - **Depends on:** DSH-001, Reservations read model.
   - **Outcome:** Dashboard metric cards reflect real tenant state.
   - **Acceptance:**
-    - [ ] Resolve tenant/default branch from actor context.
-    - [ ] Use database/server time with branch/reservation timezone semantics.
-    - [ ] Counts use same predicates as Reservations/Schedule.
-    - [ ] Query does not scan unbounded historical rows.
-    - [ ] Restricted/cancelled tenant reads remain safe according to lifecycle policy.
-  - **Tests/evidence:** Count consistency tests against seeded reservations.
+    - [x] Resolve tenant/default branch from actor context; request-supplied branch IDs are ignored.
+    - [x] Use database/server time with branch/reservation timezone semantics.
+    - [x] Counts use the canonical Reservation/Schedule state and timestamp predicates.
+    - [x] Query avoids unbounded historical scans for month aggregates using migration-owned partial indexes.
+    - [x] Restricted/cancelled access passes through the shared `existing_rental_read` lifecycle gate and staff permission check.
+  - **Tests/evidence:** `api/tests/integration/dashboard-overview.test.ts` verifies authorization, branch isolation, seeded metric projections, branch-local windows, and query plans against 5,000 historical reservations/customer profiles.
 
 - [ ] **DSH-011 — Implement operational work queue**
   - **Depends on:** DSH-010, Availability/Custody projections.
@@ -95,17 +95,28 @@ Before marking a task complete:
     - [ ] Resolved issues disappear according to canonical resolution state.
   - **Tests/evidence:** Late return/disruption/payment review fixtures.
 
+- [x] **DSH-013 — Implement upcoming fitting appointments and business performance**
+  - **Depends on:** DSH-001, persisted fitting appointments, reservation completion timestamps, and customer profiles.
+  - **Outcome:** The visible fitting table and Business Performance card use persisted database state instead of sample values.
+  - **Acceptance:**
+    - [x] Upcoming fitting appointments cover the remainder of today plus the next two branch-local days, include only future `pending`/`confirmed` rows, and use persisted booking channel labels.
+    - [x] Completed rental value excludes deposits and is labelled as rental value rather than accounting revenue.
+    - [x] Current and previous calendar-month values, counts, average, and active customer profile counts are returned with zero-baseline-safe values.
+    - [x] Customer contact details, fitting notes, payment details, and fabricated fitting subtypes are not returned.
+  - **Tests/evidence:** Focused dashboard PostgreSQL integration, contract tests, and dashboard component tests pass.
+
 ## Phase 2: Dashboard UI integration
 
 - [ ] **DSH-020 — Replace dashboard mock metrics**
   - **Depends on:** DSH-010.
   - **Outcome:** Existing metric cards use real API data.
   - **Acceptance:**
-    - [ ] Loading/skeleton state avoids showing fake zeroes as authoritative data.
-    - [ ] Error state is visible and retryable.
+    - [x] Loading state avoids showing fake zeroes as authoritative data.
+    - [x] Error state is visible and retryable.
     - [ ] Theme toggle does not change semantic meaning of metric tones.
-    - [ ] Metric labels match the dictionary exactly.
-  - **Tests/evidence:** Component/browser tests with seeded tenant data.
+    - [x] Metric labels match the dictionary exactly.
+    - [x] Active-rental, pickup, return, fitting, payment-review, and business-performance values render from `getDashboardOverview()`; no sample metrics are used as fallbacks.
+  - **Tests/evidence:** `app/tests/unit/dashboard-overview.test.tsx` covers loading, API-backed metric/date values, empty lists, retry, and prior-month zero baseline. Authenticated browser verification and global theme semantic-tone review remain open; the full app suite also has unrelated existing test failures.
 
 - [ ] **DSH-021 — Replace dashboard mock activity/attention lists**
   - **Depends on:** DSH-011, DSH-012.
@@ -116,6 +127,7 @@ Before marking a task complete:
     - [ ] “View all” routes to the correct filtered Reservations/Calendar page.
     - [ ] No duplicate mock customer/clothing data remains.
   - **Tests/evidence:** Drill-down identity tests.
+  - **Current scope note:** Today's schedule and upcoming-rental/fitting rows are data-backed. Attention/readiness queues and dashboard drill-down actions remain open; this task is not complete.
 
 - [ ] **DSH-022 — Connect dashboard quick actions safely**
   - **Depends on:** Reservation mutation APIs.
@@ -167,7 +179,8 @@ Before marking a task complete:
     - [ ] Queue query uses indexed tenant/status/date predicates.
     - [ ] Detail enrichment is batched; no per-row query loop for ordinary load.
     - [ ] Representative tenant scale includes 1,000 assets and realistic reservation volume.
-  - **Tests/evidence:** Query-plan/load measurements.
+  - **Tests/evidence:** Focused PostgreSQL EXPLAIN coverage with 5,000 completed reservation history rows and 5,000 customer profiles; representative 1,000-asset/load measurements remain open.
+  - **Implementation note:** The overview is one database statement with per-list candidate bounds and capped item enrichment. EXPLAIN showed historical completion and active-customer lookups needed dedicated partial indexes, added in [0061_dashboard_overview_indexes.sql](../../../api/src/db/migrations/0061_dashboard_overview_indexes.sql). The focused plan test verifies both indexes are used without sequential scans; broader 1,000-asset/load evidence is still required before closing DSH-040.
 
 - [ ] **DSH-041 — Handle partial dependency/read failures safely**
   - **Depends on:** DSH-020, DSH-021.
@@ -203,6 +216,6 @@ Before marking a task complete:
 ## Deferred from Dashboard V1
 
 - Advanced business analytics/revenue intelligence.
-- Real fitting metrics/work queues — V1.1.
+- Fitting mutations and dedicated fitting work queues; fitting appointment counts/table are now in the live overview scope.
 - Multi-branch executive aggregation — V2.
 - Predictive/AI operational recommendations.

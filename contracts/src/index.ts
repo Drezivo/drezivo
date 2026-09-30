@@ -18,6 +18,7 @@ export * from './files';
 export * from './tenancy';
 export * from './guest';
 export * from './operator';
+export * from './dashboard';
 
 /**
  * The exact `@drezivo/contracts` version this build was compiled against.

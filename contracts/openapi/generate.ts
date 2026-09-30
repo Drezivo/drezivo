@@ -106,6 +106,7 @@ import {
   fittingWeeklyHoursUpdateResponse,
   guestReservationView,
   dashboardFittingSummaryResponse,
+  dashboardOverviewResponse,
   guestReservationRequest,
   guestReservationCreated,
   guestReceiptUploadRequest,
@@ -950,6 +951,23 @@ registry.registerPath({
     404: jsonError('The active branch could not be found.'),
     409: jsonError('The tenant lifecycle does not permit this operational read.'),
     422: jsonError('The clothing availability query is invalid or exceeds the bounded window.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/dashboard/overview',
+  tags: ['dashboard'],
+  summary: 'Read the active branch dashboard overview from authoritative reservations, fittings, payment evidence, and customers.',
+  responses: {
+    200: {
+      description:
+        'Branch-local operational counts and bounded dashboard lists, with completed rental value and active customer counts for the current and prior calendar months.',
+      content: { 'application/json': { schema: successEnvelope(dashboardOverviewResponse) } },
+    },
+    403: jsonError('Reservation management permission is required.'),
+    404: jsonError('The active branch could not be found.'),
+    409: jsonError('The tenant lifecycle does not permit this operational read.'),
   },
 });
 

@@ -457,7 +457,7 @@ export async function rejectReservation(
 export async function getReservationList(
   input: ReservationReadContext,
   query: ReservationListQuery,
-  storage: ObjectStorage = s3ObjectStorage,
+  storage: ObjectStorage = objectStorage,
 ): Promise<ReservationListResponse> {
   assertReservationReadContext(input);
 

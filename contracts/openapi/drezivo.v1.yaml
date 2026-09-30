@@ -106,7 +106,7 @@ components:
           format: uuid
         booking_channel:
           type: string
-          enum: &a35
+          enum: &a36
             - staff
             - storefront
         status:
@@ -318,7 +318,7 @@ components:
           type: array
           items:
             type: string
-            enum: &a36
+            enum: &a37
               - confirm
               - reject
               - cancel
@@ -557,7 +557,7 @@ components:
             properties:
               weekday:
                 type: string
-                enum: &a37
+                enum: &a38
                   - monday
                   - tuesday
                   - wednesday
@@ -6465,7 +6465,7 @@ paths:
                           - "null"
                       theme:
                         type: string
-                        enum: &a40
+                        enum: &a41
                           - ivory
                           - sage
                           - blush
@@ -12586,6 +12586,716 @@ paths:
                   - success
                   - error
                   - request_id
+  /dashboard/overview:
+    get:
+      tags:
+        - dashboard
+      summary: Read the active branch dashboard overview from authoritative
+        reservations, fittings, payment evidence, and customers.
+      responses:
+        "200":
+          description: Branch-local operational counts and bounded dashboard lists, with
+            completed rental value and active customer counts for the current
+            and prior calendar months.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      window:
+                        type: object
+                        properties:
+                          timezone:
+                            type: string
+                            pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
+                          as_of:
+                            type: string
+                            format: date-time
+                          today:
+                            type: object
+                            properties:
+                              start:
+                                type: string
+                                format: date-time
+                              end:
+                                type: string
+                                format: date-time
+                            required:
+                              - start
+                              - end
+                          upcoming_rentals:
+                            type: object
+                            properties:
+                              start:
+                                type: string
+                                format: date-time
+                              end:
+                                type: string
+                                format: date-time
+                            required:
+                              - start
+                              - end
+                          upcoming_fittings:
+                            type: object
+                            properties:
+                              start:
+                                type: string
+                                format: date-time
+                              end:
+                                type: string
+                                format: date-time
+                            required:
+                              - start
+                              - end
+                          current_month:
+                            type: object
+                            properties:
+                              start:
+                                type: string
+                                format: date-time
+                              end:
+                                type: string
+                                format: date-time
+                            required:
+                              - start
+                              - end
+                          previous_month:
+                            type: object
+                            properties:
+                              start:
+                                type: string
+                                format: date-time
+                              end:
+                                type: string
+                                format: date-time
+                            required:
+                              - start
+                              - end
+                        required:
+                          - timezone
+                          - as_of
+                          - today
+                          - upcoming_rentals
+                          - upcoming_fittings
+                          - current_month
+                          - previous_month
+                        additionalProperties: false
+                      metrics:
+                        type: object
+                        properties:
+                          active_rentals:
+                            type: integer
+                            minimum: -9007199254740991
+                            maximum: 9007199254740991
+                          pickups_today:
+                            type: integer
+                            minimum: -9007199254740991
+                            maximum: 9007199254740991
+                          returns_today:
+                            type: integer
+                            minimum: -9007199254740991
+                            maximum: 9007199254740991
+                          fittings_today:
+                            type: integer
+                            minimum: -9007199254740991
+                            maximum: 9007199254740991
+                          payments_to_review:
+                            type: integer
+                            minimum: -9007199254740991
+                            maximum: 9007199254740991
+                        required:
+                          - active_rentals
+                          - pickups_today
+                          - returns_today
+                          - fittings_today
+                          - payments_to_review
+                        additionalProperties: false
+                      today_schedule:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              anyOf:
+                                - oneOf:
+                                    - type: object
+                                      properties:
+                                        id:
+                                          type: string
+                                          minLength: 1
+                                          maxLength: 100
+                                        source:
+                                          type: string
+                                          enum:
+                                            - reservation
+                                        source_id:
+                                          type: string
+                                          format: uuid
+                                        event_type:
+                                          type: string
+                                          enum:
+                                            - pickup
+                                        period:
+                                          type: object
+                                          properties:
+                                            start:
+                                              type: string
+                                              format: date-time
+                                            end:
+                                              type: string
+                                              format: date-time
+                                          required:
+                                            - start
+                                            - end
+                                        customer_name:
+                                          type: string
+                                          minLength: 1
+                                          maxLength: 200
+                                        customer_phone:
+                                          type:
+                                            - string
+                                            - "null"
+                                          minLength: 1
+                                          maxLength: 50
+                                        rental_items:
+                                          type: array
+                                          items:
+                                            type: object
+                                            properties:
+                                              name:
+                                                type: string
+                                                minLength: 1
+                                                maxLength: 200
+                                              rental_minor:
+                                                type: string
+                                                pattern: ^-?(0|[1-9]\d*)$
+                                              currency:
+                                                type: string
+                                                pattern: ^[A-Z]{3}$
+                                            required:
+                                              - name
+                                              - rental_minor
+                                              - currency
+                                            additionalProperties: false
+                                          maxItems: 20
+                                        rental_days:
+                                          type: integer
+                                          exclusiveMinimum: 0
+                                          minimum: -9007199254740991
+                                          maximum: 9007199254740991
+                                        status:
+                                          type: string
+                                          enum: &a35
+                                            - pending_confirmation
+                                            - confirmed
+                                            - picked_up
+                                            - returned
+                                            - completed
+                                      required:
+                                        - id
+                                        - source
+                                        - source_id
+                                        - event_type
+                                        - period
+                                        - customer_name
+                                        - customer_phone
+                                        - rental_items
+                                        - rental_days
+                                        - status
+                                      additionalProperties: false
+                                    - type: object
+                                      properties:
+                                        id:
+                                          type: string
+                                          minLength: 1
+                                          maxLength: 100
+                                        source:
+                                          type: string
+                                          enum:
+                                            - reservation
+                                        source_id:
+                                          type: string
+                                          format: uuid
+                                        event_type:
+                                          type: string
+                                          enum:
+                                            - return
+                                        period:
+                                          type: object
+                                          properties:
+                                            start:
+                                              type: string
+                                              format: date-time
+                                            end:
+                                              type: string
+                                              format: date-time
+                                          required:
+                                            - start
+                                            - end
+                                        customer_name:
+                                          type: string
+                                          minLength: 1
+                                          maxLength: 200
+                                        customer_phone:
+                                          type:
+                                            - string
+                                            - "null"
+                                          minLength: 1
+                                          maxLength: 50
+                                        rental_items:
+                                          type: array
+                                          items:
+                                            type: object
+                                            properties:
+                                              name:
+                                                type: string
+                                                minLength: 1
+                                                maxLength: 200
+                                              rental_minor:
+                                                type: string
+                                                pattern: ^-?(0|[1-9]\d*)$
+                                              currency:
+                                                type: string
+                                                pattern: ^[A-Z]{3}$
+                                            required:
+                                              - name
+                                              - rental_minor
+                                              - currency
+                                            additionalProperties: false
+                                          maxItems: 20
+                                        rental_days:
+                                          type: integer
+                                          exclusiveMinimum: 0
+                                          minimum: -9007199254740991
+                                          maximum: 9007199254740991
+                                        status:
+                                          type: string
+                                          enum: *a35
+                                      required:
+                                        - id
+                                        - source
+                                        - source_id
+                                        - event_type
+                                        - period
+                                        - customer_name
+                                        - customer_phone
+                                        - rental_items
+                                        - rental_days
+                                        - status
+                                      additionalProperties: false
+                                - type: object
+                                  properties:
+                                    id:
+                                      type: string
+                                      minLength: 1
+                                      maxLength: 100
+                                    source:
+                                      type: string
+                                      enum:
+                                        - fitting
+                                    source_id:
+                                      type: string
+                                      format: uuid
+                                    event_type:
+                                      type: string
+                                      enum:
+                                        - fitting
+                                    period:
+                                      type: object
+                                      properties:
+                                        start:
+                                          type: string
+                                          format: date-time
+                                        end:
+                                          type: string
+                                          format: date-time
+                                      required:
+                                        - start
+                                        - end
+                                    customer_name:
+                                      type: string
+                                      minLength: 1
+                                      maxLength: 200
+                                    customer_phone:
+                                      type:
+                                        - string
+                                        - "null"
+                                      minLength: 1
+                                      maxLength: 50
+                                    item_names:
+                                      type: array
+                                      items:
+                                        type: string
+                                        minLength: 1
+                                        maxLength: 200
+                                      maxItems: 20
+                                    status:
+                                      type: string
+                                      enum:
+                                        - pending
+                                        - confirmed
+                                        - completed
+                                        - no_show
+                                  required:
+                                    - id
+                                    - source
+                                    - source_id
+                                    - event_type
+                                    - period
+                                    - customer_name
+                                    - customer_phone
+                                    - item_names
+                                    - status
+                                  additionalProperties: false
+                            maxItems: 6
+                          total:
+                            type: integer
+                            minimum: -9007199254740991
+                            maximum: 9007199254740991
+                          truncated:
+                            type: boolean
+                        required:
+                          - items
+                          - total
+                          - truncated
+                        additionalProperties: false
+                      upcoming_rentals:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id:
+                                  type: string
+                                  format: uuid
+                                customer_name:
+                                  type: string
+                                  minLength: 1
+                                  maxLength: 200
+                                item_names:
+                                  type: array
+                                  items:
+                                    type: string
+                                    minLength: 1
+                                    maxLength: 200
+                                  maxItems: 20
+                                pickup_at:
+                                  type: string
+                                  format: date-time
+                                due_at:
+                                  type: string
+                                  format: date-time
+                                status:
+                                  type: string
+                                  enum:
+                                    - pending_confirmation
+                                    - confirmed
+                              required:
+                                - id
+                                - customer_name
+                                - item_names
+                                - pickup_at
+                                - due_at
+                                - status
+                              additionalProperties: false
+                            maxItems: 5
+                          total:
+                            type: integer
+                            minimum: -9007199254740991
+                            maximum: 9007199254740991
+                          truncated:
+                            type: boolean
+                        required:
+                          - items
+                          - total
+                          - truncated
+                        additionalProperties: false
+                      upcoming_fitting_appointments:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id:
+                                  type: string
+                                  format: uuid
+                                customer_name:
+                                  type: string
+                                  minLength: 1
+                                  maxLength: 200
+                                garment_names:
+                                  type: array
+                                  items:
+                                    type: string
+                                    minLength: 1
+                                    maxLength: 200
+                                  maxItems: 20
+                                starts_at:
+                                  type: string
+                                  format: date-time
+                                ends_at:
+                                  type: string
+                                  format: date-time
+                                booking_channel:
+                                  type: string
+                                  enum: *a36
+                                status:
+                                  type: string
+                                  enum:
+                                    - pending
+                                    - confirmed
+                              required:
+                                - id
+                                - customer_name
+                                - garment_names
+                                - starts_at
+                                - ends_at
+                                - booking_channel
+                                - status
+                              additionalProperties: false
+                            maxItems: 5
+                          total:
+                            type: integer
+                            minimum: -9007199254740991
+                            maximum: 9007199254740991
+                          truncated:
+                            type: boolean
+                        required:
+                          - items
+                          - total
+                          - truncated
+                        additionalProperties: false
+                      business_performance:
+                        type: object
+                        properties:
+                          currency:
+                            type: string
+                            pattern: ^[A-Z]{3}$
+                          completed_rental_value:
+                            type: object
+                            properties:
+                              current_minor:
+                                type: string
+                                pattern: ^-?(0|[1-9]\d*)$
+                              previous_minor:
+                                type: string
+                                pattern: ^-?(0|[1-9]\d*)$
+                            required:
+                              - current_minor
+                              - previous_minor
+                            additionalProperties: false
+                          completed_rentals:
+                            type: object
+                            properties:
+                              current:
+                                type: integer
+                                minimum: -9007199254740991
+                                maximum: 9007199254740991
+                              previous:
+                                type: integer
+                                minimum: -9007199254740991
+                                maximum: 9007199254740991
+                            required:
+                              - current
+                              - previous
+                            additionalProperties: false
+                          average_rental_value:
+                            type: object
+                            properties:
+                              current_minor:
+                                type:
+                                  - string
+                                  - "null"
+                                pattern: ^-?(0|[1-9]\d*)$
+                              previous_minor:
+                                type:
+                                  - string
+                                  - "null"
+                                pattern: ^-?(0|[1-9]\d*)$
+                            required:
+                              - current_minor
+                              - previous_minor
+                            additionalProperties: false
+                          new_customers:
+                            type: object
+                            properties:
+                              current:
+                                type: integer
+                                minimum: -9007199254740991
+                                maximum: 9007199254740991
+                              previous:
+                                type: integer
+                                minimum: -9007199254740991
+                                maximum: 9007199254740991
+                            required:
+                              - current
+                              - previous
+                            additionalProperties: false
+                        required:
+                          - currency
+                          - completed_rental_value
+                          - completed_rentals
+                          - average_rental_value
+                          - new_customers
+                        additionalProperties: false
+                    required:
+                      - window
+                      - metrics
+                      - today_schedule
+                      - upcoming_rentals
+                      - upcoming_fitting_appointments
+                      - business_performance
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Reservation management permission is required.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a24
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "404":
+          description: The active branch could not be found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a24
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "409":
+          description: The tenant lifecycle does not permit this operational read.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a24
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
   /dashboard/fittings-summary:
     get:
       tags:
@@ -13195,7 +13905,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a35
+                            enum: *a36
                           status:
                             type: string
                             enum: *a1
@@ -13389,7 +14099,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a36
+                              enum: *a37
                             maxItems: 8
                           version:
                             type: integer
@@ -13593,7 +14303,7 @@ paths:
                         format: uuid
                       booking_channel:
                         type: string
-                        enum: *a35
+                        enum: *a36
                       status:
                         type: string
                         enum: *a1
@@ -13787,7 +14497,7 @@ paths:
                         type: array
                         items:
                           type: string
-                          enum: *a36
+                          enum: *a37
                         maxItems: 8
                       version:
                         type: integer
@@ -14129,7 +14839,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a35
+                            enum: *a36
                           status:
                             type: string
                             enum: *a1
@@ -14323,7 +15033,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a36
+                              enum: *a37
                             maxItems: 8
                           version:
                             type: integer
@@ -14566,7 +15276,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a35
+                            enum: *a36
                           status:
                             type: string
                             enum: *a1
@@ -14760,7 +15470,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a36
+                              enum: *a37
                             maxItems: 8
                           version:
                             type: integer
@@ -15034,7 +15744,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a35
+                            enum: *a36
                           status:
                             type: string
                             enum: *a1
@@ -15228,7 +15938,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a36
+                              enum: *a37
                             maxItems: 8
                           version:
                             type: integer
@@ -15497,7 +16207,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a35
+                            enum: *a36
                           status:
                             type: string
                             enum: *a1
@@ -15691,7 +16401,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a36
+                              enum: *a37
                             maxItems: 8
                           version:
                             type: integer
@@ -15964,7 +16674,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a35
+                            enum: *a36
                           status:
                             type: string
                             enum: *a1
@@ -16158,7 +16868,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a36
+                              enum: *a37
                             maxItems: 8
                           version:
                             type: integer
@@ -16431,7 +17141,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a35
+                            enum: *a36
                           status:
                             type: string
                             enum: *a1
@@ -16625,7 +17335,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a36
+                              enum: *a37
                             maxItems: 8
                           version:
                             type: integer
@@ -16893,7 +17603,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a35
+                            enum: *a36
                           status:
                             type: string
                             enum: *a1
@@ -17087,7 +17797,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a36
+                              enum: *a37
                             maxItems: 8
                           version:
                             type: integer
@@ -17355,7 +18065,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a35
+                            enum: *a36
                           status:
                             type: string
                             enum: *a1
@@ -17549,7 +18259,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a36
+                              enum: *a37
                             maxItems: 8
                           version:
                             type: integer
@@ -17820,7 +18530,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a35
+                            enum: *a36
                           status:
                             type: string
                             enum: *a1
@@ -18014,7 +18724,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a36
+                              enum: *a37
                             maxItems: 8
                           version:
                             type: integer
@@ -18285,7 +18995,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a35
+                            enum: *a36
                           status:
                             type: string
                             enum: *a1
@@ -18479,7 +19189,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a36
+                              enum: *a37
                             maxItems: 8
                           version:
                             type: integer
@@ -18770,7 +19480,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a35
+                            enum: *a36
                           status:
                             type: string
                             enum: *a1
@@ -18964,7 +19674,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a36
+                              enum: *a37
                             maxItems: 8
                           version:
                             type: integer
@@ -19245,7 +19955,7 @@ paths:
                           properties:
                             weekday:
                               type: string
-                              enum: *a37
+                              enum: *a38
                             windows:
                               type: array
                               items:
@@ -19424,7 +20134,7 @@ paths:
                               properties:
                                 weekday:
                                   type: string
-                                  enum: *a37
+                                  enum: *a38
                                 windows:
                                   type: array
                                   items:
@@ -19635,7 +20345,7 @@ paths:
                     properties:
                       weekday:
                         type: string
-                        enum: *a37
+                        enum: *a38
                       windows:
                         type: array
                         items:
@@ -19707,7 +20417,7 @@ paths:
                               properties:
                                 weekday:
                                   type: string
-                                  enum: *a37
+                                  enum: *a38
                                 windows:
                                   type: array
                                   items:
@@ -21088,7 +21798,7 @@ paths:
                               type:
                                 - string
                                 - "null"
-                              enum: &a39
+                              enum: &a40
                                 - requested
                                 - processing
                                 - completed
@@ -21440,7 +22150,7 @@ paths:
                   pattern: ^[A-Z]{3}$
                 purpose:
                   type: string
-                  enum: &a38
+                  enum: &a39
                     - rental_refund
                     - security_deposit_release
                     - goodwill_adjustment
@@ -21487,10 +22197,10 @@ paths:
                             pattern: ^[A-Z]{3}$
                           purpose:
                             type: string
-                            enum: *a38
+                            enum: *a39
                           status:
                             type: string
-                            enum: *a39
+                            enum: *a40
                           merchant_reference:
                             type:
                               - string
@@ -21727,7 +22437,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: &a41
+                        enum: &a42
                           - draft
                           - published
                           - suspended
@@ -21778,7 +22488,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a40
+                                enum: *a41
                             required:
                               - display_name
                               - tagline
@@ -22249,7 +22959,7 @@ paths:
                           format: uuid
                         theme:
                           type: string
-                          enum: *a40
+                          enum: *a41
                       required:
                         - display_name
                         - tagline
@@ -22465,7 +23175,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a41
+                        enum: *a42
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -22513,7 +23223,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a40
+                                enum: *a41
                             required:
                               - display_name
                               - tagline
@@ -23109,7 +23819,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a41
+                        enum: *a42
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -23157,7 +23867,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a40
+                                enum: *a41
                             required:
                               - display_name
                               - tagline
@@ -23618,7 +24328,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a41
+                        enum: *a42
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -23666,7 +24376,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a40
+                                enum: *a41
                             required:
                               - display_name
                               - tagline
@@ -24127,7 +24837,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a41
+                        enum: *a42
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -24175,7 +24885,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a40
+                                enum: *a41
                             required:
                               - display_name
                               - tagline
@@ -24689,7 +25399,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a41
+                        enum: *a42
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -24737,7 +25447,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a40
+                                enum: *a41
                             required:
                               - display_name
                               - tagline
