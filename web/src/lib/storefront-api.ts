@@ -53,6 +53,8 @@ interface CallOptions {
   bearer?: string;
   /** Server reads may be cached briefly; guest and write calls never are. */
   revalidate?: number;
+  /** Owner preview token (server reads only). A preview read is never cached. */
+  preview?: string | undefined;
 }
 
 async function call<S extends z.ZodTypeAny>(path: string, schema: S, options: CallOptions = {}): Promise<z.infer<S>> {
@@ -60,6 +62,8 @@ async function call<S extends z.ZodTypeAny>(path: string, schema: S, options: Ca
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
   if (options.bearer) headers['Authorization'] = `Bearer ${options.bearer}`;
+  if (options.preview) headers['X-Storefront-Preview'] = options.preview;
+  const cacheable = options.revalidate !== undefined && !options.preview;
 
   let response: Response;
   try {
@@ -67,7 +71,7 @@ async function call<S extends z.ZodTypeAny>(path: string, schema: S, options: Ca
       method: options.method ?? 'GET',
       headers,
       ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
-      ...(options.revalidate !== undefined ? { next: { revalidate: options.revalidate } } : { cache: 'no-store' as const }),
+      ...(cacheable ? { next: { revalidate: options.revalidate } } : { cache: 'no-store' as const }),
     });
   } catch {
     throw new StorefrontApiError('We could not reach the shop. Check your connection and try again.', 503, 'NETWORK');
@@ -83,25 +87,25 @@ async function call<S extends z.ZodTypeAny>(path: string, schema: S, options: Ca
 const store = (slug: string) => `/public/stores/${encodeURIComponent(slug)}`;
 
 /** Server-side read for pages. A missing, draft, or suspended store is `null` (the page 404s). */
-export async function getStore(slug: string): Promise<PublicStorefront | null> {
+export async function getStore(slug: string, preview?: string): Promise<PublicStorefront | null> {
   try {
-    return await call(store(slug), publicStorefront, { revalidate: 60 });
+    return await call(store(slug), publicStorefront, { revalidate: 60, preview });
   } catch (error) {
     if (error instanceof StorefrontApiError && error.status === 404) return null;
     throw error;
   }
 }
 
-export function getCatalogue(slug: string, query: Record<string, string | undefined>): Promise<CatalogueResponse> {
+export function getCatalogue(slug: string, query: Record<string, string | undefined>, preview?: string): Promise<CatalogueResponse> {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) if (value) params.set(key, value);
   const suffix = params.toString() ? `?${params.toString()}` : '';
-  return call(`${store(slug)}/catalogue${suffix}`, catalogueResponse, { revalidate: 60 });
+  return call(`${store(slug)}/catalogue${suffix}`, catalogueResponse, { revalidate: 60, preview });
 }
 
-export async function getItem(slug: string, productId: string): Promise<ItemDetail | null> {
+export async function getItem(slug: string, productId: string, preview?: string): Promise<ItemDetail | null> {
   try {
-    return await call(`${store(slug)}/products/${encodeURIComponent(productId)}`, itemDetail, { revalidate: 60 });
+    return await call(`${store(slug)}/products/${encodeURIComponent(productId)}`, itemDetail, { revalidate: 60, preview });
   } catch (error) {
     if (error instanceof StorefrontApiError && (error.status === 404 || error.status === 422)) return null;
     throw error;

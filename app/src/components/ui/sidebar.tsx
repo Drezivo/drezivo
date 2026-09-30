@@ -49,7 +49,8 @@ function SidebarProvider({
   children: React.ReactNode;
 }) {
   const isMobile = useIsMobile();
-  const [open, setOpen] = useState(false);
+  // Desktop starts expanded so every section is visible on first load; the header trigger collapses it.
+  const [open, setOpen] = useState(true);
   const [openMobile, setOpenMobile] = useState(false);
   const state: SidebarContextValue["state"] = open ? "expanded" : "collapsed";
   const toggleSidebar = useCallback(() => {

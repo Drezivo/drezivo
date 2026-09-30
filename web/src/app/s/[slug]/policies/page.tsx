@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { getStore } from '@/lib/storefront-api';
+import { readStore } from '@/lib/storefront-preview';
 import { formatMinor, formatTime } from '@/lib/storefront-format';
 
 export const metadata: Metadata = { title: 'Rental info' };
@@ -10,7 +10,7 @@ export const revalidate = 60;
 
 export default async function PoliciesPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const store = await getStore(slug);
+  const store = await readStore(slug);
   if (!store) notFound();
   const { policy, checkout, fulfillment } = store;
 

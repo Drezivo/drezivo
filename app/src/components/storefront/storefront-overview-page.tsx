@@ -29,6 +29,7 @@ import { Card, CardContent } from "@/components/ui/card";
 
 import { SocialLinks, StatusPill, StorefrontMiniPreview, storefrontUrl } from "./storefront-bits";
 import { useStorefrontEditor } from "./storefront-editor";
+import { StorefrontPreviewButton } from "./storefront-preview-button";
 
 export function StorefrontOverviewPage() {
   const editor = useStorefrontEditor();
@@ -125,19 +126,21 @@ function OverviewCard({ settings }: { settings: StorefrontSettings }) {
           )}
         </div>
       </div>
-      <CardContent className="grid gap-5 p-5 pt-12 sm:grid-cols-2">
-        <div>
+      <CardContent className="grid gap-5 p-5 pt-12 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="min-w-0">
           <h2 className="font-display text-xl font-semibold text-dashboard-navy">{branding.display_name}</h2>
           <p className="mt-1 text-sm text-dashboard-muted">{branding.tagline ?? "Add a short tagline in Edit details."}</p>
           <div className="mt-4">
             <SocialLinks settings={settings} />
           </div>
         </div>
-        <dl className="grid gap-4 text-sm">
+        <dl className="grid min-w-0 gap-4 text-sm">
           <div>
             <dt className="text-xs font-medium text-dashboard-muted">Store address</dt>
-            <dd className="mt-1 flex items-center gap-2">
-              <span className="min-w-0 truncate text-dashboard-navy">{fullUrl}</span>
+            {/* The address gets its own wrapping line and the actions sit below it, so a long
+                address can never push the buttons out of the card at any width. */}
+            <dd className="mt-1 break-all text-dashboard-navy">{fullUrl}</dd>
+            <dd className="mt-2 flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => void copy()}
@@ -154,11 +157,13 @@ function OverviewCard({ settings }: { settings: StorefrontSettings }) {
                 >
                   <ExternalLink className="h-3.5 w-3.5" /> Open
                 </a>
-              ) : null}
+              ) : (
+                <StorefrontPreviewButton />
+              )}
             </dd>
             {settings.status === "published" ? null : (
               <p className="mt-1.5 text-xs leading-5 text-dashboard-muted">
-                Not live yet. This link shows &ldquo;Page not found&rdquo; until you publish your storefront.
+                Not live yet. Renters see &ldquo;Page not found&rdquo; at this address until you publish. Use Preview to see it the way they will.
               </p>
             )}
           </div>

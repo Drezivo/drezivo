@@ -5,6 +5,7 @@ import { storefront } from '../../db/schema/index.js';
 import { eq, and } from 'drizzle-orm';
 
 import type { PolicySnapshotColumns } from './storefront-policy.js';
+import type { PreviewGrant } from './storefront-preview.js';
 
 /**
  * Public read path. Every query names its columns (no `SELECT *`), and the service maps rows onto
@@ -21,7 +22,22 @@ export interface PublishedStore {
   branchId: string;
 }
 
-export async function resolvePublishedStore(slug: string): Promise<PublishedStore | null> {
+/**
+ * The published storefront for a slug. With a verified owner preview grant, the storefront the
+ * grant names is returned even while it is a draft, and only if the slug still matches it.
+ * Draft rows are invisible to the global handle (RLS), so the preview read runs tenant-scoped.
+ */
+export async function resolvePublishedStore(slug: string, preview: PreviewGrant | null = null): Promise<PublishedStore | null> {
+  if (preview) {
+    return withTenantTransaction(preview.tenantId, 'anonymous:public', async (client) => {
+      const result = await client.query<{ id: string; tenant_id: string; branch_id: string }>(
+        `SELECT id, tenant_id, branch_id FROM storefront WHERE tenant_id = $1 AND id = $2 AND slug = $3`,
+        [preview.tenantId, preview.storefrontId, slug],
+      );
+      const row = result.rows[0];
+      return row ? { id: row.id, tenantId: row.tenant_id, branchId: row.branch_id } : null;
+    });
+  }
   const [row] = await db
     .select({ id: storefront.id, tenantId: storefront.tenantId, branchId: storefront.branchId })
     .from(storefront)
@@ -30,8 +46,12 @@ export async function resolvePublishedStore(slug: string): Promise<PublishedStor
   return row ?? null;
 }
 
-export function withPublishedStore<T>(slug: string, read: (client: PoolClient, store: PublishedStore) => Promise<T>): Promise<T | null> {
-  return resolvePublishedStore(slug).then((store) =>
+export function withPublishedStore<T>(
+  slug: string,
+  read: (client: PoolClient, store: PublishedStore) => Promise<T>,
+  preview: PreviewGrant | null = null,
+): Promise<T | null> {
+  return resolvePublishedStore(slug, preview).then((store) =>
     store ? withTenantTransaction(store.tenantId, 'anonymous:public', (client) => read(client, store)) : null,
   );
 }
@@ -400,12 +420,9 @@ export async function computeAvailability(
   variantId: string,
   fromIso: string,
   toIso: string,
+  preview: PreviewGrant | null = null,
 ): Promise<AvailabilityDayRow[] | null> {
-  const [publicRow] = await db
-    .select({ id: storefront.id, tenantId: storefront.tenantId, branchId: storefront.branchId })
-    .from(storefront)
-    .where(and(eq(storefront.slug, slug), eq(storefront.status, 'published')))
-    .limit(1);
+  const publicRow = await resolvePublishedStore(slug, preview);
 
   if (!publicRow) {
     return null;

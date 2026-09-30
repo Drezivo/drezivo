@@ -73,6 +73,7 @@ import {
   businessSettings,
   notificationSettings,
   publishStorefrontPolicyRequest,
+  storefrontPreviewLink,
   storefrontSettings,
   storefrontTransitionRequest,
   updateBusinessSettingsRequest,
@@ -204,6 +205,7 @@ import {
   type BusinessSettings,
   type NotificationSettings,
   type PublishStorefrontPolicyRequest,
+  type StorefrontPreviewLink,
   type StorefrontSettings,
   type UpdateBusinessSettingsRequest,
   type UpdateNotificationSettingsRequest,
@@ -1125,6 +1127,8 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
       }),
     getStorefront: () =>
       request<StorefrontSettings>({ getToken, method: "GET", path: "/api/v1/storefront", responseSchema: apiEnvelope(storefrontSettings) }),
+    getStorefrontPreview: () =>
+      request<StorefrontPreviewLink>({ getToken, method: "GET", path: "/api/v1/storefront/preview", responseSchema: apiEnvelope(storefrontPreviewLink) }),
     updateStorefront: (input: UpdateStorefrontRequest, idempotencyKey: string) =>
       request<StorefrontSettings>({
         getToken,

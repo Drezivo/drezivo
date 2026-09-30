@@ -2,7 +2,7 @@
 
 import { useAuth, useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AuthBrand } from "@/components/auth/auth-brand";
 import { DrezivoApiError } from "@/lib/drezivo-api";
@@ -12,35 +12,47 @@ type ResolveState =
   | { kind: "resolving" }
   | { kind: "error"; error: DrezivoApiError };
 
+const RESOLVE_TIMEOUT_MS = 20_000;
+
 export function PostAuthResolver() {
   const { getToken, isLoaded, isSignedIn, orgId } = useAuth();
   const { setActive } = useClerk();
   const router = useRouter();
   const [state, setState] = useState<ResolveState>({ kind: "resolving" });
+  // Clerk updates orgId and getToken while it finishes sign-in and while setActive runs. Read them
+  // through refs so those updates do not start a second, overlapping resolution.
+  const latest = useRef({ getToken, orgId, setActive });
+  latest.current = { getToken, orgId, setActive };
+  const started = useRef(false);
 
-  const resolveLanding = useCallback(async () => {
+  useEffect(() => {
     if (!isLoaded) return;
     if (!isSignedIn) {
       router.replace("/sign-in");
       return;
     }
+    if (started.current) return;
+    started.current = true;
 
-    setState({ kind: "resolving" });
-    try {
-      const resolution = await resolveStaffLanding({
-        activeOrganizationId: orgId,
-        getToken,
-        setActive,
-      });
-      router.replace(resolution.kind === "workspace" ? "/calendar" : "/onboarding");
-    } catch (error) {
-      setState({ kind: "error", error: toDrezivoApiError(error) });
-    }
-  }, [getToken, isLoaded, isSignedIn, orgId, router, setActive]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new DrezivoApiError("Opening your workspace took too long. Please try again.", { status: 504 })),
+        RESOLVE_TIMEOUT_MS
+      );
+    });
+    const { getToken: token, orgId: activeOrganizationId, setActive: activate } = latest.current;
 
-  useEffect(() => {
-    void resolveLanding();
-  }, [resolveLanding]);
+    Promise.race([resolveStaffLanding({ activeOrganizationId, getToken: token, setActive: activate }), timeout])
+      .then((resolution) => {
+        // A full navigation, not router.replace: Clerk refreshes the router right after sign-in, and
+        // that refresh cancelled the soft navigation, leaving this spinner up until a manual reload.
+        // replace() also keeps this page out of history, so Back does not return to it.
+        window.location.replace(resolution.kind === "workspace" ? "/calendar" : "/onboarding");
+      })
+      .catch((error: unknown) => setState({ kind: "error", error: toDrezivoApiError(error) }))
+      .finally(() => clearTimeout(timer));
+  }, [isLoaded, isSignedIn, router]);
 
   return (
     <main className="flex min-h-svh items-center justify-center bg-auth-night px-6 text-auth-text">
@@ -65,7 +77,7 @@ export function PostAuthResolver() {
             ) : null}
             <button
               type="button"
-              onClick={() => void resolveLanding()}
+              onClick={() => window.location.reload()}
               className="mt-7 inline-flex min-h-10 items-center justify-center rounded-full bg-auth-button px-6 text-sm font-semibold text-auth-button-ink transition hover:bg-auth-button-hover"
             >
               Try again

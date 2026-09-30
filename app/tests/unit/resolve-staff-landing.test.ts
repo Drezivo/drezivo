@@ -74,7 +74,8 @@ describe("resolveStaffLanding", () => {
       setActive,
     });
 
-    expect(result).toEqual({ kind: "workspace", workspace: workspaceB });
+    // The verified actor is returned too, so the dashboard shell can reuse it instead of refetching.
+    expect(result).toEqual({ kind: "workspace", workspace: workspaceB, actor: { tenant: { id: workspaceB.tenant.id } } });
     expect(setActive).not.toHaveBeenCalled();
     expect(api.getActorContext).toHaveBeenCalledTimes(1);
   });
