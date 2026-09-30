@@ -6,11 +6,14 @@ import type {
   ClothingAvailabilityTimelineResponse,
   ClothingAvailabilityTimelineRow,
   ClothingAvailabilityTimelineStatus,
+  PhysicalAssetSummary,
+  UpdatePhysicalAssetStateResponse,
 } from "@drezivo/contracts";
 import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  LoaderCircle,
   Search,
   Shirt,
 } from "lucide-react";
@@ -20,6 +23,7 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -33,6 +37,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  ManagePhysicalAssetDialog,
+  physicalAssetUpdateSuccessMessage,
+} from "@/components/inventory/manage-physical-asset-dialog";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { cn } from "@/lib/utils";
@@ -85,6 +93,11 @@ export function CalendarAvailabilityPage() {
   const [isContextResolved, setIsContextResolved] = useState(false);
   const [windowStart, setWindowStart] = useState<string | null>(null);
   const [selectedAgenda, setSelectedAgenda] = useState<SelectedAgenda | null>(null);
+  const [managedAsset, setManagedAsset] = useState<PhysicalAssetSummary | null>(null);
+  const [managedAssetSize, setManagedAssetSize] = useState<string | null>(null);
+  const [isLoadingManagedAsset, setIsLoadingManagedAsset] = useState(false);
+  const [manageReadinessError, setManageReadinessError] = useState<string | null>(null);
+  const [readinessNotice, setReadinessNotice] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query.trim());
   const [categoryId, setCategoryId] = useState<
@@ -100,6 +113,7 @@ export function CalendarAvailabilityPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<DrezivoApiError | null>(null);
   const [reloadVersion, setReloadVersion] = useState(0);
+  const assetLookupGeneration = useRef(0);
 
   const currentCursor = pageCursors[pageIndex] ?? null;
   const windowEnd = windowStart
@@ -119,10 +133,49 @@ export function CalendarAvailabilityPage() {
   const permissionRestricted = error?.status === 403 || error?.code === "FORBIDDEN";
 
   const resetPagination = useCallback(() => {
+    assetLookupGeneration.current += 1;
+    setIsLoadingManagedAsset(false);
+    setManageReadinessError(null);
     setPageIndex(0);
     setPageCursors([null]);
     setSelectedAgenda(null);
   }, []);
+
+  const manageReadiness = async (item: ClothingAvailabilityTimelineRow) => {
+    const generation = ++assetLookupGeneration.current;
+    setManagedAsset(null);
+    setManagedAssetSize(null);
+    setManageReadinessError(null);
+    setIsLoadingManagedAsset(true);
+
+    try {
+      const result = await createDrezivoApiClient(getToken).getCatalogueClothingDetail(
+        item.product.id
+      );
+      if (assetLookupGeneration.current !== generation) return;
+
+      const matchingVariant = result.data.variants.find((variant) =>
+        variant.assets.some((asset) => asset.id === item.asset.id)
+      );
+      const asset = matchingVariant?.assets.find((candidate) => candidate.id === item.asset.id);
+      if (!asset || !matchingVariant) {
+        throw new DrezivoApiError(
+          "This physical piece could not be found. Refresh the calendar and try again.",
+          { status: 404 }
+        );
+      }
+
+      setManagedAsset(asset);
+      setManagedAssetSize(matchingVariant.size_label);
+    } catch (caughtError) {
+      if (assetLookupGeneration.current !== generation) return;
+      setManageReadinessError(toDrezivoApiError(caughtError).message);
+    } finally {
+      if (assetLookupGeneration.current === generation) {
+        setIsLoadingManagedAsset(false);
+      }
+    }
+  };
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -254,6 +307,14 @@ export function CalendarAvailabilityPage() {
     <div className="min-h-full bg-dashboard-canvas px-3 py-5 sm:px-4 lg:px-5">
       <div className="flex w-full max-w-none flex-col gap-4">
         <AvailabilityHeading />
+        {readinessNotice ? (
+          <p
+            role="status"
+            className="rounded-lg border border-dashboard-border bg-dashboard-surface px-4 py-3 text-sm text-dashboard-navy"
+          >
+            {readinessNotice}
+          </p>
+        ) : null}
         <AvailabilityControls
           categoryFilter={categoryLabel}
           categoryOptions={facets.categories.map((category) => ({
@@ -298,7 +359,12 @@ export function CalendarAvailabilityPage() {
           isLoading={isLoading}
           items={timeline?.rows ?? []}
           onNextPage={goNextPage}
-          onOpenAgenda={(assetId, agendaId) => setSelectedAgenda({ assetId, agendaId })}
+          onOpenAgenda={(assetId, agendaId) => {
+            assetLookupGeneration.current += 1;
+            setIsLoadingManagedAsset(false);
+            setManageReadinessError(null);
+            setSelectedAgenda({ assetId, agendaId });
+          }}
           onPageSizeChange={(value) => {
             setPageSize(value);
             resetPagination();
@@ -321,8 +387,41 @@ export function CalendarAvailabilityPage() {
         open={Boolean(selectedItem && selectedBlock)}
         rangeLabel={rangeLabel}
         timeZone={effectiveTimeZone}
+        canManageReadiness={
+          selectedBlock?.type === "unavailable" && selectedItem?.asset.readiness !== "ready"
+        }
+        isLoadingManagedAsset={isLoadingManagedAsset}
+        manageReadinessError={manageReadinessError}
+        onManageReadiness={() => {
+          if (selectedItem) void manageReadiness(selectedItem);
+        }}
         onOpenChange={(open) => {
-          if (!open) setSelectedAgenda(null);
+          if (!open) {
+            assetLookupGeneration.current += 1;
+            setIsLoadingManagedAsset(false);
+            setManageReadinessError(null);
+            setSelectedAgenda(null);
+          }
+        }}
+      />
+
+      <ManagePhysicalAssetDialog
+        asset={managedAsset}
+        sizeLabel={managedAssetSize}
+        open={managedAsset !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setManagedAsset(null);
+            setManagedAssetSize(null);
+          }
+        }}
+        onUpdated={(result: UpdatePhysicalAssetStateResponse) => {
+          assetLookupGeneration.current += 1;
+          setManagedAsset(null);
+          setManagedAssetSize(null);
+          setSelectedAgenda(null);
+          setReloadVersion((value) => value + 1);
+          setReadinessNotice(physicalAssetUpdateSuccessMessage(result));
         }}
       />
     </div>
@@ -858,14 +957,22 @@ function TimelineState({
 }
 
 function AvailabilityDetailsSheet({
+  canManageReadiness,
+  isLoadingManagedAsset,
   item,
+  manageReadinessError,
+  onManageReadiness,
   onOpenChange,
   open,
   rangeLabel,
   selectedBlock,
   timeZone,
 }: {
+  canManageReadiness: boolean;
+  isLoadingManagedAsset: boolean;
   item: ClothingAvailabilityTimelineRow | null;
+  manageReadinessError: string | null;
+  onManageReadiness: () => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
   rangeLabel: string;
@@ -1016,6 +1123,36 @@ function AvailabilityDetailsSheet({
                 <CardContent className="p-4">
                   <h3 className="text-sm font-semibold text-dashboard-navy">Quick Actions</h3>
                   <div className="mt-3 space-y-2">
+                    {canManageReadiness ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={isLoadingManagedAsset}
+                        aria-busy={isLoadingManagedAsset}
+                        onClick={onManageReadiness}
+                        className="h-10 w-full justify-start border border-dashboard-border bg-dashboard-surface px-4 text-dashboard-navy hover:bg-dashboard-active"
+                      >
+                        {isLoadingManagedAsset ? (
+                          <LoaderCircle className="h-4 w-4 animate-spin text-dashboard-accent" aria-hidden="true" />
+                        ) : (
+                          <Shirt className="h-4 w-4 text-dashboard-accent" aria-hidden="true" />
+                        )}
+                        Manage readiness
+                      </Button>
+                    ) : null}
+                    {manageReadinessError ? (
+                      <p
+                        role="alert"
+                        className="rounded-md border border-dashboard-danger/30 bg-dashboard-danger/10 px-3 py-2 text-xs text-dashboard-danger"
+                      >
+                        {manageReadinessError}
+                      </p>
+                    ) : null}
+                    {canManageReadiness ? (
+                      <p className="text-xs text-dashboard-muted">
+                        Marking a piece Ready does not remove reservation or maintenance blocks.
+                      </p>
+                    ) : null}
                     <QuickLink href={`/inventory/${item.product.id}`} icon={Shirt} label="View Clothing Details" />
                     <QuickLink href="/reservations" icon={CalendarDays} label="View Reservations" />
                   </div>
