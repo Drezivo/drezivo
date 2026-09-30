@@ -195,8 +195,7 @@ the onboarding record. For a trial-eligible owner, completion runs one idempoten
     same transaction; and
 11. return the tenant, default branch, Owner membership, branch grants, and subscription summary.
 
-Bootstrap creates `Main Branch` (`main`) in `Asia/Manila` with empty address and operating-hours
-placeholders. A supplied slug is preserved exactly. When no slug was supplied, the server
+Bootstrap creates `Main Branch` (`main`) in `Asia/Manila` with empty address and canonical default Business Hours of `08:00–20:00` with Sunday closed. These defaults are stored in `branch.operating_hours`; later owner edits use the Business Information Settings flow. A supplied slug is preserved exactly. When no slug was supplied, the server
 normalizes the organization name and adds a stable onboarding-derived suffix only if the shared
 tenant/storefront slug namespace is occupied. The Starter, Professional, and Business version-1
 plan rows are seeded before bootstrap can run, with 125/300/1,000 physical-asset limits and

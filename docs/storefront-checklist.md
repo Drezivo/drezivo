@@ -170,8 +170,7 @@ MinIO community builds are no longer published, so a small local S3 stand-in out
       measurements (custom values, the default guide image, or none).
 - [x] `GET /public/stores/:slug/availability`: day states for one size, in store time. Days inside
       minimum notice are unavailable, and internal reasons collapse to `unavailable`.
-- [x] `GET /public/stores/:slug/fitting-slots`: 30-minute starts inside the weekly windows, with
-      closures and capacity applied. It uses the same rules as fitting creation.
+- [x] `GET /public/stores/:slug/fitting-slots`: 30-minute starts inside the active branch Business Hours, with recurring closed weekdays, special closed dates, and capacity applied. It uses the same rules as fitting creation.
 - [x] The repository was rewritten set-based. The old per-product image and variant loop (N+1)
       is gone. Images are signed in one query per response.
 - [x] Fixed an existing bug: public product images were filtered on `is_private = false`, but
@@ -194,7 +193,7 @@ MinIO community builds are no longer published, so a small local S3 stand-in out
   - an archived item returns `404`;
   - availability honours notice, a foreign size returns `404`, and a window over 62 days gets
     `422`;
-  - fitting slots follow opt-in, hours, and closures.
+  - fitting slots follow opt-in, active-branch Business Hours, recurring closed weekdays, special closed dates, and capacity.
 
 > Accepted exposure: a signed image URL contains the files module's object key, which includes
 > the tenant UUID. The UUID grants nothing, because no API trusts a browser-sent tenant id. If
@@ -284,7 +283,7 @@ MinIO community builds are no longer published, so a small local S3 stand-in out
       version.
 - [x] `/storefront/requirements`: phone, social handle, and event date, each Required, Optional,
       or Don't ask. `/storefront/settings`: handover time, minimum notice, longest rental,
-      online fitting requests, and links to the fitting schedule and payment methods.
+      online fitting requests, and links to Business Hours/Fitting Settings and payment methods. Public fitting slots consume the active branch Business Hours plus special closed dates; Storefront does not own a separate weekly fitting schedule.
 - [x] `/settings`, with a section nav in the reference layout:
   - Business information: editable, with fixed regional details and a completeness summary;
   - Payment methods and Measurement guide: the existing pages, re-framed inside the nav;

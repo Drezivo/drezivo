@@ -3,15 +3,15 @@ title: Fittings V1.1 Implementation Checklist
 type: implementation-checklist
 status: in-progress
 owner: Drezivo team
-updated: 2026-09-27
+updated: 2026-10-01
 tags: [drezivo, v1.1, fittings, frontend, backend, implementation, checklist]
 ---
 
 # Fittings V1.1 Implementation Checklist
 
-**Status:** Frontend prototype approved. Backend Phases BE-0 through BE-5 are implemented, with the isolated Neon-branch rehearsal for FIT-BE-025 still outstanding. BE-6 backend schedule behavior is implemented through FIT-BE-063; FIT-BE-061 remains open only for the frontend session-storage cutover intentionally deferred to FIT-BE-101. BE-7 fitting finance integration is complete through FIT-BE-074. BE-8 cross-product backend integration is complete through FIT-BE-083. BE-9 security, reliability, observability, and hardening is complete through FIT-BE-094: the production fitting router is mounted, authorization/RLS/pool isolation and contention have dedicated falsification coverage, safe audit/failure observability is active, and representative list/calendar query plans are verified. Frontend production cutover remains intentionally deferred to BE-10.
+**Status:** Historical fitting implementation record. The original fitting-owned weekly-hours/closure model and `/fittings/schedule` page are **superseded as of 2026-10-01** by [[Business Hours and Fittings Schedule Refactor Tasks]]. Current production ownership is: Business Information Settings owns branch Business Hours and special closed dates; `/fittings` owns appointment operations plus a modal containing only enabled state, capacity, strict duration, and fee; Calendar/Storefront consume Business Hours but do not own schedule configuration. Older checked items below remain historical evidence and must not be treated as current product guidance.
 
-This file is the feature-wide implementation checklist for `/fittings` and `/fittings/schedule`. The original frontend prototype phases are retained below as implementation history; the backend phases are appended after the frontend section.
+This file is the historical feature-wide implementation record for Fittings. The original frontend prototype and backend phases are retained below as implementation history; current scheduling ownership is defined by the canonical specifications and the Business Hours refactor record.
 
 **Canonical specifications:** [[Fittings Backend Decision Record]], [PRD](../../product/Drezivo-PRD.md), [TRD](../../architecture/Drezivo-TRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), and [ERD](../../architecture/Drezivo-ERD.dbml).
 
@@ -31,11 +31,12 @@ The fitting frontend will **not** expose rooms, staff assignment, capacity-slot 
 
 This frontend decision is now matched by the approved backend model: capacity is enforced with hidden branch capacity slots that are never exposed as room/staff/resource management. Reintroducing named resources requires a new coordinated product/architecture decision.
 
-The staff-facing schedule should stay simple:
+Current staff-facing configuration stays simple:
 
-- fitting operating days/hours;
-- appointment duration;
-- breaks/closures;
+- Business Information Settings: one branch opening time, one closing time, recurring closed weekdays, and special closed dates;
+- Fitting Settings modal: enabled state, appointment duration, simultaneous capacity, and optional fixed fee.
+
+Historical fitting-owned hours/breaks/closures entries below are superseded.
 
 ## Frontend prototype boundary
 
@@ -49,8 +50,8 @@ The staff-facing schedule should stay simple:
 - New Fitting prototype flow.
 - Garment preference versus guaranteed-garment presentation.
 - Fitting fee/payment-state presentation where useful.
-- `/fittings/schedule` staff page.
-- Branch-scoped fitting settings: enabled state, maximum simultaneous capacity, strict duration, optional fixed fee, weekly hours, and date-specific closures.
+- Historical `/fittings/schedule` staff page prototype (superseded; production route removed).
+- Historical fitting-owned weekly hours/date-specific closures (superseded by branch Business Hours and `branch_closure`).
 - Loading, empty, error, disabled, responsive, keyboard, and dark-mode states.
 
 ### Explicitly out of scope
@@ -397,7 +398,7 @@ Prototype-only strings such as `Guaranteed intent` and fixture payment labels st
 
 ---
 
-# Phase 5: `/fittings/schedule` hours and schedule-settings prototype
+# Phase 5: historical `/fittings/schedule` prototype — superseded by Business Hours
 
 - [ ] **FIT-FE-050 — Align Fitting Schedule & Availability page with canonical branch settings** _(reopened after BE-0)_
   - **Acceptance:**
@@ -974,7 +975,7 @@ The fitting frontend prototype is complete when:
 
 ---
 
-# Backend Phase BE-6: Fitting schedule settings
+# Backend Phase BE-6: historical fitting schedule settings — superseded by Business Hours
 
 - [x] **FIT-BE-060 — Implement weekly fitting-hours commands**
   - **Acceptance:**

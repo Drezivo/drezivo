@@ -3,7 +3,7 @@ title: Fittings Backend Decision Record
 type: product-domain-decision-record
 status: approved-for-implementation
 owner: Drezivo team
-updated: 2026-09-26
+updated: 2026-10-01
 tags: [drezivo, v1.1, fittings, backend, decisions, domain]
 ---
 
@@ -30,15 +30,14 @@ Canonical architecture must remain aligned with the [PRD](../../product/Drezivo-
 
 Fitting configuration is branch-scoped. In the current single-default-branch product the frontend may present this as business-level configuration, but persistence belongs to the branch.
 
-Each branch has:
+Fitting-specific configuration for each branch has:
 
-- `fittings_enabled`.
-- Maximum simultaneous fittings.
-- Strict fitting duration.
-- Optional fixed fitting fee.
-- Weekly operating windows.
-- Date-specific closures.
-- The branch timezone already established by the platform.
+- enabled state;
+- maximum simultaneous fittings;
+- strict fitting duration;
+- optional fixed fitting fee.
+
+The branch itself separately owns canonical Business Hours through `branch.operating_hours`: one opening time, one closing time, recurring closed weekdays, optimistic version, and update timestamp. Whole-day special closures live in `branch_closure`. The branch timezone remains authoritative for both.
 
 Only Owner may change fitting configuration. Owner and Front Desk may view it.
 
@@ -49,7 +48,7 @@ Disabling fittings:
 - does not cancel or invalidate existing appointments;
 - does not block lifecycle actions on existing appointments.
 
-Configuration changes must not invalidate future appointments already accepted by the system. A capacity reduction, hours change, or new closure that conflicts with existing future fittings is rejected. Duration and fee changes apply only to newly created fittings because appointments snapshot their effective period/fee.
+Configuration changes must not invalidate future appointments already accepted by the system. Capacity reduction, Business Hours changes, recurring closed-weekday changes, or special closed-date changes that conflict with accepted future fittings are rejected. Duration and fee changes apply only to newly created fittings because appointments snapshot their effective period/fee.
 
 ## Capacity and concurrency model
 
@@ -77,14 +76,13 @@ Scheduling grid:
 
 A fitting is schedulable only when its entire appointment period:
 
-- falls inside one enabled weekly operating window;
-- does not overlap a date-specific closure;
+- fits inside the active branch Business Hours opening/closing window;
+- occurs on a weekday not listed in `closed_weekdays`;
+- does not fall on a `branch_closure` local date;
 - has an available hidden capacity slot;
 - can claim every requested guaranteed garment.
 
-Recurring breaks are represented by gaps between weekly operating windows. Example: `09:00–12:00` plus `13:00–17:00` makes `12:00–13:00` unavailable without a separate recurring-break entity.
-
-Date-specific closures represent holidays, private events, temporary partial-day closures, or full-day closures.
+V1 Business Hours deliberately use one shared daily opening/closing window rather than fitting-specific per-weekday windows or recurring-break gaps. `branch_closure` represents whole-day special closures such as holidays or private events.
 
 Branch timezone is authoritative. Staff enters local branch date/time; the backend stores the bounded timestamp period plus a timezone snapshot.
 
@@ -259,26 +257,26 @@ Owner and Front Desk may perform operational fitting actions:
 - mark no-show after start;
 - edit internal note.
 
-Owner only may mutate fitting configuration:
+Owner only may mutate fitting-specific configuration:
 
 - enabled state;
 - maximum simultaneous fittings;
 - strict duration;
-- fitting fee;
-- weekly operating windows;
-- date-specific closures.
+- fitting fee.
+
+Business Hours and special closed dates are mutated through the Settings domain, not the Fittings domain.
 
 Existing finance authorization remains authoritative for payment verification and refunds; fitting permissions do not grant new finance authority.
 
 ## Cross-product rollout
 
-Production integration is staged:
+Production integration now uses one ownership boundary:
 
-1. `/fittings` and `/fittings/schedule` use the production fitting APIs.
-2. Calendar consumes real fitting appointments.
-3. Dashboard consumes real fitting operational counts/queues.
-4. Availability reflects guaranteed fitting garment allocations.
-5. Payments surfaces fitting-fee finance records.
+1. `/fittings` owns fitting appointments and opens a Fitting Settings modal for enabled/capacity/duration/fee.
+2. Business Information Settings owns Business Hours and special closed dates for the active branch.
+3. Calendar consumes real fitting appointments while Business Hours frame the visible schedule and closed-day presentation.
+4. Storefront fitting slots and staff fitting validation consume the same Business Hours/closure rules.
+5. Dashboard, Availability and Payments consume their existing fitting projections without owning schedule configuration.
 
 Prototype/mock fitting data in those surfaces must be removed only when that surface's production integration is implemented and verified.
 
@@ -299,8 +297,8 @@ Prototype/mock fitting data in those surfaces must be removed only when that sur
 - Customer-facing email/SMS fitting delivery.
 - Hard delete.
 - Separate fitting event-sourcing subsystem.
-- A duplicate weekly availability visualization in `/fittings/schedule`.
+- A separate fitting-owned weekly-hours or closure subsystem.
 
 ## BE-0 implementation consequence
 
-Contracts, migrations, and production fitting routes may begin only after the canonical PRD/TRD/Data Model/ERD and the implementation checklist reflect this record without contradictory fitting behavior.
+The original `fitting_hours` / `fitting_closure` model was removed before production users existed, when the product boundary was simplified to shared branch Business Hours. Migration `0063_branch_business_hours.sql` performs the destructive roll-forward and rejects incompatible legacy partial-day/split-window data rather than silently broadening availability. Canonical PRD/TRD/Data Model/ERD and implementation records must describe this newer ownership boundary.
