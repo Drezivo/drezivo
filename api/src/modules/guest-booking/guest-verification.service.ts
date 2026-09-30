@@ -48,11 +48,12 @@ export class GuestVerificationService {
       throw new ForbiddenError('Please complete the "I am human" check and try again.');
     }
     const acceptAnyCode = this.acceptAnyCode();
-    if (!acceptAnyCode && !this.isEmailEnabled()) {
-      throw new DependencyUnavailableError('Email verification is unavailable right now. Please contact the shop directly.');
-    }
     const done = await withPublishedStore(slug, async (client, store) => {
+      // A paused shop is the answer that matters to the renter, whatever the email provider's state.
       if (!store.bookingOpen) throw new BookingPausedError(BOOKING_PAUSED);
+      if (!acceptAnyCode && !this.isEmailEnabled()) {
+        throw new DependencyUnavailableError('Email verification is unavailable right now. Please contact the shop directly.');
+      }
       const digest = digestRecipientEmail(email);
       const recent = await client.query<{ n: number }>(
         `SELECT count(*)::int AS n FROM guest_email_verification
