@@ -182,8 +182,8 @@ describe('CLT-022 clothing file attachment flow', async () => {
       'Content-Type': 'image/png',
       'If-None-Match': '*',
     });
-    expect(JSON.stringify(authorization.body)).not.toContain(process.env.S3_SECRET_ACCESS_KEY);
-    expect(JSON.stringify(authorization.body)).not.toContain(process.env.S3_ACCESS_KEY_ID);
+    expect(JSON.stringify(authorization.body)).not.toContain(process.env.OBJECT_STORAGE_SECRET_ACCESS_KEY);
+    expect(JSON.stringify(authorization.body)).not.toContain(process.env.OBJECT_STORAGE_ACCESS_KEY_ID);
 
     const fileId = authorization.body.data.file_id;
     const pending = await readFile(seed.tenantId, seed.principalId, fileId);
