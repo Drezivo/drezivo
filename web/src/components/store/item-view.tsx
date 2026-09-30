@@ -7,6 +7,7 @@ import type { ItemDetail, PublicStorefront } from '@drezivo/contracts';
 import { durationLabel, formatMinor } from '@/lib/storefront-format';
 
 import { BookingDrawer } from './booking/booking-drawer';
+import { useStorePreview } from './preview-context';
 
 type Tab = 'details' | 'measurements' | 'rental';
 
@@ -17,7 +18,8 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
   const [booking, setBooking] = useState(false);
   const variant = item.variants.find((entry) => entry.variant_id === variantId) ?? null;
   const shown = variant ?? item.variants[0];
-  const canBook = store.payment_methods.length > 0;
+  const preview = useStorePreview();
+  const canBook = store.payment_methods.length > 0 && !preview;
   const image = item.image_urls[imageIndex] ?? item.image_urls[0];
 
   return (
@@ -74,7 +76,11 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
           <button type="button" className="sf-button sf-button-primary mt-8 w-full" disabled={!variant || !canBook} onClick={() => setBooking(true)}>
             {!variant ? 'Choose a size' : 'Choose rental dates'}
           </button>
-          {!canBook ? <p className="mt-3 text-sm text-sf-muted">Online booking is not open yet. Contact the shop to reserve this piece.</p> : null}
+          {preview ? (
+            <p className="mt-3 text-sm text-sf-muted">Booking opens once you publish your storefront.</p>
+          ) : !canBook ? (
+            <p className="mt-3 text-sm text-sf-muted">Online booking is not open yet. Contact the shop to reserve this piece.</p>
+          ) : null}
           {store.fitting.enabled ? (
             <a href={`/s/${store.slug}/fittings`} className="mt-3 block text-center text-sm underline underline-offset-4">
               Try it on first: request a fitting

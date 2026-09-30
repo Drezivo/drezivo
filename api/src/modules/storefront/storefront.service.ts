@@ -43,6 +43,7 @@ import {
   type PublishedStore,
   type StoreCoreRow,
 } from './storefront.repository.js';
+import type { PreviewGrant } from './storefront-preview.js';
 
 const NOT_FOUND = 'This store is not available.';
 const DAY_MS = 86_400_000;
@@ -54,7 +55,7 @@ const DAY_MS = 86_400_000;
 export class PublicStorefrontService {
   constructor(private readonly media: StorefrontMediaSigner = storefrontMediaSigner) {}
 
-  async getStorefront(slug: string): Promise<PublicStorefront> {
+  async getStorefront(slug: string, preview: PreviewGrant | null = null): Promise<PublicStorefront> {
     const result = await withPublishedStore(slug, async (client, store) => {
       const core = await this.requireCore(client, store);
       const document = toDocument(core);
@@ -130,12 +131,12 @@ export class PublicStorefrontService {
           fee_minor: fittingOpen && fitting.fee_minor !== '0' ? fitting.fee_minor : null,
         },
       });
-    });
+    }, preview);
     if (!result) throw new NotFoundError(NOT_FOUND);
     return result;
   }
 
-  async getCatalogue(slug: string, query: CatalogueQuery): Promise<CatalogueResponse> {
+  async getCatalogue(slug: string, query: CatalogueQuery, preview: PreviewGrant | null = null): Promise<CatalogueResponse> {
     const result = await withPublishedStore(slug, async (client, store) => {
       const filter: CatalogueFilter = {
         sort: query.sort,
@@ -155,12 +156,12 @@ export class PublicStorefrontService {
         page_size: query.page_size,
         sizes,
       });
-    });
+    }, preview);
     if (!result) throw new NotFoundError(NOT_FOUND);
     return result;
   }
 
-  async getItem(slug: string, productId: string): Promise<ItemDetail> {
+  async getItem(slug: string, productId: string, preview: PreviewGrant | null = null): Promise<ItemDetail> {
     const result = await withPublishedStore(slug, async (client, store) => {
       const found = await readPublicItem(client, store.tenantId, productId);
       if (!found || found.variants.length === 0) return null;
@@ -189,7 +190,7 @@ export class PublicStorefrontService {
           measurement: toMeasurement(variant, variant.guide_file_id ? (urls.get(variant.guide_file_id) ?? null) : null),
         })),
       });
-    });
+    }, preview);
     if (!result) throw new NotFoundError(NOT_FOUND);
     return result;
   }
@@ -198,13 +199,13 @@ export class PublicStorefrontService {
    * Day states for one size. Days inside the owner's minimum notice are unavailable. Internal
    * reasons (cleaning, maintenance, transfer) are never shown; they collapse to "unavailable".
    */
-  async getAvailability(slug: string, query: PublicAvailabilityQuery): Promise<PublicAvailabilityResponse> {
+  async getAvailability(slug: string, query: PublicAvailabilityQuery, preview: PreviewGrant | null = null): Promise<PublicAvailabilityResponse> {
     const store = await withPublishedStore(slug, async (client, found) => {
       if (!(await isVisibleVariant(client, found.tenantId, query.variant_id))) return null;
       const core = await this.requireCore(client, found);
       const today = localDate(new Date(), core.timezone);
       return { timezone: core.timezone, earliest: addDays(today, toDocument(core).checkout.min_notice_days) };
-    });
+    }, preview);
     if (!store) throw new NotFoundError(NOT_FOUND);
 
     const days = enumerateDays(query.from, query.to);
@@ -213,6 +214,7 @@ export class PublicStorefrontService {
       query.variant_id,
       zonedMidnight(query.from, store.timezone),
       zonedMidnight(addDays(query.to, 1), store.timezone),
+      preview,
     );
     if (!rows) throw new NotFoundError(NOT_FOUND);
 
@@ -229,7 +231,7 @@ export class PublicStorefrontService {
     });
   }
 
-  async getFittingSlots(slug: string, date: string): Promise<FittingSlotsResponse> {
+  async getFittingSlots(slug: string, date: string, preview: PreviewGrant | null = null): Promise<FittingSlotsResponse> {
     const result = await withPublishedStore(slug, async (client, store) => {
       const core = await this.requireCore(client, store);
       const fitting = await readFittingConfig(client, store);
@@ -241,7 +243,7 @@ export class PublicStorefrontService {
         fee_minor: fitting.fee_minor === '0' ? null : fitting.fee_minor,
         slots: slots.map((slot) => ({ start_at: slot.start_at.toISOString(), end_at: slot.end_at.toISOString() })),
       });
-    });
+    }, preview);
     if (!result) throw new NotFoundError(NOT_FOUND);
     return result;
   }

@@ -122,6 +122,7 @@ import {
   fittingSlotsQuery,
   fittingSlotsResponse,
   storefrontSettings,
+  storefrontPreviewLink,
   updateStorefrontRequest,
   updateStorefrontSlugRequest,
   storefrontTransitionRequest,
@@ -1460,6 +1461,7 @@ const extraPaths: Array<{
   schema: z.ZodTypeAny;
 }> = [
   { method: 'get', path: '/storefront', tag: 'storefront-cms', summary: 'Storefront document, status, policy, and publish readiness.', request: {}, schema: storefrontSettings },
+  { method: 'get', path: '/storefront/preview', tag: 'storefront-cms', summary: 'Short-lived owner preview credential for the storefront, published or not.', request: {}, schema: storefrontPreviewLink },
   { method: 'patch', path: '/storefront', tag: 'storefront-cms', summary: 'Replace the storefront document (version checked).', request: { headers: idempotencyKeyHeader, body: jsonBody(updateStorefrontRequest) }, schema: storefrontSettings },
   { method: 'post', path: '/storefront/slug', tag: 'storefront-cms', summary: 'Change the public storefront address.', request: { headers: idempotencyKeyHeader, body: jsonBody(updateStorefrontSlugRequest) }, schema: storefrontSettings },
   { method: 'post', path: '/storefront/publish', tag: 'storefront-cms', summary: 'Publish once readiness checks pass.', request: { headers: idempotencyKeyHeader, body: jsonBody(storefrontTransitionRequest) }, schema: storefrontSettings },

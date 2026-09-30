@@ -25,6 +25,8 @@ const write = [requireStaffAuth, requireTenantContext, workspaceRateLimit(30), r
 
 storefrontCmsRouter.get('/storefront', ...read, readHandler((req) => service.get(staffContextOf(req))));
 
+storefrontCmsRouter.get('/storefront/preview', ...read, readHandler((req) => service.preview(staffContextOf(req))));
+
 storefrontCmsRouter.patch(
   '/storefront',
   ...write,

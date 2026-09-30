@@ -543,6 +543,34 @@ storefront itself (workflow, alignment, design). Calendars were left untouched, 
     example filled the form and enabled Publish (nothing was published).
   - Guest booking and fitting flow re-run green.
 
+## Milestone 12 — Owner preview, sign-in fix, layout and speed
+
+- [x] Sign-in no longer sticks on "Opening your workspace". Clerk's post-sign-in
+      `router.refresh()` cancelled the resolver's soft navigation. The resolver now runs once,
+      leaves with `window.location.replace`, bounds `setActive` (10 s) and the whole check (20 s),
+      and shows a retryable error instead of spinning.
+  - Unit test: `app/tests/unit/post-auth-resolver.test.tsx`.
+- [x] Owner preview of an unpublished storefront.
+  - `GET /api/v1/storefront/preview` issues a one-hour HMAC token, derived from the digest key with
+    a purpose label.
+  - Public reads accept it via `X-Storefront-Preview`, answer `private, no-store`, and send
+    `Vary`. Guest verification and holds stay published-only.
+  - The web app enters preview through a POST route (the token is never in a URL), using Draft
+    Mode plus an httpOnly cookie scoped to the store. It shows a preview bar, `noindex`, and
+    booking and fitting requests turned off.
+  - Integration test: `api/tests/integration/storefront-preview.test.ts`, 5 tests.
+- [x] The sidebar opens expanded on first load.
+- [x] The store address shows on its own wrapping line with Copy and Preview below it, so it
+      never overflows the card (checked at 1440, 1024, and 390 px).
+- [x] Speed.
+  - Turbopack for `app` and `web` dev: the first visit to a page dropped from 1.5–4.5 s to about
+    1 s, and warm navigation is 0.2–0.35 s including data.
+  - `loading.tsx` for the dashboard and the storefront, so every click responds immediately.
+  - The access gate shares the actor context with the shell, so each load makes one fewer API
+    call.
+  - The production build prerenders every dashboard page as static, with 170–256 kB of
+    first-load JS.
+
 ## Change log
 
 | Date | Milestone | Change | Files |
@@ -574,3 +602,4 @@ storefront itself (workflow, alignment, design). Calendars were left untouched, 
 | 2026-09-29 | 10 | Worker drain mode, acknowledged domain events, strict booleans, mounted env file, Cloud Build, runbook | `api/src/worker.ts`, `api/src/worker/runner.ts`, `api/src/worker/handlers/domain-events.ts`, `api/src/config/{index.ts,load-env.ts}`, `api/src/middleware/idempotency.ts`, `api/cloudbuild.yaml`, `.gcloudignore`, `api/tests/integration/worker-drain.test.ts`, `api/src/config/__tests__/worker-config.test.ts`, `docs/runbooks/{worker-cloud-run.md,environments.md}` |
 | 2026-09-29 | 11 | Storefront motion (GSAP, Lenis), favicon, hero and focus fixes | `web/src/components/store/motion/{motion-root.tsx,scroll.ts}`, `web/src/app/{layout.tsx,globals.css,icon.svg}`, `web/src/app/s/[slug]/layout.tsx`, `web/src/components/store/{home-sections,product-card,item-view,store-header}.tsx`, `web/src/components/store/booking/booking-drawer.tsx`, `web/package.json` |
 | 2026-09-29 | 11 | Owner-side QA fixes: rate limit, role fallback, settings layout, Clerk theme, policy starter, slug input, unsaved-changes prompt, app favicon | `api/src/modules/tenancy/tenancy.routes.ts`, `app/src/components/shell/dashboard-shell.tsx`, `app/src/app/(dashboard)/settings/layout.tsx`, `app/src/components/settings/{settings-nav,account-settings-page}.tsx`, `app/src/components/storefront/{storefront-policy-pages,storefront-details-page}.tsx`, `app/src/components/forms/form-kit.tsx`, `app/src/app/icon.png` |
+| 2026-09-30 | 12 | Owner preview, sign-in resolve fix, sidebar default, address card, Turbopack, loading states, shared actor context | `api/src/modules/storefront/{storefront-preview,storefront.repository,storefront.service,storefront.routes}.ts`, `api/src/modules/storefront-cms/*`, `contracts/src/storefront/cms.ts`, `app/src/components/auth/post-auth-resolver.tsx`, `app/src/lib/resolve-staff-landing.ts`, `app/src/components/shell/*`, `app/src/components/storefront/{storefront-overview-page,storefront-preview-button}.tsx`, `app/src/components/ui/sidebar.tsx`, `web/src/app/s/[slug]/{layout.tsx,loading.tsx,preview/route.ts,preview/exit/route.ts}`, `web/src/lib/{storefront-api,storefront-preview}.ts` |

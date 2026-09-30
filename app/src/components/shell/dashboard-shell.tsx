@@ -4,6 +4,7 @@ import { useAuth, useUser } from "@clerk/nextjs";
 import type { ActorContext } from "@drezivo/contracts";
 import { useEffect, useMemo, useState } from "react";
 
+import { useVerifiedActorContext } from "@/components/shell/dashboard-access-gate";
 import { DashboardHeader } from "@/components/shell/dashboard-header";
 import { DashboardSidebar } from "@/components/shell/dashboard-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -27,9 +28,13 @@ function roleLabel(role: ActorContext["membership"]["role"] | undefined) {
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const { getToken } = useAuth();
   const { user } = useUser();
-  const [actorContext, setActorContext] = useState<ActorContext | null>(null);
+  const verifiedActor = useVerifiedActorContext();
+  const [fetchedActor, setActorContext] = useState<ActorContext | null>(null);
+  const actorContext = verifiedActor ?? fetchedActor;
 
   useEffect(() => {
+    // Inside the access gate the actor is already known; fetch only when rendered without it.
+    if (verifiedActor) return;
     let active = true;
     let retry: ReturnType<typeof setTimeout> | undefined;
     const api = createDrezivoApiClient(getToken);
@@ -52,7 +57,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       active = false;
       clearTimeout(retry);
     };
-  }, [getToken]);
+  }, [getToken, verifiedActor]);
 
   const identity = useMemo<DashboardIdentity>(() => {
     const clerkName = [user?.firstName, user?.lastName].filter(Boolean).join(" ");

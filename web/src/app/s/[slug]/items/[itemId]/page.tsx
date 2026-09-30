@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { ItemView } from '@/components/store/item-view';
-import { getItem, getStore } from '@/lib/storefront-api';
+import { readItem, readStore } from '@/lib/storefront-preview';
 import { buildItemMetadata } from '@/lib/seo';
 
 export const revalidate = 60;
@@ -14,13 +14,13 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug, itemId } = await params;
-  const [store, item] = await Promise.all([getStore(slug), getItem(slug, itemId)]);
+  const [store, item] = await Promise.all([readStore(slug), readItem(slug, itemId)]);
   return store && item ? buildItemMetadata(store, item) : {};
 }
 
 export default async function ItemPage({ params }: Props) {
   const { slug, itemId } = await params;
-  const [store, item] = await Promise.all([getStore(slug), getItem(slug, itemId)]);
+  const [store, item] = await Promise.all([readStore(slug), readItem(slug, itemId)]);
   if (!store || !item) notFound();
 
   const cheapest = item.variants.reduce((low, variant) => (BigInt(variant.rental_price_minor) < BigInt(low.rental_price_minor) ? variant : low));

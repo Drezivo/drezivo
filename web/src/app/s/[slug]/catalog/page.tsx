@@ -7,7 +7,7 @@ import { catalogueQuery } from '@drezivo/contracts';
 
 import { CatalogControls } from '@/components/store/catalog-controls';
 import { ProductGrid } from '@/components/store/product-card';
-import { getCatalogue, getStore } from '@/lib/storefront-api';
+import { readCatalogue, readStore } from '@/lib/storefront-preview';
 
 export const metadata: Metadata = { title: 'Collection' };
 
@@ -16,7 +16,7 @@ type SearchParams = Record<string, string | string[] | undefined>;
 export default async function CatalogPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<SearchParams> }) {
   const { slug } = await params;
   const raw = await searchParams;
-  const store = await getStore(slug);
+  const store = await readStore(slug);
   if (!store) notFound();
 
   const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
@@ -29,7 +29,7 @@ export default async function CatalogPage({ params, searchParams }: { params: Pr
     page: first(raw['page']),
   });
   const query = parsed.success ? parsed.data : catalogueQuery.parse({});
-  const result = await getCatalogue(slug, {
+  const result = await readCatalogue(slug, {
     search: query.search,
     category: query.category,
     size: query.size,

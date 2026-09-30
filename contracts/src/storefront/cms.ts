@@ -259,6 +259,19 @@ export const storefrontSettings = z
   .strict();
 export type StorefrontSettings = z.infer<typeof storefrontSettings>;
 
+/**
+ * A short-lived, read-only credential that lets the owner view the storefront before it is
+ * published. The app hands it to the storefront in a POST body, never in a URL.
+ */
+export const storefrontPreviewLink = z
+  .object({
+    slug: storefrontSlug,
+    token: z.string().min(1).max(200),
+    expires_at: z.string().datetime({ offset: true }),
+  })
+  .strict();
+export type StorefrontPreviewLink = z.infer<typeof storefrontPreviewLink>;
+
 /** PATCH /storefront. */
 export const updateStorefrontRequest = z
   .object({ version: z.number().int().positive(), document: storefrontDocument })

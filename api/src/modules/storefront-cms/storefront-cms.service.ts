@@ -7,6 +7,7 @@ import {
   type PermissionCode,
   type PublishStorefrontPolicyRequest,
   type StorefrontDocument,
+  type StorefrontPreviewLink,
   type StorefrontReadiness,
   type StorefrontSettings,
   type UpdateStorefrontRequest,
@@ -27,6 +28,7 @@ import {
 import { runIdempotentCommand, type CommandResult } from '../../shared/idempotent-command.js';
 import { storefrontMediaSigner, type StorefrontMediaSigner } from '../storefront/storefront-media.js';
 import { fromPolicyColumns, toPolicyColumns } from '../storefront/storefront-policy.js';
+import { issuePreviewToken } from '../storefront/storefront-preview.js';
 import {
   appendStorefrontAudit,
   findAcceptedStorefrontAssets,
@@ -57,6 +59,15 @@ export class StorefrontCmsService {
     return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
       const row = await this.requireStorefront(client, context.tenantId, false);
       return this.view(client, context.tenantId, row);
+    });
+  }
+
+  /** Read-only preview credential for this workspace's storefront. Issuing it changes nothing. */
+  preview(context: StaffContext): Promise<StorefrontPreviewLink> {
+    return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+      const row = await this.requireStorefront(client, context.tenantId, false);
+      const { token, expiresAt } = issuePreviewToken({ tenantId: context.tenantId, storefrontId: row.id });
+      return { slug: row.slug, token, expires_at: expiresAt.toISOString() };
     });
   }
 

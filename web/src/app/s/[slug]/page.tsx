@@ -1,13 +1,13 @@
 import { notFound } from 'next/navigation';
 
 import { About, CategoryIndex, EmptyCollection, FittingBand, Hero, HowItWorks, ProductSection, RentalInfo } from '@/components/store/home-sections';
-import { getStore } from '@/lib/storefront-api';
+import { readStore } from '@/lib/storefront-preview';
 
 export const revalidate = 60;
 
 export default async function StorefrontHome({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const store = await getStore(slug);
+  const store = await readStore(slug);
   if (!store) notFound();
   const { sections } = store.content;
   const hasClothing = store.new_arrivals.length > 0;

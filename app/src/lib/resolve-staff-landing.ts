@@ -1,14 +1,36 @@
 "use client";
 
-import type { WorkspaceSummary } from "@drezivo/contracts";
+import type { ActorContext, WorkspaceSummary } from "@drezivo/contracts";
 
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 
 type SetActiveOrganization = (params: { organization: string | null }) => Promise<unknown>;
 
 export type StaffLandingResolution =
-  | { kind: "workspace"; workspace: WorkspaceSummary }
+  | { kind: "workspace"; workspace: WorkspaceSummary; actor: ActorContext }
   | { kind: "onboarding" };
+
+const SET_ACTIVE_TIMEOUT_MS = 10_000;
+
+/**
+ * Clerk's Next.js `setActive` first runs a cache-invalidation server action and only settles when
+ * that action succeeds; if it fails, the promise never resolves. Bound it so a stuck switch
+ * surfaces as a retryable error instead of an endless "Opening your workspace" spinner.
+ */
+async function activateOrganization(setActive: SetActiveOrganization, organization: string | null): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new DrezivoApiError("Switching to your workspace took too long. Please try again.", { status: 504 })),
+      SET_ACTIVE_TIMEOUT_MS
+    );
+  });
+  try {
+    await Promise.race([setActive({ organization }), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export async function resolveStaffLanding({
   activeOrganizationId,
@@ -24,7 +46,7 @@ export async function resolveStaffLanding({
 
   if (workspaces.data.items.length === 0) {
     if (activeOrganizationId) {
-      await setActive({ organization: null });
+      await activateOrganization(setActive, null);
     }
 
     const onboarding = await api.getCurrentOnboarding();
@@ -49,7 +71,7 @@ export async function resolveStaffLanding({
   }
 
   if (activeOrganizationId !== workspace.clerk_org_id) {
-    await setActive({ organization: workspace.clerk_org_id });
+    await activateOrganization(setActive, workspace.clerk_org_id);
   }
 
   const actor = await api.getActorContext();
@@ -60,5 +82,5 @@ export async function resolveStaffLanding({
     );
   }
 
-  return { kind: "workspace", workspace };
+  return { kind: "workspace", workspace, actor: actor.data };
 }

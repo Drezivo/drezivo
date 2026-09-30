@@ -3,7 +3,8 @@
 import { useAuth, useClerk } from "@clerk/nextjs";
 import { Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { ActorContext } from "@drezivo/contracts";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { DrezivoApiError } from "@/lib/drezivo-api";
@@ -11,8 +12,15 @@ import { resolveStaffLanding } from "@/lib/resolve-staff-landing";
 
 type GateState =
   | { kind: "checking" }
-  | { kind: "ready" }
+  | { kind: "ready"; actor: ActorContext }
   | { kind: "error"; error: DrezivoApiError };
+
+/** The actor context the gate already loaded, so the shell does not fetch it a second time. */
+const VerifiedActorContext = createContext<ActorContext | null>(null);
+
+export function useVerifiedActorContext(): ActorContext | null {
+  return useContext(VerifiedActorContext);
+}
 
 export function DashboardAccessGate({ children }: { children: React.ReactNode }) {
   const { getToken, isLoaded, isSignedIn, orgId } = useAuth();
@@ -56,7 +64,7 @@ export function DashboardAccessGate({ children }: { children: React.ReactNode })
         router.replace("/onboarding");
         return;
       }
-      setState({ kind: "ready" });
+      setState({ kind: "ready", actor: resolution.actor });
     } catch (error) {
       setState({ kind: "error", error: toDrezivoApiError(error) });
     }
@@ -66,7 +74,7 @@ export function DashboardAccessGate({ children }: { children: React.ReactNode })
     void verifyAccess();
   }, [verifyAccess]);
 
-  if (state.kind === "ready") return <>{children}</>;
+  if (state.kind === "ready") return <VerifiedActorContext.Provider value={state.actor}>{children}</VerifiedActorContext.Provider>;
 
   return (
     <main className="dashboard-theme-dark flex min-h-svh items-center justify-center bg-dashboard-canvas px-5 py-10 text-dashboard-navy sm:px-8">
