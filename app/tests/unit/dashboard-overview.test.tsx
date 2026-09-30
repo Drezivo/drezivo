@@ -33,7 +33,7 @@ import { DashboardOverview } from "@/components/dashboard/dashboard-overview";
 const overview: DashboardOverviewResponse = {
   window: {
     timezone: "Asia/Manila",
-    as_of: "2026-09-30T03:00:00.000Z",
+    as_of: "2026-09-29T18:00:00.000Z",
     today: { start: "2026-09-29T16:00:00.000Z", end: "2026-09-30T16:00:00.000Z" },
     upcoming_rentals: { start: "2026-09-30T03:00:00.000Z", end: "2026-10-06T16:00:00.000Z" },
     upcoming_fittings: { start: "2026-09-30T03:00:00.000Z", end: "2026-10-02T16:00:00.000Z" },
@@ -144,6 +144,16 @@ describe("DashboardOverview", () => {
     ] as const) {
       expect(within(metrics).getByText(label)).toBeVisible();
       expect(within(metrics).getAllByText(value).length).toBeGreaterThan(0);
+    }
+    const metricLinks: ReadonlyArray<readonly [string, string]> = [
+      ["View Active Rentals", "/reservations?status=picked_up"],
+      ["View Pickups Today", "/calendar?date=2026-09-30&activity=pickup"],
+      ["View Returns Today", "/calendar?date=2026-09-30&activity=return"],
+      ["View Fittings Today", "/fittings?date=today"],
+      ["View Payments to Review", "/reservations?status=pending_confirmation"],
+    ];
+    for (const [name, href] of metricLinks) {
+      expect(within(metrics).getByRole("link", { name })).toHaveAttribute("href", href);
     }
 
     expect(screen.getByText("₱48,500.00")).toBeVisible();

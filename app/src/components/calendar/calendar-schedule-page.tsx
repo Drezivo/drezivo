@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import { useSearchParams } from "next/navigation";
 import {
   CalendarDays,
   ChevronLeft,
@@ -46,6 +47,7 @@ import {
   getCalendarMonthGridDateKeys,
   getCalendarWeekDateKeys,
   mapOperationalCalendarEvents,
+  parseCalendarDateKey,
   startOfCalendarWeek,
   type CalendarActivity,
   type CalendarActivityFilter,
@@ -95,8 +97,28 @@ function calendarCategoryLabel(category: CalendarCategory) {
   return category.status === "inactive" ? `${category.name} (inactive)` : category.name;
 }
 
+function parseRequestedDate(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    parseCalendarDateKey(value);
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+function parseRequestedActivity(value: string | null): ActivityFilter | null {
+  if (value === "pickup") return "Pickup";
+  if (value === "return") return "Return";
+  if (value === "fitting") return "Fitting";
+  return null;
+}
+
 export function CalendarSchedulePage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const searchParams = useSearchParams();
+  const requestedDateKey = parseRequestedDate(searchParams.get("date"));
+  const requestedActivity = parseRequestedActivity(searchParams.get("activity"));
   const fallbackTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const [contextState, setContextState] = useState<ContextState>("loading");
   const [contextError, setContextError] = useState<string | null>(null);
@@ -105,15 +127,17 @@ export function CalendarSchedulePage() {
   const [timeZone, setTimeZone] = useState(fallbackTimeZone);
   const [view, setView] = useState<CalendarView>("week");
   const [weekStart, setWeekStart] = useState(() =>
-    startOfCalendarWeek(calendarTodayDateKey(fallbackTimeZone))
+    startOfCalendarWeek(requestedDateKey ?? calendarTodayDateKey(fallbackTimeZone))
   );
   const [monthStart, setMonthStart] = useState(
-    () => `${calendarTodayDateKey(fallbackTimeZone).slice(0, 7)}-01`
+    () => `${(requestedDateKey ?? calendarTodayDateKey(fallbackTimeZone)).slice(0, 7)}-01`
   );
-  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("All Activity");
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>(
+    requestedActivity ?? "All Activity"
+  );
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
+  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(requestedDateKey);
   const [selectedReservationId, setSelectedReservationId] = useState<string | null>(null);
   const [selectedReservation, setSelectedReservation] = useState<ReservationDetail | null>(null);
   const [reservationDetailLoading, setReservationDetailLoading] = useState(false);
@@ -164,14 +188,17 @@ export function CalendarSchedulePage() {
 
         const resolvedTimeZone = branch.timezone || data.tenant.timezone;
         const today = calendarTodayDateKey(resolvedTimeZone);
+        const focusDate = requestedDateKey ?? today;
         setActiveBranchId(branch.id);
         setPermissionCodes(grant.permission_codes);
         setTimeZone(resolvedTimeZone);
         setCategoryFilter(null);
         setStatusFilter(null);
         setCategories([]);
-        setWeekStart(startOfCalendarWeek(today));
-        setMonthStart(`${today.slice(0, 7)}-01`);
+        setWeekStart(startOfCalendarWeek(focusDate));
+        setMonthStart(`${focusDate.slice(0, 7)}-01`);
+        setSelectedDateKey(requestedDateKey);
+        setActivityFilter(requestedActivity ?? "All Activity");
         setContextState("ready");
       })
       .catch((error: unknown) => {
@@ -191,7 +218,7 @@ export function CalendarSchedulePage() {
     return () => {
       cancelled = true;
     };
-  }, [contextReloadVersion, getToken, isLoaded, isSignedIn]);
+  }, [contextReloadVersion, getToken, isLoaded, isSignedIn, requestedActivity, requestedDateKey]);
 
   const visibleDateKeys = useMemo(
     () =>
