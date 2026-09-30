@@ -754,7 +754,6 @@ function AvailabilityTimeline({
                   hasCatalogueFilter={hasCatalogueFilter}
                   item={item}
                   rangeLabel={rangeLabel}
-                  todayKey={todayKey}
                   timeZone={timeZone}
                   windowEnd={windowEnd}
                   windowStart={windowStart}
@@ -828,7 +827,6 @@ function AvailabilityRow({
   item,
   onOpenAgenda,
   rangeLabel,
-  todayKey,
   timeZone,
   windowEnd,
   windowStart,
@@ -838,7 +836,6 @@ function AvailabilityRow({
   item: ClothingAvailabilityTimelineRow;
   onOpenAgenda: (assetId: string, agendaId: string) => void;
   rangeLabel: string;
-  todayKey: string;
   timeZone: string;
   windowEnd: string;
   windowStart: string;
@@ -880,7 +877,6 @@ function AvailabilityRow({
               key={`${item.asset.id}-${day.date}`}
               className={cn(
                 "border-r border-dashboard-border/70",
-                day.date === todayKey && "bg-dashboard-active/40",
                 index === days.length - 1 && "border-r-0"
               )}
             />

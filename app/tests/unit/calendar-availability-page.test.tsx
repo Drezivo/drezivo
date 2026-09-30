@@ -265,7 +265,7 @@ describe("CalendarAvailabilityPage", () => {
     expect(todayHeader).toHaveTextContent(branchTodayLabels.label);
     expect(todayHeader).toHaveTextContent(branchTodayLabels.dateLabel);
     expect(todayHeader).toHaveClass("bg-dashboard-gold-soft/70");
-    expect(timeline.querySelector('[class~="bg-dashboard-active/40"]')).not.toBeNull();
+    expect(timeline.querySelector('[class~="bg-dashboard-active/40"]')).toBeNull();
   });
 
   it("lets a short timeline shrink to its content while capping larger lists", async () => {
