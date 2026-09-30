@@ -373,6 +373,21 @@ describe("ReservationsPage", () => {
     });
   });
 
+  it.each([
+    ["picked_up", "Picked Up"],
+    ["pending_confirmation", "Pending Confirmation"],
+  ] as const)("initializes the %s status filter from the URL", async (status, label) => {
+    navigation.search = `status=${status}`;
+
+    render(<ReservationsPage />);
+
+    expect(await screen.findByText("RSV-REAL-001")).toBeVisible();
+    expect(screen.getByRole("tab", { name: label })).toHaveAttribute("aria-selected", "true");
+    await waitFor(() =>
+      expect(api.getReservations).toHaveBeenCalledWith(expect.objectContaining({ status }))
+    );
+  });
+
   it("treats the first pickup-date selection as an exact day and the second as an inclusive range", async () => {
     render(<ReservationsPage />);
     await screen.findByText("RSV-REAL-001");
@@ -451,6 +466,9 @@ describe("ReservationsPage", () => {
     expect(await screen.findByRole("heading", { name: "Reservation RSV-REAL-001" })).toBeVisible();
     expect(screen.getAllByText("Real Customer").length).toBeGreaterThanOrEqual(1);
     const detailSheet = screen.getByRole("dialog");
+    expect(within(detailSheet).getByText("Customer")).toBeVisible();
+    expect(within(detailSheet).getByText("Name")).toBeVisible();
+    expect(within(detailSheet).queryByText("RC")).not.toBeInTheDocument();
     const garmentImage = within(detailSheet).getByRole("img", {
       name: "Real Emerald Gown cover image",
     });

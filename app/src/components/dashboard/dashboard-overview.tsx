@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { calendarDateKeyAt } from "@/components/calendar/calendar-schedule-data";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +48,21 @@ type DashboardMetricEntry = {
   key: DashboardMetricKey;
   value: number;
 };
+
+function metricHref(key: DashboardMetricKey, today: string): string {
+  switch (key) {
+    case "active_rentals":
+      return "/reservations?status=picked_up";
+    case "pickups_today":
+      return `/calendar?date=${today}&activity=pickup`;
+    case "returns_today":
+      return `/calendar?date=${today}&activity=return`;
+    case "fittings_today":
+      return "/fittings?date=today";
+    case "payments_to_review":
+      return "/reservations?status=pending_confirmation";
+  }
+}
 
 function EventBadge({ type }: { type: ScheduleEventType }) {
   return (
@@ -162,6 +178,7 @@ export function DashboardOverview() {
     { key: "fittings_today", value: overview.metrics.fittings_today },
     { key: "payments_to_review", value: overview.metrics.payments_to_review },
   ];
+  const today = calendarDateKeyAt(new Date(overview.window.as_of), overview.window.timezone);
 
   return (
     <div className="min-h-[calc(100svh-72px)] px-4 py-5 sm:px-6 sm:py-6 xl:px-10">
@@ -191,30 +208,40 @@ export function DashboardOverview() {
             const metric = DASHBOARD_METRIC_PRESENTATION[key];
             const Icon = metric.icon;
             return (
-              <Card key={key} className="min-h-[166px] justify-between py-5">
-                <CardContent className="flex h-full flex-col justify-between px-5">
-                  <div className="flex items-center justify-between">
-                    <div
-                      className={cn(
-                        "flex h-10 w-10 items-center justify-center rounded-xl",
-                        metricToneClasses[metric.tone]
-                      )}
-                    >
-                      <Icon className="h-5 w-5" strokeWidth={1.8} aria-hidden="true" />
+              <Link
+                key={key}
+                href={metricHref(key, today)}
+                aria-label={`View ${metric.label}`}
+                className="group block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent focus-visible:ring-offset-2 focus-visible:ring-offset-dashboard-canvas"
+              >
+                <Card className="min-h-[166px] justify-between py-5 transition-colors group-hover:border-dashboard-accent/50 group-focus-visible:border-dashboard-accent">
+                  <CardContent className="flex h-full flex-col justify-between px-5">
+                    <div className="flex items-center justify-between">
+                      <div
+                        className={cn(
+                          "flex h-10 w-10 items-center justify-center rounded-xl",
+                          metricToneClasses[metric.tone]
+                        )}
+                      >
+                        <Icon className="h-5 w-5" strokeWidth={1.8} aria-hidden="true" />
+                      </div>
+                      <ChevronRight
+                        className="h-5 w-5 text-dashboard-navy transition-transform group-hover:translate-x-0.5"
+                        aria-hidden="true"
+                      />
                     </div>
-                    <ChevronRight className="h-5 w-5 text-dashboard-navy" aria-hidden="true" />
-                  </div>
-                  <div className="mt-5">
-                    <CardTitle as="h2" className="text-sm font-medium text-dashboard-navy/80">
-                      {metric.label}
-                    </CardTitle>
-                    <p className="mt-1 text-[30px] font-semibold leading-none tracking-[-0.04em] text-dashboard-navy">
-                      {value.toLocaleString("en-PH")}
-                    </p>
-                    <p className="mt-1.5 text-sm text-dashboard-muted">{metric.description}</p>
-                  </div>
-                </CardContent>
-              </Card>
+                    <div className="mt-5">
+                      <CardTitle as="h2" className="text-sm font-medium text-dashboard-navy/80">
+                        {metric.label}
+                      </CardTitle>
+                      <p className="mt-1 text-[30px] font-semibold leading-none tracking-[-0.04em] text-dashboard-navy">
+                        {value.toLocaleString("en-PH")}
+                      </p>
+                      <p className="mt-1.5 text-sm text-dashboard-muted">{metric.description}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
             );
           })}
         </section>

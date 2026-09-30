@@ -1,13 +1,15 @@
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type {
-  CustomerId,
-  FileObjectId,
-  PaymentMethodId,
-  PermissionCode,
-  ProductVariantId,
-  StaffReservationCreateRequest,
+import {
+  dashboardOverviewResponse,
+  successEnvelope,
+  type CustomerId,
+  type FileObjectId,
+  type PaymentMethodId,
+  type PermissionCode,
+  type ProductVariantId,
+  type StaffReservationCreateRequest,
 } from '@drezivo/contracts';
 
 import '../../src/config/load-env.js';
@@ -1819,6 +1821,28 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       success: true,
       data: { reservation: { status: 'completed', version: returned.version + 1 } },
     });
+    const completedAt = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ completed_at: Date | null }>(
+        `SELECT completed_at FROM reservation WHERE tenant_id = $1 AND id = $2::uuid`,
+        [seed.tenantId, returned.id],
+      );
+      return requireRow(result.rows, 'completed reservation timestamp').completed_at;
+    });
+    expect(completedAt).toBeInstanceOf(Date);
+
+    useClerk(seed);
+    const dashboard = await request(createApp()).get('/api/v1/dashboard/overview');
+    expect(dashboard.status).toBe(200);
+    const dashboardData = successEnvelope(dashboardOverviewResponse).parse(dashboard.body).data;
+    const businessPerformance = dashboardData.business_performance;
+    expect(
+      businessPerformance.completed_rentals.current + businessPerformance.completed_rentals.previous,
+    ).toBe(1);
+    expect(
+      BigInt(businessPerformance.completed_rental_value.current_minor) +
+        BigInt(businessPerformance.completed_rental_value.previous_minor),
+    ).toBeGreaterThan(0n);
+
     const state = await pickupState(seed, returned.id);
     expect(state.asset).toMatchObject({ custody_kind: 'at_branch', readiness: 'ready' });
     expect(state.allocation).toMatchObject({ is_blocking: false });
