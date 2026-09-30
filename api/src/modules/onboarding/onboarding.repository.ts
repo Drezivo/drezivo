@@ -330,7 +330,7 @@ export async function chooseOnboardingPlanInTransaction(
   if (row.status !== 'incomplete' && row.status !== 'payment_pending') {
     return { kind: 'not_selectable', onboarding: toOwnerOnboarding(row) };
   }
-  // Retired plans (migration 0062) stay for existing subscriptions but must not be chosen: bootstrap
+  // Retired plans (migration 0063) stay for existing subscriptions but must not be chosen: bootstrap
   // would refuse them later and leave the owner stuck on an onboarding that can never finish.
   const plan = await client.query<{ available: boolean }>(
     'SELECT EXISTS (SELECT 1 FROM plan WHERE code = $1 AND active) AS available',

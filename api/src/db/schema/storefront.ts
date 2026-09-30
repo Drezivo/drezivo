@@ -105,7 +105,7 @@ export const paymentMethod = pgTable(
     storefrontEnabled: boolean('storefront_enabled').notNull().default(false),
     /** 'details' (typed account + optional QR) or 'material' (the business's own PDF/image). */
     presentation: text('presentation').notNull().default('details'),
-    /** Composite FK (tenant_id, material_file_id) -> file_object in migration 0062. */
+    /** Composite FK (tenant_id, material_file_id) -> file_object in migration 0063. */
     materialFileId: uuid('material_file_id'),
     version: integer('version').notNull().default(1),
     ...timestamps,

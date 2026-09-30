@@ -17,7 +17,7 @@
 --   5. UPDATE plan SET active = true WHERE code IN ('professional', 'business') AND version = 1;
 --      restore starter v1 limits to 125 assets / 0 seats (0053). Subscriptions moved to starter and
 --      past_due/restricted rows reset to trialing are NOT restored automatically; the
---      `subscription_event` rows with business_key 'migration:0062:*' record the prior plan.
+--      `subscription_event` rows with business_key 'migration:0063:*' record the prior plan.
 
 -- 1. Plans -----------------------------------------------------------------------------------
 -- Documented exception to plan immutability: the operator app accepts only plan_version 1 and
@@ -42,7 +42,7 @@ BEGIN
 
   -- Every workspace moves to the one plan. The event keeps the prior plan for audit/reversal.
   INSERT INTO subscription_event (tenant_id, subscription_id, prior_plan_id, next_plan_id, event_type, effective_at, business_key)
-  SELECT s.tenant_id, s.id, s.plan_id, starter_id, 'plan_changed', now(), 'migration:0062:plan_starter'
+  SELECT s.tenant_id, s.id, s.plan_id, starter_id, 'plan_changed', now(), 'migration:0063:plan_starter'
     FROM subscription s
    WHERE s.plan_id <> starter_id
   ON CONFLICT (tenant_id, business_key) DO NOTHING;
@@ -158,7 +158,7 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM subscription_payment WHERE status = 'pending' GROUP BY tenant_id HAVING count(*) > 1
   ) THEN
-    RAISE EXCEPTION 'several pending subscription payments exist for one tenant; resolve them before 0062';
+    RAISE EXCEPTION 'several pending subscription payments exist for one tenant; resolve them before running 0063';
   END IF;
 END $$;
 

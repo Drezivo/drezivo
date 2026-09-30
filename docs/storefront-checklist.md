@@ -599,7 +599,7 @@ Runbook: `docs/runbooks/pilot-operation.md`.
       `drezivo_worker` role), so emails and hold expiry work without a worker service. Reversible.
   - Tests: `api/src/worker/__tests__/embedded.test.ts`.
 - [x] One plan, Standard (₱300 a month, 1,000 garments, 10 staff), stored as `starter`. Migration
-      `0062_pilot_billing.sql` retires Professional and Business and moves every subscription.
+      `0063_pilot_billing.sql` retires Professional and Business and moves every subscription.
   - Onboarding refuses a retired plan when it is chosen, not later at bootstrap, where the owner
     would be stuck.
   - The migration can be run twice.
@@ -667,4 +667,4 @@ Runbook: `docs/runbooks/pilot-operation.md`.
 | 2026-09-29 | 11 | Owner-side QA fixes: rate limit, role fallback, settings layout, Clerk theme, policy starter, slug input, unsaved-changes prompt, app favicon | `api/src/modules/tenancy/tenancy.routes.ts`, `app/src/components/shell/dashboard-shell.tsx`, `app/src/app/(dashboard)/settings/layout.tsx`, `app/src/components/settings/{settings-nav,account-settings-page}.tsx`, `app/src/components/storefront/{storefront-policy-pages,storefront-details-page}.tsx`, `app/src/components/forms/form-kit.tsx`, `app/src/app/icon.png` |
 | 2026-09-30 | 12 | Owner preview, sign-in resolve fix, sidebar default, address card, Turbopack, loading states, shared actor context | `api/src/modules/storefront/{storefront-preview,storefront.repository,storefront.service,storefront.routes}.ts`, `api/src/modules/storefront-cms/*`, `contracts/src/storefront/cms.ts`, `app/src/components/auth/post-auth-resolver.tsx`, `app/src/lib/resolve-staff-landing.ts`, `app/src/components/shell/*`, `app/src/components/storefront/{storefront-overview-page,storefront-preview-button}.tsx`, `app/src/components/ui/sidebar.tsx`, `web/src/app/s/[slug]/{layout.tsx,loading.tsx,preview/route.ts,preview/exit/route.ts}`, `web/src/lib/{storefront-api,storefront-preview}.ts` |
 | 2026-09-30 | 13 | Section links with Lenis, motion fallback, no storefront streaming, submit-guard key lifecycle, image type detection | `web/src/components/store/motion/{motion-root.tsx,scroll.ts}`, `web/src/app/globals.css`, `app/src/lib/{use-submit-guard,storefront-assets}.ts` |
-| 2026-10-01 | 14 | Pilot billing: embedded worker, one Standard plan, derived access, manual payments, business payment methods, hold guard, Turnstile | `api/src/db/migrations/0062_pilot_billing.sql`, `api/src/modules/billing/*`, `api/src/modules/payment-methods/*`, `app/src/components/billing/*`, `docs/runbooks/pilot-operation.md` |
+| 2026-10-01 | 14 | Pilot billing: embedded worker, one Standard plan, derived access, manual payments, business payment methods, hold guard, Turnstile | `api/src/db/migrations/0063_pilot_billing.sql`, `api/src/modules/billing/*`, `api/src/modules/payment-methods/*`, `app/src/components/billing/*`, `docs/runbooks/pilot-operation.md` |

@@ -109,7 +109,7 @@ export const subscriptionPayment = pgTable(
     collectionMethod: text('collection_method').notNull(),
     providerReference: text('provider_reference'),
     businessKey: text('business_key').notNull(),
-    // Pilot billing (0062): manual payment with uploaded proof, reviewed by an operator.
+    // Pilot billing (0063): manual payment with uploaded proof, reviewed by an operator.
     paymentMethodId: uuid('payment_method_id').references(() => platformPaymentMethod.id),
     reference: text('reference'),
     /** Composite FK (tenant_id, proof_file_id) -> file_object in the migration. */

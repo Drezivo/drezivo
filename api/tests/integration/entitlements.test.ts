@@ -56,7 +56,7 @@ describe('TBF-032 entitlement service', async () => {
       frontdeskSeatsMax: standard.frontdeskSeatsMax,
     }).toEqual(STANDARD_PLAN);
 
-    // Migration 0062 deactivated them; nothing may start a new subscription on either.
+    // Migration 0063 deactivated them; nothing may start a new subscription on either.
     for (const retired of ['professional', 'business'] as const) {
       await expect(
         withGlobalTransaction('user_tbf032_plans', (client) => resolvePlanEntitlements(client, retired)),

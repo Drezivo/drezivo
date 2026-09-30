@@ -124,7 +124,7 @@ Never commit these values. They live in each host's settings.
 
 1. **Supabase:** in the SQL editor, run
    `ALTER ROLE drezivo_worker WITH LOGIN PASSWORD '<long random password>';`. Then apply the
-   migrations through `0062_pilot_billing.sql` (in `api/`, set `DATABASE_URL_DIRECT` and run
+   migrations through `0063_pilot_billing.sql` (in `api/`, set `DATABASE_URL_DIRECT` and run
    `npm run db:migrate`). The migration can be run again safely.
 2. **Cloudflare:** Dashboard → Turnstile → Add widget for `drezivo.shop` (Managed mode). Put the
    site key in the web app and the secret key in the API.

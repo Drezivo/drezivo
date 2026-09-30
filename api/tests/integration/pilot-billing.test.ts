@@ -14,7 +14,7 @@ import {
 } from './helpers/test-db.js';
 
 /**
- * Pilot billing (migration 0062) end to end over HTTP against PostgreSQL with RLS: access derived
+ * Pilot billing (migration 0063) end to end over HTTP against PostgreSQL with RLS: access derived
  * from the subscription dates, the storefront and bookings following it, duplicate-safe proof of
  * payment, and the five-online-method limit for a business's own payment methods.
  */

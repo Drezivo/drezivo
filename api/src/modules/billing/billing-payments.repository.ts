@@ -6,7 +6,7 @@ import type { SubscriptionPaymentStatus, SubscriptionStatus } from '@drezivo/con
  * Pilot billing reads and the one business-side write (submitting a payment proof).
  *
  * `platform_payment_method` is a GLOBAL table that operators manage; the business API only reads
- * it (see migration 0062 for why the role can technically write). QR bytes are selected only by
+ * it (see migration 0063 for why the role can technically write). QR bytes are selected only by
  * the dedicated QR read, never in list queries.
  */
 
