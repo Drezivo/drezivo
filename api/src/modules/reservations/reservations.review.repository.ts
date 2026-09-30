@@ -892,6 +892,7 @@ export async function completeReturnedReservation(
   const result = await client.query<{ version: number }>(
     `UPDATE reservation
         SET status = 'completed',
+            completed_at = statement_timestamp(),
             version = version + 1
       WHERE tenant_id = $1
         AND branch_id = $2::uuid
