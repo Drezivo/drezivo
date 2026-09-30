@@ -12,11 +12,11 @@ import {
   Info,
   Plus,
   Search,
+  Settings2,
   Shirt,
   UserCheck,
   X,
 } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import type {
@@ -28,7 +28,7 @@ import type {
 } from "@drezivo/contracts";
 
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -52,6 +52,7 @@ import {
   formatFittingTimeRange,
 } from "./fittings-presentation";
 import { FittingDetailsSheet } from "./fitting-details-sheet";
+import { FittingSettingsDialog } from "./fitting-settings-dialog";
 import { NewFittingSheet } from "./new-fitting-sheet";
 
 type FittingDateFilter = "all" | "today" | "upcoming";
@@ -109,6 +110,7 @@ export function FittingsPage() {
   const [error, setError] = useState<DrezivoApiError | null>(null);
   const [reloadVersion, setReloadVersion] = useState(0);
   const [isNewFittingOpen, setIsNewFittingOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [selectedFittingId, setSelectedFittingId] = useState<string | null>(null);
   const [selectedFitting, setSelectedFitting] = useState<FittingDetail | null>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
@@ -255,6 +257,7 @@ export function FittingsPage() {
         <FittingsHeading
           canCreate={!permissionRestricted && settings?.enabled === true}
           onNewFitting={() => setIsNewFittingOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         />
 
         <SummarySection summary={summary} loading={isSummaryLoading} />
@@ -332,6 +335,15 @@ export function FittingsPage() {
         </Card>
       </div>
 
+      <FittingSettingsDialog
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
+        onSaved={(nextSettings) => {
+          setSettings(nextSettings);
+          setReloadVersion((value) => value + 1);
+        }}
+      />
+
       <NewFittingSheet
         open={isNewFittingOpen}
         settings={settings}
@@ -366,9 +378,11 @@ export function FittingsPage() {
 function FittingsHeading({
   canCreate,
   onNewFitting,
+  onOpenSettings,
 }: {
   canCreate: boolean;
   onNewFitting: () => void;
+  onOpenSettings: () => void;
 }) {
   return (
     <section
@@ -385,13 +399,10 @@ function FittingsHeading({
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <Link
-          href="/fittings/schedule"
-          className={cn(buttonVariants({ variant: "secondary" }), "w-full sm:w-auto")}
-        >
-          <CalendarClock className="h-4 w-4" aria-hidden="true" />
-          Schedule &amp; Availability
-        </Link>
+        <Button type="button" variant="secondary" onClick={onOpenSettings} className="w-full sm:w-auto">
+          <Settings2 className="h-4 w-4" aria-hidden="true" />
+          Fitting settings
+        </Button>
         <Button
           type="button"
           onClick={onNewFitting}

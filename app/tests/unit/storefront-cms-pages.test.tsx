@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   updateBusinessSettings: vi.fn(),
   getBusinessHours: vi.fn(),
   updateBusinessHours: vi.fn(),
+  getBranchClosures: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({ useAuth: clerk.useAuth }));
@@ -171,6 +172,10 @@ describe("business settings page", () => {
         updated_at: "2026-09-29T02:00:00.000Z",
       },
       requestId: "r-hours",
+    });
+    api.getBranchClosures.mockResolvedValue({
+      data: { items: [], page_meta: { next_cursor: null, has_more: false } },
+      requestId: "r-closures",
     });
   });
 

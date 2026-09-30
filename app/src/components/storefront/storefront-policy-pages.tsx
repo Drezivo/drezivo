@@ -253,11 +253,11 @@ export function StorefrontBookingSettingsPage() {
             onChange={(fitting_requests) => checkout.update({ fitting_requests })}
           />
           <p className="mt-2 text-xs text-dashboard-muted">
-            Hours, length, fee, and capacity come from{" "}
-            <Link href="/fittings/schedule" className="font-medium text-dashboard-accent hover:underline">
-              Fittings › Schedule
+            Times follow{" "}
+            <Link href="/settings" className="font-medium text-dashboard-accent hover:underline">
+              Settings › Business hours
             </Link>
-            . Requests only open when fittings are enabled there.
+            . Duration, fee, capacity, and whether fittings are enabled are managed from the Fitting settings dialog on the Fittings page.
           </p>
         </Section>
         <Section icon={Info} title="Payment methods">

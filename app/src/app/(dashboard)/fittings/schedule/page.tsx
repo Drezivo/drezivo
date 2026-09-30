@@ -1,5 +1,5 @@
-import { FittingSchedulePage } from "@/components/fittings/fitting-schedule-page";
+import { notFound } from "next/navigation";
 
-export default function FittingScheduleRoute() {
-  return <FittingSchedulePage />;
+export default function RetiredFittingScheduleRoute() {
+  notFound();
 }

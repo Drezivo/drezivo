@@ -9,7 +9,6 @@ describe("fitting prototype data", () => {
   it("keeps fitting navigation isolated to the prototype routes", () => {
     expect(FITTING_PROTOTYPE_ROUTES).toEqual({
       appointments: "/fittings",
-      schedule: "/fittings/schedule",
     });
   });
 

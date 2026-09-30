@@ -3,13 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fittingSettings } from "@drezivo/contracts";
 
-import { FittingSchedulePage } from "@/components/fittings/fitting-schedule-page";
+import { FittingSettingsDialog } from "@/components/fittings/fitting-settings-dialog";
 
-const clerk = vi.hoisted(() => ({
-  getToken: vi.fn(),
-  useAuth: vi.fn(),
-}));
-
+const clerk = vi.hoisted(() => ({ getToken: vi.fn(), useAuth: vi.fn() }));
 const api = vi.hoisted(() => ({
   getFittingSettings: vi.fn(),
   updateFittingSettings: vi.fn(),
@@ -42,11 +38,7 @@ const settings = fittingSettings.parse({
 });
 
 function installDefaults() {
-  clerk.useAuth.mockReturnValue({
-    getToken: clerk.getToken,
-    isLoaded: true,
-    isSignedIn: true,
-  });
+  clerk.useAuth.mockReturnValue({ getToken: clerk.getToken, isLoaded: true, isSignedIn: true });
   clerk.getToken.mockResolvedValue("test-token");
   api.getFittingSettings.mockResolvedValue({ data: settings, requestId: "request-settings" });
   api.updateFittingSettings.mockResolvedValue({
@@ -55,38 +47,37 @@ function installDefaults() {
   });
 }
 
-describe("FittingSchedulePage scalar settings bridge", () => {
+function renderDialog(onSaved = vi.fn(), onOpenChange = vi.fn()) {
+  render(<FittingSettingsDialog open onOpenChange={onOpenChange} onSaved={onSaved} />);
+  return { onSaved, onOpenChange };
+}
+
+describe("FittingSettingsDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     installDefaults();
   });
 
-  it("loads only fitting-specific settings and points scheduling to Business Hours", async () => {
-    render(<FittingSchedulePage />);
+  it("shows only fitting-specific controls and points schedule ownership to Business Hours", async () => {
+    renderDialog();
 
     expect(await screen.findByRole("heading", { name: "Fitting settings" })).toBeVisible();
-    expect(screen.getByText(/Fittings follow your active branch Business Hours/i)).toBeVisible();
-    expect(screen.getByRole("link", { name: /Manage Business Hours/i })).toHaveAttribute(
-      "href",
-      "/settings"
-    );
+    expect(screen.getByRole("switch", { name: "Accept fitting appointments" })).toBeChecked();
     expect(screen.getByLabelText("Maximum simultaneous fittings")).toHaveValue("2");
     expect(screen.getByLabelText("Appointment duration")).toHaveValue("60");
     expect(screen.getByLabelText("Fitting fee (PHP)")).toHaveValue("500.00");
+    expect(screen.getByText(/follow the active branch Business Hours/i)).toBeVisible();
+    expect(screen.getByRole("link", { name: /Manage business hours/i })).toHaveAttribute("href", "/settings");
     expect(screen.queryByText(/weekly fitting hours/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/date-specific closures/i)).not.toBeInTheDocument();
   });
 
-  it("saves scalar fitting settings once with an idempotency key", async () => {
-    render(<FittingSchedulePage />);
+  it("saves scalar settings once and returns the authoritative settings to the Fittings page", async () => {
+    const { onSaved, onOpenChange } = renderDialog();
     await screen.findByRole("heading", { name: "Fitting settings" });
 
-    fireEvent.change(screen.getByLabelText("Maximum simultaneous fittings"), {
-      target: { value: "3" },
-    });
-    fireEvent.change(screen.getByLabelText("Fitting fee (PHP)"), {
-      target: { value: "125.00" },
-    });
+    fireEvent.change(screen.getByLabelText("Maximum simultaneous fittings"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("Fitting fee (PHP)"), { target: { value: "125.00" } });
     const save = screen.getByRole("button", { name: "Save fitting settings" });
     fireEvent.click(save);
     fireEvent.click(save);
@@ -100,27 +91,34 @@ describe("FittingSchedulePage scalar settings bridge", () => {
           duration_minutes: 60,
           fee_minor: "12500",
         },
-        expect.any(String)
-      )
+        expect.any(String),
+      ),
     );
     expect(api.updateFittingSettings).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ version: 2, capacity: 3 })));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("surfaces scalar fitting settings API errors", async () => {
+  it("preserves stale-version error and retry behavior", async () => {
     const { DrezivoApiError } = await import("@/lib/drezivo-api");
     api.updateFittingSettings.mockRejectedValueOnce(
-      new DrezivoApiError("Fitting capacity cannot be reduced.", { status: 409 })
+      new DrezivoApiError("stale", { code: "STALE_VERSION", status: 409 }),
     );
-
-    render(<FittingSchedulePage />);
+    renderDialog();
     await screen.findByRole("heading", { name: "Fitting settings" });
-    fireEvent.change(screen.getByLabelText("Maximum simultaneous fittings"), {
-      target: { value: "1" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save fitting settings" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Fitting capacity cannot be reduced."
-    );
+    fireEvent.change(screen.getByLabelText("Maximum simultaneous fittings"), { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save fitting settings" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("changed elsewhere");
+  });
+
+  it("shows a retry action when fitting settings fail to load", async () => {
+    api.getFittingSettings.mockRejectedValueOnce(new Error("load failed"));
+    renderDialog();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("load failed");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(api.getFittingSettings).toHaveBeenCalledTimes(2));
+    expect(await screen.findByLabelText("Maximum simultaneous fittings")).toHaveValue("2");
   });
 });

@@ -15,8 +15,8 @@ import {
   calendarBoundaryInstant,
   calendarDateKeyAt,
   calendarTodayDateKey,
+  calendarGridHeight,
   CALENDAR_HOUR_HEIGHT,
-  CALENDAR_TOTAL_HEIGHT,
   formatCalendarDate,
   getCalendarMonthGridDateKeys,
   startOfCalendarWeek,
@@ -26,6 +26,8 @@ const clerk = vi.hoisted(() => ({ getToken: vi.fn(), useAuth: vi.fn() }));
 const api = vi.hoisted(() => ({
   getActorContext: vi.fn(),
   getOperationalCalendar: vi.fn(),
+  getBusinessHours: vi.fn(),
+  getBranchClosures: vi.fn(),
   getReservationDetail: vi.fn(),
   getFittingDetail: vi.fn(),
   confirmFitting: vi.fn(),
@@ -207,6 +209,17 @@ const fittingDetailFixture = {
   created_at: fittingAt,
 } as unknown as FittingDetail;
 
+const businessHours = {
+  branch_id: branchId,
+  branch_name: "Main Branch",
+  opens_local: "09:00",
+  closes_local: "20:00",
+  closed_weekdays: ["sunday"],
+  timezone: timeZone,
+  version: 1,
+  updated_at: "2026-10-01T00:00:00.000Z",
+};
+
 const actorContext = {
   tenant: { timezone: timeZone },
   branches: [{ id: branchId, timezone: timeZone }],
@@ -220,6 +233,11 @@ function installDefaults() {
   clerk.useAuth.mockReturnValue({ getToken: clerk.getToken, isLoaded: true, isSignedIn: true });
   clerk.getToken.mockResolvedValue("unit-test-token");
   api.getActorContext.mockResolvedValue({ data: actorContext, requestId: "request-context" });
+  api.getBusinessHours.mockResolvedValue({ data: businessHours, requestId: "request-hours" });
+  api.getBranchClosures.mockResolvedValue({
+    data: { items: [], page_meta: { next_cursor: null, has_more: false } },
+    requestId: "request-closures",
+  });
   api.getOperationalCalendar.mockResolvedValue({
     data: {
       window: {
@@ -394,18 +412,25 @@ describe("CalendarSchedulePage production details and states", () => {
 
     const scheduleGrid = await screen.findByRole("region", { name: /Weekly schedule grid/ });
     const dayColumn = within(scheduleGrid).getAllByLabelText(
-      "Schedule day activity from 8 AM to 8 PM"
+      "Schedule day activity from 9am to 8pm"
     )[0];
     if (!dayColumn) throw new Error("Expected a day column in the weekly schedule grid.");
 
     expect(CALENDAR_HOUR_HEIGHT).toBe(80);
-    expect(CALENDAR_TOTAL_HEIGHT).toBe(12 * 80);
-    expect(dayColumn).toHaveStyle({ height: "960px" });
+    expect(
+      calendarGridHeight({
+        visibleStartMinute: 9 * 60,
+        visibleEndMinute: 20 * 60,
+        closedWeekdays: ["sunday"],
+        specialClosedDates: {},
+      })
+    ).toBe(11 * 80);
+    expect(dayColumn).toHaveStyle({ height: "880px" });
 
     const hourGuides = dayColumn.querySelectorAll('[data-calendar-time-guide="hour"]');
     const halfHourGuides = dayColumn.querySelectorAll('[data-calendar-time-guide="half-hour"]');
-    expect(hourGuides).toHaveLength(12);
-    expect(halfHourGuides).toHaveLength(12);
+    expect(hourGuides).toHaveLength(11);
+    expect(halfHourGuides).toHaveLength(11);
     expect(hourGuides[0]).toHaveStyle({ top: "0px" });
     expect(hourGuides[1]).toHaveStyle({ top: "80px" });
     expect(halfHourGuides[0]).toHaveStyle({ top: "40px" });
@@ -413,8 +438,109 @@ describe("CalendarSchedulePage production details and states", () => {
     expect(halfHourGuides[0]).toHaveClass("border-dashed");
 
     const pickup = screen.getByRole("button", { name: /Open reservation details: Pickup/ });
-    expect(pickup).toHaveStyle({ top: "163px", height: "44px" });
+    expect(pickup).toHaveStyle({ top: "83px", height: "44px" });
     expect(container).toContainElement(pickup);
+  });
+
+  it("changes the visible week range when Business Hours change without changing event instants", async () => {
+    const first = render(<CalendarSchedulePage />);
+    const firstGrid = await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    expect(within(firstGrid).getAllByLabelText(/Schedule day activity from 9am to 8pm/)).toHaveLength(7);
+    expect(calendarEvents[0]?.period.start).toBe(pickupAt);
+    first.unmount();
+
+    api.getBusinessHours.mockResolvedValue({
+      data: { ...businessHours, opens_local: "10:00" },
+      requestId: "request-hours-later",
+    });
+    render(<CalendarSchedulePage />);
+    const secondGrid = await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    expect(within(secondGrid).getAllByLabelText(/Schedule day activity from 10am to 8pm/)).toHaveLength(7);
+    expect(calendarEvents[0]?.period.start).toBe(pickupAt);
+  });
+
+  it("keeps a recurring closed Sunday visible in Week and Month views", async () => {
+    render(<CalendarSchedulePage />);
+    const scheduleGrid = await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    const sundayKey = addCalendarDays(weekStart, 6);
+    const sundayHeader = within(scheduleGrid).getByRole("button", {
+      name: `Open ${formatCalendarDate(sundayKey, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} agenda`,
+    });
+    expect(sundayHeader).toHaveTextContent("Closed");
+
+    fireEvent.click(screen.getByRole("button", { name: "Month view" }));
+    const monthGrid = await screen.findByRole("region", { name: /Monthly schedule grid/ });
+    const monthStart = `${calendarTodayDateKey(timeZone).slice(0, 7)}-01`;
+    const monthSunday = getCalendarMonthGridDateKeys(monthStart).find(
+      (dateKey) => dateKey.slice(0, 7) === monthStart.slice(0, 7) && new Date(`${dateKey}T00:00:00.000Z`).getUTCDay() === 0
+    );
+    if (!monthSunday) throw new Error("Expected a Sunday in the visible month.");
+    const monthSundayButton = within(monthGrid).getByRole("button", {
+      name: `Open ${formatCalendarDate(monthSunday, { month: "long", day: "numeric", year: "numeric" })} agenda`,
+    });
+    expect(monthSundayButton.parentElement).toHaveTextContent("Closed");
+  });
+
+  it("marks a special closed date in Week and Month views without hiding existing activity", async () => {
+    const specialDate = calendarTodayDateKey(timeZone);
+    api.getBranchClosures.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: "00000000-0000-4000-8000-000000000199",
+            branch_id: branchId,
+            local_date: specialDate,
+            reason: "Inventory count",
+            version: 1,
+            created_at: "2026-10-01T00:00:00.000Z",
+            updated_at: "2026-10-01T00:00:00.000Z",
+          },
+        ],
+        page_meta: { next_cursor: null, has_more: false },
+      },
+      requestId: "request-special-closure",
+    });
+
+    render(<CalendarSchedulePage />);
+    const scheduleGrid = await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    const specialHeader = within(scheduleGrid).getByRole("button", {
+      name: `Open ${formatCalendarDate(specialDate, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} agenda`,
+    });
+    expect(specialHeader).toHaveTextContent("Closed");
+
+    fireEvent.click(screen.getByRole("button", { name: "Month view" }));
+    const monthGrid = await screen.findByRole("region", { name: /Monthly schedule grid/ });
+    const specialButton = within(monthGrid).getByRole("button", {
+      name: `Open ${formatCalendarDate(specialDate, { month: "long", day: "numeric", year: "numeric" })} agenda`,
+    });
+    expect(specialButton.parentElement).toHaveTextContent("Closed · Inventory count");
+  });
+
+  it("keeps an existing reservation outside Business Hours discoverable", async () => {
+    const earlyStart = new Date(mondayStart + 8 * 60 * 60 * 1_000).toISOString();
+    const earlyEvent: OperationalCalendarEvent = {
+      ...calendarEvents[0]!,
+      id: "reservation-early-pickup",
+      period: { start: earlyStart, end: new Date(Date.parse(earlyStart) + 30 * 60_000).toISOString() },
+    };
+    api.getOperationalCalendar.mockResolvedValue({
+      data: {
+        window: {
+          start: calendarBoundaryInstant(weekStart, timeZone),
+          end: calendarBoundaryInstant(addCalendarDays(weekStart, 7), timeZone),
+        },
+        categories: [],
+        events: [...calendarEvents, earlyEvent],
+        truncated: false,
+      },
+      requestId: "request-calendar-outside-hours",
+    });
+
+    render(<CalendarSchedulePage />);
+    await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    const earlyButton = screen.getByRole("button", { name: /outside business hours at 8:00 AM/i });
+    expect(earlyButton).toBeVisible();
+    expect(earlyButton).toHaveTextContent("Outside business hours");
   });
 
   it("keeps Pickup blue, Return purple, and Fitting yellow across events and summaries", async () => {
@@ -770,8 +896,8 @@ describe("CalendarSchedulePage production details and states", () => {
     await screen.findByRole("region", { name: /Weekly schedule grid/ });
     const pickup = screen.getByRole("button", { name: /Open reservation details: Pickup/ });
     const fitting = screen.getByRole("button", { name: /Open fitting details: Fitting/ });
-    expect(pickup).toHaveStyle({ top: "163px", height: "154px", left: "0%", width: "50%" });
-    expect(fitting).toHaveStyle({ top: "203px", height: "74px", left: "50%", width: "50%" });
+    expect(pickup).toHaveStyle({ top: "83px", height: "154px", left: "0%", width: "50%" });
+    expect(fitting).toHaveStyle({ top: "123px", height: "74px", left: "50%", width: "50%" });
   });
 
   it("retries a transient Reservation detail failure and refreshes both projections after pickup", async () => {

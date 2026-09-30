@@ -7,7 +7,6 @@
 
 export const FITTING_PROTOTYPE_ROUTES = {
   appointments: "/fittings",
-  schedule: "/fittings/schedule",
 } as const;
 
 export const FITTING_PROTOTYPE_TODAY = "2026-09-26";

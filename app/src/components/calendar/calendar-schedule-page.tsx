@@ -36,14 +36,17 @@ import {
   addCalendarDays,
   addCalendarMonths,
   calendarBoundaryInstant,
+  calendarBusinessHoursModel,
+  calendarClosedReason,
+  calendarGridHeight,
+  calendarTimeTicks,
   calendarTodayDateKey,
   filterCalendarActivities,
-  CALENDAR_END_HOUR,
-  CALENDAR_HOUR_HEIGHT,
-  CALENDAR_START_HOUR,
-  CALENDAR_TOTAL_HEIGHT,
   formatCalendarDate,
+  formatCalendarMinute,
   formatCalendarTime,
+  isActivityOutsideBusinessHours,
+  CALENDAR_HOUR_HEIGHT,
   getCalendarMonthGridDateKeys,
   getCalendarWeekDateKeys,
   mapOperationalCalendarEvents,
@@ -52,6 +55,7 @@ import {
   type CalendarActivity,
   type CalendarActivityFilter,
   type CalendarActivityType,
+  type CalendarBusinessHours,
   type CalendarCategory,
   type CalendarView,
 } from "./calendar-schedule-data";
@@ -154,6 +158,7 @@ export function CalendarSchedulePage() {
   const [calendarError, setCalendarError] = useState<string | null>(null);
   const [activities, setActivities] = useState<CalendarActivity[]>([]);
   const [categories, setCategories] = useState<CalendarCategory[]>([]);
+  const [businessHours, setBusinessHours] = useState<CalendarBusinessHours | null>(null);
   const [truncated, setTruncated] = useState(false);
   const [reloadVersion, setReloadVersion] = useState(0);
   const [contextReloadVersion, setContextReloadVersion] = useState(0);
@@ -249,14 +254,28 @@ export function CalendarSchedulePage() {
     setCalendarState("loading");
     setCalendarError(null);
     setActivities([]);
+    setBusinessHours(null);
     setTruncated(false);
 
-    void createDrezivoApiClient(getToken)
-      .getOperationalCalendar({ start: requestRange.start, end: requestRange.end })
-      .then(({ data }) => {
+    const firstDateKey = visibleDateKeys[0];
+    const lastDateKey = visibleDateKeys[visibleDateKeys.length - 1];
+    if (!firstDateKey || !lastDateKey) return;
+    const api = createDrezivoApiClient(getToken);
+    void Promise.all([
+      api.getOperationalCalendar({ start: requestRange.start, end: requestRange.end }),
+      api.getBusinessHours(),
+      api.getBranchClosures({
+        date_start: firstDateKey,
+        date_end: lastDateKey,
+        limit: 100,
+      }),
+    ])
+      .then(([calendarResult, hoursResult, closureResult]) => {
         if (cancelled) return;
+        const data = calendarResult.data;
         setActivities(mapOperationalCalendarEvents(data.events, timeZone));
         setCategories(data.categories);
+        setBusinessHours(calendarBusinessHoursModel(hoursResult.data, closureResult.data.items));
         setCategoryFilter((selected) =>
           selected && data.categories.some((category) => category.id === selected) ? selected : null
         );
@@ -280,7 +299,7 @@ export function CalendarSchedulePage() {
     return () => {
       cancelled = true;
     };
-  }, [activeBranchId, contextState, getToken, reloadVersion, requestRange, timeZone]);
+  }, [activeBranchId, contextState, getToken, reloadVersion, requestRange, timeZone, visibleDateKeys]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !selectedReservationId) return;
@@ -529,10 +548,11 @@ export function CalendarSchedulePage() {
               : {})}
           />
         ) : null}
-        {contextState === "ready" && calendarState === "ready" ? (
+        {contextState === "ready" && calendarState === "ready" && businessHours ? (
           view === "week" ? (
             <ScheduleGrid
               activities={visibleActivities}
+              businessHours={businessHours}
               dateKeys={weekDateKeys}
               timeZone={timeZone}
               todayKey={todayKey}
@@ -542,6 +562,7 @@ export function CalendarSchedulePage() {
           ) : (
             <MonthGrid
               activities={visibleActivities}
+              businessHours={businessHours}
               cursor={monthStart}
               dateKeys={getCalendarMonthGridDateKeys(monthStart)}
               timeZone={timeZone}
@@ -565,6 +586,7 @@ export function CalendarSchedulePage() {
         activities={categoryAndStatusActivities.filter(
           (activity) => activity.dateKey === selectedDateKey
         )}
+        businessHours={businessHours}
         activityFilter={activityFilter}
         dateKey={selectedDateKey}
         isLoading={
@@ -932,6 +954,7 @@ function CalendarMessage({
 
 function ScheduleGrid({
   activities,
+  businessHours,
   dateKeys,
   onOpenActivity,
   timeZone,
@@ -939,16 +962,15 @@ function ScheduleGrid({
   onOpenDay,
 }: {
   activities: CalendarActivity[];
+  businessHours: CalendarBusinessHours;
   dateKeys: string[];
   onOpenActivity: (activity: CalendarActivity) => void;
   timeZone: string;
   todayKey: string;
   onOpenDay: (dateKey: string) => void;
 }) {
-  const hours = Array.from(
-    { length: CALENDAR_END_HOUR - CALENDAR_START_HOUR },
-    (_, index) => index + CALENDAR_START_HOUR
-  );
+  const timeTicks = calendarTimeTicks(businessHours);
+  const totalHeight = calendarGridHeight(businessHours);
   return (
     <Card
       role="region"
@@ -960,6 +982,7 @@ function ScheduleGrid({
         <div className="min-h-[4.25rem] border-b border-r border-dashboard-border" />
         {dateKeys.map((dateKey) => {
           const dayActivities = activities.filter((activity) => activity.dateKey === dateKey);
+          const closedReason = calendarClosedReason(dateKey, businessHours);
           return (
             <button
               key={dateKey}
@@ -969,7 +992,8 @@ function ScheduleGrid({
               aria-current={dateKey === todayKey ? "date" : undefined}
               className={cn(
                 "flex min-h-[4.25rem] min-w-0 flex-col items-center justify-center border-b border-r border-dashboard-border px-1 text-center transition-colors hover:bg-dashboard-active",
-                dateKey === todayKey && "bg-dashboard-gold-soft/70"
+                dateKey === todayKey && "bg-dashboard-gold-soft/70",
+                closedReason && "bg-dashboard-canvas/70"
               )}
             >
               <span className="text-xs font-semibold text-dashboard-navy">
@@ -983,23 +1007,27 @@ function ScheduleGrid({
               >
                 {formatCalendarDate(dateKey, { month: "short", day: "numeric" })}
               </span>
-              <Badge variant="outline" className="mt-1 h-4 px-1 text-[10px]">
-                {dayActivities.length}
-              </Badge>
+              {closedReason ? (
+                <Badge variant="outline" className="mt-1 h-4 px-1 text-[10px]">Closed</Badge>
+              ) : (
+                <Badge variant="outline" className="mt-1 h-4 px-1 text-[10px]">
+                  {dayActivities.length}
+                </Badge>
+              )}
             </button>
           );
         })}
         <div
           className="relative border-r border-dashboard-border"
-          style={{ height: CALENDAR_TOTAL_HEIGHT }}
+          style={{ height: totalHeight }}
         >
-          {hours.map((hour, index) => (
+          {timeTicks.map((minute, index) => (
             <span
-              key={hour}
+              key={minute}
               className="absolute right-1 -translate-y-1/2 bg-dashboard-surface px-0.5 text-[9px] text-dashboard-muted"
               style={{ top: index * CALENDAR_HOUR_HEIGHT }}
             >
-              {formatHour(hour)}
+              {formatCalendarMinute(minute)}
             </span>
           ))}
         </div>
@@ -1009,6 +1037,8 @@ function ScheduleGrid({
             <ScheduleDayColumn
               key={dateKey}
               activities={dayActivities}
+              businessHours={businessHours}
+              dateKey={dateKey}
               isToday={dateKey === todayKey}
               timeZone={timeZone}
               onOpenActivity={onOpenActivity}
@@ -1022,6 +1052,7 @@ function ScheduleGrid({
           <OutsideHoursList
             key={`${dateKey}-outside`}
             activities={activities.filter((activity) => activity.dateKey === dateKey)}
+            businessHours={businessHours}
             isToday={dateKey === todayKey}
             timeZone={timeZone}
             onOpenActivity={onOpenActivity}
@@ -1034,55 +1065,69 @@ function ScheduleGrid({
 
 function ScheduleDayColumn({
   activities,
+  businessHours,
+  dateKey,
   isToday,
   onOpenActivity,
   timeZone,
 }: {
   activities: CalendarActivity[];
+  businessHours: CalendarBusinessHours;
+  dateKey: string;
   isToday: boolean;
   onOpenActivity: (activity: CalendarActivity) => void;
   timeZone: string;
 }) {
-  const startMinute = CALENDAR_START_HOUR * 60;
-  const endMinute = CALENDAR_END_HOUR * 60;
+  const startMinute = businessHours.visibleStartMinute;
+  const endMinute = businessHours.visibleEndMinute;
+  const totalHeight = calendarGridHeight(businessHours);
+  const timeTicks = calendarTimeTicks(businessHours);
+  const closedReason = calendarClosedReason(dateKey, businessHours);
   const onGrid = activities.filter(
     (activity) =>
       activity.startMinute >= startMinute &&
       activity.startMinute < endMinute &&
-      activity.startMinute + Math.max(MIN_ACTIVITY_TARGET_MINUTES, activity.durationMinutes) <=
-        endMinute
+      activity.startMinute + activity.durationMinutes <= endMinute
   );
   const positioned = layoutOverlappingActivities(onGrid);
 
   return (
-    <div className={cn("min-w-0", isToday && "bg-dashboard-gold-soft/40")}>
+    <div className={cn("min-w-0", isToday && "bg-dashboard-gold-soft/40", closedReason && "bg-dashboard-canvas/65")}>
       <div
         className="relative border-b border-r border-dashboard-border"
-        style={{ height: CALENDAR_TOTAL_HEIGHT }}
-        aria-label="Schedule day activity from 8 AM to 8 PM"
+        style={{ height: totalHeight }}
+        aria-label={`Schedule day activity from ${formatCalendarMinute(startMinute)} to ${formatCalendarMinute(endMinute)}${closedReason ? ", closed" : ""}`}
         data-today-column={isToday ? "true" : undefined}
       >
-        {Array.from({ length: CALENDAR_END_HOUR - CALENDAR_START_HOUR }, (_, index) => (
-          <div
-            key={`hour-${index}`}
-            className="pointer-events-none absolute inset-x-0 border-t border-dashboard-border/70"
-            style={{ top: index * CALENDAR_HOUR_HEIGHT }}
-            data-calendar-time-guide="hour"
-            aria-hidden="true"
-          ></div>
-        ))}
-        {Array.from({ length: CALENDAR_END_HOUR - CALENDAR_START_HOUR }, (_, index) => (
-          <div
-            key={`half-hour-${index}`}
-            className="pointer-events-none absolute inset-x-0 border-t border-dashed border-dashboard-border/40"
-            style={{ top: index * CALENDAR_HOUR_HEIGHT + CALENDAR_HOUR_HEIGHT / 2 }}
-            data-calendar-time-guide="half-hour"
-            aria-hidden="true"
-          ></div>
-        ))}
+        {timeTicks.map((minute) => {
+          const top = ((minute - startMinute) / 60) * CALENDAR_HOUR_HEIGHT;
+          return (
+            <div key={`hour-${minute}`}>
+              <div
+                className="pointer-events-none absolute inset-x-0 border-t border-dashboard-border/70"
+                style={{ top }}
+                data-calendar-time-guide="hour"
+                aria-hidden="true"
+              />
+              {minute + 30 < endMinute ? (
+                <div
+                  className="pointer-events-none absolute inset-x-0 border-t border-dashed border-dashboard-border/40"
+                  style={{ top: top + CALENDAR_HOUR_HEIGHT / 2 }}
+                  data-calendar-time-guide="half-hour"
+                  aria-hidden="true"
+                />
+              ) : null}
+            </div>
+          );
+        })}
+        {closedReason ? (
+          <div className="pointer-events-none absolute inset-x-2 top-2 z-[1] rounded border border-dashboard-border bg-dashboard-canvas/90 px-2 py-1 text-center text-[10px] font-semibold text-dashboard-muted">
+            Closed · {closedReason}
+          </div>
+        ) : null}
         {positioned.map(({ activity, lane, lanes }) => {
           const top = ((activity.startMinute - startMinute) / 60) * CALENDAR_HOUR_HEIGHT + 3;
-          const remainingHeight = CALENDAR_TOTAL_HEIGHT - top - 3;
+          const remainingHeight = totalHeight - top - 3;
           const height = Math.min(
             remainingHeight,
             Math.max(44, (activity.durationMinutes / 60) * CALENDAR_HOUR_HEIGHT - 6)
@@ -1127,23 +1172,19 @@ function ScheduleDayColumn({
 
 function OutsideHoursList({
   activities,
+  businessHours,
   isToday,
   onOpenActivity,
   timeZone,
 }: {
   activities: CalendarActivity[];
+  businessHours: CalendarBusinessHours;
   isToday: boolean;
   onOpenActivity: (activity: CalendarActivity) => void;
   timeZone: string;
 }) {
-  const visibleStart = CALENDAR_START_HOUR * 60;
-  const visibleEnd = CALENDAR_END_HOUR * 60;
-  const outsideHours = activities.filter(
-    (activity) =>
-      activity.startMinute < visibleStart ||
-      activity.startMinute >= visibleEnd ||
-      activity.startMinute + Math.max(MIN_ACTIVITY_TARGET_MINUTES, activity.durationMinutes) >
-        visibleEnd
+  const outsideHours = activities.filter((activity) =>
+    isActivityOutsideBusinessHours(activity, businessHours)
   );
   return (
     <div
@@ -1155,7 +1196,7 @@ function OutsideHoursList({
       {outsideHours.length > 0 ? (
         <>
           <p className="text-[10px] font-semibold text-dashboard-muted">
-            Outside visible hours ({outsideHours.length})
+            Outside business hours ({outsideHours.length})
           </p>
           <div className="max-h-28 space-y-1 overflow-y-auto">
             {outsideHours.map((activity) => (
@@ -1167,8 +1208,11 @@ function OutsideHoursList({
                   "block min-h-11 w-full truncate rounded border px-2 py-2 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent",
                   activityTone[activity.type]
                 )}
-                aria-label={`Open ${activity.source} details: ${activity.type} outside visible hours at ${formatCalendarTime(activity.startAt, timeZone)}`}
+                aria-label={`Open ${activity.source} details: ${activity.type} outside business hours at ${formatCalendarTime(activity.startAt, timeZone)}`}
               >
+                {activity.source === "reservation" ? (
+                  <span className="mb-0.5 block text-[9px] font-semibold uppercase tracking-wide">Outside business hours</span>
+                ) : null}
                 {formatCalendarTime(activity.startAt, timeZone)} · {activity.type} ·{" "}
                 {activity.customerName ?? (activity.itemNames.join(", ") || "Scheduled activity")}
               </button>
@@ -1219,6 +1263,7 @@ function layoutOverlappingActivities(activities: CalendarActivity[]) {
 
 function MonthGrid({
   activities,
+  businessHours,
   cursor,
   dateKeys,
   onOpenActivity,
@@ -1227,6 +1272,7 @@ function MonthGrid({
   onOpenDay,
 }: {
   activities: CalendarActivity[];
+  businessHours: CalendarBusinessHours;
   cursor: string;
   dateKeys: string[];
   onOpenActivity: (activity: CalendarActivity) => void;
@@ -1257,6 +1303,7 @@ function MonthGrid({
           {dateKeys.map((dateKey) => {
             const inMonth = dateKey.slice(0, 7) === cursor.slice(0, 7);
             const dayActivities = activities.filter((activity) => activity.dateKey === dateKey);
+            const closedReason = calendarClosedReason(dateKey, businessHours);
             const preview = dayActivities.slice(0, 2);
             const moreCount = Math.max(0, dayActivities.length - preview.length);
             return (
@@ -1265,7 +1312,8 @@ function MonthGrid({
                 className={cn(
                   "min-h-32 border-b border-r border-dashboard-border p-1.5 sm:min-h-36 sm:p-2",
                   !inMonth && "bg-dashboard-canvas/50",
-                  dateKey === todayKey && "bg-dashboard-active/40"
+                  dateKey === todayKey && "bg-dashboard-active/40",
+                  closedReason && "bg-dashboard-canvas/75"
                 )}
               >
                 <button
@@ -1280,6 +1328,11 @@ function MonthGrid({
                 >
                   {formatCalendarDate(dateKey, { day: "numeric" })}
                 </button>
+                {closedReason ? (
+                  <div className="mb-1 rounded border border-dashboard-border bg-dashboard-canvas px-1.5 py-1 text-[10px] font-semibold text-dashboard-muted">
+                    Closed{businessHours.specialClosedDates[dateKey] ? ` · ${businessHours.specialClosedDates[dateKey]}` : ""}
+                  </div>
+                ) : null}
                 <div className="space-y-1">
                   {preview.map((activity) => (
                     <button
@@ -1293,6 +1346,9 @@ function MonthGrid({
                       )}
                       title={`${activity.type}: ${activity.itemNames.join(", ")}`}
                     >
+                      {activity.source === "reservation" && isActivityOutsideBusinessHours(activity, businessHours) ? (
+                        <span className="mb-0.5 block text-[9px] font-semibold uppercase tracking-wide">Outside business hours</span>
+                      ) : null}
                       <span className="font-semibold">
                         {formatCalendarTime(activity.startAt, timeZone)}
                       </span>{" "}
@@ -1309,7 +1365,7 @@ function MonthGrid({
                       +{moreCount} more
                     </button>
                   ) : dayActivities.length === 0 ? (
-                    <span className="px-1 text-[10px] text-dashboard-muted">No activity</span>
+                    <span className="px-1 text-[10px] text-dashboard-muted">{closedReason ? "Closed" : "No activity"}</span>
                   ) : null}
                 </div>
               </div>
@@ -1324,6 +1380,7 @@ function MonthGrid({
 function DayAgendaSheet({
   activities,
   activityFilter,
+  businessHours,
   dateKey,
   isLoading,
   error,
@@ -1336,6 +1393,7 @@ function DayAgendaSheet({
 }: {
   activities: CalendarActivity[];
   activityFilter: ActivityFilter;
+  businessHours: CalendarBusinessHours | null;
   dateKey: string | null;
   isLoading: boolean;
   error: string | null;
@@ -1347,6 +1405,7 @@ function DayAgendaSheet({
   onOpenChange: (open: boolean) => void;
 }) {
   const open = dateKey !== null;
+  const closedReason = dateKey && businessHours ? calendarClosedReason(dateKey, businessHours) : null;
   const sortedActivities = [...activities].sort(
     (left, right) => Date.parse(left.startAt) - Date.parse(right.startAt)
   );
@@ -1382,6 +1441,7 @@ function DayAgendaSheet({
                   : "Daily agenda"}
               </SheetTitle>
               <SheetDescription className="mt-1 text-dashboard-muted">
+                {closedReason ? `Closed · ${closedReason}. ` : ""}
                 {activities.length} {activities.length === 1 ? "event" : "events"} match the current
                 category and status filters.
               </SheetDescription>
@@ -1458,7 +1518,7 @@ function DayAgendaSheet({
             </div>
           ) : activities.length === 0 ? (
             <div className="rounded-lg border border-dashed border-dashboard-border p-8 text-center text-sm text-dashboard-muted">
-              No activity on this day.
+              {closedReason ? `The branch is closed on this day${businessHours?.specialClosedDates[dateKey ?? ""] ? ` · ${businessHours.specialClosedDates[dateKey ?? ""]}` : ""}.` : "No activity on this day."}
             </div>
           ) : filteredActivities.length === 0 ? (
             <div className="rounded-lg border border-dashed border-dashboard-border p-8 text-center text-sm text-dashboard-muted">
@@ -1490,6 +1550,9 @@ function DayAgendaSheet({
                       <Badge variant="outline" className="capitalize">
                         {activity.status.replaceAll("_", " ")}
                       </Badge>
+                      {activity.source === "reservation" && businessHours && isActivityOutsideBusinessHours(activity, businessHours) ? (
+                        <Badge variant="outline">Outside business hours</Badge>
+                      ) : null}
                     </span>
                     <span className="block truncate text-sm text-dashboard-muted">
                       {activity.itemNames.join(", ") || "Scheduled activity"}
@@ -1513,9 +1576,4 @@ function DayAgendaSheet({
       </SheetContent>
     </Sheet>
   );
-}
-
-function formatHour(hour: number) {
-  const displayHour = hour % 12 || 12;
-  return `${displayHour}${hour < 12 ? "am" : "pm"}`;
 }
