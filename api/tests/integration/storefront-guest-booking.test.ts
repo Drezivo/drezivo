@@ -54,7 +54,7 @@ describe('storefront guest booking', async () => {
       });
     },
     authorizeRead: (input: { storageKey: string }) => Promise.resolve({ readUrl: `https://files.test/${input.storageKey}`, expiresAt: new Date(Date.now() + 3_600_000) }),
-    inspectUploadedObject: (key: string, _maxByteSize: number) => {
+    inspectUploadedObject: (key: string) => {
       const found = uploads.get(key);
       return Promise.resolve(found ? { ...found, versionId: null, prefix: PNG } : null);
     },
