@@ -43,4 +43,5 @@
   on an onboarding that can never finish.
 - Cross-repository signed formats (operator proof links) need one shared test vector in both
   repositories. Allow clock skew when checking the expiry, because the hosts differ.
-
+- Run every workspace's own test script before pushing (`npm run test --workspace @drezivo/contracts`
+  included). CI runs the contracts tests, and fixtures there break when a contract gains a field.
