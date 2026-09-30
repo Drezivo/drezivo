@@ -56,7 +56,12 @@ const overview: DashboardOverviewResponse = {
         event_type: "pickup",
         period: { start: "2026-09-30T04:00:00.000Z", end: "2026-09-30T04:30:00.000Z" },
         customer_name: "Carla Cruz",
-        item_names: ["Blue Evening Gown"],
+        customer_phone: "555-0101",
+        rental_items: [
+          { name: "Blue Evening Gown", rental_minor: "1000", currency: "PHP" },
+          { name: "Second Pickup Gown", rental_minor: "2500", currency: "PHP" },
+        ],
+        rental_days: 2,
         status: "confirmed",
       },
       {
@@ -66,6 +71,7 @@ const overview: DashboardOverviewResponse = {
         event_type: "fitting",
         period: { start: "2026-09-30T05:00:00.000Z", end: "2026-09-30T06:00:00.000Z" },
         customer_name: "Alyssa Santos",
+        customer_phone: null,
         item_names: ["Wedding Dress"],
         status: "pending",
       },
@@ -114,29 +120,36 @@ const overview: DashboardOverviewResponse = {
 describe("DashboardOverview", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    dashboardApi.getDashboardOverview.mockResolvedValue({ data: overview, requestId: "req-dashboard" });
+    dashboardApi.getDashboardOverview.mockResolvedValue({
+      data: overview,
+      requestId: "req-dashboard",
+    });
   });
 
   it("consumes the dashboard API and renders live metrics, date, and business performance", async () => {
     render(<DashboardOverview />);
 
-    expect(await screen.findByRole("heading", { name: "Your rental business today" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Your rental business today" })
+    ).toBeVisible();
     expect(dashboardApi.getDashboardOverview).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Wed, Sep 30, 2026")).toBeVisible();
     const metrics = screen.getByRole("region", { name: "Today's overview" });
-    for (const [label, value] of ([
+    for (const [label, value] of [
       ["Active Rentals", "2"],
       ["Pickups Today", "1"],
       ["Returns Today", "1"],
       ["Fittings Today", "1"],
       ["Payments to Review", "2"],
-    ] as const)) {
+    ] as const) {
       expect(within(metrics).getByText(label)).toBeVisible();
       expect(within(metrics).getAllByText(value).length).toBeGreaterThan(0);
     }
 
     expect(screen.getByText("₱48,500.00")).toBeVisible();
-    expect(screen.getByText("Completed rental value excludes deposits; new customers are tenant-wide.")).toBeVisible();
+    expect(
+      screen.getByText("Completed rental value excludes deposits; new customers are tenant-wide.")
+    ).toBeVisible();
     expect(screen.queryByText(/sample|prototype|maria|2025/i)).not.toBeInTheDocument();
   });
 
@@ -152,16 +165,32 @@ describe("DashboardOverview", () => {
   it("renders API-backed schedule, rental, and three-day fitting rows with real channel labels", async () => {
     render(<DashboardOverview />);
 
-    const schedule = await screen.findByRole("list", { name: "Today's schedule" });
-    expect(within(schedule).getByText("Carla Cruz")).toBeVisible();
-    expect(within(schedule).getByText("Blue Evening Gown")).toBeVisible();
-    expect(within(schedule).getByText("Pickup")).toBeVisible();
-    expect(within(schedule).getByText("Fitting")).toBeVisible();
+    const schedule = await screen.findByRole("table", { name: "Today's schedule" });
+    expect(
+      within(schedule)
+        .getAllByRole("columnheader")
+        .map((header) => header.textContent)
+    ).toEqual(["Time", "Activity", "Name", "Gown", "Status"]);
+    const scheduleRows = within(schedule).getAllByRole("row");
+    const pickupRow = scheduleRows[1];
+    const fittingRow = scheduleRows[2];
+    if (!pickupRow || !fittingRow) throw new Error("Today's schedule is missing an event row");
+    expect(within(pickupRow).getByText("555-0101")).toBeVisible();
+    expect(within(pickupRow).getByText("Carla Cruz")).toBeVisible();
+    expect(within(pickupRow).getByText("Blue Evening Gown")).toBeVisible();
+    expect(within(pickupRow).getByText("₱10 / 2 days")).toBeVisible();
+    expect(within(pickupRow).getByText("Second Pickup Gown")).toBeVisible();
+    expect(within(pickupRow).getByText("₱25 / 2 days")).toBeVisible();
+    expect(within(pickupRow).getByText("Pickup")).toBeVisible();
+    expect(within(fittingRow).getByText("No phone on file")).toBeVisible();
+    expect(within(fittingRow).getByText("Fitting")).toBeVisible();
+    expect(within(fittingRow).getByText("Wedding Dress")).toBeVisible();
+    expect(within(fittingRow).queryByText(/\d+ day/)).not.toBeInTheDocument();
 
     expect(screen.getByRole("heading", { name: "Upcoming Rentals" })).toBeVisible();
-    const rentalsTable = screen.getAllByRole("table").find((table) =>
-      within(table).queryByRole("columnheader", { name: "Rental Period" })
-    );
+    const rentalsTable = screen
+      .getAllByRole("table")
+      .find((table) => within(table).queryByRole("columnheader", { name: "Rental Period" }));
     expect(rentalsTable).toBeDefined();
     if (!rentalsTable) throw new Error("Upcoming rentals table is missing");
     expect(within(rentalsTable).getByText("Bea Cruz")).toBeVisible();
@@ -172,9 +201,9 @@ describe("DashboardOverview", () => {
       "href",
       "/fittings"
     );
-    const fittingTable = screen.getAllByRole("table").find((table) =>
-      within(table).queryByRole("columnheader", { name: "Booked via" })
-    );
+    const fittingTable = screen
+      .getAllByRole("table")
+      .find((table) => within(table).queryByRole("columnheader", { name: "Booked via" }));
     expect(fittingTable).toBeDefined();
     if (!fittingTable) throw new Error("Fitting appointments table is missing");
     expect(within(fittingTable).getByText("Jamie Cruz")).toBeVisible();
@@ -218,7 +247,9 @@ describe("DashboardOverview", () => {
     expect(screen.queryByText(/48,500|Maria Santos|Sample data/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByRole("heading", { name: "Your rental business today" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Your rental business today" })
+    ).toBeVisible();
     expect(dashboardApi.getDashboardOverview).toHaveBeenCalledTimes(2);
   });
 
@@ -233,10 +264,15 @@ describe("DashboardOverview", () => {
         new_customers: { current: 0, previous: 0 },
       },
     } satisfies DashboardOverviewResponse;
-    dashboardApi.getDashboardOverview.mockResolvedValueOnce({ data: zeroBaseline, requestId: "req-zero" });
+    dashboardApi.getDashboardOverview.mockResolvedValueOnce({
+      data: zeroBaseline,
+      requestId: "req-zero",
+    });
     render(<DashboardOverview />);
 
-    await waitFor(() => expect(screen.getAllByText("No prior-month baseline").length).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(screen.getAllByText("No prior-month baseline").length).toBeGreaterThan(0)
+    );
     expect(screen.getByText("No completed rentals this month")).toBeVisible();
   });
 });

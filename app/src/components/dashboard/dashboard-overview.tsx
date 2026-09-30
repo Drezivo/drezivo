@@ -5,10 +5,7 @@ import { ArrowRight, ChevronRight, CircleAlert, Clock3, RefreshCw } from "lucide
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import type {
-  DashboardOverviewResponse,
-  DashboardOverviewScheduleEvent,
-} from "@drezivo/contracts";
+import type { DashboardOverviewResponse, DashboardOverviewScheduleEvent } from "@drezivo/contracts";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -133,7 +130,7 @@ export function DashboardOverview() {
         ? "You do not have permission to view this dashboard."
         : error?.status === 409
           ? "This workspace is currently read-only for dashboard operations."
-          : error?.message ?? "The dashboard could not be loaded.";
+          : (error?.message ?? "The dashboard could not be loaded.");
     return (
       <div className="min-h-[calc(100svh-72px)] px-10 py-5 sm:py-6">
         <Card role="alert" className="mx-auto max-w-2xl">
@@ -239,10 +236,21 @@ export function DashboardOverview() {
             </CardHeader>
             <CardContent className="p-0">
               {overview.today_schedule.items.length === 0 ? (
-                <p className="px-5 py-8 text-sm text-dashboard-muted">No schedule activity today.</p>
+                <p className="px-5 py-8 text-sm text-dashboard-muted">
+                  No schedule activity today.
+                </p>
               ) : (
-                <div className="relative w-full overflow-x-auto">
-                  <ul aria-label="Today's schedule" className="min-w-[560px]">
+                <Table aria-label="Today's schedule" className="min-w-[680px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Time</TableHead>
+                      <TableHead>Activity</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Gown</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {overview.today_schedule.items.map((event) => (
                       <ScheduleRow
                         key={event.id}
@@ -250,12 +258,13 @@ export function DashboardOverview() {
                         timezone={overview.window.timezone}
                       />
                     ))}
-                  </ul>
-                </div>
+                  </TableBody>
+                </Table>
               )}
               {overview.today_schedule.truncated && (
                 <p className="border-t border-dashboard-border px-5 py-3 text-xs text-dashboard-muted">
-                  Showing {overview.today_schedule.items.length} of {overview.today_schedule.total} events.
+                  Showing {overview.today_schedule.items.length} of {overview.today_schedule.total}{" "}
+                  events.
                 </p>
               )}
             </CardContent>
@@ -308,13 +317,20 @@ export function DashboardOverview() {
                           {rental.item_names.join(", ") || "—"}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-dashboard-navy/80">
-                          {formatDateRange(rental.pickup_at, rental.due_at, overview.window.timezone)}
+                          {formatDateRange(
+                            rental.pickup_at,
+                            rental.due_at,
+                            overview.window.timezone
+                          )}
                         </TableCell>
                         <TableCell>
                           <StatusBadge status={rental.status} />
                         </TableCell>
                         <TableCell className="pr-5 text-right">
-                          <ChevronRight className="ml-auto h-4 w-4 text-dashboard-navy" aria-hidden="true" />
+                          <ChevronRight
+                            className="ml-auto h-4 w-4 text-dashboard-navy"
+                            aria-hidden="true"
+                          />
                         </TableCell>
                       </TableRow>
                     ))}
@@ -442,7 +458,9 @@ export function DashboardOverview() {
                 />
                 <PerformanceMetric
                   label="Completed Rentals"
-                  value={overview.business_performance.completed_rentals.current.toLocaleString("en-PH")}
+                  value={overview.business_performance.completed_rentals.current.toLocaleString(
+                    "en-PH"
+                  )}
                   comparison={compareCounts(
                     overview.business_performance.completed_rentals.current,
                     overview.business_performance.completed_rentals.previous
@@ -450,12 +468,14 @@ export function DashboardOverview() {
                 />
                 <PerformanceMetric
                   label="Average Rental Value"
-                  value={overview.business_performance.average_rental_value.current_minor === null
-                    ? "—"
-                    : formatMoneyMinor(
-                        overview.business_performance.average_rental_value.current_minor,
-                        overview.business_performance.currency
-                      )}
+                  value={
+                    overview.business_performance.average_rental_value.current_minor === null
+                      ? "—"
+                      : formatMoneyMinor(
+                          overview.business_performance.average_rental_value.current_minor,
+                          overview.business_performance.currency
+                        )
+                  }
                   comparison={compareOptionalMoney(
                     overview.business_performance.average_rental_value.current_minor,
                     overview.business_performance.average_rental_value.previous_minor
@@ -463,7 +483,9 @@ export function DashboardOverview() {
                 />
                 <PerformanceMetric
                   label="New Customers"
-                  value={overview.business_performance.new_customers.current.toLocaleString("en-PH")}
+                  value={overview.business_performance.new_customers.current.toLocaleString(
+                    "en-PH"
+                  )}
                   comparison={compareCounts(
                     overview.business_performance.new_customers.current,
                     overview.business_performance.new_customers.previous
@@ -491,22 +513,59 @@ function ScheduleRow({
       : event.event_type === "pickup"
         ? "Pickup"
         : "Return";
-  const itemLabel = event.item_names.join(", ") || (event.source === "fitting" ? "Fitting appointment" : "Rental");
 
   return (
-    <li className="grid grid-cols-[48px_76px_minmax(0,1fr)_auto_16px] items-center gap-2 border-b border-dashboard-border px-5 py-3.5 last:border-b-0 sm:grid-cols-[56px_90px_minmax(0,1fr)_auto_16px] sm:gap-3">
-      <div className="flex items-center gap-2 text-sm font-medium text-dashboard-muted">
-        <Clock3 className="hidden h-4 w-4 text-dashboard-navy sm:block" aria-hidden="true" />
-        <span>{formatTime(event.period.start, timezone)}</span>
-      </div>
-      <EventBadge type={type} />
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-dashboard-navy">{event.customer_name}</p>
-        <p className="truncate text-sm text-dashboard-muted">{itemLabel}</p>
-      </div>
-      <StatusBadge status={event.status} />
-      <ChevronRight className="h-4 w-4 text-dashboard-navy" aria-hidden="true" />
-    </li>
+    <TableRow>
+      <TableCell className="text-sm font-medium text-dashboard-muted">
+        <div className="flex items-center gap-2">
+          <Clock3 className="hidden h-4 w-4 text-dashboard-navy sm:block" aria-hidden="true" />
+          <span>{formatTime(event.period.start, timezone)}</span>
+        </div>
+      </TableCell>
+      <TableCell>
+        <EventBadge type={type} />
+      </TableCell>
+      <TableCell className="whitespace-normal">
+        <div className="min-w-28">
+          <p className="truncate text-xs text-dashboard-muted">
+            {event.customer_phone ?? "No phone on file"}
+          </p>
+          <p className="truncate text-sm font-semibold text-dashboard-navy">
+            {event.customer_name}
+          </p>
+        </div>
+      </TableCell>
+      <TableCell className="whitespace-normal">
+        <div className="min-w-40 space-y-2">
+          {event.source === "reservation" ? (
+            event.rental_items.length > 0 ? (
+              event.rental_items.map((item, index) => (
+                <div key={`${item.name}-${index}`}>
+                  <p className="text-sm font-medium text-dashboard-navy">{item.name}</p>
+                  <p className="text-xs text-dashboard-muted">
+                    {formatRentalItemPrice(item.rental_minor, item.currency)} / {event.rental_days}{" "}
+                    {event.rental_days === 1 ? "day" : "days"}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <span className="text-sm text-dashboard-muted">Rental</span>
+            )
+          ) : event.item_names.length > 0 ? (
+            event.item_names.map((name, index) => (
+              <p className="text-sm font-medium text-dashboard-navy" key={`${name}-${index}`}>
+                {name}
+              </p>
+            ))
+          ) : (
+            <span className="text-sm text-dashboard-muted">Fitting appointment</span>
+          )}
+        </div>
+      </TableCell>
+      <TableCell>
+        <StatusBadge status={event.status} />
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -574,6 +633,19 @@ function formatMonth(value: string, timezone: string): string {
 }
 
 function formatMoneyMinor(value: string, currency: string): string {
+  return formatMoneyMinorWithFractionDigits(value, currency, 2);
+}
+
+function formatRentalItemPrice(value: string, currency: string): string {
+  const fractionDigits = BigInt(value) % 100n === 0n ? 0 : 2;
+  return formatMoneyMinorWithFractionDigits(value, currency, fractionDigits);
+}
+
+function formatMoneyMinorWithFractionDigits(
+  value: string,
+  currency: string,
+  fractionDigits: number
+): string {
   const amount = BigInt(value);
   const whole = amount / 100n;
   const fraction = (amount % 100n).toString().padStart(2, "0");
@@ -581,8 +653,8 @@ function formatMoneyMinor(value: string, currency: string): string {
   const currencyParts = new Intl.NumberFormat(locale, {
     style: "currency",
     currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
   }).formatToParts(0);
   const groupedWhole = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(whole);
   let insertedInteger = false;

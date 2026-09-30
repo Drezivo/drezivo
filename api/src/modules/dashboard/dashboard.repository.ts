@@ -96,6 +96,7 @@ export const DASHBOARD_OVERVIEW_SQL = `WITH branch_clock AS MATERIALIZED (
          r.customer_snapshot,
          r.pickup_at AS starts_at,
          r.pickup_at + INTERVAL '30 minutes' AS ends_at,
+         GREATEST(1, CEIL(EXTRACT(EPOCH FROM (r.due_at - r.pickup_at)) / 86400.0))::int AS rental_days,
          r.status::text AS status
        FROM reservation r
        CROSS JOIN windows w
@@ -112,6 +113,7 @@ export const DASHBOARD_OVERVIEW_SQL = `WITH branch_clock AS MATERIALIZED (
          r.customer_snapshot,
          r.due_at,
          r.due_at + INTERVAL '30 minutes',
+         GREATEST(1, CEIL(EXTRACT(EPOCH FROM (r.due_at - r.pickup_at)) / 86400.0))::int,
          r.status::text
        FROM reservation r
        CROSS JOIN windows w
@@ -128,6 +130,7 @@ export const DASHBOARD_OVERVIEW_SQL = `WITH branch_clock AS MATERIALIZED (
          NULL::jsonb,
          lower(fa.period),
          upper(fa.period),
+         NULL::int,
          fa.status::text
        FROM fitting_appointment fa
        CROSS JOIN windows w
@@ -155,21 +158,33 @@ export const DASHBOARD_OVERVIEW_SQL = `WITH branch_clock AS MATERIALIZED (
                NULLIF(btrim(c.full_name), ''),
                'Customer'
              ),
-             'item_names', CASE
-               WHEN item.source = 'reservation' THEN COALESCE(ri.item_names, '[]'::jsonb)
-               ELSE COALESCE(fi.item_names, '[]'::jsonb)
+             'customer_phone', CASE
+               WHEN item.source = 'reservation' THEN NULLIF(btrim(item.customer_snapshot->>'phone'), '')
+               ELSE NULLIF(btrim(c.phone), '')
              END,
              'status', item.status
-           ) ORDER BY item.starts_at, item.event_type, item.id
+           ) || CASE
+             WHEN item.source = 'reservation' THEN jsonb_build_object(
+               'rental_items', COALESCE(ri.rental_items, '[]'::jsonb),
+               'rental_days', item.rental_days
+             )
+             ELSE jsonb_build_object('item_names', COALESCE(fi.item_names, '[]'::jsonb))
+           END ORDER BY item.starts_at, item.event_type, item.id
          ),
          '[]'::jsonb
        ) AS items
        FROM today_event_page item
        LEFT JOIN customer c ON c.tenant_id = $1::uuid AND c.id = item.customer_id
        LEFT JOIN LATERAL (
-         SELECT jsonb_agg(lines.name_snapshot ORDER BY lines.line_number, lines.id) AS item_names
+         SELECT jsonb_agg(
+                  jsonb_build_object(
+                    'name', lines.name_snapshot,
+                    'rental_minor', lines.rental_minor::text,
+                    'currency', lines.currency
+                  ) ORDER BY lines.line_number, lines.id
+                ) AS rental_items
            FROM (
-             SELECT rl.name_snapshot, rl.line_number, rl.id
+             SELECT rl.name_snapshot, rl.rental_minor, rl.currency, rl.line_number, rl.id
                FROM reservation_line rl
               WHERE item.source = 'reservation'
                 AND rl.tenant_id = $1::uuid AND rl.reservation_id = item.source_id

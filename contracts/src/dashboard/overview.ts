@@ -7,6 +7,14 @@ import { fittingBookingChannel } from '../fittings/state';
 
 const dashboardCount = z.number().int().nonnegative().safe();
 const boundedNames = z.array(z.string().trim().min(1).max(200)).max(20);
+const customerPhone = z.string().trim().min(1).max(50).nullable();
+const dashboardRentalItem = z
+  .object({
+    name: z.string().trim().min(1).max(200),
+    rental_minor: nonNegativeMoneyString,
+    currency: currencyCode,
+  })
+  .strict();
 
 export const dashboardOverviewReservationStatus = z.enum([
   'pending_confirmation',
@@ -16,12 +24,7 @@ export const dashboardOverviewReservationStatus = z.enum([
   'completed',
 ]);
 
-export const dashboardOverviewFittingStatus = z.enum([
-  'pending',
-  'confirmed',
-  'completed',
-  'no_show',
-]);
+export const dashboardOverviewFittingStatus = z.enum(['pending', 'confirmed', 'completed', 'no_show']);
 
 const dashboardOverviewReservationEvent = z.discriminatedUnion('event_type', [
   z
@@ -32,7 +35,9 @@ const dashboardOverviewReservationEvent = z.discriminatedUnion('event_type', [
       event_type: z.literal('pickup'),
       period: instantInterval,
       customer_name: z.string().trim().min(1).max(200),
-      item_names: boundedNames,
+      customer_phone: customerPhone,
+      rental_items: z.array(dashboardRentalItem).max(20),
+      rental_days: z.number().int().positive().safe(),
       status: dashboardOverviewReservationStatus,
     })
     .strict(),
@@ -44,7 +49,9 @@ const dashboardOverviewReservationEvent = z.discriminatedUnion('event_type', [
       event_type: z.literal('return'),
       period: instantInterval,
       customer_name: z.string().trim().min(1).max(200),
-      item_names: boundedNames,
+      customer_phone: customerPhone,
+      rental_items: z.array(dashboardRentalItem).max(20),
+      rental_days: z.number().int().positive().safe(),
       status: dashboardOverviewReservationStatus,
     })
     .strict(),
@@ -58,6 +65,7 @@ const dashboardOverviewFittingEvent = z
     event_type: z.literal('fitting'),
     period: instantInterval,
     customer_name: z.string().trim().min(1).max(200),
+    customer_phone: customerPhone,
     item_names: boundedNames,
     status: dashboardOverviewFittingStatus,
   })
@@ -148,9 +156,7 @@ export const dashboardOverviewResponse = z
             previous_minor: nonNegativeMoneyString,
           })
           .strict(),
-        completed_rentals: z
-          .object({ current: dashboardCount, previous: dashboardCount })
-          .strict(),
+        completed_rentals: z.object({ current: dashboardCount, previous: dashboardCount }).strict(),
         average_rental_value: z
           .object({
             current_minor: nonNegativeMoneyString.nullable(),

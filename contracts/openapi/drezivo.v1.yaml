@@ -12758,13 +12758,38 @@ paths:
                                           type: string
                                           minLength: 1
                                           maxLength: 200
-                                        item_names:
+                                        customer_phone:
+                                          type:
+                                            - string
+                                            - "null"
+                                          minLength: 1
+                                          maxLength: 50
+                                        rental_items:
                                           type: array
                                           items:
-                                            type: string
-                                            minLength: 1
-                                            maxLength: 200
+                                            type: object
+                                            properties:
+                                              name:
+                                                type: string
+                                                minLength: 1
+                                                maxLength: 200
+                                              rental_minor:
+                                                type: string
+                                                pattern: ^-?(0|[1-9]\d*)$
+                                              currency:
+                                                type: string
+                                                pattern: ^[A-Z]{3}$
+                                            required:
+                                              - name
+                                              - rental_minor
+                                              - currency
+                                            additionalProperties: false
                                           maxItems: 20
+                                        rental_days:
+                                          type: integer
+                                          exclusiveMinimum: 0
+                                          minimum: -9007199254740991
+                                          maximum: 9007199254740991
                                         status:
                                           type: string
                                           enum: &a35
@@ -12780,7 +12805,9 @@ paths:
                                         - event_type
                                         - period
                                         - customer_name
-                                        - item_names
+                                        - customer_phone
+                                        - rental_items
+                                        - rental_days
                                         - status
                                       additionalProperties: false
                                     - type: object
@@ -12816,13 +12843,38 @@ paths:
                                           type: string
                                           minLength: 1
                                           maxLength: 200
-                                        item_names:
+                                        customer_phone:
+                                          type:
+                                            - string
+                                            - "null"
+                                          minLength: 1
+                                          maxLength: 50
+                                        rental_items:
                                           type: array
                                           items:
-                                            type: string
-                                            minLength: 1
-                                            maxLength: 200
+                                            type: object
+                                            properties:
+                                              name:
+                                                type: string
+                                                minLength: 1
+                                                maxLength: 200
+                                              rental_minor:
+                                                type: string
+                                                pattern: ^-?(0|[1-9]\d*)$
+                                              currency:
+                                                type: string
+                                                pattern: ^[A-Z]{3}$
+                                            required:
+                                              - name
+                                              - rental_minor
+                                              - currency
+                                            additionalProperties: false
                                           maxItems: 20
+                                        rental_days:
+                                          type: integer
+                                          exclusiveMinimum: 0
+                                          minimum: -9007199254740991
+                                          maximum: 9007199254740991
                                         status:
                                           type: string
                                           enum: *a35
@@ -12833,7 +12885,9 @@ paths:
                                         - event_type
                                         - period
                                         - customer_name
-                                        - item_names
+                                        - customer_phone
+                                        - rental_items
+                                        - rental_days
                                         - status
                                       additionalProperties: false
                                 - type: object
@@ -12869,6 +12923,12 @@ paths:
                                       type: string
                                       minLength: 1
                                       maxLength: 200
+                                    customer_phone:
+                                      type:
+                                        - string
+                                        - "null"
+                                      minLength: 1
+                                      maxLength: 50
                                     item_names:
                                       type: array
                                       items:
@@ -12890,6 +12950,7 @@ paths:
                                     - event_type
                                     - period
                                     - customer_name
+                                    - customer_phone
                                     - item_names
                                     - status
                                   additionalProperties: false

@@ -32,7 +32,9 @@ function validOverview() {
           event_type: 'pickup' as const,
           period: { start: '2026-09-30T04:00:00.000Z', end: '2026-09-30T04:30:00.000Z' },
           customer_name: 'A customer',
-          item_names: ['Evening Gown'],
+          customer_phone: '555-0101',
+          rental_items: [{ name: 'Evening Gown', rental_minor: '30000', currency: 'PHP' }],
+          rental_days: 3,
           status: 'confirmed' as const,
         },
         {
@@ -42,6 +44,7 @@ function validOverview() {
           event_type: 'fitting' as const,
           period: { start: '2026-09-30T05:00:00.000Z', end: '2026-09-30T06:00:00.000Z' },
           customer_name: 'Another customer',
+          customer_phone: null,
           item_names: [],
           status: 'pending' as const,
         },
@@ -114,9 +117,35 @@ describe('dashboardOverviewResponse', () => {
       ...withContactData,
       today_schedule: {
         ...withContactData.today_schedule,
-        items: [{ ...firstEvent, email: 'private@example.test' }, ...withContactData.today_schedule.items.slice(1)],
+        items: [
+          { ...firstEvent, email: 'private@example.test' },
+          ...withContactData.today_schedule.items.slice(1),
+        ],
       },
     };
     expect(() => dashboardOverviewResponse.parse(contactProjection)).toThrow();
+  });
+
+  it('requires phone and rental details only for their matching event source', () => {
+    const withoutPhone = validOverview();
+    const pickup = withoutPhone.today_schedule.items[0];
+    if (!pickup) throw new Error('expected a pickup fixture');
+    const pickupWithoutPhone = { ...pickup };
+    Reflect.deleteProperty(pickupWithoutPhone, 'customer_phone');
+    withoutPhone.today_schedule.items[0] = pickupWithoutPhone;
+    expect(() => dashboardOverviewResponse.parse(withoutPhone)).toThrow();
+
+    const fittingWithRentalPrice = validOverview();
+    const fitting = fittingWithRentalPrice.today_schedule.items[1];
+    if (!fitting) throw new Error('expected a fitting fixture');
+    const invalidFitting = {
+      ...fitting,
+      rental_items: [{ name: 'Evening Gown', rental_minor: '30000', currency: 'PHP' }],
+    };
+    const invalidProjection = {
+      ...fittingWithRentalPrice,
+      today_schedule: { ...fittingWithRentalPrice.today_schedule, items: [pickup, invalidFitting] },
+    };
+    expect(() => dashboardOverviewResponse.parse(invalidProjection)).toThrow();
   });
 });

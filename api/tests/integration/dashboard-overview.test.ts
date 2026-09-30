@@ -52,7 +52,8 @@ interface DashboardSeed {
 describe('Dashboard overview API', async () => {
   const { createApp } = await import('../../src/app.js');
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
-  const { DASHBOARD_OVERVIEW_SQL } = await import('../../src/modules/dashboard/dashboard.repository.js');
+  const { DASHBOARD_OVERVIEW_SQL } =
+    await import('../../src/modules/dashboard/dashboard.repository.js');
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
 
   beforeAll(async () => {
@@ -68,7 +69,11 @@ describe('Dashboard overview API', async () => {
     const unauthenticated = await request(createApp()).get('/api/v1/dashboard/overview');
     expect(unauthenticated.status).toBe(401);
 
-    const seed = await seedDashboardWorkspace('dashboard_permission', 'user_dashboard_permission', []);
+    const seed = await seedDashboardWorkspace(
+      'dashboard_permission',
+      'user_dashboard_permission',
+      [],
+    );
     useClerk(seed);
     const forbidden = await request(createApp()).get('/api/v1/dashboard/overview');
     expect(forbidden.status).toBe(403);
@@ -79,13 +84,17 @@ describe('Dashboard overview API', async () => {
       'reservations.manage',
     ]);
     const foreignTenant = await createTestTenant({ clerkOrgId: 'org_dashboard_foreign_customer' });
-    await withTenantTransaction(foreignTenant.id, 'user_dashboard_foreign_customer', async (client) => {
-      await client.query(
-        `INSERT INTO customer (tenant_id, full_name, email)
+    await withTenantTransaction(
+      foreignTenant.id,
+      'user_dashboard_foreign_customer',
+      async (client) => {
+        await client.query(
+          `INSERT INTO customer (tenant_id, full_name, email)
          VALUES ($1, 'Foreign Dashboard Customer', 'foreign-dashboard@example.test')`,
-        [foreignTenant.id],
-      );
-    });
+          [foreignTenant.id],
+        );
+      },
+    );
     useClerk(seed);
 
     const response = await request(createApp()).get('/api/v1/dashboard/overview');
@@ -101,7 +110,11 @@ describe('Dashboard overview API', async () => {
     });
     expect(data.today_schedule).toMatchObject({ items: [], total: 0, truncated: false });
     expect(data.upcoming_rentals).toMatchObject({ items: [], total: 0, truncated: false });
-    expect(data.upcoming_fitting_appointments).toMatchObject({ items: [], total: 0, truncated: false });
+    expect(data.upcoming_fitting_appointments).toMatchObject({
+      items: [],
+      total: 0,
+      truncated: false,
+    });
     expect(data.business_performance).toMatchObject({
       completed_rental_value: { current_minor: '0', previous_minor: '0' },
       completed_rentals: { current: 0, previous: 0 },
@@ -154,13 +167,17 @@ describe('Dashboard overview API', async () => {
       await adminPool.end();
     }
 
-    const queryPlan = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const result = await client.query<{ 'QUERY PLAN': unknown }>(
-        `EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) ${DASHBOARD_OVERVIEW_SQL}`,
-        [seed.tenantId, seed.branchId],
-      );
-      return result.rows.map((row) => String(row['QUERY PLAN'])).join('\n');
-    });
+    const queryPlan = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const result = await client.query<{ 'QUERY PLAN': unknown }>(
+          `EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) ${DASHBOARD_OVERVIEW_SQL}`,
+          [seed.tenantId, seed.branchId],
+        );
+        return result.rows.map((row) => String(row['QUERY PLAN'])).join('\n');
+      },
+    );
 
     expect(queryPlan).not.toContain('Seq Scan on reservation');
     expect(queryPlan).not.toContain('Seq Scan on customer');
@@ -195,6 +212,22 @@ describe('Dashboard overview API', async () => {
     expect(data.today_schedule.items.map((item) => item.event_type)).toContain('return');
     expect(data.today_schedule.items.map((item) => item.event_type)).toContain('fitting');
     expect(data.today_schedule.total).toBe(data.today_schedule.items.length);
+    const pickupEvent = data.today_schedule.items.find((item) => item.event_type === 'pickup');
+    const returnEvent = data.today_schedule.items.find((item) => item.event_type === 'return');
+    const fittingEvent = data.today_schedule.items.find((item) => item.event_type === 'fitting');
+    expect(pickupEvent).toMatchObject({
+      customer_phone: '555-0101',
+      rental_days: 3,
+      rental_items: [
+        { name: 'Today Pickup Gown', rental_minor: '1000', currency: 'PHP' },
+        { name: 'Second Pickup Gown', rental_minor: '2000', currency: 'PHP' },
+      ],
+    });
+    expect(returnEvent).toMatchObject({ customer_phone: null, rental_days: 3 });
+    expect(fittingEvent).toMatchObject({
+      customer_phone: '555-0199',
+      item_names: ['Dashboard Gown'],
+    });
 
     expect(data.upcoming_rentals.items).toHaveLength(2);
     expect(data.upcoming_rentals.items.map((item) => item.item_names[0])).toEqual([
@@ -209,12 +242,12 @@ describe('Dashboard overview API', async () => {
       status: 'pending',
       garment_names: ['Storefront Fitting Gown'],
     });
-    expect(data.upcoming_fitting_appointments.items.map((item) => item.garment_names).flat()).toContain(
-      'Two-Day Window Fitting Gown',
-    );
-    expect(data.upcoming_fitting_appointments.items.map((item) => item.garment_names).flat()).not.toContain(
-      'Outside-Window Fitting Gown',
-    );
+    expect(
+      data.upcoming_fitting_appointments.items.map((item) => item.garment_names).flat(),
+    ).toContain('Two-Day Window Fitting Gown');
+    expect(
+      data.upcoming_fitting_appointments.items.map((item) => item.garment_names).flat(),
+    ).not.toContain('Outside-Window Fitting Gown');
     expect(data.business_performance).toMatchObject({
       currency: 'PHP',
       completed_rental_value: { current_minor: '12000', previous_minor: '7000' },
@@ -225,6 +258,7 @@ describe('Dashboard overview API', async () => {
 
     const serialized = JSON.stringify(data);
     expect(serialized).not.toContain('dashboard-private@example.test');
+    expect(serialized).not.toContain('secret@example.test');
     expect(serialized).not.toContain('private fitting note');
     expect(serialized).not.toContain('payment_receipt');
     expect(serialized).not.toContain('fittingType');
@@ -297,6 +331,10 @@ describe('Dashboard overview API', async () => {
       );
       const customerId = requireId(customerResult.rows[0]?.id, 'customer');
       await client.query(
+        `UPDATE customer SET phone = '555-0199' WHERE tenant_id = $1 AND id = $2`,
+        [tenant.id, customerId],
+      );
+      await client.query(
         `INSERT INTO customer (tenant_id, full_name, email, created_at)
          SELECT $1, 'Previous Month Customer', 'previous@example.test',
                 ((date_trunc('month', statement_timestamp() AT TIME ZONE b.timezone) - interval '1 month' + interval '5 days')::timestamp AT TIME ZONE b.timezone)
@@ -362,6 +400,8 @@ describe('Dashboard overview API', async () => {
         dueDayOffset: number;
         dueHour: number;
         amount: number;
+        lineAmount?: number;
+        snapshotPhone?: string | null;
         completedMonthOffset?: number;
         branchId?: string;
       }): Promise<string> => {
@@ -377,7 +417,12 @@ describe('Dashboard overview API', async () => {
            SELECT $1, COALESCE($10::uuid, $2::uuid), $3, $4, $5, $6, $7, $8,
                   ((clock.today + $9::int)::timestamp + make_interval(hours => $11::int)) AT TIME ZONE clock.timezone,
                   ((clock.today + $12::int)::timestamp + make_interval(hours => $13::int)) AT TIME ZONE clock.timezone,
-                  clock.timezone, '{"full_name":"Dashboard Customer","email":"secret@example.test"}'::jsonb,
+                  clock.timezone,
+                  jsonb_build_object(
+                    'full_name', 'Dashboard Customer',
+                    'email', 'secret@example.test',
+                    'phone', $16::text
+                  ),
                   '{}'::jsonb, 'PHP', $14, 0, $14,
                   CASE WHEN $15::int IS NULL THEN NULL ELSE
                     (((date_trunc('month', statement_timestamp() AT TIME ZONE clock.timezone)
@@ -401,6 +446,7 @@ describe('Dashboard overview API', async () => {
             input.dueHour,
             input.amount,
             input.completedMonthOffset ?? null,
+            input.snapshotPhone ?? null,
           ],
         );
         const id = requireId(result.rows[0]?.id, `${input.label} reservation`);
@@ -409,38 +455,84 @@ describe('Dashboard overview API', async () => {
              (tenant_id, reservation_id, variant_id, line_number, name_snapshot, measurements_snapshot,
               pricing_snapshot, rental_minor, deposit_minor, currency)
            VALUES ($1, $2, $3, 1, $4, '{}'::jsonb, '{}'::jsonb, $5, 0, 'PHP')`,
-          [seed.tenantId, id, seed.variantId, input.label, input.amount],
+          [seed.tenantId, id, seed.variantId, input.label, input.lineAmount ?? input.amount],
         );
         return id;
       };
 
       const pickupId = await insertReservation({
-        label: 'Today Pickup Gown', status: 'confirmed', pickupDayOffset: 0, pickupHour: 0,
-        dueDayOffset: 2, dueHour: 12, amount: 1000,
+        label: 'Today Pickup Gown',
+        status: 'confirmed',
+        pickupDayOffset: 0,
+        pickupHour: 0,
+        dueDayOffset: 2,
+        dueHour: 12,
+        amount: 3000,
+        lineAmount: 1000,
+        snapshotPhone: '555-0101',
       });
+      await client.query(
+        `INSERT INTO reservation_line
+           (tenant_id, reservation_id, variant_id, line_number, name_snapshot, measurements_snapshot,
+            pricing_snapshot, rental_minor, deposit_minor, currency)
+         VALUES ($1, $2, $3, 2, 'Second Pickup Gown', '{}'::jsonb, '{}'::jsonb, 2000, 0, 'PHP')`,
+        [seed.tenantId, pickupId, seed.variantId],
+      );
       const returnId = await insertReservation({
-        label: 'Today Return Gown', status: 'picked_up', pickupDayOffset: -2, pickupHour: 10,
-        dueDayOffset: 0, dueHour: 13, amount: 2000,
+        label: 'Today Return Gown',
+        status: 'picked_up',
+        pickupDayOffset: -2,
+        pickupHour: 10,
+        dueDayOffset: 0,
+        dueHour: 13,
+        amount: 2000,
       });
       await insertReservation({
-        label: 'Active Gown', status: 'picked_up', pickupDayOffset: -2, pickupHour: 11,
-        dueDayOffset: 3, dueHour: 14, amount: 3000,
+        label: 'Active Gown',
+        status: 'picked_up',
+        pickupDayOffset: -2,
+        pickupHour: 11,
+        dueDayOffset: 3,
+        dueHour: 14,
+        amount: 3000,
       });
       await insertReservation({
-        label: 'Upcoming Gown', status: 'pending_confirmation', pickupDayOffset: 1, pickupHour: 10,
-        dueDayOffset: 3, dueHour: 12, amount: 4000,
+        label: 'Upcoming Gown',
+        status: 'pending_confirmation',
+        pickupDayOffset: 1,
+        pickupHour: 10,
+        dueDayOffset: 3,
+        dueHour: 12,
+        amount: 4000,
       });
       await insertReservation({
-        label: 'Second Upcoming Gown', status: 'confirmed', pickupDayOffset: 2, pickupHour: 11,
-        dueDayOffset: 4, dueHour: 12, amount: 5000,
+        label: 'Second Upcoming Gown',
+        status: 'confirmed',
+        pickupDayOffset: 2,
+        pickupHour: 11,
+        dueDayOffset: 4,
+        dueHour: 12,
+        amount: 5000,
       });
       const currentCompleteId = await insertReservation({
-        label: 'Current Completed Gown', status: 'completed', pickupDayOffset: -10, pickupHour: 10,
-        dueDayOffset: -9, dueHour: 10, amount: 12000, completedMonthOffset: 0,
+        label: 'Current Completed Gown',
+        status: 'completed',
+        pickupDayOffset: -10,
+        pickupHour: 10,
+        dueDayOffset: -9,
+        dueHour: 10,
+        amount: 12000,
+        completedMonthOffset: 0,
       });
       await insertReservation({
-        label: 'Previous Completed Gown', status: 'completed', pickupDayOffset: -40, pickupHour: 10,
-        dueDayOffset: -39, dueHour: 10, amount: 7000, completedMonthOffset: -1,
+        label: 'Previous Completed Gown',
+        status: 'completed',
+        pickupDayOffset: -40,
+        pickupHour: 10,
+        dueDayOffset: -39,
+        dueHour: 10,
+        amount: 7000,
+        completedMonthOffset: -1,
       });
 
       const otherBranchStorefront = await client.query<{ id: string }>(
@@ -448,7 +540,10 @@ describe('Dashboard overview API', async () => {
          VALUES ($1, $2, $3, 'draft', '{}'::jsonb, '{}'::jsonb) RETURNING id`,
         [seed.tenantId, seed.otherBranchId, `other-${seed.tenantId.slice(0, 8)}`],
       );
-      const otherStorefrontId = requireId(otherBranchStorefront.rows[0]?.id, 'other branch storefront');
+      const otherStorefrontId = requireId(
+        otherBranchStorefront.rows[0]?.id,
+        'other branch storefront',
+      );
       const otherPolicy = await client.query<{ id: string }>(
         `INSERT INTO policy_snapshot
            (tenant_id, storefront_id, version, rental_rules, deposit_rules, cancellation_rules,
@@ -472,7 +567,14 @@ describe('Dashboard overview API', async () => {
                 ((clock.today + 1)::timestamp + interval '10 hours') AT TIME ZONE clock.timezone,
                 clock.timezone, '{"full_name":"Foreign Branch Customer"}'::jsonb,
                 '{}'::jsonb, 'PHP', 500, 0, 500 FROM clock`,
-        [seed.tenantId, seed.otherBranchId, seed.customerId, otherStorefrontId, otherPolicyId, seed.paymentMethodId],
+        [
+          seed.tenantId,
+          seed.otherBranchId,
+          seed.customerId,
+          otherStorefrontId,
+          otherPolicyId,
+          seed.paymentMethodId,
+        ],
       );
 
       const paymentRows = await client.query<{ id: string }>(
@@ -495,24 +597,45 @@ describe('Dashboard overview API', async () => {
         await client.query(
           `INSERT INTO payment_receipt (tenant_id, payment_id, file_id, evidence_status)
            VALUES ($1, $2, $3, $4)`,
-          [seed.tenantId, payment.id, requireId(file.rows[0]?.id, 'receipt file'), evidenceStatuses[index]],
+          [
+            seed.tenantId,
+            payment.id,
+            requireId(file.rows[0]?.id, 'receipt file'),
+            evidenceStatuses[index],
+          ],
         );
       }
 
       await insertFitting(seed, client, {
-        label: 'today', dayOffset: 0, hour: 9, channel: 'staff', slotId: seed.slotIds[0],
+        label: 'today',
+        dayOffset: 0,
+        hour: 9,
+        channel: 'staff',
+        slotId: seed.slotIds[0],
         internalNote: 'private fitting note',
       });
       await insertFitting(seed, client, {
-        label: 'upcoming', dayOffset: 1, hour: 10, channel: 'storefront', slotId: seed.slotIds[1],
+        label: 'upcoming',
+        dayOffset: 1,
+        hour: 10,
+        channel: 'storefront',
+        slotId: seed.slotIds[1],
         name: 'Storefront Fitting Gown',
       });
       await insertFitting(seed, client, {
-        label: 'two-day-window', dayOffset: 2, hour: 10, channel: 'staff', slotId: seed.slotIds[1],
+        label: 'two-day-window',
+        dayOffset: 2,
+        hour: 10,
+        channel: 'staff',
+        slotId: seed.slotIds[1],
         name: 'Two-Day Window Fitting Gown',
       });
       await insertFitting(seed, client, {
-        label: 'outside-window', dayOffset: 3, hour: 10, channel: 'staff', slotId: seed.slotIds[1],
+        label: 'outside-window',
+        dayOffset: 3,
+        hour: 10,
+        channel: 'staff',
+        slotId: seed.slotIds[1],
         name: 'Outside-Window Fitting Gown',
       });
 
@@ -554,8 +677,16 @@ describe('Dashboard overview API', async () => {
                   '[)'
                 ), clock.timezone, 'PHP', 500, $7, $8
            FROM clock RETURNING id`,
-        [seed.tenantId, seed.branchId, seed.customerId, input.channel, input.dayOffset,
-          input.hour, input.internalNote ?? null, `dashboard-${input.label}-${seed.tenantId}`],
+        [
+          seed.tenantId,
+          seed.branchId,
+          seed.customerId,
+          input.channel,
+          input.dayOffset,
+          input.hour,
+          input.internalNote ?? null,
+          `dashboard-${input.label}-${seed.tenantId}`,
+        ],
       );
       const fittingId = requireId(appointment.rows[0]?.id, 'fitting appointment');
       await client.query(
