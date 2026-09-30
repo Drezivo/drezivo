@@ -31,8 +31,17 @@ const api = vi.hoisted(() => ({
   confirmFitting: vi.fn(),
   pickupReservation: vi.fn(),
 }));
+const navigation = vi.hoisted(() => ({ search: "" }));
 
 vi.mock("@clerk/nextjs", () => ({ useAuth: clerk.useAuth }));
+
+vi.mock("next/navigation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/navigation")>();
+  return {
+    ...actual,
+    useSearchParams: () => new URLSearchParams(navigation.search),
+  };
+});
 
 vi.mock("@/lib/drezivo-api", () => ({
   DrezivoApiError: class DrezivoApiError extends Error {
@@ -244,6 +253,7 @@ function installDefaults() {
 describe("CalendarSchedulePage production details and states", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    navigation.search = "";
     installDefaults();
   });
 
@@ -448,6 +458,49 @@ describe("CalendarSchedulePage production details and states", () => {
     expect(screen.getByRole("button", { name: "All Categories" })).toBeVisible();
     expect(screen.getByRole("button", { name: "All Statuses" })).toBeVisible();
   });
+
+  it.each(["pickup", "return"] as const)(
+    "opens a %s date-and-activity deep link directly in the filtered day agenda",
+    async (activity) => {
+      const date = calendarDateKeyAt(new Date(pickupAt), timeZone);
+      navigation.search = new URLSearchParams({ date, activity }).toString();
+
+      render(<CalendarSchedulePage />);
+
+      const agenda = await screen.findByRole("dialog");
+      expect(
+        within(agenda).getByRole("heading", {
+          name: formatCalendarDate(date, {
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+          }),
+        })
+      ).toBeVisible();
+      const activityLabel = activity === "pickup" ? "Pickup" : "Return";
+      const otherActivityLabel = activity === "pickup" ? "Return" : "Pickup";
+      expect(
+        within(agenda).getByRole("button", { name: new RegExp(`^${activityLabel}`) })
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(
+        await within(agenda).findByRole("button", {
+          name: new RegExp(`^Open reservation details: ${activityLabel}`),
+        })
+      ).toBeVisible();
+      expect(
+        within(agenda).queryByRole("button", {
+          name: new RegExp(`^Open reservation details: ${otherActivityLabel}`),
+        })
+      ).not.toBeInTheDocument();
+      expect(await within(agenda).findByText("Calendar Reservation Customer")).toBeVisible();
+      expect(within(agenda).queryByText("Calendar Fitting Customer")).not.toBeInTheDocument();
+      expect(api.getOperationalCalendar).toHaveBeenCalledWith({
+        start: calendarBoundaryInstant(startOfCalendarWeek(date), timeZone),
+        end: calendarBoundaryInstant(addCalendarDays(startOfCalendarWeek(date), 7), timeZone),
+      });
+    }
+  );
 
   it("warns when the API marks a dense range as truncated", async () => {
     api.getOperationalCalendar.mockResolvedValueOnce({

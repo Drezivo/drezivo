@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import { useSearchParams } from "next/navigation";
 import {
   CalendarClock,
   ChevronDown,
@@ -83,12 +84,20 @@ const SUMMARY_ITEMS = [
 
 const FITTINGS_PAGE_SIZE = 10;
 
+function parseFittingDateFilter(value: string | null): FittingDateFilter {
+  if (value === "today" || value === "upcoming") return value;
+  return "all";
+}
+
 export function FittingsPage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query.trim());
   const [status, setStatus] = useState<FittingState | null>(null);
-  const [dateFilter, setDateFilter] = useState<FittingDateFilter>("all");
+  const [dateFilter, setDateFilter] = useState<FittingDateFilter>(() =>
+    parseFittingDateFilter(searchParams.get("date"))
+  );
   const [rows, setRows] = useState<FittingListItem[]>([]);
   const [pageMeta, setPageMeta] = useState<PageMeta>({ next_cursor: null, has_more: false });
   const [pageIndex, setPageIndex] = useState(0);

@@ -8,6 +8,11 @@ import {
   fittingSettings,
 } from "@drezivo/contracts";
 
+import {
+  addCalendarDays,
+  calendarBoundaryInstant,
+  calendarTodayDateKey,
+} from "@/components/calendar/calendar-schedule-data";
 import { FittingsPage } from "@/components/fittings/fittings-page";
 
 const clerk = vi.hoisted(() => ({
@@ -31,8 +36,17 @@ const api = vi.hoisted(() => ({
   rejectFitting: vi.fn(),
   rescheduleFitting: vi.fn(),
 }));
+const navigation = vi.hoisted(() => ({ search: "" }));
 
 vi.mock("@clerk/nextjs", () => ({ useAuth: clerk.useAuth }));
+
+vi.mock("next/navigation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/navigation")>();
+  return {
+    ...actual,
+    useSearchParams: () => new URLSearchParams(navigation.search),
+  };
+});
 
 vi.mock("@/lib/drezivo-api", () => ({
   DrezivoApiError: class DrezivoApiError extends Error {
@@ -184,6 +198,7 @@ function installDefaults() {
 describe("FittingsPage production cutover", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    navigation.search = "";
     installDefaults();
   });
 
@@ -200,6 +215,23 @@ describe("FittingsPage production cutover", () => {
     expect(screen.queryByText("Local prototype only.")).not.toBeInTheDocument();
     expect(api.getFittings).toHaveBeenCalledWith(
       expect.objectContaining({ limit: 10, sort: "starts_at_asc" })
+    );
+  });
+
+  it("initializes the Today filter from the URL and requests the branch-local day", async () => {
+    navigation.search = "date=today";
+    render(<FittingsPage />);
+
+    expect(await screen.findByText("Real Fitting Customer")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Date: Today" })).toBeVisible();
+    const today = calendarTodayDateKey("Asia/Manila");
+    await waitFor(() =>
+      expect(api.getFittings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          period_start: calendarBoundaryInstant(today, "Asia/Manila"),
+          period_end: calendarBoundaryInstant(addCalendarDays(today, 1), "Asia/Manila"),
+        })
+      )
     );
   });
 
