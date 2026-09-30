@@ -171,8 +171,8 @@ body {
 /*
  * Storefront motion (components/store/motion/motion-root.tsx). `html.sf-motion` is set before first
  * paint only when reduced motion is not requested, so these starting states never hide content
- * from people who opted out or run without JavaScript. If the motion script has not started after
- * a moment, the fallback animation shows everything anyway.
+ * from people who opted out or run without JavaScript. Any target the motion script has not bound
+ * (`data-motion-bound`) shows itself after a moment, so nothing can stay hidden.
  */
 .sf-motion [data-reveal='text'],
 .sf-motion [data-reveal-item],
@@ -185,7 +185,7 @@ body {
 .sf-motion [data-hero-line] {
   transform: translateY(105%);
 }
-.sf-motion:not(.sf-motion-ready) :is([data-reveal], [data-reveal-item], [data-hero-fade], [data-hero-line]) {
+.sf-motion :is([data-reveal], [data-reveal-item], [data-hero-fade], [data-hero-line]):not([data-motion-bound]) {
   animation: sf-motion-fallback 0s 2.5s forwards;
 }
 @keyframes sf-motion-fallback {
@@ -194,6 +194,11 @@ body {
     clip-path: none;
     transform: none;
   }
+}
+
+/* In-page targets land below the sticky header when the browser does the scrolling (reduced motion). */
+.storefront-shell [id] {
+  scroll-margin-top: calc(var(--storefront-header-height) + 8px);
 }
 
 [data-store-header] {
