@@ -203,6 +203,7 @@ describe('Settings Business Hours ownership', async () => {
       version: 1,
     });
 
+    const otherTenant = await seed('update-other-tenant');
     const result = await settingsService.updateBusinessHours(context(seeded), randomUUID(), {
       version: 1,
       opens_local: '10:00',
@@ -225,6 +226,11 @@ describe('Settings Business Hours ownership', async () => {
         [seeded.tenantId, seeded.otherBranchId],
       );
       expect(other.rows[0]?.operating_hours).toMatchObject({ opens_local: '08:00', closes_local: '20:00' });
+      const foreignTenant = await client.query<{ operating_hours: Record<string, unknown> }>(
+        `SELECT operating_hours FROM branch WHERE tenant_id=$1 AND id=$2`,
+        [otherTenant.tenantId, otherTenant.branchId],
+      );
+      expect(foreignTenant.rows[0]?.operating_hours).toMatchObject({ opens_local: '09:00', closes_local: '20:00' });
       const audit = await client.query<{ action: string; redacted_summary: Record<string, unknown> }>(
         `SELECT action,redacted_summary FROM audit_event
           WHERE tenant_id=$1 AND action='settings.business_hours.updated'`,
@@ -263,6 +269,14 @@ describe('Settings Business Hours ownership', async () => {
     });
     expect(stale.status).toBe(409);
     expect(stale.body.success ? null : stale.body.error.code).toBe('STALE_VERSION');
+
+    const persisted = await settingsService.getBusinessHours(context(seeded));
+    expect(persisted).toMatchObject({
+      opens_local: '10:00',
+      closes_local: '19:00',
+      closed_weekdays: [],
+      version: 2,
+    });
   });
 
   it('rejects narrower Business Hours or a recurring closed weekday that would invalidate an accepted future fitting', async () => {
@@ -333,6 +347,26 @@ describe('Settings Business Hours ownership', async () => {
         'settings.business_hours.closure.updated',
       ].sort());
     });
+  });
+
+  it('rejects duplicate special closed dates and invalid closure input safely', async () => {
+    const seeded = await seed('closure-invalid');
+    const created = await settingsService.createBranchClosure(context(seeded), randomUUID(), {
+      local_date: '2099-12-25',
+      reason: 'Holiday',
+    });
+    expect(created.status).toBe(201);
+
+    const duplicate = await settingsService.createBranchClosure(context(seeded), randomUUID(), {
+      local_date: '2099-12-25',
+      reason: 'Duplicate holiday',
+    });
+    expect(duplicate.status).toBe(409);
+    expect(duplicate.body.success ? null : duplicate.body.error.code).toBe('STATE_CONFLICT');
+
+    const { branchClosureCreateRequest } = await import('@drezivo/contracts');
+    expect(branchClosureCreateRequest.safeParse({ local_date: '2099-02-30', reason: 'Impossible date' }).success).toBe(false);
+    expect(branchClosureCreateRequest.safeParse({ local_date: '2099-12-26', reason: '   ' }).success).toBe(false);
   });
 
   it('rejects a special closed date that overlaps an accepted future fitting', async () => {

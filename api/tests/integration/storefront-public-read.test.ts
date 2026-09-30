@@ -178,11 +178,14 @@ describe('public storefront read API', async () => {
     const open = await request(app).get(`/api/v1/public/stores/${ws.slug}/fitting-slots?date=${date}`);
     expect(open.status).toBe(200);
     expect(dataOf<FittingSlotsResponse>(open)).toMatchObject({ duration_minutes: 60, fee_minor: '50000' });
-    expect(dataOf<FittingSlotsResponse>(open).slots.map((slot) => slot.start_at)).toEqual([
+    const openSlots = dataOf<FittingSlotsResponse>(open).slots;
+    expect(openSlots.map((slot) => slot.start_at)).toEqual([
       `${date}T02:00:00.000Z`,
       `${date}T02:30:00.000Z`,
       `${date}T03:00:00.000Z`,
     ]);
+    expect(openSlots[0]?.start_at).toBe(`${date}T02:00:00.000Z`); // 10:00 Asia/Manila opening time.
+    expect(openSlots.at(-1)?.end_at).toBe(`${date}T04:00:00.000Z`); // Final slot ends exactly at 12:00 closing.
 
     await admin.query<Record<string, unknown>>(
       `INSERT INTO branch_closure (tenant_id, branch_id, local_date, reason)
@@ -191,6 +194,23 @@ describe('public storefront read API', async () => {
     );
     const afterClosure = await request(app).get(`/api/v1/public/stores/${ws.slug}/fitting-slots?date=${date}`);
     expect(dataOf<FittingSlotsResponse>(afterClosure).slots).toEqual([]);
+
+    await admin.query<Record<string, unknown>>(
+      `DELETE FROM branch_closure WHERE tenant_id = $1 AND branch_id = $2 AND local_date = $3::date`,
+      [ws.tenantId, ws.branchId, date],
+    );
+    const weekday = new Date(`${date}T00:00:00.000Z`)
+      .toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })
+      .toLowerCase();
+    await admin.query<Record<string, unknown>>(
+      `UPDATE branch
+          SET operating_hours = jsonb_set(operating_hours, '{closed_weekdays}', to_jsonb(ARRAY[$3]::text[]))
+        WHERE tenant_id = $1 AND id = $2`,
+      [ws.tenantId, ws.branchId, weekday],
+    );
+    const recurringClosed = await request(app).get(`/api/v1/public/stores/${ws.slug}/fitting-slots?date=${date}`);
+    expect(dataOf<FittingSlotsResponse>(recurringClosed).slots).toEqual([]);
+
     const store = await request(app).get(`/api/v1/public/stores/${ws.slug}`);
     expect(dataOf<PublicStorefront>(store).fitting).toEqual({ enabled: true, duration_minutes: 60, fee_minor: '50000' });
     expect(dataOf<PublicStorefront>(store).content.sections.fitting).toBe(true);
