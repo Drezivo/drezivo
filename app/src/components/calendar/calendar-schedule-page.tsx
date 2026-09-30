@@ -358,10 +358,6 @@ export function CalendarSchedulePage() {
   const weekDateKeys = useMemo(() => getCalendarWeekDateKeys(weekStart), [weekStart]);
   const firstWeekDay = weekDateKeys[0] ?? weekStart;
   const lastWeekDay = weekDateKeys[weekDateKeys.length - 1] ?? weekStart;
-  const periodLabel =
-    view === "week"
-      ? `${formatCalendarDate(firstWeekDay, { month: "short", day: "numeric" })} – ${formatCalendarDate(lastWeekDay, { month: "short", day: "numeric", year: "numeric" })}`
-      : formatCalendarDate(monthStart, { month: "long", year: "numeric" });
   const currentPeriodContainsToday =
     view === "week"
       ? todayKey >= firstWeekDay && todayKey <= lastWeekDay
@@ -379,6 +375,7 @@ export function CalendarSchedulePage() {
     const today = calendarTodayDateKey(timeZone);
     setWeekStart(startOfCalendarWeek(today));
     setMonthStart(`${today.slice(0, 7)}-01`);
+    setView("week");
   };
 
   const openDayAgenda = (dateKey: string) => setSelectedDateKey(dateKey);
@@ -430,7 +427,6 @@ export function CalendarSchedulePage() {
           activityFilter={activityFilter}
           categoryFilter={categoryFilter}
           categories={categories}
-          dateLabel={periodLabel}
           onActivityFilterChange={setActivityFilter}
           onCategoryFilterChange={setCategoryFilter}
           onNavigate={navigate}
@@ -696,7 +692,6 @@ function CalendarControls({
   activityFilter,
   categoryFilter,
   categories,
-  dateLabel,
   onActivityFilterChange,
   onCategoryFilterChange,
   onNavigate,
@@ -712,7 +707,6 @@ function CalendarControls({
   activityFilter: ActivityFilter;
   categoryFilter: string | null;
   categories: CalendarCategory[];
-  dateLabel: string;
   onActivityFilterChange: (value: ActivityFilter) => void;
   onCategoryFilterChange: (value: string | null) => void;
   onNavigate: (direction: -1 | 1) => void;
@@ -751,20 +745,6 @@ function CalendarControls({
           >
             <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </Button>
-          <span className="inline-flex min-h-10 items-center gap-2 rounded-md border border-dashboard-border bg-dashboard-surface px-3 text-sm font-medium text-dashboard-navy">
-            <CalendarDays className="h-4 w-4" aria-hidden="true" />
-            {dateLabel}
-          </span>
-          {showTodayAction ? (
-            <Button
-              variant="ghost"
-              disabled={disabled}
-              onClick={onToday}
-              className="min-h-11 border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
-            >
-              Today
-            </Button>
-          ) : null}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -838,23 +818,35 @@ function CalendarControls({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <div className="inline-flex w-full rounded-lg border border-dashboard-border bg-dashboard-surface p-1 lg:w-auto">
-          {(["week", "month"] as const).map((option) => (
+        <div className="flex w-full items-center gap-2 lg:w-auto">
+          {showTodayAction ? (
             <Button
-              key={option}
               variant="ghost"
               disabled={disabled}
-              aria-pressed={view === option}
-              aria-label={`${option === "week" ? "Week" : "Month"} view`}
-              onClick={() => onViewChange(option)}
-              className={cn(
-                "min-h-11 flex-1 capitalize text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy lg:flex-none",
-                view === option && "bg-dashboard-active text-dashboard-accent"
-              )}
+              onClick={onToday}
+              className="min-h-11 shrink-0 border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
             >
-              {option}
+              Today
             </Button>
-          ))}
+          ) : null}
+          <div className="inline-flex min-w-0 flex-1 rounded-lg border border-dashboard-border bg-dashboard-surface p-1 lg:flex-none">
+            {(["week", "month"] as const).map((option) => (
+              <Button
+                key={option}
+                variant="ghost"
+                disabled={disabled}
+                aria-pressed={view === option}
+                aria-label={`${option === "week" ? "Week" : "Month"} view`}
+                onClick={() => onViewChange(option)}
+                className={cn(
+                  "min-h-11 flex-1 capitalize text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy lg:flex-none",
+                  view === option && "bg-dashboard-active text-dashboard-accent"
+                )}
+              >
+                {option}
+              </Button>
+            ))}
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -950,7 +942,7 @@ function ScheduleGrid({
               aria-current={dateKey === todayKey ? "date" : undefined}
               className={cn(
                 "flex min-h-[4.25rem] min-w-0 flex-col items-center justify-center border-b border-r border-dashboard-border px-1 text-center transition-colors hover:bg-dashboard-active",
-                dateKey === todayKey && "bg-dashboard-active/60"
+                dateKey === todayKey && "bg-dashboard-gold-soft/70"
               )}
             >
               <span className="text-xs font-semibold text-dashboard-navy">
@@ -959,7 +951,7 @@ function ScheduleGrid({
               <span
                 className={cn(
                   "text-xs text-dashboard-muted",
-                  dateKey === todayKey && "font-semibold text-dashboard-accent"
+                  dateKey === todayKey && "font-semibold text-dashboard-gold-text"
                 )}
               >
                 {formatCalendarDate(dateKey, { month: "short", day: "numeric" })}
@@ -990,6 +982,7 @@ function ScheduleGrid({
             <ScheduleDayColumn
               key={dateKey}
               activities={dayActivities}
+              isToday={dateKey === todayKey}
               timeZone={timeZone}
               onOpenActivity={onOpenActivity}
             />
@@ -1002,6 +995,7 @@ function ScheduleGrid({
           <OutsideHoursList
             key={`${dateKey}-outside`}
             activities={activities.filter((activity) => activity.dateKey === dateKey)}
+            isToday={dateKey === todayKey}
             timeZone={timeZone}
             onOpenActivity={onOpenActivity}
           />
@@ -1013,10 +1007,12 @@ function ScheduleGrid({
 
 function ScheduleDayColumn({
   activities,
+  isToday,
   onOpenActivity,
   timeZone,
 }: {
   activities: CalendarActivity[];
+  isToday: boolean;
   onOpenActivity: (activity: CalendarActivity) => void;
   timeZone: string;
 }) {
@@ -1032,11 +1028,12 @@ function ScheduleDayColumn({
   const positioned = layoutOverlappingActivities(onGrid);
 
   return (
-    <div className="min-w-0">
+    <div className={cn("min-w-0", isToday && "bg-dashboard-gold-soft/40")}>
       <div
         className="relative border-b border-r border-dashboard-border"
         style={{ height: CALENDAR_TOTAL_HEIGHT }}
         aria-label="Schedule day activity from 8 AM to 8 PM"
+        data-today-column={isToday ? "true" : undefined}
       >
         {Array.from({ length: CALENDAR_END_HOUR - CALENDAR_START_HOUR }, (_, index) => (
           <div
@@ -1103,10 +1100,12 @@ function ScheduleDayColumn({
 
 function OutsideHoursList({
   activities,
+  isToday,
   onOpenActivity,
   timeZone,
 }: {
   activities: CalendarActivity[];
+  isToday: boolean;
   onOpenActivity: (activity: CalendarActivity) => void;
   timeZone: string;
 }) {
@@ -1120,7 +1119,12 @@ function OutsideHoursList({
         visibleEnd
   );
   return (
-    <div className="min-h-12 space-y-1 border-r border-t border-dashboard-border p-1.5">
+    <div
+      className={cn(
+        "min-h-12 space-y-1 border-r border-t border-dashboard-border p-1.5",
+        isToday && "bg-dashboard-gold-soft/40"
+      )}
+    >
       {outsideHours.length > 0 ? (
         <>
           <p className="text-[10px] font-semibold text-dashboard-muted">
@@ -1212,6 +1216,9 @@ function MonthGrid({
       className="gap-0 overflow-x-auto py-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent"
     >
       <div className="min-w-[700px]">
+        <div className="border-b border-dashboard-border bg-dashboard-surface px-3 py-2 text-sm font-semibold text-dashboard-navy">
+          {formatCalendarDate(cursor, { month: "long", year: "numeric" })}
+        </div>
         <div className="grid grid-cols-7 border-b border-dashboard-border bg-dashboard-surface">
           {weekdays.map((day) => (
             <div key={day} className="p-2 text-center text-xs font-semibold text-dashboard-muted">

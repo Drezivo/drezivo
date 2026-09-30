@@ -32,6 +32,8 @@ export interface ReservationListReadRow {
   line_rental_minor: string | number | null;
   line_deposit_minor: string | number | null;
   line_currency: string | null;
+  line_cover_storage_key: string | null;
+  line_cover_version_id: string | null;
   fulfillment_method: 'pickup' | 'delivery' | null;
   pickup_at: Date;
   due_at: Date;
@@ -272,6 +274,8 @@ export async function listReservationsReadModel(
        line.rental_minor AS line_rental_minor,
        line.deposit_minor AS line_deposit_minor,
        line.currency AS line_currency,
+       cover_image.storage_key AS line_cover_storage_key,
+       cover_image.version_id AS line_cover_version_id,
        r.delivery_snapshot ->> 'fulfillment_method' AS fulfillment_method,
        r.pickup_at,
        r.due_at,
@@ -314,6 +318,25 @@ export async function listReservationsReadModel(
         ORDER BY rl.line_number ASC, rl.id ASC
         LIMIT 1
      ) line ON true
+     LEFT JOIN LATERAL (
+       SELECT f.storage_key, f.version_id
+         FROM product_variant pv
+         JOIN product_image pi
+           ON pi.tenant_id = pv.tenant_id
+          AND pi.product_id = pv.product_id
+          AND pi.display_order = 0
+         JOIN file_object f
+           ON f.tenant_id = pi.tenant_id
+          AND f.id = pi.file_id
+        WHERE pv.tenant_id = r.tenant_id
+          AND pv.id = line.variant_id
+          AND f.purpose = 'catalogue_image'
+          AND f.lifecycle_status = 'accepted'
+          AND f.frozen_at IS NOT NULL
+          AND (f.version_id IS NOT NULL OR f.sha256 IS NOT NULL)
+          AND f.mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+        LIMIT 1
+     ) cover_image ON true
      LEFT JOIN LATERAL (
        SELECT
          p.id,

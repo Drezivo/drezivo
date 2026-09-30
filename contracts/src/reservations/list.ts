@@ -92,6 +92,7 @@ export const reservationLineSummary = z
     id: reservationLineId,
     variant_id: productVariantId,
     name_snapshot: z.string().trim().min(1).max(300),
+    image_url: z.string().url().nullable().default(null),
     rental_minor: moneyString,
     deposit_minor: moneyString,
     currency: currencyCode,
