@@ -26,7 +26,6 @@ import {
 } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useState } from "react";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -812,20 +811,13 @@ function CustomersTable({
         {customers.map((customer) => (
           <TableRow key={customer.id}>
             <TableCell className="pl-4 align-top">
-              <div className="flex items-start gap-3">
-                <Avatar className="h-9 w-9 border border-dashboard-border">
-                  <AvatarFallback className="bg-dashboard-active text-xs font-semibold text-dashboard-accent">
-                    {initials(customer.full_name)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="max-w-52 truncate font-semibold text-dashboard-navy">
-                    {customer.full_name}
-                  </p>
-                  <p className="mt-1 text-xs text-dashboard-muted">
-                    Customer since {formatCustomerSince(customer.created_at)}
-                  </p>
-                </div>
+              <div className="min-w-0">
+                <p className="max-w-52 truncate font-semibold text-dashboard-navy">
+                  {customer.full_name}
+                </p>
+                <p className="mt-1 text-xs text-dashboard-muted">
+                  Customer since {formatCustomerSince(customer.created_at)}
+                </p>
               </div>
             </TableCell>
             <TableCell className="align-top">
@@ -954,15 +946,6 @@ function CustomerPagination({
       </div>
     </div>
   );
-}
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
 }
 
 function formatCustomerSince(value: string): string {

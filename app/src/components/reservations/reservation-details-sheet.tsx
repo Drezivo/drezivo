@@ -14,7 +14,6 @@ import { useEffect, useState } from "react";
 
 import type { PermissionCode, ReservationDetail } from "@drezivo/contracts";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -175,23 +174,16 @@ function ReservationDetails({
       <div className="flex flex-1 flex-col gap-3 p-4">
         <DetailCard title="Customer" icon={UserRound}>
           {customer ? (
-            <div className="flex items-start gap-3">
-              <Avatar className="h-11 w-11 border border-dashboard-border">
-                <AvatarFallback className="bg-dashboard-active font-semibold text-dashboard-accent">
-                  {initials(customer.full_name)}
-                </AvatarFallback>
-              </Avatar>
-              <dl className="grid min-w-0 flex-1 gap-2 text-sm sm:grid-cols-2">
-                <DetailValue label="Name" value={customer.full_name} />
-                <DetailValue label="Phone" value={customer.phone ?? "Not provided"} />
-                <DetailValue label="Email" value={customer.email ?? "Not provided"} />
-                <DetailValue label="Address" value={customer.address ?? "Not recorded"} />
-                <DetailValue
-                  label="Customer record"
-                  value={detail.customer.customer_id ? "Linked customer" : "Snapshot only"}
-                />
-              </dl>
-            </div>
+            <dl className="grid w-full gap-2 text-sm sm:grid-cols-2">
+              <DetailValue label="Name" value={customer.full_name} />
+              <DetailValue label="Phone" value={customer.phone ?? "Not provided"} />
+              <DetailValue label="Email" value={customer.email ?? "Not provided"} />
+              <DetailValue label="Address" value={customer.address ?? "Not recorded"} />
+              <DetailValue
+                label="Customer record"
+                value={detail.customer.customer_id ? "Linked customer" : "Snapshot only"}
+              />
+            </dl>
           ) : (
             <div className="rounded-lg border border-dashboard-border bg-dashboard-active/40 p-3">
               <p className="font-medium text-dashboard-navy">Customer not added yet</p>
@@ -550,15 +542,6 @@ function formatMinorMoney(value: string, currency: string): string {
     maximumFractionDigits: 0,
     style: "currency",
   }).format(Number(value) / 100);
-}
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
 }
 
 function humanize(value: string): string {

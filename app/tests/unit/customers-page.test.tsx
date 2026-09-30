@@ -168,6 +168,8 @@ describe("CustomersPage production wiring", () => {
     expect(screen.getByText("8")).toBeVisible();
     expect(screen.getByText("17")).toBeVisible();
     expect(screen.getByText("11")).toBeVisible();
+    const customerTable = screen.getByRole("table", { name: "Customers" });
+    expect(within(customerTable).queryByText("RD")).not.toBeInTheDocument();
     expect(screen.queryByText("Maria Santos")).not.toBeInTheDocument();
     expect(screen.queryByText("Last Activity")).not.toBeInTheDocument();
     expect(screen.queryByText("Next Activity")).not.toBeInTheDocument();

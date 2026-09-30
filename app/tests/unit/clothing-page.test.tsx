@@ -254,7 +254,7 @@ describe("ClothingPage", () => {
     expect(screen.getByRole("button", { name: "Sort clothing" })).toHaveTextContent("Oldest");
   });
 
-  it("renders canonical operational signals separately from windowed availability capacity", async () => {
+  it("shows windowed availability without implying a global clothing status", async () => {
     api.getCatalogueClothing.mockResolvedValueOnce({
       data: {
         items: [
@@ -281,13 +281,11 @@ describe("ClothingPage", () => {
     render(<ClothingPage />);
     await screen.findByText("Real Black Satin Gown");
 
-    expect(screen.getAllByText("1 Reserved").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("1 Rented").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("1 Cleaning").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("1 Maintenance").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("1 Unavailable").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("columnheader", { name: "Status" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Operational status", { selector: "dt" })).not.toBeInTheDocument();
     expect(screen.getAllByText("0/5 available").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Next 24 hours").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Available", { selector: "span" })).not.toBeInTheDocument();
   });
 
   it("renders the backend cover image and falls back to initials when none is available", async () => {
@@ -522,7 +520,7 @@ describe("ClothingPage", () => {
     expect(screen.getByRole("table", { name: "Clothing catalogue" })).toBeVisible();
     expect(screen.getByText("Category", { selector: "dt" })).toBeInTheDocument();
     expect(screen.getByText("Availability", { selector: "dt" })).toBeInTheDocument();
-    expect(screen.getByText("Operational status", { selector: "dt" })).toBeInTheDocument();
+    expect(screen.queryByText("Operational status", { selector: "dt" })).not.toBeInTheDocument();
   });
 
   it("uses the backend next cursor for catalogue pagination", async () => {
