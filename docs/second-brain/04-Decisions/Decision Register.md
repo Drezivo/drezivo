@@ -4,7 +4,7 @@ type: decision-index
 status: current
 owner: Drezivo team
 source: "../../decisions/ and accepted owner decisions"
-updated: 2026-09-26
+updated: 2026-09-30
 tags: [drezivo, decisions, adr]
 ---
 
@@ -12,7 +12,8 @@ tags: [drezivo, decisions, adr]
 
 - [[Monorepo Consolidation]] - one root Git repository with five deployable workspaces.
 - [[Drizzle and PostgreSQL]] - Drizzle plus reviewed SQL for PostgreSQL constraints and RLS.
-- [[Supabase Managed PostgreSQL]] - Supabase hosts PostgreSQL only; Drezivo keeps Clerk, Express authorization, restricted runtime roles, and S3/MinIO.
+- [[Supabase Managed PostgreSQL]] - Supabase hosts PostgreSQL only; Drezivo keeps Clerk, Express authorization, and restricted runtime roles.
+- [[Cloudflare R2 Object Storage]] - production object storage targets Cloudflare R2; local development keeps MinIO behind the same S3-compatible boundary.
 - [[Shared Contracts Package]] - workspace package `@drezivo/contracts` as the API contract authority.
 - [[Obsidian Second Brain]] - project-only linked notes, Canvas, and Bases with no secrets.
 

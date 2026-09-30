@@ -1,5 +1,6 @@
 import type { FileObjectId } from "@drezivo/contracts";
 
+import { uploadAuthorizedFile } from "@/lib/authorized-file-upload";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 
 export const STOREFRONT_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
@@ -44,8 +45,8 @@ export async function detectImageType(file: File): Promise<ImageType> {
 }
 
 /**
- * Authorize → direct PUT to storage with a SHA-256 checksum → finalize. The server re-checks size,
- * type, checksum, and file signature before the image can be referenced anywhere.
+ * Authorize → direct create-only PUT to storage → finalize. The server re-checks size, type,
+ * SHA-256, and file signature before the image can be referenced anywhere.
  */
 export async function uploadStorefrontImage(
   file: File,
@@ -70,8 +71,11 @@ export async function uploadStorefrontImage(
       { purpose, content_type: contentType, byte_size: file.size, sha256: await sha256Base64(file) },
       intent.uploadKey,
     );
-    const uploaded = await fetch(authorized.data.upload_url, { method: "PUT", headers: authorized.data.required_headers, body: file });
-    if (!uploaded.ok) throw new Error("The image upload did not finish. Try again.");
+    await uploadAuthorizedFile(
+      authorized.data,
+      file,
+      "The image upload did not finish. Try again.",
+    );
     const finalized = await client.finalizeUpload(authorized.data.file_id, intent.finalizeKey);
     return finalized.data.file.file_id;
   } catch (error) {

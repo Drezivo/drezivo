@@ -48,7 +48,7 @@ import {
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
-import { s3ObjectStorage } from '../../integrations/storage/s3-object-storage.js';
+import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
 import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
 import {
   ForbiddenError,
@@ -481,7 +481,7 @@ export async function getReservationList(
 export async function getReservationDetail(
   input: ReservationReadContext,
   reservationId: string,
-  storage: ObjectStorage = s3ObjectStorage,
+  storage: ObjectStorage = objectStorage,
 ): Promise<ReservationDetail> {
   assertReservationReadContext(input);
 

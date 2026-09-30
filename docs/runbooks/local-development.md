@@ -1,8 +1,8 @@
 # Local development services
 
 This runbook starts the local services required to rehearse PostgreSQL migrations and prepare
-S3-compatible object storage. It is for development only. Production uses separately managed
-PostgreSQL and private object storage.
+S3-compatible object storage. It is for development only. Production uses Supabase PostgreSQL and
+Cloudflare R2 private object storage through the same application boundary.
 
 ## Services
 
@@ -24,10 +24,11 @@ the [MinIO Compose example](https://github.com/minio/minio/blob/master/docs/orch
 ## Start and migrate
 
 1. Install Docker Desktop or another Docker engine that provides Docker Compose.
-2. Fill the credential entries in the ignored `api/.env` file. `MINIO_ROOT_PASSWORD` and
-   `S3_SECRET_ACCESS_KEY` must be the same value; use a unique local value. The API uses
-   `http://127.0.0.1:9000` with path-style addressing for MinIO; production leaves the endpoint
-   unset for AWS S3. Copy your Clerk development-instance values there as well. Generate separate
+2. Fill the credential entries in the ignored `api/.env` file. `MINIO_ROOT_PASSWORD` and the
+   local object-storage secret must use the same MinIO value; use a unique local value. Configure
+   `OBJECT_STORAGE_ENDPOINT=http://127.0.0.1:9000`, `OBJECT_STORAGE_REGION=us-east-1`, and
+   `OBJECT_STORAGE_FORCE_PATH_STYLE=true` for MinIO. Production instead uses an explicit Cloudflare
+   R2 endpoint with region `auto` and virtual-hosted addressing. Copy your Clerk development-instance values there as well. Generate separate
    32-byte base64url values for `INVITATION_EMAIL_ENCRYPTION_KEY` and
    `INVITATION_EMAIL_DIGEST_KEY`. Do not commit any `.env*` file.
 3. Run `docker compose --env-file api/.env up -d` from the repository root. This is the supported
@@ -43,9 +44,9 @@ the [MinIO Compose example](https://github.com/minio/minio/blob/master/docs/orch
 7. Run `npm run db:migrate --workspace @drezivo/api`.
 8. Confirm the migration ledger reports all numbered SQL files and no migration error.
 
-The API's object-storage adapter is not wired in Phase 0. MinIO is present so its buckets and
-credentials can be exercised when the file-storage slice is implemented; do not claim the API
-uploads to MinIO before that adapter and its tests exist.
+The API's `S3CompatibleObjectStorage` adapter is shared by local MinIO and Cloudflare R2. Local
+browser uploads still use the normal authorize → direct presigned PUT → finalize flow, so MinIO CORS
+and the private bucket must remain configured for the local app origins.
 
 ## Stop and reset
 

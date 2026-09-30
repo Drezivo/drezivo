@@ -1,13 +1,15 @@
 # Drezivo — Technical Requirements Document
 
-**Revision:** 1.4 · **Date:** 26 September 2026
+**Revision:** 1.5 · **Date:** 30 September 2026
 **Status:** Monorepo scaffold and architecture contract. Infrastructure remains unprovisioned; scaffold checks do not prove production performance, isolation or recovery.
 
 **Changes in 1.2.** The five former checkouts are now workspaces in one root Git repository. The root lockfile, license, review boundary, and release evidence are authoritative. Workspace ownership remains explicit: `contracts` provides shared schemas, `api` owns business transactions and the worker, `app` and `web` render user journeys, and `docs` owns specifications. The former polyrepo decision remains as a superseded ADR. Automatic CI is deferred until the scaffold gate is green, as recorded in `docs/runbooks/ci-baseline.md`. Security controls, tenant context, and migration windows now apply across workspaces in one pull request.
 
 **Changes in 1.3.** The V1.1 fitting backend boundary is frozen: staff-created fittings first; branch-scoped hidden capacity slots; 30-minute scheduling grid with one strict branch duration; hard hours/closure enforcement; canonical appointment state machine; atomic creation/reschedule; immediate guaranteed-garment allocation; branch-scoped optional fixed fee using the existing finance domain; Owner-only fitting configuration; existing audit/idempotency/outbox conventions; and staged cross-product rollout. Rooms/staff/named fitting resources and customer-facing reminders are not part of the first production fitting slice.
 
-**Changes in 1.4.** Supabase replaces Neon as the managed PostgreSQL provider. The API continues to use Drizzle and `node-postgres` with restricted runtime roles, reviewed SQL migrations, transaction-local tenant context, and S3/MinIO for objects. Supabase Auth, Storage, Realtime, and Data API are not application dependencies. See `docs/decisions/0009-supabase-managed-postgresql.md`.
+**Changes in 1.4.** Supabase replaces Neon as the managed PostgreSQL provider. The API continues to use Drizzle and `node-postgres` with restricted runtime roles, reviewed SQL migrations, and transaction-local tenant context. Supabase Auth, Storage, Realtime, and Data API are not application dependencies. See `docs/decisions/0009-supabase-managed-postgresql.md`.
+
+**Changes in 1.5.** Cloudflare R2 replaces Amazon S3 as the production object-storage target while local development keeps MinIO. The public upload contract remains authorize → presigned create-only PUT → finalize. Finalization hashes the bytes actually stored instead of trusting provider checksum headers, and new R2 objects are pinned by SHA-256 rather than provider version IDs. See `docs/decisions/0010-cloudflare-r2-object-storage.md`.
 
 Read with [PRD](../product/Drezivo-PRD.md), [market research](../product/Drezivo-Market-Research.md), and [logical data model](Drezivo-Data-Model.md). Product release V1 is distinct from document revision numbers. The DBML describes relationships; SQL migrations must implement constraints it cannot express.
 
@@ -21,7 +23,7 @@ Retain the team's familiar stack. Use a **modular monolith**: one Express busine
 | Business API        | Express + TypeScript on a supported Node LTS                                      | REST JSON endpoints and transaction boundaries. Long-running containers suit explicit database transactions and predictable worker operation.                                                                                                                                   |
 | Database            | Supabase PostgreSQL                                                               | Managed PostgreSQL only: shared schema with tenant keys, constraints, row-level security, and transaction locks. Separate staging and production projects; Data API disabled.                                                                                                   |
 | Authentication      | Clerk                                                                             | Staff authentication and organization identity. Drezivo owns domain permissions, branch grants and subscription entitlements.                                                                                                                                                   |
-| Files               | Private S3 buckets; separate public catalogue derivatives                         | Original evidence is private; controlled upload, quarantine, short-lived downloads.                                                                                                                                                                                             |
+| Files               | Cloudflare R2 private objects in production; MinIO locally                        | S3-compatible boundary; private objects use create-only uploads, verified finalization, and short-lived reads.                                                                                                                                                                  |
 | Query/migrations    | **Decided: Drizzle + node-postgres (`pg`)**                                       | Confirmed 15 September 2026. TypeScript queries with reviewed SQL migrations for exclusion constraints/RLS. See `docs/decisions/0002-drizzle-and-node-postgres.md`. Custom SQL and real transaction tests remain mandatory.                                                     |
 | Boundary validation | **Decided: Zod + OpenAPI 3.1, published as `@drezivo/contracts`**                 | Runtime input validation and one shared client shape. TypeScript alone cannot validate HTTP input. Because all surfaces share one monorepo (§2.1), the contract is a workspace package imported by every consumer; generated OpenAPI remains the external compatibility record. |
 | Durable work        | Postgres outbox/job tables and polling worker                                     | Avoid an additional queue service initially; add SQS when measured load or operational needs justify it.                                                                                                                                                                        |
@@ -45,7 +47,7 @@ Each deployable workspace (§2.1) is one release boundary. The `api` repository 
 
 All three browser-facing surfaces sit under one registrable parent domain. That is a deliberate isolation choice, not a cosmetic one: it lets the guest capability exchange in §3 set a host-scoped `__Host-` cookie, keeps the CORS allowlist an explicit three-entry list rather than a wildcard, and prevents a tenant slug from ever becoming a DNS-level identifier. **Tenant slugs are path segments under `/s/`, never subdomains.** A subdomain-per-tenant scheme would put tenant identity into the cookie origin, where a misconfiguration leaks one tenant's session to another; a path segment cannot.
 
-For the first paid pilot, use a managed Next.js host (Vercel is a candidate), a managed container host for Express and the worker, Supabase PostgreSQL, and S3. Confirm region compatibility and prices before selecting paid plans. Prefer API, worker, database, and private storage in a nearby compatible region such as Singapore **if all chosen services support the required configuration**. Measure latency from Philippine mobile networks; geographical proximity is not a benchmark.
+For the first paid pilot, use a managed Next.js host (Vercel is a candidate), a managed container host for Express and the worker, Supabase PostgreSQL, and Cloudflare R2. Confirm provider placement, compatibility, and prices before selecting paid plans. Measure latency from Philippine mobile networks; geographical proximity alone is not a benchmark.
 
 Use separate development, staging, and production secrets/accounts or projects, with least privilege. Do not use a free-tier suspension/retention assumption as a production recovery plan. Provide readiness checks, graceful shutdown and connection draining, dependency timeouts, and two API instances where required to meet the availability target. A single worker can restart safely because work and leases persist.
 
@@ -60,14 +62,14 @@ flowchart LR
   B --> A
   C[Clerk identity] --> A
   A --> D[(Supabase PostgreSQL)]
-  A --> S[Private S3 upload authorization]
+  A --> S[Private R2 upload authorization]
   J[Durable worker] --> D
   J --> E[Email provider]
   J --> S
   O[Restricted operator console] --> A
 ```
 
-The browser never receives a database connection string or unrestricted S3 credentials. Next.js server rendering calls the API through scoped service/request adapters; it does not become a second source of financial or availability logic.
+The browser never receives a database connection string or unrestricted object-storage credentials. Next.js server rendering calls the API through scoped service/request adapters; it does not become a second source of financial or availability logic.
 
 ## 2. Domain boundaries and ownership
 
@@ -79,7 +81,7 @@ The browser never receives a database connection string or unrestricted S3 crede
 | Reservations       | Quote snapshots, state transitions, pickup/return policy                        | Availability and operational finance                       |
 | Finance            | Verified collections, charges, allocations, refunds, deposit liability          | Immutable sources and actor authorization                  |
 | Storefront         | Published content, policies, public projections                                 | Catalogue, pricing, availability                           |
-| Files              | Upload sessions, scanning, immutable accepted objects, retention                | S3                                                         |
+| Files              | Upload sessions, scanning, immutable accepted objects, retention                | `ObjectStorage` → Cloudflare R2 / local MinIO              |
 | Platform billing   | Drezivo subscription and entitlements                                           | Separate operator/provider records                         |
 | Notifications/jobs | Outbox, leases, reminders and delivery outcomes                                 | Domain events                                              |
 | Operator/audit     | Support grants, incident actions, recovery records                              | Explicit privileged access                                 |
@@ -310,9 +312,9 @@ The first successful tenant bootstrap starts the selected plan's fourteen-day tr
 
 Authorize upload purpose, expected size, content types and owner before signing. Use unpredictable immutable keys; accept catalogue images and evidence through separate policies. Limit image dimensions/decompression, strip unnecessary metadata, validate actual file signatures, and scan quarantined objects. Never execute uploaded content.
 
-S3 presigned URLs can be reused until expiry and can overwrite an existing key. Therefore a successful upload is not automatically immutable: finalize against an exact object version/checksum, or copy the accepted version to an inaccessible final key before marking it available. A later reuse of the upload URL must not change the evidence a merchant approved. [AWS presigned URL documentation](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html).
+R2 presigned URLs can be reused until expiry, so Drezivo signs every new upload as a create-only PUT with `If-None-Match: *` against an unpredictable unique key. Reusing the authorization therefore cannot replace an existing object. Finalization streams the stored bytes through the API, enforces the upload-size bound, computes SHA-256 itself, and verifies MIME type and magic bytes before marking the file accepted. New R2 files do not rely on provider version IDs; legacy non-null version IDs fail closed until migrated and reconciled. [Cloudflare R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/), [R2 S3 compatibility](https://developers.cloudflare.com/r2/api/s3/api/).
 
-Catalogue products allow at most five ordered photos per style, with display order zero as the cover. Each source image remains limited to 10 MB and each proof image to 5 MB. Serve optimized public derivatives only. Keep private evidence access short-lived (proposed five-minute downloads), no public ACLs, no indexing, no shared CDN cache. Use IAM roles, encryption at rest and TLS. Keep object versions in the retention/deletion inventory.
+Catalogue products allow at most five ordered photos per style, with display order zero as the cover. Each source image remains limited to 10 MB and each proof image to 5 MB. Serve optimized public derivatives only. Keep private evidence access short-lived (proposed five-minute downloads), no public ACLs, no indexing, no shared CDN cache. Use least-privilege bucket-scoped credentials, encryption at rest and TLS. Keep accepted SHA-256 values and any legacy provider-version metadata in the retention/deletion inventory.
 
 Store minimum contact data. A customer address is limited to reservation fulfillment/operational contact, is tenant-scoped, excluded from list/search projections and client persistence, and is retained in accepted reservation snapshots. One optional social-media handle or URL is a live-profile field only: it is not searched, logged, or copied into reservation snapshots. Customer directory, profile edits, archive, and Reservation/Fitting intake selectors use the existing `reservations.manage` staff capability under tenant context. Operationally archived or anonymized profiles cannot be selected for new intake, while existing Reservation/Fitting history remains readable and branch-scoped. Focused PostgreSQL evidence covers this boundary; the broader baseline still has unrelated timeout failures. Identity evidence is opt-in by justified merchant policy, not a default checkout requirement. Define retention by purpose, legal obligation and dispute needs before launch; do not invent a universal statutory retention period. Erasure jobs must cover originals, derivatives, object versions and exports, while respecting documented legal holds. Restoring backups requires reapplying the deletion/hold register before customer access resumes.
 

@@ -1,7 +1,7 @@
 import type { PoolClient } from 'pg';
 
 import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
-import { s3ObjectStorage } from '../../integrations/storage/s3-object-storage.js';
+import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
 
 /** Signed image URLs outlive the public cache (`s-maxage` 300 s) with a wide margin. */
 export const STOREFRONT_IMAGE_URL_TTL_SECONDS = 3600;
@@ -15,7 +15,7 @@ const DISPLAYABLE_PURPOSES = ['storefront_asset', 'catalogue_image', 'measuremen
  */
 export class StorefrontMediaSigner {
   constructor(
-    private readonly storage: ObjectStorage = s3ObjectStorage,
+    private readonly storage: ObjectStorage = objectStorage,
     private readonly ttlSeconds = STOREFRONT_IMAGE_URL_TTL_SECONDS,
   ) {}
 

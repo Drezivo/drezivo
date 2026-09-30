@@ -43,7 +43,6 @@ class FakeStorage {
   readonly authorized: Array<{
     storageKey: string;
     contentType: string;
-    sha256: string;
     expiresInSeconds: number;
   }> = [];
   readonly inspected: string[] = [];
@@ -67,7 +66,6 @@ class FakeStorage {
   authorizeUpload(input: {
     storageKey: string;
     contentType: string;
-    sha256: string;
     expiresInSeconds: number;
   }) {
     this.authorized.push(input);
@@ -75,7 +73,7 @@ class FakeStorage {
       uploadUrl: `https://uploads.example.test/${encodeURIComponent(input.storageKey)}`,
       requiredHeaders: {
         'Content-Type': input.contentType,
-        'x-amz-checksum-sha256': input.sha256,
+        'If-None-Match': '*',
       },
       expiresAt: new Date('2026-09-21T00:00:00.000Z'),
     });
@@ -182,10 +180,10 @@ describe('CLT-022 clothing file attachment flow', async () => {
     if (!authorization.body.success) throw new Error('Expected upload authorization success.');
     expect(authorization.body.data.required_headers).toEqual({
       'Content-Type': 'image/png',
-      'x-amz-checksum-sha256': SHA_A,
+      'If-None-Match': '*',
     });
-    expect(JSON.stringify(authorization.body)).not.toContain(process.env.S3_SECRET_ACCESS_KEY);
-    expect(JSON.stringify(authorization.body)).not.toContain(process.env.S3_ACCESS_KEY_ID);
+    expect(JSON.stringify(authorization.body)).not.toContain(process.env.OBJECT_STORAGE_SECRET_ACCESS_KEY);
+    expect(JSON.stringify(authorization.body)).not.toContain(process.env.OBJECT_STORAGE_ACCESS_KEY_ID);
 
     const fileId = authorization.body.data.file_id;
     const pending = await readFile(seed.tenantId, seed.principalId, fileId);

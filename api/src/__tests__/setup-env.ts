@@ -17,8 +17,12 @@ process.env.CORS_ALLOWED_ORIGINS ??= 'http://localhost:3000';
 process.env.INVITATION_EMAIL_ENCRYPTION_KEY ??= Buffer.alloc(32, 17).toString('base64url');
 process.env.INVITATION_EMAIL_DIGEST_KEY ??= Buffer.alloc(32, 29).toString('base64url');
 
-process.env.AWS_REGION ??= 'us-east-1';
-process.env.S3_BUCKET_PRIVATE ??= 'drezivo-unit-private';
-process.env.S3_BUCKET_PUBLIC ??= 'drezivo-unit-public';
-process.env.S3_ACCESS_KEY_ID ??= 'unit-test-access-key';
-process.env.S3_SECRET_ACCESS_KEY ??= 'unit-test-secret-key';
+if (process.env.OBJECT_STORAGE_LIVE_TESTS !== 'true') {
+  process.env.OBJECT_STORAGE_ENDPOINT ??= 'http://127.0.0.1:9000';
+  process.env.OBJECT_STORAGE_REGION ??= 'us-east-1';
+  process.env.OBJECT_STORAGE_BUCKET_PRIVATE ??= 'drezivo-unit-private';
+  process.env.OBJECT_STORAGE_BUCKET_PUBLIC ??= 'drezivo-unit-public';
+  process.env.OBJECT_STORAGE_ACCESS_KEY_ID ??= 'unit-test-access-key';
+  process.env.OBJECT_STORAGE_SECRET_ACCESS_KEY ??= 'unit-test-secret-key';
+  process.env.OBJECT_STORAGE_FORCE_PATH_STYLE ??= 'true';
+}
