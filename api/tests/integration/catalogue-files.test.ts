@@ -68,7 +68,7 @@ class FakeStorage {
     contentType: string;
     expiresInSeconds: number;
   }) {
-    this.authorized.push({ ...input, sha256: '' });
+    this.authorized.push(input);
     return Promise.resolve({
       uploadUrl: `https://uploads.example.test/${encodeURIComponent(input.storageKey)}`,
       requiredHeaders: {
