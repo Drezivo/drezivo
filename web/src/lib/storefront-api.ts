@@ -121,8 +121,9 @@ export function getFittingSlots(slug: string, date: string): Promise<FittingSlot
   return call(`${store(slug)}/fitting-slots?date=${encodeURIComponent(date)}`, fittingSlotsResponse);
 }
 
-export function startVerification(slug: string, email: string): Promise<StartGuestVerificationResponse> {
-  return call(`${store(slug)}/verifications`, startGuestVerificationResponse, { method: 'POST', body: { email } });
+export function startVerification(slug: string, email: string, turnstileToken?: string | null): Promise<StartGuestVerificationResponse> {
+  const body = turnstileToken ? { email, turnstile_token: turnstileToken } : { email };
+  return call(`${store(slug)}/verifications`, startGuestVerificationResponse, { method: 'POST', body });
 }
 
 export function confirmVerification(slug: string, email: string, code: string): Promise<ConfirmGuestVerificationResponse> {

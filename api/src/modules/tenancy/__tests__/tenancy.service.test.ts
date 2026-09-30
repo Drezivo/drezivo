@@ -13,6 +13,7 @@ function context(status: 'active' | 'restricted' | 'cancelled'): ResolvedActorCo
     active_branch_id: '' as never,
     branch_grants: [],
     subscription: {} as never,
+    access: {} as never,
     entitlements: {} as never,
   };
 }

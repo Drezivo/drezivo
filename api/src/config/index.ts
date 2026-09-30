@@ -60,6 +60,11 @@ export const envSchema = z
     WORKER_MODE: z.enum(['continuous', 'drain']).default('continuous'),
     WORKER_DRAIN_SCOPE: z.enum(['all', 'fast']).default('all'),
     WORKER_DRAIN_BUDGET_MS: z.coerce.number().int().min(1000).max(3_300_000).default(600_000),
+    // Pilot hosting: run the worker as a supervised child of the API process (src/worker/embedded.ts).
+    // WORKER_DATABASE_URL is then required and must be the drezivo_worker connection, never the
+    // API's drezivo_app DATABASE_URL. Reverse by setting false and deploying the dedicated worker.
+    EMBEDDED_WORKER: strictBooleanEnv('EMBEDDED_WORKER').default(false),
+    WORKER_DATABASE_URL: z.string().url('WORKER_DATABASE_URL must be a valid postgres connection string').optional(),
 
     IDEMPOTENCY_RETENTION_DAYS: z.coerce.number().int().min(1).default(7),
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
@@ -70,6 +75,12 @@ export const envSchema = z
     EMAIL_FILE_SINK_DIR: z.string().min(1).optional(),
     STOREFRONT_PUBLIC_ORIGIN: z.string().url().optional(),
     GUEST_VERIFICATION_MODE: z.enum(['email', 'dev_accept_any']).default('email'),
+    // Cloudflare Turnstile secret for storefront "Send code". Unset (local development) skips the
+    // check with one startup warning; set, a missing or rejected token is refused.
+    TURNSTILE_SECRET_KEY: z.string().min(1).max(200).optional(),
+    // Shared with the operator API: signs 5-minute links that open a business's proof of payment
+    // (modules/billing/operator-proof-link.ts). Unset = proof links are off.
+    OPERATOR_PROOF_LINK_SECRET: z.string().min(32, 'OPERATOR_PROOF_LINK_SECRET must be at least 32 characters').max(200).optional(),
   })
   .superRefine((env, ctx) => {
     if (env.GUEST_VERIFICATION_MODE === 'dev_accept_any' && env.NODE_ENV === 'production') {
@@ -92,6 +103,22 @@ export const envSchema = z
         path: ['EMAIL_PROVIDER'],
         message: 'file email is for development only and needs EMAIL_FILE_SINK_DIR',
       });
+    }
+
+    if (env.EMBEDDED_WORKER) {
+      if (!env.WORKER_DATABASE_URL) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['WORKER_DATABASE_URL'],
+          message: 'EMBEDDED_WORKER needs WORKER_DATABASE_URL (the drezivo_worker connection)',
+        });
+      } else if (env.WORKER_DATABASE_URL === env.DATABASE_URL) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['WORKER_DATABASE_URL'],
+          message: 'WORKER_DATABASE_URL must differ from DATABASE_URL (the worker uses its own role)',
+        });
+      }
     }
 
     if (!['staging', 'production'].includes(env.NODE_ENV)) return;

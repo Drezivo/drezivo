@@ -1,6 +1,7 @@
-import { boolean, integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, customType, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
-import { idColumn, timestamps } from './_shared.js';
+import { membership, tenant } from './tenancy.js';
+import { idColumn, timestamps, updatableTimestamps } from './_shared.js';
 
 /**
  * Owns: Drezivo's OWN SaaS subscription/entitlement records for a tenant. Governed by
@@ -68,6 +69,7 @@ export const subscription = pgTable('subscription', {
   trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
   currentPeriodStart: timestamp('current_period_start', { withTimezone: true }).notNull(),
   currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }).notNull(),
+  /** Pilot billing: operator-granted read-only extension end ("read-only until"); see modules/billing/access.ts. */
   graceEndsAt: timestamp('grace_ends_at', { withTimezone: true }),
   cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
   providerReference: text('provider_reference'),
@@ -107,7 +109,63 @@ export const subscriptionPayment = pgTable(
     collectionMethod: text('collection_method').notNull(),
     providerReference: text('provider_reference'),
     businessKey: text('business_key').notNull(),
+    // Pilot billing (0063): manual payment with uploaded proof, reviewed by an operator.
+    paymentMethodId: uuid('payment_method_id').references(() => platformPaymentMethod.id),
+    reference: text('reference'),
+    /** Composite FK (tenant_id, proof_file_id) -> file_object in the migration. */
+    proofFileId: uuid('proof_file_id'),
+    submittedByMembershipId: uuid('submitted_by_membership_id').references(() => membership.id),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    reviewedBy: text('reviewed_by'),
+    reviewNote: text('review_note'),
     ...timestamps,
   },
   (table) => [uniqueIndex('subscription_payment_tenant_business_key_key').on(table.tenantId, table.businessKey)],
 );
+
+const bytea = customType<{ data: Buffer }>({ dataType: () => 'bytea' });
+
+/**
+ * Drezivo's OWN ways to receive the subscription fee. Global (no tenant), operator-managed: the
+ * business API only reads it. QR bytes live here (<= 512 KB, PNG/JPEG/WebP) and are served by
+ * GET /billing/payment-methods/{id}/qr, never in list responses.
+ */
+export const platformPaymentMethod = pgTable('platform_payment_method', {
+  ...idColumn,
+  label: text('label').notNull(),
+  accountName: text('account_name'),
+  accountNumber: text('account_number'),
+  instructions: text('instructions'),
+  qrImage: bytea('qr_image'),
+  qrMime: text('qr_mime'),
+  active: boolean('active').notNull().default(true),
+  sortOrder: integer('sort_order').notNull().default(0),
+  version: integer('version').notNull().default(1),
+  ...updatableTimestamps,
+});
+
+/** Operator audit + idempotency log for platform payment method writes (append-only). */
+export const platformPaymentMethodChange = pgTable('platform_payment_method_change', {
+  ...idColumn,
+  platformPaymentMethodId: uuid('platform_payment_method_id')
+    .notNull()
+    .references(() => platformPaymentMethod.id),
+  operatorSubject: text('operator_subject').notNull(),
+  action: text('action').notNull(),
+  intentKey: text('intent_key').notNull(),
+  reason: text('reason').notNull(),
+  redactedSummary: jsonb('redacted_summary').$type<Record<string, unknown>>().notNull(),
+  requestId: text('request_id'),
+  ...timestamps,
+});
+
+/** Operator-written notes per business. Append-only; no business API route reads it. */
+export const tenantOperatorNote = pgTable('tenant_operator_note', {
+  ...idColumn,
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenant.id),
+  body: text('body').notNull(),
+  authorLabel: text('author_label').notNull(),
+  ...timestamps,
+});

@@ -1,5 +1,9 @@
 # Worker on Cloud Run Jobs (Stage 1, no monthly fee)
 
+> **On hold (2026-09-30).** Google Cloud billing could not be set up, so during the pilot the worker
+> runs inside the API service instead. See `docs/runbooks/pilot-operation.md`. This runbook stays
+> valid for when the team moves the worker to its own service.
+
 How to run the Drezivo worker as two scheduled Google Cloud Run Jobs. The worker is the process
 that sends email, expires unpaid holds, reconciles Clerk and subscriptions, and clears the outbox.
 The API (on Render) and the database (Supabase) are assumed to exist already.

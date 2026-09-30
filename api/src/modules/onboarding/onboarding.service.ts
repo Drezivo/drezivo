@@ -355,7 +355,9 @@ export async function selectOnboardingPlan(
     const error =
       result.kind === 'not_found_or_forbidden'
         ? new NotFoundError('Onboarding could not be found.')
-        : new StateConflictError('Onboarding is not eligible for plan selection.');
+        : result.kind === 'plan_unavailable'
+          ? new StateConflictError('The selected plan is unavailable.')
+          : new StateConflictError('Onboarding is not eligible for plan selection.');
     const body = failureBody(input.requestId, error.code, error.message);
     await transaction.appendAudit({
       accountId: account.id,

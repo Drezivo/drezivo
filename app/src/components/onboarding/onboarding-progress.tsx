@@ -1,11 +1,11 @@
 import { Check } from "lucide-react";
 
-export type OnboardingStep = "organization" | "plan" | "launch";
+export type OnboardingStep = "organization" | "launch";
 
+// One plan only (Standard), so there is no plan step: business details, then start the trial.
 const STEPS: ReadonlyArray<{ id: OnboardingStep; label: string }> = [
-  { id: "organization", label: "Organization" },
-  { id: "plan", label: "Plan" },
-  { id: "launch", label: "Launch" },
+  { id: "organization", label: "Business" },
+  { id: "launch", label: "Start trial" },
 ];
 
 export function OnboardingProgress({ current }: { current: OnboardingStep }) {

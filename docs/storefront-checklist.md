@@ -591,6 +591,49 @@ storefront itself (workflow, alignment, design). Calendars were left untouched, 
   - Tests: `app/tests/unit/storefront-assets.test.ts`.
   - Verified end to end: finalize returned 200.
 
+## Milestone 14 — Pilot without a paid worker: one plan, manual payments
+
+Runbook: `docs/runbooks/pilot-operation.md`.
+
+- [x] The API runs the existing worker as a child process (`EMBEDDED_WORKER=true`, the
+      `drezivo_worker` role), so emails and hold expiry work without a worker service. Reversible.
+  - Tests: `api/src/worker/__tests__/embedded.test.ts`.
+- [x] One plan, Standard (₱300 a month, 1,000 garments, 10 staff), stored as `starter`. Migration
+      `0063_pilot_billing.sql` retires Professional and Business and moves every subscription.
+  - Onboarding refuses a retired plan when it is chosen, not later at bootstrap, where the owner
+    would be stuck.
+  - The migration can be run twice.
+- [x] Sign-up ends with "Start your 14-day trial?" (`POST /onboarding/{id}/start-trial`).
+- [x] Access is worked out from the subscription dates on every request (`billing/access.ts`), with
+      no background job:
+  - a reminder in the last 3 days;
+  - then view-only for 30 days, with the storefront online and bookings paused for the first 3;
+  - then locked, with only Subscribe available.
+  - Tests: `api/tests/integration/pilot-billing.test.ts`, `api/src/modules/billing/__tests__/`.
+- [x] Manual payment: the owner uploads a proof and a reference, and the server sets the amount.
+      One proof can wait at a time, and a double submit is safe.
+  - Operators approve or reject in the operator repositories. The owner is emailed through the
+    outbox.
+  - Tests: `api/src/worker/handlers/__tests__/subscription-payment-reviewed.test.ts`.
+- [x] Operators view proofs through a signed 5-minute link. Both repositories pin the format with a
+      shared test vector (`api/src/modules/billing/__tests__/operator-proof-link.test.ts`).
+- [x] Businesses can add and remove their own online payment methods, up to 5. Each method is either
+      typed details or an uploaded PDF or image.
+  - Removing a method archives it. The limit holds under racing adds.
+- [x] The Notifications tab is hidden, and customer emails always send (reversible flags).
+- [x] A live garment hold keeps its panel open across navigation and refresh until it is finished,
+      cancelled, or expired.
+- [x] Cloudflare Turnstile protects the storefront's "Send code", failing closed. Clerk bot
+      protection covers sign-up (a dashboard setting).
+- [x] Found and fixed during QA:
+  - Claiming a staff invitation crashed because the new `access` field was missing from the
+    claim's actor context.
+  - The catalogue scale test hung because of empty planner statistics.
+- Known and unchanged, also failing on `main`:
+  - app unit tests (11) and web `use-submit-guard` (1);
+  - the `fittings-phase8` dashboard count near midnight in Manila;
+  - `eslint` for app and web cannot load `eslint-config-next` under ESLint 10.
+
 ## Change log
 
 | Date | Milestone | Change | Files |
@@ -624,3 +667,4 @@ storefront itself (workflow, alignment, design). Calendars were left untouched, 
 | 2026-09-29 | 11 | Owner-side QA fixes: rate limit, role fallback, settings layout, Clerk theme, policy starter, slug input, unsaved-changes prompt, app favicon | `api/src/modules/tenancy/tenancy.routes.ts`, `app/src/components/shell/dashboard-shell.tsx`, `app/src/app/(dashboard)/settings/layout.tsx`, `app/src/components/settings/{settings-nav,account-settings-page}.tsx`, `app/src/components/storefront/{storefront-policy-pages,storefront-details-page}.tsx`, `app/src/components/forms/form-kit.tsx`, `app/src/app/icon.png` |
 | 2026-09-30 | 12 | Owner preview, sign-in resolve fix, sidebar default, address card, Turbopack, loading states, shared actor context | `api/src/modules/storefront/{storefront-preview,storefront.repository,storefront.service,storefront.routes}.ts`, `api/src/modules/storefront-cms/*`, `contracts/src/storefront/cms.ts`, `app/src/components/auth/post-auth-resolver.tsx`, `app/src/lib/resolve-staff-landing.ts`, `app/src/components/shell/*`, `app/src/components/storefront/{storefront-overview-page,storefront-preview-button}.tsx`, `app/src/components/ui/sidebar.tsx`, `web/src/app/s/[slug]/{layout.tsx,loading.tsx,preview/route.ts,preview/exit/route.ts}`, `web/src/lib/{storefront-api,storefront-preview}.ts` |
 | 2026-09-30 | 13 | Section links with Lenis, motion fallback, no storefront streaming, submit-guard key lifecycle, image type detection | `web/src/components/store/motion/{motion-root.tsx,scroll.ts}`, `web/src/app/globals.css`, `app/src/lib/{use-submit-guard,storefront-assets}.ts` |
+| 2026-10-01 | 14 | Pilot billing: embedded worker, one Standard plan, derived access, manual payments, business payment methods, hold guard, Turnstile | `api/src/db/migrations/0063_pilot_billing.sql`, `api/src/modules/billing/*`, `api/src/modules/payment-methods/*`, `app/src/components/billing/*`, `docs/runbooks/pilot-operation.md` |

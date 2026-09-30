@@ -144,6 +144,36 @@ export class StaleVersionError extends AppError {
   readonly code: ErrorCode = 'STALE_VERSION';
 }
 
+/** 403 — the subscription is read-only: everything is viewable, nothing can change until it is paid. */
+export class SubscriptionReadOnlyError extends AppError {
+  readonly status = 403;
+  readonly code: ErrorCode = 'SUBSCRIPTION_READ_ONLY';
+}
+
+/** 403 — the subscription is locked: only subscribing (billing) is possible. */
+export class SubscriptionLockedError extends AppError {
+  readonly status = 403;
+  readonly code: ErrorCode = 'SUBSCRIPTION_LOCKED';
+}
+
+/** 409 — the shop's subscription is not in full access, so renters cannot book or request fittings. */
+export class BookingPausedError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'BOOKING_PAUSED';
+}
+
+/** 409 — a subscription payment is already waiting for operator review. */
+export class PaymentAlreadyPendingError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'PAYMENT_ALREADY_PENDING';
+}
+
+/** 409 — the business already has the maximum number of active online payment methods. */
+export class PaymentMethodLimitError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'PAYMENT_METHOD_LIMIT';
+}
+
 /** 422 — well-formed request, semantically invalid input (Zod boundary failures land here). */
 export class ValidationError extends AppError {
   readonly status = 422;

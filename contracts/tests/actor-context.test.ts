@@ -45,7 +45,17 @@ describe('actor and workspace contracts', () => {
           trial_ends_at: tenant.updated_at,
           grace_ends_at: null,
         },
-        entitlements: { physical_assets_max: 125, frontdesk_seats_max: 0 },
+        entitlements: { physical_assets_max: 1000, frontdesk_seats_max: 10 },
+        access: {
+          level: 'full',
+          reason: 'trial',
+          ends_at: tenant.updated_at,
+          days_left: 13,
+          pending_payment: false,
+          storefront_online: true,
+          storefront_offline_at: null,
+          read_only_until: null,
+        },
       }).success,
     ).toBe(true);
   });

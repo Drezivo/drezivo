@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 
-import type { ActorContext, PermissionCode, TenantStatus } from '@drezivo/contracts';
+import type { ActorContext, PermissionCode, SubscriptionAccess, TenantStatus } from '@drezivo/contracts';
 
 import { resolveActorContext } from '../modules/tenancy/tenancy.repository.js';
 import {
@@ -9,6 +9,7 @@ import {
   StateConflictError,
   ValidationError,
 } from '../shared/errors.js';
+import { assertSubscriptionAccess } from '../modules/billing/access-gate.js';
 
 export interface TenantContext {
   tenantId: string;
@@ -20,6 +21,8 @@ export interface TenantContext {
   activeBranchId: string;
   actorContext: ActorContext;
   effectiveTenantStatus: TenantStatus;
+  /** Subscription access derived at request time (modules/billing/access.ts). */
+  access: SubscriptionAccess;
 }
 
 declare module 'express-serve-static-core' {
@@ -84,6 +87,7 @@ export async function requireTenantContext(
       active_branch_id: context.active_branch_id,
       branch_grants: context.branch_grants,
       subscription: context.subscription,
+      access: context.access,
       entitlements: context.entitlements,
     };
     req.actorContext = actorContext;
@@ -97,7 +101,13 @@ export async function requireTenantContext(
       activeBranchId: context.active_branch_id,
       actorContext,
       effectiveTenantStatus: context.effectiveTenantStatus,
+      access: context.access,
     };
+    // Pilot billing: view-only and locked workspaces are enforced here for every staff route.
+    assertSubscriptionAccess(
+      { method: req.method, path: new URL(req.originalUrl, 'http://drezivo.invalid').pathname, body: req.body as unknown },
+      context.access,
+    );
     next();
   } catch (error) {
     next(error);

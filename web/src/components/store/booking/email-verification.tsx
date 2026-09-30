@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 
 import { confirmVerification, startVerification, StorefrontApiError } from '@/lib/storefront-api';
 
+import { Turnstile, TURNSTILE_SITE_KEY, type TurnstileHandle } from '../turnstile';
+
 export interface VerifiedEmail {
   email: string;
   token: string;
@@ -22,6 +24,9 @@ export function EmailVerification({ slug, verified, onVerified }: { slug: string
   const [cooldown, setCooldown] = useState(0);
   const inFlight = useRef(false);
   const codeInput = useRef<HTMLInputElement>(null);
+  const robotCheck = useRef<TurnstileHandle>(null);
+  const [robotToken, setRobotToken] = useState<string | null>(null);
+  const needsRobotCheck = Boolean(TURNSTILE_SITE_KEY) && !robotToken;
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -48,7 +53,13 @@ export function EmailVerification({ slug, verified, onVerified }: { slug: string
     guarded(async () => {
       const normalized = email.trim().toLowerCase();
       if (!EMAIL.test(normalized)) throw new StorefrontApiError('Enter a valid email address.', 422, 'VALIDATION_FAILED');
-      await startVerification(slug, normalized);
+      if (needsRobotCheck) throw new StorefrontApiError('Tick "I am human" first.', 422, 'VALIDATION_FAILED');
+      try {
+        await startVerification(slug, normalized, robotToken);
+      } finally {
+        // Each check is single-use; a new one is needed for "Resend code".
+        robotCheck.current?.reset();
+      }
       setEmail(normalized);
       setStage('code');
       setCode('');
@@ -86,6 +97,7 @@ export function EmailVerification({ slug, verified, onVerified }: { slug: string
 
   return (
     <div className="space-y-3">
+      <Turnstile ref={robotCheck} onToken={setRobotToken} onUnavailable={() => setError('The security check could not load. Refresh the page and try again.')} />
       {stage === 'email' ? (
         <form
           className="flex flex-col gap-2 sm:flex-row"
@@ -98,7 +110,7 @@ export function EmailVerification({ slug, verified, onVerified }: { slug: string
             Email address
           </label>
           <input id="guest-email" type="email" autoComplete="email" inputMode="email" required className="sf-input" placeholder="you@example.com" value={email} onChange={(event) => setEmail(event.target.value)} />
-          <button type="submit" className="sf-button sf-button-primary shrink-0" disabled={pending}>
+          <button type="submit" className="sf-button sf-button-primary shrink-0" disabled={pending || needsRobotCheck}>
             {pending ? 'Sending…' : 'Send code'}
           </button>
         </form>
@@ -133,7 +145,7 @@ export function EmailVerification({ slug, verified, onVerified }: { slug: string
             </button>
           </div>
           <div className="flex gap-4 text-xs">
-            <button type="button" className="underline underline-offset-4 disabled:no-underline disabled:opacity-50" disabled={cooldown > 0 || pending} onClick={() => void send()}>
+            <button type="button" className="underline underline-offset-4 disabled:no-underline disabled:opacity-50" disabled={cooldown > 0 || pending || needsRobotCheck} onClick={() => void send()}>
               {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend code'}
             </button>
             <button type="button" className="underline underline-offset-4" onClick={() => setStage('email')}>

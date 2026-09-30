@@ -300,7 +300,9 @@ describe('storefront guest booking', async () => {
     expect(lines.rows).toEqual([{ garment_guaranteed: false }]);
   });
 
-  it('skips customer emails the owner switched off', async () => {
+  // Pilot: NOTIFICATION_PREFERENCES_ENFORCED is false, so a stored "off" preference must not stop
+  // a customer email (the Notifications tab is hidden and owners cannot switch it back on).
+  it('sends customer emails even when a stored preference says off', async () => {
     const ws = await liveStore('gv-prefs');
     const current = await settingsService.getNotifications(ws.owner);
     await settingsService.updateNotifications(ws.owner, 'prefs', { version: current.version, email_enabled: true, customer: { ...current.customer, request_confirmed: false }, business: current.business });
@@ -313,6 +315,9 @@ describe('storefront guest booking', async () => {
       await emailNotifications.reservationEvent(client, ws.tenantId, id, 'request_rejected');
     });
     const sent = await admin.query<Record<string, unknown>>(`SELECT dedupe_key FROM outbox_event WHERE tenant_id = $1 AND dedupe_key LIKE 'reservation-email:%'`, [ws.tenantId]);
-    expect(sent.rows.map((row) => row['dedupe_key'])).toEqual([`reservation-email:${id}:request_rejected:customer`]);
+    expect(sent.rows.map((row) => row['dedupe_key']).sort()).toEqual([
+      `reservation-email:${id}:request_confirmed:customer`,
+      `reservation-email:${id}:request_rejected:customer`,
+    ]);
   });
 });

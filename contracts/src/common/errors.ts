@@ -51,6 +51,12 @@ export const errorCode = z.enum([
   'TENANT_CANCELLED',
   'LAST_OWNER_CONFLICT',
   'OPERATOR_APPROVAL_REQUIRED',
+  // Pilot billing: renters cannot book while the shop's subscription is read-only.
+  'BOOKING_PAUSED',
+  'SUBSCRIPTION_READ_ONLY',
+  'SUBSCRIPTION_LOCKED',
+  'PAYMENT_ALREADY_PENDING',
+  'PAYMENT_METHOD_LIMIT',
   // 422 — the request body failed validation
   'VALIDATION_FAILED',
   // 429 — rate limited

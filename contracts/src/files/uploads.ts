@@ -21,6 +21,8 @@ export const filePurpose = z.enum([
   'verification_document',
   'storefront_asset',
   'export_result',
+  'subscription_payment_proof',
+  'payment_method_material',
 ]);
 export type FilePurpose = z.infer<typeof filePurpose>;
 

@@ -19,7 +19,8 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
   const variant = item.variants.find((entry) => entry.variant_id === variantId) ?? null;
   const shown = variant ?? item.variants[0];
   const preview = useStorePreview();
-  const canBook = store.payment_methods.length > 0 && !preview;
+  // booking_open is false while the shop's subscription is view-only: the page stays browsable.
+  const canBook = store.payment_methods.length > 0 && !preview && store.booking_open;
   const image = item.image_urls[imageIndex] ?? item.image_urls[0];
 
   return (
@@ -78,6 +79,8 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
           </button>
           {preview ? (
             <p className="mt-3 text-sm text-sf-muted">Booking opens once you publish your storefront.</p>
+          ) : !store.booking_open ? (
+            <p className="mt-3 text-sm text-sf-muted">Online booking is paused for now. Contact the shop to reserve this piece.</p>
           ) : !canBook ? (
             <p className="mt-3 text-sm text-sf-muted">Online booking is not open yet. Contact the shop to reserve this piece.</p>
           ) : null}

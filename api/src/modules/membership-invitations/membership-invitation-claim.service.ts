@@ -402,7 +402,9 @@ function toPublicActorContext(context: ResolvedClaimContext): ActorContext {
     branch_grants: context.branch_grants,
     subscription: context.subscription,
     entitlements: context.entitlements,
-  });
+    access: context.access,
+    // `satisfies` makes the compiler flag a field added to ActorContext but missed here; parse() alone takes unknown.
+  } satisfies ActorContext);
 }
 
 function successBody(requestId: string, data: ActorContext): Record<string, unknown> {

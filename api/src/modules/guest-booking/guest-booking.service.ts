@@ -20,6 +20,7 @@ import { pool, withTenantTransaction } from '../../db/client.js';
 import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
 import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
 import {
+  BookingPausedError,
   CapacityConflictError,
   DependencyUnavailableError,
   HoldExpiredError,
@@ -76,6 +77,7 @@ import {
   type GuestReservationRow,
 } from './guest-booking.repository.js';
 import { guestVerificationService, tokenHash, type GuestVerificationService } from './guest-verification.service.js';
+import { isPaymentMaterialContentType } from '../payment-methods/payment-method-readiness.js';
 
 const STORE_NOT_FOUND = 'This store is not available.';
 const GUEST_NOT_FOUND = 'This booking link is not valid or has expired.';
@@ -413,9 +415,10 @@ export class GuestBookingService {
     const row = await readGuestReservation(client, tenantId, reservationId);
     if (!row) throw new NotFoundError(GUEST_NOT_FOUND);
     const payable = row.status === 'held' || row.status === 'pending_confirmation';
-    const qrUrl = payable && row.rail === 'manual_qr' && row.qr_file_id
-      ? ((await storefrontMediaSigner.sign(client, tenantId, [row.qr_file_id])).get(row.qr_file_id) ?? null)
-      : null;
+    const showMaterial = payable && row.presentation === 'material' && row.material_file_id !== null && isPaymentMaterialContentType(row.material_mime ?? '');
+    const signed = payable ? await storefrontMediaSigner.sign(client, tenantId, [row.rail === 'manual_qr' ? row.qr_file_id : null, showMaterial ? row.material_file_id : null]) : new Map<string, string>();
+    const qrUrl = row.qr_file_id ? (signed.get(row.qr_file_id) ?? null) : null;
+    const materialUrl = showMaterial && row.material_file_id ? (signed.get(row.material_file_id) ?? null) : null;
     const money = (key: string): string => {
       const value = row.price_snapshot[key];
       return typeof value === 'string' && /^\d+$/.test(value) ? value : '0';
@@ -443,6 +446,9 @@ export class GuestBookingService {
             rail: row.rail,
             ...(qrUrl ? { qr_image_url: qrUrl } : {}),
             ...(paymentNote(row.destination_snapshot) ? { destination_note: paymentNote(row.destination_snapshot) } : {}),
+            ...(materialUrl && row.material_mime && isPaymentMaterialContentType(row.material_mime)
+              ? { material_url: materialUrl, material_content_type: row.material_mime }
+              : {}),
           }
         : null,
     });
@@ -451,6 +457,8 @@ export class GuestBookingService {
   private async requireStore(slug: string): Promise<PublishedStore> {
     const store = await resolvePublishedStore(slug);
     if (!store) throw new NotFoundError(STORE_NOT_FOUND);
+    // Pilot billing: a view-only shop keeps its storefront up for a few days but takes no bookings.
+    if (!store.bookingOpen) throw new BookingPausedError('Online booking is paused for this shop right now. Please contact the shop directly.');
     return store;
   }
 

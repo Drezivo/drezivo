@@ -2,6 +2,8 @@ import Link from 'next/link';
 
 import type { PublicStorefront } from '@drezivo/contracts';
 
+import { SITE_URL } from '@/lib/site-urls';
+
 import { storeNav } from './store-nav';
 
 export function StoreFooter({ store }: { store: PublicStorefront }) {
@@ -78,7 +80,7 @@ export function StoreFooter({ store }: { store: PublicStorefront }) {
           </p>
           <p>
             Bookings by{' '}
-            <a href="https://drezivo.com" className="underline-offset-2 hover:underline">
+            <a href={SITE_URL} className="underline-offset-2 hover:underline">
               Drezivo
             </a>
           </p>

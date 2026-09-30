@@ -376,6 +376,13 @@ describe('CLT-078 catalogue lifecycle propagation', async () => {
         [tenant.id, productRow.id, fileId],
       );
 
+      // A published storefront is online only while its subscription grants access (billing/access.ts).
+      await client.query(
+        `INSERT INTO subscription (tenant_id, plan_id, status, current_period_start, current_period_end)
+         SELECT $1, id, 'active', now(), now() + interval '30 days'
+           FROM plan WHERE code = 'starter' AND version = 1 AND active = true`,
+        [tenant.id],
+      );
       const storefrontSlug = `clt078-${tenant.id.slice(0, 8)}`;
       const storefront = await client.query<{ id: string }>(
         `INSERT INTO storefront (tenant_id, branch_id, slug, status, branding, contact, published_at)

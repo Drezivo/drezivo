@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { BrandMark } from './brand-mark';
+import { SIGN_IN_URL, SIGN_UP_URL } from '@/lib/site-urls';
 
 const NAV_LINKS = [
   { href: '/#features', label: 'Features' },
@@ -52,8 +53,8 @@ export function SiteHeader() {
           ))}
         </nav>
         <div className="hidden items-center gap-3 sm:flex">
-          <a href="https://app.drezivo.com/sign-in" className="marketing-button-secondary px-4 py-2 text-sm">Sign In</a>
-          <a href="https://app.drezivo.com/sign-up" className="marketing-button-primary px-4 py-2 text-sm">Get Started</a>
+          <a href={SIGN_IN_URL} className="marketing-button-secondary px-4 py-2 text-sm">Sign In</a>
+          <a href={SIGN_UP_URL} className="marketing-button-primary px-4 py-2 text-sm">Get Started</a>
         </div>
         <details className="relative sm:hidden">
           <summary className="marketing-button-secondary cursor-pointer list-none px-3 py-2 text-sm">Menu</summary>
@@ -61,8 +62,8 @@ export function SiteHeader() {
             {NAV_LINKS.map((link) => (
               <Link key={link.href} href={link.href} className="rounded-lg px-3 py-2 text-sm text-marketing-ink hover:bg-marketing-cream">{link.label}</Link>
             ))}
-            <a href="https://app.drezivo.com/sign-in" className="rounded-lg px-3 py-2 text-sm text-marketing-ink hover:bg-marketing-cream">Sign In</a>
-            <a href="https://app.drezivo.com/sign-up" className="marketing-button-primary mt-1 px-3 py-2 text-center text-sm">Get Started</a>
+            <a href={SIGN_IN_URL} className="rounded-lg px-3 py-2 text-sm text-marketing-ink hover:bg-marketing-cream">Sign In</a>
+            <a href={SIGN_UP_URL} className="marketing-button-primary mt-1 px-3 py-2 text-center text-sm">Get Started</a>
           </nav>
         </details>
       </div>
