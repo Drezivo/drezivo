@@ -288,7 +288,9 @@ describe("NewFittingSheet production cutover", () => {
     it("opens on the slot already running so a walk-in can start now, and shows the shop time", () => {
       render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
 
-      expect(screen.getByRole("button", { name: "Fitting start time" })).toHaveTextContent("04:00 PM");
+      expect(screen.getByRole("textbox", { name: "Fitting start time hour" })).toHaveValue("04");
+      expect(screen.getByRole("textbox", { name: "Fitting start time minute" })).toHaveValue("00");
+      expect(screen.getByRole("combobox", { name: "Fitting start time period" })).toHaveValue("PM");
       expect(screen.getByText(/It is now 4:13 PM/)).toBeVisible();
     });
 
@@ -300,18 +302,22 @@ describe("NewFittingSheet production cutover", () => {
         vi.advanceTimersByTime(30_000);
       });
 
-      expect(screen.getByRole("button", { name: "Fitting start time" })).toHaveTextContent("04:30 PM");
+      expect(screen.getByRole("textbox", { name: "Fitting start time hour" })).toHaveValue("04");
+      expect(screen.getByRole("textbox", { name: "Fitting start time minute" })).toHaveValue("30");
+      expect(screen.getByRole("combobox", { name: "Fitting start time period" })).toHaveValue("PM");
       expect(
         screen.getByText("The start time moved to 4:30 PM because the time you chose has passed.")
       ).toBeVisible();
     });
 
-    it("offers only on-the-hour and half-hour minutes", () => {
+    it("rejects minutes outside the 30-minute fitting grid", () => {
       render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
 
-      fireEvent.click(screen.getByRole("button", { name: "Fitting start time" }));
-      const minutes = within(screen.getByLabelText("Fitting start time minute")).getAllByRole("option");
-      expect(minutes.map((option) => option.textContent)).toEqual(["00", "30"]);
+      const minuteInput = screen.getByRole("textbox", { name: "Fitting start time minute" });
+      fireEvent.change(minuteInput, { target: { value: "15" } });
+      fireEvent.blur(minuteInput);
+
+      expect(screen.getByText("Enter a time on a 30-minute boundary.")).toBeVisible();
     });
   });
 
