@@ -19,6 +19,8 @@ import {
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
+import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
+import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
 import { ForbiddenError, NotFoundError, TenantCancelledError, TenantRestrictedError } from '../../shared/errors.js';
 import {
   listFittingsReadModel,
@@ -28,6 +30,8 @@ import {
 } from './fittings.repository.js';
 import { toFittingSettings } from './fittings.settings.mapper.js';
 import { readFittingSettingsModel } from './fittings.settings.repository.js';
+
+const FITTING_IMAGE_VIEW_EXPIRY_SECONDS = 10 * 60;
 
 export interface FittingReadContext {
   tenantId: string;
@@ -52,12 +56,22 @@ export async function getFittingIntakeOptions(
   });
 }
 
-export async function getFittingList(input: FittingReadContext, query: FittingListQuery): Promise<FittingListResponse> {
+export async function getFittingList(
+  input: FittingReadContext,
+  query: FittingListQuery,
+  storage: ObjectStorage = objectStorage,
+): Promise<FittingListResponse> {
   assertFittingReadContext(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
     const page = await listFittingsReadModel(client, { tenantId: input.tenantId, branchId: input.branchId, query });
+    const imageAuthorizations = new Map<string, Promise<string>>();
+    const items = await Promise.all(
+      page.rows.map(async (row) =>
+        toListItem(row, await mapGarmentsWithImages(row.garments, storage, imageAuthorizations)),
+      ),
+    );
     return fittingListResponse.parse({
-      items: page.rows.map(toListItem),
+      items,
       page_meta: { next_cursor: page.nextCursor, has_more: page.hasMore },
     });
   });
@@ -101,13 +115,16 @@ export async function getFittingSettings(input: FittingReadContext): Promise<Fit
   });
 }
 
-function toListItem(row: FittingListReadRow): FittingListItem {
+function toListItem(
+  row: FittingListReadRow,
+  garments: FittingGarmentLineSummary[] = mapGarments(row.garments, false),
+): FittingListItem {
   return fittingListItem.parse({
     id: row.fitting_id,
     status: row.status,
     period: { start: row.starts_at.toISOString(), end: row.ends_at.toISOString() },
     customer: { id: row.customer_id, full_name: row.customer_full_name },
-    garments: mapGarments(row.garments, false),
+    garments,
     fee: { fee_minor: String(row.fee_minor), currency: row.currency, payment: normalizePayment(row.payment) },
     attention: attention(row.status, row.starts_at, row.ends_at),
     version: Number(row.version),
@@ -115,7 +132,60 @@ function toListItem(row: FittingListReadRow): FittingListItem {
   });
 }
 
-type GarmentJson = { id: string; variant_id: string; product_name: string; sku: string; size_label: string | null; color_label: string | null; garment_guaranteed: boolean; asset_id: string | null; asset_code: string | null };
+type GarmentJson = {
+  id: string;
+  variant_id: string;
+  product_name: string;
+  sku: string;
+  size_label: string | null;
+  color_label: string | null;
+  primary_image_storage_key: string | null;
+  primary_image_version_id: string | null;
+  garment_guaranteed: boolean;
+  asset_id: string | null;
+  asset_code: string | null;
+};
+async function mapGarmentsWithImages(
+  value: unknown,
+  storage: ObjectStorage,
+  authorizations: Map<string, Promise<string>>,
+): Promise<FittingGarmentLineSummary[]> {
+  const rows = Array.isArray(value) ? (value as GarmentJson[]) : [];
+  return Promise.all(
+    rows.map(async (row) => {
+      let primaryImageUrl: string | null = null;
+      if (row.primary_image_storage_key) {
+        const authorizationKey = `${row.primary_image_storage_key}\u0000${row.primary_image_version_id ?? ''}`;
+        let authorization = authorizations.get(authorizationKey);
+        if (!authorization) {
+          authorization = storage
+            .authorizeRead({
+              storageKey: row.primary_image_storage_key,
+              versionId: row.primary_image_version_id,
+              expiresInSeconds: FITTING_IMAGE_VIEW_EXPIRY_SECONDS,
+            })
+            .then((result) => result.readUrl);
+          authorizations.set(authorizationKey, authorization);
+        }
+        primaryImageUrl = await authorization;
+      }
+
+      return {
+        id: row.id as FittingGarmentLineSummary['id'],
+        variant: {
+          variant_id: row.variant_id as FittingGarmentLineSummary['variant']['variant_id'],
+          product_name: row.product_name,
+          sku: row.sku,
+          size_label: row.size_label,
+          color_label: row.color_label,
+          primary_image_url: primaryImageUrl,
+        },
+        garment_mode: row.garment_guaranteed ? 'guaranteed' : 'preference',
+      };
+    }),
+  );
+}
+
 function mapGarments(value: unknown, includeAsset: true): FittingGarmentLineDetail[];
 function mapGarments(value: unknown, includeAsset: false): FittingGarmentLineSummary[];
 function mapGarments(

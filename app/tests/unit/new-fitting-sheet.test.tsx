@@ -12,6 +12,7 @@ const clerk = vi.hoisted(() => ({
 
 const api = vi.hoisted(() => ({
   createFitting: vi.fn(),
+  getBusinessHours: vi.fn(),
   getCatalogueClothing: vi.fn(),
   getCatalogueClothingDetail: vi.fn(),
   getFittingIntakeOptions: vi.fn(),
@@ -53,9 +54,6 @@ const settings = fittingSettings.parse({
   fee_minor: "50000",
   currency: "PHP",
   timezone: "Asia/Manila",
-  weekly_hours: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].map(
-    (weekday) => ({ weekday, windows: [{ starts_local: "09:00", ends_local: "17:00" }] })
-  ),
   version: 1,
   updated_at: "2026-09-27T00:00:00.000Z",
 });
@@ -104,6 +102,7 @@ const catalogueList = {
       product_id: productId,
       name: "Test Gown",
       size_labels: ["Medium"],
+      primary_image_url: "https://cdn.example.test/test-gown.webp",
     },
   ],
   page_meta: { next_cursor: null, has_more: false },
@@ -128,6 +127,19 @@ describe("NewFittingSheet production cutover", () => {
     vi.clearAllMocks();
     clerk.useAuth.mockReturnValue({ getToken: clerk.getToken });
     clerk.getToken.mockResolvedValue("test-token");
+    api.getBusinessHours.mockResolvedValue({
+      data: {
+        branch_id: branchId,
+        branch_name: "Main",
+        opens_local: "08:00",
+        closes_local: "20:00",
+        closed_weekdays: [],
+        timezone: "Asia/Manila",
+        version: 1,
+        updated_at: "2026-09-27T00:00:00.000Z",
+      },
+      requestId: "request-business-hours",
+    });
     api.getFittingIntakeOptions.mockResolvedValue({
       data: {
         customers: [
@@ -161,6 +173,16 @@ describe("NewFittingSheet production cutover", () => {
     expect(screen.queryByText("Guaranteed intent")).not.toBeInTheDocument();
   });
 
+  it("uses segmented start-time input and branch Business Hours quick choices", async () => {
+    render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    expect(screen.getByLabelText("Fitting start time hour")).toBeVisible();
+    expect(screen.getByLabelText("Fitting start time minute")).toBeVisible();
+    expect(screen.getByLabelText("Fitting start time period")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Set time" })).not.toBeInTheDocument();
+    await waitFor(() => expect(api.getBusinessHours).toHaveBeenCalledTimes(1));
+  });
+
   it("searches existing customers through the fitting intake API", async () => {
     render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
 
@@ -192,14 +214,31 @@ describe("NewFittingSheet production cutover", () => {
     fireEvent.change(screen.getByPlaceholderText("09XXXXXXXXX"), {
       target: { value: "09171234567" },
     });
+    fireEvent.change(screen.getByLabelText("Fitting start time hour"), {
+      target: { value: "7" },
+    });
+    fireEvent.change(screen.getByLabelText("Fitting start time minute"), {
+      target: { value: "30" },
+    });
+    fireEvent.change(screen.getByLabelText("Fitting start time period"), {
+      target: { value: "PM" },
+    });
     expect(screen.queryByLabelText("Address (optional)")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Social media (optional)")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(await screen.findByRole("button", { name: /Test Gown/ })).toBeVisible();
+    expect(screen.getByRole("img", { name: "Test Gown catalogue photo" })).toHaveAttribute(
+      "src",
+      "https://cdn.example.test/test-gown.webp"
+    );
     fireEvent.click(screen.getByRole("button", { name: /Test Gown/ }));
-    expect(await screen.findByText("SKU TEST-M")).toBeVisible();
+    await screen.findByText("Medium / Gold");
+    expect(screen.queryByText(/SKU TEST-M/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByRole("button", { name: "Preference only" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Guarantee garment" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Remove" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Guarantee garment" }));
     expect(screen.getByText("Guaranteed garment")).toBeVisible();
 

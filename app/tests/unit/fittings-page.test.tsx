@@ -92,6 +92,7 @@ const listItem = fittingListItem.parse({
         sku: "EMERALD-M",
         size_label: "Medium",
         color_label: "Emerald",
+        primary_image_url: "https://cdn.example.test/emerald-gown.webp",
       },
       garment_mode: "guaranteed",
     },
@@ -209,6 +210,10 @@ describe("FittingsPage production cutover", () => {
 
     expect(await screen.findByText("Real Fitting Customer")).toBeVisible();
     expect(screen.getByText("Emerald Evening Gown")).toBeVisible();
+    expect(screen.getByRole("img", { name: "Emerald Evening Gown catalogue photo" })).toHaveAttribute(
+      "src",
+      "https://cdn.example.test/emerald-gown.webp"
+    );
     expect(screen.getByText("₱500")).toBeVisible();
     expect(screen.getByText("Not started")).toBeVisible();
     expect(screen.getByText("3")).toBeVisible();
