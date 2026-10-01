@@ -22,6 +22,7 @@ export function DateRangePickerField({
   disabled = false,
   className,
   startFreshOnOpen = false,
+  popoverAlign = "start",
 }: {
   value: DateRangeValue;
   onChange: (value: DateRangeValue) => void;
@@ -31,6 +32,7 @@ export function DateRangePickerField({
   disabled?: boolean;
   className?: string;
   startFreshOnOpen?: boolean;
+  popoverAlign?: "start" | "end";
 }) {
   const externalRange = useMemo<DayPickerDateRange | undefined>(() => {
     const from = parseIsoDate(value.from);
@@ -104,7 +106,12 @@ export function DateRangePickerField({
       </button>
 
       {open ? (
-        <div className="absolute left-1/2 top-[calc(100%+0.5rem)] z-50 w-[calc(100vw-2rem)] max-w-[22rem] -translate-x-1/2 rounded-lg border border-dashboard-border bg-dashboard-surface p-2 shadow-xl sm:left-0 sm:w-[22rem] sm:translate-x-0 sm:p-3">
+        <div
+          className={cn(
+            "absolute left-1/2 top-[calc(100%+0.5rem)] z-50 w-[calc(100vw-2rem)] max-w-[22rem] -translate-x-1/2 rounded-lg border border-dashboard-border bg-dashboard-surface p-2 shadow-xl sm:w-[22rem] sm:translate-x-0 sm:p-3",
+            popoverAlign === "end" ? "sm:left-auto sm:right-0" : "sm:left-0 sm:right-auto"
+          )}
+        >
           <Calendar
             mode="range"
             selected={draftRange}

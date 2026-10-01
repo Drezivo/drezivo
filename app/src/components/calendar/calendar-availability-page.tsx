@@ -538,7 +538,7 @@ function AvailabilityControls({
   ];
 
   return (
-    <Card className="gap-0 py-0">
+    <Card className="relative z-40 gap-0 overflow-visible py-0">
       <CardContent className="flex flex-col gap-3 p-3">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
           <label className="relative min-w-0 flex-1">
@@ -581,6 +581,7 @@ function AvailabilityControls({
               value={dateRangeValue}
               onChange={onDateRangeChange}
               startFreshOnOpen
+              popoverAlign="end"
               disabled={dateNavigationDisabled}
               placeholder={dateRangeLabel}
               className="w-[11.5rem] sm:w-[13rem]"
