@@ -16,7 +16,8 @@ DECLARE
 BEGIN
   -- The Supabase API-role grants observed on this project are scoped to public. Keep this change
   -- there rather than changing defaults for Supabase-managed schemas such as storage. Use
-  -- current_user because the local integration DB's Drezivo owner is `drezivo`.
+  -- current_user because CI and Supabase both apply migrations as the Drezivo object owner
+  -- (`postgres`).
   EXECUTE format(
     'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public REVOKE ALL PRIVILEGES ON TABLES FROM PUBLIC',
     current_user
