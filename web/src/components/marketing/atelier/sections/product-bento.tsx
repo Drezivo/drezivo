@@ -12,19 +12,23 @@ import { motionAllowed } from '../motion/motion-tokens';
  */
 function Card({ title, body, wide, children }: { title: string; body: string; wide?: boolean; children: ReactNode }) {
   return (
-    <article data-at-reveal="blur" data-bento-card className={`at-bento-card ${wide ? 'lg:col-span-2' : ''}`}>
+    <article data-at-reveal="blur" data-bento-card className={`at-bento-card ${wide ? 'sm:col-span-2' : ''}`}>
       <div className="at-app at-app-flat">
         <div data-bento-skeleton aria-hidden="true" className="absolute inset-4 grid content-start gap-3">
           <span className="at-skeleton h-4 w-1/2" />
           <span className="at-skeleton h-20 w-full" />
           <span className="at-skeleton h-4 w-2/3" />
         </div>
-        <div data-bento-data className="p-4">{children}</div>
+        <div data-bento-data className="p-[1.1em]">{children}</div>
       </div>
-      <h3 className="mt-6 font-[family-name:var(--font-atelier-display)] text-[1.625rem] font-normal leading-[1.15]">{title}</h3>
-      <p className="mt-2 max-w-[28rem] text-[0.975rem] leading-[1.7] text-atelier-muted">{body}</p>
+      <h3 className="mt-6 font-[family-name:var(--font-atelier-display)] text-at-title font-normal">{title}</h3>
+      <p className="mt-2 max-w-[28rem] text-at-body text-atelier-muted">{body}</p>
     </article>
   );
+}
+
+function Chip({ tone, children }: { tone: 'gold' | 'green'; children: ReactNode }) {
+  return <span className={`at-chip at-chip-${tone}`}>{children}</span>;
 }
 
 const TODAY = [
@@ -68,24 +72,24 @@ export function ProductBento() {
   }, []);
 
   return (
-    <section ref={root} id="features" data-header="light" className="at-linen py-28 text-atelier-ink lg:py-40">
+    <section ref={root} id="features" data-header="light" className="at-linen py-at-section text-atelier-ink">
       <div className="at-container">
         <div className="max-w-[56rem]" data-at-reveal="lines">
           <p className="at-eyebrow text-atelier-gold-ink">One system</p>
-          <h2 className="mt-6 font-[family-name:var(--font-atelier-display)] text-[clamp(2.5rem,5vw,4.5rem)] font-normal leading-[1.02] tracking-[-0.02em]">
+          <h2 className="mt-6 font-[family-name:var(--font-atelier-display)] text-at-display font-normal">
             <span className="block overflow-hidden"><span data-at-line className="block">Every corner of the shop,{' '}</span></span>
             <span className="block overflow-hidden"><span data-at-line className="block">on one screen.{' '}</span></span>
           </h2>
         </div>
 
-        <div className="mt-16 grid gap-x-8 gap-y-16 md:grid-cols-2 lg:mt-24 lg:grid-cols-3">
+        <div className="mt-at-stack grid gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-3 lg:gap-x-8 lg:gap-y-16">
           <Card wide title="Today, at a glance" body="Pickups, returns, fittings, and payments waiting for you, the moment you open the shop.">
-            <p className="text-[0.8125rem] font-medium text-[var(--app-ink)]">Good morning, Joy</p>
-            <p className="mt-1 text-[0.6875rem] text-[var(--app-muted)]">Thursday, December 15</p>
+            <p className="at-m-md font-medium text-[var(--app-ink)]">Good morning, Joy</p>
+            <p className="mt-1 at-m-xs text-[var(--app-muted)]">Thursday, December 15</p>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
               {TODAY.map(([label, value]) => (
                 <div key={label} className="rounded-md bg-[var(--app-surface-2)] p-3">
-                  <p className="text-[0.6875rem] text-[var(--app-muted)]">{label}</p>
+                  <p className="at-m-xs text-[var(--app-muted)]">{label}</p>
                   <p className="mt-1 font-[family-name:var(--font-atelier-display)] text-3xl text-[var(--app-ink)]">{value}</p>
                 </div>
               ))}
@@ -98,12 +102,12 @@ export function ProductBento() {
           </Card>
 
           <Card title="Every piece, every size" body="Each physical piece has a status, so you know what is ready, out, or being cleaned.">
-            <ul className="grid gap-2 text-[0.75rem]">
+            <ul className="grid gap-2 at-m-sm">
               {PIECES.map(([name, sizes, status, tone]) => (
                 <li key={name} className="flex items-center justify-between gap-2 rounded-md bg-[var(--app-surface-2)] px-2.5 py-2">
                   <span>
                     <span className="block text-[var(--app-ink)]">{name}</span>
-                    <span className="text-[0.6875rem] text-[var(--app-muted)]">{sizes}</span>
+                    <span className="at-m-xs text-[var(--app-muted)]">{sizes}</span>
                   </span>
                   <span className={`at-chip at-chip-${tone}`}>{status}</span>
                 </li>
@@ -112,26 +116,41 @@ export function ProductBento() {
           </Card>
 
           <Card title="Fittings, without the back-and-forth" body="Renters book a fitting slot from your storefront. Your business hours decide what they can pick.">
-            <div className="grid grid-cols-3 gap-1.5 text-center text-[0.6875rem]">
+            <div className="flex items-baseline justify-between">
+              <p className="at-m-md font-medium text-[var(--app-ink)]">Fitting slots</p>
+              <p className="at-m-xs text-[var(--app-muted)]">Sat, Dec 17</p>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-1.5 text-center at-m-xs">
               {['10:00', '10:30', '11:00', '1:00', '1:30', '2:00'].map((slot, index) => (
                 <span key={slot} className={`rounded-md py-2 ${index === 1 ? 'bg-[var(--app-active)] text-[var(--app-accent)]' : index === 4 ? 'bg-[var(--app-surface-3)] text-[var(--app-muted)] line-through' : 'bg-[var(--app-surface-2)] text-[var(--app-ink)]'}`}>
                   {slot}
                 </span>
               ))}
             </div>
+            <div className="mt-3 flex items-center justify-between gap-2 rounded-md bg-[var(--app-surface-2)] px-2.5 py-2 at-m-xs">
+              <span className="text-[var(--app-ink)]">10:30 · Carla Mendoza · Red Mermaid · M</span>
+              <Chip tone="gold">Booked</Chip>
+            </div>
+            <p className="mt-2 at-m-xs text-[var(--app-muted)]">1:30 is outside your Saturday hours.</p>
           </Card>
 
           <Card title="A history for every renter" body="Contact details, past rentals, deposits, and notes in one record, with their consent kept beside it.">
-            <p className="text-[0.8125rem] text-[var(--app-ink)]">Carla Mendoza</p>
-            <p className="text-[0.6875rem] text-[var(--app-muted)]">4 rentals · last on Nov 30</p>
-            <ul className="mt-3 grid gap-1.5 text-[0.6875rem] text-[var(--app-muted)]">
+            <p className="at-m-md text-[var(--app-ink)]">Carla Mendoza</p>
+            <p className="at-m-xs text-[var(--app-muted)]">4 rentals · last on Nov 30 · 0917 ••• 4821</p>
+            <ul className="mt-3 grid gap-1.5 at-m-xs text-[var(--app-muted)]">
               <li className="flex justify-between"><span>Debut gown · Nov 30</span><span className="text-[var(--app-green)]">Returned</span></li>
               <li className="flex justify-between"><span>Filipiniana · Aug 12</span><span className="text-[var(--app-green)]">Returned</span></li>
+              <li className="flex justify-between"><span>Barong · Jun 3</span><span className="text-[var(--app-green)]">Returned</span></li>
             </ul>
+            <div className="mt-3 grid gap-1 rounded-md bg-[var(--app-surface-2)] p-2.5 at-m-xs">
+              <p className="flex justify-between"><span className="text-[var(--app-muted)]">Deposits</span><span className="text-[var(--app-ink)]">All refunded</span></p>
+              <p className="flex justify-between"><span className="text-[var(--app-muted)]">Note</span><span className="text-[var(--app-ink)]">Prefers Saturday fittings</span></p>
+              <p className="flex justify-between"><span className="text-[var(--app-muted)]">Consent</span><span className="text-[var(--app-green)]">Recorded Aug 12</span></p>
+            </div>
           </Card>
 
           <Card title="Every peso, accounted for" body="Rental fees, deposits, and refunds sit on each booking, so the day's takings add up without a notebook.">
-            <ul className="grid gap-2 text-[0.75rem]">
+            <ul className="grid gap-2 at-m-sm">
               {[
                 ['GCash · RES-1042', '₱2,500.00', 'green', 'Approved'],
                 ['Cash · RES-1039', '₱1,200.00', 'green', 'Recorded'],
@@ -140,7 +159,7 @@ export function ProductBento() {
                 <li key={label} className="flex items-center justify-between gap-2 rounded-md bg-[var(--app-surface-2)] px-2.5 py-2">
                   <span>
                     <span className="block tabular-nums text-[var(--app-ink)]">{amount}</span>
-                    <span className="text-[0.6875rem] text-[var(--app-muted)]">{label}</span>
+                    <span className="at-m-xs text-[var(--app-muted)]">{label}</span>
                   </span>
                   <span className={`at-chip at-chip-${tone}`}>{status}</span>
                 </li>

@@ -4,7 +4,7 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useEffect, useRef, type ReactNode } from 'react';
 
-import { motionAllowed } from '../motion/motion-tokens';
+import { EASE_REVEAL, motionAllowed } from '../motion/motion-tokens';
 import {
   AfterCalendar,
   AfterDeposit,
@@ -21,6 +21,8 @@ import {
 gsap.registerPlugin(ScrollTrigger);
 
 interface Row {
+  /** Reservations and the calendar are the core of the offer; their key moment gets a soft pulse. */
+  core?: boolean;
   pain: string;
   title: string;
   body: string;
@@ -31,6 +33,7 @@ interface Row {
 
 const ROWS: readonly Row[] = [
   {
+    core: true,
     pain: '“Available pa po?” at 11 PM',
     title: 'Renters answer their own question.',
     body: 'Every inquiry used to mean flipping through a notebook or scrolling a group chat. Your Drezivo storefront shows live availability, so renters pick open dates and send a booking while you sleep.',
@@ -39,9 +42,10 @@ const ROWS: readonly Row[] = [
     after: <AfterStorefront />,
   },
   {
+    core: true,
     pain: 'Two clients, one gown',
     title: 'A gown can only be promised once.',
-    body: 'Overlapping dates are refused at the source, including the cleaning days after each return. Staff see the conflict before they say yes, with a similar piece to offer instead.',
+    body: 'Overlapping dates are refused at the source, including the cleaning days after each return. You see the conflict before you say yes, with a similar piece to offer instead.',
     fix: 'Calendar with protected holds',
     before: <BeforeNotebook />,
     after: <AfterCalendar />,
@@ -82,69 +86,112 @@ export function BeforeAfter() {
   useEffect(() => {
     const host = root.current;
     if (!host || !motionAllowed()) return;
-    const context = gsap.context(() => {
-      gsap.utils.toArray<HTMLElement>('[data-ba-row]').forEach((row) => {
-        const before = row.querySelector('[data-ba-before]');
-        const after = row.querySelector('[data-ba-after]');
-        const line = row.querySelector('[data-ba-line]');
-        const skeleton = row.querySelector('[data-ba-skeleton]');
-        const data = row.querySelector('[data-ba-data]');
+    const parts = (row: HTMLElement) => ({
+      pair: row.querySelector<HTMLElement>('.at-snap-pair'),
+      before: row.querySelector<HTMLElement>('[data-ba-before]'),
+      after: row.querySelector<HTMLElement>('[data-ba-after]'),
+      handoff: row.querySelector<HTMLElement>('[data-ba-line]'),
+      skeleton: row.querySelector<HTMLElement>('[data-ba-skeleton]'),
+      data: row.querySelector<HTMLElement>('[data-ba-data]'),
+    });
+    const mm = gsap.matchMedia(host);
+
+    // Side by side (640px and up): the change is scrubbed by scroll, so it plays at the reader's pace.
+    mm.add('(min-width: 40rem)', () => {
+      gsap.utils.toArray<HTMLElement>('[data-ba-row]', host).forEach((row) => {
+        const { before, after, handoff, skeleton, data } = parts(row);
         gsap
           .timeline({ scrollTrigger: { trigger: row, start: 'top 78%', end: 'center 48%', scrub: 0.6 } })
-          .fromTo(before, { filter: 'grayscale(0) blur(0px)', opacity: 1, scale: 1, rotate: 0 }, { filter: 'grayscale(0.9) blur(1.5px)', opacity: 0.42, scale: 0.94, rotate: -2, ease: 'none' }, 0)
-          .fromTo(line, { scaleX: 0 }, { scaleX: 1, ease: 'none' }, 0.05)
-          .fromTo(after, { clipPath: 'inset(0% 100% 0% 0% round 18px)', y: 24 }, { clipPath: 'inset(0% 0% 0% 0% round 18px)', y: 0, ease: 'none' }, 0.12)
+          // The before stays fully readable; it only cools a little as the after takes the stage.
+          .fromTo(before, { filter: 'grayscale(0)' }, { filter: 'grayscale(0.35)', ease: 'none' }, 0)
+          .fromTo(handoff, { scale: 0, rotate: -90 }, { scale: 1, rotate: 0, ease: 'none' }, 0.05)
+          .fromTo(after, { clipPath: 'inset(0% 100% 0% 0% round 24px)', y: 24 }, { clipPath: 'inset(0% 0% 0% 0% round 24px)', y: 0, ease: 'none' }, 0.12)
           .fromTo(skeleton, { autoAlpha: 1 }, { autoAlpha: 0, ease: 'none' }, 0.62)
           .fromTo(data, { autoAlpha: 0 }, { autoAlpha: 1, ease: 'none' }, 0.66);
       });
-    }, host);
-    return () => context.revert();
+    });
+
+    // Phones: the after card sits off-screen in a swipe row, so a scrubbed reveal would play unseen.
+    // Each row plays once as a short scene instead: the before settles in, the row swipes itself to
+    // the after (unless the visitor already touched it), and the after screen loads.
+    mm.add('(max-width: 39.99rem)', () => {
+      const cleanups: Array<() => void> = [];
+      gsap.utils.toArray<HTMLElement>('[data-ba-row]', host).forEach((row) => {
+        const { pair, before, after, skeleton, data } = parts(row);
+        if (!pair || !after) return;
+        let touched = false;
+        const markTouched = () => { touched = true; };
+        pair.addEventListener('pointerdown', markTouched, { once: true });
+        gsap.set(skeleton, { autoAlpha: 1 });
+        gsap.set(data, { autoAlpha: 0 });
+        const showAfter = () => {
+          if (touched) return;
+          const inset = parseFloat(getComputedStyle(pair).scrollPaddingLeft) || 0;
+          pair.scrollTo({ left: after.offsetLeft - inset, behavior: 'smooth' });
+        };
+        const scene = gsap
+          .timeline({ paused: true })
+          .fromTo(before, { autoAlpha: 0, y: 32 }, { autoAlpha: 1, y: 0, duration: 0.7, ease: EASE_REVEAL })
+          .call(showAfter, undefined, '+=0.9')
+          .to(before, { filter: 'grayscale(0.35)', duration: 0.6, ease: 'none' }, '<')
+          .to(skeleton, { autoAlpha: 0, duration: 0.3, ease: 'none' }, '+=0.5')
+          .to(data, { autoAlpha: 1, duration: 0.5, ease: EASE_REVEAL });
+        ScrollTrigger.create({ trigger: pair, start: 'top 70%', once: true, onEnter: () => scene.play() });
+        cleanups.push(() => pair.removeEventListener('pointerdown', markTouched));
+      });
+      return () => cleanups.forEach((cleanup) => cleanup());
+    });
+
+    return () => mm.revert();
   }, []);
 
   return (
-    <section ref={root} id="before-after" data-header="light" className="bg-atelier-paper py-28 text-atelier-ink lg:py-40">
+    <section ref={root} id="before-after" data-header="light" className="bg-atelier-paper py-at-section text-atelier-ink">
       <div className="at-container">
         <div className="grid gap-8 lg:grid-cols-[1fr_1fr] lg:items-end">
           <div data-at-reveal="lines">
             <p className="at-eyebrow text-atelier-gold-ink">Why shops switch</p>
-            <h2 className="mt-6 font-[family-name:var(--font-atelier-display)] text-[clamp(2.5rem,5vw,4.5rem)] font-normal leading-[1.02] tracking-[-0.02em]">
+            <h2 className="mt-6 font-[family-name:var(--font-atelier-display)] text-at-display font-normal">
               <span className="block overflow-hidden"><span data-at-line className="block">A rental shop{' '}</span></span>
               <span className="block overflow-hidden"><span data-at-line className="block">runs on memory.{' '}</span></span>
               <span className="block overflow-hidden"><span data-at-line className="block italic">Drezivo remembers.{' '}</span></span>
             </h2>
           </div>
-          <p data-at-reveal="up" className="max-w-[32rem] text-[1.0625rem] leading-[1.75] text-atelier-muted lg:justify-self-end">
+          <p data-at-reveal="up" className="max-w-[32rem] text-at-lead text-atelier-muted lg:justify-self-end">
             These are the hassles we hear from gown, barong, and costume shops every week. Each one has a place in Drezivo, so it stops
             living in someone&apos;s head or phone.
           </p>
         </div>
 
-        <ol className="mt-20 grid gap-24 lg:mt-28 lg:gap-36">
+        <ol className="mt-at-stack grid gap-at-section">
           {ROWS.map((row, index) => (
-            <li key={row.pain} data-ba-row className="grid gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-center lg:gap-16">
-              <div data-at-reveal="up">
-                <p className="flex items-baseline gap-4">
-                  <span className="font-[family-name:var(--font-atelier-display)] text-5xl leading-none text-atelier-gold">{String(index + 1).padStart(2, '0')}</span>
-                  <span className="at-eyebrow text-atelier-gold-ink">{row.pain}</span>
-                </p>
-                <h3 className="mt-6 font-[family-name:var(--font-atelier-display)] text-[clamp(1.75rem,2.8vw,2.5rem)] font-normal leading-[1.1] tracking-[-0.01em]">
-                  {row.title}
-                </h3>
-                <p className="mt-4 max-w-[30rem] text-[1rem] leading-[1.75] text-atelier-muted">{row.body}</p>
-                <p className="mt-6 inline-flex items-center gap-3 text-sm font-medium text-atelier-ink">
-                  <span aria-hidden="true" className="h-px w-8 bg-atelier-gold" />
-                  {row.fix}
-                </p>
-              </div>
-              <div className="relative grid items-center gap-6 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)] sm:gap-0">
-                <div data-ba-before className="relative z-0 sm:-mr-10 sm:translate-y-6">
-                  <p className="at-eyebrow mb-3 text-[0.65rem] text-atelier-muted">Before</p>
-                  {row.before}
+            <li key={row.pain} data-ba-row data-core={row.core ? '' : undefined} className="grid gap-8 sm:gap-10">
+              <div data-at-reveal="up" className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-end lg:gap-16">
+                <div>
+                  <p className="flex items-baseline gap-4">
+                    <span className="font-[family-name:var(--font-atelier-display)] text-at-numeral text-atelier-gold">{String(index + 1).padStart(2, '0')}</span>
+                    <span className="at-eyebrow text-atelier-gold-ink">{row.pain}</span>
+                  </p>
+                  <h3 className="mt-5 font-[family-name:var(--font-atelier-display)] text-at-subhead font-normal">{row.title}</h3>
                 </div>
-                <span data-ba-line aria-hidden="true" className="at-ba-line hidden sm:block" />
-                <div data-ba-after className="relative z-10">
-                  <p className="at-eyebrow mb-3 text-[0.65rem] text-atelier-gold-ink">With Drezivo</p>
-                  {row.after}
+                <div>
+                  <p className="max-w-[34rem] text-at-body text-atelier-muted">{row.body}</p>
+                  <p className="mt-4 inline-flex items-center gap-3 text-at-small font-medium text-atelier-ink">
+                    <span aria-hidden="true" className="h-px w-8 bg-atelier-gold" />
+                    {row.fix}
+                  </p>
+                </div>
+              </div>
+              {/* Two equal stages: phones swipe between them, larger screens show them side by side. */}
+              <div role="group" aria-label={`${row.fix}: before and with Drezivo`} tabIndex={0} className="at-snap-pair relative sm:grid-cols-2 sm:gap-5 lg:gap-8">
+                <div data-ba-before className="at-stage at-stage-before">
+                  <p className="at-eyebrow text-atelier-muted">Before<span aria-hidden="true" className="sm:hidden"> · swipe →</span></p>
+                  <div className="at-stage-body">{row.before}</div>
+                </div>
+                <span data-ba-line aria-hidden="true" className="at-ba-line hidden sm:grid">→</span>
+                <div data-ba-after className="at-stage at-stage-after">
+                  <p className="at-eyebrow text-atelier-champagne">With Drezivo</p>
+                  <div className="at-stage-body">{row.after}</div>
                 </div>
               </div>
             </li>

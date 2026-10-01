@@ -62,6 +62,46 @@
   --color-atelier-gold: #a07a46;
   --color-atelier-gold-ink: #7a5830;
 
+  /*
+   * Atelier fluid scale: the single source of truth for marketing type and rhythm. Every value
+   * grows linearly from a 320px to a 1440px viewport (display sizes keep shrinking to 280px for
+   * the smallest phones), so nothing needs per-breakpoint font overrides. Use the generated
+   * utilities (text-at-hero, py-at-section, …); never hard-code a marketing font size.
+   * Regenerate with: min@320, max@1440 → clamp(min, intercept + slope·vw, max).
+   */
+  --text-at-micro: clamp(0.6875rem, 0.6696rem + 0.0893vw, 0.75rem);
+  --text-at-micro--line-height: 1.6;
+  --text-at-small: clamp(0.8125rem, 0.7857rem + 0.1339vw, 0.9062rem);
+  --text-at-small--line-height: 1.6;
+  --text-at-body: clamp(0.9375rem, 0.9196rem + 0.0893vw, 1rem);
+  --text-at-body--line-height: 1.75;
+  --text-at-lead: clamp(1rem, 0.9732rem + 0.1339vw, 1.0938rem);
+  --text-at-lead--line-height: 1.7;
+  --text-at-title: clamp(1.25rem, 1.1071rem + 0.7143vw, 1.75rem);
+  --text-at-title--line-height: 1.2;
+  --text-at-title--letter-spacing: -0.005em;
+  --text-at-subhead: clamp(1.5rem, 1.2143rem + 1.4286vw, 2.5rem);
+  --text-at-subhead--line-height: 1.1;
+  --text-at-subhead--letter-spacing: -0.01em;
+  --text-at-display: clamp(2.0402rem, 1.4464rem + 3.3929vw, 4.5rem);
+  --text-at-display--line-height: 1.02;
+  --text-at-display--letter-spacing: -0.02em;
+  --text-at-hero: clamp(2.125rem, 1.25rem + 5vw, 5.75rem);
+  --text-at-hero--line-height: 0.98;
+  --text-at-hero--letter-spacing: -0.02em;
+  --text-at-numeral: clamp(2.5rem, 1.9286rem + 2.8571vw, 4.5rem);
+  --text-at-numeral--line-height: 1;
+  --text-at-price: clamp(4.9911rem, 3.1786rem + 10.3571vw, 12.5rem);
+  --text-at-price--line-height: 0.85;
+  --text-at-price--letter-spacing: -0.03em;
+  /* Root size of the coded app mockups; everything inside them is sized in em off this. */
+  --text-at-mock: clamp(0.8125rem, 0.7589rem + 0.2679vw, 1rem);
+  /* Mockups that are the offer itself (before/after stages, feature bento) read larger. */
+  --text-at-mock-showcase: clamp(0.8125rem, 0.7232rem + 0.4464vw, 1.125rem);
+  --spacing-at-section: clamp(5rem, 3.5714rem + 7.1429vw, 10rem);
+  --spacing-at-stack: clamp(3rem, 2.1429rem + 4.2857vw, 6rem);
+  --spacing-at-gutter: clamp(1.125rem, 0.5893rem + 2.6786vw, 3rem);
+
   --font-display: 'Georgia', 'Times New Roman', serif;
   --font-body:
     system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;

@@ -30,7 +30,9 @@ export function MarketingMotion() {
     const lenis = new Lenis({
       lerp: 0.085,
       autoRaf: false,
-      anchors: { offset: -72 },
+      // No offset here: Lenis already subtracts each target's scroll-margin-top (atelier.css), and
+      // adding one as well scrolled anchors 72px short, under the header.
+      anchors: true,
       prevent: (node) => node.closest('[role="dialog"], [data-lenis-prevent]') !== null,
     });
     const tick = (time: number) => lenis.raf(time * 1000);

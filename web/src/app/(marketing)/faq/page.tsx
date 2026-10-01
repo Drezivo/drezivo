@@ -25,20 +25,20 @@ const FAQ_JSON_LD = JSON.stringify({
 
 export default function FaqPage() {
   return (
-    <section data-header="light" className="at-linen py-28 text-atelier-ink lg:py-40">
+    <section data-header="light" className="at-linen py-at-section text-atelier-ink">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: FAQ_JSON_LD }} />
       <div className="at-container grid gap-14 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-20">
         <div className="lg:sticky lg:top-32 lg:self-start">
           <p className="at-eyebrow text-atelier-gold-ink">FAQ</p>
-          <h1 className="mt-6 font-[family-name:var(--font-atelier-display)] text-[clamp(2.5rem,5vw,4.25rem)] font-normal leading-[1.05] tracking-[-0.02em]">
+          <h1 className="mt-6 font-[family-name:var(--font-atelier-display)] text-at-hero font-normal">
             Asked often,{' '}
             <span className="italic">answered plainly.</span>
           </h1>
-          <p className="mt-6 max-w-[24rem] text-[1rem] leading-[1.75] text-atelier-muted">
+          <p className="mt-6 max-w-[24rem] text-at-body text-atelier-muted">
             What rental shop owners ask before they start: the trial, billing, bookings, and who stays in control.
           </p>
           <nav aria-label="FAQ sections" className="mt-10">
-            <ul className="space-y-3 text-[0.9375rem]">
+            <ul className="space-y-3 text-at-body">
               {MARKETING_FAQ_GROUPS.map((group) => (
                 <li key={group.title}>
                   <Link href={`#${groupId(group.title)}`} className="text-atelier-ink underline decoration-atelier-gold underline-offset-4">
@@ -51,16 +51,16 @@ export default function FaqPage() {
         </div>
         <div className="space-y-16">
           {MARKETING_FAQ_GROUPS.map((group) => (
-            <div key={group.title} id={groupId(group.title)} className="scroll-mt-32">
+            <div key={group.title} id={groupId(group.title)}>
               <h2 className="at-eyebrow text-atelier-gold-ink">{group.title}</h2>
               <div className="mt-5 border-t border-atelier-paper-line">
                 {group.faqs.map((faq) => (
                   <details key={faq.question} className="at-faq group border-b border-atelier-paper-line">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-6 py-6 text-[1.0625rem] font-medium">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-6 py-6 text-at-lead font-medium">
                       <span>{faq.question}</span>
                       <span aria-hidden="true" className="at-faq-icon" />
                     </summary>
-                    <p className="max-w-[40rem] pb-7 pr-10 text-[1rem] leading-[1.75] text-atelier-muted">{faq.answer}</p>
+                    <p className="max-w-[40rem] pb-7 pr-10 text-at-body text-atelier-muted">{faq.answer}</p>
                   </details>
                 ))}
               </div>

@@ -72,3 +72,9 @@
 - Never `git worktree remove --force` a worktree whose `node_modules` are junctions into the main
   checkout: it deletes through them (it wiped `api/`, part of `app/`, and both env files). Remove
   the junctions first with `cmd /c rmdir`, check none remain, then `git worktree prune`.
+- Marketing sizes come only from the fluid scale in `web/src/app/globals.css` (`--text-at-*`,
+  `--spacing-at-*` → `text-at-hero`, `py-at-section`, …). Never add a raw `text-[1.0625rem]` or a
+  one-off `clamp()`. Coded app mockups use `.at-m-*`, which is relative to the mockup root;
+  plain `em` compounds when nested (a 0.6875em chip inside a 0.75em list renders at 0.52).
+- Check marketing layouts from 280px to 1440px with `qa-widths.mjs`, not just at 390px.
+  `whitespace-nowrap` headlines need a font token that fits the narrowest phone.

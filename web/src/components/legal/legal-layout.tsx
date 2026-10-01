@@ -14,13 +14,10 @@ const LEGAL_PAGES = [
 export function LegalLayout({
   title,
   updated,
-  notice,
   children,
 }: {
   title: string;
   updated: string;
-  /** Shown above the document while it is still a draft for legal review. */
-  notice?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -29,11 +26,11 @@ export function LegalLayout({
         <PatternDraft id="legal-draft" className="at-art inset-0 h-full w-full text-atelier-champagne opacity-[0.16]" />
         <div className="at-container">
           <p className="at-eyebrow text-atelier-champagne">Legal</p>
-          <h1 className="mt-6 font-[family-name:var(--font-atelier-display)] text-[clamp(2.75rem,6vw,5rem)] font-normal leading-[1.02] tracking-[-0.02em]">
+          <h1 className="mt-6 font-[family-name:var(--font-atelier-display)] text-at-hero font-normal">
             {title}
           </h1>
-          <p className="mt-5 text-sm text-atelier-mist">Last updated: {updated}</p>
-          <nav aria-label="Legal documents" className="mt-10 flex flex-wrap gap-x-8 gap-y-3 text-[0.9375rem]">
+          <p className="mt-5 text-at-small text-atelier-mist">Last updated: {updated}</p>
+          <nav aria-label="Legal documents" className="mt-10 flex flex-wrap gap-x-8 gap-y-3 text-at-body">
             {LEGAL_PAGES.map((page) => (
               <Link
                 key={page.href}
@@ -47,10 +44,9 @@ export function LegalLayout({
           </nav>
         </div>
       </section>
-      <section data-header="light" className="bg-atelier-paper py-20 lg:py-28">
+      <section data-header="light" className="bg-atelier-paper py-at-section">
         <div className="at-container">
           <article className="at-legal mx-auto max-w-[46rem]">
-            {notice ? <p className="at-legal-notice">{notice}</p> : null}
             {children}
           </article>
         </div>
