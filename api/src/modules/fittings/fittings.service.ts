@@ -77,11 +77,16 @@ export async function getFittingList(
   });
 }
 
-export async function getFittingDetail(input: FittingReadContext, fittingId: string): Promise<FittingDetail> {
+export async function getFittingDetail(
+  input: FittingReadContext,
+  fittingId: string,
+  storage: ObjectStorage = objectStorage,
+): Promise<FittingDetail> {
   assertFittingReadContext(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
     const row = await readFittingDetailModel(client, { tenantId: input.tenantId, branchId: input.branchId, fittingId });
     if (!row) throw new NotFoundError('Fitting could not be found.');
+    const garments = await mapGarmentsWithImages(row.garments, storage, new Map(), true);
     return fittingDetail.parse({
       ...toListItem(row),
       branch_id: row.branch_id,
@@ -95,7 +100,7 @@ export async function getFittingDetail(input: FittingReadContext, fittingId: str
         address: row.customer_address,
         social_media: row.customer_social_media,
       },
-      garments: mapGarments(row.garments, true),
+      garments,
       internal_note: row.internal_note,
       terminal_reason: row.terminal_reason,
       allowed_actions: allowedActions(row.status, row.starts_at, row.ends_at),
@@ -145,11 +150,24 @@ type GarmentJson = {
   asset_id: string | null;
   asset_code: string | null;
 };
+function mapGarmentsWithImages(
+  value: unknown,
+  storage: ObjectStorage,
+  authorizations: Map<string, Promise<string>>,
+  includeAsset: true,
+): Promise<FittingGarmentLineDetail[]>;
+function mapGarmentsWithImages(
+  value: unknown,
+  storage: ObjectStorage,
+  authorizations: Map<string, Promise<string>>,
+  includeAsset?: false,
+): Promise<FittingGarmentLineSummary[]>;
 async function mapGarmentsWithImages(
   value: unknown,
   storage: ObjectStorage,
   authorizations: Map<string, Promise<string>>,
-): Promise<FittingGarmentLineSummary[]> {
+  includeAsset = false,
+): Promise<Array<FittingGarmentLineDetail | FittingGarmentLineSummary>> {
   const rows = Array.isArray(value) ? (value as GarmentJson[]) : [];
   return Promise.all(
     rows.map(async (row) => {
@@ -181,6 +199,16 @@ async function mapGarmentsWithImages(
           primary_image_url: primaryImageUrl,
         },
         garment_mode: row.garment_guaranteed ? 'guaranteed' : 'preference',
+        ...(includeAsset
+          ? {
+              assigned_asset: row.garment_guaranteed
+                ? {
+                    id: row.asset_id as NonNullable<FittingGarmentLineDetail['assigned_asset']>['id'],
+                    asset_code: row.asset_code as string,
+                  }
+                : null,
+            }
+          : {}),
       };
     }),
   );

@@ -90,7 +90,7 @@ const listItem = fittingListItem.parse({
         variant_id: variantId,
         product_name: "Emerald Evening Gown",
         sku: "EMERALD-M",
-        size_label: "Medium",
+        size_label: null,
         color_label: "Emerald",
         primary_image_url: "https://cdn.example.test/emerald-gown.webp",
       },
@@ -386,7 +386,13 @@ describe("FittingsPage production cutover", () => {
     expect(screen.queryByText("@realcustomer")).not.toBeInTheDocument();
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("Guaranteed garment")).toBeVisible();
-    expect(within(dialog).getByText("Guaranteed asset GWN-0042")).toBeVisible();
+    expect(within(dialog).getByText("Free size · Emerald")).toBeVisible();
+    expect(within(dialog).getByRole("img", { name: "Emerald Evening Gown catalogue photo" })).toHaveAttribute(
+      "src",
+      "https://cdn.example.test/emerald-gown.webp"
+    );
+    expect(within(dialog).queryByText(/Guaranteed asset/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("GWN-0042")).not.toBeInTheDocument();
     expect(within(dialog).getByText("Bring heels for final fitting.")).toBeVisible();
     expect(within(dialog).queryByText(/capacity slot/i)).not.toBeInTheDocument();
     expect(api.getFittingDetail).toHaveBeenCalledWith(fittingId);

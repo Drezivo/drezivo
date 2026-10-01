@@ -41,7 +41,7 @@ export function BusinessSettingsPage() {
 
   return (
     <div className="grid gap-4">
-      <Section icon={Building2} title="Business information" description="Used on your records, receipts, and the emails Drezivo sends for you. Your public storefront details are edited in Storefront.">
+      <Section icon={Building2} title="Business information" description="Used on your records, receipts, and the emails Drezivo sends for you. Phone, email, and address stay synced with Storefront contact details.">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Business name" className="sm:col-span-2" error={err("business_name")} count={{ value: draft.business_name.length, max: 120 }}>
             {(props) => <Input {...props} value={draft.business_name} maxLength={120} autoComplete="organization" onChange={(e) => resource.update({ business_name: e.target.value })} />}
@@ -49,8 +49,19 @@ export function BusinessSettingsPage() {
           <Field label="Business email" hint="New booking and fitting requests are emailed here. Customers always get their own booking emails." error={err("business_email")}>
             {(props) => <Input {...props} type="email" autoComplete="email" value={draft.business_email ?? ""} onChange={(e) => resource.update({ business_email: orNull(e.target.value) })} />}
           </Field>
-          <Field label="Business phone" error={err("business_phone")}>
-            {(props) => <Input {...props} type="tel" autoComplete="tel" value={draft.business_phone ?? ""} placeholder="+63 917 123 4567" onChange={(e) => resource.update({ business_phone: orNull(e.target.value) })} />}
+          <Field label="Business phone" hint="Use exactly 11 digits." error={err("business_phone")}>
+            {(props) => (
+              <Input
+                {...props}
+                type="tel"
+                inputMode="numeric"
+                autoComplete="tel"
+                maxLength={11}
+                value={draft.business_phone ?? ""}
+                placeholder="09xxxxxxxxx"
+                onChange={(e) => resource.update({ business_phone: orNull(e.target.value.replace(/\D/g, "").slice(0, 11)) })}
+              />
+            )}
           </Field>
           <Field label="Business address" className="sm:col-span-2" error={err("business_address")}>
             {(props) => <Textarea {...props} rows={2} maxLength={300} value={draft.business_address ?? ""} onChange={(e) => resource.update({ business_address: orNull(e.target.value) })} />}

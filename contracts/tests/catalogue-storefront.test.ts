@@ -117,8 +117,9 @@ describe('storefront CMS contract', () => {
 
 describe('business settings contract', () => {
   it('validates business information strictly', () => {
-    const info = { business_name: 'Luna Gown Rentals', business_email: 'Hello@Luna.test', business_phone: '+63 917 123 4567', business_address: null };
+    const info = { business_name: 'Luna Gown Rentals', business_email: 'Hello@Luna.test', business_phone: '09171234567', business_address: null };
     expect(businessInformation.parse(info).business_email).toBe('hello@luna.test');
+    expect(businessInformation.parse({ ...info, business_phone: '+63 917 123 4567' }).business_phone).toBe('09171234567');
     expect(businessInformation.safeParse({ ...info, currency: 'USD' }).success).toBe(false);
     expect(businessInformation.safeParse({ ...info, business_phone: 'call me' }).success).toBe(false);
   });

@@ -39,6 +39,11 @@ import {
 } from '../../shared/errors.js';
 import { runIdempotentCommand, type CommandResult } from '../../shared/idempotent-command.js';
 import {
+  appendStorefrontAudit,
+  readStorefront,
+  syncStorefrontContactFromBusinessInformation,
+} from '../storefront-cms/storefront-cms.repository.js';
+import {
   appendBranchSettingsAudit,
   appendSettingsAudit,
   createBranchClosure,
@@ -126,12 +131,36 @@ export class SettingsService {
   ): Promise<CommandResult<BusinessSettings>> {
     return this.command(context, key, 'settings.business.update', request, async (client) => {
       const { version, ...info } = request;
+      // Keep lock ordering consistent with storefront writes: storefront first, tenant settings second.
+      const storefront = await readStorefront(client, context.tenantId, true);
+      if (!storefront) throw new NotFoundError('Storefront settings could not be found.');
       await this.requireTenantVersion(client, context.tenantId, version);
       await updateBusinessInformation(client, {
         tenantId: context.tenantId,
         expectedVersion: version,
         info,
       });
+      const storefrontContactChanged = await syncStorefrontContactFromBusinessInformation(client, {
+        tenantId: context.tenantId,
+        storefrontId: storefront.id,
+        phone: info.business_phone,
+        email: info.business_email,
+        address: info.business_address,
+      });
+      if (storefrontContactChanged) {
+        await appendStorefrontAudit(client, {
+          tenantId: context.tenantId,
+          actorKey: context.principalId,
+          storefrontId: storefront.id,
+          action: 'storefront.contact.synced_from_business_settings',
+          summary: {
+            has_email: info.business_email !== null,
+            has_phone: info.business_phone !== null,
+            has_address: info.business_address !== null,
+          },
+          requestId: context.requestId,
+        });
+      }
       await appendSettingsAudit(client, {
         tenantId: context.tenantId,
         actorKey: context.principalId,

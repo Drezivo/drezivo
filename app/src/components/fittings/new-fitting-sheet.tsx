@@ -225,7 +225,7 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
       }
       if (!date || date < today) return "Choose today or a future date.";
       if (!startTime) return "Choose a fitting start time.";
-      if (date === today && startTime < currentTimeInTimeZone(timeZone)) {
+      if (date === today && startTime < earliestFittingStartTimeInTimeZone(timeZone)) {
         return "Choose a fitting start time that is not in the past.";
       }
       const startMinute = Number(startTime.split(":")[1] ?? Number.NaN);
@@ -687,7 +687,7 @@ function StepAppointment({
         </div>
       )}
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(10rem,0.9fr)_minmax(19rem,1.5fr)_minmax(7rem,0.65fr)]">
         <Field label="Date">
           <DatePickerField
             ariaLabel="Fitting date"
@@ -703,7 +703,7 @@ function StepAppointment({
             value={startTime}
             onChange={onStartTimeChange}
             mode="input"
-            {...(date === today ? { min: currentTimeInTimeZone(timeZone) } : {})}
+            {...(date === today ? { min: earliestFittingStartTimeInTimeZone(timeZone) } : {})}
             quickStart={businessHours?.opens_local ?? "08:00"}
             quickEnd={businessHours?.closes_local ?? "20:00"}
             popoverAlign="end"
@@ -842,9 +842,9 @@ function StepGarments({
                     const selected = selections.find(
                       (selection) => selection.variantId === variant.id
                     );
-                    const label = [variant.size_label, variant.color_label]
+                    const label = [variant.size_label ?? "Free size", variant.color_label]
                       .filter(Boolean)
-                      .join(" / ");
+                      .join(" · ");
                     return (
                       <div
                         key={variant.id}
@@ -1069,7 +1069,7 @@ function todayInTimeZone(timeZone: string): string {
   return `${values["year"]}-${values["month"]}-${values["day"]}`;
 }
 
-function currentTimeInTimeZone(timeZone: string): string {
+function earliestFittingStartTimeInTimeZone(timeZone: string): string {
   const parts = new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     hourCycle: "h23",
@@ -1077,7 +1077,12 @@ function currentTimeInTimeZone(timeZone: string): string {
     timeZone,
   }).formatToParts(new Date());
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values["hour"]}:${values["minute"]}`;
+  let hour = Number(values["hour"]);
+  const minute = Number(values["minute"]);
+  const roundedMinute = minute < 30 ? 30 : 0;
+  if (minute >= 30) hour += 1;
+  if (hour >= 24) return "24:00";
+  return `${String(hour).padStart(2, "0")}:${String(roundedMinute).padStart(2, "0")}`;
 }
 
 function zonedDateTimeToIso(dateValue: string, timeValue: string, timeZone: string): string | null {

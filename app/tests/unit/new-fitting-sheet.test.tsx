@@ -233,7 +233,7 @@ describe("NewFittingSheet production cutover", () => {
       "https://cdn.example.test/test-gown.webp"
     );
     fireEvent.click(screen.getByRole("button", { name: /Test Gown/ }));
-    await screen.findByText("Medium / Gold");
+    await screen.findByText("Medium · Gold");
     expect(screen.queryByText(/SKU TEST-M/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     expect(screen.getByRole("button", { name: "Preference only" })).toBeVisible();
