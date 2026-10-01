@@ -15,7 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     // suppressHydrationWarning: the storefront's before-paint motion script adds a class here.
     // data-scroll-behavior: lets Next.js switch CSS smooth scrolling off during route changes.
     <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>
-      <body>
+      <body suppressHydrationWarning>
         <QueryProvider>{children}</QueryProvider>
       </body>
     </html>

@@ -78,3 +78,9 @@
   plain `em` compounds when nested (a 0.6875em chip inside a 0.75em list renders at 0.52).
 - Check marketing layouts from 280px to 1440px with `qa-widths.mjs`, not just at 390px.
   `whitespace-nowrap` headlines need a font token that fits the narrowest phone.
+- Lenis `scrollTo(element)` already subtracts the target's CSS `scroll-margin-top`. Adding an
+  `anchors.offset` as well applies the offset twice. Keep one offset: scroll-margin.
+- After a client-side route change, call `lenis.resize()` before scrolling to a `#hash`. Lenis
+  keeps the previous page's scroll limit and clamps the target short.
+- In a phone swipe row, a scroll-scrubbed reveal on the off-screen card plays unseen. Use
+  `gsap.matchMedia` and give phones a one-shot scene that brings the card into view.
