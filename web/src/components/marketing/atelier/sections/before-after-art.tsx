@@ -101,17 +101,17 @@ export function AfterCalendar() {
   return (
     <AppScreen title="Calendar" meta="Dec 12 – 18">
       <div className="grid gap-2 at-m-xs">
-        <div className="grid grid-cols-[9.5em_1fr] items-center gap-2">
+        <div className="grid grid-cols-[7.5em_1fr] sm:grid-cols-[9.5em_1fr] items-center gap-2">
           <span className="truncate text-[var(--app-muted)]">Red Mermaid · M</span>
           <span className="relative h-[2.6em] rounded-md bg-[var(--app-surface-2)]">
-            <span className="absolute inset-y-1 left-[28%] w-[44%] rounded bg-[var(--app-active)] px-2 py-1 text-[var(--app-accent)]">Ana Reyes · held</span>
-            <span className="absolute inset-y-1 left-[73%] w-[13%] rounded bg-[var(--app-surface-3)]" title="Cleaning" />
+            <span className="absolute inset-y-1 left-[18%] w-[58%] truncate whitespace-nowrap rounded bg-[var(--app-active)] px-2 py-1 text-[var(--app-accent)]"><span className="sm:hidden">Ana · held</span><span className="hidden sm:inline">Ana Reyes · held</span></span>
+            <span className="absolute inset-y-1 left-[78%] w-[13%] rounded bg-[var(--app-surface-3)]" title="Cleaning" />
           </span>
         </div>
-        <div className="grid grid-cols-[9.5em_1fr] items-center gap-2">
+        <div className="grid grid-cols-[7.5em_1fr] sm:grid-cols-[9.5em_1fr] items-center gap-2">
           <span className="truncate text-[var(--app-muted)]">Barong · L</span>
           <span className="relative h-[2.6em] rounded-md bg-[var(--app-surface-2)]">
-            <span className="absolute inset-y-1 left-[12%] w-[30%] rounded bg-[var(--app-green-soft)] px-2 py-1 text-[var(--app-green)]">Lim · out</span>
+            <span className="absolute inset-y-1 left-[6%] w-[44%] truncate whitespace-nowrap rounded bg-[var(--app-green-soft)] px-2 py-1 text-[var(--app-green)]">Lim · out</span>
           </span>
         </div>
       </div>
