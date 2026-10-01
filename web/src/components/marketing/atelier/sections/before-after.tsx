@@ -41,7 +41,7 @@ const ROWS: readonly Row[] = [
   {
     pain: 'Two clients, one gown',
     title: 'A gown can only be promised once.',
-    body: 'Overlapping dates are refused at the source, including the cleaning days after each return. Staff see the conflict before they say yes, with a similar piece to offer instead.',
+    body: 'Overlapping dates are refused at the source, including the cleaning days after each return. You see the conflict before you say yes, with a similar piece to offer instead.',
     fix: 'Calendar with protected holds',
     before: <BeforeNotebook />,
     after: <AfterCalendar />,
@@ -102,48 +102,48 @@ export function BeforeAfter() {
   }, []);
 
   return (
-    <section ref={root} id="before-after" data-header="light" className="bg-atelier-paper py-28 text-atelier-ink lg:py-40">
+    <section ref={root} id="before-after" data-header="light" className="bg-atelier-paper py-at-section text-atelier-ink">
       <div className="at-container">
         <div className="grid gap-8 lg:grid-cols-[1fr_1fr] lg:items-end">
           <div data-at-reveal="lines">
             <p className="at-eyebrow text-atelier-gold-ink">Why shops switch</p>
-            <h2 className="mt-6 font-[family-name:var(--font-atelier-display)] text-[clamp(2.5rem,5vw,4.5rem)] font-normal leading-[1.02] tracking-[-0.02em]">
+            <h2 className="mt-6 font-[family-name:var(--font-atelier-display)] text-at-display font-normal">
               <span className="block overflow-hidden"><span data-at-line className="block">A rental shop{' '}</span></span>
               <span className="block overflow-hidden"><span data-at-line className="block">runs on memory.{' '}</span></span>
               <span className="block overflow-hidden"><span data-at-line className="block italic">Drezivo remembers.{' '}</span></span>
             </h2>
           </div>
-          <p data-at-reveal="up" className="max-w-[32rem] text-[1.0625rem] leading-[1.75] text-atelier-muted lg:justify-self-end">
+          <p data-at-reveal="up" className="max-w-[32rem] text-at-lead text-atelier-muted lg:justify-self-end">
             These are the hassles we hear from gown, barong, and costume shops every week. Each one has a place in Drezivo, so it stops
             living in someone&apos;s head or phone.
           </p>
         </div>
 
-        <ol className="mt-20 grid gap-24 lg:mt-28 lg:gap-36">
+        <ol className="mt-at-stack grid gap-at-section">
           {ROWS.map((row, index) => (
-            <li key={row.pain} data-ba-row className="grid gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-center lg:gap-16">
+            <li key={row.pain} data-ba-row className="grid gap-8 sm:gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-center lg:gap-16">
               <div data-at-reveal="up">
                 <p className="flex items-baseline gap-4">
-                  <span className="font-[family-name:var(--font-atelier-display)] text-5xl leading-none text-atelier-gold">{String(index + 1).padStart(2, '0')}</span>
+                  <span className="font-[family-name:var(--font-atelier-display)] text-at-numeral text-atelier-gold">{String(index + 1).padStart(2, '0')}</span>
                   <span className="at-eyebrow text-atelier-gold-ink">{row.pain}</span>
                 </p>
-                <h3 className="mt-6 font-[family-name:var(--font-atelier-display)] text-[clamp(1.75rem,2.8vw,2.5rem)] font-normal leading-[1.1] tracking-[-0.01em]">
+                <h3 className="mt-6 font-[family-name:var(--font-atelier-display)] text-at-subhead font-normal">
                   {row.title}
                 </h3>
-                <p className="mt-4 max-w-[30rem] text-[1rem] leading-[1.75] text-atelier-muted">{row.body}</p>
-                <p className="mt-6 inline-flex items-center gap-3 text-sm font-medium text-atelier-ink">
+                <p className="mt-4 max-w-[30rem] text-at-body text-atelier-muted">{row.body}</p>
+                <p className="mt-6 inline-flex items-center gap-3 text-at-small font-medium text-atelier-ink">
                   <span aria-hidden="true" className="h-px w-8 bg-atelier-gold" />
                   {row.fix}
                 </p>
               </div>
-              <div className="relative grid items-center gap-6 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)] sm:gap-0">
+              <div role="group" aria-label={`${row.fix}: before and with Drezivo`} tabIndex={0} className="at-snap-pair relative sm:grid sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)] sm:items-center">
                 <div data-ba-before className="relative z-0 sm:-mr-10 sm:translate-y-6">
-                  <p className="at-eyebrow mb-3 text-[0.65rem] text-atelier-muted">Before</p>
+                  <p className="at-eyebrow mb-3 text-atelier-muted">Before<span aria-hidden="true" className="sm:hidden"> · swipe →</span></p>
                   {row.before}
                 </div>
                 <span data-ba-line aria-hidden="true" className="at-ba-line hidden sm:block" />
                 <div data-ba-after className="relative z-10">
-                  <p className="at-eyebrow mb-3 text-[0.65rem] text-atelier-gold-ink">With Drezivo</p>
+                  <p className="at-eyebrow mb-3 text-atelier-gold-ink">With Drezivo</p>
                   {row.after}
                 </div>
               </div>

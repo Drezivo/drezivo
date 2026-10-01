@@ -87,19 +87,19 @@ export function SiteHeader() {
       <div className="at-container flex h-[4.5rem] items-center justify-between gap-6">
         <Link href="/" className="flex items-center gap-2.5" aria-label="Drezivo home">
           <Image src="/brand/drezivo-mark.png" alt="" width={497} height={600} priority className="h-9 w-auto" />
-          <span className="font-[family-name:var(--font-atelier-display)] text-[1.5rem] leading-none">Drezivo</span>
+          <span className="font-[family-name:var(--font-atelier-display)] text-at-title leading-none">Drezivo</span>
         </Link>
 
         <nav className="hidden items-center gap-8 lg:flex" aria-label="Primary">
           {NAV_LINKS.map((link) => (
-            <Link key={link.href} href={link.href} className="at-nav-link text-[0.9375rem]">
+            <Link key={link.href} href={link.href} className="at-nav-link text-at-body">
               {link.label}
             </Link>
           ))}
         </nav>
 
         <div className="hidden items-center gap-2 lg:flex">
-          <a href={SIGN_IN_URL} className="at-nav-link px-3 py-2 text-[0.9375rem]">Sign in</a>
+          <a href={SIGN_IN_URL} className="at-nav-link px-3 py-2 text-at-body">Sign in</a>
           <a href={SIGN_UP_URL} className={`at-button at-button-sm ${dark ? 'at-button-light' : 'at-button-dark'}`}>Start free trial</a>
         </div>
 
@@ -123,7 +123,7 @@ export function SiteHeader() {
           <ul className="grid gap-2">
             {NAV_LINKS.map((link) => (
               <li key={link.href} data-menu-item>
-                <Link href={link.href} onClick={() => setOpen(false)} className="block py-2 font-[family-name:var(--font-atelier-display)] text-[2.5rem] leading-tight">
+                <Link href={link.href} onClick={() => setOpen(false)} className="block py-2 font-[family-name:var(--font-atelier-display)] text-at-display leading-tight">
                   {link.label}
                 </Link>
               </li>

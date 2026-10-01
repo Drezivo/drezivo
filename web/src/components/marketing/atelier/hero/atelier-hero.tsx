@@ -121,10 +121,10 @@ export function AtelierHero({ signUpUrl, priceLabel, trialDays }: { signUpUrl: s
         {/* Phones: the copy sits over the lower half of the scene, so it gets a night scrim for contrast. */}
         <div aria-hidden="true" className="at-hero-scrim absolute inset-x-0 bottom-0 h-[62%] lg:hidden" />
 
-        <div className="at-container relative z-10 flex h-full flex-col justify-end pb-[max(5rem,12svh)] lg:justify-center lg:pb-0">
+        <div className="at-container relative z-10 flex h-full flex-col justify-end-safe pb-[max(2.5rem,8svh)] pt-24 lg:justify-center lg:pb-0 lg:pt-0">
           <div data-hero-act="one" className="max-w-[48rem]">
             <p data-hero-eyebrow className="at-eyebrow text-atelier-champagne">Clothing rental software, made in the Philippines</p>
-            <h1 className="mt-6 font-[family-name:var(--font-atelier-display)] text-[clamp(2.75rem,6vw,5.5rem)] font-normal leading-[0.98] tracking-[-0.02em]">
+            <h1 className="mt-4 sm:mt-6 font-[family-name:var(--font-atelier-display)] text-at-hero font-normal">
               {['Every gown.', 'Every booking.', 'One calm place.'].map((line, index) => (
                 <span key={line} className="block overflow-hidden whitespace-nowrap pb-[0.08em]">
                   <span data-hero-line className="block" style={{ '--line': index } as React.CSSProperties}>
@@ -133,11 +133,11 @@ export function AtelierHero({ signUpUrl, priceLabel, trialDays }: { signUpUrl: s
                 </span>
               ))}
             </h1>
-            <p data-hero-fade className="mt-7 max-w-[34rem] text-[1.0625rem] leading-[1.7] text-atelier-mist">
+            <p data-hero-fade className="mt-5 max-w-[34rem] sm:mt-7 text-at-lead text-atelier-mist">
               Drezivo runs the busy side of a clothing rental shop: availability, reservations, deposits, payments, and returns.
               Your evenings stop belonging to Messenger.
             </p>
-            <div data-hero-fade className="mt-9 flex flex-wrap items-center gap-3">
+            <div data-hero-fade className="at-cta-row mt-7 sm:mt-9">
               <a href={signUpUrl} className="at-button at-button-light">
                 Start your {trialDays}-day free trial
               </a>
@@ -145,7 +145,7 @@ export function AtelierHero({ signUpUrl, priceLabel, trialDays }: { signUpUrl: s
                 See what changes
               </a>
             </div>
-            <p data-hero-fade className="mt-6 text-sm text-atelier-mist">
+            <p data-hero-fade className="mt-5 text-at-small text-atelier-mist sm:mt-6">
               No credit card. {priceLabel} after your trial.
             </p>
           </div>
@@ -154,10 +154,10 @@ export function AtelierHero({ signUpUrl, priceLabel, trialDays }: { signUpUrl: s
             <div className="at-container">
               <div className="max-w-[30rem]">
                 <p className="at-eyebrow text-atelier-champagne">Scattered → settled</p>
-                <p className="mt-5 font-[family-name:var(--font-atelier-display)] text-[clamp(2.25rem,4.6vw,4.25rem)] leading-[1.02] tracking-[-0.02em]">
+                <p className="mt-5 font-[family-name:var(--font-atelier-display)] text-at-display">
                   From scattered threads to one gown.
                 </p>
-                <p className="mt-5 text-[1.0625rem] leading-[1.7] text-atelier-mist">
+                <p className="mt-5 text-at-lead text-atelier-mist">
                   Messenger threads, notebook calendars, and payment screenshots, gathered into one system your whole team can see.
                 </p>
               </div>
@@ -166,7 +166,7 @@ export function AtelierHero({ signUpUrl, priceLabel, trialDays }: { signUpUrl: s
         </div>
 
         <div data-hero-cue aria-hidden="true" className="at-scroll-cue absolute bottom-6 left-1/2 z-10 hidden -translate-x-1/2 lg:grid">
-          <span className="at-eyebrow text-[0.65rem] text-atelier-mist">Scroll</span>
+          <span className="at-eyebrow text-atelier-mist">Scroll</span>
           <span className="at-scroll-cue-line" />
         </div>
       </div>

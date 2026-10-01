@@ -14,7 +14,7 @@
   background: var(--color-atelier-paper);
   color: var(--color-atelier-ink);
   font-family: var(--font-atelier-body);
-  font-size: 1rem;
+  font-size: var(--text-at-body);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -45,12 +45,12 @@ html:has(.marketing-page)::-webkit-scrollbar-thumb { background: var(--color-ate
   width: 100%;
   max-width: 84rem;
   margin-inline: auto;
-  padding-inline: clamp(1.25rem, 4vw, 3rem);
+  padding-inline: var(--spacing-at-gutter);
 }
 
 .at-eyebrow {
   font-family: var(--font-atelier-body);
-  font-size: 0.75rem;
+  font-size: var(--text-at-micro);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.3em;
@@ -68,14 +68,40 @@ html:has(.marketing-page)::-webkit-scrollbar-thumb { background: var(--color-ate
   border-radius: 9999px;
   border: 1px solid transparent;
   font-family: var(--font-atelier-body);
-  font-size: 0.9375rem;
+  font-size: var(--text-at-body);
   font-weight: 500;
   letter-spacing: 0.01em;
   transition: background-color 250ms cubic-bezier(0.4, 0, 0.2, 1), color 250ms cubic-bezier(0.4, 0, 0.2, 1),
     border-color 250ms cubic-bezier(0.4, 0, 0.2, 1), transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 .at-button:active { transform: scale(0.97); }
-.at-button-sm { min-height: 2.5rem; padding: 0.55rem 1.15rem; font-size: 0.875rem; }
+/* Call-to-action group. Phones: full-width stacked buttons in thumb reach; from 640px: inline. */
+.at-cta-row { display: grid; gap: 0.75rem; }
+.at-cta-row > .at-button { justify-content: center; }
+@media (min-width: 40rem) {
+  .at-cta-row { display: flex; flex-wrap: wrap; align-items: center; }
+}
+
+/* A before/after pair. Phones: a swipeable row that bleeds to the screen edge with the next card
+   peeking in; from 640px the children fall back to the section's own grid composition. */
+.at-snap-pair {
+  display: flex;
+  gap: 1rem;
+  margin-inline: calc(var(--spacing-at-gutter) * -1);
+  padding: 0.5rem var(--spacing-at-gutter) 1.5rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--spacing-at-gutter);
+  scrollbar-width: none;
+}
+.at-snap-pair::-webkit-scrollbar { display: none; }
+.at-snap-pair > * { flex: 0 0 86%; scroll-snap-align: start; }
+@media (min-width: 40rem) {
+  .at-snap-pair { display: grid; gap: 0; margin-inline: 0; padding: 0; overflow: visible; }
+  .at-snap-pair > * { flex: none; }
+}
+
+.at-button-sm { min-height: 2.5rem; padding: 0.55rem 1.15rem; font-size: var(--text-at-small); }
 .at-button-light { background: var(--color-atelier-paper); color: var(--color-atelier-night); }
 .at-button-light:hover { background: var(--color-atelier-champagne); }
 .at-button-dark { background: var(--color-atelier-night); color: var(--color-atelier-paper); }
@@ -223,8 +249,16 @@ html.at-entering.at-entered main {
   border: 1px solid var(--app-line);
   background: var(--app-surface);
   font-family: var(--font-atelier-body);
+  font-size: var(--text-at-mock);
   box-shadow: 0 30px 60px -30px rgba(18, 14, 11, 0.55), 0 12px 24px -16px rgba(18, 14, 11, 0.35);
 }
+/* Mockup type scale, relative to the mockup root (--text-at-mock), never to the parent, so nested
+   sizes cannot compound. Mockups use these classes instead of their own rem/em sizes. */
+.at-m-xs { font-size: calc(var(--text-at-mock) * 0.6875); }
+.at-m-sm { font-size: calc(var(--text-at-mock) * 0.75); }
+.at-m-md { font-size: calc(var(--text-at-mock) * 0.8125); }
+.at-m-lg { font-size: calc(var(--text-at-mock) * 0.95); }
+.at-m-xl { font-size: calc(var(--text-at-mock) * 1.05); }
 .at-app-flat { min-height: 10.5rem; box-shadow: 0 24px 48px -32px rgba(18, 14, 11, 0.5); }
 
 .at-skeleton {
@@ -249,7 +283,7 @@ html.at-motion [data-bento-card]:not([data-loaded]) [data-bento-data] { opacity:
   white-space: nowrap;
   border-radius: 9999px;
   padding: 0.2rem 0.6rem;
-  font-size: 0.6875rem;
+  font-size: calc(var(--text-at-mock) * 0.6875);
   font-weight: 500;
 }
 .at-chip-gold { background: var(--app-active, #342a1f); color: var(--app-accent, #d2a15b); }
@@ -263,11 +297,11 @@ html.at-motion [data-bento-card]:not([data-loaded]) [data-bento-data] { opacity:
   gap: 2px;
   border-radius: 6px;
   padding: 0.45rem 0;
-  font-size: 0.6875rem;
+  font-size: calc(var(--text-at-mock) * 0.6875);
   background: var(--app-surface-2);
   color: var(--app-ink);
 }
-.at-day small { font-size: 0.5625rem; color: var(--app-muted); }
+.at-day small { font-size: calc(var(--text-at-mock) * 0.5625); color: var(--app-muted); }
 .at-day-open { background: var(--app-green-soft); }
 .at-day-open small { color: var(--app-green); }
 .at-day-reserved { color: #a39e98; text-decoration: line-through; }
@@ -279,7 +313,8 @@ html.at-motion [data-bento-card]:not([data-loaded]) [data-bento-data] { opacity:
 .at-artifact {
   position: relative;
   border-radius: 18px;
-  padding: 1.1rem;
+  padding: 1.1em;
+  font-size: var(--text-at-mock);
   box-shadow: 0 24px 40px -28px rgba(18, 14, 11, 0.45);
 }
 .at-artifact-phone { background: #eef0f3; border: 1px solid #dde1e7; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
@@ -290,13 +325,13 @@ html.at-motion [data-bento-card]:not([data-loaded]) [data-bento-data] { opacity:
   padding-top: 1.4rem;
   transform: rotate(-1.5deg);
 }
-.at-artifact-note { background: #f7e7a1; transform: rotate(2deg); max-width: 15rem; }
+.at-artifact-note { background: #f7e7a1; transform: rotate(2deg); max-width: 15em; }
 .at-bubble {
   max-width: 88%;
   border-radius: 18px 18px 18px 4px;
   background: #ffffff;
   padding: 0.55rem 0.8rem;
-  font-size: 0.8125rem;
+  font-size: calc(var(--text-at-mock) * 0.8125);
   line-height: 1.4;
   color: #1d1d1f;
 }
@@ -311,9 +346,9 @@ html.at-motion [data-bento-card]:not([data-loaded]) [data-bento-data] { opacity:
   color: #fff;
   filter: blur(0.6px);
 }
-.at-receipt-shot span { font-size: 0.6875rem; opacity: 0.85; }
-.at-receipt-shot b { font-size: 1.15rem; }
-.at-receipt-shot i { font-size: 0.625rem; font-style: normal; opacity: 0.75; }
+.at-receipt-shot span { font-size: calc(var(--text-at-mock) * 0.6875); opacity: 0.85; }
+.at-receipt-shot b { font-size: calc(var(--text-at-mock) * 1.15); }
+.at-receipt-shot i { font-size: calc(var(--text-at-mock) * 0.625); font-style: normal; opacity: 0.75; }
 .at-hand { font-family: var(--font-atelier-hand), 'Segoe Print', cursive; color: #2b2a6b; }
 .at-circle {
   position: absolute;
@@ -381,11 +416,11 @@ html.at-motion [data-bento-card]:not([data-loaded]) [data-bento-data] { opacity:
 /* ------------------------------------------------------------------ legal documents */
 
 /* Explicit atelier colours: these pages sit on paper in every OS colour scheme. */
-.at-legal { color: var(--color-atelier-ink); font-size: 1rem; line-height: 1.8; }
+.at-legal { color: var(--color-atelier-ink); font-size: var(--text-at-body); line-height: 1.8; }
 .at-legal h2 {
   margin: 3.5rem 0 1rem;
   font-family: var(--font-atelier-display);
-  font-size: clamp(1.5rem, 2.4vw, 1.875rem);
+  font-size: var(--text-at-title);
   font-weight: 400;
   line-height: 1.2;
   letter-spacing: -0.01em;
@@ -406,7 +441,7 @@ html.at-motion [data-bento-card]:not([data-loaded]) [data-bento-data] { opacity:
   border-radius: 0.75rem;
   background: var(--color-atelier-paper-2);
   padding: 1rem 1.25rem;
-  font-size: 0.9375rem;
+  font-size: var(--text-at-small);
   color: var(--color-atelier-ink);
 }
 
@@ -460,7 +495,7 @@ html.at-motion :is([data-at-reveal]:not([data-at-bound]) [data-at-line], [data-a
 .at-watermark::before {
   content: 'Drezivo';
   font-family: var(--font-atelier-display);
-  font-size: clamp(3.5rem, 12vw, 10rem);
+  font-size: var(--text-at-price);
   line-height: 0.8;
   letter-spacing: -0.03em;
   color: var(--color-atelier-night-3);

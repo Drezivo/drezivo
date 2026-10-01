@@ -29,7 +29,7 @@ export function ShopMarquee() {
     <section aria-label="Shops Drezivo is built for" data-header="dark" className="overflow-hidden border-y border-atelier-night-line bg-atelier-night py-7 text-atelier-paper">
       <div ref={track} className="flex w-max items-center">
         {items.map((shop, index) => (
-          <span key={`${shop}-${index}`} aria-hidden={index >= SHOPS.length} className="flex items-center whitespace-nowrap font-[family-name:var(--font-atelier-display)] text-[clamp(1.5rem,2.6vw,2.25rem)] italic">
+          <span key={`${shop}-${index}`} aria-hidden={index >= SHOPS.length} className="flex items-center whitespace-nowrap font-[family-name:var(--font-atelier-display)] text-at-subhead italic">
             <span className="px-8">{shop}</span>
             <span aria-hidden="true" className="text-[0.6em] not-italic text-atelier-champagne">✦</span>
           </span>
