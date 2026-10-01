@@ -41,11 +41,11 @@ const NAV_ITEMS = [
 function DrezivoMark() {
   return (
     <Image
-      src="/drezivo-mark-reference.png"
+      src="/brand/drezivo-mark.png"
       alt=""
       aria-hidden="true"
-      width={32}
-      height={32}
+      width={497}
+      height={600}
       className="h-8 w-8 shrink-0 object-contain"
     />
   );
