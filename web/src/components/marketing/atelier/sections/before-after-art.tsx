@@ -11,11 +11,11 @@ import type { ReactNode } from 'react';
 export function AppScreen({ title, meta, children }: { title: string; meta?: string; children: ReactNode }) {
   return (
     <div className="at-app">
-      <div className="flex items-center justify-between gap-3 border-b border-[var(--app-line)] px-4 py-3">
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--app-line)] px-[1.1em] py-[0.8em]">
         <p className="at-m-md font-medium text-[var(--app-ink)]">{title}</p>
         {meta ? <p className="at-m-xs text-[var(--app-muted)]">{meta}</p> : null}
       </div>
-      <div className="relative p-4">
+      <div className="relative p-[1.1em]">
         <div data-ba-skeleton aria-hidden="true" className="absolute inset-4 grid content-start gap-3">
           <span className="at-skeleton h-4 w-2/3" />
           <span className="at-skeleton h-16 w-full" />
@@ -72,7 +72,7 @@ export function AfterStorefront() {
           </span>
         ))}
       </div>
-      <p className="mt-3 rounded-md bg-[var(--app-accent)] py-2 text-center at-m-sm font-medium text-[#1a140d]">Reserve Dec 14 – 16</p>
+      <p data-ba-key className="mt-3 rounded-md bg-[var(--app-accent)] py-2 text-center at-m-sm font-medium text-[#1a140d]">Reserve Dec 14 – 16</p>
     </AppScreen>
   );
 }
@@ -101,21 +101,21 @@ export function AfterCalendar() {
   return (
     <AppScreen title="Calendar" meta="Dec 12 – 18">
       <div className="grid gap-2 at-m-xs">
-        <div className="grid grid-cols-[6.5rem_1fr] items-center gap-2">
+        <div className="grid grid-cols-[9.5em_1fr] items-center gap-2">
           <span className="truncate text-[var(--app-muted)]">Red Mermaid · M</span>
-          <span className="relative h-7 rounded-md bg-[var(--app-surface-2)]">
+          <span className="relative h-[2.6em] rounded-md bg-[var(--app-surface-2)]">
             <span className="absolute inset-y-1 left-[28%] w-[44%] rounded bg-[var(--app-active)] px-2 py-1 text-[var(--app-accent)]">Ana Reyes · held</span>
             <span className="absolute inset-y-1 left-[73%] w-[13%] rounded bg-[var(--app-surface-3)]" title="Cleaning" />
           </span>
         </div>
-        <div className="grid grid-cols-[6.5rem_1fr] items-center gap-2">
+        <div className="grid grid-cols-[9.5em_1fr] items-center gap-2">
           <span className="truncate text-[var(--app-muted)]">Barong · L</span>
-          <span className="relative h-7 rounded-md bg-[var(--app-surface-2)]">
+          <span className="relative h-[2.6em] rounded-md bg-[var(--app-surface-2)]">
             <span className="absolute inset-y-1 left-[12%] w-[30%] rounded bg-[var(--app-green-soft)] px-2 py-1 text-[var(--app-green)]">Lim · out</span>
           </span>
         </div>
       </div>
-      <div className="mt-3 flex items-start gap-2 rounded-md border border-[var(--app-danger)]/40 bg-[var(--app-danger)]/10 p-2.5 at-m-xs text-[var(--app-ink)]">
+      <div data-ba-key className="mt-3 flex items-start gap-2 rounded-md border border-[var(--app-danger)]/40 bg-[var(--app-danger)]/10 p-2.5 at-m-xs text-[var(--app-ink)]">
         <span aria-hidden="true" className="mt-0.5 text-[var(--app-danger)]">●</span>
         <span>Bea Santos · Dec 14 – 16: already reserved. Suggest the Ruby Mermaid · M instead?</span>
       </div>
@@ -153,8 +153,8 @@ export function AfterPaymentReview() {
         </div>
         <Chip tone="gold">To review</Chip>
       </div>
-      <div className="mt-3 grid grid-cols-[3.5rem_1fr] gap-3 rounded-md bg-[var(--app-surface-2)] p-2.5">
-        <span aria-hidden="true" className="h-14 rounded bg-[var(--app-surface-3)]" />
+      <div className="mt-3 grid grid-cols-[4.5em_1fr] gap-3 rounded-md bg-[var(--app-surface-2)] p-2.5">
+        <span aria-hidden="true" className="h-[4.5em] rounded bg-[var(--app-surface-3)]" />
         <p className="at-m-xs leading-5 text-[var(--app-muted)]">
           Proof attached to the reservation. Amount matches the balance due for Dec 21 – 23.
         </p>

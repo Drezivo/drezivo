@@ -11,7 +11,6 @@ export default function PrivacyPage() {
     <LegalLayout
       title="Privacy Policy"
       updated="[INSERT DATE]"
-      notice="Draft for Philippine legal review. Confirm the actual data flows, processors, retention schedule, transfers, DPO, and contact details before publishing. This page is not legal advice."
     >
       <h2>1. Who this notice covers</h2>
       <p>

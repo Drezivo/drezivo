@@ -51,7 +51,7 @@ export default function FaqPage() {
         </div>
         <div className="space-y-16">
           {MARKETING_FAQ_GROUPS.map((group) => (
-            <div key={group.title} id={groupId(group.title)} className="scroll-mt-32">
+            <div key={group.title} id={groupId(group.title)}>
               <h2 className="at-eyebrow text-atelier-gold-ink">{group.title}</h2>
               <div className="mt-5 border-t border-atelier-paper-line">
                 {group.faqs.map((faq) => (

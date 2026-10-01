@@ -11,7 +11,6 @@ export default function TermsPage() {
     <LegalLayout
       title="Terms of Service"
       updated="[INSERT DATE]"
-      notice="Draft for Philippine legal review. Replace the bracketed company, address, contact, billing, and dispute details before publishing. This page is not legal advice."
     >
       <h2>1. Agreement and scope</h2>
       <p>

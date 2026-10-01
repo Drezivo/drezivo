@@ -96,6 +96,8 @@
   --text-at-price--letter-spacing: -0.03em;
   /* Root size of the coded app mockups; everything inside them is sized in em off this. */
   --text-at-mock: clamp(0.8125rem, 0.7589rem + 0.2679vw, 1rem);
+  /* Mockups that are the offer itself (before/after stages, feature bento) read larger. */
+  --text-at-mock-showcase: clamp(0.8125rem, 0.7232rem + 0.4464vw, 1.125rem);
   --spacing-at-section: clamp(5rem, 3.5714rem + 7.1429vw, 10rem);
   --spacing-at-stack: clamp(3rem, 2.1429rem + 4.2857vw, 6rem);
   --spacing-at-gutter: clamp(1.125rem, 0.5893rem + 2.6786vw, 3rem);

@@ -19,12 +19,16 @@ function Card({ title, body, wide, children }: { title: string; body: string; wi
           <span className="at-skeleton h-20 w-full" />
           <span className="at-skeleton h-4 w-2/3" />
         </div>
-        <div data-bento-data className="p-4">{children}</div>
+        <div data-bento-data className="p-[1.1em]">{children}</div>
       </div>
       <h3 className="mt-6 font-[family-name:var(--font-atelier-display)] text-at-title font-normal">{title}</h3>
       <p className="mt-2 max-w-[28rem] text-at-body text-atelier-muted">{body}</p>
     </article>
   );
+}
+
+function Chip({ tone, children }: { tone: 'gold' | 'green'; children: ReactNode }) {
+  return <span className={`at-chip at-chip-${tone}`}>{children}</span>;
 }
 
 const TODAY = [
@@ -112,22 +116,37 @@ export function ProductBento() {
           </Card>
 
           <Card title="Fittings, without the back-and-forth" body="Renters book a fitting slot from your storefront. Your business hours decide what they can pick.">
-            <div className="grid grid-cols-3 gap-1.5 text-center at-m-xs">
+            <div className="flex items-baseline justify-between">
+              <p className="at-m-md font-medium text-[var(--app-ink)]">Fitting slots</p>
+              <p className="at-m-xs text-[var(--app-muted)]">Sat, Dec 17</p>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-1.5 text-center at-m-xs">
               {['10:00', '10:30', '11:00', '1:00', '1:30', '2:00'].map((slot, index) => (
                 <span key={slot} className={`rounded-md py-2 ${index === 1 ? 'bg-[var(--app-active)] text-[var(--app-accent)]' : index === 4 ? 'bg-[var(--app-surface-3)] text-[var(--app-muted)] line-through' : 'bg-[var(--app-surface-2)] text-[var(--app-ink)]'}`}>
                   {slot}
                 </span>
               ))}
             </div>
+            <div className="mt-3 flex items-center justify-between gap-2 rounded-md bg-[var(--app-surface-2)] px-2.5 py-2 at-m-xs">
+              <span className="text-[var(--app-ink)]">10:30 · Carla Mendoza · Red Mermaid · M</span>
+              <Chip tone="gold">Booked</Chip>
+            </div>
+            <p className="mt-2 at-m-xs text-[var(--app-muted)]">1:30 is outside your Saturday hours.</p>
           </Card>
 
           <Card title="A history for every renter" body="Contact details, past rentals, deposits, and notes in one record, with their consent kept beside it.">
             <p className="at-m-md text-[var(--app-ink)]">Carla Mendoza</p>
-            <p className="at-m-xs text-[var(--app-muted)]">4 rentals · last on Nov 30</p>
+            <p className="at-m-xs text-[var(--app-muted)]">4 rentals · last on Nov 30 · 0917 ••• 4821</p>
             <ul className="mt-3 grid gap-1.5 at-m-xs text-[var(--app-muted)]">
               <li className="flex justify-between"><span>Debut gown · Nov 30</span><span className="text-[var(--app-green)]">Returned</span></li>
               <li className="flex justify-between"><span>Filipiniana · Aug 12</span><span className="text-[var(--app-green)]">Returned</span></li>
+              <li className="flex justify-between"><span>Barong · Jun 3</span><span className="text-[var(--app-green)]">Returned</span></li>
             </ul>
+            <div className="mt-3 grid gap-1 rounded-md bg-[var(--app-surface-2)] p-2.5 at-m-xs">
+              <p className="flex justify-between"><span className="text-[var(--app-muted)]">Deposits</span><span className="text-[var(--app-ink)]">All refunded</span></p>
+              <p className="flex justify-between"><span className="text-[var(--app-muted)]">Note</span><span className="text-[var(--app-ink)]">Prefers Saturday fittings</span></p>
+              <p className="flex justify-between"><span className="text-[var(--app-muted)]">Consent</span><span className="text-[var(--app-green)]">Recorded Aug 12</span></p>
+            </div>
           </Card>
 
           <Card title="Every peso, accounted for" body="Rental fees, deposits, and refunds sit on each booking, so the day's takings add up without a notebook.">

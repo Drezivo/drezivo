@@ -20,10 +20,22 @@ export function setLenis(lenis: Lenis | null): void {
   lenisInstance = lenis;
 }
 
-/** Jumps to the top without smoothing, for page changes. */
-export function resetScroll(): void {
-  if (lenisInstance) lenisInstance.scrollTo(0, { immediate: true, force: true });
-  else window.scrollTo(0, 0);
+/**
+ * Places a newly arrived page without smoothing: at its `#hash` section when the link had one
+ * (offset by that section's scroll-margin-top), otherwise at the top.
+ */
+export function resetScroll(hash = ''): void {
+  const target = hash.length > 1 ? document.getElementById(decodeURIComponent(hash.slice(1))) : null;
+  if (lenisInstance) {
+    // Lenis still holds the previous page's scroll limit until it re-measures; without this a
+    // section lower than the old page's height is clamped short.
+    lenisInstance.resize();
+    lenisInstance.scrollTo(target ?? 0, { immediate: true, force: true });
+  } else if (target) {
+    target.scrollIntoView();
+  } else {
+    window.scrollTo(0, 0);
+  }
 }
 
 export function lockScroll(locked: boolean): void {

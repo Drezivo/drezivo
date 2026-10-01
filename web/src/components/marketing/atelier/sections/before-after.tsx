@@ -21,6 +21,8 @@ import {
 gsap.registerPlugin(ScrollTrigger);
 
 interface Row {
+  /** Reservations and the calendar are the core of the offer; their key moment gets a soft pulse. */
+  core?: boolean;
   pain: string;
   title: string;
   body: string;
@@ -31,6 +33,7 @@ interface Row {
 
 const ROWS: readonly Row[] = [
   {
+    core: true,
     pain: '“Available pa po?” at 11 PM',
     title: 'Renters answer their own question.',
     body: 'Every inquiry used to mean flipping through a notebook or scrolling a group chat. Your Drezivo storefront shows live availability, so renters pick open dates and send a booking while you sleep.',
@@ -39,6 +42,7 @@ const ROWS: readonly Row[] = [
     after: <AfterStorefront />,
   },
   {
+    core: true,
     pain: 'Two clients, one gown',
     title: 'A gown can only be promised once.',
     body: 'Overlapping dates are refused at the source, including the cleaning days after each return. You see the conflict before you say yes, with a similar piece to offer instead.',
@@ -91,9 +95,10 @@ export function BeforeAfter() {
         const data = row.querySelector('[data-ba-data]');
         gsap
           .timeline({ scrollTrigger: { trigger: row, start: 'top 78%', end: 'center 48%', scrub: 0.6 } })
-          .fromTo(before, { filter: 'grayscale(0) blur(0px)', opacity: 1, scale: 1, rotate: 0 }, { filter: 'grayscale(0.9) blur(1.5px)', opacity: 0.42, scale: 0.94, rotate: -2, ease: 'none' }, 0)
+          // The before stays fully readable; it only cools a little as the after takes the stage.
+          .fromTo(before, { filter: 'grayscale(0)' }, { filter: 'grayscale(0.35)', ease: 'none' }, 0)
           .fromTo(line, { scaleX: 0 }, { scaleX: 1, ease: 'none' }, 0.05)
-          .fromTo(after, { clipPath: 'inset(0% 100% 0% 0% round 18px)', y: 24 }, { clipPath: 'inset(0% 0% 0% 0% round 18px)', y: 0, ease: 'none' }, 0.12)
+          .fromTo(after, { clipPath: 'inset(0% 100% 0% 0% round 24px)', y: 24 }, { clipPath: 'inset(0% 0% 0% 0% round 24px)', y: 0, ease: 'none' }, 0.12)
           .fromTo(skeleton, { autoAlpha: 1 }, { autoAlpha: 0, ease: 'none' }, 0.62)
           .fromTo(data, { autoAlpha: 0 }, { autoAlpha: 1, ease: 'none' }, 0.66);
       });
@@ -121,30 +126,33 @@ export function BeforeAfter() {
 
         <ol className="mt-at-stack grid gap-at-section">
           {ROWS.map((row, index) => (
-            <li key={row.pain} data-ba-row className="grid gap-8 sm:gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-center lg:gap-16">
-              <div data-at-reveal="up">
-                <p className="flex items-baseline gap-4">
-                  <span className="font-[family-name:var(--font-atelier-display)] text-at-numeral text-atelier-gold">{String(index + 1).padStart(2, '0')}</span>
-                  <span className="at-eyebrow text-atelier-gold-ink">{row.pain}</span>
-                </p>
-                <h3 className="mt-6 font-[family-name:var(--font-atelier-display)] text-at-subhead font-normal">
-                  {row.title}
-                </h3>
-                <p className="mt-4 max-w-[30rem] text-at-body text-atelier-muted">{row.body}</p>
-                <p className="mt-6 inline-flex items-center gap-3 text-at-small font-medium text-atelier-ink">
-                  <span aria-hidden="true" className="h-px w-8 bg-atelier-gold" />
-                  {row.fix}
-                </p>
-              </div>
-              <div role="group" aria-label={`${row.fix}: before and with Drezivo`} tabIndex={0} className="at-snap-pair relative sm:grid sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)] sm:items-center">
-                <div data-ba-before className="relative z-0 sm:-mr-10 sm:translate-y-6">
-                  <p className="at-eyebrow mb-3 text-atelier-muted">Before<span aria-hidden="true" className="sm:hidden"> · swipe →</span></p>
-                  {row.before}
+            <li key={row.pain} data-ba-row data-core={row.core ? '' : undefined} className="grid gap-8 sm:gap-10">
+              <div data-at-reveal="up" className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-end lg:gap-16">
+                <div>
+                  <p className="flex items-baseline gap-4">
+                    <span className="font-[family-name:var(--font-atelier-display)] text-at-numeral text-atelier-gold">{String(index + 1).padStart(2, '0')}</span>
+                    <span className="at-eyebrow text-atelier-gold-ink">{row.pain}</span>
+                  </p>
+                  <h3 className="mt-5 font-[family-name:var(--font-atelier-display)] text-at-subhead font-normal">{row.title}</h3>
                 </div>
-                <span data-ba-line aria-hidden="true" className="at-ba-line hidden sm:block" />
-                <div data-ba-after className="relative z-10">
-                  <p className="at-eyebrow mb-3 text-atelier-gold-ink">With Drezivo</p>
-                  {row.after}
+                <div>
+                  <p className="max-w-[34rem] text-at-body text-atelier-muted">{row.body}</p>
+                  <p className="mt-4 inline-flex items-center gap-3 text-at-small font-medium text-atelier-ink">
+                    <span aria-hidden="true" className="h-px w-8 bg-atelier-gold" />
+                    {row.fix}
+                  </p>
+                </div>
+              </div>
+              {/* Two equal stages: phones swipe between them, larger screens show them side by side. */}
+              <div role="group" aria-label={`${row.fix}: before and with Drezivo`} tabIndex={0} className="at-snap-pair relative sm:grid-cols-2 sm:gap-5 lg:gap-8">
+                <div data-ba-before className="at-stage at-stage-before">
+                  <p className="at-eyebrow text-atelier-muted">Before<span aria-hidden="true" className="sm:hidden"> · swipe →</span></p>
+                  <div className="at-stage-body">{row.before}</div>
+                </div>
+                <span data-ba-line aria-hidden="true" className="at-ba-line hidden sm:grid">→</span>
+                <div data-ba-after className="at-stage at-stage-after">
+                  <p className="at-eyebrow text-atelier-champagne">With Drezivo</p>
+                  <div className="at-stage-body">{row.after}</div>
                 </div>
               </div>
             </li>

@@ -14,13 +14,10 @@ const LEGAL_PAGES = [
 export function LegalLayout({
   title,
   updated,
-  notice,
   children,
 }: {
   title: string;
   updated: string;
-  /** Shown above the document while it is still a draft for legal review. */
-  notice?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -50,7 +47,6 @@ export function LegalLayout({
       <section data-header="light" className="bg-atelier-paper py-at-section">
         <div className="at-container">
           <article className="at-legal mx-auto max-w-[46rem]">
-            {notice ? <p className="at-legal-notice">{notice}</p> : null}
             {children}
           </article>
         </div>

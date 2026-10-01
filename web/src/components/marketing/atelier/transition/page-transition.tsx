@@ -122,7 +122,7 @@ export function PageTransition() {
         });
         router.push(`${url.pathname}${url.search}${url.hash}`);
         await arrived;
-        resetScroll();
+        resetScroll(url.hash);
         lockScroll(false);
         await reveal();
         busy.current = false;

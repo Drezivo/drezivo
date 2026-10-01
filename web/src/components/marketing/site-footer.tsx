@@ -23,8 +23,9 @@ const COLUMNS = [
 ] as const;
 
 export function SiteFooter() {
+  // overflow-hidden: the watermark glyph's line box hangs ~32px below the footer and showed the page ground.
   return (
-    <footer data-header="dark" className="bg-atelier-night text-atelier-paper">
+    <footer data-header="dark" className="overflow-hidden bg-atelier-night text-atelier-paper">
       <div className="at-container border-t border-atelier-night-line pb-10 pt-16 sm:pt-20">
         <div className="grid grid-cols-2 gap-x-6 gap-y-10 md:grid-cols-[1.4fr_1fr_1fr_1.2fr] md:gap-12">
           <div className="col-span-2 md:col-span-1">
