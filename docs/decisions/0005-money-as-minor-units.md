@@ -2,6 +2,11 @@
 
 **Status:** Accepted, dated 15 September 2026
 
+**Historical pricing note:** The three-plan amounts cited below were the commercial offer at the
+time this decision was accepted. The current single-plan pilot offer is recorded in
+[ADR 0011](0011-single-standard-pilot-plan.md); the integer minor-unit and decimal-string rules in
+this ADR remain in force.
+
 ## Context
 
 TRD §4 states the API contract rule directly: "Serialize monetary minor units as decimal

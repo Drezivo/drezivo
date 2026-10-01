@@ -3,7 +3,7 @@
 **Status:** approved tenancy/onboarding foundation with additive owner identity and tenant bootstrap migrations applied in code
 **Owner:** API and database maintainers  
 **Source:** `Tenancy, Onboarding, Clerk, Memberships, and Billing Foundation` in the Second Brain, 16 September 2026  
-**Updated:** 27 September 2026
+**Updated:** 1 October 2026
 **Related:** [TRD](Drezivo-TRD.md), [Data Model](Drezivo-Data-Model.md), [ERD](Drezivo-ERD.dbml), [migration runbook](../runbooks/migrations.md)
 
 This document defines the forward-only database work for tenancy onboarding. Reviewed SQL
@@ -95,15 +95,22 @@ Invitation recipients are explicitly outside this command boundary until TBF-040
 local invitation persistence and claim state; they must not be treated as owners by a future
 owner-eligibility implementation.
 
-TBF-030 adds the authenticated owner bootstrap command at
-`POST /api/v1/onboarding/{onboardingId}/bootstrap`. It requires a strict empty body, the active
-Clerk organization matching the onboarding record, and an account-scoped `Idempotency-Key`.
-Migration `0016_tenant_bootstrap.sql` seeds the immutable version-1 Starter, Professional, and Business
-plan rows; forward-only policy migration `0053_update_v1_entitlements_and_trial_policy.sql` verifies
-the prices and sets their 125/300/1,000 physical-asset and 0/2/10 Front Desk-seat limits. The winning
-database transaction creates the tenant, `Main Branch`, Owner membership/grant, draft storefront,
-trialing subscription, `trial_started` event, both audit records, and a `tenant.bootstrapped`
-outbox event, then finalizes the safe response. `Main Branch` starts with canonical Business Hours
+TBF-030 originally exposed authenticated owner bootstrap at
+`POST /api/v1/onboarding/{onboardingId}/bootstrap`. The current pilot UI calls
+`POST /api/v1/onboarding/{onboardingId}/start-trial` with an empty body and an account-scoped
+`Idempotency-Key`; that command selects the sole active Standard plan (`starter`) and delegates
+tenant creation to the existing bootstrap command with derived idempotency keys. Each step is
+replay-safe, and the bootstrap transaction creates the tenant graph atomically.
+Migration `0016_tenant_bootstrap.sql` originally seeded version-1 Starter, Professional, and Business
+rows; `0053_update_v1_entitlements_and_trial_policy.sql` set their historical 125/300/1,000
+physical-asset and 0/2/10 Front Desk-seat limits. The current pilot offer is one Standard plan:
+`0063_pilot_billing.sql` keeps `starter` v1 active at 30,000 PHP minor units/month, sets its limits
+to 1,000 assets and 10 Front Desk seats, and deactivates Professional and Business v1. It moves
+existing subscriptions to `starter` while recording prior plan ids in `subscription_event`, and
+normalizes expired/restricted billing states for the derived pilot access model. The old rows remain
+for audit history. The winning database transaction creates the tenant, `Main Branch`, Owner
+membership/grant, draft storefront, Standard trial subscription, `trial_started` event, both audit
+records, and a `tenant.bootstrapped` outbox event, then finalizes the safe response. `Main Branch` starts with canonical Business Hours
 `08:00–20:00` and Sunday closed in `branch.operating_hours`; this is a safe bootstrap default, not
 a fitting-specific schedule. A no-op worker handler acknowledges that event
 until later consumers are introduced.
@@ -118,13 +125,13 @@ invitation reservations under the same tenant lock.
 
 TBF-033 completes the Phase 3 lifecycle boundary without adding a new table. The existing
 `subscription` and `subscription_event` records are transitioned by one shared database-time
-service: an expired trial becomes `past_due` with grace ending seven days after the original
-trial boundary, and an expired grace becomes `restricted` while preserving the tenant's approved
-settlement, return, refund, and export actions. Actor-context requests reconcile state before
-returning the projection, and the worker repeats the same per-tenant transition transaction for
-delayed jobs. The Owner-only `POST /api/v1/subscription/plan` command uses tenant idempotency,
-the TBF-032 resolver, active-usage downgrade checks, immutable plan-change events, and tenant
-audit records. Paid-plan changes and payment activation remain later billing work.
+service. This was the original seven-day grace design; the pilot replaces it with request-time
+derived full/read-only/locked access based on subscription dates, a 30-day read-only window, and
+an operator-granted read-only extension. The storefront stays online without new intake for the
+first three days after the period ends, then goes offline. The current pilot has no alternate
+sellable plan or owner-facing plan change. The Owner-only `POST /api/v1/subscription/plan` command
+must resolve an active plan and cannot switch to a retired plan; future plan changes require a new
+owner decision and migration.
 
 TBF-040 adds `0019_membership_invitations.sql` and four authenticated tenant-context Owner routes
 for local invitation state. Recipient email is normalized, HMAC-digested for exact tenant-local

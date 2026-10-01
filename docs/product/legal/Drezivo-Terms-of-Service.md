@@ -58,10 +58,12 @@ Drezivo’s responsibility for its own unlawful acts or negligence.
 
 ## 4. Plans, prices, and payment
 
-Current advertised monthly plans are Starter at **₱300**, Professional at **₱499**, and Business at
-**₱1,299**, unless an order form or published pricing page states otherwise. Prices, inclusions,
-tax treatment, billing period, payment processor, renewal, and cancellation terms must be shown
-before purchase. Drezivo must not charge a customer for an unselected plan or add-on.
+The current pilot offers one Standard plan at **₱300 per month**, with up to 1,000 active physical
+assets and 10 Front Desk seats. An eligible new account receives a fourteen-day trial. After the
+trial, the business pays through a listed Drezivo payment method and submits a reference and receipt
+for operator review. Prices, inclusions, tax treatment, billing period, payment method, renewal, and
+cancellation terms must be shown before purchase. Drezivo must not charge a customer for an
+unselected plan or add-on. This remains a counsel-review draft.
 
 The business using Drezivo remains responsible for collecting rental fees, deposits, and other
 amounts from its customers. Drezivo is not a bank, escrow agent, payment facilitator, or insurer
