@@ -2,11 +2,13 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { PolicyImages } from '@/components/store/policy-images';
 import { readStore } from '@/lib/storefront-preview';
 import { formatMinor, formatTime } from '@/lib/storefront-format';
 
 export const metadata: Metadata = { title: 'Rental info' };
-export const revalidate = 60;
+
+type PolicySection = { id: string; title: string } & ({ body: string } | { images: readonly string[] });
 
 export default async function PoliciesPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -14,11 +16,17 @@ export default async function PoliciesPage({ params }: { params: Promise<{ slug:
   if (!store) notFound();
   const { policy, checkout, fulfillment } = store;
 
+  const terms: Array<PolicySection | null> =
+    policy.format === 'images'
+      ? [policy.image_urls.length > 0 ? { id: 'terms', title: 'Rental terms', images: policy.image_urls } : null]
+      : [
+          { id: 'renting', title: 'How renting works', body: policy.rental },
+          { id: 'deposit', title: 'Security deposit', body: policy.deposit },
+          { id: 'cancellation', title: 'Cancellation', body: policy.cancellation },
+          policy.damage ? { id: 'damage', title: 'Damage and late returns', body: policy.damage } : null,
+        ];
   const sections = [
-    { id: 'renting', title: 'How renting works', body: policy.rental },
-    { id: 'deposit', title: 'Security deposit', body: policy.deposit },
-    { id: 'cancellation', title: 'Cancellation', body: policy.cancellation },
-    { id: 'damage', title: 'Damage and late returns', body: policy.damage },
+    ...terms,
     {
       id: 'delivery',
       title: fulfillment.delivery ? 'Pickup and delivery' : 'Pickup',
@@ -27,7 +35,8 @@ export default async function PoliciesPage({ params }: { params: Promise<{ slug:
         : 'Pick up and return at the shop.',
     },
     { id: 'privacy', title: 'Your privacy', body: policy.privacy_notice },
-  ].filter((section): section is { id: string; title: string; body: string } => Boolean(section.body));
+  ].filter((section): section is PolicySection => section !== null && ('images' in section || Boolean(section.body)));
+  const hasTerms = sections.some((section) => section.id !== 'delivery' && section.id !== 'privacy');
 
   return (
     <div className="mx-auto max-w-7xl px-5 pb-8 pt-12 sm:px-8 sm:pt-16">
@@ -63,14 +72,21 @@ export default async function PoliciesPage({ params }: { params: Promise<{ slug:
             ))}
           </ul>
         </nav>
-        <div className="max-w-2xl space-y-12">
+        {/* Wide enough for a photographed policy page to stay legible; prose keeps a shorter line. */}
+        <div className="min-w-0 max-w-4xl space-y-12">
           {sections.map((section) => (
             <section key={section.id} id={section.id}>
               <h2 className="font-sf-display text-3xl font-light">{section.title}</h2>
-              <p className="mt-4 whitespace-pre-line leading-8 text-sf-muted">{section.body}</p>
+              {'images' in section ? (
+                <div className="mt-6">
+                  <PolicyImages urls={section.images} shopName={store.name} />
+                </div>
+              ) : (
+                <p className="mt-4 max-w-2xl whitespace-pre-line leading-8 text-sf-muted">{section.body}</p>
+              )}
             </section>
           ))}
-          {sections.length === 0 ? <p className="text-sf-muted">This shop has not published its rental terms yet. Contact the shop before you book.</p> : null}
+          {!hasTerms ? <p className="text-sf-muted">This shop has not published its rental terms yet. Contact the shop before you book.</p> : null}
           <Link href={`/s/${slug}/catalog`} className="sf-button sf-button-primary">
             Browse the collection
           </Link>

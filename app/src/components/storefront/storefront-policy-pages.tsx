@@ -12,14 +12,17 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
+import { PolicyImagesField } from "./policy-images-field";
 import { BackLink, PageShell } from "./storefront-details-page";
 import { useDocumentDraft, useStorefrontEditor } from "./storefront-editor";
 
 const EMPTY_RULES: StorefrontPolicyRules = {
+  format: "text",
   rental: "",
   deposit: "",
   cancellation: "",
   damage: null,
+  image_file_ids: [],
   delivery: { enabled: false, fee_minor: "0", notes: null },
   privacy_notice: "",
 };
@@ -53,6 +56,7 @@ export function StorefrontPoliciesPage() {
   const version = editor.settings?.policy.version;
   const [rules, setRules] = useState<StorefrontPolicyRules>(saved ?? EMPTY_RULES);
   const [fee, setFee] = useState(minorToPesos(saved?.delivery.fee_minor ?? "0"));
+  const [uploadingImages, setUploadingImages] = useState(false);
 
   useEffect(() => {
     setRules(saved ?? EMPTY_RULES);
@@ -78,6 +82,7 @@ export function StorefrontPoliciesPage() {
     </Field>
   );
   const blank = !saved && !rules.rental && !rules.deposit && !rules.cancellation && !rules.damage && !rules.privacy_notice;
+  const imageTerms = rules.format === "images";
 
   return (
     <PageShell>
@@ -91,7 +96,7 @@ export function StorefrontPoliciesPage() {
         <span className="flex-1">
           {saved ? `You are editing version ${editor.settings.policy.version}.` : "You have not written a policy yet. Your storefront cannot go live without one."}
         </span>
-        {blank ? (
+        {blank && !imageTerms ? (
           <Button type="button" variant="secondary" size="sm" className="shrink-0" onClick={() => update({ ...EXAMPLE_TEXT })}>
             Start from example text
           </Button>
@@ -100,14 +105,50 @@ export function StorefrontPoliciesPage() {
 
       <div className="grid gap-4">
         <Section icon={ShieldCheck} title="Rental terms">
-          <div className="grid gap-4">
-            {text("rental", "How renting works", "Rental length, pickup and return, and what is included.", 1500)}
-            {text("deposit", "Security deposit", "How much, when it is paid, and when it is returned.", 1000)}
-            {text("cancellation", "Cancellation", "What happens if a renter cancels.", 1500)}
-            <Field label="Damage and late returns" hint="Optional." error={err("damage")} count={{ value: rules.damage?.length ?? 0, max: 1000 }}>
-              {(props) => <Textarea {...props} rows={3} maxLength={1000} placeholder={EXAMPLE_TEXT.damage} value={rules.damage ?? ""} onChange={(e) => update({ damage: e.target.value.trim() ? e.target.value : null })} />}
-            </Field>
+          <div
+            className="mb-4 flex rounded-lg border border-dashboard-border bg-dashboard-surface p-1"
+            role="group"
+            aria-label="How to show your rental terms"
+          >
+            {([["text", "Type it"], ["images", "Upload images"]] as const).map(([format, label]) => (
+              <button
+                key={format}
+                type="button"
+                aria-pressed={rules.format === format}
+                onClick={() => update({ format })}
+                className={cn(
+                  "flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  rules.format === format ? "bg-dashboard-active text-dashboard-accent" : "text-dashboard-muted hover:text-dashboard-navy"
+                )}
+              >
+                {label}
+              </button>
+            ))}
           </div>
+          {imageTerms ? (
+            <div className="grid gap-3">
+              <p className="text-sm text-dashboard-muted">
+                Already have your policy as a picture or a printed page? Upload it here. Renters see each page at full width on your
+                Rental info page and accept it before they book. Use clear, straight photos so every line is readable.
+              </p>
+              <PolicyImagesField
+                fileIds={rules.image_file_ids}
+                savedUrls={editor.settings.policy.image_urls}
+                error={err("image_file_ids")}
+                onChange={(image_file_ids) => update({ image_file_ids })}
+                onUploadingChange={setUploadingImages}
+              />
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {text("rental", "How renting works", "Rental length, pickup and return, and what is included.", 1500)}
+              {text("deposit", "Security deposit", "How much, when it is paid, and when it is returned.", 1000)}
+              {text("cancellation", "Cancellation", "What happens if a renter cancels.", 1500)}
+              <Field label="Damage and late returns" hint="Optional." error={err("damage")} count={{ value: rules.damage?.length ?? 0, max: 1000 }}>
+                {(props) => <Textarea {...props} rows={3} maxLength={1000} placeholder={EXAMPLE_TEXT.damage} value={rules.damage ?? ""} onChange={(e) => update({ damage: e.target.value.trim() ? e.target.value : null })} />}
+              </Field>
+            </div>
+          )}
         </Section>
 
         <Section icon={Truck} title="Delivery" description="Pickup is always available. Turn on delivery to let renters choose it.">
@@ -134,8 +175,9 @@ export function StorefrontPoliciesPage() {
         saving={editor.saving}
         state={editor.saveState}
         label={saved ? "Publish new version" : "Publish policy"}
+        blockedReason={uploadingImages ? "Wait for the pages to finish uploading." : null}
         onSave={() => {
-          if (feeMinor === null) return;
+          if (feeMinor === null || uploadingImages) return;
           void editor.savePolicy(next);
         }}
       />

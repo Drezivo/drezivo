@@ -15,7 +15,11 @@ type TimeParts = {
 };
 
 const HOURS = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0"));
-const MINUTES = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
+function minuteOptions(step: number): string[] {
+  return Array.from({ length: Math.ceil(60 / step) }, (_, index) =>
+    String(index * step).padStart(2, "0")
+  );
+}
 
 export function TimePickerField({
   value,
@@ -24,6 +28,7 @@ export function TimePickerField({
   placeholder = "Select time",
   disabled = false,
   min,
+  minuteStep = 1,
   className,
   popoverAlign = "start",
 }: {
@@ -33,17 +38,22 @@ export function TimePickerField({
   placeholder?: string;
   disabled?: boolean;
   min?: string;
+  /** Offer only minutes on this step (30 shows :00 and :30) when nothing else is accepted. */
+  minuteStep?: number;
   className?: string;
   popoverAlign?: "start" | "end";
 }) {
   const parsedValue = useMemo(() => parseTime(value), [value]);
+  const minutes = useMemo(() => minuteOptions(minuteStep), [minuteStep]);
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<TimeParts>(() => parsedValue ?? defaultTimeParts());
+  const [draft, setDraft] = useState<TimeParts>(() =>
+    snapMinute(parsedValue ?? defaultTimeParts(), minuteStep)
+  );
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    setDraft(parsedValue ?? defaultTimeParts());
+    setDraft(snapMinute(parsedValue ?? defaultTimeParts(), minuteStep));
     const onPointerDown = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
@@ -56,7 +66,7 @@ export function TimePickerField({
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [open, parsedValue]);
+  }, [open, parsedValue, minuteStep]);
 
   const draftValue = to24HourTime(draft);
   const belowMinimum = Boolean(min && draftValue < min);
@@ -104,7 +114,7 @@ export function TimePickerField({
             <TimeSelect
               ariaLabel={`${ariaLabel} minute`}
               value={draft.minute}
-              options={MINUTES}
+              options={minutes}
               onChange={(minute) => setDraft((current) => ({ ...current, minute }))}
             />
             <TimeSelect
@@ -200,6 +210,12 @@ function defaultTimeParts(): TimeParts {
     minute: String(now.getMinutes()).padStart(2, "0"),
     period: hour24 >= 12 ? "PM" : "AM",
   };
+}
+
+/** A minute the select cannot show would be submitted invisibly, so round it down onto the step. */
+function snapMinute(parts: TimeParts, step: number): TimeParts {
+  const minute = Math.floor(Number(parts.minute) / step) * step;
+  return { ...parts, minute: String(minute).padStart(2, "0") };
 }
 
 function to24HourTime(parts: TimeParts): string {

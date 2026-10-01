@@ -33,11 +33,13 @@ describe('public storefront read API', async () => {
   const { closePool } = await import('../../src/db/client.js');
   const { storefrontCmsService: cms } = await import('../../src/modules/storefront-cms/storefront-cms.service.js');
   const { addDays, localDate } = await import('../../src/modules/storefront/storefront.service.js');
-  const { createStorefrontWorkspace } = await import('./helpers/storefront-fixture.js');
-  const { defaultStorefrontDocument, productId } = await import('@drezivo/contracts');
+  const { createStorefrontAsset, createStorefrontWorkspace } = await import('./helpers/storefront-fixture.js');
+  const { defaultStorefrontDocument, fileObjectId, productId } = await import('@drezivo/contracts');
   const admin = new pg.Pool({ connectionString: adminUrl, max: 2 });
 
   const rules = {
+    format: 'text' as const,
+    image_file_ids: [],
     rental: 'Three-day rentals from pickup.',
     deposit: 'Refundable deposit at pickup.',
     cancellation: 'Free cancellation until 48 hours before pickup.',
@@ -104,6 +106,43 @@ describe('public storefront read API', async () => {
     // Taking the store offline makes every public route a 404 again.
     await cms.unpublish(ws.owner, 'pub-live-off', 3);
     expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue`)).status).toBe(404);
+  });
+
+  it('publishes rental terms as images in page order and never shows the typed text kept for later', async () => {
+    const ws = await createStorefrontWorkspace('pub-img');
+    const other = await createStorefrontWorkspace('pub-img-other');
+    const pageOne = await createStorefrontAsset(ws.tenantId, ws.owner.principalId, 'policy-page-one');
+    const pageTwo = await createStorefrontAsset(ws.tenantId, ws.owner.principalId, 'policy-page-two');
+    const foreign = await createStorefrontAsset(other.tenantId, other.owner.principalId, 'policy-foreign');
+    const document = defaultStorefrontDocument('Luna Gown Rentals');
+    document.contact.email = 'hello@luna.test';
+    expect((await cms.updateDocument(ws.owner, 'pub-img-doc', { version: 1, document })).status).toBe(200);
+
+    const imageRules = {
+      ...rules,
+      format: 'images' as const,
+      rental: 'Old typed wording the owner kept in the editor.',
+      image_file_ids: [fileObjectId.parse(pageTwo), fileObjectId.parse(pageOne)],
+    };
+    const refused = await cms.publishPolicy(ws.owner, 'pub-img-foreign', {
+      expected_version: 1,
+      rules: { ...imageRules, image_file_ids: [fileObjectId.parse(pageOne), fileObjectId.parse(foreign)] },
+    });
+    expect(refused.status).toBe(422);
+
+    const saved = await cms.publishPolicy(ws.owner, 'pub-img-pol', { expected_version: 1, rules: imageRules });
+    expect(saved.status).toBe(200);
+    const view = saved.body.success ? saved.body.data : null;
+    expect(view?.policy.rules).toMatchObject({ format: 'images', image_file_ids: [pageTwo, pageOne] });
+    expect(Object.keys(view?.policy.image_urls ?? {}).sort()).toEqual([pageOne, pageTwo].sort());
+    expect(view?.readiness.has_policy).toBe(true);
+    expect((await cms.publish(ws.owner, 'pub-img-pub', 2)).status).toBe(200);
+
+    const store = dataOf<PublicStorefront>(await request(createApp()).get(`/api/v1/public/stores/${ws.slug}`));
+    expect(store.policy).toMatchObject({ format: 'images', rental: '', deposit: '', cancellation: '', damage: null, privacy_notice: rules.privacy_notice });
+    expect(store.policy.image_urls).toHaveLength(2);
+    expect(store.policy.image_urls[0]).toContain('policy-page-two');
+    expect(store.policy.image_urls[1]).toContain('policy-page-one');
   });
 
   it('filters, searches, and pages the catalogue without treating input as SQL wildcards', async () => {
