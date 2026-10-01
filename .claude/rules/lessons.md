@@ -45,3 +45,10 @@
   repositories. Allow clock skew when checking the expiry, because the hosts differ.
 - Run every workspace's own test script before pushing (`npm run test --workspace @drezivo/contracts`
   included). CI runs the contracts tests, and fixtures there break when a contract gains a field.
+- Never cache a storefront read whose answer can become "not found" (publish state, access). When
+  a revalidation gets a 404, Next keeps serving the cached 200, so an unpublished or lapsed store
+  stayed online indefinitely. Verify caching behavior on a production build, not `next dev`.
+- After editing shared code, restart the Turbopack dev server before trusting a route's behavior;
+  an already-compiled route kept running the old module and looked like a real bug.
+- A contract field with `.default()` is required in `z.infer` (the output type), so test fixtures
+  typed as the parsed request need the new field even though the API accepts it missing.
