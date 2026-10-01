@@ -8,11 +8,10 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <LegalLayout title="Terms of Service" updated="[INSERT DATE]">
-      <p className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
-        Draft for Philippine legal review. Replace the bracketed company, address, contact, billing,
-        and dispute details before publishing. This page is not legal advice.
-      </p>
+    <LegalLayout
+      title="Terms of Service"
+      updated="[INSERT DATE]"
+    >
       <h2>1. Agreement and scope</h2>
       <p>
         These Terms govern access to Drezivo, a hosted service for clothing rental businesses. The
@@ -49,10 +48,15 @@ export default function TermsPage() {
       </p>
       <h2>4. Plans and payment</h2>
       <p>
-        Published monthly plans are Starter at ₱300, Professional at ₱499, and Business at ₱1,299,
-        unless an order form or pricing page states otherwise. The checkout flow must show the
-        selected plan, inclusions, taxes, billing period, renewal, cancellation, and payment terms
-        before purchase.
+        The current plans, prices, and what each includes are published on the{' '}
+        <a href="/pricing">pricing page</a>. The checkout flow must show the selected plan,
+        inclusions, taxes, billing period, renewal, cancellation, and payment terms before
+        purchase.
+      </p>
+      <p>
+        If we change the price of a plan you already pay for, we will tell you in advance. Your
+        account keeps its current price for three months after the change takes effect; the new
+        price applies from your first billing period after those three months.
       </p>
       <p>
         The business remains responsible for collecting rental fees, deposits, and refunds from its

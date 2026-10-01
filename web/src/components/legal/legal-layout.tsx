@@ -1,5 +1,16 @@
 import Link from 'next/link';
 
+import { PatternDraft } from '@/components/marketing/atelier/art/pattern-draft';
+
+const LEGAL_PAGES = [
+  { href: '/terms', label: 'Terms of Service' },
+  { href: '/privacy', label: 'Privacy Policy' },
+] as const;
+
+/**
+ * Legal documents in the marketing atelier style. Colours are explicit atelier tokens, never the
+ * app theme tokens: marketing pages stay on paper even when the visitor's OS is in dark mode.
+ */
 export function LegalLayout({
   title,
   updated,
@@ -10,15 +21,36 @@ export function LegalLayout({
   children: React.ReactNode;
 }) {
   return (
-    <main className="mx-auto max-w-4xl px-6 py-16 text-foreground">
-      <div className="mb-10 border-b border-border pb-6">
-        <Link className="text-sm text-muted-foreground hover:text-foreground" href="/">
-          Back to Drezivo
-        </Link>
-        <h1 className="mt-6 font-display text-4xl tracking-tight">{title}</h1>
-        <p className="mt-3 text-sm text-muted-foreground">Last updated: {updated}</p>
-      </div>
-      <article className="prose prose-neutral max-w-none dark:prose-invert">{children}</article>
-    </main>
+    <>
+      <section data-header="dark" className="relative isolate overflow-hidden bg-atelier-night pb-16 pt-36 text-atelier-paper lg:pb-24 lg:pt-44">
+        <PatternDraft id="legal-draft" className="at-art inset-0 h-full w-full text-atelier-champagne opacity-[0.16]" />
+        <div className="at-container">
+          <p className="at-eyebrow text-atelier-champagne">Legal</p>
+          <h1 className="mt-6 font-[family-name:var(--font-atelier-display)] text-at-hero font-normal">
+            {title}
+          </h1>
+          <p className="mt-5 text-at-small text-atelier-mist">Last updated: {updated}</p>
+          <nav aria-label="Legal documents" className="mt-10 flex flex-wrap gap-x-8 gap-y-3 text-at-body">
+            {LEGAL_PAGES.map((page) => (
+              <Link
+                key={page.href}
+                href={page.href}
+                aria-current={page.label === title ? 'page' : undefined}
+                className="text-atelier-mist underline decoration-atelier-night-line underline-offset-8 transition-colors hover:text-atelier-paper aria-[current=page]:text-atelier-paper aria-[current=page]:decoration-atelier-champagne"
+              >
+                {page.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
+      </section>
+      <section data-header="light" className="bg-atelier-paper py-at-section">
+        <div className="at-container">
+          <article className="at-legal mx-auto max-w-[46rem]">
+            {children}
+          </article>
+        </div>
+      </section>
+    </>
   );
 }

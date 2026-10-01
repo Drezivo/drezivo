@@ -41,11 +41,11 @@ const NAV_ITEMS = [
 function DrezivoMark() {
   return (
     <Image
-      src="/drezivo-mark-reference.png"
+      src="/brand/drezivo-mark.png"
       alt=""
       aria-hidden="true"
-      width={32}
-      height={32}
+      width={497}
+      height={600}
       className="h-8 w-8 shrink-0 object-contain"
     />
   );
@@ -94,7 +94,15 @@ export function DashboardSidebar({ identity }: { identity: DashboardIdentity }) 
                 ].join(" ")}
               >
                 <Avatar className="h-10 w-10 border border-dashboard-border">
-                  <AvatarFallback>{initials(identity.businessName)}</AvatarFallback>
+                  {identity.businessLogoUrl ? (
+                    <img
+                      src={identity.businessLogoUrl}
+                      alt={`${identity.businessName} logo`}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <AvatarFallback>{initials(identity.businessName)}</AvatarFallback>
+                  )}
                 </Avatar>
                 {!collapsed && (
                   <span className="min-w-0 flex-1">
