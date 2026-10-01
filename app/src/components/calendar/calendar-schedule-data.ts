@@ -6,7 +6,7 @@ import type {
   Weekday,
 } from "@drezivo/contracts";
 
-export const CALENDAR_HOUR_HEIGHT = 80;
+export const CALENDAR_HOUR_HEIGHT = 96;
 
 export type CalendarActivityType = "Pickup" | "Return" | "Fitting";
 export type CalendarActivityFilter = "All Activity" | CalendarActivityType;

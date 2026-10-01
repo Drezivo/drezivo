@@ -407,7 +407,7 @@ describe("CalendarSchedulePage production details and states", () => {
     expect(screen.getByRole("button", { name: "Week view" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("uses 80px hourly rows with half-hour guides and time-aligned events", async () => {
+  it("uses 96px hourly rows with half-hour guides and time-aligned events", async () => {
     const { container } = render(<CalendarSchedulePage />);
 
     const scheduleGrid = await screen.findByRole("region", { name: /Weekly schedule grid/ });
@@ -416,7 +416,7 @@ describe("CalendarSchedulePage production details and states", () => {
     )[0];
     if (!dayColumn) throw new Error("Expected a day column in the weekly schedule grid.");
 
-    expect(CALENDAR_HOUR_HEIGHT).toBe(80);
+    expect(CALENDAR_HOUR_HEIGHT).toBe(96);
     expect(
       calendarGridHeight({
         visibleStartMinute: 9 * 60,
@@ -424,21 +424,21 @@ describe("CalendarSchedulePage production details and states", () => {
         closedWeekdays: ["sunday"],
         specialClosedDates: {},
       })
-    ).toBe(11 * 80);
-    expect(dayColumn).toHaveStyle({ height: "880px" });
+    ).toBe(11 * 96);
+    expect(dayColumn).toHaveStyle({ height: "1056px" });
 
     const hourGuides = dayColumn.querySelectorAll('[data-calendar-time-guide="hour"]');
     const halfHourGuides = dayColumn.querySelectorAll('[data-calendar-time-guide="half-hour"]');
     expect(hourGuides).toHaveLength(11);
     expect(halfHourGuides).toHaveLength(11);
     expect(hourGuides[0]).toHaveStyle({ top: "0px" });
-    expect(hourGuides[1]).toHaveStyle({ top: "80px" });
-    expect(halfHourGuides[0]).toHaveStyle({ top: "40px" });
-    expect(halfHourGuides[1]).toHaveStyle({ top: "120px" });
+    expect(hourGuides[1]).toHaveStyle({ top: "96px" });
+    expect(halfHourGuides[0]).toHaveStyle({ top: "48px" });
+    expect(halfHourGuides[1]).toHaveStyle({ top: "144px" });
     expect(halfHourGuides[0]).toHaveClass("border-dashed");
 
     const pickup = screen.getByRole("button", { name: /Open reservation details: Pickup/ });
-    expect(pickup).toHaveStyle({ top: "83px", height: "44px" });
+    expect(pickup).toHaveStyle({ top: "99px", height: "44px" });
     expect(container).toContainElement(pickup);
   });
 
@@ -857,6 +857,50 @@ describe("CalendarSchedulePage production details and states", () => {
     ).toHaveLength(3);
   });
 
+  it("keeps back-to-back events stacked at full width when their actual times do not overlap", async () => {
+    const pickupEvent = calendarEvents[0];
+    const fittingEvent = calendarEvents[2];
+    if (!pickupEvent || !fittingEvent) throw new Error("Expected both Calendar event fixtures.");
+    const backToBackEvents: OperationalCalendarEvent[] = [
+      {
+        ...pickupEvent,
+        id: "reservation-back-to-back-pickup",
+        period: {
+          start: pickupAt,
+          end: new Date(Date.parse(pickupAt) + 30 * 60_000).toISOString(),
+        },
+      },
+      {
+        ...fittingEvent,
+        id: "fitting-back-to-back-pickup",
+        period: {
+          start: new Date(Date.parse(pickupAt) + 30 * 60_000).toISOString(),
+          end: new Date(Date.parse(pickupAt) + 60 * 60_000).toISOString(),
+        },
+      },
+    ];
+    api.getOperationalCalendar.mockResolvedValueOnce({
+      data: {
+        window: {
+          start: calendarBoundaryInstant(weekStart, timeZone),
+          end: calendarBoundaryInstant(addCalendarDays(weekStart, 7), timeZone),
+        },
+        categories: [],
+        events: backToBackEvents,
+        truncated: false,
+      },
+      requestId: "request-back-to-back-events",
+    });
+    render(<CalendarSchedulePage />);
+
+    await screen.findByRole("region", { name: /Weekly schedule grid/ });
+    const pickup = screen.getByRole("button", { name: /Open reservation details: Pickup/ });
+    const fitting = screen.getByRole("button", { name: /Open fitting details: Fitting/ });
+    expect(pickup).toHaveStyle({ left: "0%", width: "100%" });
+    expect(fitting).toHaveStyle({ left: "0%", width: "100%" });
+    expect(pickup).toHaveStyle({ height: "44px" });
+  });
+
   it("lays out overlapping events in separate lanes using their actual durations", async () => {
     const pickupEvent = calendarEvents[0];
     const fittingEvent = calendarEvents[2];
@@ -896,8 +940,8 @@ describe("CalendarSchedulePage production details and states", () => {
     await screen.findByRole("region", { name: /Weekly schedule grid/ });
     const pickup = screen.getByRole("button", { name: /Open reservation details: Pickup/ });
     const fitting = screen.getByRole("button", { name: /Open fitting details: Fitting/ });
-    expect(pickup).toHaveStyle({ top: "83px", height: "154px", left: "0%", width: "50%" });
-    expect(fitting).toHaveStyle({ top: "123px", height: "74px", left: "50%", width: "50%" });
+    expect(pickup).toHaveStyle({ top: "99px", height: "186px", left: "0%", width: "50%" });
+    expect(fitting).toHaveStyle({ top: "147px", height: "90px", left: "50%", width: "50%" });
   });
 
   it("retries a transient Reservation detail failure and refreshes both projections after pickup", async () => {

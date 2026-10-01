@@ -12531,8 +12531,6 @@ paths:
                                     - pending_confirmation
                                     - confirmed
                                     - picked_up
-                                    - returned
-                                    - completed
                               required:
                                 - id
                                 - source

@@ -543,38 +543,27 @@ describe('FIT-BE-080..083 cross-product integration', async () => {
     ).toContain(category);
   });
 
-  it('projects every eligible reservation state once and conceals excluded states', async () => {
+  it('projects only actionable reservation milestones for each lifecycle state', async () => {
     const seed = await seedWorkspace('calendar-reservation-states');
-    const eligibleStatuses = [
+    const statuses = [
       'pending_confirmation',
       'confirmed',
       'picked_up',
       'returned',
       'completed',
+      'held',
+      'cancelled',
+      'expired',
+      'rejected',
     ] as const;
-    const excludedStatuses = ['held', 'cancelled', 'expired', 'rejected'] as const;
-    const eligibleIds: string[] = [];
-    const excludedIds: string[] = [];
+    const reservationIds = new Map<(typeof statuses)[number], string>();
 
-    for (const status of eligibleStatuses) {
+    for (const status of statuses) {
       const reservation = await insertReservation(seed, {
         pickupAt: plus(seed.todayStart, 12),
         dueAt: plus(seed.todayStart, 36),
       });
-      eligibleIds.push(reservation.reservationId);
-      await withAdmin(async (client) => {
-        await client.query('UPDATE reservation SET status = $1 WHERE id = $2', [
-          status,
-          reservation.reservationId,
-        ]);
-      });
-    }
-    for (const status of excludedStatuses) {
-      const reservation = await insertReservation(seed, {
-        pickupAt: plus(seed.todayStart, 12),
-        dueAt: plus(seed.todayStart, 36),
-      });
-      excludedIds.push(reservation.reservationId);
+      reservationIds.set(status, reservation.reservationId);
       await withAdmin(async (client) => {
         await client.query('UPDATE reservation SET status = $1 WHERE id = $2', [
           status,
@@ -588,14 +577,24 @@ describe('FIT-BE-080..083 cross-product integration', async () => {
       end: plus(seed.todayStart, 48),
     });
     const reservationEvents = calendar.events.filter((event) => event.source === 'reservation');
+    const eventsFor = (status: (typeof statuses)[number]) =>
+      reservationEvents.filter((event) => event.source_id === reservationIds.get(status));
 
-    expect(reservationEvents).toHaveLength(eligibleIds.length * 2);
-    for (const reservationId of eligibleIds) {
-      expect(reservationEvents.filter((event) => event.source_id === reservationId)).toHaveLength(2);
-    }
-    for (const reservationId of excludedIds) {
-      expect(reservationEvents.some((event) => event.source_id === reservationId)).toBe(false);
-    }
+    expect(eventsFor('pending_confirmation').map((event) => event.event_type).sort()).toEqual([
+      'pickup',
+      'return',
+    ]);
+    expect(eventsFor('confirmed').map((event) => event.event_type).sort()).toEqual([
+      'pickup',
+      'return',
+    ]);
+    expect(eventsFor('picked_up').map((event) => event.event_type)).toEqual(['return']);
+    expect(eventsFor('returned')).toHaveLength(0);
+    expect(eventsFor('completed')).toHaveLength(0);
+    expect(eventsFor('held')).toHaveLength(0);
+    expect(eventsFor('cancelled')).toHaveLength(0);
+    expect(eventsFor('expired')).toHaveLength(0);
+    expect(eventsFor('rejected')).toHaveLength(0);
   });
 
   it('preserves event identity across a branch-local midnight boundary', async () => {

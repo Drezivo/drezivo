@@ -65,7 +65,6 @@ const activityTone: Record<CalendarActivityType, string> = {
   Return: "calendar-activity-return",
   Fitting: "calendar-activity-fitting",
 };
-const MIN_ACTIVITY_TARGET_MINUTES = 48;
 
 const activityIcon: Record<CalendarActivityType, typeof RotateCcw> = {
   Pickup: RotateCcw,
@@ -1128,10 +1127,30 @@ function ScheduleDayColumn({
         {positioned.map(({ activity, lane, lanes }) => {
           const top = ((activity.startMinute - startMinute) / 60) * CALENDAR_HOUR_HEIGHT + 3;
           const remainingHeight = totalHeight - top - 3;
-          const height = Math.min(
-            remainingHeight,
-            Math.max(44, (activity.durationMinutes / 60) * CALENDAR_HOUR_HEIGHT - 6)
+          const nextStartMinute = positioned.reduce<number | null>((next, candidate) => {
+            if (
+              candidate.activity.id === activity.id ||
+              candidate.lane !== lane ||
+              candidate.activity.startMinute <= activity.startMinute
+            ) {
+              return next;
+            }
+            return next === null
+              ? candidate.activity.startMinute
+              : Math.min(next, candidate.activity.startMinute);
+          }, null);
+          const naturalHeight = Math.max(
+            44,
+            (activity.durationMinutes / 60) * CALENDAR_HOUR_HEIGHT - 6
           );
+          const heightBeforeNext =
+            nextStartMinute === null
+              ? Number.POSITIVE_INFINITY
+              : Math.max(
+                  1,
+                  ((nextStartMinute - activity.startMinute) / 60) * CALENDAR_HOUR_HEIGHT - 3
+                );
+          const height = Math.min(remainingHeight, naturalHeight, heightBeforeNext);
           const width = 100 / lanes;
           const Icon = activityIcon[activity.type];
           return (
@@ -1240,8 +1259,7 @@ function layoutOverlappingActivities(activities: CalendarActivity[]) {
     const assigned = cluster.map((activity) => {
       let lane = laneEnds.findIndex((end) => end <= activity.startMinute);
       if (lane === -1) lane = laneEnds.length;
-      laneEnds[lane] =
-        activity.startMinute + Math.max(MIN_ACTIVITY_TARGET_MINUTES, activity.durationMinutes);
+      laneEnds[lane] = activity.startMinute + activity.durationMinutes;
       return { activity, lane };
     });
     for (const entry of assigned) result.push({ ...entry, lanes: laneEnds.length });
@@ -1252,10 +1270,7 @@ function layoutOverlappingActivities(activities: CalendarActivity[]) {
   for (const activity of sorted) {
     if (cluster.length > 0 && activity.startMinute >= clusterEnd) finishCluster();
     cluster.push(activity);
-    clusterEnd = Math.max(
-      clusterEnd,
-      activity.startMinute + Math.max(MIN_ACTIVITY_TARGET_MINUTES, activity.durationMinutes)
-    );
+    clusterEnd = Math.max(clusterEnd, activity.startMinute + activity.durationMinutes);
   }
   finishCluster();
   return result;
