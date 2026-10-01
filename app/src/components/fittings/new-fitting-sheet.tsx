@@ -125,6 +125,81 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
     resetDraft();
   }, [open, resetDraft]);
 
+  // Keep the clock current while the sheet is open so the earliest start never lags behind.
+  useEffect(() => {
+    if (!open) return;
+    setNow(new Date());
+    const timer = window.setInterval(() => setNow(new Date()), CLOCK_TICK_MS);
+    return () => window.clearInterval(timer);
+  }, [open]);
+
+  // A blank draft starts in the slot in progress, so a walk-in can be fitted right away. A start the
+  // clock has passed moves forward instead of failing later on the server.
+  useEffect(() => {
+    if (!open) return;
+    if (!date || !startTime) {
+      setDate(clock.date);
+      setStartTime(clock.slotTime);
+      return;
+    }
+    if (date < clock.date || (date === clock.date && startTime < clock.slotTime)) {
+      setDate(clock.date);
+      setStartTime(clock.slotTime);
+      setScheduleNotice(
+        `The start time moved to ${formatSlotTime(clock.slotTime)} because the time you chose has passed.`
+      );
+    }
+  }, [clock, date, open, startTime]);
+
+  // Typing a walk-in's details looks them up, so a returning customer is reused instead of duplicated.
+  // The lookup is only a hint: a failure never blocks creating the walk-in.
+  useEffect(() => {
+    if (!open || customerMode !== "walk-in" || !deferredWalkInLookup) {
+      setWalkInMatches([]);
+      return;
+    }
+    let cancelled = false;
+    void createDrezivoApiClient(getToken)
+      .getFittingIntakeOptions({ customer_search: deferredWalkInLookup })
+      .then((result) => {
+        if (!cancelled) setWalkInMatches(result.data.customers);
+      })
+      .catch(() => {
+        if (!cancelled) setWalkInMatches([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerMode, deferredWalkInLookup, getToken, open]);
+
+  // An exact email or phone match is the same person; a name match is only a suggestion.
+  const shownWalkInMatches = walkInMatches
+    .filter((customer) =>
+      walkInMatchKind === "name" ||
+      customer.email === walkInLookup ||
+      customer.phone === walkInLookup
+    )
+    .slice(0, WALK_IN_MATCH_LIMIT);
+
+  const changeDate = (value: string) => {
+    setScheduleNotice(null);
+    setDate(value);
+  };
+  const changeStartTime = (value: string) => {
+    setScheduleNotice(null);
+    setStartTime(value);
+  };
+
+  const chooseExistingCustomer = (customer: FittingCustomerOption) => {
+    setCustomerMode("existing");
+    // Searching by the most specific detail keeps the chosen customer in the refreshed result list.
+    setCustomerQuery(customer.phone ?? customer.email ?? customer.full_name);
+    setCustomerOptions([customer]);
+    setExistingCustomerId(customer.id);
+    setWalkInMatches([]);
+    setValidationMessage(null);
+  };
+
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -852,6 +927,8 @@ function StepAppointment({
           <TimePickerField
             ariaLabel="Fitting start time"
             value={startTime}
+            {...(date === today ? { min: earliestTime } : {})}
+            minuteStep={SLOT_MINUTES}
             onChange={onStartTimeChange}
             mode="input"
             {...(date === today ? { min: earliestTime } : {})}

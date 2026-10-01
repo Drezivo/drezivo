@@ -7345,6 +7345,18 @@ paths:
                           version:
                             type: integer
                             exclusiveMinimum: 0
+                          format:
+                            type: string
+                            enum:
+                              - text
+                              - images
+                            default: text
+                          image_urls:
+                            type: array
+                            items:
+                              type: string
+                              format: uri
+                            default: []
                           rental:
                             type: string
                           deposit:
@@ -23341,17 +23353,23 @@ paths:
                               - object
                               - "null"
                             properties:
+                              format:
+                                type: string
+                                enum: &a48
+                                  - text
+                                  - images
+                                default: text
                               rental:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1500
                               deposit:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1000
                               cancellation:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1500
                               damage:
                                 type:
@@ -23359,6 +23377,13 @@ paths:
                                   - "null"
                                 minLength: 0
                                 maxLength: 1000
+                              image_file_ids:
+                                type: array
+                                items:
+                                  type: string
+                                  format: uuid
+                                maxItems: 6
+                                default: &a49 []
                               delivery:
                                 type: object
                                 properties:
@@ -23390,6 +23415,12 @@ paths:
                               - delivery
                               - privacy_notice
                             additionalProperties: false
+                          image_urls:
+                            type: object
+                            additionalProperties:
+                              type: string
+                              format: uri
+                            default: &a50 {}
                         required:
                           - version
                           - effective_at
@@ -24076,17 +24107,21 @@ paths:
                               - object
                               - "null"
                             properties:
+                              format:
+                                type: string
+                                enum: *a48
+                                default: text
                               rental:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1500
                               deposit:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1000
                               cancellation:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1500
                               damage:
                                 type:
@@ -24094,6 +24129,13 @@ paths:
                                   - "null"
                                 minLength: 0
                                 maxLength: 1000
+                              image_file_ids:
+                                type: array
+                                items:
+                                  type: string
+                                  format: uuid
+                                maxItems: 6
+                                default: *a49
                               delivery:
                                 type: object
                                 properties:
@@ -24125,6 +24167,12 @@ paths:
                               - delivery
                               - privacy_notice
                             additionalProperties: false
+                          image_urls:
+                            type: object
+                            additionalProperties:
+                              type: string
+                              format: uri
+                            default: *a50
                         required:
                           - version
                           - effective_at
@@ -24720,17 +24768,21 @@ paths:
                               - object
                               - "null"
                             properties:
+                              format:
+                                type: string
+                                enum: *a48
+                                default: text
                               rental:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1500
                               deposit:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1000
                               cancellation:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1500
                               damage:
                                 type:
@@ -24738,6 +24790,13 @@ paths:
                                   - "null"
                                 minLength: 0
                                 maxLength: 1000
+                              image_file_ids:
+                                type: array
+                                items:
+                                  type: string
+                                  format: uuid
+                                maxItems: 6
+                                default: *a49
                               delivery:
                                 type: object
                                 properties:
@@ -24769,6 +24828,12 @@ paths:
                               - delivery
                               - privacy_notice
                             additionalProperties: false
+                          image_urls:
+                            type: object
+                            additionalProperties:
+                              type: string
+                              format: uri
+                            default: *a50
                         required:
                           - version
                           - effective_at
@@ -25229,17 +25294,21 @@ paths:
                               - object
                               - "null"
                             properties:
+                              format:
+                                type: string
+                                enum: *a48
+                                default: text
                               rental:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1500
                               deposit:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1000
                               cancellation:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1500
                               damage:
                                 type:
@@ -25247,6 +25316,13 @@ paths:
                                   - "null"
                                 minLength: 0
                                 maxLength: 1000
+                              image_file_ids:
+                                type: array
+                                items:
+                                  type: string
+                                  format: uuid
+                                maxItems: 6
+                                default: *a49
                               delivery:
                                 type: object
                                 properties:
@@ -25278,6 +25354,12 @@ paths:
                               - delivery
                               - privacy_notice
                             additionalProperties: false
+                          image_urls:
+                            type: object
+                            additionalProperties:
+                              type: string
+                              format: uri
+                            default: *a50
                         required:
                           - version
                           - effective_at
@@ -25738,17 +25820,21 @@ paths:
                               - object
                               - "null"
                             properties:
+                              format:
+                                type: string
+                                enum: *a48
+                                default: text
                               rental:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1500
                               deposit:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1000
                               cancellation:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1500
                               damage:
                                 type:
@@ -25756,6 +25842,13 @@ paths:
                                   - "null"
                                 minLength: 0
                                 maxLength: 1000
+                              image_file_ids:
+                                type: array
+                                items:
+                                  type: string
+                                  format: uuid
+                                maxItems: 6
+                                default: *a49
                               delivery:
                                 type: object
                                 properties:
@@ -25787,6 +25880,12 @@ paths:
                               - delivery
                               - privacy_notice
                             additionalProperties: false
+                          image_urls:
+                            type: object
+                            additionalProperties:
+                              type: string
+                              format: uri
+                            default: *a50
                         required:
                           - version
                           - effective_at
@@ -25944,17 +26043,21 @@ paths:
                 rules:
                   type: object
                   properties:
+                    format:
+                      type: string
+                      enum: *a48
+                      default: text
                     rental:
                       type: string
-                      minLength: 1
+                      minLength: 0
                       maxLength: 1500
                     deposit:
                       type: string
-                      minLength: 1
+                      minLength: 0
                       maxLength: 1000
                     cancellation:
                       type: string
-                      minLength: 1
+                      minLength: 0
                       maxLength: 1500
                     damage:
                       type:
@@ -25962,6 +26065,13 @@ paths:
                         - "null"
                       minLength: 0
                       maxLength: 1000
+                    image_file_ids:
+                      type: array
+                      items:
+                        type: string
+                        format: uuid
+                      maxItems: 6
+                      default: *a49
                     delivery:
                       type: object
                       properties:
@@ -26300,17 +26410,21 @@ paths:
                               - object
                               - "null"
                             properties:
+                              format:
+                                type: string
+                                enum: *a48
+                                default: text
                               rental:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1500
                               deposit:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1000
                               cancellation:
                                 type: string
-                                minLength: 1
+                                minLength: 0
                                 maxLength: 1500
                               damage:
                                 type:
@@ -26318,6 +26432,13 @@ paths:
                                   - "null"
                                 minLength: 0
                                 maxLength: 1000
+                              image_file_ids:
+                                type: array
+                                items:
+                                  type: string
+                                  format: uuid
+                                maxItems: 6
+                                default: *a49
                               delivery:
                                 type: object
                                 properties:
@@ -26349,6 +26470,12 @@ paths:
                               - delivery
                               - privacy_notice
                             additionalProperties: false
+                          image_urls:
+                            type: object
+                            additionalProperties:
+                              type: string
+                              format: uri
+                            default: *a50
                         required:
                           - version
                           - effective_at
@@ -28584,7 +28711,7 @@ paths:
                               pattern: ^[A-Z]{3}$
                             status:
                               type: string
-                              enum: &a48
+                              enum: &a51
                                 - pending
                                 - verified
                                 - failed
@@ -28768,7 +28895,7 @@ paths:
                             pattern: ^[A-Z]{3}$
                           status:
                             type: string
-                            enum: *a48
+                            enum: *a51
                           reference:
                             type: string
                             minLength: 1
