@@ -67,6 +67,9 @@ export const MARKETING_FEATURES = [
   },
 ] as const;
 
+/** Free trial length; keep in step with the API's billing constants. */
+export const MARKETING_TRIAL_DAYS = 14;
+
 /**
  * One plan during the pilot (internal code `starter`, sold as Standard). The API owns the real price,
  * limits, and trial length; keep this copy in step with billing.constants / migration 0061.

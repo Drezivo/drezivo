@@ -1,0 +1,420 @@
+/*
+ * Atelier — the marketing site's finish layer. Tokens live in globals.css (@theme, --color-atelier-*).
+ * Motion rules: three curves only (UI 0.4,0,0.2,1 · reveal expo-out · drama 0.77,0,0.175,1), 48px
+ * reveal distance, 0.3em tracking on uppercase labels. Hidden start states exist only under
+ * html.at-motion, which an inline script sets before paint when reduced motion is not requested.
+ */
+
+.marketing-page {
+  /* Defined here, not at :root: next/font sets --font-bodoni and friends on this element. */
+  --font-atelier-display: var(--font-bodoni), 'Bodoni 72', 'Didot', Georgia, serif;
+  --font-atelier-body: var(--font-atelier-jost), 'Futura', ui-sans-serif, system-ui, sans-serif;
+  /* Pages still on the older marketing classes (font-display) inherit the same pairing. */
+  --font-display: var(--font-atelier-display);
+  background: var(--color-atelier-paper);
+  color: var(--color-atelier-ink);
+  font-family: var(--font-atelier-body);
+  font-size: 1rem;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.marketing-page ::selection {
+  background: color-mix(in srgb, var(--color-atelier-champagne) 45%, transparent);
+  color: var(--color-atelier-ink);
+}
+
+.marketing-page :focus-visible {
+  outline: 2px solid var(--color-atelier-champagne);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.marketing-page [id] {
+  scroll-margin-top: 5rem;
+}
+
+html:has(.marketing-page) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-atelier-gold) transparent;
+}
+html:has(.marketing-page)::-webkit-scrollbar { width: 6px; }
+html:has(.marketing-page)::-webkit-scrollbar-thumb { background: var(--color-atelier-gold); border-radius: 9999px; }
+
+.at-container {
+  width: 100%;
+  max-width: 84rem;
+  margin-inline: auto;
+  padding-inline: clamp(1.25rem, 4vw, 3rem);
+}
+
+.at-eyebrow {
+  font-family: var(--font-atelier-body);
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  line-height: 1.6;
+}
+
+/* ------------------------------------------------------------------ buttons */
+
+.at-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 3rem;
+  padding: 0.85rem 1.6rem;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  font-family: var(--font-atelier-body);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition: background-color 250ms cubic-bezier(0.4, 0, 0.2, 1), color 250ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 250ms cubic-bezier(0.4, 0, 0.2, 1), transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.at-button:active { transform: scale(0.97); }
+.at-button-sm { min-height: 2.5rem; padding: 0.55rem 1.15rem; font-size: 0.875rem; }
+.at-button-light { background: var(--color-atelier-paper); color: var(--color-atelier-night); }
+.at-button-light:hover { background: var(--color-atelier-champagne); }
+.at-button-dark { background: var(--color-atelier-night); color: var(--color-atelier-paper); }
+.at-button-dark:hover { background: var(--color-atelier-night-3); }
+.at-button-ghost-dark { border-color: color-mix(in srgb, var(--color-atelier-paper) 30%, transparent); color: var(--color-atelier-paper); }
+.at-button-ghost-dark:hover { border-color: var(--color-atelier-champagne); color: var(--color-atelier-champagne); }
+
+/* ------------------------------------------------------------------ header */
+
+.at-header {
+  color: var(--color-atelier-ink);
+  transition: background-color 300ms cubic-bezier(0.4, 0, 0.2, 1), color 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.at-header[data-ground='dark'] { color: var(--color-atelier-paper); }
+.at-header[data-ground='light'][data-scrolled] {
+  background: color-mix(in srgb, var(--color-atelier-paper) 86%, transparent);
+  backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: 0 1px 0 var(--color-atelier-paper-line);
+}
+.at-header[data-ground='dark'][data-scrolled] {
+  background: color-mix(in srgb, var(--color-atelier-night) 72%, transparent);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--color-atelier-paper) 8%, transparent);
+}
+.at-nav-link {
+  position: relative;
+  opacity: 0.82;
+  transition: opacity 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.at-nav-link::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: -4px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.at-nav-link:hover { opacity: 1; }
+.at-nav-link:hover::after { transform: scaleX(1); transform-origin: left; }
+
+.at-menu {
+  position: fixed;
+  inset: 0;
+  background: var(--color-atelier-night);
+  color: var(--color-atelier-paper);
+}
+
+/* ------------------------------------------------------------------ mosaic, preloader */
+
+.at-mosaic {
+  /* Roughly square blocks per screen size; extra cells fall into zero-height rows. */
+  --mosaic-columns: 5;
+  --mosaic-rows: 11;
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  grid-template-columns: repeat(var(--mosaic-columns), 1fr);
+  grid-template-rows: repeat(var(--mosaic-rows), 1fr);
+  grid-auto-rows: 0;
+  overflow: hidden;
+  pointer-events: none;
+  visibility: hidden;
+}
+@media (min-width: 40rem) { .at-mosaic { --mosaic-columns: 8; --mosaic-rows: 9; } }
+@media (min-width: 64rem) { .at-mosaic { --mosaic-columns: 12; --mosaic-rows: 8; } }
+.at-mosaic[data-active] { visibility: visible; pointer-events: auto; }
+.at-mosaic > span { visibility: hidden; opacity: 0; margin: -0.5px; }
+.at-mosaic[data-ground='night'] > span { background: var(--color-atelier-night); }
+.at-mosaic[data-ground='paper'] > span { background: var(--color-atelier-paper-2); }
+/* Before hydration on a first visit, the ground is already up so nothing flashes underneath. */
+html.at-preload .at-mosaic { visibility: visible; }
+html.at-preload .at-mosaic > span { visibility: visible; opacity: 1; }
+
+.at-preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: none;
+  place-items: center;
+  color: var(--color-atelier-champagne);
+  pointer-events: none;
+}
+html.at-preload .at-preloader { display: grid; }
+.at-preloader [data-word-letter] { transform: translateY(105%); color: var(--color-atelier-paper); }
+.at-preloader [data-preload-meta] { visibility: hidden; opacity: 0; color: var(--color-atelier-mist); }
+.at-preloader path { stroke-dasharray: 400; stroke-dashoffset: 400; }
+
+/* The new page sharpens out of a blur as the mosaic clears. */
+html.at-entering main { filter: blur(10px); opacity: 0.6; }
+html.at-entering.at-entered main {
+  filter: blur(0);
+  opacity: 1;
+  transition: filter 900ms cubic-bezier(0.22, 1, 0.36, 1), opacity 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ------------------------------------------------------------------ hero */
+
+.at-hero-poster {
+  background:
+    radial-gradient(60% 70% at 72% 55%, rgba(201, 164, 106, 0.18), transparent 70%),
+    radial-gradient(90% 90% at 20% 30%, rgba(58, 40, 28, 0.6), transparent 70%),
+    var(--color-atelier-night);
+}
+.at-hero-canvas { opacity: 0; transition: opacity 1200ms cubic-bezier(0.22, 1, 0.36, 1); }
+.at-hero-canvas[data-ready] { opacity: 1; }
+.at-scroll-cue { justify-items: center; gap: 0.6rem; }
+.at-scroll-cue-line {
+  display: block;
+  width: 1px;
+  height: 3rem;
+  background: linear-gradient(var(--color-atelier-champagne), transparent);
+  transform-origin: top;
+  animation: at-cue 2.4s cubic-bezier(0.77, 0, 0.175, 1) infinite;
+}
+@keyframes at-cue {
+  0% { transform: scaleY(0); }
+  50% { transform: scaleY(1); transform-origin: top; }
+  51% { transform-origin: bottom; }
+  100% { transform: scaleY(0); transform-origin: bottom; }
+}
+
+/* ------------------------------------------------------------------ product mockups (business app theme) */
+
+.at-app {
+  --app-canvas: #141414;
+  --app-surface: #1a1a1a;
+  --app-surface-2: #222120;
+  --app-surface-3: #2c2a27;
+  --app-line: #383633;
+  --app-ink: #f5f1eb;
+  --app-muted: #aaa39b;
+  --app-active: #342a1f;
+  --app-accent: #d2a15b;
+  --app-danger: #ff4d6d;
+  --app-green: #72d89e;
+  --app-green-soft: #193126;
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--app-line);
+  background: var(--app-surface);
+  font-family: var(--font-atelier-body);
+  box-shadow: 0 30px 60px -30px rgba(18, 14, 11, 0.55), 0 12px 24px -16px rgba(18, 14, 11, 0.35);
+}
+.at-app-flat { min-height: 10.5rem; box-shadow: 0 24px 48px -32px rgba(18, 14, 11, 0.5); }
+
+.at-skeleton {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(100deg, #24221f 30%, #34302b 50%, #24221f 70%);
+  background-size: 300% 100%;
+  animation: at-shimmer 1.4s linear infinite;
+}
+@keyframes at-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* Without motion the data simply shows; with motion, the scroll script swaps the layers. */
+[data-ba-skeleton] { visibility: hidden; opacity: 0; }
+[data-bento-skeleton] { opacity: 0; transition: opacity 400ms cubic-bezier(0.4, 0, 0.2, 1); }
+html.at-motion [data-bento-card]:not([data-loaded]) [data-bento-skeleton] { opacity: 1; }
+html.at-motion [data-bento-card]:not([data-loaded]) [data-bento-data] { opacity: 0; }
+[data-bento-data] { transition: opacity 600ms cubic-bezier(0.22, 1, 0.36, 1); }
+
+.at-chip {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  border-radius: 9999px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+.at-chip-gold { background: var(--app-active, #342a1f); color: var(--app-accent, #d2a15b); }
+.at-chip-green { background: var(--app-green-soft, #193126); color: var(--app-green, #72d89e); }
+.at-chip-red { background: rgba(255, 77, 109, 0.14); color: #ff8aa0; }
+.at-chip-muted { background: var(--app-surface-3, #2c2a27); color: var(--app-muted, #aaa39b); }
+
+.at-day {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  border-radius: 6px;
+  padding: 0.45rem 0;
+  font-size: 0.6875rem;
+  background: var(--app-surface-2);
+  color: var(--app-ink);
+}
+.at-day small { font-size: 0.5625rem; color: var(--app-muted); }
+.at-day-open { background: var(--app-green-soft); }
+.at-day-open small { color: var(--app-green); }
+.at-day-reserved { color: #a39e98; text-decoration: line-through; }
+.at-day-reserved small { color: #a39e98; }
+.at-day-cleaning { background: var(--app-surface-3); }
+
+/* ------------------------------------------------------------------ "before" artifacts */
+
+.at-artifact {
+  position: relative;
+  border-radius: 18px;
+  padding: 1.1rem;
+  box-shadow: 0 24px 40px -28px rgba(18, 14, 11, 0.45);
+}
+.at-artifact-phone { background: #eef0f3; border: 1px solid #dde1e7; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
+.at-artifact-paper {
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 27px, rgba(91, 119, 168, 0.22) 27px 28px),
+    #fffdf6;
+  padding-top: 1.4rem;
+  transform: rotate(-1.5deg);
+}
+.at-artifact-note { background: #f7e7a1; transform: rotate(2deg); max-width: 15rem; }
+.at-bubble {
+  max-width: 88%;
+  border-radius: 18px 18px 18px 4px;
+  background: #ffffff;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: #1d1d1f;
+}
+.at-bubble-short { width: fit-content; }
+.at-receipt-shot {
+  display: grid;
+  gap: 0.15rem;
+  width: 11rem;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #0a5bff, #3f8cff);
+  padding: 0.9rem;
+  color: #fff;
+  filter: blur(0.6px);
+}
+.at-receipt-shot span { font-size: 0.6875rem; opacity: 0.85; }
+.at-receipt-shot b { font-size: 1.15rem; }
+.at-receipt-shot i { font-size: 0.625rem; font-style: normal; opacity: 0.75; }
+.at-hand { font-family: var(--font-atelier-hand), 'Segoe Print', cursive; color: #2b2a6b; }
+.at-circle {
+  position: absolute;
+  inset: -0.2rem -0.6rem;
+  border: 2px solid rgba(178, 34, 34, 0.75);
+  border-radius: 50%;
+  transform: rotate(-3deg);
+}
+
+.at-ba-line {
+  position: absolute;
+  top: 50%;
+  left: 38%;
+  width: 18%;
+  height: 1px;
+  background: var(--color-atelier-gold);
+  transform-origin: left;
+  z-index: 5;
+}
+
+.at-bento-card { position: relative; }
+
+/* ------------------------------------------------------------------ FAQ, closing, footer */
+
+.at-faq summary::-webkit-details-marker { display: none; }
+.at-faq-icon { position: relative; width: 14px; height: 14px; flex-shrink: 0; }
+.at-faq-icon::before,
+.at-faq-icon::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: var(--color-atelier-gold-ink);
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.at-faq-icon::after { transform: rotate(90deg); }
+.at-faq[open] .at-faq-icon::after { transform: rotate(0deg); }
+
+.at-closing-glow {
+  position: absolute;
+  inset: -30% -10% auto;
+  height: 120%;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(201, 164, 106, 0.16), transparent 70%);
+  animation: at-breathe 9s ease-in-out infinite alternate;
+}
+@keyframes at-breathe { from { transform: scale(0.92); opacity: 0.7; } to { transform: scale(1.08); opacity: 1; } }
+
+.at-footer-link { color: var(--color-atelier-mist); transition: color 250ms cubic-bezier(0.4, 0, 0.2, 1); }
+.at-footer-link:hover { color: var(--color-atelier-paper); }
+
+/* ------------------------------------------------------------------ scroll reveals (start states) */
+
+/* Hero entrance: pure CSS so the headline is painted with the first frame. html.at-hero-go is set
+   before paint on repeat visits, or by the preloader as it clears. */
+html.at-motion [data-hero-line] { transform: translateY(105%); }
+html.at-motion [data-hero-eyebrow] { opacity: 0; transform: translateX(-48px); }
+html.at-motion [data-hero-fade] { opacity: 0; transform: translateY(24px); }
+html.at-hero-go [data-hero-line] {
+  animation: at-hero-line 1.4s cubic-bezier(0.77, 0, 0.175, 1) calc(var(--line, 0) * 120ms) forwards;
+}
+html.at-hero-go [data-hero-eyebrow] { animation: at-hero-in 1s cubic-bezier(0.77, 0, 0.175, 1) 0.3s forwards; }
+html.at-hero-go [data-hero-fade] { animation: at-hero-in 1s cubic-bezier(0.22, 1, 0.36, 1) 0.55s forwards; }
+html.at-hero-go [data-hero-fade] + [data-hero-fade] { animation-delay: 0.65s; }
+html.at-hero-go [data-hero-fade] + [data-hero-fade] + [data-hero-fade] { animation-delay: 0.75s; }
+@keyframes at-hero-line { to { transform: translateY(0); } }
+@keyframes at-hero-in { to { opacity: 1; transform: none; } }
+/* If neither class ever arrives (script error), show the hero after a moment rather than never. */
+html.at-motion:not(.at-hero-go):not(.at-preload) :is([data-hero-line], [data-hero-eyebrow], [data-hero-fade]) {
+  animation: at-fallback 0.01s linear 2s forwards;
+}
+html.at-motion [data-at-reveal='lines'] [data-at-line] { transform: translateY(105%); }
+html.at-motion [data-at-reveal='up'],
+html.at-motion [data-at-stagger] [data-at-item] { opacity: 0; visibility: hidden; transform: translateY(48px); }
+html.at-motion [data-at-reveal='blur'] { opacity: 0; visibility: hidden; filter: blur(12px); transform: scale(0.98); }
+
+/* Anything the motion script never reached (an error, a slow bundle) shows itself after a moment. */
+html.at-motion :is([data-at-reveal], [data-at-stagger]):not([data-at-bound]) {
+  animation: at-fallback 0.01s linear 3s forwards;
+}
+html.at-motion :is([data-at-reveal]:not([data-at-bound]) [data-at-line], [data-at-stagger]:not([data-at-bound]) [data-at-item]) {
+  animation: at-fallback 0.01s linear 3s forwards;
+}
+@keyframes at-fallback { to { opacity: 1; visibility: visible; transform: none; filter: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .at-skeleton, .at-scroll-cue-line, .at-closing-glow { animation: none; }
+  .at-button, .at-header, .at-nav-link::after { transition: none; }
+}
+
+.at-hero-scrim {
+  background: linear-gradient(to top, var(--color-atelier-night) 18%, color-mix(in srgb, var(--color-atelier-night) 82%, transparent) 55%, transparent);
+}
+
+/* Decorative wordmark: drawn from CSS so it is not text on the page (and not read or audited as text). */
+.at-watermark::before {
+  content: 'Drezivo';
+  font-family: var(--font-atelier-display);
+  font-size: clamp(3.5rem, 12vw, 10rem);
+  line-height: 0.8;
+  letter-spacing: -0.03em;
+  color: var(--color-atelier-night-3);
+}

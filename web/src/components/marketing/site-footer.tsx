@@ -1,39 +1,59 @@
 import Link from 'next/link';
-import { BrandMark } from './brand-mark';
-import { CONTACT_EMAIL } from '@/lib/site-urls';
+
+import { CONTACT_EMAIL, SIGN_IN_URL } from '@/lib/site-urls';
+
+const COLUMNS = [
+  {
+    title: 'Product',
+    links: [
+      { href: '/#before-after', label: 'Why Drezivo' },
+      { href: '/#features', label: 'Features' },
+      { href: '/pricing', label: 'Pricing' },
+      { href: '/faq', label: 'FAQ' },
+    ],
+  },
+  {
+    title: 'Legal',
+    links: [
+      { href: '/terms', label: 'Terms of Service' },
+      { href: '/privacy', label: 'Privacy Policy' },
+    ],
+  },
+] as const;
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-marketing-dark-line bg-marketing-dark text-marketing-cream">
-      <div className="marketing-container py-14">
-        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
+    <footer data-header="dark" className="bg-atelier-night text-atelier-paper">
+      <div className="at-container border-t border-atelier-night-line pb-10 pt-20">
+        <div className="grid gap-12 md:grid-cols-[1.4fr_1fr_1fr_1.2fr]">
           <div>
-            <div className="flex items-center gap-2 font-display text-lg"><BrandMark className="h-7 w-7 text-marketing-gold" /><span>Drezivo</span></div>
-            <p className="mt-3 max-w-xs text-sm text-marketing-cream/70">Clothing rental operations software for Philippine businesses.</p>
+            <p className="font-[family-name:var(--font-atelier-display)] text-[2rem] leading-none">Drezivo</p>
+            <p className="mt-4 max-w-[18rem] text-sm leading-[1.7] text-atelier-mist">Clothing rental software for Philippine shops: gowns, barong, ternos, costumes, and everything in between.</p>
           </div>
+          {COLUMNS.map((column) => (
+            <div key={column.title}>
+              <p className="at-eyebrow text-[0.6875rem] text-atelier-champagne">{column.title}</p>
+              <ul className="mt-5 grid gap-3 text-sm">
+                {column.links.map((link) => (
+                  <li key={link.href}>
+                    <Link href={link.href} className="at-footer-link">{link.label}</Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
           <div>
-            <p className="text-sm font-semibold">Product</p>
-            <ul className="mt-3 space-y-2 text-sm text-marketing-cream/70">
-              <li><Link href="/#features" className="hover:text-marketing-cream">Features</Link></li>
-              <li><Link href="/#how-it-works" className="hover:text-marketing-cream">How It Works</Link></li>
-              <li><Link href="/pricing" className="hover:text-marketing-cream">Pricing</Link></li>
-              <li><Link href="/faq" className="hover:text-marketing-cream">FAQ</Link></li>
+            <p className="at-eyebrow text-[0.6875rem] text-atelier-champagne">Talk to us</p>
+            <ul className="mt-5 grid gap-3 text-sm">
+              <li><a href={`mailto:${CONTACT_EMAIL}`} className="at-footer-link">{CONTACT_EMAIL}</a></li>
+              <li><a href={SIGN_IN_URL} className="at-footer-link">Sign in to your shop</a></li>
             </ul>
-          </div>
-          <div>
-            <p className="text-sm font-semibold">Legal</p>
-            <ul className="mt-3 space-y-2 text-sm text-marketing-cream/70">
-              <li><Link href="/terms" className="hover:text-marketing-cream">Terms of Service</Link></li>
-              <li><Link href="/privacy" className="hover:text-marketing-cream">Privacy Policy</Link></li>
-            </ul>
-          </div>
-          <div>
-            <p className="text-sm font-semibold">Stay in touch</p>
-            <p className="mt-3 text-sm leading-6 text-marketing-cream/70">Built for the people keeping every fitting, pickup, and return moving.</p>
-            <a href={`mailto:${CONTACT_EMAIL}`} className="mt-3 inline-block text-sm text-marketing-gold hover:text-marketing-cream">{CONTACT_EMAIL}</a>
           </div>
         </div>
-        <p className="mt-12 border-t border-marketing-dark-line pt-5 text-xs text-marketing-cream/50">© {new Date().getFullYear()} Drezivo. All rights reserved.</p>
+        <div className="mt-20 flex flex-wrap items-end justify-between gap-6 border-t border-atelier-night-line pt-8">
+          <span aria-hidden="true" className="at-watermark" />
+          <p className="text-xs text-atelier-mist">© {new Date().getFullYear()} Drezivo. Made in the Philippines.</p>
+        </div>
       </div>
     </footer>
   );
