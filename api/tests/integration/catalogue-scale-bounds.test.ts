@@ -1,3 +1,4 @@
+import { Client } from 'pg';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import type { PermissionCode } from '@drezivo/contracts';
@@ -38,6 +39,7 @@ describe('CLT-061 catalogue scale and query bounds', async () => {
   beforeAll(async () => {
     await migrateTestDatabase(adminUrl);
     await ensureAppRoleLogin(adminUrl);
+    await resetTestDatabase(adminUrl);
   });
 
   afterEach(async () => {
@@ -144,7 +146,6 @@ describe('CLT-061 catalogue scale and query bounds', async () => {
     const seeded = await seedScaleCatalogue(tenant.id, 'user_clt061_plans');
 
     const plans = await withTenantTransaction(tenant.id, 'user_clt061_plans', async (client) => {
-      await client.query('ANALYZE product');
       const anchorResult = await client.query<{ id: string; sort_name: string }>(
         `SELECT id, lower(name) AS sort_name
            FROM product
@@ -200,11 +201,15 @@ describe('CLT-061 catalogue scale and query bounds', async () => {
 
   async function seedScaleCatalogue(tenantId: string, principalId: string) {
     const seeded = await insertScaleCatalogue(tenantId, principalId);
-    // Autoanalyze may have sampled these tables while they were empty; with those stats the churn
-    // UPDATE picks a nested-loop plan that runs for minutes and holds locks the next test waits on.
-    await withTenantTransaction(tenantId, principalId, (client) =>
-      client.query('ANALYZE product, product_variant, physical_asset'),
-    );
+    // Collect representative planner stats after seeding. PostgreSQL 17 requires MAINTAIN for
+    // ANALYZE, which the app role intentionally lacks, so use the local test admin connection.
+    const admin = new Client({ connectionString: adminUrl });
+    await admin.connect();
+    try {
+      await admin.query('ANALYZE product, product_variant, physical_asset');
+    } finally {
+      await admin.end();
+    }
     return seeded;
   }
 
