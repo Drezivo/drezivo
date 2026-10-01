@@ -12,6 +12,7 @@ const clerk = vi.hoisted(() => ({
 
 const api = vi.hoisted(() => ({
   createFitting: vi.fn(),
+  getBusinessHours: vi.fn(),
   getCatalogueClothing: vi.fn(),
   getCatalogueClothingDetail: vi.fn(),
   getFittingIntakeOptions: vi.fn(),
@@ -101,6 +102,7 @@ const catalogueList = {
       product_id: productId,
       name: "Test Gown",
       size_labels: ["Medium"],
+      primary_image_url: "https://cdn.example.test/test-gown.webp",
     },
   ],
   page_meta: { next_cursor: null, has_more: false },
@@ -125,6 +127,19 @@ describe("NewFittingSheet production cutover", () => {
     vi.clearAllMocks();
     clerk.useAuth.mockReturnValue({ getToken: clerk.getToken });
     clerk.getToken.mockResolvedValue("test-token");
+    api.getBusinessHours.mockResolvedValue({
+      data: {
+        branch_id: branchId,
+        branch_name: "Main",
+        opens_local: "08:00",
+        closes_local: "20:00",
+        closed_weekdays: [],
+        timezone: "Asia/Manila",
+        version: 1,
+        updated_at: "2026-09-27T00:00:00.000Z",
+      },
+      requestId: "request-business-hours",
+    });
     api.getFittingIntakeOptions.mockResolvedValue({
       data: {
         customers: [
@@ -158,6 +173,16 @@ describe("NewFittingSheet production cutover", () => {
     expect(screen.queryByText("Guaranteed intent")).not.toBeInTheDocument();
   });
 
+  it("uses segmented start-time input and branch Business Hours quick choices", async () => {
+    render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    expect(screen.getByLabelText("Fitting start time hour")).toBeVisible();
+    expect(screen.getByLabelText("Fitting start time minute")).toBeVisible();
+    expect(screen.getByLabelText("Fitting start time period")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Set time" })).not.toBeInTheDocument();
+    await waitFor(() => expect(api.getBusinessHours).toHaveBeenCalledTimes(1));
+  });
+
   it("searches existing customers through the fitting intake API", async () => {
     render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
 
@@ -189,14 +214,31 @@ describe("NewFittingSheet production cutover", () => {
     fireEvent.change(screen.getByPlaceholderText("09XXXXXXXXX"), {
       target: { value: "09171234567" },
     });
+    fireEvent.change(screen.getByLabelText("Fitting start time hour"), {
+      target: { value: "7" },
+    });
+    fireEvent.change(screen.getByLabelText("Fitting start time minute"), {
+      target: { value: "30" },
+    });
+    fireEvent.change(screen.getByLabelText("Fitting start time period"), {
+      target: { value: "PM" },
+    });
     expect(screen.queryByLabelText("Address (optional)")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Social media (optional)")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(await screen.findByRole("button", { name: /Test Gown/ })).toBeVisible();
+    expect(screen.getByRole("img", { name: "Test Gown catalogue photo" })).toHaveAttribute(
+      "src",
+      "https://cdn.example.test/test-gown.webp"
+    );
     fireEvent.click(screen.getByRole("button", { name: /Test Gown/ }));
-    expect(await screen.findByText("SKU TEST-M")).toBeVisible();
+    await screen.findByText("Medium · Gold");
+    expect(screen.queryByText(/SKU TEST-M/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByRole("button", { name: "Preference only" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Guarantee garment" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Remove" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Guarantee garment" }));
     expect(screen.getByText("Guaranteed garment")).toBeVisible();
 
@@ -246,7 +288,9 @@ describe("NewFittingSheet production cutover", () => {
     it("opens on the slot already running so a walk-in can start now, and shows the shop time", () => {
       render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
 
-      expect(screen.getByRole("button", { name: "Fitting start time" })).toHaveTextContent("04:00 PM");
+      expect(screen.getByRole("textbox", { name: "Fitting start time hour" })).toHaveValue("04");
+      expect(screen.getByRole("textbox", { name: "Fitting start time minute" })).toHaveValue("00");
+      expect(screen.getByRole("combobox", { name: "Fitting start time period" })).toHaveValue("PM");
       expect(screen.getByText(/It is now 4:13 PM/)).toBeVisible();
     });
 
@@ -258,18 +302,22 @@ describe("NewFittingSheet production cutover", () => {
         vi.advanceTimersByTime(30_000);
       });
 
-      expect(screen.getByRole("button", { name: "Fitting start time" })).toHaveTextContent("04:30 PM");
+      expect(screen.getByRole("textbox", { name: "Fitting start time hour" })).toHaveValue("04");
+      expect(screen.getByRole("textbox", { name: "Fitting start time minute" })).toHaveValue("30");
+      expect(screen.getByRole("combobox", { name: "Fitting start time period" })).toHaveValue("PM");
       expect(
         screen.getByText("The start time moved to 4:30 PM because the time you chose has passed.")
       ).toBeVisible();
     });
 
-    it("offers only on-the-hour and half-hour minutes", () => {
+    it("rejects minutes outside the 30-minute fitting grid", () => {
       render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
 
-      fireEvent.click(screen.getByRole("button", { name: "Fitting start time" }));
-      const minutes = within(screen.getByLabelText("Fitting start time minute")).getAllByRole("option");
-      expect(minutes.map((option) => option.textContent)).toEqual(["00", "30"]);
+      const minuteInput = screen.getByRole("textbox", { name: "Fitting start time minute" });
+      fireEvent.change(minuteInput, { target: { value: "15" } });
+      fireEvent.blur(minuteInput);
+
+      expect(screen.getByText("Enter a time on a 30-minute boundary.")).toBeVisible();
     });
   });
 

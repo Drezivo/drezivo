@@ -50,7 +50,19 @@ export const facebookPage = z
 export const contactPhone = z
   .string()
   .trim()
-  .regex(/^\+?[0-9][0-9 ()-]{6,19}$/, 'enter a valid phone number');
+  .transform((value, context) => {
+    if (!/^[+0-9 ()-]+$/.test(value)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'phone number must contain exactly 11 digits' });
+      return z.NEVER;
+    }
+    const digits = value.replace(/\D/g, '');
+    const canonical = digits.length === 12 && digits.startsWith('63') ? `0${digits.slice(2)}` : digits;
+    if (!/^\d{11}$/.test(canonical)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'phone number must contain exactly 11 digits' });
+      return z.NEVER;
+    }
+    return canonical;
+  });
 
 /** Fixed palettes so every storefront stays readable; the owner picks one, not raw colours. */
 export const storefrontTheme = z.enum(['ivory', 'sage', 'blush', 'noir']);

@@ -355,7 +355,7 @@ export function ReservationsPage() {
               <ReservationPagination
                 pageIndex={pageIndex}
                 shown={rows.length}
-                hasMore={pageMeta.has_more}
+                hasMore={pageMeta.has_more && Boolean(pageMeta.next_cursor)}
                 onNext={goNext}
                 onPrevious={goPrevious}
               />
@@ -746,7 +746,10 @@ function ReservationPagination({
           aria-label="Previous reservations page"
           disabled={pageIndex === 0}
           onClick={onPrevious}
-          className="h-8 w-8"
+          className={cn(
+            "h-8 w-8 bg-transparent hover:bg-transparent",
+            pageIndex === 0 ? "cursor-not-allowed text-dashboard-muted opacity-35" : "text-white"
+          )}
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </Button>
@@ -760,7 +763,10 @@ function ReservationPagination({
           aria-label="Next reservations page"
           disabled={!hasMore}
           onClick={onNext}
-          className="h-8 w-8"
+          className={cn(
+            "h-8 w-8 bg-transparent hover:bg-transparent",
+            !hasMore ? "cursor-not-allowed text-dashboard-muted opacity-35" : "text-white"
+          )}
         >
           <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </Button>

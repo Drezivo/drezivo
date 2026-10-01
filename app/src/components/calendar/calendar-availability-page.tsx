@@ -36,6 +36,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { DateRangePickerField } from "@/components/ui/date-range-picker-field";
 import { Input } from "@/components/ui/input";
 import {
   ManagePhysicalAssetDialog,
@@ -51,6 +52,7 @@ import {
   agendaPlacement,
   availabilityStatusLabel,
   buildAvailabilityDays,
+  calendarDayDifference,
   formatAgendaDateRange,
   formatAvailabilityRange,
   formatBoundaryDateTime,
@@ -92,6 +94,7 @@ export function CalendarAvailabilityPage() {
   );
   const [isContextResolved, setIsContextResolved] = useState(false);
   const [windowStart, setWindowStart] = useState<string | null>(null);
+  const [windowEnd, setWindowEnd] = useState<string | null>(null);
   const [selectedAgenda, setSelectedAgenda] = useState<SelectedAgenda | null>(null);
   const [managedAsset, setManagedAsset] = useState<PhysicalAssetSummary | null>(null);
   const [managedAssetSize, setManagedAssetSize] = useState<string | null>(null);
@@ -116,12 +119,9 @@ export function CalendarAvailabilityPage() {
   const assetLookupGeneration = useRef(0);
 
   const currentCursor = pageCursors[pageIndex] ?? null;
-  const windowEnd = windowStart
-    ? addCalendarDays(windowStart, AVAILABILITY_WINDOW_DAYS - 1)
-    : null;
   const days = useMemo(
-    () => (windowStart ? buildAvailabilityDays(windowStart) : []),
-    [windowStart]
+    () => (windowStart && windowEnd ? buildAvailabilityDays(windowStart, windowEnd) : []),
+    [windowEnd, windowStart]
   );
   const rangeLabel =
     windowStart && windowEnd ? formatAvailabilityRange(windowStart, windowEnd) : "Loading dates…";
@@ -191,12 +191,16 @@ export function CalendarAvailabilityPage() {
         );
         const resolvedTimeZone = activeBranch?.timezone ?? result.data.tenant.timezone;
         setTimeZone(resolvedTimeZone);
-        setWindowStart(todayInTimeZone(resolvedTimeZone));
+        const today = todayInTimeZone(resolvedTimeZone);
+        setWindowStart(today);
+        setWindowEnd(addCalendarDays(today, AVAILABILITY_WINDOW_DAYS - 1));
       })
       .catch(() => {
         if (cancelled) return;
         setTimeZone(fallbackTimeZone);
-        setWindowStart(todayInTimeZone(fallbackTimeZone));
+        const today = todayInTimeZone(fallbackTimeZone);
+        setWindowStart(today);
+        setWindowEnd(addCalendarDays(today, AVAILABILITY_WINDOW_DAYS - 1));
       })
       .finally(() => {
         if (!cancelled) setIsContextResolved(true);
@@ -276,13 +280,27 @@ export function CalendarAvailabilityPage() {
   const effectiveTimeZone = timeline?.timezone ?? timeZone;
 
   const shiftDateRange = (direction: -1 | 1) => {
-    if (!windowStart) return;
-    setWindowStart(addCalendarDays(windowStart, direction * AVAILABILITY_WINDOW_DAYS));
+    if (!windowStart || !windowEnd) return;
+    const dayCount = calendarDayDifference(windowStart, windowEnd) + 1;
+    setWindowStart(addCalendarDays(windowStart, direction * dayCount));
+    setWindowEnd(addCalendarDays(windowEnd, direction * dayCount));
     resetPagination();
   };
 
   const resetDateRange = () => {
-    setWindowStart(todayInTimeZone(timeZone));
+    const today = todayInTimeZone(timeZone);
+    setWindowStart(today);
+    setWindowEnd(addCalendarDays(today, AVAILABILITY_WINDOW_DAYS - 1));
+    resetPagination();
+  };
+
+  const changeDateRange = (range: { from: string; to: string }) => {
+    if (!range.from || !range.to) return;
+    const inclusiveDays = calendarDayDifference(range.from, range.to) + 1;
+    if (inclusiveDays < 1) return;
+    const boundedEnd = inclusiveDays > 31 ? addCalendarDays(range.from, 30) : range.to;
+    setWindowStart(range.from);
+    setWindowEnd(boundedEnd);
     resetPagination();
   };
 
@@ -322,6 +340,7 @@ export function CalendarAvailabilityPage() {
             value: category.id,
           }))}
           dateRangeLabel={rangeLabel}
+          dateRangeValue={{ from: windowStart ?? "", to: windowEnd ?? "" }}
           query={query}
           sizeFilter={sizeFilter ?? "All Sizes"}
           sizeOptions={facets.size_labels}
@@ -347,6 +366,7 @@ export function CalendarAvailabilityPage() {
           }}
           onPreviousRange={() => shiftDateRange(-1)}
           onNextRange={() => shiftDateRange(1)}
+          onDateRangeChange={changeDateRange}
           onResetRange={resetDateRange}
         />
 
@@ -477,8 +497,10 @@ function AvailabilityControls({
   categoryOptions,
   dateNavigationDisabled,
   dateRangeLabel,
+  dateRangeValue,
   hasCatalogueFilter,
   onCategoryChange,
+  onDateRangeChange,
   onNextRange,
   onPreviousRange,
   onQueryChange,
@@ -494,8 +516,10 @@ function AvailabilityControls({
   categoryOptions: ReadonlyArray<{ label: string; value: string }>;
   dateNavigationDisabled: boolean;
   dateRangeLabel: string;
+  dateRangeValue: { from: string; to: string };
   hasCatalogueFilter: boolean;
   onCategoryChange: (value: string) => void;
+  onDateRangeChange: (value: { from: string; to: string }) => void;
   onNextRange: () => void;
   onPreviousRange: () => void;
   onQueryChange: (value: string) => void;
@@ -514,7 +538,7 @@ function AvailabilityControls({
   ];
 
   return (
-    <Card className="gap-0 py-0">
+    <Card className="relative z-40 gap-0 overflow-visible py-0">
       <CardContent className="flex flex-col gap-3 p-3">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
           <label className="relative min-w-0 flex-1">
@@ -552,15 +576,25 @@ function AvailabilityControls({
             >
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
             </Button>
+            <DateRangePickerField
+              ariaLabel="Calendar availability date range"
+              value={dateRangeValue}
+              onChange={onDateRangeChange}
+              startFreshOnOpen
+              popoverAlign="end"
+              disabled={dateNavigationDisabled}
+              placeholder={dateRangeLabel}
+              className="w-[11.5rem] sm:w-[13rem]"
+            />
             <Button
+              type="button"
               variant="ghost"
               aria-label="Return to the current date range"
               disabled={dateNavigationDisabled}
               onClick={onResetRange}
-              className="border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+              className="h-10 border border-dashboard-border bg-dashboard-surface px-3 text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy"
             >
-              <CalendarDays className="h-4 w-4" aria-hidden="true" />
-              {dateRangeLabel}
+              Today
             </Button>
           </div>
         </div>
@@ -687,7 +721,10 @@ function AvailabilityTimeline({
           className="max-h-[clamp(34rem,64vh,46rem)] overflow-auto"
         >
           <div className="min-w-[58rem] sm:min-w-[68rem] lg:min-w-[78rem]">
-            <div className="sticky top-0 z-30 grid grid-cols-[7.5rem_repeat(14,minmax(3.25rem,1fr))] border-b border-dashboard-border bg-dashboard-surface shadow-sm sm:grid-cols-[9rem_repeat(14,minmax(3.5rem,1fr))] lg:grid-cols-[12rem_repeat(14,minmax(3.5rem,1fr))]">
+            <div
+              className="sticky top-0 z-30 grid border-b border-dashboard-border bg-dashboard-surface shadow-sm"
+              style={{ gridTemplateColumns: `12rem repeat(${days.length}, minmax(3.5rem, 1fr))` }}
+            >
               <div className="sticky left-0 z-40 flex items-center border-r border-dashboard-border bg-dashboard-surface px-2 py-3 text-xs font-semibold text-dashboard-navy sm:px-3 sm:text-sm lg:px-4">
                 Clothing Item
               </div>
@@ -721,7 +758,7 @@ function AvailabilityTimeline({
             </div>
 
             {isLoading ? (
-              <TimelineLoadingState />
+              <TimelineLoadingState days={days} />
             ) : error ? (
               <TimelineState
                 title={
@@ -843,7 +880,10 @@ function AvailabilityRow({
   const laneCount = Math.max(1, ...item.agendas.map((agenda) => agenda.display_lane + 1));
 
   return (
-    <div className="grid grid-cols-[7.5rem_repeat(14,minmax(3.25rem,1fr))] border-b border-dashboard-border last:border-b-0 sm:grid-cols-[9rem_repeat(14,minmax(3.5rem,1fr))] lg:grid-cols-[12rem_repeat(14,minmax(3.5rem,1fr))]">
+    <div
+      className="grid border-b border-dashboard-border last:border-b-0"
+      style={{ gridTemplateColumns: `12rem repeat(${days.length}, minmax(3.5rem, 1fr))` }}
+    >
       <div className="sticky left-0 z-20 flex min-h-20 items-center gap-2 border-r border-dashboard-border bg-dashboard-surface px-2 text-left shadow-[4px_0_8px_-8px_var(--color-dashboard-muted)] sm:gap-3 sm:px-3">
         <ClothingThumbnail item={item} compact />
         <span className="min-w-0">
@@ -870,8 +910,15 @@ function AvailabilityRow({
         </span>
       </div>
 
-      <div className="relative col-span-14 bg-dashboard-surface">
-        <div className="pointer-events-none absolute inset-0 grid grid-cols-14" aria-hidden="true">
+      <div
+        className="relative bg-dashboard-surface"
+        style={{ gridColumn: `2 / span ${days.length}` }}
+      >
+        <div
+          className="pointer-events-none absolute inset-0 grid"
+          style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}
+          aria-hidden="true"
+        >
           {days.map((day, index) => (
             <div
               key={`${item.asset.id}-${day.date}`}
@@ -884,11 +931,17 @@ function AvailabilityRow({
         </div>
 
         <div
-          className="relative z-10 grid min-h-20 grid-cols-14"
-          style={{ gridTemplateRows: `repeat(${laneCount}, minmax(4rem, auto))` }}
+          className="relative z-10 grid min-h-20"
+          style={{
+            gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))`,
+            gridTemplateRows: `repeat(${laneCount}, minmax(4rem, auto))`,
+          }}
         >
           {item.agendas.length === 0 && hasCatalogueFilter ? (
-            <div className="col-span-14 m-2 flex min-h-16 items-center justify-center rounded-lg border border-dashed border-dashboard-border bg-dashboard-active/40 px-4 text-center text-xs text-dashboard-muted">
+            <div
+              className="m-2 flex min-h-16 items-center justify-center rounded-lg border border-dashed border-dashboard-border bg-dashboard-active/40 px-4 text-center text-xs text-dashboard-muted"
+              style={{ gridColumn: `1 / span ${days.length}` }}
+            >
               No projected blocking activity in this date range · {rangeLabel}
             </div>
           ) : null}
@@ -931,19 +984,23 @@ function AvailabilityRow({
   );
 }
 
-function TimelineLoadingState() {
+function TimelineLoadingState({ days }: { days: readonly AvailabilityDay[] }) {
   return (
     <div aria-label="Loading clothing availability" className="animate-pulse">
       {Array.from({ length: 5 }, (_, index) => (
         <div
           key={index}
-          className="grid min-h-20 grid-cols-[7.5rem_repeat(14,minmax(3.25rem,1fr))] border-b border-dashboard-border sm:grid-cols-[9rem_repeat(14,minmax(3.5rem,1fr))] lg:grid-cols-[12rem_repeat(14,minmax(3.5rem,1fr))]"
+          className="grid min-h-20 border-b border-dashboard-border"
+          style={{ gridTemplateColumns: `12rem repeat(${days.length}, minmax(3.5rem, 1fr))` }}
         >
           <div className="sticky left-0 z-20 border-r border-dashboard-border bg-dashboard-surface p-3">
             <div className="h-3 w-3/4 rounded bg-dashboard-active" />
             <div className="mt-3 h-2 w-1/2 rounded bg-dashboard-active" />
           </div>
-          <div className="col-span-14 m-3 rounded-lg bg-dashboard-active/70" />
+          <div
+            className="m-3 rounded-lg bg-dashboard-active/70"
+            style={{ gridColumn: `2 / span ${days.length}` }}
+          />
         </div>
       ))}
     </div>

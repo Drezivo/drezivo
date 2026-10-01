@@ -68,8 +68,8 @@ export function fittingGarmentModeLabel(mode: FittingGarmentMode): string {
 }
 
 export function fittingVariantLabel(line: Pick<FittingGarmentLineSummary, "variant">): string {
-  const color = line.variant.color_label ? ` / ${line.variant.color_label}` : "";
-  return `${line.variant.size_label}${color}`;
+  const size = line.variant.size_label ?? "Free size";
+  return line.variant.color_label ? `${size} · ${line.variant.color_label}` : size;
 }
 
 export function formatFittingDate(value: string, timeZone: string): string {

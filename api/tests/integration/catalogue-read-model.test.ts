@@ -95,6 +95,13 @@ describe('CLT Phase 1 catalogue read model', async () => {
     expect(first.items).toHaveLength(25);
     expect(first.page_meta.has_more).toBe(true);
     expect(first.page_meta.next_cursor).toEqual(expect.any(String));
+    expect(first.summary).toEqual({
+      total_products: 120,
+      active_rental_items: 119,
+      active_categories: 2,
+      archived_products: 1,
+      matching_products: 120,
+    });
 
     const second = await getCatalogueClothingList(context, {
       limit: 25,
@@ -108,12 +115,26 @@ describe('CLT Phase 1 catalogue read model', async () => {
     if (!secondFirst || !firstLast) throw new Error('Expected populated first and second pages.');
     expect(secondFirst.name > firstLast.name).toBe(true);
 
+    const activeOnly = await getCatalogueClothingList(context, {
+      limit: 20,
+      sort: 'name_asc',
+      product_status: 'active',
+    });
+    expect(activeOnly.summary).toEqual({
+      total_products: 120,
+      active_rental_items: 119,
+      active_categories: 2,
+      archived_products: 1,
+      matching_products: 119,
+    });
+
     const searched = await getCatalogueClothingList(context, {
       limit: 20,
       sort: 'name_asc',
       search: 'Rental Look 119',
     });
     expect(searched.items.map((item) => item.code)).toEqual(['LOOK-119']);
+    expect(searched.summary.matching_products).toBe(1);
 
     const categoryFiltered = await getCatalogueClothingList(context, {
       limit: 100,
@@ -151,7 +172,17 @@ describe('CLT Phase 1 catalogue read model', async () => {
       sort: 'name_asc',
       search: 'this does not exist',
     });
-    expect(empty).toEqual({ items: [], page_meta: { next_cursor: null, has_more: false } });
+    expect(empty).toEqual({
+      items: [],
+      page_meta: { next_cursor: null, has_more: false },
+      summary: {
+        total_products: 120,
+        active_rental_items: 119,
+        active_categories: 2,
+        archived_products: 1,
+        matching_products: 0,
+      },
+    });
   });
 
   it('excludes archived variants and their physical pieces from the normal inventory list projection', async () => {

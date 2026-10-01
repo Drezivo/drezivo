@@ -1,10 +1,11 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { CalendarDays, Check, FileUp, Search, Shirt, TimerReset, UserRound } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, FileUp, Search, Shirt, TimerReset, UserRound } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import type {
+  BranchBusinessHours,
   ClothingDetail,
   ClothingListItem,
   CustomerId,
@@ -41,7 +42,7 @@ import { claimHoldOwner, clearPendingHold, readHoldDraft, saveHoldDraft, savePen
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
 
-const PRODUCT_LIMIT = 12;
+const PRODUCT_LIMIT = 5;
 
 type Step = "select" | "held" | "done";
 type CustomerMode = "new" | "existing";
@@ -113,6 +114,7 @@ export function NewReservationSheet({
   const [paymentMethods, setPaymentMethods] = useState<StaffReservationPaymentMethodOption[]>([]);
   const [paymentMethodId, setPaymentMethodId] = useState<PaymentMethodId | "">("");
   const [products, setProducts] = useState<ClothingListItem[]>([]);
+  const [businessHours, setBusinessHours] = useState<BranchBusinessHours | null>(null);
   const [productsLoading, setProductsLoading] = useState(false);
   const [availabilityReloadVersion, setAvailabilityReloadVersion] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState<ClothingListItem | null>(null);
@@ -246,7 +248,15 @@ export function NewReservationSheet({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    void createDrezivoApiClient(getToken)
+    const api = createDrezivoApiClient(getToken);
+    void api.getBusinessHours()
+      .then((result) => {
+        if (!cancelled) setBusinessHours(result.data);
+      })
+      .catch(() => {
+        if (!cancelled) setBusinessHours(null);
+      });
+    void api
       .getStaffReservationIntakeOptions({})
       .then((result) => {
         if (cancelled) return;
@@ -268,7 +278,7 @@ export function NewReservationSheet({
 
     const query = {
       limit: PRODUCT_LIMIT,
-      sort: "name_asc" as const,
+      sort: deferredSearch ? ("name_asc" as const) : ("newest" as const),
       product_status: "active" as const,
       ...(deferredSearch ? { search: deferredSearch } : {}),
     };
@@ -832,7 +842,7 @@ export function NewReservationSheet({
                     No active clothing matches this search.
                   </p>
                 ) : (
-                  products.map((product) => (
+                  products.slice(0, PRODUCT_LIMIT).map((product) => (
                     <button
                       key={product.product_id}
                       type="button"
@@ -859,12 +869,28 @@ export function NewReservationSheet({
                           : "border-dashboard-border hover:bg-dashboard-active/50"
                       )}
                     >
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-dashboard-navy">{product.name}</p>
-                        <p className="mt-1 text-xs text-dashboard-muted">
-                          {product.code} · from{" "}
-                          {formatMinorMoney(product.price_from_minor, product.currency)}
-                        </p>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-14 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-dashboard-active text-xs font-semibold text-dashboard-accent">
+                          {product.primary_image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element -- signed catalogue URLs are dynamic and are not configured as stable next/image remote patterns.
+                            <img
+                              src={product.primary_image_url}
+                              alt={`${product.name} catalogue photo`}
+                              loading="lazy"
+                              decoding="async"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <Shirt className="h-5 w-5" aria-hidden="true" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-dashboard-navy">{product.name}</p>
+                          <p className="mt-1 text-xs text-dashboard-muted">
+                            {product.code} · from{" "}
+                            {formatMinorMoney(product.price_from_minor, product.currency)}
+                          </p>
+                        </div>
                       </div>
                       <Badge variant="outline" className="shrink-0">
                         {product.readiness.ready} ready
@@ -873,6 +899,13 @@ export function NewReservationSheet({
                   ))
                 )}
               </div>
+              {!productsLoading && products.length > 0 ? (
+                <p className="mt-2 text-xs text-dashboard-muted">
+                  {deferredSearch
+                    ? "Showing up to 5 matching clothing items. Refine your search to narrow the results."
+                    : "Showing up to 5 recent clothing items. Search to find more clothing."}
+                </p>
+              ) : null}
             </section>
 
             {productDetail ? (
@@ -982,6 +1015,9 @@ export function NewReservationSheet({
                         <Field label={`Pickup time · ${formatIsoDateForDisplay(pickupDate)}`}>
                           <TimePickerField
                             ariaLabel="Pickup time"
+                            mode="input"
+                            quickStart={businessHours?.opens_local ?? "08:00"}
+                            quickEnd={businessHours?.closes_local ?? "20:00"}
                             value={pickupTime}
                             onChange={(value) => {
                               setPickupTime(value);
@@ -993,6 +1029,9 @@ export function NewReservationSheet({
                         <Field label={`Return time · ${formatIsoDateForDisplay(dueDate)}`}>
                           <TimePickerField
                             ariaLabel="Return time"
+                            mode="input"
+                            quickStart={businessHours?.opens_local ?? "08:00"}
+                            quickEnd={businessHours?.closes_local ?? "20:00"}
                             value={dueTime}
                             {...(() => {
                               const minTime = minimumReturnTime(
@@ -1028,18 +1067,24 @@ export function NewReservationSheet({
                           />
                         </Field>
                         <Field label="Fulfillment">
-                          <select
-                            aria-label="Fulfillment"
-                            value={fulfillmentMethod}
-                            onChange={(event) => {
-                              setFulfillmentMethod(event.target.value as "pickup" | "delivery");
-                              reserveGuard.resetIntent();
-                            }}
-                            className="h-9 w-full rounded-md border border-dashboard-border bg-dashboard-surface px-3 text-sm text-dashboard-navy"
-                          >
-                            <option value="pickup">Pickup</option>
-                            <option value="delivery">Delivery</option>
-                          </select>
+                          <div className="relative">
+                            <select
+                              aria-label="Fulfillment"
+                              value={fulfillmentMethod}
+                              onChange={(event) => {
+                                setFulfillmentMethod(event.target.value as "pickup" | "delivery");
+                                reserveGuard.resetIntent();
+                              }}
+                              className="h-10 w-full appearance-none rounded-md border border-dashboard-border bg-dashboard-surface py-2 pl-3 pr-10 text-sm text-dashboard-navy outline-none focus:ring-2 focus:ring-dashboard-accent/30"
+                            >
+                              <option value="pickup">Pickup</option>
+                              <option value="delivery">Delivery</option>
+                            </select>
+                            <ChevronDown
+                              aria-hidden="true"
+                              className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-dashboard-muted"
+                            />
+                          </div>
                         </Field>
                       </div>
 
@@ -1198,7 +1243,7 @@ export function NewReservationSheet({
                       </a>
                     ) : null}
                   </div>
-                  {held.paymentInstructions.rail === "cash" ? (
+                  {held.paymentInstructions.rail === "cash" && step === "held" ? (
                     <label className="hidden items-center gap-2 rounded-md border border-dashboard-border px-3 py-2 text-sm text-dashboard-navy sm:flex">
                       <input
                         type="checkbox"
@@ -1240,17 +1285,19 @@ export function NewReservationSheet({
                         </p>
                       ) : null}
                     </Field>
-                    <label className="flex h-10 items-center gap-2 rounded-md border border-dashboard-border px-3 text-sm text-dashboard-navy sm:hidden">
-                      <input
-                        type="checkbox"
-                        checked={cashReceived}
-                        onChange={(event) => {
-                          setCashReceived(event.target.checked);
-                          completeGuard.resetIntent();
-                        }}
-                      />
-                      Cash received
-                    </label>
+                    {step === "held" ? (
+                      <label className="flex h-10 items-center gap-2 rounded-md border border-dashboard-border px-3 text-sm text-dashboard-navy sm:hidden">
+                        <input
+                          type="checkbox"
+                          checked={cashReceived}
+                          onChange={(event) => {
+                            setCashReceived(event.target.checked);
+                            completeGuard.resetIntent();
+                          }}
+                        />
+                        Cash received
+                      </label>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="mt-3 space-y-2">

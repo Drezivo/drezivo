@@ -28,6 +28,7 @@ import type {
   CatalogueCategory,
   ClothingListItem,
   ClothingListSort,
+  ClothingListSummary,
   ClothingProductLifecycle,
 } from "@drezivo/contracts";
 
@@ -56,7 +57,8 @@ import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
 const SIZE_OPTIONS = ["All Sizes", "XS", "S", "M", "L", "XL", "XXL"] as const;
-const STATUS_OPTIONS = ["All Statuses", "Active", "Draft", "Archived"] as const;
+const STATUS_OPTIONS = ["Active", "Draft", "Archived", "All Statuses"] as const;
+const DEFAULT_STATUS: StatusFilter = "Active";
 const SORT_OPTIONS: ReadonlyArray<{ label: string; value: ClothingListSort }> = [
   { label: "New", value: "newest" },
   { label: "Oldest", value: "oldest" },
@@ -70,6 +72,14 @@ type StatusFilter = (typeof STATUS_OPTIONS)[number];
 type PageMeta = {
   next_cursor: string | null;
   has_more: boolean;
+};
+
+const EMPTY_SUMMARY: ClothingListSummary = {
+  total_products: 0,
+  active_rental_items: 0,
+  active_categories: 0,
+  archived_products: 0,
+  matching_products: 0,
 };
 
 export function ClothingPage() {
@@ -87,6 +97,7 @@ export function ClothingPage() {
   const [sort, setSort] = useState<ClothingListSort>(() => parseSort(searchParams.get("sort")));
   const [categories, setCategories] = useState<CatalogueCategory[]>([]);
   const [rows, setRows] = useState<ClothingListItem[]>([]);
+  const [summary, setSummary] = useState<ClothingListSummary>(EMPTY_SUMMARY);
   const [pageMeta, setPageMeta] = useState<PageMeta>({ next_cursor: null, has_more: false });
   const [pageIndex, setPageIndex] = useState(0);
   const [pageCursors, setPageCursors] = useState<Array<string | null>>([null]);
@@ -119,7 +130,8 @@ export function ClothingPage() {
     if (deferredQuery) params.set("q", deferredQuery);
     if (categoryId) params.set("category", categoryId);
     if (size !== "All Sizes") params.set("size", size);
-    if (status !== "All Statuses") params.set("status", status.toLowerCase());
+    if (status === "All Statuses") params.set("status", "all");
+    else if (status !== DEFAULT_STATUS) params.set("status", status.toLowerCase());
     if (sort !== "newest") params.set("sort", sort);
 
     const nextSearch = params.toString();
@@ -166,11 +178,13 @@ export function ClothingPage() {
         if (cancelled) return;
         setRows(result.data.items);
         setPageMeta(result.data.page_meta);
+        setSummary(result.data.summary ?? EMPTY_SUMMARY);
       })
       .catch((caughtError) => {
         if (cancelled) return;
         setRows([]);
         setPageMeta({ next_cursor: null, has_more: false });
+        setSummary(EMPTY_SUMMARY);
         setError(toDrezivoApiError(caughtError));
       })
       .finally(() => {
@@ -223,13 +237,13 @@ export function ClothingPage() {
     resetPagination();
   };
 
-  const hasActiveFilters = Boolean(deferredQuery || categoryId || size !== "All Sizes" || status !== "All Statuses");
+  const hasActiveFilters = Boolean(deferredQuery || categoryId || size !== "All Sizes" || status !== DEFAULT_STATUS);
 
   const clearFilters = () => {
     setQuery("");
     setCategoryId(null);
     setSize("All Sizes");
-    setStatus("All Statuses");
+    setStatus(DEFAULT_STATUS);
     resetPagination();
   };
 
@@ -260,14 +274,8 @@ export function ClothingPage() {
     setPageIndex((current) => Math.max(0, current - 1));
   };
 
-  const pageMetrics = useMemo(
-    () => ({
-      styles: rows.length,
-      pieces: rows.reduce((total, item) => total + item.readiness.active_assets, 0),
-      archived: rows.filter((item) => item.product_status === "archived").length,
-    }),
-    [rows]
-  );
+  const pageRangeStart = summary.matching_products === 0 ? 0 : pageIndex * PAGE_SIZE + 1;
+  const pageRangeEnd = pageRangeStart === 0 ? 0 : pageRangeStart + rows.length - 1;
 
   return (
     <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
@@ -348,10 +356,10 @@ export function ClothingPage() {
         </Card>
 
         <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-          <MetricCard label="Styles This Page" value={pageMetrics.styles} icon={Shirt} tone="blue" />
-          <MetricCard label="Active Pieces This Page" value={pageMetrics.pieces} icon={Boxes} tone="mint" />
-          <MetricCard label="Categories" value={categories.length} icon={Tags} tone="purple" />
-          <MetricCard label="Archived This Page" value={pageMetrics.archived} icon={Archive} tone="neutral" />
+          <MetricCard label="Total Clothing" value={summary.total_products} icon={Shirt} tone="blue" />
+          <MetricCard label="Active Rental Items" value={summary.active_rental_items} icon={Boxes} tone="mint" />
+          <MetricCard label="Categories" value={summary.active_categories} icon={Tags} tone="purple" />
+          <MetricCard label="Archived Clothing" value={summary.archived_products} icon={Archive} tone="neutral" />
         </div>
 
         <Card className="gap-0 overflow-hidden py-0">
@@ -414,7 +422,7 @@ export function ClothingPage() {
             {!isLoading && !error && rows.length > 0 ? (
               <div className="flex flex-col gap-3 border-t border-dashboard-border px-4 py-3 text-xs text-dashboard-muted sm:flex-row sm:items-center sm:justify-between">
                 <p>
-                  Page {pageIndex + 1} · {rows.length} {rows.length === 1 ? "style" : "styles"} loaded
+                  Showing {pageRangeStart}–{pageRangeEnd} of {summary.matching_products}
                 </p>
                 <div className="flex items-center gap-1">
                   <Button
@@ -423,7 +431,12 @@ export function ClothingPage() {
                     aria-label="Previous clothing page"
                     disabled={pageIndex === 0}
                     onClick={goPrevious}
-                    className="h-8 w-8"
+                    className={cn(
+                      "h-8 w-8",
+                      pageIndex === 0
+                        ? "cursor-not-allowed text-dashboard-muted opacity-35"
+                        : "text-white hover:bg-transparent hover:text-white"
+                    )}
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
@@ -434,9 +447,14 @@ export function ClothingPage() {
                     variant="ghost"
                     size="icon"
                     aria-label="Next clothing page"
-                    disabled={!pageMeta.has_more}
+                    disabled={!pageMeta.has_more || !pageMeta.next_cursor}
                     onClick={goNext}
-                    className="h-8 w-8"
+                    className={cn(
+                      "h-8 w-8",
+                      !pageMeta.has_more || !pageMeta.next_cursor
+                        ? "cursor-not-allowed text-dashboard-muted opacity-35"
+                        : "text-white hover:bg-transparent hover:text-white"
+                    )}
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -795,12 +813,13 @@ function parseSizeFilter(value: string | null): SizeFilter {
 }
 
 function parseStatusFilter(value: string | null): StatusFilter {
-  if (!value) return "All Statuses";
+  if (!value) return DEFAULT_STATUS;
   const normalized = value.toLowerCase();
   if (normalized === "active") return "Active";
   if (normalized === "draft") return "Draft";
   if (normalized === "archived") return "Archived";
-  return "All Statuses";
+  if (normalized === "all") return "All Statuses";
+  return DEFAULT_STATUS;
 }
 
 function parseSort(value: string | null): ClothingListSort {

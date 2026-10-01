@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, CheckCircle2, CircleAlert, Mail, Phone, XCircle } from "lucide-react";
+import { CalendarClock, CheckCircle2, CircleAlert, Mail, Phone, Shirt, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { FittingAction, FittingDetail } from "@drezivo/contracts";
@@ -208,31 +208,42 @@ export function FittingDetailsSheet({
                 <div className="mt-3 space-y-2">
                   {fitting.garments.map((garment) => (
                     <div key={garment.id} className="rounded-lg border border-dashboard-border p-4">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                          <p className="font-medium text-dashboard-navy">
-                            {garment.variant.product_name}
-                          </p>
-                          <p className="mt-1 text-xs text-dashboard-muted">
-                            {fittingVariantLabel(garment)}
-                          </p>
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-16 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
+                          {garment.variant.primary_image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element -- fitting garment images use short-lived signed catalogue URLs.
+                            <img
+                              src={garment.variant.primary_image_url}
+                              alt={`${garment.variant.product_name} catalogue photo`}
+                              loading="lazy"
+                              decoding="async"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <Shirt className="h-5 w-5" aria-hidden="true" />
+                          )}
                         </div>
-                        <Badge
-                          variant="outline"
-                          className={
-                            garment.garment_mode === "preference"
-                              ? "dashboard-event-fitting"
-                              : "reservation-status-confirmed"
-                          }
-                        >
-                          {fittingGarmentModeLabel(garment.garment_mode)}
-                        </Badge>
+                        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="font-medium text-dashboard-navy">
+                              {garment.variant.product_name}
+                            </p>
+                            <p className="mt-1 text-xs text-dashboard-muted">
+                              {fittingVariantLabel(garment)}
+                            </p>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={
+                              garment.garment_mode === "preference"
+                                ? "dashboard-event-fitting"
+                                : "reservation-status-confirmed"
+                            }
+                          >
+                            {fittingGarmentModeLabel(garment.garment_mode)}
+                          </Badge>
+                        </div>
                       </div>
-                      {garment.garment_mode === "guaranteed" && garment.assigned_asset ? (
-                        <p className="mt-3 text-xs text-dashboard-muted">
-                          Guaranteed asset {garment.assigned_asset.asset_code}
-                        </p>
-                      ) : null}
                     </div>
                   ))}
                 </div>

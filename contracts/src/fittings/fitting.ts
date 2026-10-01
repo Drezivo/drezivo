@@ -105,6 +105,7 @@ export const fittingVariantSummary = z
     // Null is the canonical wire representation for a product's single Free size variant.
     size_label: z.string().trim().min(1).max(40).nullable(),
     color_label: z.string().trim().min(1).max(80).nullable(),
+    primary_image_url: z.string().url().nullable().optional(),
   })
   .strict();
 export type FittingVariantSummary = z.infer<typeof fittingVariantSummary>;

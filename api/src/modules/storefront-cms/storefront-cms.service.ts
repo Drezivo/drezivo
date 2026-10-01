@@ -26,6 +26,11 @@ import {
   ValidationError,
 } from '../../shared/errors.js';
 import { runIdempotentCommand, type CommandResult } from '../../shared/idempotent-command.js';
+import {
+  appendSettingsAudit,
+  readTenantSettings,
+  syncBusinessContactFromStorefront,
+} from '../settings/settings.repository.js';
 import { storefrontMediaSigner, type StorefrontMediaSigner } from '../storefront/storefront-media.js';
 import { fromPolicyColumns, toPolicyColumns } from '../storefront/storefront-policy.js';
 import { issuePreviewToken } from '../storefront/storefront-preview.js';
@@ -74,6 +79,8 @@ export class StorefrontCmsService {
   updateDocument(context: StaffContext, idempotencyKey: string, request: UpdateStorefrontRequest): Promise<CommandResult<StorefrontSettings>> {
     return this.command(context, idempotencyKey, 'storefront.document.update', request, async (client, row) => {
       this.assertVersion(row, request.version);
+      // Lock tenant settings after the storefront row so cross-page contact sync uses one lock order.
+      await readTenantSettings(client, context.tenantId, true);
       await this.assertReferencesBelongToWorkspace(client, context.tenantId, request.document);
       await updateStorefrontDocument(client, {
         tenantId: context.tenantId,
@@ -81,6 +88,25 @@ export class StorefrontCmsService {
         expectedVersion: request.version,
         document: request.document,
       });
+      const businessContactChanged = await syncBusinessContactFromStorefront(client, {
+        tenantId: context.tenantId,
+        businessEmail: request.document.contact.email,
+        businessPhone: request.document.contact.phone,
+        businessAddress: request.document.contact.address,
+      });
+      if (businessContactChanged) {
+        await appendSettingsAudit(client, {
+          tenantId: context.tenantId,
+          actorKey: context.principalId,
+          action: 'settings.business.contact.synced_from_storefront',
+          summary: {
+            has_email: request.document.contact.email !== null,
+            has_phone: request.document.contact.phone !== null,
+            has_address: request.document.contact.address !== null,
+          },
+          requestId: context.requestId,
+        });
+      }
       return { action: 'storefront.document.updated', summary: { theme: request.document.branding.theme } };
     });
   }
@@ -283,15 +309,16 @@ export class StorefrontCmsService {
   }
 }
 
-/** A storefront that was never edited stores `{}`; show the owner a sensible starting document. */
+/** Bootstrap rows store empty objects; hydrate missing sections before validating the saved document. */
 export function toDocument(row: Pick<StorefrontRow, 'branding' | 'contact' | 'content' | 'checkout' | 'tenant_name'>): StorefrontDocument {
+  const defaults = defaultStorefrontDocument(row.tenant_name);
   const parsed = storefrontDocument.safeParse({
-    branding: row.branding,
-    contact: row.contact,
-    content: row.content,
-    checkout: row.checkout,
+    branding: { ...defaults.branding, ...row.branding },
+    contact: { ...defaults.contact, ...row.contact },
+    content: { ...defaults.content, ...row.content },
+    checkout: { ...defaults.checkout, ...row.checkout },
   });
-  return parsed.success ? parsed.data : defaultStorefrontDocument(row.tenant_name);
+  return parsed.success ? parsed.data : defaults;
 }
 
 export const storefrontCmsService = new StorefrontCmsService();

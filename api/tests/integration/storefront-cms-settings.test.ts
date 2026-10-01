@@ -66,11 +66,17 @@ describe('storefront CMS and settings', async () => {
 
   it('saves once per key, replays retries, rejects key reuse and stale versions', async () => {
     const ws = await createStorefrontWorkspace('cms-save');
-    const document = { ...defaultStorefrontDocument('Luna'), contact: { ...defaultStorefrontDocument('Luna').contact, phone: '+63 917 123 4567' } };
+    const document = { ...defaultStorefrontDocument('Luna'), contact: { ...defaultStorefrontDocument('Luna').contact, phone: '09171234567' } };
 
     const first = await cms.updateDocument(ws.owner, 'save-1', { version: 1, document });
     expect(first.status).toBe(200);
     expect(first.body.success && first.body.data.version).toBe(2);
+    await expect(settings.getBusiness(ws.owner)).resolves.toMatchObject({
+      version: 2,
+      business_phone: '09171234567',
+      business_email: null,
+      business_address: null,
+    });
 
     const replay = await cms.updateDocument(ws.owner, 'save-1', { version: 1, document });
     expect(replay).toEqual(first);
@@ -162,10 +168,20 @@ describe('storefront CMS and settings', async () => {
       version: 1,
       business_name: 'Luna Gown Rentals',
       business_email: 'owner@luna.test',
-      business_phone: '+63 917 000 0000',
+      business_phone: '09170000000',
       business_address: '12 Mabini St, Quezon City',
     });
     expect(saved.body.success && saved.body.data).toMatchObject({ version: 2, business_name: 'Luna Gown Rentals' });
+    await expect(cms.get(ws.owner)).resolves.toMatchObject({
+      version: 2,
+      document: {
+        contact: {
+          phone: '09170000000',
+          email: 'owner@luna.test',
+          address: '12 Mabini St, Quezon City',
+        },
+      },
+    });
     const tenant = await admin.query<Record<string, unknown>>('SELECT name FROM tenant WHERE id = $1', [ws.tenantId]);
     expect(tenant.rows[0]?.['name']).toBe('Luna Gown Rentals');
 

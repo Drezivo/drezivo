@@ -190,6 +190,8 @@ function baseSelect(extra = ''): string {
            'sku', pv.sku,
            'size_label', pv.size_label,
            'color_label', pv.color_label,
+           'primary_image_storage_key', cover_image.storage_key,
+           'primary_image_version_id', cover_image.version_id,
            'garment_guaranteed', fl.garment_guaranteed,
            'asset_id', fl.asset_id,
            'asset_code', pa.asset_code
@@ -198,6 +200,22 @@ function baseSelect(extra = ''): string {
        FROM fitting_line fl
        JOIN product_variant pv ON pv.tenant_id = fl.tenant_id AND pv.id = fl.variant_id
        JOIN product p ON p.tenant_id = pv.tenant_id AND p.id = pv.product_id
+       LEFT JOIN LATERAL (
+         SELECT f.storage_key, f.version_id
+           FROM product_image pi
+           JOIN file_object f
+             ON f.tenant_id = pi.tenant_id
+            AND f.id = pi.file_id
+          WHERE pi.tenant_id = p.tenant_id
+            AND pi.product_id = p.id
+            AND pi.display_order = 0
+            AND f.purpose = 'catalogue_image'
+            AND f.lifecycle_status = 'accepted'
+            AND f.frozen_at IS NOT NULL
+            AND (f.version_id IS NOT NULL OR f.sha256 IS NOT NULL)
+            AND f.mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+          LIMIT 1
+       ) cover_image ON true
        LEFT JOIN physical_asset pa ON pa.tenant_id = fl.tenant_id AND pa.id = fl.asset_id
        WHERE fl.tenant_id = fa.tenant_id
          AND fl.fitting_id = fa.id

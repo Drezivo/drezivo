@@ -5,6 +5,7 @@ import { Check, ChevronLeft, ChevronRight, Plus, Search, Shirt } from "lucide-re
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import type {
+  BranchBusinessHours,
   ClothingDetail,
   ClothingListItem,
   FittingCustomerOption,
@@ -69,6 +70,7 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
   const [walkInPhone, setWalkInPhone] = useState("");
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("10:00");
+  const [businessHours, setBusinessHours] = useState<BranchBusinessHours | null>(null);
   const [garmentQuery, setGarmentQuery] = useState("");
   const deferredGarmentQuery = useDeferredValue(garmentQuery.trim());
   const [products, setProducts] = useState<ClothingListItem[]>([]);
@@ -122,6 +124,22 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
     if (!open) return;
     resetDraft();
   }, [open, resetDraft]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void createDrezivoApiClient(getToken)
+      .getBusinessHours()
+      .then((result) => {
+        if (!cancelled) setBusinessHours(result.data);
+      })
+      .catch(() => {
+        if (!cancelled) setBusinessHours(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, open]);
 
   // Keep the clock current while the sheet is open so the earliest start never lags behind.
   useEffect(() => {
@@ -481,6 +499,7 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
               date={date}
               startTime={startTime}
               durationMinutes={settings?.duration_minutes ?? null}
+              businessHours={businessHours}
               onCustomerModeChange={setCustomerMode}
               onCustomerQueryChange={setCustomerQuery}
               onExistingCustomerChange={setExistingCustomerId}
@@ -598,6 +617,7 @@ function StepAppointment({
   date,
   startTime,
   durationMinutes,
+  businessHours,
   onCustomerModeChange,
   onCustomerQueryChange,
   onExistingCustomerChange,
@@ -625,6 +645,7 @@ function StepAppointment({
   date: string;
   startTime: string;
   durationMinutes: number | null;
+  businessHours: BranchBusinessHours | null;
   onCustomerModeChange: (value: CustomerMode) => void;
   onCustomerQueryChange: (value: string) => void;
   onExistingCustomerChange: (value: string) => void;
@@ -817,7 +838,7 @@ function StepAppointment({
         </div>
       )}
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(10rem,0.9fr)_minmax(19rem,1.5fr)_minmax(7rem,0.65fr)]">
         <Field label="Date">
           <DatePickerField
             ariaLabel="Fitting date"
@@ -831,9 +852,13 @@ function StepAppointment({
           <TimePickerField
             ariaLabel="Fitting start time"
             value={startTime}
+            onChange={onStartTimeChange}
+            mode="input"
             {...(date === today ? { min: earliestTime } : {})}
             minuteStep={SLOT_MINUTES}
-            onChange={onStartTimeChange}
+            quickStart={businessHours?.opens_local ?? "08:00"}
+            quickEnd={businessHours?.closes_local ?? "20:00"}
+            popoverAlign="end"
           />
         </Field>
         <div className="mt-4">
@@ -935,13 +960,23 @@ function StepGarments({
                     : "border-dashboard-border bg-dashboard-surface hover:bg-dashboard-canvas"
                 )}
               >
-                <span className="flex items-start gap-2">
-                  <Shirt
-                    className="mt-0.5 h-4 w-4 shrink-0 text-dashboard-accent"
-                    aria-hidden="true"
-                  />
-                  <span>
-                    <span className="block font-medium text-dashboard-navy">{product.name}</span>
+                <span className="flex items-start gap-3">
+                  <span className="flex h-12 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
+                    {product.primary_image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- catalogue images use short-lived signed URLs.
+                      <img
+                        src={product.primary_image_url}
+                        alt={`${product.name} catalogue photo`}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <Shirt className="h-4 w-4" aria-hidden="true" />
+                    )}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium text-dashboard-navy">{product.name}</span>
                     <span className="mt-1 block text-xs text-dashboard-muted">
                       {product.size_labels.join(", ") || "Variants available"}
                     </span>
@@ -967,33 +1002,33 @@ function StepGarments({
                     const selected = selections.find(
                       (selection) => selection.variantId === variant.id
                     );
-                    const label = [variant.size_label, variant.color_label]
+                    const label = [variant.size_label ?? "Free size", variant.color_label]
                       .filter(Boolean)
-                      .join(" / ");
+                      .join(" · ");
                     return (
                       <div
                         key={variant.id}
                         className="rounded-lg border border-dashboard-border p-3"
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="font-medium text-dashboard-navy">{label}</p>
-                            <p className="mt-1 text-xs text-dashboard-muted">SKU {variant.sku}</p>
-                          </div>
-                          <Button
-                            type="button"
-                            variant={selected ? "secondary" : "default"}
-                            size="sm"
-                            onClick={() => onToggleVariant(variant.id, productDetail.name, label)}
-                          >
-                            {selected ? "Remove" : "Add"}
-                          </Button>
+                          <p className="min-w-0 truncate font-medium text-dashboard-navy">
+                            {label || "Free size"}
+                          </p>
+                          {!selected ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => onToggleVariant(variant.id, productDetail.name, label || "Free size")}
+                            >
+                              Add
+                            </Button>
+                          ) : null}
                         </div>
                         {selected ? (
                           <div
-                            className="mt-3 grid grid-cols-2 gap-2"
+                            className="mt-3 grid grid-cols-[1fr_1fr_auto] gap-2"
                             role="group"
-                            aria-label={`Garment mode for ${productDetail.name} ${label}`}
+                            aria-label={`Garment mode for ${productDetail.name} ${label || "Free size"}`}
                           >
                             {(["preference", "guaranteed"] as const).map((mode) => (
                               <button
@@ -1011,6 +1046,14 @@ function StepGarments({
                                 {mode === "preference" ? "Preference only" : "Guarantee garment"}
                               </button>
                             ))}
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => onToggleVariant(variant.id, productDetail.name, label || "Free size")}
+                            >
+                              Remove
+                            </Button>
                           </div>
                         ) : null}
                       </div>

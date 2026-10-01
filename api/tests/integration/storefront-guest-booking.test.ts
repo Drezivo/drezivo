@@ -239,7 +239,8 @@ describe('storefront guest booking', async () => {
 
   it('moves the hold to review when the guest submits a verified receipt, and emails per preferences', async () => {
     const ws = await liveStore('gv-receipt');
-    await settingsService.updateBusiness(ws.owner, 'biz', { version: 1, business_name: 'Luna Gown Rentals', business_email: 'owner@luna.test', business_phone: null, business_address: null });
+    const business = await settingsService.getBusiness(ws.owner);
+    await settingsService.updateBusiness(ws.owner, 'biz', { version: business.version, business_name: 'Luna Gown Rentals', business_email: 'owner@luna.test', business_phone: null, business_address: null });
     const token = await verified(ws.slug, ws.tenantId, 'ana@example.test');
     const created = await booking.createReservation(ws.slug, { requestId: 'h', idempotencyKey: 'hold' }, holdRequest(ws, token, 'ana@example.test'));
     if (!created.body.success) throw new Error('hold failed');

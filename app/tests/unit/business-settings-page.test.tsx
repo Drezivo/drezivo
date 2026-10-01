@@ -37,7 +37,7 @@ vi.mock("@/lib/drezivo-api", () => ({
 const business = {
   business_name: "Luna Rentals",
   business_email: "hello@example.test",
-  business_phone: "+639171234567",
+  business_phone: "09171234567",
   business_address: "Quezon City",
   version: 1,
   timezone: "Asia/Manila",
@@ -95,6 +95,16 @@ describe("BusinessSettingsPage Business Hours editor", () => {
     const regionalHeading = screen.getByText("Regional settings");
     expect(businessHeading.compareDocumentPosition(hoursHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(hoursHeading.compareDocumentPosition(regionalHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("keeps the business phone aligned with storefront contact rules", async () => {
+    render(<BusinessSettingsPage />);
+
+    const phone = await screen.findByLabelText("Business phone");
+    expect(phone).toHaveValue("09171234567");
+    fireEvent.change(phone, { target: { value: "09ab123456789999" } });
+    expect(phone).toHaveValue("09123456789");
+    expect(screen.getByText(/stay synced with Storefront contact details/i)).toBeVisible();
   });
 
   it("saves one shared time window and recurring closed weekdays, then refetches authoritative state", async () => {

@@ -51,8 +51,12 @@ export function addCalendarDays(value: string, amount: number): string {
   return toCalendarDateKey(date);
 }
 
-export function buildAvailabilityDays(startDate: string): AvailabilityDay[] {
-  return Array.from({ length: AVAILABILITY_WINDOW_DAYS }, (_, index) => {
+export function buildAvailabilityDays(
+  startDate: string,
+  endDate = addCalendarDays(startDate, AVAILABILITY_WINDOW_DAYS - 1)
+): AvailabilityDay[] {
+  const dayCount = calendarDayDifference(startDate, endDate) + 1;
+  return Array.from({ length: Math.max(0, dayCount) }, (_, index) => {
     const date = parseCalendarDate(addCalendarDays(startDate, index));
     return {
       date: toCalendarDateKey(date),
@@ -197,7 +201,7 @@ function instantToDateKey(value: Date, timeZone: string): string {
   return `${year}-${month}-${day}`;
 }
 
-function calendarDayDifference(startDate: string, endDate: string): number {
+export function calendarDayDifference(startDate: string, endDate: string): number {
   return Math.round(
     (parseCalendarDate(endDate).getTime() - parseCalendarDate(startDate).getTime()) /
       (24 * 60 * 60 * 1_000)

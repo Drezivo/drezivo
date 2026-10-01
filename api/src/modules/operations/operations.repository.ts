@@ -99,7 +99,8 @@ export async function readOperationalCalendarEvents(
          r.pickup_at + interval '30 minutes' AS ends_at,
          r.status::text AS status
        FROM reservation_candidates r
-       WHERE r.pickup_at >= $3::timestamptz
+       WHERE r.status IN ('pending_confirmation', 'confirmed')
+         AND r.pickup_at >= $3::timestamptz
          AND r.pickup_at < $4::timestamptz
        UNION ALL
        SELECT
@@ -114,7 +115,8 @@ export async function readOperationalCalendarEvents(
          r.due_at + interval '30 minutes' AS ends_at,
          r.status::text AS status
        FROM reservation_candidates r
-       WHERE r.due_at >= $3::timestamptz
+       WHERE r.status IN ('pending_confirmation', 'confirmed', 'picked_up')
+         AND r.due_at >= $3::timestamptz
          AND r.due_at < $4::timestamptz
      ),
      fitting_event_candidates AS (
