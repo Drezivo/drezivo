@@ -8,12 +8,11 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalLayout title="Privacy Policy" updated="[INSERT DATE]">
-      <p className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
-        Draft for Philippine legal review. Confirm the actual data flows, processors, retention
-        schedule, transfers, DPO, and contact details before publishing. This page is not legal
-        advice.
-      </p>
+    <LegalLayout
+      title="Privacy Policy"
+      updated="[INSERT DATE]"
+      notice="Draft for Philippine legal review. Confirm the actual data flows, processors, retention schedule, transfers, DPO, and contact details before publishing. This page is not legal advice."
+    >
       <h2>1. Who this notice covers</h2>
       <p>
         This notice covers Drezivo websites, staff dashboards, public storefront tools,

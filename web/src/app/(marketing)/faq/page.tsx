@@ -25,7 +25,7 @@ const FAQ_JSON_LD = JSON.stringify({
 
 export default function FaqPage() {
   return (
-    <section data-header="light" className="bg-atelier-paper py-28 text-atelier-ink lg:py-40">
+    <section data-header="light" className="at-linen py-28 text-atelier-ink lg:py-40">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: FAQ_JSON_LD }} />
       <div className="at-container grid gap-14 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-20">
         <div className="lg:sticky lg:top-32 lg:self-start">

@@ -1,5 +1,7 @@
 import { formatPlanPrice, type PublicPlan } from '@/lib/plans';
 
+import { TapeMeasure } from '../art/tape-measure';
+
 const PAY_WITH = ['GCash', 'Maya', 'Bank transfer'];
 
 function Features({ features, onDark = false }: { features: readonly string[]; onDark?: boolean }) {
@@ -79,15 +81,26 @@ function PlanCards({ plans, signUpUrl }: { plans: readonly PublicPlan[]; signUpU
  * Pricing as its own chapter. With a single plan there is nothing to compare, so the price is the
  * headline; when the operator console publishes two to four plans, the same section becomes cards.
  */
-export function PlanShowcase({ plans, signUpUrl }: { plans: readonly PublicPlan[]; signUpUrl: string }) {
+export function PlanShowcase({
+  plans,
+  signUpUrl,
+  headingLevel = 'h2',
+}: {
+  plans: readonly PublicPlan[];
+  signUpUrl: string;
+  /** `h1` when the showcase is the page itself (/pricing) rather than a landing section. */
+  headingLevel?: 'h1' | 'h2';
+}) {
   if (plans.length === 0) return null;
   const single = plans.length === 1;
+  const Heading = headingLevel;
   return (
-    <section id="pricing" data-header="light" className="bg-atelier-paper py-28 text-atelier-ink lg:py-40">
+    <section id="pricing" data-header="light" className="relative isolate overflow-hidden bg-atelier-paper py-28 text-atelier-ink lg:py-40">
+      <TapeMeasure className="at-art bottom-8 left-[-12%] h-auto w-[130%] -rotate-[5deg] md:bottom-auto md:left-auto md:right-[-10%] md:top-40 md:w-[58%] md:-rotate-[6deg]" />
       <div className="at-container">
         <div className="max-w-[46rem]" data-at-reveal="lines">
           <p className="at-eyebrow text-atelier-gold-ink">Pricing</p>
-          <h2 className="mt-6 font-[family-name:var(--font-atelier-display)] text-[clamp(2.5rem,5vw,4.5rem)] font-normal leading-[1.02] tracking-[-0.02em]">
+          <Heading className="mt-6 font-[family-name:var(--font-atelier-display)] text-[clamp(2.5rem,5vw,4.5rem)] font-normal leading-[1.02] tracking-[-0.02em]">
             {single ? (
               <>
                 <span className="block overflow-hidden"><span data-at-line className="block">One plan.{' '}</span></span>
@@ -99,7 +112,7 @@ export function PlanShowcase({ plans, signUpUrl }: { plans: readonly PublicPlan[
                 <span className="block overflow-hidden"><span data-at-line className="block italic">with your shop.{' '}</span></span>
               </>
             )}
-          </h2>
+          </Heading>
         </div>
         {single ? <SinglePlan plan={plans[0]!} signUpUrl={signUpUrl} /> : <PlanCards plans={plans} signUpUrl={signUpUrl} />}
       </div>
