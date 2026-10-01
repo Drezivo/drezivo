@@ -25,13 +25,13 @@ export interface ClaimMembershipRow {
 export async function findClaimTenant(
   client: PoolClient,
   clerkOrgId: string,
+  invitationId: string,
 ): Promise<ClaimTenantRow | null> {
   const result = await client.query<ClaimTenantRow>(
     `SELECT id, clerk_org_id, status
-       FROM tenant
-      WHERE clerk_org_id = $1
+       FROM resolve_membership_invitation_tenant($1, $2::uuid)
       LIMIT 1`,
-    [clerkOrgId],
+    [clerkOrgId, invitationId],
   );
   return result.rows[0] ?? null;
 }

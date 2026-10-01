@@ -25,7 +25,7 @@ process.env.S3_ACCESS_KEY_ID ??= 'test';
 process.env.S3_SECRET_ACCESS_KEY ??= 'test';
 
 describe('TBF-031 actor and workspace resolution', async () => {
-  const { closePool, pool, withGlobalTransaction, withTenantTransaction } =
+  const { closePool, withGlobalTransaction, withTenantTransaction } =
     await import('../../src/db/client.js');
   const { listActorWorkspaces, resolveActorContext } =
     await import('../../src/modules/tenancy/tenancy.repository.js');
@@ -55,10 +55,9 @@ describe('TBF-031 actor and workspace resolution', async () => {
   }) {
     const tenant = await createTestTenant({ clerkOrgId: input.clerkOrgId });
     if (input.tenantStatus && input.tenantStatus !== 'active') {
-      await pool.query('UPDATE tenant SET status = $1 WHERE id = $2', [
-        input.tenantStatus,
-        tenant.id,
-      ]);
+      await withTenantTransaction(tenant.id, input.principalId, (client) =>
+        client.query('UPDATE tenant SET status = $1 WHERE id = $2', [input.tenantStatus, tenant.id]),
+      );
     }
     const membershipId = await createTestMembership(
       tenant.id,

@@ -34,7 +34,11 @@ export async function reconcileNextClerkWebhook(): Promise<boolean> {
       return true;
     }
 
-    const tenant = await findClaimTenant(client, payload.data.organization_id);
+    const tenant = await findClaimTenant(
+      client,
+      payload.data.organization_id,
+      payload.data.invitation_id,
+    );
     if (!tenant) {
       await markClerkWebhookProcessed(client, row.id, 'processed');
       return true;

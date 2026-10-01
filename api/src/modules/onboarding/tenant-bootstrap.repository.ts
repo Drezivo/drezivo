@@ -178,11 +178,11 @@ export async function createTenantBootstrapGraph(
   );
   // The Clerk organization is globally unique on tenant. Resolve the collision before the
   // insert so an unrelated existing tenant becomes a typed state conflict, not a raw 23505.
-  const existingTenant = await client.query<{ id: string }>(
-    'SELECT id FROM tenant WHERE clerk_org_id = $1 LIMIT 1',
+  const availableTenantOrganization = await client.query<{ available: boolean }>(
+    'SELECT bootstrap_clerk_org_available($1) AS available',
     [input.clerkOrgId],
   );
-  if (existingTenant.rows[0]) return { kind: 'state_conflict' };
+  if (!availableTenantOrganization.rows[0]?.available) return { kind: 'state_conflict' };
 
   const nowResult = await client.query<{ now: Date }>('SELECT now() AS now');
   const now = nowResult.rows[0]?.now;
