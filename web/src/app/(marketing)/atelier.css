@@ -166,7 +166,7 @@ html.at-preload .at-mosaic > span { visibility: visible; opacity: 1; }
 html.at-preload .at-preloader { display: grid; }
 .at-preloader [data-word-letter] { transform: translateY(105%); color: var(--color-atelier-paper); }
 .at-preloader [data-preload-meta] { visibility: hidden; opacity: 0; color: var(--color-atelier-mist); }
-.at-preloader path { stroke-dasharray: 400; stroke-dashoffset: 400; }
+.at-preloader [data-mark] { clip-path: inset(100% 0 0 0); }
 
 /* The new page sharpens out of a blur as the mosaic clears. */
 html.at-entering main { filter: blur(10px); opacity: 0.6; }

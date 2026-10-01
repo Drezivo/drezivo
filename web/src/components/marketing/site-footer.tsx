@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 
 import { CONTACT_EMAIL, SIGN_IN_URL } from '@/lib/site-urls';
@@ -27,7 +28,10 @@ export function SiteFooter() {
       <div className="at-container border-t border-atelier-night-line pb-10 pt-20">
         <div className="grid gap-12 md:grid-cols-[1.4fr_1fr_1fr_1.2fr]">
           <div>
-            <p className="font-[family-name:var(--font-atelier-display)] text-[2rem] leading-none">Drezivo</p>
+            <p className="flex items-center gap-3 font-[family-name:var(--font-atelier-display)] text-[2rem] leading-none">
+              <Image src="/brand/drezivo-mark.png" alt="" width={497} height={600} className="h-11 w-auto" />
+              Drezivo
+            </p>
             <p className="mt-4 max-w-[18rem] text-sm leading-[1.7] text-atelier-mist">Clothing rental software for Philippine shops: gowns, barong, ternos, costumes, and everything in between.</p>
           </div>
           {COLUMNS.map((column) => (
