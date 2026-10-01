@@ -90,35 +90,113 @@ export const MARKETING_PLANS: readonly MarketingPlan[] = [
   },
 ];
 
-export const MARKETING_FAQS: readonly MarketingFaq[] = [
+export interface MarketingFaqGroup {
+  readonly title: string;
+  readonly faqs: readonly MarketingFaq[];
+}
+
+/**
+ * The full FAQ, grouped for the /faq page. Answers about trial length, plans, staff, and fittings
+ * must match what the product does today (billing.constants, MARKETING_PLANS); update them together.
+ */
+export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
   {
-    question: 'Do customers need to create an account to book?',
-    answer:
-      'No. In V1, customers book as guests. After submitting a reservation, they verify their email and receive a private status link—no password or account required.',
+    title: 'Trial, plans & billing',
+    faqs: [
+      {
+        question: 'What happens when my free trial ends? Will I lose my data?',
+        answer: `Your trial lasts ${MARKETING_TRIAL_DAYS} days, then you receive a further seven-day normal-access grace period if payment is overdue. After that, new bookings, publishing, new assets, and staff invitations can be restricted, but existing rentals, returns, refunds, settlement work, and exports remain accessible. Cancellation does not automatically delete your data.`,
+      },
+      {
+        question: 'Can I still see or export my records after cancelling?',
+        answer:
+          'Yes. A cancelled business retains read-only settlement and export access. The precise export window and retention schedule still need to be finalized and published before launch.',
+      },
+      {
+        question: 'Do I need a credit card to start?',
+        answer: 'No. Your first business can start its trial without a card or payment account.',
+      },
+      {
+        question: 'How much does Drezivo cost?',
+        answer: `One plan, Standard, at ₱300 a month after the ${MARKETING_TRIAL_DAYS}-day free trial. It includes up to 125 garments for the shop owner, with no staff accounts. Asset limits are based on active physical garments, not the number of styles in your catalogue.`,
+      },
+      {
+        question: 'Will upgrading or downgrading delete my catalogue or booking history?',
+        answer:
+          'No. Drezivo should give you an upgrade or archive path if you exceed a limit. Restriction, downgrade, and cancellation must not delete records or block approved returns and refunds.',
+      },
+    ],
   },
   {
-    question: 'How does a guest check the status of their reservation?',
-    answer:
-      'Every guest reservation gets a private, unguessable status link sent to the email they provided. The link—not the reference number or email address alone—is what proves it is really their reservation.',
+    title: 'Bookings, payments & customers',
+    faqs: [
+      {
+        question: 'Can customers reserve without creating an account?',
+        answer:
+          'Yes. Guest booking is the V1 default. Customers can browse, choose a garment and dates, submit their details, and manage the booking through a secure guest link.',
+      },
+      {
+        question: 'How does Drezivo prevent double bookings?',
+        answer:
+          'Drezivo tracks each real physical garment, not just a stock count. When a customer continues to payment, the system creates an exclusive hold on an eligible item and blocks overlapping dates, including preparation and cleaning time.',
+      },
+      {
+        question: 'Does an uploaded GCash or Maya receipt mean the customer has paid?',
+        answer:
+          'No. A receipt is payment evidence, not proof of settled funds. The shop reviews cash or QR-payment evidence and explicitly verifies it before the reservation becomes confirmed.',
+      },
+      {
+        question: 'Does Drezivo process customer payments or issue refunds?',
+        answer:
+          'Not in V1. Each shop provides its own QR/payment instructions, collects payment directly, and reviews submitted evidence. Refunds are coordinated by the shop, with Drezivo recording the approved financial outcome.',
+      },
+      {
+        question: 'What is the difference between the rental fee and the security deposit?',
+        answer:
+          'They are separate amounts. The rental charge is income for the rental, while the security deposit is refundable unless the shop records an approved deduction, such as damage or an outstanding charge.',
+      },
+      {
+        question: 'Can a customer cancel or change their reservation?',
+        answer:
+          'Yes, through the secure guest link, subject to the shop’s own cancellation policy. A reschedule checks the new dates before releasing the original item, so a failed change does not accidentally lose the existing booking.',
+      },
+    ],
   },
   {
-    question: 'What payment methods are supported?',
-    answer:
-      'V1 supports GCash and Maya via merchant-provided QR codes, plus cash collected in person. The business reviews uploaded payment evidence before confirming a reservation.',
-  },
-  {
-    question: 'Is there a security deposit?',
-    answer:
-      'Many businesses require a refundable security deposit in addition to the rental fee. Deposit amounts and refund terms are set per business and shown before checkout.',
-  },
-  {
-    question: 'Can a reservation be cancelled or rescheduled?',
-    answer:
-      "Yes, subject to the business's own cancellation policy shown on their storefront. A cancellation request does not release the held item until the business processes it.",
-  },
-  {
-    question: 'How much does Drezivo cost?',
-    answer:
-      'One plan, Standard, at ₱300 a month after a 14-day free trial. It includes up to 125 garments for the shop owner, with no staff accounts. Pay by GCash, Maya, or bank transfer and upload your receipt.',
+    title: 'Running your shop',
+    faqs: [
+      {
+        question: 'Who decides rental prices, deposits, cancellation rules, and refunds?',
+        answer:
+          'The rental business does. Drezivo provides the workflow and records; each shop remains the merchant responsible for its own prices, policies, customer communication, garment condition, and refunds.',
+      },
+      {
+        question: 'Can I import my existing clothing catalogue?',
+        answer:
+          'Yes. CSV import is planned with preview, row-level validation, duplicate detection, and an all-or-nothing commit: invalid rows should not create partial catalogue data.',
+      },
+      {
+        question: 'Can staff access everything in my account?',
+        answer:
+          'The Standard plan is for the shop owner alone, with no staff accounts. Where staff accounts are available, owners keep control of business policies, payments, publishing, users, exports, and refunds. Front-desk staff can handle daily reservations, pickup, return, and garment readiness, but do not receive unrestricted access to sensitive documents, refunds, or business settings.',
+      },
+      {
+        question: 'How is customer and business data protected?',
+        answer:
+          'The design uses tenant isolation, role-based access, audited sensitive actions, private file storage, expiring access to uploads, and minimal data collection. Customers’ reservation records are isolated from other customers and other rental businesses.',
+      },
+      {
+        question: 'Can I offer fittings, multi-item bookings, or multiple branches?',
+        answer:
+          'Fittings, yes: customers can request a fitting from your storefront, and you can book walk-in fittings from the app. Multi-item bookings and multiple branches are not in V1. V1 supports one branch and one garment per booking; multi-item booking and partial returns are planned for V1.1, and multi-branch operations and transfers are V2 scope.',
+      },
+      {
+        question: 'Are reminders, payment gateways, and delivery integrations included?',
+        answer:
+          'Not in V1. There is no integrated card/payment gateway, automatic payment reconciliation, SMS, live courier integration, cart, wishlist, reviews, or customer accounts required for checkout.',
+      },
+    ],
   },
 ];
+
+export const MARKETING_FAQS: readonly MarketingFaq[] = MARKETING_FAQ_GROUPS.flatMap((group) => group.faqs);

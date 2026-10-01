@@ -363,6 +363,53 @@ html.at-motion [data-bento-card]:not([data-loaded]) [data-bento-data] { opacity:
 }
 @keyframes at-breathe { from { transform: scale(0.92); opacity: 0.7; } to { transform: scale(1.08); opacity: 1; } }
 
+/* ------------------------------------------------------------------ drawn backgrounds */
+
+/* Decorative artwork sits under a section's content: the section is `relative isolate`, the art is
+   `at-art` (z -1 inside that stacking context), so content needs no z-index of its own. */
+.at-art { position: absolute; z-index: -1; pointer-events: none; }
+
+/* Linen: a fine warp/weft weave plus a little fractal grain, all generated, nothing fetched. */
+.at-linen {
+  background-color: var(--color-atelier-paper-2);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.48 0 0 0 0 0.35 0 0 0 0 0.19 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"),
+    repeating-linear-gradient(0deg, rgb(122 88 48 / 0.045) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgb(122 88 48 / 0.035) 0 1px, transparent 1px 4px);
+}
+
+/* ------------------------------------------------------------------ legal documents */
+
+/* Explicit atelier colours: these pages sit on paper in every OS colour scheme. */
+.at-legal { color: var(--color-atelier-ink); font-size: 1rem; line-height: 1.8; }
+.at-legal h2 {
+  margin: 3.5rem 0 1rem;
+  font-family: var(--font-atelier-display);
+  font-size: clamp(1.5rem, 2.4vw, 1.875rem);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.at-legal p, .at-legal ul { margin-top: 1rem; color: var(--color-atelier-muted); }
+.at-legal ul { padding-left: 1.25rem; list-style: disc; }
+.at-legal li { margin-top: 0.5rem; }
+.at-legal li::marker { color: var(--color-atelier-gold); }
+.at-legal a {
+  color: var(--color-atelier-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--color-atelier-gold);
+  text-underline-offset: 4px;
+}
+.at-legal a:hover { text-decoration-color: var(--color-atelier-ink); }
+.at-legal-notice {
+  border: 1px solid var(--color-atelier-champagne);
+  border-radius: 0.75rem;
+  background: var(--color-atelier-paper-2);
+  padding: 1rem 1.25rem;
+  font-size: 0.9375rem;
+  color: var(--color-atelier-ink);
+}
+
 .at-footer-link { color: var(--color-atelier-mist); transition: color 250ms cubic-bezier(0.4, 0, 0.2, 1); }
 .at-footer-link:hover { color: var(--color-atelier-paper); }
 

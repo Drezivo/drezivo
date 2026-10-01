@@ -68,7 +68,7 @@ export function ProductBento() {
   }, []);
 
   return (
-    <section ref={root} id="features" data-header="light" className="bg-atelier-paper-2 py-28 text-atelier-ink lg:py-40">
+    <section ref={root} id="features" data-header="light" className="at-linen py-28 text-atelier-ink lg:py-40">
       <div className="at-container">
         <div className="max-w-[56rem]" data-at-reveal="lines">
           <p className="at-eyebrow text-atelier-gold-ink">One system</p>

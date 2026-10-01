@@ -1,7 +1,9 @@
+import { PatternDraft } from '../art/pattern-draft';
+
 const STEPS = [
   {
     title: 'Set up in an afternoon',
-    body: 'Add your pieces and sizes, your business hours, and how renters pay you. Staff join with their own sign-in.',
+    body: 'Add your pieces and sizes, your business hours, and how renters pay you. Your storefront is ready the same day.',
   },
   {
     title: 'Share your storefront link',
@@ -9,13 +11,14 @@ const STEPS = [
   },
   {
     title: 'Run the day from one screen',
-    body: 'Confirm bookings, review payment proof, hand gowns over, and check them back in. Everyone on the team sees the same thing.',
+    body: 'Confirm bookings, review payment proof, hand gowns over, and check them back in. Every booking, payment, and garment in one place.',
   },
 ] as const;
 
 export function HowItWorks() {
   return (
-    <section id="how-it-works" data-header="dark" className="bg-atelier-night py-28 text-atelier-paper lg:py-40">
+    <section id="how-it-works" data-header="dark" className="relative isolate overflow-hidden bg-atelier-night py-28 text-atelier-paper lg:py-40">
+      <PatternDraft id="how-it-works-draft" className="at-art inset-0 h-full w-full text-atelier-champagne opacity-[0.13]" />
       <div className="at-container">
         <div className="max-w-[44rem]" data-at-reveal="lines">
           <p className="at-eyebrow text-atelier-champagne">How it works</p>
