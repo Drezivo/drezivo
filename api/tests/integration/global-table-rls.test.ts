@@ -161,4 +161,36 @@ describe('global-table RLS and runtime privileges', () => {
       await admin.end();
     }
   });
+
+  it('keeps the fitting constraint validator private to the API role', async () => {
+    const admin = await openClient();
+    try {
+      const result = await admin.query<{
+        function_exists: boolean;
+        app_can_execute: boolean;
+        worker_can_execute: boolean;
+        supabase_api_role_can_execute: boolean;
+      }>(`SELECT
+        validator.oid IS NOT NULL AS function_exists,
+        CASE WHEN validator.oid IS NULL THEN false
+             ELSE has_function_privilege('drezivo_app', validator.oid, 'EXECUTE') END AS app_can_execute,
+        CASE WHEN validator.oid IS NULL THEN false
+             ELSE has_function_privilege('drezivo_worker', validator.oid, 'EXECUTE') END AS worker_can_execute,
+        COALESCE((
+          SELECT bool_or(has_function_privilege(role.rolname, validator.oid, 'EXECUTE'))
+            FROM pg_roles role
+           WHERE role.rolname IN ('anon', 'authenticated', 'service_role')
+        ), false) AS supabase_api_role_can_execute
+       FROM (SELECT to_regprocedure('public.fitting_assert_current_claims(uuid, uuid)') AS oid) AS validator`);
+
+      expect(result.rows[0]).toEqual({
+        function_exists: true,
+        app_can_execute: true,
+        worker_can_execute: false,
+        supabase_api_role_can_execute: false,
+      });
+    } finally {
+      await admin.end();
+    }
+  });
 });
