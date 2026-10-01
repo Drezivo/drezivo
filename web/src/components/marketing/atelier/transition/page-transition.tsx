@@ -11,7 +11,8 @@ import { Preloader } from './preloader';
 const MARKETING_PATHS = new Set(['/', '/pricing', '/faq', '/privacy', '/terms', '/contact', '/support']);
 const PRELOAD_FLAG = 'dz-atelier-preloaded';
 
-type Ground = 'night' | 'paper';
+/** Night holds the first-visit preloader; links between pages play the glittering champagne mosaic. */
+type Ground = 'night' | 'champagne';
 
 /**
  * Enough cells for the largest grid (12 × 11). The grid itself is sized by CSS breakpoints in
@@ -113,7 +114,7 @@ export function PageTransition() {
       event.preventDefault();
       if (busy.current) return;
       busy.current = true;
-      setGround('paper');
+      setGround('champagne');
       void (async () => {
         lockScroll(true);
         await cover();
