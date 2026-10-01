@@ -66,3 +66,9 @@
   colours in sRGB and convert (`pow(c, 2.2)`) or dark grounds come out lifted and muddy.
 - Route-level CSS files are unlayered and beat Tailwind utilities; never set `display` in a class
   that a utility like `hidden lg:grid` has to toggle.
+- Marketing pages are always on paper; never style them with app theme tokens (`text-foreground`,
+  `prose-invert`, `dark:` variants). An OS in dark mode turns that into light text on light paper.
+  QA marketing pages with `colorScheme: 'dark'` and `'light'`, not just the browser default.
+- Never `git worktree remove --force` a worktree whose `node_modules` are junctions into the main
+  checkout: it deletes through them (it wiped `api/`, part of `app/`, and both env files). Remove
+  the junctions first with `cmd /c rmdir`, check none remain, then `git worktree prune`.
