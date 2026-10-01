@@ -86,10 +86,15 @@ async function call<S extends z.ZodTypeAny>(path: string, schema: S, options: Ca
 
 const store = (slug: string) => `/public/stores/${encodeURIComponent(slug)}`;
 
-/** Server-side read for pages. A missing, draft, or suspended store is `null` (the page 404s). */
+/**
+ * Server-side read for pages. A missing, draft, or suspended store is `null` (the page 404s).
+ * Never cached: when a refresh got a 404, Next kept serving the cached published copy, so an
+ * unpublished or lapsed store stayed online. The store layout calls this for every page, so it
+ * gates the cached catalogue and item reads too. It is one indexed row on the API.
+ */
 export async function getStore(slug: string, preview?: string): Promise<PublicStorefront | null> {
   try {
-    return await call(store(slug), publicStorefront, { revalidate: 60, preview });
+    return await call(store(slug), publicStorefront, { preview });
   } catch (error) {
     if (error instanceof StorefrontApiError && error.status === 404) return null;
     throw error;

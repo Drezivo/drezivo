@@ -6,7 +6,6 @@ import { readStore } from '@/lib/storefront-preview';
 import { formatMinor, formatTime } from '@/lib/storefront-format';
 
 export const metadata: Metadata = { title: 'Rental info' };
-export const revalidate = 60;
 
 export default async function PoliciesPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
