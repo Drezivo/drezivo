@@ -24,6 +24,9 @@ import {
 } from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
+import { FORM_DEPTH, FORM_TOP, TORSO_PROFILE, torsoRadiusAt, WAIST_Y } from './form-profile';
+import { createGownDress } from './gown-dress';
+import { createGownParticles } from './gown-particles';
 import { SILK_FRAGMENT, SILK_VERTEX } from './silk-shader';
 
 /**
@@ -71,30 +74,6 @@ interface RibbonSpec {
 
 const SEGMENTS_HIGH = 140;
 const SEGMENTS_LOW = 80;
-const FORM_TOP = 1.56;
-const WAIST_Y = 1.04;
-/** Dress forms are oval in plan: narrower front-to-back than side-to-side. */
-const FORM_DEPTH = 0.74;
-
-/**
- * Torso profile as [radius, height] pairs, neck to hip. One table drives both the lathed form and
- * the ribbon path, so ribbons always lie on the surface instead of disappearing inside it.
- */
-const TORSO_PROFILE: ReadonlyArray<readonly [number, number]> = [
-  [0.0, 0.84], [0.165, 0.84], [0.198, 0.9], [0.196, 0.97], [0.142, WAIST_Y], [0.16, 1.16], [0.19, 1.27],
-  [0.186, 1.36], [0.2, 1.42], [0.17, 1.455], [0.06, 1.475], [0.042, 1.5], [0.042, 1.54], [0.0, 1.545],
-];
-
-/** Torso radius at a height, interpolated from the profile (outside the torso: 0). */
-function torsoRadiusAt(y: number): number {
-  for (let i = 1; i < TORSO_PROFILE.length; i += 1) {
-    const [r0, y0] = TORSO_PROFILE[i - 1]!;
-    const [r1, y1] = TORSO_PROFILE[i]!;
-    if (y >= Math.min(y0, y1) && y <= Math.max(y0, y1) && y1 !== y0) return r0 + ((r1 - r0) * (y - y0)) / (y1 - y0);
-  }
-  return 0;
-}
-
 const RIBBONS: readonly RibbonSpec[] = [
   // Two ribbons leave opposite shoulders and cross over the bodice, as in the mark.
   { angle: 0.6, turns: 0.38, topY: 1.42, hemY: 0.02, hemRadius: 0.72, width: 0.2, train: 0.95, twist: 0.6, scatter: new Vector3(-1.5, 1.6, -0.4), scatterTilt: 0.9, delay: 0, shade: 1 },
@@ -119,7 +98,7 @@ const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
  * Point on the wrapped gown. Above the waist the ribbon hugs the bodice just off its surface; below
  * it the skirt flares toward the hem, and the train ribbons sweep out along the floor, as in the mark.
  */
-function gownPoint(spec: RibbonSpec, t: number, out: Vector3): Vector3 {
+function ribbonWrapPoint(spec: RibbonSpec, t: number, out: Vector3): Vector3 {
   const y = spec.topY + (spec.hemY - spec.topY) * t;
   const waistRadius = torsoRadiusAt(WAIST_Y) + 0.012;
   let radius: number;
@@ -189,7 +168,7 @@ class Ribbon {
     const local = smooth(clamp01((progress - this.spec.delay) / 0.6));
     for (let i = 0; i <= this.segments; i += 1) {
       const t = i / this.segments;
-      gownPoint(this.spec, t, this.a);
+      ribbonWrapPoint(this.spec, t, this.a);
       scatterPoint(this.spec, t, time, this.b);
       // A soft travelling wave keeps the satin alive even when the gown is settled.
       const wave = Math.sin(t * 10 - time * 1.4 + this.spec.angle) * 0.018 * t;
@@ -332,10 +311,23 @@ export function createAtelierScene(
     clearcoatRoughness: 0.4,
     envMapIntensity: 1.15,
     side: DoubleSide,
+    // The ribbons hand over to the particles and dissolve away.
+    transparent: true,
   });
   const segments = options.quality === 'high' ? SEGMENTS_HIGH : SEGMENTS_LOW;
   const ribbons = RIBBONS.map((spec) => new Ribbon(spec, segments, ribbonMaterial));
   for (const ribbon of ribbons) gown.add(ribbon.mesh);
+
+  // The finished dress and the particles that build it.
+  const dress = createGownDress(options.quality);
+  gown.add(dress.group);
+  // Particles start where the ribbons float in the first frame.
+  const particles = createGownParticles(
+    options.quality === 'high' ? 6000 : 2600,
+    { ribbonCount: RIBBONS.length, ribbonPoint: (index, t, out) => scatterPoint(RIBBONS[index]!, t, 0, out) },
+    renderer.getPixelRatio(),
+  );
+  gown.add(particles.points);
   scene.add(gown);
 
   scene.add(new AmbientLight('#fff4e6', 0.25));
@@ -367,10 +359,11 @@ export function createAtelierScene(
     camera.aspect = aspect;
     // Wide screens keep the gown in the right third beside the headline; tall phones center it lower.
     const wide = aspect > 1.15;
-    // On phones the copy sits in the lower half, so the gown stands in the upper half, a little smaller.
+    // On phones the copy sits in the lower half, so the whole finished gown (skirt and train included)
+    // stands in the upper half of the screen.
     gown.position.set(wide ? Math.min(1.05, 0.55 + (aspect - 1.15) * 0.6) : 0, 0, 0);
-    camera.position.set(0, wide ? 0.95 : 1.1, wide ? 4.6 : 7.2);
-    camera.lookAt(0, wide ? 0.82 : -0.1, 0);
+    camera.position.set(0, wide ? 0.95 : 1.1, wide ? 4.6 : 9.2);
+    camera.lookAt(0, wide ? 0.82 : -0.25, 0);
     camera.updateProjectionMatrix();
   };
 
@@ -378,7 +371,14 @@ export function createAtelierScene(
     const time = (now - start) / 1000;
     progress += (targetProgress - progress) * (options.animate ? 0.08 : 1);
     pointer.lerp(pointerTarget, options.animate ? 0.05 : 1);
-    for (const ribbon of ribbons) ribbon.update(progress, options.animate ? time : 0);
+    const clock = options.animate ? time : 0;
+    // Timeline: ribbons drift in (0-0.5), particles leave them and land (0.22-1), ribbons fade
+    // (0.38-0.7), and the satin follows the particles outward from the waist (0.42-0.95).
+    for (const ribbon of ribbons) ribbon.update(Math.min(1, progress / 0.5), clock);
+    ribbonMaterial.opacity = 1 - smooth(clamp01((progress - 0.38) / 0.32));
+    ribbonMaterial.visible = ribbonMaterial.opacity > 0.01;
+    particles.update(progress, clock);
+    dress.setReveal(smooth(clamp01((progress - 0.42) / 0.53)));
     gown.rotation.y = (options.animate ? time * 0.12 : 0.4) + progress * Math.PI * 0.55 + pointer.x * 0.15;
     gown.rotation.x = pointer.y * 0.04;
     shadowMaterial.uniforms['uOpacity']!.value = 0.45 * smooth(clamp01(progress));
@@ -423,6 +423,8 @@ export function createAtelierScene(
       observer.disconnect();
       for (const ribbon of ribbons) ribbon.dispose();
       ribbonMaterial.dispose();
+      dress.dispose();
+      particles.dispose();
       form.dispose();
       backdropGeometry.dispose();
       backdropMaterial.dispose();
