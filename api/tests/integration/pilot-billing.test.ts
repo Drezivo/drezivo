@@ -47,6 +47,8 @@ describe('pilot billing', async () => {
   const admin = new pg.Pool({ connectionString: adminUrl, max: 3 });
 
   const rules = {
+    format: 'text' as const,
+    image_file_ids: [],
     rental: 'Three-day rentals from pickup.',
     deposit: 'Refundable deposit at pickup.',
     cancellation: 'Free cancellation until 48 hours before pickup.',

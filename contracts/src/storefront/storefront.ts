@@ -27,6 +27,9 @@ export type PublicStorefrontContact = z.infer<typeof publicStorefrontContact>;
 export const publicStorefrontPolicy = z
   .object({
     version: z.number().int().positive(),
+    /** `images`: the rental terms are the pictures in `image_urls`, in page order. */
+    format: z.enum(['text', 'images']).default('text'),
+    image_urls: z.array(z.string().url()).default([]),
     rental: z.string(),
     deposit: z.string(),
     cancellation: z.string(),

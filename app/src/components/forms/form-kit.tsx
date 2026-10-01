@@ -133,12 +133,15 @@ export function SaveBar({
   state,
   onSave,
   label = "Save changes",
+  blockedReason = null,
 }: {
   dirty: boolean;
   saving: boolean;
   state: SaveState;
   onSave: () => void;
   label?: string;
+  /** Holds the save while something it depends on (such as an upload) is still running. */
+  blockedReason?: string | null;
 }) {
   // Reloading or closing the tab with unsaved edits asks first. Every settings and storefront form uses this bar.
   useEffect(() => {
@@ -160,11 +163,13 @@ export function SaveBar({
             <span className="inline-flex items-center gap-1.5 text-dashboard-green-text">
               <CheckCircle2 className="h-4 w-4" /> Saved
             </span>
+          ) : blockedReason ? (
+            <span className="text-dashboard-muted">{blockedReason}</span>
           ) : dirty ? (
             <span className="text-dashboard-muted">You have unsaved changes.</span>
           ) : null}
         </p>
-        <Button type="button" onClick={onSave} disabled={!dirty || saving}>
+        <Button type="button" onClick={onSave} disabled={!dirty || saving || blockedReason !== null}>
           {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
           {saving ? "Saving…" : label}
         </Button>

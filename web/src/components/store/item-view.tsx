@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 
 import type { ItemDetail, PublicStorefront } from '@drezivo/contracts';
@@ -107,7 +108,14 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
             <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="py-5 text-sm leading-7">
               {tab === 'details' ? <p className="whitespace-pre-line text-sf-muted">{item.description ?? 'Ask the shop for more details about this piece.'}</p> : null}
               {tab === 'measurements' ? <Measurements item={item} variantId={variantId} /> : null}
-              {tab === 'rental' ? (
+              {tab === 'rental' && store.policy.format === 'images' ? (
+                <p className="text-sf-muted">
+                  This shop&apos;s rental terms are published as pages.{' '}
+                  <Link href={`/s/${store.slug}/policies#terms`} className="text-sf-ink underline underline-offset-4">
+                    Read the rental terms
+                  </Link>
+                </p>
+              ) : tab === 'rental' ? (
                 <dl className="space-y-4">
                   {[
                     ['Rental', store.policy.rental],

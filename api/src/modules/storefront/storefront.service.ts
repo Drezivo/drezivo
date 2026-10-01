@@ -70,6 +70,9 @@ export class PublicStorefrontService {
       const newRows = await readCatalogueCards(client, store.tenantId, { sort: 'newest', limit: 8, offset: 0 });
 
       const rules = policy ? fromPolicyColumns(policy) : null;
+      // Image terms replace the typed terms entirely; text kept in the editor for later is not published.
+      const imageTerms = rules?.format === 'images';
+      const typedTerms = imageTerms ? null : rules;
       const featuredOrder = new Map<string, number>(document.content.featured_product_ids.map((id, index) => [id, index]));
       const featured = [...featuredRows].sort((a, b) => (featuredOrder.get(a.product_id) ?? 0) - (featuredOrder.get(b.product_id) ?? 0));
 
@@ -80,8 +83,10 @@ export class PublicStorefrontService {
         document.content.about.image_file_id,
         ...featured.map((row) => row.image_file_id),
         ...newRows.map((row) => row.image_file_id),
+        ...(imageTerms ? rules.image_file_ids : []),
       ]);
       const urlOf = (id: string | null): string | null => (id ? (urls.get(id) ?? null) : null);
+      const policyImageUrls = imageTerms ? rules.image_file_ids.flatMap((id) => urlOf(id) ?? []) : [];
       const fittingOpen = fitting !== null && fitting.enabled && document.checkout.fitting_requests;
 
       return publicStorefront.parse({
@@ -106,10 +111,12 @@ export class PublicStorefrontService {
         new_arrivals: newRows.map((row) => toCard(row, urlOf)),
         policy: {
           version: policy?.version ?? 1,
-          rental: rules?.rental ?? '',
-          deposit: rules?.deposit ?? '',
-          cancellation: rules?.cancellation ?? '',
-          damage: rules?.damage ?? null,
+          format: imageTerms ? 'images' : 'text',
+          image_urls: policyImageUrls,
+          rental: typedTerms?.rental ?? '',
+          deposit: typedTerms?.deposit ?? '',
+          cancellation: typedTerms?.cancellation ?? '',
+          damage: typedTerms?.damage ?? null,
           delivery_notes: rules?.delivery.notes ?? null,
           privacy_notice: rules?.privacy_notice ?? '',
         },

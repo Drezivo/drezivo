@@ -64,6 +64,8 @@ describe('storefront guest booking', async () => {
   const pngSha = createHash('sha256').update(PNG).digest('base64');
 
   const policy = {
+    format: 'text' as const,
+    image_file_ids: [],
     rental: 'Three-day rentals.',
     deposit: 'Refundable deposit.',
     cancellation: 'Cancel 48 hours ahead.',
