@@ -14,6 +14,7 @@ import { createDrezivoApiClient } from "@/lib/drezivo-api";
 
 export interface DashboardIdentity {
   businessName: string;
+  businessLogoUrl?: string;
   roleLabel: string;
   userImageUrl?: string;
   userName: string;
@@ -32,6 +33,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
   const verifiedActor = useVerifiedActorContext();
   const [fetchedActor, setActorContext] = useState<ActorContext | null>(null);
+  const [businessLogoUrl, setBusinessLogoUrl] = useState<string | null>(null);
   const actorContext = verifiedActor ?? fetchedActor;
   const access = actorContext?.access ?? null;
   const refreshActor = useRefreshVerifiedActor();
@@ -63,17 +65,46 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     };
   }, [getToken, verifiedActor]);
 
+  useEffect(() => {
+    let active = true;
+    const api = createDrezivoApiClient(getToken);
+    const loadLogo = () => {
+      void api
+        .getStorefront()
+        .then((result) => {
+          if (active) setBusinessLogoUrl(result.data.media.logo_url);
+        })
+        .catch(() => {
+          if (active) setBusinessLogoUrl(null);
+        });
+    };
+
+    loadLogo();
+    const onStorefrontUpdated = (event: Event) => {
+      const logoUrl = (event as CustomEvent<{ logoUrl?: string | null }>).detail?.logoUrl;
+      if (logoUrl !== undefined) setBusinessLogoUrl(logoUrl);
+      else loadLogo();
+    };
+    window.addEventListener("drezivo:storefront-updated", onStorefrontUpdated);
+
+    return () => {
+      active = false;
+      window.removeEventListener("drezivo:storefront-updated", onStorefrontUpdated);
+    };
+  }, [getToken]);
+
   const identity = useMemo<DashboardIdentity>(() => {
     const clerkName = [user?.firstName, user?.lastName].filter(Boolean).join(" ");
 
     return {
       businessName: actorContext?.tenant.name ?? "",
+      ...(businessLogoUrl ? { businessLogoUrl } : {}),
       roleLabel: roleLabel(actorContext?.membership.role),
       ...(user?.imageUrl ? { userImageUrl: user.imageUrl } : {}),
       userName:
         user?.fullName || clerkName || user?.primaryEmailAddress?.emailAddress || "Account",
     };
-  }, [actorContext, user]);
+  }, [actorContext, businessLogoUrl, user]);
 
   useEffect(() => {
     // Theme switching is intentionally disabled for now; the dashboard always uses dark mode.

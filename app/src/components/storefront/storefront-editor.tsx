@@ -108,6 +108,11 @@ export function StorefrontEditorProvider({ children }: { children: React.ReactNo
         const result = await guard.submit((key) => action(createDrezivoApiClient(getToken), key));
         if (!result) return false;
         setSettings(result.data);
+        window.dispatchEvent(
+          new CustomEvent("drezivo:storefront-updated", {
+            detail: { logoUrl: result.data.media.logo_url },
+          })
+        );
         guard.resetIntent();
         setFieldErrors({});
         setSaveState({ kind: "saved" });
