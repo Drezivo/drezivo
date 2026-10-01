@@ -67,40 +67,23 @@ export const MARKETING_FEATURES = [
   },
 ] as const;
 
+/**
+ * One plan during the pilot (internal code `starter`, sold as Standard). The API owns the real price,
+ * limits, and trial length; keep this copy in step with billing.constants / migration 0061.
+ */
 export const MARKETING_PLANS: readonly MarketingPlan[] = [
   {
-    name: 'Starter',
+    name: 'Standard',
     price: '300.00',
-    blurb: 'Perfect for small businesses just getting started.',
+    blurb: 'Everything you need to run your rental shop, with a 14-day free trial.',
     features: [
-      'Up to 125 active physical assets',
-      'Owner-only access',
+      'Up to 1,000 garments',
+      'Owner + up to 10 staff',
+      'Online storefront with bookings and fittings',
       'Reservations, calendar & availability',
-      'Customer management',
-      'Returns, refunds & exports',
-    ],
-  },
-  {
-    name: 'Professional',
-    price: '499.00',
-    blurb: 'For growing businesses with more rentals and customers.',
-    features: [
-      'Up to 300 active physical assets',
-      'Owner + up to 2 Front desk seats',
-      'Everything in Starter',
-      'Priority support',
+      'Customers, payments, returns & exports',
     ],
     highlighted: true,
-  },
-  {
-    name: 'Business',
-    price: '1299.00',
-    blurb: 'For established businesses with higher volume.',
-    features: [
-      'Up to 1,000 active physical assets',
-      'Owner + up to 10 Front desk seats',
-      'Everything in Professional',
-    ],
   },
 ];
 
@@ -133,6 +116,6 @@ export const MARKETING_FAQS: readonly MarketingFaq[] = [
   {
     question: 'How much does Drezivo cost?',
     answer:
-      'Starter is ₱300/month, Professional is ₱499/month, and Business is ₱1,299/month. See the Pricing page for what each plan includes.',
+      'One plan, Standard, at ₱300 a month after a 14-day free trial. It includes up to 1,000 garments and 10 staff. Pay by GCash, Maya, or bank transfer and upload your receipt.',
   },
 ];

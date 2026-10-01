@@ -119,6 +119,7 @@ export class PublicStorefrontService {
           delivery_fee_minor: rules?.delivery.enabled ? rules.delivery.fee_minor : '0',
         },
         payment_methods: paymentMethods,
+        booking_open: store.bookingOpen,
         checkout: {
           requirements: document.checkout.requirements,
           handover_time: document.checkout.handover_time,

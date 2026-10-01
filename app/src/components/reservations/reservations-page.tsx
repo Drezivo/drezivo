@@ -37,6 +37,7 @@ import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { cn } from "@/lib/utils";
 
 import { NewReservationSheet } from "./new-reservation-sheet";
+import { RESERVATIONS_CHANGED_EVENT } from "./pending-hold-guard";
 import { ReservationDetailsSheet } from "./reservation-details-sheet";
 import {
   PAYMENT_EVIDENCE_LABELS,
@@ -82,6 +83,12 @@ export function ReservationsPage() {
   const [rows, setRows] = useState<ReservationListItem[]>([]);
   const [permissionCodes, setPermissionCodes] = useState<PermissionCode[]>([]);
   const [isNewReservationOpen, setIsNewReservationOpen] = useState(false);
+  // The dashboard's pending-hold guard may complete or cancel a hold while this list is open.
+  useEffect(() => {
+    const reload = () => setReloadVersion((value) => value + 1);
+    window.addEventListener(RESERVATIONS_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(RESERVATIONS_CHANGED_EVENT, reload);
+  }, []);
   const [selectedReservationId, setSelectedReservationId] = useState<string | null>(null);
   const [selectedReservation, setSelectedReservation] = useState<ReservationDetail | null>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);

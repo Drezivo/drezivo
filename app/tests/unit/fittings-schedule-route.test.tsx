@@ -1,14 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 
-const navigation = vi.hoisted(() => ({ notFound: vi.fn(() => { throw new Error("NEXT_NOT_FOUND"); }) }));
-
-vi.mock("next/navigation", () => ({ notFound: navigation.notFound }));
-
-import FittingScheduleRoute from "@/app/(dashboard)/fittings/schedule/page";
+import { describe, expect, it } from "vitest";
 
 describe("retired /fittings/schedule route", () => {
-  it("does not render a production page and resolves through Next not-found handling", () => {
-    expect(() => FittingScheduleRoute()).toThrow("NEXT_NOT_FOUND");
-    expect(navigation.notFound).toHaveBeenCalledTimes(1);
+  it("has no production route file", () => {
+    expect(
+      existsSync(join(process.cwd(), "src/app/(dashboard)/fittings/schedule/page.tsx")),
+    ).toBe(false);
   });
 });

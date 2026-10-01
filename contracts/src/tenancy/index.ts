@@ -4,3 +4,4 @@ export * from './actor-context';
 export * from './onboarding';
 export * from './settings';
 export * from './business-hours';
+export * from './billing';

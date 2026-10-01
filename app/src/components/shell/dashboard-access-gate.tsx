@@ -7,7 +7,7 @@ import type { ActorContext } from "@drezivo/contracts";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { DrezivoApiError } from "@/lib/drezivo-api";
+import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { resolveStaffLanding } from "@/lib/resolve-staff-landing";
 
 type GateState =
@@ -16,11 +16,18 @@ type GateState =
   | { kind: "error"; error: DrezivoApiError };
 
 /** The actor context the gate already loaded, so the shell does not fetch it a second time. */
-const VerifiedActorContext = createContext<ActorContext | null>(null);
+const VerifiedActorContext = createContext<{ actor: ActorContext; refresh: () => void } | null>(null);
 
 export function useVerifiedActorContext(): ActorContext | null {
-  return useContext(VerifiedActorContext);
+  return useContext(VerifiedActorContext)?.actor ?? null;
 }
+
+/** Re-reads the actor context without showing the access check again (e.g. after a payment is sent). */
+export function useRefreshVerifiedActor(): () => void {
+  return useContext(VerifiedActorContext)?.refresh ?? noop;
+}
+
+const noop = () => undefined;
 
 export function DashboardAccessGate({ children }: { children: React.ReactNode }) {
   const { getToken, isLoaded, isSignedIn, orgId } = useAuth();
@@ -74,7 +81,16 @@ export function DashboardAccessGate({ children }: { children: React.ReactNode })
     void verifyAccess();
   }, [verifyAccess]);
 
-  if (state.kind === "ready") return <VerifiedActorContext.Provider value={state.actor}>{children}</VerifiedActorContext.Provider>;
+  const refreshActor = useCallback(() => {
+    void createDrezivoApiClient(() => getTokenRef.current())
+      .getActorContext()
+      .then((result) => setState({ kind: "ready", actor: result.data }))
+      .catch(() => undefined);
+  }, []);
+
+  if (state.kind === "ready") {
+    return <VerifiedActorContext.Provider value={{ actor: state.actor, refresh: refreshActor }}>{children}</VerifiedActorContext.Provider>;
+  }
 
   return (
     <main className="dashboard-theme-dark flex min-h-svh items-center justify-center bg-dashboard-canvas px-5 py-10 text-dashboard-navy sm:px-8">

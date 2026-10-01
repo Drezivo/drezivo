@@ -37,6 +37,8 @@ export const filePurposeEnum = pgEnum('file_purpose', [
   'verification_document',
   'storefront_asset',
   'export_result',
+  'subscription_payment_proof',
+  'payment_method_material',
 ]);
 
 export const file = pgTable(

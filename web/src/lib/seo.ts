@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import type { ItemDetail, PublicStorefront } from '@drezivo/contracts';
+import { SITE_URL } from '@/lib/site-urls';
 
 const SITE_NAME = 'Drezivo';
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://drezivo.com';
 
 /**
  * Per-tenant metadata for a published storefront. This only builds the page

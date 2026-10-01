@@ -9,6 +9,7 @@ import {
   requireTestDatabaseUrl,
   resetTestDatabase,
 } from './helpers/test-db.js';
+import { STANDARD_PLAN } from './helpers/standard-plan.js';
 
 const clerk = vi.hoisted(() => ({ getAuth: vi.fn() }));
 
@@ -236,9 +237,9 @@ describe('CLT-076 add variant HTTP route', async () => {
       await client.query(
         `INSERT INTO physical_asset
            (tenant_id, branch_id, variant_id, asset_code, lifecycle_status, readiness, custody_kind)
-         SELECT $1, $2, $3, 'CLT076-CAP-' || lpad(n::text, 3, '0'), 'active', 'ready', 'at_branch'
-           FROM generate_series(1, 125) AS n`,
-        [seeded.tenantId, seeded.branchId, baseVariantId],
+         SELECT $1, $2, $3, 'CLT076-CAP-' || lpad(n::text, 4, '0'), 'active', 'ready', 'at_branch'
+           FROM generate_series(1, $4::int) AS n`,
+        [seeded.tenantId, seeded.branchId, baseVariantId, STANDARD_PLAN.physicalAssetsMax],
       );
     });
 
@@ -266,7 +267,7 @@ describe('CLT-076 add variant HTTP route', async () => {
         assets: assets.rows[0]?.count ?? -1,
       };
     });
-    expect(state).toEqual({ variants: 0, assets: 125 });
+    expect(state).toEqual({ variants: 0, assets: STANDARD_PLAN.physicalAssetsMax });
   });
 
   it('requires branch clothing-management permission', async () => {

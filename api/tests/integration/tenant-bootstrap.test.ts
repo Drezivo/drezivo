@@ -53,7 +53,7 @@ describe('TBF-030 tenant bootstrap', async () => {
       organizationName: 'Luna Gowns',
     });
     if (onboarding.kind !== 'created') throw new Error('expected onboarding creation');
-    const selected = await chooseOnboardingPlan(onboarding.onboarding.id, 'professional', principalId);
+    const selected = await chooseOnboardingPlan(onboarding.onboarding.id, 'starter', principalId);
     if (selected.kind !== 'updated') throw new Error('expected plan selection');
 
     const result = await runTenantBootstrap({
@@ -71,7 +71,7 @@ describe('TBF-030 tenant bootstrap', async () => {
       tenant: { name: 'Luna Gowns', slug: 'luna-gowns', currency: 'PHP', timezone: 'Asia/Manila' },
       default_branch: { name: 'Main Branch', code: 'main', is_default: true },
       membership: { role: 'owner', status: 'active' },
-      subscription: { plan_code: 'professional', status: 'trialing' },
+      subscription: { plan_code: 'starter', status: 'trialing' },
     });
     expect(result.body.data.branch_grants[0]?.permission_codes).toHaveLength(15);
 

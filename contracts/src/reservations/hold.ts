@@ -21,6 +21,9 @@ export const paymentInstructions = z
     rail: z.enum(['cash', 'manual_qr', 'manual_transfer']),
     qr_image_url: z.string().url().optional(),
     destination_note: z.string().trim().max(2_000).optional(),
+    /** A business's own instructions file (PDF or image) shown instead of, or with, the details. */
+    material_url: z.string().url().optional(),
+    material_content_type: z.enum(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']).optional(),
   })
   .strict();
 export type PaymentInstructions = z.infer<typeof paymentInstructions>;

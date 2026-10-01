@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { organizationOnboarding, type OrganizationOnboarding } from "@drezivo/contracts";
 import { OnboardingPlan } from "@/components/onboarding/onboarding-plan";
@@ -12,11 +12,10 @@ const clerk = vi.hoisted(() => ({
 }));
 
 const api = vi.hoisted(() => ({
-  bootstrapOnboarding: vi.fn(),
   getActorContext: vi.fn(),
   getCurrentOnboarding: vi.fn(),
   getWorkspaces: vi.fn(),
-  selectOnboardingPlan: vi.fn(),
+  startOnboardingTrial: vi.fn(),
 }));
 
 const router = vi.hoisted(() => ({ replace: vi.fn() }));
@@ -55,11 +54,6 @@ const onboarding: OrganizationOnboarding = organizationOnboarding.parse({
   updated_at: "2026-09-19T00:00:00.000Z",
 });
 
-const professionalOnboarding = {
-  ...onboarding,
-  selected_plan_code: "professional" as const,
-};
-
 const bootstrap = {
   tenant: {
     id: "tenant_123",
@@ -88,7 +82,7 @@ const bootstrap = {
   branch_grants: [{ branch_id: "branch_123", permission_codes: ["assets.manage"] }],
   subscription: {
     id: "subscription_123",
-    plan_code: "professional" as const,
+    plan_code: "starter" as const,
     status: "trialing" as const,
     trial_ends_at: "2026-09-26T00:00:00.000Z",
     grace_ends_at: null,
@@ -120,105 +114,22 @@ function mockCurrent(currentOnboarding: OrganizationOnboarding = onboarding) {
 }
 
 describe("OnboardingPlan", () => {
+  const locationReplace = vi.fn();
+  const originalLocation = window.location;
+
   beforeEach(() => {
     vi.clearAllMocks();
     clerk.getToken.mockResolvedValue("clerk-token");
     clerk.setActive.mockResolvedValue(undefined);
     mockCurrent();
+    Object.defineProperty(window, "location", { configurable: true, value: { ...originalLocation, replace: locationReplace } });
   });
 
-  it("renders the three authoritative plan options and defaults to Professional", async () => {
-    renderPlan();
-
-    expect(await screen.findByRole("heading", { name: "Choose your plan" })).toBeVisible();
-    expect(screen.getByRole("radio", { name: /Starter/ })).not.toBeChecked();
-    expect(screen.getByRole("radio", { name: /Professional/ })).toBeChecked();
-    expect(screen.getByRole("radio", { name: /Business/ })).not.toBeChecked();
-    expect(screen.getByText("₱300")).toBeVisible();
-    expect(screen.getByText("₱499")).toBeVisible();
-    expect(screen.getByText("₱1,299")).toBeVisible();
-    expect(screen.getByText("1,000 active assets")).toBeVisible();
+  afterEach(() => {
+    Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
   });
 
-  it("persists only plan_code and moves to launch review", async () => {
-    api.selectOnboardingPlan.mockResolvedValue({
-      data: { ...onboarding, selected_plan_code: "starter" as const },
-      requestId: "req-plan",
-    });
-
-    renderPlan();
-    await screen.findByRole("heading", { name: "Choose your plan" });
-
-    fireEvent.click(screen.getByRole("radio", { name: /Starter/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-
-    await waitFor(() => expect(api.selectOnboardingPlan).toHaveBeenCalledTimes(1));
-    expect(api.selectOnboardingPlan).toHaveBeenCalledWith(
-      onboarding.id,
-      { plan_code: "starter" },
-      expect.any(String)
-    );
-    expect(await screen.findByRole("heading", { name: "Review and launch" })).toBeVisible();
-    expect(screen.getByText("Starter")).toBeVisible();
-  });
-
-  it("guards duplicate submits while the first plan request is pending", async () => {
-    let resolveRequest: (value: unknown) => void = () => undefined;
-    api.selectOnboardingPlan.mockReturnValue(
-      new Promise((resolve) => {
-        resolveRequest = resolve;
-      })
-    );
-
-    renderPlan();
-    await screen.findByRole("heading", { name: "Choose your plan" });
-    fireEvent.click(screen.getByRole("radio", { name: /Starter/ }));
-
-    const button = screen.getByRole("button", { name: "Continue" });
-    fireEvent.click(button);
-    fireEvent.click(button);
-
-    expect(api.selectOnboardingPlan).toHaveBeenCalledTimes(1);
-
-    resolveRequest({
-      data: { ...onboarding, selected_plan_code: "starter" },
-      requestId: "req-plan",
-    });
-  });
-
-  it("reuses the same idempotency key when retrying the same plan selection", async () => {
-    api.selectOnboardingPlan.mockRejectedValueOnce(new Error("network failure"));
-    api.selectOnboardingPlan.mockResolvedValueOnce({
-      data: { ...onboarding, selected_plan_code: "starter" },
-      requestId: "req-plan",
-    });
-
-    renderPlan();
-    await screen.findByRole("heading", { name: "Choose your plan" });
-    fireEvent.click(screen.getByRole("radio", { name: /Starter/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-
-    await screen.findByRole("alert");
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-
-    await waitFor(() => expect(api.selectOnboardingPlan).toHaveBeenCalledTimes(2));
-    expect(api.selectOnboardingPlan.mock.calls[0]?.[2]).toBe(api.selectOnboardingPlan.mock.calls[1]?.[2]);
-  });
-
-  it("loads a persisted plan directly into review without starting the trial", async () => {
-    mockCurrent(professionalOnboarding);
-
-    renderPlan();
-
-    expect(await screen.findByRole("heading", { name: "Review and launch" })).toBeVisible();
-    expect(screen.getByText("Professional")).toBeVisible();
-    expect(screen.getByText("300 active assets", { exact: false })).toBeVisible();
-    expect(api.bootstrapOnboarding).not.toHaveBeenCalled();
-  });
-
-  it("requires trial confirmation before bootstrap and completes workspace handoff once", async () => {
-    mockCurrent(professionalOnboarding);
-    api.bootstrapOnboarding.mockResolvedValue({ data: bootstrap, requestId: "req-bootstrap" });
+  function mockWorkspaceHandoff() {
     api.getWorkspaces.mockResolvedValue({
       data: { items: [workspace], page_meta: { next_cursor: null, has_more: false } },
       requestId: "req-workspaces",
@@ -231,63 +142,89 @@ describe("OnboardingPlan", () => {
         active_branch_id: bootstrap.default_branch.id,
         branch_grants: bootstrap.branch_grants,
         subscription: bootstrap.subscription,
-        entitlements: { physical_assets_max: 300, frontdesk_seats_max: 2 },
+        entitlements: { physical_assets_max: 1000, frontdesk_seats_max: 10 },
       },
       requestId: "req-actor",
     });
+  }
+
+  it("asks to start the trial on arrival and shows the one Standard plan, with no plan to choose", async () => {
+    renderPlan();
+
+    const dialog = await screen.findByRole("dialog", { name: "Start your 14-day trial?" });
+    expect(dialog).toHaveTextContent("₱300 a month");
+    expect(dialog).toHaveTextContent("Up to 1,000 garments");
+    expect(dialog).toHaveTextContent("Up to 10 staff");
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(api.startOnboardingTrial).not.toHaveBeenCalled();
+  });
+
+  it("closes on Not yet without starting anything, and the trial button reopens it", async () => {
+    renderPlan();
+    await screen.findByRole("dialog", { name: "Start your 14-day trial?" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Not yet" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByRole("heading", { name: "Start your free trial" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: /Start 14-day trial/ }));
+    expect(await screen.findByRole("dialog", { name: "Start your 14-day trial?" })).toBeVisible();
+    expect(api.startOnboardingTrial).not.toHaveBeenCalled();
+  });
+
+  it("starts the trial once for a double click and opens the new workspace", async () => {
+    api.startOnboardingTrial.mockResolvedValue({ data: bootstrap, requestId: "req-trial" });
+    mockWorkspaceHandoff();
 
     renderPlan();
-    fireEvent.click(await screen.findByRole("button", { name: /Launch Workspace/i }));
-
-    expect(screen.getByRole("dialog", { name: "Start your 14-day trial?" })).toBeVisible();
-    expect(screen.getByText(/No credit card is required during the trial period/i)).toBeVisible();
-    expect(api.bootstrapOnboarding).not.toHaveBeenCalled();
-
+    await screen.findByRole("dialog", { name: "Start your 14-day trial?" });
     const confirm = screen.getByRole("button", { name: "Start 14-day trial" });
     fireEvent.click(confirm);
     fireEvent.click(confirm);
 
-    await waitFor(() => expect(api.bootstrapOnboarding).toHaveBeenCalledTimes(1));
-    expect(api.bootstrapOnboarding).toHaveBeenCalledWith(onboarding.id, {}, expect.any(String));
-    await waitFor(() => expect(api.getWorkspaces).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(locationReplace).toHaveBeenCalledWith("/"));
+    expect(api.startOnboardingTrial).toHaveBeenCalledTimes(1);
+    expect(api.startOnboardingTrial).toHaveBeenCalledWith(onboarding.id, expect.any(String));
     expect(clerk.setActive).toHaveBeenCalledWith({ organization: "org_123" });
     expect(api.getActorContext).toHaveBeenCalledTimes(1);
-    expect(router.replace).toHaveBeenCalledWith("/");
   });
 
-  it("retries only workspace loading after bootstrap succeeds", async () => {
-    mockCurrent(professionalOnboarding);
-    api.bootstrapOnboarding.mockResolvedValue({ data: bootstrap, requestId: "req-bootstrap" });
-    api.getWorkspaces
-      .mockRejectedValueOnce(new Error("temporary workspace read failure"))
-      .mockResolvedValueOnce({
-        data: { items: [workspace], page_meta: { next_cursor: null, has_more: false } },
-        requestId: "req-workspaces",
-      });
-    api.getActorContext.mockResolvedValue({
-      data: {
-        tenant: bootstrap.tenant,
-        membership: bootstrap.membership,
-        branches: [bootstrap.default_branch],
-        active_branch_id: bootstrap.default_branch.id,
-        branch_grants: bootstrap.branch_grants,
-        subscription: bootstrap.subscription,
-        entitlements: { physical_assets_max: 300, frontdesk_seats_max: 2 },
-      },
-      requestId: "req-actor",
-    });
+  it("reuses the same idempotency key when the owner retries after a failure", async () => {
+    api.startOnboardingTrial.mockRejectedValueOnce(new Error("network failure"));
+    api.startOnboardingTrial.mockResolvedValueOnce({ data: bootstrap, requestId: "req-trial" });
+    mockWorkspaceHandoff();
 
     renderPlan();
-    fireEvent.click(await screen.findByRole("button", { name: /Launch Workspace/i }));
+    await screen.findByRole("dialog", { name: "Start your 14-day trial?" });
+    fireEvent.click(screen.getByRole("button", { name: "Start 14-day trial" }));
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByRole("button", { name: "Start 14-day trial" }));
+
+    await waitFor(() => expect(api.startOnboardingTrial).toHaveBeenCalledTimes(2));
+    expect(api.startOnboardingTrial.mock.calls[0]?.[1]).toBe(api.startOnboardingTrial.mock.calls[1]?.[1]);
+  });
+
+  it("retries only workspace loading after the trial has started", async () => {
+    api.startOnboardingTrial.mockResolvedValue({ data: bootstrap, requestId: "req-trial" });
+    mockWorkspaceHandoff();
+    api.getWorkspaces.mockRejectedValueOnce(new Error("temporary workspace read failure"));
+
+    renderPlan();
+    await screen.findByRole("dialog", { name: "Start your 14-day trial?" });
     fireEvent.click(screen.getByRole("button", { name: "Start 14-day trial" }));
 
     expect(await screen.findByRole("heading", { name: "Your workspace was created" })).toBeVisible();
-    expect(api.bootstrapOnboarding).toHaveBeenCalledTimes(1);
-
     fireEvent.click(screen.getByRole("button", { name: "Try loading workspace again" }));
 
-    await waitFor(() => expect(api.getWorkspaces).toHaveBeenCalledTimes(2));
-    expect(api.bootstrapOnboarding).toHaveBeenCalledTimes(1);
-    expect(router.replace).toHaveBeenCalledWith("/");
+    await waitFor(() => expect(locationReplace).toHaveBeenCalledWith("/"));
+    expect(api.getWorkspaces).toHaveBeenCalledTimes(2);
+    expect(api.startOnboardingTrial).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends an owner who already finished onboarding back to the onboarding router", async () => {
+    mockCurrent({ ...onboarding, status: "provisioned" as const });
+    renderPlan();
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/onboarding"));
+    expect(api.startOnboardingTrial).not.toHaveBeenCalled();
   });
 });

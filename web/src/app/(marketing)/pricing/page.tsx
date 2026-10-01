@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { buildMarketingMetadata } from '@/lib/seo';
 import { formatPhpPerUnit } from '@/lib/money';
 import { MARKETING_PLANS } from '@/lib/marketing-content';
+import { SIGN_UP_URL } from '@/lib/site-urls';
 
 export const metadata: Metadata = buildMarketingMetadata(
   'Pricing',
@@ -27,12 +28,11 @@ export default function PricingPage() {
           Simple, transparent pricing
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-marketing-muted">
-          Choose the plan that fits your business. No hidden fees — just the tools you need to
-          grow.
+          One plan with everything included. Try it free for 14 days, then ₱300 a month.
         </p>
       </div>
 
-      <div className="mt-14 grid gap-6 sm:grid-cols-3">
+      <div className="mx-auto mt-14 grid max-w-md gap-6">
         {MARKETING_PLANS.map((plan) => (
           <div
             key={plan.name}
@@ -40,11 +40,6 @@ export default function PricingPage() {
               plan.highlighted ? 'border-marketing-brown bg-marketing-dark text-marketing-cream shadow-xl' : 'border-marketing-line bg-marketing-panel text-marketing-ink'
             }`}
           >
-            {plan.highlighted ? (
-              <p className="mb-3 inline-block rounded-full bg-marketing-gold px-3 py-1 text-xs font-medium text-marketing-dark">
-                Most Popular
-              </p>
-            ) : null}
             <p className="font-medium">{plan.name}</p>
             <p className={`mt-1 text-sm ${plan.highlighted ? 'text-marketing-cream/70' : 'text-marketing-muted'}`}>{plan.blurb}</p>
             <p className="mt-4 font-display text-3xl font-semibold">
@@ -61,30 +56,27 @@ export default function PricingPage() {
               ))}
             </ul>
             <a
-              href="https://app.drezivo.com/sign-up"
+              href={SIGN_UP_URL}
               className={`mt-8 block rounded-md px-4 py-2.5 text-center text-sm font-medium ${
                 plan.highlighted
                   ? 'bg-marketing-cream text-marketing-dark'
                   : 'border border-marketing-line text-marketing-ink'
               }`}
             >
-              Get Started
+              Start your free trial
             </a>
           </div>
         ))}
       </div>
 
       <div className="mt-10 grid gap-4 rounded-2xl border border-marketing-line bg-marketing-panel p-6 text-sm text-marketing-muted sm:grid-cols-3">
-        <p>No credit card required to start your 14-day trial.</p>
-        <p>Cancel anytime — downgrade or cancel never deletes your data.</p>
-        <p>
-          Fittings and multi-item booking ship in a later release; every plan above reflects V1
-          scope only.
-        </p>
+        <p>No credit card needed for the 14-day trial.</p>
+        <p>Pay monthly by GCash, Maya, or bank transfer and upload your receipt.</p>
+        <p>If a month ends unpaid, your shop turns view-only; your data is never deleted.</p>
       </div>
 
       <p className="mt-10 text-center text-sm text-marketing-muted">
-        Have questions about a plan?{' '}
+        Have questions about pricing?{' '}
         <Link href="/faq" className="text-marketing-brown underline underline-offset-2">
           Read the FAQ
         </Link>

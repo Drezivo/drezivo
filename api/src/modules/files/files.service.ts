@@ -267,6 +267,19 @@ function assertFileWriteContext(input: FileContext, purpose: FileObjectRow['purp
   if (input.effectiveTenantStatus === 'cancelled') {
     throw new TenantCancelledError('This workspace is closed.');
   }
+  // Proof of paying Drezivo, and a business's own payment instructions: owner-level only.
+  if (purpose === 'subscription_payment_proof') {
+    if (!input.permissionCodes.includes('policies.manage')) {
+      throw new ForbiddenError('Only the business owner can pay for the subscription.');
+    }
+    return;
+  }
+  if (purpose === 'payment_method_material') {
+    if (!input.permissionCodes.includes('payments.manage')) {
+      throw new ForbiddenError('Payment method management permission is required.');
+    }
+    return;
+  }
   if (purpose === 'payment_receipt') {
     if (
       !input.permissionCodes.includes('reservations.manage') ||
@@ -290,9 +303,13 @@ function assertSupportedUpload(request: UploadAuthorizationRequest): void {
     if (!CATALOGUE_IMAGE_MIME_TYPES.has(request.content_type)) {
       throw new ValidationError('Images must be JPEG, PNG, or WebP.');
     }
-  } else if (request.purpose === 'payment_receipt') {
+  } else if (
+    request.purpose === 'payment_receipt' ||
+    request.purpose === 'subscription_payment_proof' ||
+    request.purpose === 'payment_method_material'
+  ) {
     if (!PAYMENT_RECEIPT_MIME_TYPES.has(request.content_type)) {
-      throw new ValidationError('Payment receipts must be JPEG, PNG, WebP, or PDF.');
+      throw new ValidationError('This file must be a JPEG, PNG, WebP, or PDF.');
     }
   } else {
     throw new ValidationError('This upload purpose is not available through the staff upload flow.');
@@ -307,7 +324,9 @@ function assertSupportedFilePurpose(row: FileObjectRow): void {
     row.purpose !== 'catalogue_image' &&
     row.purpose !== 'measurement_guide' &&
     row.purpose !== 'storefront_asset' &&
-    row.purpose !== 'payment_receipt'
+    row.purpose !== 'payment_receipt' &&
+    row.purpose !== 'subscription_payment_proof' &&
+    row.purpose !== 'payment_method_material'
   ) {
     throw new NotFoundError('The uploaded file could not be found.');
   }

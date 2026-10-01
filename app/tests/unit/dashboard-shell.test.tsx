@@ -26,6 +26,8 @@ vi.mock("@/lib/drezivo-api", () => ({
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
+  // The shell mounts the pending-hold guard, which navigates with the router.
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
 }));
 
 describe("DashboardShell", () => {

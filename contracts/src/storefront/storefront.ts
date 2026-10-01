@@ -83,6 +83,8 @@ export const publicStorefront = z
       .object({ pickup: z.literal(true), delivery: z.boolean(), delivery_fee_minor: moneyString })
       .strict(),
     payment_methods: z.array(publicPaymentMethod).max(20),
+    /** False while the shop's subscription is read-only: the storefront is visible but takes no bookings or fittings. */
+    booking_open: z.boolean(),
     checkout: z
       .object({
         requirements: z

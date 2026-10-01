@@ -25,6 +25,18 @@ Three environments, each with its own secrets/accounts or projects, least privil
   production is a "free tier" resource (TRD §1: "Do not use a free-tier suspension/retention
   assumption as a production recovery plan").
 
+**Pilot (2026-09-30):** real businesses use production on free-tier hosting while the team collects
+feedback, as a deliberate, time-boxed exception to the rule above. How it works and what it needs:
+`docs/runbooks/pilot-operation.md`.
+
+Production domains:
+
+| Service | Domain |
+| --- | --- |
+| `web` (marketing and storefronts) | `drezivo.shop`, with storefronts at `drezivo.shop/s/<store-address>` |
+| `app` (business app) | `partners.drezivo.shop` |
+| Operator console (separate repositories) | `operator.drezivo.shop` |
+
 DECISION NEEDED: name the specific hosting accounts/projects for each environment (Vercel
 team/project per environment, container host project per environment, Supabase project/environment
 naming convention) once TRD §12's "remaining selection" of hosting plans/region is made.
@@ -65,7 +77,7 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   production.
 - `EMAIL_FROM` and `RESEND_API_KEY` — required when `EMAIL_PROVIDER=resend`. The key is a secret.
 - `EMAIL_FILE_SINK_DIR` — local folder for `EMAIL_PROVIDER=file`; each message is one JSON file.
-- `STOREFRONT_PUBLIC_ORIGIN` — public origin of `web` (for example `https://drezivo.com`), used for
+- `STOREFRONT_PUBLIC_ORIGIN` — public origin of `web` (for example `https://drezivo.shop`), used for
   the private request-status link in renter emails. Without it, emails omit the link.
 - `GUEST_VERIFICATION_MODE`: `email` (the default) or `dev_accept_any`.
   - `dev_accept_any` sends no verification email and accepts any 6-digit code. Use it for local

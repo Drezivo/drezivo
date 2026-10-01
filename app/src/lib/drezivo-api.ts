@@ -82,6 +82,12 @@ import {
   notificationSettings,
   publishStorefrontPolicyRequest,
   storefrontPreviewLink,
+  billingOverview,
+  submitSubscriptionPaymentRequest,
+  submitSubscriptionPaymentResponse,
+  startTrialRequest,
+  createPaymentMethodRequest,
+  archivePaymentMethodRequest,
   storefrontSettings,
   storefrontTransitionRequest,
   updateBranchBusinessHoursRequest,
@@ -215,6 +221,11 @@ import {
   type NotificationSettings,
   type PublishStorefrontPolicyRequest,
   type StorefrontPreviewLink,
+  type BillingOverview,
+  type SubmitSubscriptionPaymentRequest,
+  type SubmitSubscriptionPaymentResponse,
+  type CreatePaymentMethodRequest,
+  type ArchivePaymentMethodRequest,
   type StorefrontSettings,
   type UpdateBranchBusinessHoursRequest,
   type UpdateBusinessSettingsRequest,
@@ -336,6 +347,16 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "POST",
         path: `/api/v1/onboarding/${encodeURIComponent(onboardingId)}/abandon`,
         responseSchema: apiEnvelope(organizationOnboarding),
+      }),
+    /** Standard plan + 14-day trial + workspace bootstrap in one duplicate-safe call (replaces plan selection). */
+    startOnboardingTrial: (onboardingId: string, idempotencyKey: string) =>
+      request<TenantBootstrapResponse>({
+        getToken,
+        body: startTrialRequest.parse({}),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/onboarding/${encodeURIComponent(onboardingId)}/start-trial`,
+        responseSchema: apiEnvelope(tenantBootstrapResponse),
       }),
     bootstrapOnboarding: (
       onboardingId: string,
@@ -466,6 +487,45 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "GET",
         path: "/api/v1/payment-methods",
         responseSchema: apiEnvelope(paymentMethodSettingsList),
+      }),
+    createPaymentMethod: (input: CreatePaymentMethodRequest, idempotencyKey: string) =>
+      request<PaymentMethodSettingsItem>({
+        getToken,
+        body: createPaymentMethodRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/payment-methods",
+        responseSchema: apiEnvelope(paymentMethodSettingsItem),
+      }),
+    archivePaymentMethod: (paymentMethodId: string, input: ArchivePaymentMethodRequest, idempotencyKey: string) =>
+      request<PaymentMethodSettingsItem>({
+        getToken,
+        body: archivePaymentMethodRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/payment-methods/${encodeURIComponent(paymentMethodId)}/archive`,
+        responseSchema: apiEnvelope(paymentMethodSettingsItem),
+      }),
+    getBilling: () =>
+      request<BillingOverview>({ getToken, method: "GET", path: "/api/v1/billing", responseSchema: apiEnvelope(billingOverview) }),
+    submitSubscriptionPayment: (input: SubmitSubscriptionPaymentRequest, idempotencyKey: string) =>
+      request<SubmitSubscriptionPaymentResponse>({
+        getToken,
+        body: submitSubscriptionPaymentRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/billing/payments",
+        responseSchema: apiEnvelope(submitSubscriptionPaymentResponse),
+      }),
+    /** Drezivo's QR image for one payment method, as an object URL the caller must revoke. */
+    getBillingQrObjectUrl: (paymentMethodId: string) =>
+      fetchAuthorizedObjectUrl(getToken, `/api/v1/billing/payment-methods/${encodeURIComponent(paymentMethodId)}/qr`),
+    getReservationHold: (reservationId: string) =>
+      request<StaffReservationCreateResponse>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/hold`,
+        responseSchema: apiEnvelope(staffReservationCreateResponse),
       }),
     updatePaymentMethodSettings: (
       paymentMethodId: string,
@@ -1205,6 +1265,22 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
   };
 }
 
+/** GET of a non-JSON authorized resource (an image), returned as an object URL. */
+async function fetchAuthorizedObjectUrl(getToken: () => Promise<string | null>, path: string): Promise<string> {
+  const token = await getToken();
+  if (!token) throw new DrezivoApiError("Your session has expired. Please sign in again.", { status: 401 });
+  const apiOrigin = process.env["NEXT_PUBLIC_API_ORIGIN"]?.replace(/\/$/, "");
+  if (!apiOrigin) throw new DrezivoApiError("The Drezivo API is not configured for this environment.", { status: 503 });
+  let response: Response;
+  try {
+    response = await fetch(`${apiOrigin}${path}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
+  } catch {
+    throw new DrezivoApiError("We could not reach Drezivo. Check your connection and try again.", { status: 503 });
+  }
+  if (!response.ok) throw new DrezivoApiError("The QR code could not be loaded.", { status: response.status });
+  return URL.createObjectURL(await response.blob());
+}
+
 async function request<T>({
   body,
   getToken,
@@ -1256,6 +1332,11 @@ async function request<T>({
   }
 
   if (!parsed.data.success) {
+    const code = parsed.data.error.code;
+    // The dashboard shell listens for this and asks the owner to pay (see components/billing/subscription-status.tsx).
+    if ((code === "SUBSCRIPTION_READ_ONLY" || code === "SUBSCRIPTION_LOCKED") && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("drezivo:subscription-required", { detail: { code } }));
+    }
     throw new DrezivoApiError(parsed.data.error.message, {
       code: parsed.data.error.code,
       requestId: parsed.data.request_id,

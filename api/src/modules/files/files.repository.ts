@@ -9,7 +9,9 @@ export interface FileObjectRow {
     | 'payment_receipt'
     | 'verification_document'
     | 'storefront_asset'
-    | 'export_result';
+    | 'export_result'
+    | 'subscription_payment_proof'
+    | 'payment_method_material';
   storage_key: string;
   version_id: string | null;
   sha256: string | null;

@@ -66,7 +66,10 @@ guestBookingRouter.post(
   noStore,
   perIp('guest-verify-start', 10, 15),
   validate({ params: slugParams, body: startGuestVerificationRequest }),
-  send((req) => verification.start(slugOf(req), (req.body as StartGuestVerificationRequest).email)),
+  send((req) => {
+    const body = req.body as StartGuestVerificationRequest;
+    return verification.start(slugOf(req), body.email, { token: body.turnstile_token, remoteIp: req.ip });
+  }),
 );
 
 guestBookingRouter.post(

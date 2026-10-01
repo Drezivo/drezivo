@@ -169,6 +169,12 @@ import {
   uploadAuthorizationRequest,
   uploadAuthorizationResponse,
   verifyOnboardingPaymentRequest,
+  archivePaymentMethodRequest,
+  billingOverview,
+  createPaymentMethodRequest,
+  startTrialRequest,
+  submitSubscriptionPaymentRequest,
+  submitSubscriptionPaymentResponse,
 } from '../src';
 
 // Must run before any `.openapi()` call. This package's own schemas never
@@ -1528,6 +1534,136 @@ for (const entry of extraPaths) {
   });
 }
 
+
+// ---- pilot billing, start trial, payment methods, and held-reservation resume ----------------
+registry.registerPath({
+  method: 'post',
+  path: '/onboarding/{onboardingId}/start-trial',
+  tags: ['onboarding'],
+  summary: 'Choose the Standard plan and provision the workspace with a 14-day trial in one command.',
+  request: {
+    params: z.object({ onboardingId: z.string().uuid() }),
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: startTrialRequest } } },
+  },
+  responses: {
+    201: {
+      description: 'Tenant graph provisioned and trial started (replays return the same body).',
+      content: { 'application/json': { schema: successEnvelope(tenantBootstrapResponse) } },
+    },
+    404: jsonError('The onboarding was not found for this account.'),
+    409: jsonError('TRIAL_CONSUMED, or the onboarding is not eligible, or the key is in progress.'),
+    429: jsonError('Start-trial rate limit exceeded.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/billing',
+  tags: ['billing'],
+  summary: "The workspace's plan, access state, Drezivo payment methods, and payment history.",
+  responses: {
+    200: {
+      description: 'Billing overview. Works while the workspace is read-only or locked.',
+      content: { 'application/json': { schema: successEnvelope(billingOverview) } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/billing/payment-methods/{paymentMethodId}/qr',
+  tags: ['billing'],
+  summary: "QR image of one of Drezivo's active payment methods (raw bytes, private, max-age=300).",
+  request: { params: z.object({ paymentMethodId: z.string().uuid() }) },
+  responses: {
+    200: {
+      description: 'The QR image.',
+      content: {
+        'image/png': { schema: z.string() },
+        'image/jpeg': { schema: z.string() },
+        'image/webp': { schema: z.string() },
+      },
+    },
+    404: jsonError('No active method with a QR image.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/billing/payments',
+  tags: ['billing'],
+  summary: 'Owner submits proof of a subscription payment for operator review.',
+  request: {
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: submitSubscriptionPaymentRequest } } },
+  },
+  responses: {
+    201: {
+      description: 'Payment recorded as pending review (replays return the same body).',
+      content: { 'application/json': { schema: successEnvelope(submitSubscriptionPaymentResponse) } },
+    },
+    403: jsonError('Only the owner can pay.'),
+    409: jsonError('PAYMENT_ALREADY_PENDING, or an identical request is in progress.'),
+    422: jsonError('Unknown payment method or proof file.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/payment-methods',
+  tags: ['payments'],
+  summary: 'Add an online payment method (at most 5 active online methods).',
+  request: {
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: createPaymentMethodRequest } } },
+  },
+  responses: {
+    201: {
+      description: 'Payment method created (replays return the same body).',
+      content: { 'application/json': { schema: successEnvelope(paymentMethodSettingsItem) } },
+    },
+    403: jsonError('Payment management permission is required.'),
+    409: jsonError('PAYMENT_METHOD_LIMIT, or an identical request is in progress.'),
+    422: jsonError('The payment method is invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/payment-methods/{paymentMethodId}/archive',
+  tags: ['payments'],
+  summary: 'Remove an online payment method (archived; past reservations keep it).',
+  request: {
+    params: z.object({ paymentMethodId: z.string().uuid() }),
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: archivePaymentMethodRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Payment method archived (active and storefront_enabled false).',
+      content: { 'application/json': { schema: successEnvelope(paymentMethodSettingsItem) } },
+    },
+    404: jsonError('The payment method could not be found for this workspace.'),
+    409: jsonError('STATE_CONFLICT for a stale version; cash cannot be archived.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/reservations/{reservationId}/hold',
+  tags: ['reservations'],
+  summary: 'Resume a held staff reservation: the create response shape while it is still held.',
+  request: { params: z.object({ reservationId: z.string().uuid() }) },
+  responses: {
+    200: {
+      description: 'The held reservation and its payment instructions.',
+      content: { 'application/json': { schema: successEnvelope(staffReservationCreateResponse) } },
+    },
+    404: jsonError('The reservation was not found in the active branch.'),
+    409: jsonError('The reservation is no longer held.'),
+  },
+});
 
 const generator = new OpenApiGeneratorV31(registry.definitions);
 const document = generator.generateDocument({

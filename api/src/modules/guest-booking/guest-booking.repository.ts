@@ -83,6 +83,9 @@ export interface GuestReservationRow {
   rail: 'cash' | 'manual_qr' | 'manual_transfer';
   destination_snapshot: Record<string, unknown>;
   qr_file_id: string | null;
+  presentation: 'details' | 'material';
+  material_file_id: string | null;
+  material_mime: string | null;
   receipt_submitted: boolean;
 }
 
@@ -91,6 +94,8 @@ export async function readGuestReservation(client: PoolClient, tenantId: string,
     `SELECT r.id, r.branch_id, r.reference_code, r.status, r.pickup_at, r.due_at, r.hold_expires_at,
             r.price_snapshot, r.delivery_snapshot, rl.name_snapshot AS item_name, pv.size_label,
             pm.name AS method_name, pm.rail, pm.destination_snapshot, pm.qr_file_id,
+            pm.presentation, pm.material_file_id,
+            (SELECT fo.mime_type FROM file_object fo WHERE fo.tenant_id = pm.tenant_id AND fo.id = pm.material_file_id) AS material_mime,
             EXISTS (
               SELECT 1 FROM payment p
                 JOIN payment_receipt pr ON pr.tenant_id = p.tenant_id AND pr.payment_id = p.id

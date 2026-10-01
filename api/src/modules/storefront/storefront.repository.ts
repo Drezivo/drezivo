@@ -6,6 +6,8 @@ import { eq, and } from 'drizzle-orm';
 
 import type { PolicySnapshotColumns } from './storefront-policy.js';
 import type { PreviewGrant } from './storefront-preview.js';
+import { readTenantAccess } from '../billing/billing-payments.service.js';
+import { onlinePaymentMethodReadySql, paymentMethodFileJoinsSql } from '../payment-methods/payment-method-readiness.js';
 
 /**
  * Public read path. Every query names its columns (no `SELECT *`), and the service maps rows onto
@@ -20,6 +22,8 @@ export interface PublishedStore {
   id: string;
   tenantId: string;
   branchId: string;
+  /** Renters may book and request fittings (the subscription is in full access, and not a preview). */
+  bookingOpen: boolean;
 }
 
 /**
@@ -35,7 +39,8 @@ export async function resolvePublishedStore(slug: string, preview: PreviewGrant 
         [preview.tenantId, preview.storefrontId, slug],
       );
       const row = result.rows[0];
-      return row ? { id: row.id, tenantId: row.tenant_id, branchId: row.branch_id } : null;
+      // A preview is read-only for the owner: it never takes bookings, whatever the subscription.
+      return row ? { id: row.id, tenantId: row.tenant_id, branchId: row.branch_id, bookingOpen: false } : null;
     });
   }
   const [row] = await db
@@ -43,7 +48,12 @@ export async function resolvePublishedStore(slug: string, preview: PreviewGrant 
     .from(storefront)
     .where(and(eq(storefront.slug, slug), eq(storefront.status, 'published')))
     .limit(1);
-  return row ?? null;
+  if (!row) return null;
+  // Pilot billing (billing/access.ts): a lapsed shop stays online, without bookings, for 3 days,
+  // then its storefront is offline like an unpublished one.
+  const access = await withTenantTransaction(row.tenantId, 'anonymous:public', (client) => readTenantAccess(client, row.tenantId));
+  if (!access?.storefront_online) return null;
+  return { ...row, bookingOpen: access.level === 'full' };
 }
 
 export function withPublishedStore<T>(
@@ -106,13 +116,9 @@ export async function readStorefrontPaymentMethods(client: PoolClient, tenantId:
   const result = await client.query<PublicPaymentMethodRow>(
     `SELECT pm.id, pm.name, pm.rail
        FROM payment_method pm
-       LEFT JOIN file_object qr ON qr.tenant_id = pm.tenant_id AND qr.id = pm.qr_file_id
+       ${paymentMethodFileJoinsSql()}
       WHERE pm.tenant_id = $1
-        AND pm.active AND pm.storefront_enabled AND pm.rail <> 'cash'
-        AND (
-          (pm.rail = 'manual_qr' AND qr.lifecycle_status = 'accepted' AND qr.purpose = 'storefront_asset')
-          OR (pm.rail = 'manual_transfer' AND NULLIF(btrim(pm.destination_snapshot ->> 'account_number'), '') IS NOT NULL)
-        )
+        AND ${onlinePaymentMethodReadySql()}
       ORDER BY lower(pm.name), pm.id
       LIMIT 20`,
     [tenantId],

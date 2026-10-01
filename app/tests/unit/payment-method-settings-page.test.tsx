@@ -7,6 +7,7 @@ const clerk = vi.hoisted(() => ({ getToken: vi.fn(), useAuth: vi.fn() }));
 const api = vi.hoisted(() => ({
   getPaymentMethodSettings: vi.fn(),
   updatePaymentMethodSettings: vi.fn(),
+  archivePaymentMethod: vi.fn(),
   authorizeUpload: vi.fn(),
   finalizeUpload: vi.fn(),
 }));
@@ -30,6 +31,8 @@ const methods = [
     version: 1,
     destination: { account_name: null, account_number: null, instructions: null },
     qr_file_id: null,
+    presentation: "details",
+    material: null,
   },
   {
     id: gcashId,
@@ -41,6 +44,8 @@ const methods = [
     version: 1,
     destination: { account_name: null, account_number: null, instructions: null },
     qr_file_id: null,
+    presentation: "details",
+    material: null,
   },
 ] as const;
 
@@ -99,5 +104,39 @@ describe("PaymentMethodSettingsPage", () => {
       }),
       expect.any(String)
     );
+  });
+
+  it("disables adding at five online methods and says why", async () => {
+    const online = Array.from({ length: 5 }, (_, index) => ({
+      ...methods[1],
+      id: `3333333${index}-3333-4333-8333-333333333333`,
+      name: `Bank ${index}`,
+      rail: "manual_transfer" as const,
+    }));
+    api.getPaymentMethodSettings.mockResolvedValue({ data: { items: [methods[0], ...online] }, requestId: "req-list" });
+    render(<PaymentMethodSettingsPage />);
+    await screen.findByText("Bank 4");
+
+    expect(screen.getByRole("button", { name: /Add payment method/ })).toBeDisabled();
+    expect(screen.getByText("All 5 online methods are in use. Remove one to add another.")).toBeVisible();
+  });
+
+  it("asks before removing and archives once for a double click", async () => {
+    api.archivePaymentMethod.mockResolvedValue({
+      data: { ...methods[1], active: false, version: 2 },
+      requestId: "req-archive",
+    });
+    render(<PaymentMethodSettingsPage />);
+    await screen.findByText("GCash");
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(screen.getByText("Remove GCash?")).toBeVisible();
+    expect(api.archivePaymentMethod).not.toHaveBeenCalled();
+    const confirm = screen.getByRole("button", { name: "Remove" });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(api.archivePaymentMethod).toHaveBeenCalledTimes(1));
+    expect(api.archivePaymentMethod).toHaveBeenCalledWith(gcashId, { version: 1 }, expect.any(String));
   });
 });

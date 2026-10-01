@@ -20,6 +20,8 @@ export default async function FittingsPage({ params }: { params: Promise<{ slug:
       </header>
       {preview ? (
         <p className="border border-sf-line p-6 text-sf-muted">Fitting requests open once you publish your storefront.</p>
+      ) : !store.booking_open ? (
+        <p className="border border-sf-line p-6 text-sf-muted">Online fitting requests are paused for now. Contact the shop to book a fitting.</p>
       ) : (
         <FittingFlow store={store} items={catalogue.items} />
       )}

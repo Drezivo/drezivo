@@ -199,6 +199,16 @@ describe('CLT-061 catalogue scale and query bounds', async () => {
   });
 
   async function seedScaleCatalogue(tenantId: string, principalId: string) {
+    const seeded = await insertScaleCatalogue(tenantId, principalId);
+    // Autoanalyze may have sampled these tables while they were empty; with those stats the churn
+    // UPDATE picks a nested-loop plan that runs for minutes and holds locks the next test waits on.
+    await withTenantTransaction(tenantId, principalId, (client) =>
+      client.query('ANALYZE product, product_variant, physical_asset'),
+    );
+    return seeded;
+  }
+
+  async function insertScaleCatalogue(tenantId: string, principalId: string) {
     return withTenantTransaction(tenantId, principalId, async (client) => {
       const branch = await client.query<{ id: string }>(
         `INSERT INTO branch (tenant_id, name, code, is_default, timezone)
