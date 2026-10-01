@@ -16,15 +16,23 @@ export async function promoteElapsedRecoveryReadinessForAllTenants(
   const activeTenants = await db.select({ id: tenant.id }).from(tenant);
   let totalPromoted = 0;
   for (const { id: tenantId } of activeTenants) {
-    totalPromoted += await promoteElapsedRecoveryReadinessForTenant(tenantId, batchSizePerTenant);
+    totalPromoted += await promoteElapsedRecoveryReadinessForTenant(
+      tenantId,
+      batchSizePerTenant,
+    );
   }
   return totalPromoted;
 }
 
-async function promoteElapsedRecoveryReadinessForTenant(
+/** Promotes due readiness for one known tenant; the caller must resolve tenant scope first. */
+export async function promoteElapsedRecoveryReadinessForTenant(
   tenantId: string,
-  batchSize: number,
+  batchSize = 100,
 ): Promise<number> {
+  if (!tenantId) {
+    throw new Error('promoteElapsedRecoveryReadinessForTenant: tenantId is required');
+  }
+
   return withSystemTenantTransaction(tenantId, 'worker:recovery-readiness', async (client) => {
     const result = await client.query<{ id: string }>(
       `WITH due_assets AS (

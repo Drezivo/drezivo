@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import { Client } from 'pg';
 
-import { pool, withTenantTransaction } from '../../../src/db/client.js';
+import { withTenantTransaction } from '../../../src/db/client.js';
+import { requireTestDatabaseUrl } from './test-db.js';
 
 /**
  * Minimal row factories for integration tests. This module is ONLY ever imported dynamically
@@ -9,9 +11,9 @@ import { pool, withTenantTransaction } from '../../../src/db/client.js';
  * against the wrong database before the test could intervene. Same discipline as
  * src/__tests__/app.test.ts.
  *
- * Rows are created through the real access paths, not back-door superuser inserts: global
- * tables via the shared pool, tenant-owned rows via `withTenantTransaction` so RLS policies
- * and grants are exercised by every test that uses a factory.
+ * Global tenant fixtures are inserted using the isolated local test database's admin connection;
+ * application bootstrap has a dedicated policy and is covered by tenant-bootstrap integration
+ * tests. Tenant-owned fixtures use `withTenantTransaction` so application RLS is exercised.
  */
 
 export interface TestTenant {
@@ -26,17 +28,23 @@ export function testKey(label: string): string {
 export async function createTestTenant(overrides?: { clerkOrgId?: string }): Promise<TestTenant> {
   const suffix = randomUUID().slice(0, 8);
   const clerkOrgId = overrides?.clerkOrgId ?? `org_test_${suffix}`;
-  const result = await pool.query<{ id: string }>(
-    `INSERT INTO tenant (clerk_org_id, name, slug)
-     VALUES ($1, $2, $3)
-     RETURNING id`,
-    [clerkOrgId, `Test Business ${suffix}`, `test-${suffix}`],
-  );
-  const row = result.rows[0];
-  if (!row) {
-    throw new Error('createTestTenant: insert returned no row');
+  const admin = new Client({ connectionString: requireTestDatabaseUrl() });
+  await admin.connect();
+  try {
+    const result = await admin.query<{ id: string }>(
+      `INSERT INTO tenant (clerk_org_id, name, slug)
+       VALUES ($1, $2, $3)
+       RETURNING id`,
+      [clerkOrgId, `Test Business ${suffix}`, `test-${suffix}`],
+    );
+    const row = result.rows[0];
+    if (!row) {
+      throw new Error('createTestTenant: insert returned no row');
+    }
+    return { id: row.id, clerkOrgId };
+  } finally {
+    await admin.end();
   }
-  return { id: row.id, clerkOrgId };
 }
 
 export function createTestMembership(

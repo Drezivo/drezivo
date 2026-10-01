@@ -45,3 +45,15 @@ Migrations run once, deliberately, through `npm run db:migrate` against a `DATAB
 control — never as automatic schema sync on API startup (TRD §9: "Never run schema
 synchronization on each API startup"). `src/server.ts` and `src/worker.ts` assume the schema
 already matches the applied migrations; they do not attempt to reconcile it.
+
+## Supabase grants and RLS
+
+All Drezivo tables in the exposed `public` schema must have both protection layers: runtime
+database roles need only the table/column grants required by the API or worker, and every table
+must enable and force RLS with explicit policies. Do not grant Drezivo application objects to
+Supabase's `anon`, `authenticated`, or `service_role`; the product uses its own API and runtime
+roles. New tables, sequences, and functions must be private by default and grant only the needed
+runtime operations in the same migration. Apply app migrations as the existing Drezivo object
+owner (`postgres` on Supabase), not `supabase_admin`, whose default ACLs are managed separately
+by Supabase. If Supabase's automatic-RLS event trigger is installed, keep its helper private:
+the trigger remains enabled, but only its owner may execute the `SECURITY DEFINER` function.

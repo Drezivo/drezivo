@@ -58,19 +58,19 @@ jobs:
         image: postgres:17.11-alpine3.24
         env:
           POSTGRES_DB: drezivo_test
-          POSTGRES_USER: drezivo
+          POSTGRES_USER: postgres
           POSTGRES_PASSWORD: test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U drezivo -d drezivo_test"
+          --health-cmd "pg_isready -U postgres -d drezivo_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
           --health-start-period 5s
     env:
       NODE_ENV: test
-      TEST_DATABASE_URL: postgres://drezivo:test@127.0.0.1:5432/drezivo_test
+      TEST_DATABASE_URL: postgres://postgres:test@127.0.0.1:5432/drezivo_test
       TEST_DATABASE_APP_PASSWORD: drezivo_app_ci_test
       TEST_DATABASE_WORKER_PASSWORD: drezivo_worker_ci_test
     steps:

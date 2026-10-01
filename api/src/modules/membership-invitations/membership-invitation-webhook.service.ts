@@ -28,7 +28,7 @@ export async function reconcileAcceptedInvitationWebhook(input: {
   clerk: ClerkServerAdapter;
 }): Promise<InvitationWebhookReconciliationResult> {
   return withSystemTenantResolutionTransaction(SYSTEM_PRINCIPAL, async (context) => {
-    const tenant = await findClaimTenant(context.client, input.organizationId);
+    const tenant = await findClaimTenant(context.client, input.organizationId, input.invitationId);
     if (!tenant) return { kind: 'ignored' };
     await context.setTenantContext(tenant.id);
     try {

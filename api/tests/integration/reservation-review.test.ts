@@ -95,7 +95,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     '../../src/modules/reservations/reservations.review.service.js'
   );
   const { expireDueHoldsForAllTenants } = await import('../../src/worker/handlers/hold-expirer.js');
-  const { promoteElapsedRecoveryReadinessForAllTenants } = await import(
+  const { promoteElapsedRecoveryReadinessForTenant } = await import(
     '../../src/worker/handlers/recovery-readiness.js'
   );
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
@@ -1902,7 +1902,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     expect(after.reservation_status).toBe('completed');
   });
 
-  it('reconciles elapsed Recovery cleaning through the worker without touching persistent readiness states', async () => {
+  it('reconciles elapsed Recovery cleaning for a tenant without touching persistent readiness states', async () => {
     const seed = await seedWorkspace('org_rsv052_recovery_worker', 'user_rsv052_recovery_worker', 'cash');
     const returned = await createReturnedReservation(seed, 'completion-recovery-worker');
 
@@ -1930,7 +1930,9 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       );
     });
 
-    expect(await promoteElapsedRecoveryReadinessForAllTenants()).toBe(1);
+    // This suite connects as drezivo_app, which is intentionally unable to enumerate tenants.
+    // Exercise the tenant-scoped worker operation after resolving the tenant in the fixture.
+    expect(await promoteElapsedRecoveryReadinessForTenant(seed.tenantId)).toBe(1);
     const state = await pickupState(seed, returned.id);
     expect(state.asset).toMatchObject({
       readiness: 'ready',
