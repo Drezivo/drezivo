@@ -48,16 +48,15 @@ export const operationalCalendarQuery = z
 export type OperationalCalendarQuery = z.infer<typeof operationalCalendarQuery>;
 
 /**
- * Calendar is an operational projection, not a second lifecycle. These are
- * the only reservation states whose pickup/return facts may be projected.
- * Held, cancelled, expired, and rejected reservations remain out of scope.
+ * Calendar is an operational projection, not a second lifecycle. Only states
+ * with remaining pickup/return work are projected. `picked_up` keeps only the
+ * pending return milestone; returned/completed reservations stay in history,
+ * not the default operational schedule.
  */
 export const OPERATIONAL_CALENDAR_RESERVATION_STATUSES = [
   'pending_confirmation',
   'confirmed',
   'picked_up',
-  'returned',
-  'completed',
 ] as const;
 export const operationalCalendarReservationStatus = z.enum(
   OPERATIONAL_CALENDAR_RESERVATION_STATUSES,

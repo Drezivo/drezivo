@@ -26,6 +26,7 @@ const api = vi.hoisted(() => ({
   createStaffReservation: vi.fn(),
   getCatalogueClothing: vi.fn(),
   getCatalogueClothingDetail: vi.fn(),
+  getBusinessHours: vi.fn(),
   getStaffReservationAvailabilityCalendar: vi.fn(),
   getStaffReservationAvailabilityCheck: vi.fn(),
   getStaffReservationIntakeOptions: vi.fn(),
@@ -358,11 +359,12 @@ async function selectProductVariantAndRentalPeriod() {
 }
 
 function setPickerTime(label: string, hour: string, minute: string, period: "AM" | "PM") {
-  fireEvent.click(screen.getByRole("button", { name: label }));
-  fireEvent.change(screen.getByLabelText(`${label} hour`), { target: { value: hour } });
-  fireEvent.change(screen.getByLabelText(`${label} minute`), { target: { value: minute } });
-  fireEvent.change(screen.getByLabelText(`${label} period`), { target: { value: period } });
-  fireEvent.click(screen.getByRole("button", { name: "Set time" }));
+  const hourInput = screen.getByRole("textbox", { name: `${label} hour` });
+  const minuteInput = screen.getByRole("textbox", { name: `${label} minute` });
+  const periodInput = screen.getByRole("combobox", { name: `${label} period` });
+  fireEvent.change(hourInput, { target: { value: hour } });
+  fireEvent.change(minuteInput, { target: { value: minute } });
+  fireEvent.change(periodInput, { target: { value: period } });
 }
 
 const fillDatesAndSelectProduct = selectProductVariantAndRentalPeriod;
@@ -380,6 +382,19 @@ describe("NewReservationSheet", () => {
       requestId: "req-intake",
     });
     api.getCatalogueClothing.mockResolvedValue(listPage());
+    api.getBusinessHours.mockResolvedValue({
+      data: {
+        branch_id: ids.branch,
+        branch_name: "Main Branch",
+        timezone: "Asia/Manila",
+        opens_local: "08:00",
+        closes_local: "20:00",
+        closed_weekdays: [],
+        version: 1,
+        updated_at: "2026-10-01T00:00:00.000Z",
+      },
+      requestId: "req-business-hours",
+    });
     api.getCatalogueClothingDetail.mockResolvedValue({ data: detail, requestId: "req-detail" });
     api.getStaffReservationAvailabilityCalendar.mockResolvedValue({
       data: calendarResponse,
@@ -398,6 +413,32 @@ describe("NewReservationSheet", () => {
       data: { reservation: { ...heldResponse.reservation, status: "cancelled", version: 2 } },
       requestId: "req-cancel",
     });
+  });
+
+  it("shows only five recent clothing items by default and tells staff to search for more", async () => {
+    const items = Array.from({ length: 6 }, (_, index) =>
+      clothingListItem.parse({
+        ...product,
+        product_id: `00000000-0000-4000-8000-${String(200 + index).padStart(12, "0")}`,
+        code: `LOOK-${index + 1}`,
+        name: `Recent Look ${index + 1}`,
+      })
+    );
+    api.getCatalogueClothing.mockResolvedValue(listPage(items));
+
+    renderSheet();
+
+    await waitFor(() =>
+      expect(api.getCatalogueClothing).toHaveBeenCalledWith({
+        limit: 5,
+        sort: "newest",
+        product_status: "active",
+      })
+    );
+    expect(await screen.findByRole("button", { name: /Recent Look 1/i })).toBeVisible();
+    expect(screen.getByRole("button", { name: /Recent Look 5/i })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Recent Look 6/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Showing up to 5 recent clothing items. Search to find more clothing.")).toBeVisible();
   });
 
   it("requires clothing and an explicit variant before showing the rental calendar", async () => {
@@ -420,6 +461,36 @@ describe("NewReservationSheet", () => {
         end_date: "2026-10-31",
       })
     );
+  });
+
+  it("uses segmented time inputs and business-hours quick times without a Set time step", async () => {
+    renderSheet();
+    fireEvent.click(await screen.findByRole("button", { name: /Emerald Gown/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /M · Emerald/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Select Oct 10 to Oct 13" }));
+
+    const pickupHour = screen.getByRole("textbox", { name: "Pickup time hour" });
+    const pickupMinute = screen.getByRole("textbox", { name: "Pickup time minute" });
+    const pickupPeriod = screen.getByRole("combobox", { name: "Pickup time period" });
+    const returnHour = screen.getByRole("textbox", { name: "Return time hour" });
+    const returnMinute = screen.getByRole("textbox", { name: "Return time minute" });
+    expect(pickupHour).toHaveAttribute("placeholder", "hh");
+    expect(pickupMinute).toHaveAttribute("placeholder", "mm");
+    expect(screen.queryByRole("button", { name: "Set time" })).not.toBeInTheDocument();
+
+    fireEvent.change(pickupHour, { target: { value: "3" } });
+    fireEvent.change(pickupMinute, { target: { value: "15" } });
+    fireEvent.change(pickupPeriod, { target: { value: "PM" } });
+    expect(pickupHour).toHaveValue("03");
+    expect(pickupMinute).toHaveValue("15");
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose return time" }));
+    expect(await screen.findByRole("button", { name: "08:00 AM" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "08:30 AM" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "08:00 PM" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "03:30 PM" }));
+    expect(returnHour).toHaveValue("03");
+    expect(returnMinute).toHaveValue("30");
   });
 
   it("automatically selects a free-size variant without rendering an empty size button", async () => {
@@ -530,6 +601,7 @@ describe("NewReservationSheet", () => {
     expect(
       await screen.findByText("Reservation confirmed. Cash payment of ₱2,000 was recorded.")
     ).toBeVisible();
+    expect(screen.queryByRole("checkbox", { name: "Cash received" })).not.toBeInTheDocument();
     expect(props.onReservationChanged).toHaveBeenCalledWith(ids.reservation);
   });
 

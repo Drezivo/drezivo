@@ -602,8 +602,19 @@ function AppointmentList({
                 <AppointmentCell label="Garments" className="col-span-2 lg:col-span-1">
                   {firstGarment ? (
                     <div className="flex min-w-0 items-start gap-2">
-                      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-dashboard-active text-dashboard-accent">
-                        <Shirt className="h-4 w-4" aria-hidden="true" />
+                      <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active text-dashboard-accent">
+                        {firstGarment.variant.primary_image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- fitting garment images use short-lived signed catalogue URLs.
+                          <img
+                            src={firstGarment.variant.primary_image_url}
+                            alt={`${firstGarment.variant.product_name} catalogue photo`}
+                            loading="lazy"
+                            decoding="async"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <Shirt className="h-4 w-4" aria-hidden="true" />
+                        )}
                       </span>
                       <span className="min-w-0">
                         <span className="block truncate font-medium text-dashboard-navy">

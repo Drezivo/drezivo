@@ -105,6 +105,37 @@ export async function findActiveProducts(client: PoolClient, tenantId: string, p
 }
 
 /** Conditional write: returns false when another edit already moved the version on. */
+export async function syncStorefrontContactFromBusinessInformation(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    storefrontId: string;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+  },
+): Promise<boolean> {
+  const result = await client.query(
+    `UPDATE storefront
+        SET contact = contact || jsonb_build_object(
+              'phone', $3::text,
+              'email', $4::text,
+              'address', $5::text
+            ),
+            version = version + 1,
+            updated_at = statement_timestamp()
+      WHERE tenant_id = $1
+        AND id = $2
+        AND (
+          contact->>'phone' IS DISTINCT FROM $3
+          OR contact->>'email' IS DISTINCT FROM $4
+          OR contact->>'address' IS DISTINCT FROM $5
+        )`,
+    [input.tenantId, input.storefrontId, input.phone, input.email, input.address],
+  );
+  return result.rowCount === 1;
+}
+
 export async function updateStorefrontDocument(
   client: PoolClient,
   input: { tenantId: string; storefrontId: string; expectedVersion: number; document: StorefrontDocument },

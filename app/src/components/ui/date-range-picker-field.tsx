@@ -21,6 +21,8 @@ export function DateRangePickerField({
   invalid = false,
   disabled = false,
   className,
+  startFreshOnOpen = false,
+  popoverAlign = "start",
 }: {
   value: DateRangeValue;
   onChange: (value: DateRangeValue) => void;
@@ -29,6 +31,8 @@ export function DateRangePickerField({
   invalid?: boolean;
   disabled?: boolean;
   className?: string;
+  startFreshOnOpen?: boolean;
+  popoverAlign?: "start" | "end";
 }) {
   const externalRange = useMemo<DayPickerDateRange | undefined>(() => {
     const from = parseIsoDate(value.from);
@@ -37,6 +41,7 @@ export function DateRangePickerField({
     return { from, ...(to ? { to } : {}) };
   }, [value.from, value.to]);
   const [draftRange, setDraftRange] = useState<DayPickerDateRange | undefined>(externalRange);
+  const [freshRangeStarted, setFreshRangeStarted] = useState(false);
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -72,8 +77,14 @@ export function DateRangePickerField({
         aria-invalid={invalid}
         disabled={disabled}
         onClick={() => {
-          setDraftRange(externalRange);
-          setOpen((current) => !current);
+          setOpen((current) => {
+            const nextOpen = !current;
+            if (nextOpen) {
+              setDraftRange(startFreshOnOpen ? undefined : externalRange);
+              setFreshRangeStarted(false);
+            }
+            return nextOpen;
+          });
         }}
         className={cn(
           "flex h-10 w-full items-center justify-between rounded-md border bg-dashboard-surface px-3 text-left text-sm text-dashboard-navy transition-colors hover:border-dashboard-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30 disabled:pointer-events-none disabled:opacity-50",
@@ -95,15 +106,26 @@ export function DateRangePickerField({
       </button>
 
       {open ? (
-        <div className="absolute left-1/2 top-[calc(100%+0.5rem)] z-50 w-[calc(100vw-2rem)] max-w-[22rem] -translate-x-1/2 rounded-lg border border-dashboard-border bg-dashboard-surface p-2 shadow-xl sm:left-0 sm:w-[22rem] sm:translate-x-0 sm:p-3">
+        <div
+          className={cn(
+            "absolute left-1/2 top-[calc(100%+0.5rem)] z-50 w-[calc(100vw-2rem)] max-w-[22rem] -translate-x-1/2 rounded-lg border border-dashboard-border bg-dashboard-surface p-2 shadow-xl sm:w-[22rem] sm:translate-x-0 sm:p-3",
+            popoverAlign === "end" ? "sm:left-auto sm:right-0" : "sm:left-0 sm:right-auto"
+          )}
+        >
           <Calendar
             mode="range"
             selected={draftRange}
             defaultMonth={draftRange?.from ?? today}
             onSelect={(range) => {
               if (!range?.from) return;
-              setDraftRange(range);
 
+              if (startFreshOnOpen && !freshRangeStarted) {
+                setDraftRange({ from: range.from });
+                setFreshRangeStarted(true);
+                return;
+              }
+
+              setDraftRange(range);
               if (!range.to) {
                 const date = formatIsoDate(range.from);
                 onChange({ from: date, to: date });
@@ -114,6 +136,7 @@ export function DateRangePickerField({
                 from: formatIsoDate(range.from),
                 to: formatIsoDate(range.to),
               });
+              setFreshRangeStarted(false);
               setOpen(false);
             }}
           />

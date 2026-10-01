@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fittingDetail, fittingSettings } from "@drezivo/contracts";
 
@@ -12,6 +12,7 @@ const clerk = vi.hoisted(() => ({
 
 const api = vi.hoisted(() => ({
   createFitting: vi.fn(),
+  getBusinessHours: vi.fn(),
   getCatalogueClothing: vi.fn(),
   getCatalogueClothingDetail: vi.fn(),
   getFittingIntakeOptions: vi.fn(),
@@ -53,9 +54,6 @@ const settings = fittingSettings.parse({
   fee_minor: "50000",
   currency: "PHP",
   timezone: "Asia/Manila",
-  weekly_hours: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].map(
-    (weekday) => ({ weekday, windows: [{ starts_local: "09:00", ends_local: "17:00" }] })
-  ),
   version: 1,
   updated_at: "2026-09-27T00:00:00.000Z",
 });
@@ -104,6 +102,7 @@ const catalogueList = {
       product_id: productId,
       name: "Test Gown",
       size_labels: ["Medium"],
+      primary_image_url: "https://cdn.example.test/test-gown.webp",
     },
   ],
   page_meta: { next_cursor: null, has_more: false },
@@ -128,6 +127,19 @@ describe("NewFittingSheet production cutover", () => {
     vi.clearAllMocks();
     clerk.useAuth.mockReturnValue({ getToken: clerk.getToken });
     clerk.getToken.mockResolvedValue("test-token");
+    api.getBusinessHours.mockResolvedValue({
+      data: {
+        branch_id: branchId,
+        branch_name: "Main",
+        opens_local: "08:00",
+        closes_local: "20:00",
+        closed_weekdays: [],
+        timezone: "Asia/Manila",
+        version: 1,
+        updated_at: "2026-09-27T00:00:00.000Z",
+      },
+      requestId: "request-business-hours",
+    });
     api.getFittingIntakeOptions.mockResolvedValue({
       data: {
         customers: [
@@ -161,6 +173,16 @@ describe("NewFittingSheet production cutover", () => {
     expect(screen.queryByText("Guaranteed intent")).not.toBeInTheDocument();
   });
 
+  it("uses segmented start-time input and branch Business Hours quick choices", async () => {
+    render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    expect(screen.getByLabelText("Fitting start time hour")).toBeVisible();
+    expect(screen.getByLabelText("Fitting start time minute")).toBeVisible();
+    expect(screen.getByLabelText("Fitting start time period")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Set time" })).not.toBeInTheDocument();
+    await waitFor(() => expect(api.getBusinessHours).toHaveBeenCalledTimes(1));
+  });
+
   it("searches existing customers through the fitting intake API", async () => {
     render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
 
@@ -192,14 +214,31 @@ describe("NewFittingSheet production cutover", () => {
     fireEvent.change(screen.getByPlaceholderText("09XXXXXXXXX"), {
       target: { value: "09171234567" },
     });
+    fireEvent.change(screen.getByLabelText("Fitting start time hour"), {
+      target: { value: "7" },
+    });
+    fireEvent.change(screen.getByLabelText("Fitting start time minute"), {
+      target: { value: "30" },
+    });
+    fireEvent.change(screen.getByLabelText("Fitting start time period"), {
+      target: { value: "PM" },
+    });
     expect(screen.queryByLabelText("Address (optional)")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Social media (optional)")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(await screen.findByRole("button", { name: /Test Gown/ })).toBeVisible();
+    expect(screen.getByRole("img", { name: "Test Gown catalogue photo" })).toHaveAttribute(
+      "src",
+      "https://cdn.example.test/test-gown.webp"
+    );
     fireEvent.click(screen.getByRole("button", { name: /Test Gown/ }));
-    expect(await screen.findByText("SKU TEST-M")).toBeVisible();
+    await screen.findByText("Medium · Gold");
+    expect(screen.queryByText(/SKU TEST-M/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByRole("button", { name: "Preference only" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Guarantee garment" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Remove" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Guarantee garment" }));
     expect(screen.getByText("Guaranteed garment")).toBeVisible();
 
@@ -234,5 +273,91 @@ describe("NewFittingSheet production cutover", () => {
     expect(request).not.toHaveProperty("payment");
     expect(idempotencyKey).toEqual(expect.any(String));
     expect(onCreated).toHaveBeenCalledWith(createdFitting);
+  });
+
+  describe("start time follows the shop clock", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+      // 4:13 PM in Manila.
+      vi.setSystemTime(new Date("2026-10-01T08:13:00.000Z"));
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("opens on the slot already running so a walk-in can start now, and shows the shop time", () => {
+      render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+      expect(screen.getByRole("textbox", { name: "Fitting start time hour" })).toHaveValue("04");
+      expect(screen.getByRole("textbox", { name: "Fitting start time minute" })).toHaveValue("00");
+      expect(screen.getByRole("combobox", { name: "Fitting start time period" })).toHaveValue("PM");
+      expect(screen.getByText(/It is now 4:13 PM/)).toBeVisible();
+    });
+
+    it("moves a start the clock has passed to the slot now running", () => {
+      render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+      act(() => {
+        vi.setSystemTime(new Date("2026-10-01T08:30:30.000Z"));
+        vi.advanceTimersByTime(30_000);
+      });
+
+      expect(screen.getByRole("textbox", { name: "Fitting start time hour" })).toHaveValue("04");
+      expect(screen.getByRole("textbox", { name: "Fitting start time minute" })).toHaveValue("30");
+      expect(screen.getByRole("combobox", { name: "Fitting start time period" })).toHaveValue("PM");
+      expect(
+        screen.getByText("The start time moved to 4:30 PM because the time you chose has passed.")
+      ).toBeVisible();
+    });
+
+    it("rejects minutes outside the 30-minute fitting grid", () => {
+      render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+      const minuteInput = screen.getByRole("textbox", { name: "Fitting start time minute" });
+      fireEvent.change(minuteInput, { target: { value: "15" } });
+      fireEvent.blur(minuteInput);
+
+      expect(screen.getByText("Enter a time on a 30-minute boundary.")).toBeVisible();
+    });
+  });
+
+  it("finds a walk-in who is already a customer and reuses that customer", async () => {
+    render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Walk-in customer" }));
+    fireEvent.change(screen.getByPlaceholderText("Full name"), { target: { value: "Exi" } });
+    expect(await screen.findByText("Customers with a similar name")).toBeVisible();
+
+    fireEvent.change(screen.getByPlaceholderText("09XXXXXXXXX"), {
+      target: { value: "09170000001" },
+    });
+    await waitFor(() =>
+      expect(api.getFittingIntakeOptions).toHaveBeenCalledWith({ customer_search: "09170000001" })
+    );
+    expect(await screen.findByText("This customer is already saved")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Use this customer" }));
+
+    expect(screen.getByRole("button", { name: "Existing customer" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(await screen.findByRole("radio", { name: /Existing Customer/ })).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
+  });
+
+  it("does not offer a saved customer whose phone only partly matches", async () => {
+    render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Walk-in customer" }));
+    fireEvent.change(screen.getByPlaceholderText("09XXXXXXXXX"), {
+      target: { value: "09170000009" },
+    });
+    await waitFor(() =>
+      expect(api.getFittingIntakeOptions).toHaveBeenCalledWith({ customer_search: "09170000009" })
+    );
+    expect(screen.queryByText("This customer is already saved")).not.toBeInTheDocument();
   });
 });

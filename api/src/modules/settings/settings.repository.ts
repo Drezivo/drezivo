@@ -339,6 +339,33 @@ export async function proposedBranchClosureInvalidatesFutureFittings(
   return result.rows[0]?.invalidates ?? false;
 }
 
+export async function syncBusinessContactFromStorefront(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    businessEmail: string | null;
+    businessPhone: string | null;
+    businessAddress: string | null;
+  },
+): Promise<boolean> {
+  const result = await client.query(
+    `UPDATE tenant_settings
+        SET business_email = $2,
+            business_phone = $3,
+            business_address = $4,
+            version = version + 1,
+            updated_at = statement_timestamp()
+      WHERE tenant_id = $1
+        AND (
+          business_email IS DISTINCT FROM $2
+          OR business_phone IS DISTINCT FROM $3
+          OR business_address IS DISTINCT FROM $4
+        )`,
+    [input.tenantId, input.businessEmail, input.businessPhone, input.businessAddress],
+  );
+  return result.rowCount === 1;
+}
+
 export async function updateBusinessInformation(
   client: PoolClient,
   input: { tenantId: string; expectedVersion: number; info: BusinessInformation },

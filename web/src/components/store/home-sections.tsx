@@ -176,10 +176,18 @@ export function About({ store }: { store: PublicStorefront }) {
 }
 
 export function RentalInfo({ store }: { store: PublicStorefront }) {
-  if (!store.content.sections.rental_info || !store.policy.rental) return null;
+  const imageTerms = store.policy.format === 'images';
+  const hasTerms = imageTerms ? store.policy.image_urls.length > 0 : Boolean(store.policy.rental);
+  if (!store.content.sections.rental_info || !hasTerms) return null;
+  // Pictures of a policy are not quotable here; point renters to the page that shows them in full.
+  const termItems = imageTerms
+    ? [{ title: 'Rental terms', body: 'Deposit, cancellation, and return rules are on the Rental info page. Read them before you book.' }]
+    : [
+        { title: 'Deposit', body: store.policy.deposit },
+        { title: 'Cancellation', body: store.policy.cancellation },
+      ];
   const items = [
-    { title: 'Deposit', body: store.policy.deposit },
-    { title: 'Cancellation', body: store.policy.cancellation },
+    ...termItems,
     {
       title: store.fulfillment.delivery ? 'Pickup and delivery' : 'Pickup',
       body: store.fulfillment.delivery

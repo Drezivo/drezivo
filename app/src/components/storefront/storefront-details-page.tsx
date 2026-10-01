@@ -61,10 +61,25 @@ export function StorefrontDetailsPage() {
             </div>
           </Section>
 
-          <Section icon={AtSign} title="Contact" description="Shown on your storefront so renters can reach you.">
+          <Section icon={AtSign} title="Contact" description="Shown on your storefront so renters can reach you. Phone, email, and address stay synced with Business Information.">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Phone" error={err("contact.phone")}>
-                {(props) => <Input {...props} type="tel" inputMode="tel" autoComplete="tel" value={c.phone ?? ""} placeholder="+63 917 123 4567" onChange={(e) => contact.update({ phone: orNull(e.target.value) })} />}
+              <Field label="Phone" hint="Use exactly 11 digits." error={err("contact.phone")}>
+                {(props) => (
+                  <Input
+                    {...props}
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    maxLength={11}
+                    value={c.phone ?? ""}
+                    placeholder="09xxxxxxxxx"
+                    onChange={(e) =>
+                      contact.update({
+                        phone: orNull(e.target.value.replace(/\D/g, "").slice(0, 11)),
+                      })
+                    }
+                  />
+                )}
               </Field>
               <Field label="Email" error={err("contact.email")}>
                 {(props) => <Input {...props} type="email" autoComplete="email" value={c.email ?? ""} placeholder="hello@yourshop.ph" onChange={(e) => contact.update({ email: orNull(e.target.value) })} />}

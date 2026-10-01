@@ -6,8 +6,6 @@ import { ItemView } from '@/components/store/item-view';
 import { readItem, readStore } from '@/lib/storefront-preview';
 import { buildItemMetadata } from '@/lib/seo';
 
-export const revalidate = 60;
-
 interface Props {
   params: Promise<{ slug: string; itemId: string }>;
 }

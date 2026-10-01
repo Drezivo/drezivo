@@ -99,13 +99,13 @@ export function BusinessHoursSettingsSection() {
     setError(null);
   };
 
-  const toggleWeekday = (weekday: Weekday) => {
+  const toggleOpenWeekday = (weekday: Weekday) => {
     if (!draft) return;
-    const closed = draft.closed_weekdays.includes(weekday);
+    const open = !draft.closed_weekdays.includes(weekday);
     updateDraft({
-      closed_weekdays: closed
-        ? draft.closed_weekdays.filter((item) => item !== weekday)
-        : WEEKDAYS.filter((item) => item === weekday || draft.closed_weekdays.includes(item)),
+      closed_weekdays: open
+        ? WEEKDAYS.filter((item) => item === weekday || draft.closed_weekdays.includes(item))
+        : draft.closed_weekdays.filter((item) => item !== weekday),
     });
   };
 
@@ -192,10 +192,11 @@ export function BusinessHoursSettingsSection() {
       </div>
 
       <fieldset className="mt-5">
-        <legend className="text-xs font-medium text-dashboard-muted">Closed every</legend>
+        <legend className="text-xs font-medium text-dashboard-muted">Open days</legend>
+        <p className="mt-1 text-xs text-dashboard-muted">Select the days this branch is normally open.</p>
         <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
           {WEEKDAYS.map((weekday) => {
-            const checked = draft.closed_weekdays.includes(weekday);
+            const checked = !draft.closed_weekdays.includes(weekday);
             return (
               <label
                 key={weekday}
@@ -210,8 +211,8 @@ export function BusinessHoursSettingsSection() {
                   className="sr-only"
                   type="checkbox"
                   checked={checked}
-                  aria-label={`${capitalize(weekday)} closed`}
-                  onChange={() => toggleWeekday(weekday)}
+                  aria-label={`${capitalize(weekday)} open`}
+                  onChange={() => toggleOpenWeekday(weekday)}
                 />
                 {capitalize(weekday)}
               </label>

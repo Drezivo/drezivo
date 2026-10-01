@@ -37,7 +37,7 @@ vi.mock("@/lib/drezivo-api", () => ({
 const business = {
   business_name: "Luna Rentals",
   business_email: "hello@example.test",
-  business_phone: "+639171234567",
+  business_phone: "09171234567",
   business_address: "Quezon City",
   version: 1,
   timezone: "Asia/Manila",
@@ -86,7 +86,10 @@ describe("BusinessSettingsPage Business Hours editor", () => {
     expect(await screen.findByText("Main Branch")).toBeVisible();
     expect(screen.getByLabelText("Opening time")).toHaveValue("09:00");
     expect(screen.getByLabelText("Closing time")).toHaveValue("20:00");
-    expect(screen.getByLabelText("Sunday closed")).toBeChecked();
+    expect(screen.getByText("Open days")).toBeVisible();
+    expect(screen.getByText("Select the days this branch is normally open.")).toBeVisible();
+    expect(screen.getByLabelText("Monday open")).toBeChecked();
+    expect(screen.getByLabelText("Sunday open")).not.toBeChecked();
     expect(screen.getByText("Christmas Day")).toBeVisible();
     expect(screen.getByText(/control the operational Calendar and fitting availability/i)).toBeVisible();
 
@@ -97,6 +100,16 @@ describe("BusinessSettingsPage Business Hours editor", () => {
     expect(hoursHeading.compareDocumentPosition(regionalHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("keeps the business phone aligned with storefront contact rules", async () => {
+    render(<BusinessSettingsPage />);
+
+    const phone = await screen.findByLabelText("Business phone");
+    expect(phone).toHaveValue("09171234567");
+    fireEvent.change(phone, { target: { value: "09ab123456789999" } });
+    expect(phone).toHaveValue("09123456789");
+    expect(screen.getByText(/stay synced with Storefront contact details/i)).toBeVisible();
+  });
+
   it("saves one shared time window and recurring closed weekdays, then refetches authoritative state", async () => {
     api.getBusinessHours
       .mockResolvedValueOnce({ data: hours })
@@ -104,7 +117,7 @@ describe("BusinessSettingsPage Business Hours editor", () => {
     render(<BusinessSettingsPage />);
 
     fireEvent.change(await screen.findByLabelText("Opening time"), { target: { value: "10:00" } });
-    fireEvent.click(screen.getByLabelText("Monday closed"));
+    fireEvent.click(screen.getByLabelText("Monday open"));
     fireEvent.click(screen.getByRole("button", { name: "Save business hours" }));
 
     await waitFor(() =>

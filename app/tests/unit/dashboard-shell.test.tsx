@@ -12,6 +12,7 @@ const clerk = vi.hoisted(() => ({
 
 const api = vi.hoisted(() => ({
   getActorContext: vi.fn(),
+  getStorefront: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({
@@ -56,6 +57,12 @@ describe("DashboardShell", () => {
         membership: { role: "owner" },
       },
       requestId: "req-actor",
+    });
+    api.getStorefront.mockResolvedValue({
+      data: {
+        media: { logo_url: "https://img.example.test/store-logo.png" },
+      },
+      requestId: "req-storefront",
     });
     window.localStorage.clear();
     delete document.documentElement.dataset["dashboardTheme"];
@@ -122,7 +129,7 @@ describe("DashboardShell", () => {
     expect(await screen.findByText("My account")).toBeVisible();
   });
 
-  it("shows the active business, signed-in user, and resolved role", async () => {
+  it("shows the active business, signed-in user, resolved role, and saved business logo", async () => {
     render(
       <DashboardShell>
         <div>Shell content</div>
@@ -132,6 +139,36 @@ describe("DashboardShell", () => {
     expect(await screen.findByText("Romero Formalwear")).toBeVisible();
     expect(screen.getByText("Ryanny Romero")).toBeVisible();
     expect(screen.getAllByText("Business Owner")).toHaveLength(2);
+    expect(await screen.findByRole("img", { name: "Romero Formalwear logo" })).toHaveAttribute(
+      "src",
+      "https://img.example.test/store-logo.png"
+    );
+  });
+
+  it("updates the sidebar logo when storefront branding is saved", async () => {
+    render(
+      <DashboardShell>
+        <div>Shell content</div>
+      </DashboardShell>
+    );
+
+    expect(await screen.findByRole("img", { name: "Romero Formalwear logo" })).toHaveAttribute(
+      "src",
+      "https://img.example.test/store-logo.png"
+    );
+
+    window.dispatchEvent(
+      new CustomEvent("drezivo:storefront-updated", {
+        detail: { logoUrl: "https://img.example.test/new-logo.png" },
+      })
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("img", { name: "Romero Formalwear logo" })).toHaveAttribute(
+        "src",
+        "https://img.example.test/new-logo.png"
+      )
+    );
   });
 
   it("opens the navigation as a Sheet on mobile", async () => {

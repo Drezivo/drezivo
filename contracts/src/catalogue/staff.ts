@@ -155,7 +155,18 @@ export const clothingListItem = z.object({
 });
 export type ClothingListItem = z.infer<typeof clothingListItem>;
 
-export const clothingListResponse = paginatedResponse(clothingListItem);
+export const clothingListSummary = z.object({
+  total_products: z.number().int().nonnegative(),
+  active_rental_items: z.number().int().nonnegative(),
+  active_categories: z.number().int().nonnegative(),
+  archived_products: z.number().int().nonnegative(),
+  matching_products: z.number().int().nonnegative(),
+});
+export type ClothingListSummary = z.infer<typeof clothingListSummary>;
+
+export const clothingListResponse = paginatedResponse(clothingListItem).extend({
+  summary: clothingListSummary,
+});
 export type ClothingListResponse = z.infer<typeof clothingListResponse>;
 
 export const physicalAssetSummary = z.object({

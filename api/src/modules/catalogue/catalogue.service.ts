@@ -117,6 +117,7 @@ import {
 import {
   listClothingReadModel,
   readClothingDetailModel,
+  readClothingListSummary,
 } from './catalogue.read.repository.js';
 import {
   appendCatalogueAuditEvent,
@@ -242,6 +243,11 @@ export async function getCatalogueClothingList(
       branchId: input.branchId,
       query,
     });
+    const summary = await readClothingListSummary(client, {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      query,
+    });
     const items = await Promise.all(
       page.rows.map(async (row) => {
         const primaryImageUrl = row.primary_image_storage_key
@@ -302,6 +308,7 @@ export async function getCatalogueClothingList(
         next_cursor: page.nextCursor,
         has_more: page.hasMore,
       },
+      summary,
     });
   });
 }

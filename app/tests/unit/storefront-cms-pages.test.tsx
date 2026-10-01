@@ -40,7 +40,7 @@ function settings(overrides: Partial<StorefrontSettings> = {}): StorefrontSettin
     public_path: "/s/luna-gowns",
     document: defaultStorefrontDocument("Luna Gown Rentals"),
     media: { logo_url: null, cover_url: null, hero_image_url: null, about_image_url: null },
-    policy: { version: 1, effective_at: "2026-09-29T02:00:00.000Z", rules: null },
+    policy: { version: 1, effective_at: "2026-09-29T02:00:00.000Z", rules: null, image_urls: {} },
     readiness: { has_policy: false, has_active_clothing: true, has_storefront_payment_method: true, has_contact: false, ready: false },
     ...overrides,
   };
@@ -94,6 +94,34 @@ describe("storefront CMS pages", () => {
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
     expect(await screen.findByText("Fix the highlighted fields.")).toBeVisible();
     expect(screen.getByLabelText("Email")).toHaveAttribute("aria-invalid", "true");
+    expect(api.updateStorefront).not.toHaveBeenCalled();
+  });
+
+  it("keeps the storefront phone digits-only and limited to 11 digits", async () => {
+    render(
+      <StorefrontEditorProvider>
+        <StorefrontDetailsPage />
+      </StorefrontEditorProvider>,
+    );
+
+    const phone = await screen.findByLabelText("Phone");
+    fireEvent.change(phone, { target: { value: "09ab17123456789" } });
+    expect(phone).toHaveValue("09171234567");
+    expect(phone).toHaveAttribute("maxlength", "11");
+  });
+
+  it("blocks saving a non-empty storefront phone unless it has exactly 11 digits", async () => {
+    render(
+      <StorefrontEditorProvider>
+        <StorefrontDetailsPage />
+      </StorefrontEditorProvider>,
+    );
+
+    fireEvent.change(await screen.findByLabelText("Phone"), { target: { value: "0917123456" } });
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    expect(await screen.findByText("Fix the highlighted fields.")).toBeVisible();
+    expect(screen.getByLabelText("Phone")).toHaveAttribute("aria-invalid", "true");
     expect(api.updateStorefront).not.toHaveBeenCalled();
   });
 
