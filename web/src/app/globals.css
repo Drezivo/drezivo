@@ -61,6 +61,9 @@
   --color-atelier-champagne: #d4b483;
   --color-atelier-gold: #a07a46;
   --color-atelier-gold-ink: #7a5830;
+  /* Page-transition ground: glittering champagne (texture in atelier.css, .at-mosaic). */
+  --color-atelier-champagne-glow: #e2cea9;
+  --color-atelier-champagne-light: #eae3d8;
 
   /*
    * Atelier fluid scale: the single source of truth for marketing type and rhythm. Every value
