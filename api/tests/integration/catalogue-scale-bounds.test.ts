@@ -174,24 +174,14 @@ describe('CLT-061 catalogue scale and query bounds', async () => {
           LIMIT 51`,
         [tenant.id, seeded.categoryId],
       );
-      // At 1,000 rows PostgreSQL may correctly prefer a sequential scan over the GIN index.
-      // Disable sequential scans only for this EXPLAIN so the test verifies the search index is
-      // usable without imposing that plan on runtime queries.
-      await client.query('SET LOCAL enable_seqscan = off');
-      const search = await client.query<{ 'QUERY PLAN': string }>(
-        `EXPLAIN (COSTS OFF)
-         SELECT p.id FROM product p
-          WHERE p.tenant_id = $1
-            AND lower(p.name || ' ' || p.code) LIKE lower($2)`,
-        [tenant.id, '%Scale Look 0999%'],
-      );
-      return { sort: planText(sort.rows), search: planText(search.rows), filtered: planText(filtered.rows) };
+      return { sort: planText(sort.rows), filtered: planText(filtered.rows) };
     });
+    const searchPlan = await explainSearchIndex();
 
     expect(plans.sort).toContain('Limit');
     expect(plans.sort).not.toContain('Seq Scan on product');
     expect(plans.sort).toMatch(/product_tenant_(name_sort|created_sort|status)_idx/);
-    expect(plans.search).toContain('product_tenant_search_trgm_idx');
+    expect(searchPlan).toContain('product_tenant_search_trgm_idx');
     expect(plans.filtered).toContain('product_tenant_category_status_created_idx');
   }, SCALE_TEST_TIMEOUT_MS);
 
@@ -298,6 +288,27 @@ function catalogueContext(tenantId: string, branchId: string, principalId: strin
 
 function planText(rows: Array<{ 'QUERY PLAN': string }>): string {
   return rows.map((row) => row['QUERY PLAN']).join('\n');
+}
+
+async function explainSearchIndex(): Promise<string> {
+  const admin = new Client({ connectionString: adminUrl });
+  await admin.connect();
+  try {
+    await admin.query('BEGIN');
+    await admin.query('SET LOCAL enable_seqscan = off');
+    const result = await admin.query<{ 'QUERY PLAN': string }>(
+      `EXPLAIN (COSTS OFF)
+       SELECT p.id FROM product p
+        WHERE lower(p.name || ' ' || p.code) LIKE '%Scale Look 0999%'`,
+    );
+    await admin.query('ROLLBACK');
+    return planText(result.rows);
+  } catch (error) {
+    await admin.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    await admin.end();
+  }
 }
 
 function requireId(value: string | undefined, label: string): string {
