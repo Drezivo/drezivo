@@ -11,7 +11,21 @@ import { Preloader } from './preloader';
 const MARKETING_PATHS = new Set(['/', '/pricing', '/faq', '/privacy', '/terms', '/contact', '/support']);
 const PRELOAD_FLAG = 'dz-atelier-preloaded';
 
-type Ground = 'night' | 'paper';
+type Ground = 'night' | 'home' | 'faq' | 'pricing' | 'legal' | 'contact';
+
+/**
+ * Each destination covers the screen in its own colour, so the mosaic stands out against the
+ * light section grounds and hints where the visitor is going.
+ */
+const GROUND_BY_PATH: Readonly<Record<string, Ground>> = {
+  '/': 'home',
+  '/faq': 'faq',
+  '/pricing': 'pricing',
+  '/terms': 'legal',
+  '/privacy': 'legal',
+  '/contact': 'contact',
+  '/support': 'contact',
+};
 
 /**
  * Enough cells for the largest grid (12 × 11). The grid itself is sized by CSS breakpoints in
@@ -113,7 +127,7 @@ export function PageTransition() {
       event.preventDefault();
       if (busy.current) return;
       busy.current = true;
-      setGround('paper');
+      setGround(GROUND_BY_PATH[url.pathname] ?? 'home');
       void (async () => {
         lockScroll(true);
         await cover();

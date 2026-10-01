@@ -178,7 +178,11 @@ html:has(.marketing-page)::-webkit-scrollbar-thumb { background: var(--color-ate
 .at-mosaic[data-active] { visibility: visible; pointer-events: auto; }
 .at-mosaic > span { visibility: hidden; opacity: 0; margin: -0.5px; }
 .at-mosaic[data-ground='night'] > span { background: var(--color-atelier-night); }
-.at-mosaic[data-ground='paper'] > span { background: var(--color-atelier-paper-2); }
+.at-mosaic[data-ground='home'] > span { background: var(--color-atelier-gold); }
+.at-mosaic[data-ground='faq'] > span { background: var(--color-atelier-khaki); }
+.at-mosaic[data-ground='pricing'] > span { background: var(--color-atelier-clay); }
+.at-mosaic[data-ground='legal'] > span { background: var(--color-atelier-sage-deep); }
+.at-mosaic[data-ground='contact'] > span { background: var(--color-atelier-mauve); }
 /* Before hydration on a first visit, the ground is already up so nothing flashes underneath. */
 html.at-preload .at-mosaic { visibility: visible; }
 html.at-preload .at-mosaic > span { visibility: visible; opacity: 1; }

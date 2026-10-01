@@ -61,6 +61,11 @@
   --color-atelier-champagne: #d4b483;
   --color-atelier-gold: #a07a46;
   --color-atelier-gold-ink: #7a5830;
+  /* Page-transition grounds: deeper tones that read against paper (each ≥3.4:1) and night alike. */
+  --color-atelier-khaki: #8f7d50;
+  --color-atelier-clay: #9a5636;
+  --color-atelier-sage-deep: #5f6a4e;
+  --color-atelier-mauve: #6a5468;
 
   /*
    * Atelier fluid scale: the single source of truth for marketing type and rhythm. Every value
