@@ -80,8 +80,8 @@ export const MARKETING_PLANS: readonly MarketingPlan[] = [
     price: '300.00',
     blurb: 'Everything you need to run your rental shop, with a 14-day free trial.',
     features: [
-      'Up to 1,000 garments',
-      'Owner + up to 10 staff',
+      'Up to 125 garments',
+      'For the shop owner (no staff accounts)',
       'Online storefront with bookings and fittings',
       'Reservations, calendar & availability',
       'Customers, payments, returns & exports',
@@ -119,6 +119,6 @@ export const MARKETING_FAQS: readonly MarketingFaq[] = [
   {
     question: 'How much does Drezivo cost?',
     answer:
-      'One plan, Standard, at ₱300 a month after a 14-day free trial. It includes up to 1,000 garments and 10 staff. Pay by GCash, Maya, or bank transfer and upload your receipt.',
+      'One plan, Standard, at ₱300 a month after a 14-day free trial. It includes up to 125 garments for the shop owner, with no staff accounts. Pay by GCash, Maya, or bank transfer and upload your receipt.',
   },
 ];

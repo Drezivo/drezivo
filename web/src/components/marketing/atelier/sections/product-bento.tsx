@@ -130,12 +130,19 @@ export function ProductBento() {
             </ul>
           </Card>
 
-          <Card title="Your team, with the right access" body="Owners see everything. Front desk staff handle the day without touching pricing or payouts.">
+          <Card title="Every peso, accounted for" body="Rental fees, deposits, and refunds sit on each booking, so the day's takings add up without a notebook.">
             <ul className="grid gap-2 text-[0.75rem]">
-              {[['Luz Ramos', 'Owner'], ['Joy Dela Cruz', 'Front desk'], ['Mark Uy', 'Front desk']].map(([name, role]) => (
-                <li key={name} className="flex items-center justify-between rounded-md bg-[var(--app-surface-2)] px-2.5 py-2">
-                  <span className="text-[var(--app-ink)]">{name}</span>
-                  <span className="text-[0.6875rem] text-[var(--app-muted)]">{role}</span>
+              {[
+                ['GCash · RES-1042', '₱2,500.00', 'green', 'Approved'],
+                ['Cash · RES-1039', '₱1,200.00', 'green', 'Recorded'],
+                ['Maya · RES-1045', '₱1,800.00', 'gold', 'To review'],
+              ].map(([label, amount, tone, status]) => (
+                <li key={label} className="flex items-center justify-between gap-2 rounded-md bg-[var(--app-surface-2)] px-2.5 py-2">
+                  <span>
+                    <span className="block tabular-nums text-[var(--app-ink)]">{amount}</span>
+                    <span className="text-[0.6875rem] text-[var(--app-muted)]">{label}</span>
+                  </span>
+                  <span className={`at-chip at-chip-${tone}`}>{status}</span>
                 </li>
               ))}
             </ul>

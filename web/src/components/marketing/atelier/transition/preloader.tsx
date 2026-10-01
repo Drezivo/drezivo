@@ -1,19 +1,10 @@
 'use client';
 
 import gsap from 'gsap';
+import Image from 'next/image';
 import { useEffect, useRef } from 'react';
 
 import { EASE_DRAMA, EASE_REVEAL } from '../motion/motion-tokens';
-
-/** Stylized line version of the Drezivo mark: the neck, the bodice, and four ribbons of the skirt. */
-const MARK_PATHS = [
-  'M60 6 C57 10 56 15 60 19',
-  'M42 22 C52 19 68 19 78 22',
-  'M44 24 C56 36 65 51 62 67 C59 85 41 101 25 130',
-  'M76 24 C63 34 58 45 61 55 C65 70 75 84 72 99 C70 111 87 124 110 128',
-  'M57 72 C50 91 46 111 53 136',
-  'M63 82 C67 101 82 121 118 133',
-];
 
 const WORD = 'Drezivo';
 /** Long enough for the mark to draw; short enough to stay a welcome, not a wait (it delays LCP). */
@@ -38,14 +29,14 @@ export function Preloader({ active, onDone }: { active: boolean; onDone: () => v
     let target = 0;
     let finished = false;
 
-    const paths = element.querySelectorAll<SVGPathElement>('[data-mark-path]');
-    paths.forEach((path) => {
-      const length = path.getTotalLength();
-      gsap.set(path, { strokeDasharray: length, strokeDashoffset: length });
-    });
+    // The mark rises into view from the hem up and settles from a bright catch of light.
     const intro = gsap.timeline();
     intro
-      .to(paths, { strokeDashoffset: 0, duration: 1.4, ease: EASE_DRAMA, stagger: 0.09 })
+      .fromTo(
+        element.querySelector('[data-mark]'),
+        { clipPath: 'inset(100% 0% 0% 0%)', filter: 'brightness(1.7)' },
+        { clipPath: 'inset(0% 0% 0% 0%)', filter: 'brightness(1)', duration: 1.4, ease: EASE_DRAMA },
+      )
       .to(element.querySelectorAll('[data-word-letter]'), { y: 0, duration: 0.9, ease: EASE_REVEAL, stagger: 0.045 }, 0.35)
       .to(element.querySelectorAll('[data-preload-meta]'), { autoAlpha: 1, duration: 0.6, ease: EASE_REVEAL }, 0.5);
 
@@ -104,11 +95,7 @@ export function Preloader({ active, onDone }: { active: boolean; onDone: () => v
   return (
     <div ref={root} className="at-preloader" role="status" aria-live="polite" aria-label="Loading Drezivo">
       <div data-preload-content className="flex flex-col items-center">
-        <svg viewBox="0 0 120 140" className="h-28 w-24 sm:h-36 sm:w-32" fill="none" aria-hidden="true">
-          {MARK_PATHS.map((d) => (
-            <path key={d} data-mark-path d={d} stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          ))}
-        </svg>
+        <Image data-mark src="/brand/drezivo-mark.png" alt="" width={497} height={600} priority className="h-28 w-auto sm:h-36" />
         <p className="mt-6 flex overflow-hidden font-[family-name:var(--font-atelier-display)] text-4xl tracking-[0.02em] sm:text-5xl">
           {WORD.split('').map((letter, index) => (
             <span key={`${letter}-${index}`} data-word-letter className="inline-block">

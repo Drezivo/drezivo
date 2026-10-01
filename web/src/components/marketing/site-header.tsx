@@ -1,6 +1,7 @@
 'use client';
 
 import gsap from 'gsap';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -85,9 +86,7 @@ export function SiteHeader() {
     <header className="at-header fixed inset-x-0 top-0 z-50" data-ground={dark ? 'dark' : 'light'} data-scrolled={scrolled && !open ? '' : undefined}>
       <div className="at-container flex h-[4.5rem] items-center justify-between gap-6">
         <Link href="/" className="flex items-center gap-2.5" aria-label="Drezivo home">
-          <svg viewBox="0 0 120 140" className="h-8 w-7" fill="none" aria-hidden="true">
-            <path d="M60 6 C57 10 56 15 60 19 M42 22 C52 19 68 19 78 22 M44 24 C56 36 65 51 62 67 C59 85 41 101 25 130 M76 24 C63 34 58 45 61 55 C65 70 75 84 72 99 C70 111 87 124 110 128 M57 72 C50 91 46 111 53 136" stroke="var(--color-atelier-champagne)" strokeWidth="5" strokeLinecap="round" />
-          </svg>
+          <Image src="/brand/drezivo-mark.png" alt="" width={497} height={600} priority className="h-9 w-auto" />
           <span className="font-[family-name:var(--font-atelier-display)] text-[1.5rem] leading-none">Drezivo</span>
         </Link>
 
