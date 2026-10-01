@@ -40,7 +40,7 @@ function settings(overrides: Partial<StorefrontSettings> = {}): StorefrontSettin
     public_path: "/s/luna-gowns",
     document: defaultStorefrontDocument("Luna Gown Rentals"),
     media: { logo_url: null, cover_url: null, hero_image_url: null, about_image_url: null },
-    policy: { version: 1, effective_at: "2026-09-29T02:00:00.000Z", rules: null },
+    policy: { version: 1, effective_at: "2026-09-29T02:00:00.000Z", rules: null, image_urls: {} },
     readiness: { has_policy: false, has_active_clothing: true, has_storefront_payment_method: true, has_contact: false, ready: false },
     ...overrides,
   };

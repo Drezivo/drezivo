@@ -113,6 +113,46 @@ describe('storefront CMS contract', () => {
     expect(storefrontPolicyRules.safeParse({ ...rules, delivery: { ...rules.delivery, fee_minor: '-1' } }).success).toBe(false);
     expect(storefrontPolicyRules.safeParse({ ...rules, delivery: { ...rules.delivery, fee_minor: '99999999999' } }).success).toBe(false);
   });
+
+  describe('rental terms as text or images', () => {
+    const typed = {
+      rental: 'Three-day rental.',
+      deposit: 'Refundable deposit.',
+      cancellation: 'Cancel 48 hours before pickup.',
+      damage: null,
+      delivery: { enabled: false, fee_minor: '0', notes: null },
+      privacy_notice: 'We only use your details for this rental.',
+    };
+    const page = (n: number) => `00000000-0000-4000-8000-00000000000${n}`;
+
+    it('reads a version saved before formats existed as typed text', () => {
+      expect(storefrontPolicyRules.parse(typed)).toMatchObject({ format: 'text', image_file_ids: [] });
+    });
+
+    it('requires every typed term when the terms are text', () => {
+      const result = storefrontPolicyRules.safeParse({ ...typed, deposit: '' });
+      expect(result.success).toBe(false);
+      expect(!result.success && result.error.issues.map((issue) => issue.path.join('.'))).toEqual(['deposit']);
+    });
+
+    it('accepts image terms without typed terms, but needs at least one page', () => {
+      const images = { ...typed, format: 'images', rental: '', deposit: '', cancellation: '' };
+      expect(storefrontPolicyRules.safeParse({ ...images, image_file_ids: [page(1), page(2)] }).success).toBe(true);
+      const none = storefrontPolicyRules.safeParse({ ...images, image_file_ids: [] });
+      expect(!none.success && none.error.issues.map((issue) => issue.path.join('.'))).toEqual(['image_file_ids']);
+    });
+
+    it('refuses repeated pages, more than six pages, and unknown formats', () => {
+      const images = { ...typed, format: 'images' };
+      expect(storefrontPolicyRules.safeParse({ ...images, image_file_ids: [page(1), page(1)] }).success).toBe(false);
+      expect(storefrontPolicyRules.safeParse({ ...images, image_file_ids: [1, 2, 3, 4, 5, 6, 7].map(page) }).success).toBe(false);
+      expect(storefrontPolicyRules.safeParse({ ...typed, format: 'pdf' }).success).toBe(false);
+    });
+
+    it('still requires a typed privacy notice when the terms are images', () => {
+      expect(storefrontPolicyRules.safeParse({ ...typed, format: 'images', image_file_ids: [page(1)], privacy_notice: '' }).success).toBe(false);
+    });
+  });
 });
 
 describe('business settings contract', () => {

@@ -15,7 +15,11 @@ type TimeParts = {
 };
 
 const HOURS = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0"));
-const MINUTES = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
+function minuteOptions(step: number): string[] {
+  return Array.from({ length: Math.ceil(60 / step) }, (_, index) =>
+    String(index * step).padStart(2, "0")
+  );
+}
 const QUICK_TIMES = Array.from({ length: 48 }, (_, index) => {
   const hour = Math.floor(index / 2);
   const minute = index % 2 === 0 ? "00" : "30";
@@ -29,6 +33,7 @@ export function TimePickerField({
   placeholder = "Select time",
   disabled = false,
   min,
+  minuteStep = 1,
   className,
   popoverAlign = "start",
   mode = "picker",
@@ -41,6 +46,8 @@ export function TimePickerField({
   placeholder?: string;
   disabled?: boolean;
   min?: string;
+  /** Offer only minutes on this step when the picker/input is constrained (30 shows :00 and :30). */
+  minuteStep?: number;
   className?: string;
   popoverAlign?: "start" | "end";
   mode?: "picker" | "input";
@@ -48,13 +55,16 @@ export function TimePickerField({
   quickEnd?: string;
 }) {
   const parsedValue = useMemo(() => parseTime(value), [value]);
+  const minutes = useMemo(() => minuteOptions(minuteStep), [minuteStep]);
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<TimeParts>(() => parsedValue ?? defaultTimeParts());
+  const [draft, setDraft] = useState<TimeParts>(() =>
+    snapMinute(parsedValue ?? defaultTimeParts(), minuteStep)
+  );
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    setDraft(parsedValue ?? defaultTimeParts());
+    setDraft(snapMinute(parsedValue ?? defaultTimeParts(), minuteStep));
     const onPointerDown = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
@@ -67,7 +77,7 @@ export function TimePickerField({
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [open, parsedValue]);
+  }, [open, parsedValue, minuteStep]);
 
   const draftValue = to24HourTime(draft);
   const belowMinimum = Boolean(min && draftValue < min);
@@ -81,6 +91,7 @@ export function TimePickerField({
         placeholder={placeholder === "Select time" ? "hh:mm AM/PM" : placeholder}
         disabled={disabled}
         {...(min ? { min } : {})}
+        minuteStep={minuteStep}
         {...(className ? { className } : {})}
         popoverAlign={popoverAlign}
         quickStart={quickStart}
@@ -132,7 +143,7 @@ export function TimePickerField({
             <TimeSelect
               ariaLabel={`${ariaLabel} minute`}
               value={draft.minute}
-              options={MINUTES}
+              options={minutes}
               onChange={(minute) => setDraft((current) => ({ ...current, minute }))}
             />
             <TimeSelect
@@ -178,6 +189,7 @@ function EditableTimeField({
   ariaLabel,
   disabled,
   min,
+  minuteStep,
   className,
   popoverAlign,
   quickStart,
@@ -189,6 +201,7 @@ function EditableTimeField({
   placeholder: string;
   disabled: boolean;
   min?: string;
+  minuteStep: number;
   className?: string;
   popoverAlign: "start" | "end";
   quickStart: string;
@@ -235,6 +248,10 @@ function EditableTimeField({
     const minuteNumber = Number(nextMinute);
     if (!/^\d{1,2}$/.test(nextHour) || hourNumber < 1 || hourNumber > 12 || !/^\d{1,2}$/.test(nextMinute) || minuteNumber < 0 || minuteNumber > 59) {
       setError("Enter a valid time.");
+      return;
+    }
+    if (minuteNumber % minuteStep !== 0) {
+      setError(`Enter a time on a ${minuteStep}-minute boundary.`);
       return;
     }
     const normalized = to24HourTime({
@@ -455,6 +472,12 @@ function defaultTimeParts(): TimeParts {
     minute: String(now.getMinutes()).padStart(2, "0"),
     period: hour24 >= 12 ? "PM" : "AM",
   };
+}
+
+/** A minute the picker cannot show would be submitted invisibly, so round it down onto the step. */
+function snapMinute(parts: TimeParts, step: number): TimeParts {
+  const minute = Math.floor(Number(parts.minute) / step) * step;
+  return { ...parts, minute: String(minute).padStart(2, "0") };
 }
 
 function to24HourTime(parts: TimeParts): string {

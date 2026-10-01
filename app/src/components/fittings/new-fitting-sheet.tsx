@@ -45,7 +45,16 @@ type NewFittingSheetProps = {
   onCreated: (fitting: FittingDetail) => void;
 };
 
+type WalkInMatchKind = "contact" | "name";
+
 const PRODUCT_LIMIT = 20;
+/** The server accepts fitting starts only on the branch-local 30-minute grid. */
+const SLOT_MINUTES = 30;
+const CLOCK_TICK_MS = 30_000;
+const WALK_IN_NAME_LOOKUP_MIN = 3;
+const WALK_IN_MATCH_LIMIT = 3;
+const PHONE_PATTERN = /^\d{11}$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: NewFittingSheetProps) {
   const { getToken } = useAuth();
@@ -72,12 +81,20 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
   const [garments, setGarments] = useState<GarmentSelection[]>([]);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<DrezivoApiError | null>(null);
+  const [now, setNow] = useState(() => new Date());
+  const [scheduleNotice, setScheduleNotice] = useState<string | null>(null);
+  const [walkInMatches, setWalkInMatches] = useState<FittingCustomerOption[]>([]);
   const { isSubmitting, resetIntent: resetCreateIntent, submit: submitCreate } = useSubmitGuard();
 
   const timeZone = settings?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
-  const today = useMemo(() => todayInTimeZone(timeZone), [timeZone]);
+  const clock = useMemo(() => shopClock(now, timeZone), [now, timeZone]);
+  const today = clock.date;
   const selectedCustomer =
     customerOptions.find((customer) => customer.id === existingCustomerId) ?? null;
+  const walkInLookup = walkInLookupTerm(walkInName, walkInEmail, walkInPhone);
+  const deferredWalkInLookup = useDeferredValue(walkInLookup);
+  const walkInMatchKind: WalkInMatchKind =
+    walkInLookup !== "" && walkInLookup === walkInName.trim() ? "name" : "contact";
 
   const resetDraft = useCallback(() => {
     resetCreateIntent();
@@ -89,8 +106,11 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
     setWalkInName("");
     setWalkInEmail("");
     setWalkInPhone("");
-    setDate(today);
-    setStartTime("10:00");
+    // Blank on purpose: the clock effect below fills in the slot in progress for the shop's time zone.
+    setDate("");
+    setStartTime("");
+    setScheduleNotice(null);
+    setWalkInMatches([]);
     setGarmentQuery("");
     setProducts([]);
     setSelectedProductId(null);
@@ -98,7 +118,7 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
     setGarments([]);
     setValidationMessage(null);
     setSubmitError(null);
-  }, [resetCreateIntent, today]);
+  }, [resetCreateIntent]);
 
   useEffect(() => {
     if (!open) return;
@@ -120,6 +140,81 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
       cancelled = true;
     };
   }, [getToken, open]);
+
+  // Keep the clock current while the sheet is open so the earliest start never lags behind.
+  useEffect(() => {
+    if (!open) return;
+    setNow(new Date());
+    const timer = window.setInterval(() => setNow(new Date()), CLOCK_TICK_MS);
+    return () => window.clearInterval(timer);
+  }, [open]);
+
+  // A blank draft starts in the slot in progress, so a walk-in can be fitted right away. A start the
+  // clock has passed moves forward instead of failing later on the server.
+  useEffect(() => {
+    if (!open) return;
+    if (!date || !startTime) {
+      setDate(clock.date);
+      setStartTime(clock.slotTime);
+      return;
+    }
+    if (date < clock.date || (date === clock.date && startTime < clock.slotTime)) {
+      setDate(clock.date);
+      setStartTime(clock.slotTime);
+      setScheduleNotice(
+        `The start time moved to ${formatSlotTime(clock.slotTime)} because the time you chose has passed.`
+      );
+    }
+  }, [clock, date, open, startTime]);
+
+  // Typing a walk-in's details looks them up, so a returning customer is reused instead of duplicated.
+  // The lookup is only a hint: a failure never blocks creating the walk-in.
+  useEffect(() => {
+    if (!open || customerMode !== "walk-in" || !deferredWalkInLookup) {
+      setWalkInMatches([]);
+      return;
+    }
+    let cancelled = false;
+    void createDrezivoApiClient(getToken)
+      .getFittingIntakeOptions({ customer_search: deferredWalkInLookup })
+      .then((result) => {
+        if (!cancelled) setWalkInMatches(result.data.customers);
+      })
+      .catch(() => {
+        if (!cancelled) setWalkInMatches([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerMode, deferredWalkInLookup, getToken, open]);
+
+  // An exact email or phone match is the same person; a name match is only a suggestion.
+  const shownWalkInMatches = walkInMatches
+    .filter((customer) =>
+      walkInMatchKind === "name" ||
+      customer.email === walkInLookup ||
+      customer.phone === walkInLookup
+    )
+    .slice(0, WALK_IN_MATCH_LIMIT);
+
+  const changeDate = (value: string) => {
+    setScheduleNotice(null);
+    setDate(value);
+  };
+  const changeStartTime = (value: string) => {
+    setScheduleNotice(null);
+    setStartTime(value);
+  };
+
+  const chooseExistingCustomer = (customer: FittingCustomerOption) => {
+    setCustomerMode("existing");
+    // Searching by the most specific detail keeps the chosen customer in the refreshed result list.
+    setCustomerQuery(customer.phone ?? customer.email ?? customer.full_name);
+    setCustomerOptions([customer]);
+    setExistingCustomerId(customer.id);
+    setWalkInMatches([]);
+    setValidationMessage(null);
+  };
 
   useEffect(() => {
     if (!open || customerMode !== "existing" || deferredCustomerQuery.length < 2) {
@@ -216,21 +311,21 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
         if (!walkInPhone.trim() && !walkInEmail.trim()) {
           return "Enter a phone number or email for the walk-in customer.";
         }
-        if (walkInPhone.trim() && !/^\d{11}$/.test(walkInPhone.trim())) {
+        if (walkInPhone.trim() && !PHONE_PATTERN.test(walkInPhone.trim())) {
           return "Phone number must contain exactly 11 digits.";
         }
-        if (walkInEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(walkInEmail.trim())) {
+        if (walkInEmail.trim() && !EMAIL_PATTERN.test(walkInEmail.trim())) {
           return "Enter a valid email address.";
         }
       }
       if (!date || date < today) return "Choose today or a future date.";
       if (!startTime) return "Choose a fitting start time.";
-      if (date === today && startTime < earliestFittingStartTimeInTimeZone(timeZone)) {
-        return "Choose a fitting start time that is not in the past.";
-      }
       const startMinute = Number(startTime.split(":")[1] ?? Number.NaN);
-      if (!Number.isInteger(startMinute) || startMinute % 30 !== 0) {
+      if (!Number.isInteger(startMinute) || startMinute % SLOT_MINUTES !== 0) {
         return "Fitting start time must be on a 30-minute boundary.";
+      }
+      if (date === clock.date && startTime < clock.slotTime) {
+        return `That time has passed. Choose ${formatSlotTime(clock.slotTime)} or later.`;
       }
     }
     if (currentStep === 2 && garments.length === 0) {
@@ -405,16 +500,21 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
               startTime={startTime}
               durationMinutes={settings?.duration_minutes ?? null}
               businessHours={businessHours}
-              timeZone={timeZone}
               onCustomerModeChange={setCustomerMode}
               onCustomerQueryChange={setCustomerQuery}
               onExistingCustomerChange={setExistingCustomerId}
               onWalkInNameChange={setWalkInName}
               onWalkInEmailChange={setWalkInEmail}
               onWalkInPhoneChange={setWalkInPhone}
-              onDateChange={setDate}
-              onStartTimeChange={setStartTime}
+              onDateChange={changeDate}
+              onStartTimeChange={changeStartTime}
               today={today}
+              earliestTime={clock.slotTime}
+              nowLabel={clock.nowLabel}
+              scheduleNotice={scheduleNotice}
+              walkInMatches={shownWalkInMatches}
+              walkInMatchKind={walkInMatchKind}
+              onUseExistingCustomer={chooseExistingCustomer}
             />
           ) : step === 2 ? (
             <StepGarments
@@ -518,7 +618,6 @@ function StepAppointment({
   startTime,
   durationMinutes,
   businessHours,
-  timeZone,
   onCustomerModeChange,
   onCustomerQueryChange,
   onExistingCustomerChange,
@@ -528,6 +627,12 @@ function StepAppointment({
   onDateChange,
   onStartTimeChange,
   today,
+  earliestTime,
+  nowLabel,
+  scheduleNotice,
+  walkInMatches,
+  walkInMatchKind,
+  onUseExistingCustomer,
 }: {
   customerMode: CustomerMode;
   customerQuery: string;
@@ -541,7 +646,6 @@ function StepAppointment({
   startTime: string;
   durationMinutes: number | null;
   businessHours: BranchBusinessHours | null;
-  timeZone: string;
   onCustomerModeChange: (value: CustomerMode) => void;
   onCustomerQueryChange: (value: string) => void;
   onExistingCustomerChange: (value: string) => void;
@@ -551,6 +655,13 @@ function StepAppointment({
   onDateChange: (value: string) => void;
   onStartTimeChange: (value: string) => void;
   today: string;
+  /** Start of the 30-minute slot in progress (HH:MM, shop time); nothing earlier is offered today. */
+  earliestTime: string;
+  nowLabel: string;
+  scheduleNotice: string | null;
+  walkInMatches: readonly FittingCustomerOption[];
+  walkInMatchKind: WalkInMatchKind;
+  onUseExistingCustomer: (customer: FittingCustomerOption) => void;
 }) {
   return (
     <section aria-labelledby="new-fitting-appointment-heading">
@@ -684,6 +795,46 @@ function StepAppointment({
           <p className="text-xs text-dashboard-muted sm:col-span-2">
             Full name plus at least one contact method is required.
           </p>
+          {walkInMatches.length > 0 ? (
+            <div
+              role="status"
+              className="rounded-lg border border-dashboard-accent/40 bg-dashboard-active px-3 py-3 sm:col-span-2"
+            >
+              <p className="text-sm font-medium text-dashboard-navy">
+                {walkInMatchKind === "contact"
+                  ? "This customer is already saved"
+                  : "Customers with a similar name"}
+              </p>
+              <p className="mt-0.5 text-xs text-dashboard-muted">
+                Use the saved customer to keep one history instead of creating a duplicate.
+              </p>
+              <ul className="mt-2 space-y-2">
+                {walkInMatches.map((customer) => (
+                  <li
+                    key={customer.id}
+                    className="flex items-center justify-between gap-3 rounded-md border border-dashboard-border bg-dashboard-surface px-3 py-2"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-dashboard-navy">
+                        {customer.full_name}
+                      </span>
+                      <span className="block truncate text-xs text-dashboard-muted">
+                        {[customer.email, customer.phone].filter(Boolean).join(" · ")}
+                      </span>
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => onUseExistingCustomer(customer)}
+                    >
+                      Use this customer
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -703,7 +854,8 @@ function StepAppointment({
             value={startTime}
             onChange={onStartTimeChange}
             mode="input"
-            {...(date === today ? { min: earliestFittingStartTimeInTimeZone(timeZone) } : {})}
+            {...(date === today ? { min: earliestTime } : {})}
+            minuteStep={SLOT_MINUTES}
             quickStart={businessHours?.opens_local ?? "08:00"}
             quickEnd={businessHours?.closes_local ?? "20:00"}
             popoverAlign="end"
@@ -717,9 +869,17 @@ function StepAppointment({
         </div>
       </div>
       <p className="mt-3 text-xs text-dashboard-muted">
-        Duration is fixed by fitting settings. The server checks Business Hours, closed dates, and
-        simultaneous fitting capacity when you create the appointment.
+        <span className="font-medium text-dashboard-navy">It is now {nowLabel}</span> shop time.
+        Fittings start on the hour or half hour; a walk-in can take the{" "}
+        {formatSlotTime(earliestTime)} slot that is already running. Duration is fixed by fitting
+        settings. The server checks Business Hours, closed dates, and simultaneous fitting capacity
+        when you create the appointment.
       </p>
+      {scheduleNotice ? (
+        <p role="status" className="mt-2 text-xs font-medium text-dashboard-attention">
+          {scheduleNotice}
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -1058,31 +1218,45 @@ function ReviewItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-function todayInTimeZone(timeZone: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    timeZone,
-  }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values["year"]}-${values["month"]}-${values["day"]}`;
+/**
+ * The shop's wall clock: local date, the start of the 30-minute slot in progress, and the current
+ * time for display. Rounded in wall-clock minutes, so zones with a :45 offset still land on the grid.
+ */
+function shopClock(now: Date, timeZone: string): { date: string; slotTime: string; nowLabel: string } {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZone,
+    })
+      .formatToParts(now)
+      .map((part) => [part.type, part.value])
+  );
+  const slotMinute = Math.floor(Number(parts["minute"]) / SLOT_MINUTES) * SLOT_MINUTES;
+  return {
+    date: `${parts["year"]}-${parts["month"]}-${parts["day"]}`,
+    slotTime: `${parts["hour"]}:${String(slotMinute).padStart(2, "0")}`,
+    nowLabel: new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone }).format(now),
+  };
 }
 
-function earliestFittingStartTimeInTimeZone(timeZone: string): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    hour: "2-digit",
-    hourCycle: "h23",
-    minute: "2-digit",
-    timeZone,
-  }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  let hour = Number(values["hour"]);
-  const minute = Number(values["minute"]);
-  const roundedMinute = minute < 30 ? 30 : 0;
-  if (minute >= 30) hour += 1;
-  if (hour >= 24) return "24:00";
-  return `${String(hour).padStart(2, "0")}:${String(roundedMinute).padStart(2, "0")}`;
+function formatSlotTime(value: string): string {
+  const [hour = 0, minute = 0] = value.split(":").map(Number);
+  return `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${hour >= 12 ? "PM" : "AM"}`;
+}
+
+/** The most specific complete detail typed so far: email, then phone, then a name of 3+ letters. */
+function walkInLookupTerm(name: string, email: string, phone: string): string {
+  const trimmedEmail = email.trim().toLowerCase();
+  if (EMAIL_PATTERN.test(trimmedEmail)) return trimmedEmail;
+  const trimmedPhone = phone.trim();
+  if (PHONE_PATTERN.test(trimmedPhone)) return trimmedPhone;
+  const trimmedName = name.trim();
+  return trimmedName.length >= WALK_IN_NAME_LOOKUP_MIN ? trimmedName : "";
 }
 
 function zonedDateTimeToIso(dateValue: string, timeValue: string, timeZone: string): string | null {

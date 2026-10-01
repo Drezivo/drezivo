@@ -189,16 +189,31 @@ export const storefrontDocument = z
   .strict();
 export type StorefrontDocument = z.infer<typeof storefrontDocument>;
 
+/** Most pages a rental-terms document photographed or exported as images can have. */
+export const STOREFRONT_POLICY_IMAGE_LIMIT = 6;
+
+/**
+ * How the rental terms are shown: typed text, or the shop's existing policy as images (one per
+ * page, in order). The privacy notice and delivery settings stay structured text either way.
+ */
+export const storefrontPolicyFormat = z.enum(['text', 'images']);
+export type StorefrontPolicyFormat = z.infer<typeof storefrontPolicyFormat>;
+
+const REQUIRED_TEXT_TERMS = ['rental', 'deposit', 'cancellation'] as const;
+
 /**
  * Customer-facing rental policy. Saved as a new immutable version each time, because reservations
- * keep a reference to the exact version the guest accepted.
+ * keep a reference to the exact version the guest accepted. Versions saved before `format` existed
+ * read back as text.
  */
 export const storefrontPolicyRules = z
   .object({
-    rental: plainText(1500, { min: 1, multiline: true }),
-    deposit: plainText(1000, { min: 1, multiline: true }),
-    cancellation: plainText(1500, { min: 1, multiline: true }),
+    format: storefrontPolicyFormat.default('text'),
+    rental: plainText(1500, { multiline: true }),
+    deposit: plainText(1000, { multiline: true }),
+    cancellation: plainText(1500, { multiline: true }),
     damage: optionalText(1000, true),
+    image_file_ids: z.array(fileObjectId).max(STOREFRONT_POLICY_IMAGE_LIMIT).default([]),
     delivery: z
       .object({
         enabled: z.boolean(),
@@ -208,7 +223,21 @@ export const storefrontPolicyRules = z
       .strict(),
     privacy_notice: plainText(2000, { min: 1, multiline: true }),
   })
-  .strict();
+  .strict()
+  .superRefine((rules, ctx) => {
+    if (rules.format === 'text') {
+      for (const key of REQUIRED_TEXT_TERMS) {
+        if (rules[key].length === 0) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: 'required' });
+      }
+      return;
+    }
+    if (rules.image_file_ids.length === 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['image_file_ids'], message: 'add at least one image of your policy' });
+    }
+    if (new Set(rules.image_file_ids).size !== rules.image_file_ids.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['image_file_ids'], message: 'each image can be added once' });
+    }
+  });
 export type StorefrontPolicyRules = z.infer<typeof storefrontPolicyRules>;
 
 export const storefrontStatusValue = z.enum(['draft', 'published', 'suspended']);
@@ -264,6 +293,8 @@ export const storefrontSettings = z
         version: z.number().int().positive(),
         effective_at: isoInstant,
         rules: storefrontPolicyRules.nullable(),
+        /** Signed, short-lived URLs of the policy images, keyed by file id, for the editor preview. */
+        image_urls: z.record(z.string(), z.string().url()).default({}),
       })
       .strict(),
     readiness: storefrontReadiness,

@@ -166,6 +166,11 @@ export class StorefrontCmsService {
       if (currentVersion !== request.expected_version) {
         throw new StaleVersionError('The rental policy changed since you opened it. Reload and review the latest version.');
       }
+      const imageIds = request.rules.image_file_ids;
+      const accepted = await findAcceptedStorefrontAssets(client, context.tenantId, imageIds);
+      if (imageIds.some((id) => !accepted.has(id))) {
+        throw new ValidationError('One of the policy images is not an uploaded storefront image from this workspace.');
+      }
       await insertPolicyVersion(client, {
         tenantId: context.tenantId,
         storefrontId: row.id,
@@ -262,13 +267,22 @@ export class StorefrontCmsService {
     const document = toDocument(row);
     const policy = await readCurrentPolicy(client, tenantId, row.id);
     const readiness = await this.readiness(client, tenantId, row, policy);
+    const rules = policy ? fromPolicyColumns(policy) : null;
+    const policyImageIds = rules?.image_file_ids ?? [];
     const urls = await this.media.sign(client, tenantId, [
       document.branding.logo_file_id,
       document.branding.cover_file_id,
       document.content.hero.image_file_id,
       document.content.about.image_file_id,
+      ...policyImageIds,
     ]);
     const urlOf = (id: string | null): string | null => (id ? (urls.get(id) ?? null) : null);
+    const policyImageUrls = Object.fromEntries(
+      policyImageIds.flatMap((id) => {
+        const url = urls.get(id);
+        return url ? [[id, url]] : [];
+      }),
+    );
 
     return storefrontSettings.parse({
       slug: row.slug,
@@ -287,22 +301,24 @@ export class StorefrontCmsService {
       policy: {
         version: policy?.version ?? 1,
         effective_at: (policy?.effective_at ?? row.updated_at).toISOString(),
-        rules: policy ? fromPolicyColumns(policy) : null,
+        rules,
+        image_urls: policyImageUrls,
       },
       readiness,
     });
   }
 }
 
-/** A storefront that was never edited stores `{}`; show the owner a sensible starting document. */
+/** Bootstrap rows store empty objects; hydrate missing sections before validating the saved document. */
 export function toDocument(row: Pick<StorefrontRow, 'branding' | 'contact' | 'content' | 'checkout' | 'tenant_name'>): StorefrontDocument {
+  const defaults = defaultStorefrontDocument(row.tenant_name);
   const parsed = storefrontDocument.safeParse({
-    branding: row.branding,
-    contact: row.contact,
-    content: row.content,
-    checkout: row.checkout,
+    branding: { ...defaults.branding, ...row.branding },
+    contact: { ...defaults.contact, ...row.contact },
+    content: { ...defaults.content, ...row.content },
+    checkout: { ...defaults.checkout, ...row.checkout },
   });
-  return parsed.success ? parsed.data : defaultStorefrontDocument(row.tenant_name);
+  return parsed.success ? parsed.data : defaults;
 }
 
 export const storefrontCmsService = new StorefrontCmsService();

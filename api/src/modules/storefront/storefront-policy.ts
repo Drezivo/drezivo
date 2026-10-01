@@ -15,7 +15,8 @@ export interface PolicySnapshotColumns {
 
 export function toPolicyColumns(rules: StorefrontPolicyRules): PolicySnapshotColumns {
   return {
-    rental_rules: { summary: rules.rental, damage: rules.damage },
+    // The terms format and its page images live with the terms, inside the same immutable version.
+    rental_rules: { summary: rules.rental, damage: rules.damage, format: rules.format, image_file_ids: rules.image_file_ids },
     deposit_rules: { summary: rules.deposit },
     cancellation_rules: { summary: rules.cancellation },
     delivery_rules: { enabled: rules.delivery.enabled, fee_minor: rules.delivery.fee_minor, summary: rules.delivery.notes },
@@ -29,6 +30,9 @@ export function toPolicyColumns(rules: StorefrontPolicyRules): PolicySnapshotCol
  */
 export function fromPolicyColumns(columns: PolicySnapshotColumns): StorefrontPolicyRules | null {
   const parsed = storefrontPolicyRules.safeParse({
+    // Absent on versions published before images were possible; the contract defaults them to text.
+    format: columns.rental_rules['format'],
+    image_file_ids: columns.rental_rules['image_file_ids'],
     rental: columns.rental_rules['summary'],
     deposit: columns.deposit_rules['summary'],
     cancellation: columns.cancellation_rules['summary'],

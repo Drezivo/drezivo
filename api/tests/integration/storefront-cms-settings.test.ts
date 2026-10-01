@@ -29,6 +29,8 @@ describe('storefront CMS and settings', async () => {
   const { defaultStorefrontDocument, storefrontDocument } = await import('@drezivo/contracts');
 
   const policy = {
+    format: 'text' as const,
+    image_file_ids: [],
     rental: 'Rentals run for three days from pickup.',
     deposit: 'A refundable deposit is collected at pickup.',
     cancellation: 'Cancel at least 48 hours before pickup for a full refund.',

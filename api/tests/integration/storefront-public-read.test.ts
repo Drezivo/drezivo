@@ -38,6 +38,8 @@ describe('public storefront read API', async () => {
   const admin = new pg.Pool({ connectionString: adminUrl, max: 2 });
 
   const rules = {
+    format: 'text' as const,
+    image_file_ids: [],
     rental: 'Three-day rentals from pickup.',
     deposit: 'Refundable deposit at pickup.',
     cancellation: 'Free cancellation until 48 hours before pickup.',
