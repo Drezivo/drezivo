@@ -45,3 +45,17 @@
   repositories. Allow clock skew when checking the expiry, because the hosts differ.
 - Run every workspace's own test script before pushing (`npm run test --workspace @drezivo/contracts`
   included). CI runs the contracts tests, and fixtures there break when a contract gains a field.
+- When CSS sets a start state with `translateY(105%)`, animate GSAP to `y: 0`, not `yPercent: 0`:
+  GSAP reads the computed matrix into `y` pixels, so a `yPercent` tween leaves the offset in place
+  (the landing headline, every line reveal, and the preloader wordmark all stayed hidden).
+- Next's `<Link>` handles clicks in React's root listener before any `document` bubble listener sees
+  them. To run a page transition first, listen in the capture phase and `preventDefault()` there;
+  Link then skips its own navigation.
+- Anything visible at first paint (a preloader, a mosaic overlay) must be sized by CSS, never by a
+  JavaScript measurement after hydration: the mosaic re-gridding from 12x8 to 5x11 cost 0.44 CLS.
+- Headings split into per-line spans need a trailing space in each line, or the accessible name
+  reads words glued together ("Plans that growwith your shop").
+- A three.js `ShaderMaterial` that includes `colorspace_fragment` treats its output as linear; author
+  colours in sRGB and convert (`pow(c, 2.2)`) or dark grounds come out lifted and muddy.
+- Route-level CSS files are unlayered and beat Tailwind utilities; never set `display` in a class
+  that a utility like `hidden lg:grid` has to toggle.
