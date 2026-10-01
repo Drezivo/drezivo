@@ -6,6 +6,7 @@ import {
   clothingAvailabilitySummary,
   clothingDetail,
   clothingListQuery,
+  clothingListResponse,
   clothingProductLifecycle,
   createClothingRequest,
   errorCode,
@@ -126,6 +127,28 @@ describe('catalogue staff contract', () => {
         disruptions_created: 1,
       }).success,
     ).toBe(true);
+  });
+
+  it('requires authoritative catalogue summary totals alongside paginated items', () => {
+    expect(
+      clothingListResponse.safeParse({
+        items: [],
+        page_meta: { next_cursor: null, has_more: false },
+        summary: {
+          total_products: 24,
+          active_rental_items: 37,
+          active_categories: 6,
+          archived_products: 3,
+          matching_products: 18,
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      clothingListResponse.safeParse({
+        items: [],
+        page_meta: { next_cursor: null, has_more: false },
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects authority and derived availability fields from list queries', () => {

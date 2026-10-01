@@ -50,6 +50,14 @@ export interface ClothingListReadPage {
   hasMore: boolean;
 }
 
+export interface ClothingListSummaryReadModel {
+  total_products: number;
+  active_rental_items: number;
+  active_categories: number;
+  archived_products: number;
+  matching_products: number;
+}
+
 export interface ClothingDetailProductRow {
   product_id: string;
   code: string;
@@ -484,6 +492,92 @@ export async function listClothingReadModel(
     hasMore,
     nextCursor: hasMore && last ? encodeListCursor(last, input.query.sort) : null,
   };
+}
+
+export async function readClothingListSummary(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    query: ClothingListQuery;
+  },
+): Promise<ClothingListSummaryReadModel> {
+  const values: unknown[] = [input.tenantId, input.branchId];
+  const where = ['p.tenant_id = $1'];
+  const bind = (value: unknown): string => {
+    values.push(value);
+    return `$${values.length}`;
+  };
+
+  if (input.query.search) {
+    const placeholder = bind(`%${escapeLikePattern(input.query.search)}%`);
+    where.push(`lower(p.name || ' ' || p.code) LIKE lower(${placeholder}) ESCAPE '\\'`);
+  }
+  if (input.query.category_id) where.push(`p.category_id = ${bind(input.query.category_id)}::uuid`);
+  if (input.query.size_label) {
+    const placeholder = bind(input.query.size_label);
+    where.push(`EXISTS (
+      SELECT 1 FROM product_variant pv_size
+       WHERE pv_size.tenant_id = p.tenant_id
+         AND pv_size.product_id = p.id
+         AND lower(pv_size.size_label) = lower(${placeholder})
+         AND (p.status = 'archived' OR pv_size.status <> 'archived')
+    )`);
+  }
+  if (input.query.size_kind) {
+    where.push(`EXISTS (
+      SELECT 1 FROM product_variant pv_kind
+       WHERE pv_kind.tenant_id = p.tenant_id
+         AND pv_kind.product_id = p.id
+         AND pv_kind.size_label IS ${input.query.size_kind === 'free_size' ? '' : 'NOT '}NULL
+         AND (p.status = 'archived' OR pv_kind.status <> 'archived')
+    )`);
+  }
+  if (input.query.product_status) where.push(`p.status = ${bind(input.query.product_status)}`);
+  if (input.query.asset_lifecycle || input.query.readiness) {
+    const assetPredicates = [
+      'pa_filter.tenant_id = p.tenant_id',
+      'pa_filter.branch_id = $2',
+      'pv_filter.tenant_id = p.tenant_id',
+      'pv_filter.product_id = p.id',
+      "(p.status = 'archived' OR pv_filter.status <> 'archived')",
+    ];
+    if (input.query.asset_lifecycle) {
+      assetPredicates.push(`pa_filter.lifecycle_status = ${bind(input.query.asset_lifecycle)}`);
+    }
+    if (input.query.readiness) assetPredicates.push(`pa_filter.readiness = ${bind(input.query.readiness)}`);
+    where.push(`EXISTS (
+      SELECT 1
+        FROM physical_asset pa_filter
+        JOIN product_variant pv_filter
+          ON pv_filter.tenant_id = pa_filter.tenant_id
+         AND pv_filter.id = pa_filter.variant_id
+       WHERE ${assetPredicates.join('\n         AND ')}
+    )`);
+  }
+
+  const result = await client.query<ClothingListSummaryReadModel>(
+    `SELECT
+       (SELECT count(*)::int FROM product p_total WHERE p_total.tenant_id = $1) AS total_products,
+       (SELECT count(*)::int
+          FROM physical_asset pa
+          JOIN product_variant pv ON pv.tenant_id = pa.tenant_id AND pv.id = pa.variant_id
+          JOIN product p_active ON p_active.tenant_id = pv.tenant_id AND p_active.id = pv.product_id
+         WHERE pa.tenant_id = $1
+           AND pa.branch_id = $2
+           AND pa.lifecycle_status = 'active'
+           AND pv.status <> 'archived'
+           AND p_active.status = 'active') AS active_rental_items,
+       (SELECT count(*)::int FROM category c WHERE c.tenant_id = $1 AND c.status = 'active') AS active_categories,
+       (SELECT count(*)::int FROM product p_archived WHERE p_archived.tenant_id = $1 AND p_archived.status = 'archived') AS archived_products,
+       (SELECT count(*)::int FROM product p WHERE ${where.join('\n         AND ')}) AS matching_products`,
+    values,
+  );
+  const row = result.rows[0];
+  if (!row) {
+    return { total_products: 0, active_rental_items: 0, active_categories: 0, archived_products: 0, matching_products: 0 };
+  }
+  return row;
 }
 
 export async function readClothingDetailModel(
