@@ -96,7 +96,7 @@ export function Preloader({ active, onDone }: { active: boolean; onDone: () => v
     <div ref={root} className="at-preloader" role="status" aria-live="polite" aria-label="Loading Drezivo">
       <div data-preload-content className="flex flex-col items-center">
         <Image data-mark src="/brand/drezivo-mark.png" alt="" width={497} height={600} priority className="h-28 w-auto sm:h-36" />
-        <p className="mt-6 flex overflow-hidden font-[family-name:var(--font-atelier-display)] text-4xl tracking-[0.02em] sm:text-5xl">
+        <p className="mt-6 flex overflow-hidden font-[family-name:var(--font-atelier-display)] text-at-display tracking-[0.02em]">
           {WORD.split('').map((letter, index) => (
             <span key={`${letter}-${index}`} data-word-letter className="inline-block">
               {letter}
@@ -107,7 +107,7 @@ export function Preloader({ active, onDone }: { active: boolean; onDone: () => v
       <p data-preload-content data-preload-meta className="at-eyebrow absolute bottom-8 left-6 sm:left-10">
         Clothing rental, in one place
       </p>
-      <p data-preload-content data-preload-meta className="absolute bottom-7 right-6 font-[family-name:var(--font-atelier-body)] text-sm tabular-nums tracking-[0.3em] sm:right-10">
+      <p data-preload-content data-preload-meta className="absolute bottom-7 right-6 font-[family-name:var(--font-atelier-body)] text-at-small tabular-nums tracking-[0.3em] sm:right-10">
         <span ref={counter}>000</span>
       </p>
     </div>
