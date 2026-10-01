@@ -21,6 +21,7 @@ export function DateRangePickerField({
   invalid = false,
   disabled = false,
   className,
+  startFreshOnOpen = false,
 }: {
   value: DateRangeValue;
   onChange: (value: DateRangeValue) => void;
@@ -29,6 +30,7 @@ export function DateRangePickerField({
   invalid?: boolean;
   disabled?: boolean;
   className?: string;
+  startFreshOnOpen?: boolean;
 }) {
   const externalRange = useMemo<DayPickerDateRange | undefined>(() => {
     const from = parseIsoDate(value.from);
@@ -37,6 +39,7 @@ export function DateRangePickerField({
     return { from, ...(to ? { to } : {}) };
   }, [value.from, value.to]);
   const [draftRange, setDraftRange] = useState<DayPickerDateRange | undefined>(externalRange);
+  const [freshRangeStarted, setFreshRangeStarted] = useState(false);
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -72,8 +75,14 @@ export function DateRangePickerField({
         aria-invalid={invalid}
         disabled={disabled}
         onClick={() => {
-          setDraftRange(externalRange);
-          setOpen((current) => !current);
+          setOpen((current) => {
+            const nextOpen = !current;
+            if (nextOpen) {
+              setDraftRange(startFreshOnOpen ? undefined : externalRange);
+              setFreshRangeStarted(false);
+            }
+            return nextOpen;
+          });
         }}
         className={cn(
           "flex h-10 w-full items-center justify-between rounded-md border bg-dashboard-surface px-3 text-left text-sm text-dashboard-navy transition-colors hover:border-dashboard-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30 disabled:pointer-events-none disabled:opacity-50",
@@ -102,8 +111,14 @@ export function DateRangePickerField({
             defaultMonth={draftRange?.from ?? today}
             onSelect={(range) => {
               if (!range?.from) return;
-              setDraftRange(range);
 
+              if (startFreshOnOpen && !freshRangeStarted) {
+                setDraftRange({ from: range.from });
+                setFreshRangeStarted(true);
+                return;
+              }
+
+              setDraftRange(range);
               if (!range.to) {
                 const date = formatIsoDate(range.from);
                 onChange({ from: date, to: date });
@@ -114,6 +129,7 @@ export function DateRangePickerField({
                 from: formatIsoDate(range.from),
                 to: formatIsoDate(range.to),
               });
+              setFreshRangeStarted(false);
               setOpen(false);
             }}
           />

@@ -483,21 +483,48 @@ describe("CalendarAvailabilityPage", () => {
     expect(screen.queryByText("Readiness")).not.toBeInTheDocument();
   });
 
-  it("moves the query window by fourteen days when navigating the date range", async () => {
+  it("lets staff choose a date range and refetches the matching timeline window", async () => {
     render(<CalendarAvailabilityPage />);
     await waitFor(() => expect(api.getClothingAvailabilityTimeline).toHaveBeenCalled());
 
-    const initial = api.getClothingAvailabilityTimeline.mock.calls[0]![0] as {
-      start_date: string;
-    };
+    fireEvent.click(screen.getByRole("button", { name: "Calendar availability date range" }));
+    fireEvent.click(screen.getByRole("button", { name: /October 5/i }));
+    fireEvent.click(screen.getByRole("button", { name: /October 10/i }));
+
+    await waitFor(() =>
+      expect(api.getClothingAvailabilityTimeline).toHaveBeenLastCalledWith(
+        expect.objectContaining({ start_date: "2026-10-05", end_date: "2026-10-10" })
+      )
+    );
+    expect(screen.getByRole("button", { name: "Calendar availability date range" })).toHaveTextContent(
+      "Oct 5, 2026 – Oct 10, 2026"
+    );
+    const timeline = screen.getByLabelText("Clothing availability timeline");
+    expect(within(timeline).getByText("Oct 5")).toBeVisible();
+    expect(within(timeline).getByText("Oct 10")).toBeVisible();
+    expect(within(timeline).queryByText("Oct 11")).not.toBeInTheDocument();
+  });
+
+  it("moves by the selected range length when navigating date ranges", async () => {
+    render(<CalendarAvailabilityPage />);
+    await waitFor(() => expect(api.getClothingAvailabilityTimeline).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Calendar availability date range" }));
+    fireEvent.click(screen.getByRole("button", { name: /October 5/i }));
+    fireEvent.click(screen.getByRole("button", { name: /October 10/i }));
+    await waitFor(() =>
+      expect(api.getClothingAvailabilityTimeline).toHaveBeenLastCalledWith(
+        expect.objectContaining({ start_date: "2026-10-05", end_date: "2026-10-10" })
+      )
+    );
+
     fireEvent.click(screen.getByRole("button", { name: "Next date range" }));
 
-    await waitFor(() => {
-      const latest = api.getClothingAvailabilityTimeline.mock.calls.at(-1)?.[0] as
-        | { start_date: string }
-        | undefined;
-      expect(latest?.start_date).toBe(addCalendarDays(initial.start_date, 14));
-    });
+    await waitFor(() =>
+      expect(api.getClothingAvailabilityTimeline).toHaveBeenLastCalledWith(
+        expect.objectContaining({ start_date: "2026-10-11", end_date: "2026-10-16" })
+      )
+    );
   });
 
   it("shows a branch permission state when the endpoint returns forbidden", async () => {
