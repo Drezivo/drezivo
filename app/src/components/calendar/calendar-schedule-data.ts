@@ -1,10 +1,12 @@
-import type { OperationalCalendarEvent, OperationalCalendarResponse } from "@drezivo/contracts";
+import type {
+  BranchBusinessHours,
+  BranchClosure,
+  OperationalCalendarEvent,
+  OperationalCalendarResponse,
+  Weekday,
+} from "@drezivo/contracts";
 
-export const CALENDAR_START_HOUR = 8;
-export const CALENDAR_END_HOUR = 20;
 export const CALENDAR_HOUR_HEIGHT = 80;
-export const CALENDAR_TOTAL_HEIGHT =
-  (CALENDAR_END_HOUR - CALENDAR_START_HOUR) * CALENDAR_HOUR_HEIGHT;
 
 export type CalendarActivityType = "Pickup" | "Return" | "Fitting";
 export type CalendarActivityFilter = "All Activity" | CalendarActivityType;
@@ -29,6 +31,13 @@ export type CalendarActivity = {
 export type CalendarCategory = OperationalCalendarResponse["categories"][number];
 
 export type CalendarView = "week" | "month";
+
+export type CalendarBusinessHours = {
+  visibleStartMinute: number;
+  visibleEndMinute: number;
+  closedWeekdays: Weekday[];
+  specialClosedDates: Record<string, string>;
+};
 
 const DATE_KEY_FORMATTER_OPTIONS: Intl.DateTimeFormatOptions = {
   year: "numeric",
@@ -204,6 +213,75 @@ export function mapOperationalCalendarEvents(
       const byStart = Date.parse(left.startAt) - Date.parse(right.startAt);
       return byStart || left.id.localeCompare(right.id);
     });
+}
+
+export function calendarBusinessHoursModel(
+  hours: BranchBusinessHours,
+  closures: BranchClosure[]
+): CalendarBusinessHours {
+  return {
+    visibleStartMinute: localTimeMinute(hours.opens_local),
+    visibleEndMinute: localTimeMinute(hours.closes_local),
+    closedWeekdays: [...hours.closed_weekdays],
+    specialClosedDates: Object.fromEntries(
+      closures.map((closure) => [closure.local_date, closure.reason])
+    ),
+  };
+}
+
+export function calendarGridHeight(hours: CalendarBusinessHours) {
+  return ((hours.visibleEndMinute - hours.visibleStartMinute) / 60) * CALENDAR_HOUR_HEIGHT;
+}
+
+export function calendarTimeTicks(hours: CalendarBusinessHours) {
+  const ticks: number[] = [];
+  for (let minute = hours.visibleStartMinute; minute < hours.visibleEndMinute; minute += 60) {
+    ticks.push(minute);
+  }
+  return ticks;
+}
+
+export function isCalendarDateClosed(dateKey: string, hours: CalendarBusinessHours) {
+  return Boolean(calendarClosedReason(dateKey, hours));
+}
+
+export function calendarClosedReason(dateKey: string, hours: CalendarBusinessHours): string | null {
+  const specialReason = hours.specialClosedDates[dateKey];
+  if (specialReason) return specialReason;
+  const weekday = weekdayForDateKey(dateKey);
+  return hours.closedWeekdays.includes(weekday) ? `${capitalizeWeekday(weekday)} closure` : null;
+}
+
+export function isActivityOutsideBusinessHours(
+  activity: CalendarActivity,
+  hours: CalendarBusinessHours
+) {
+  return (
+    activity.startMinute < hours.visibleStartMinute ||
+    activity.startMinute >= hours.visibleEndMinute ||
+    activity.startMinute + activity.durationMinutes > hours.visibleEndMinute
+  );
+}
+
+export function formatCalendarMinute(minute: number) {
+  const hours = Math.floor(minute / 60);
+  const minutes = minute % 60;
+  const displayHour = hours % 12 || 12;
+  return `${displayHour}${minutes ? `:${String(minutes).padStart(2, "0")}` : ""}${hours < 12 ? "am" : "pm"}`;
+}
+
+function localTimeMinute(value: string) {
+  const [hours = "0", minutes = "0"] = value.split(":");
+  return Number(hours) * 60 + Number(minutes);
+}
+
+function weekdayForDateKey(dateKey: string): Weekday {
+  const weekdays: Weekday[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  return weekdays[parseCalendarDateKey(dateKey).getUTCDay()] ?? "sunday";
+}
+
+function capitalizeWeekday(value: Weekday) {
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }
 
 export function filterCalendarActivities(

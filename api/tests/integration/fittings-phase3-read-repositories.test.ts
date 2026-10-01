@@ -3,10 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import { fittingClosureListQuery, fittingListQuery } from '@drezivo/contracts';
+import { fittingListQuery } from '@drezivo/contracts';
 
 import { listFittingsReadModel, readFittingDetailModel } from '../../src/modules/fittings/fittings.repository.js';
-import { listFittingClosuresReadModel, readFittingSettingsModel } from '../../src/modules/fittings/fittings.schedule.repository.js';
+import { readFittingSettingsModel } from '../../src/modules/fittings/fittings.settings.repository.js';
 import { migrateTestDatabase, requireTestDatabaseUrl, resetTestDatabase } from './helpers/test-db.js';
 
 const adminUrl = requireTestDatabaseUrl();
@@ -35,8 +35,17 @@ async function seed(client: Client, label: string): Promise<{ tenantId: string; 
     const product = await client.query<{ id: string }>(`INSERT INTO product (tenant_id,code,name,status) VALUES ($1,$2,'Gold Gown','active') RETURNING id`, [tenantId, `P-${suffix}`]);
     const variant = await client.query<{ id: string }>(`INSERT INTO product_variant (tenant_id,product_id,sku,size_label,color_label,measurements,measurement_unit,measurement_mode,rental_price_minor,security_deposit_minor,currency,pricing_mode,included_duration_minutes,extra_day_price_minor,prep_minutes,turnaround_minutes,status) VALUES ($1,$2,$3,'M','Gold','{}','cm','none',1000,0,'PHP','fixed_duration',1440,0,0,0,'active') RETURNING id`, [tenantId, idOf(product.rows, 'product'), `SKU-${suffix}`]);
     await client.query(`INSERT INTO fitting_settings (tenant_id,branch_id,enabled,capacity,duration_minutes,fee_minor,currency,version) VALUES ($1,$2,true,2,60,500,'PHP',1)`, [tenantId, branchId]);
-    await client.query(`INSERT INTO fitting_hours (tenant_id,branch_id,weekday,starts_local,ends_local) VALUES ($1,$2,1,'09:00','12:00'),($1,$2,1,'13:00','17:00')`, [tenantId, branchId]);
-    await client.query(`INSERT INTO fitting_closure (tenant_id,branch_id,period,timezone_snapshot,reason) VALUES ($1,$2,tstzrange('2026-12-25T01:00Z','2026-12-25T09:00Z','[)'),'Asia/Manila','Holiday')`, [tenantId, branchId]);
+    await client.query(
+      `UPDATE branch
+          SET operating_hours = '{"opens_local":"09:00","closes_local":"17:00","closed_weekdays":[]}'::jsonb
+        WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, branchId],
+    );
+    await client.query(
+      `INSERT INTO branch_closure (tenant_id, branch_id, local_date, reason)
+       VALUES ($1, $2, date '2026-12-25', 'Holiday')`,
+      [tenantId, branchId],
+    );
     const slot = await client.query<{ id: string }>(`INSERT INTO fitting_capacity_slot (tenant_id,branch_id,slot_number,active) VALUES ($1,$2,1,true) RETURNING id`, [tenantId, branchId]);
     const slotId = idOf(slot.rows, 'slot');
 
@@ -101,17 +110,22 @@ describe('FIT-BE-030..033 fitting read repositories', () => {
     } finally { await client.end(); }
   });
 
-  it('reads schedule settings, weekly windows and bounded closures without capacity-slot identity', async () => {
+  it('reads only fitting-specific scalar settings without schedule or capacity-slot identity', async () => {
     const client = await openClient();
     try {
-      const seeded = await seed(client, 'schedule');
+      const seeded = await seed(client, 'settings');
       const settings = await readFittingSettingsModel(client as never, seeded);
-      expect(settings).toMatchObject({ enabled: true, capacity: 2, duration_minutes: 60, timezone: 'Asia/Manila' });
-      expect(settings?.hours).toHaveLength(2);
+      expect(settings).toMatchObject({
+        enabled: true,
+        capacity: 2,
+        duration_minutes: 60,
+        timezone: 'Asia/Manila',
+      });
+      expect(JSON.stringify(settings)).not.toContain('hours');
+      expect(JSON.stringify(settings)).not.toContain('closure');
       expect(JSON.stringify(settings)).not.toContain('slot');
-      const closures = await listFittingClosuresReadModel(client as never, { ...seeded, query: fittingClosureListQuery.parse({ period_start: '2026-12-01T00:00:00.000Z', period_end: '2026-12-31T23:59:59.000Z' }) });
-      expect(closures.rows).toHaveLength(1);
-      expect(closures.rows[0]?.reason).toBe('Holiday');
-    } finally { await client.end(); }
+    } finally {
+      await client.end();
+    }
   });
 });

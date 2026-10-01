@@ -2,12 +2,17 @@
 
 import { Building2, CheckCircle2, CircleDashed, Globe2, Mail, MapPin, Phone } from "lucide-react";
 
-import { businessInformation, type BusinessInformation, type BusinessSettings } from "@drezivo/contracts";
+import {
+  businessInformation,
+  type BusinessInformation,
+  type BusinessSettings,
+} from "@drezivo/contracts";
 
 import { ErrorState, Field, LoadingState, SaveBar, Section } from "@/components/forms/form-kit";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
+import { BusinessHoursSettingsSection } from "./business-hours-settings-section";
 import { useSettingsResource } from "./use-settings-resource";
 
 const toDraft = (value: BusinessSettings): BusinessInformation => ({
@@ -52,6 +57,8 @@ export function BusinessSettingsPage() {
           </Field>
         </div>
       </Section>
+
+      <BusinessHoursSettingsSection />
 
       <div className="grid gap-4 md:grid-cols-2">
         <Section icon={Globe2} title="Regional settings" description="Drezivo currently runs in one region.">

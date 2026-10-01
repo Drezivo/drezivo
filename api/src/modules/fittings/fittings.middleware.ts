@@ -2,11 +2,6 @@ import type { RequestHandler } from 'express';
 
 import {
   fittingCancelRequest,
-  fittingClosureCreateRequest,
-  fittingClosureListQuery,
-  fittingClosureParams,
-  fittingClosureRemoveRequest,
-  fittingClosureUpdateRequest,
   fittingCompleteRequest,
   fittingConfirmRequest,
   fittingCreateRequest,
@@ -22,13 +17,8 @@ import {
   fittingRejectRequest,
   fittingRescheduleRequest,
   fittingSettingsUpdateRequest,
-  fittingWeeklyHoursUpdateRequest,
   idempotencyKey,
   type FittingCancelRequest,
-  type FittingClosureCreateRequest,
-  type FittingClosureListQuery,
-  type FittingClosureRemoveRequest,
-  type FittingClosureUpdateRequest,
   type FittingCompleteRequest,
   type FittingConfirmRequest,
   type FittingCreateRequest,
@@ -43,7 +33,6 @@ import {
   type FittingRejectRequest,
   type FittingRescheduleRequest,
   type FittingSettingsUpdateRequest,
-  type FittingWeeklyHoursUpdateRequest,
 } from '@drezivo/contracts';
 
 import { ForbiddenError, ValidationError } from '../../shared/errors.js';
@@ -51,11 +40,9 @@ import { ForbiddenError, ValidationError } from '../../shared/errors.js';
 declare module 'express-serve-static-core' {
   interface Request {
     fittingId?: string;
-    fittingClosureId?: string;
     fittingIdempotencyKey?: string;
     fittingListQuery?: FittingListQuery;
     fittingIntakeQuery?: FittingIntakeQuery;
-    fittingClosureListQuery?: FittingClosureListQuery;
     fittingCreateRequest?: FittingCreateRequest;
     fittingNoteUpdateRequest?: FittingNoteUpdateRequest;
     fittingGarmentPlanUpdateRequest?: FittingGarmentPlanUpdateRequest;
@@ -69,10 +56,6 @@ declare module 'express-serve-static-core' {
     fittingPaymentReceiptAttachRequest?: FittingPaymentReceiptAttachRequest;
     fittingPaymentVerifyRequest?: FittingPaymentVerifyRequest;
     fittingSettingsUpdateRequest?: FittingSettingsUpdateRequest;
-    fittingWeeklyHoursUpdateRequest?: FittingWeeklyHoursUpdateRequest;
-    fittingClosureCreateRequest?: FittingClosureCreateRequest;
-    fittingClosureUpdateRequest?: FittingClosureUpdateRequest;
-    fittingClosureRemoveRequest?: FittingClosureRemoveRequest;
   }
 }
 
@@ -132,16 +115,6 @@ export const validateFittingId: RequestHandler = (req, _res, next): void => {
   next();
 };
 
-export const validateFittingClosureId: RequestHandler = (req, _res, next): void => {
-  const parsed = fittingClosureParams.safeParse({ closureId: req.params.closureId });
-  if (!parsed.success) {
-    next(new ValidationError('A valid fitting closure id is required.'));
-    return;
-  }
-  req.fittingClosureId = parsed.data.closureId;
-  next();
-};
-
 function bodyValidator<T>(
   schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } },
   assign: (req: Parameters<RequestHandler>[0], data: T) => void,
@@ -187,13 +160,6 @@ export const validateFittingIntakeQuery = queryValidator(
     req.fittingIntakeQuery = data;
   },
   'Fitting intake query is invalid.',
-);
-export const validateFittingClosureListQuery = queryValidator(
-  fittingClosureListQuery,
-  (req, data) => {
-    req.fittingClosureListQuery = data;
-  },
-  'Fitting closure query is invalid.',
 );
 
 export const validateFittingCreate = bodyValidator(
@@ -286,32 +252,4 @@ export const validateFittingSettingsUpdate = bodyValidator(
     req.fittingSettingsUpdateRequest = data;
   },
   'Fitting settings request is invalid.',
-);
-export const validateFittingWeeklyHoursUpdate = bodyValidator(
-  fittingWeeklyHoursUpdateRequest,
-  (req, data) => {
-    req.fittingWeeklyHoursUpdateRequest = data;
-  },
-  'Weekly fitting-hours request is invalid.',
-);
-export const validateFittingClosureCreate = bodyValidator(
-  fittingClosureCreateRequest,
-  (req, data) => {
-    req.fittingClosureCreateRequest = data;
-  },
-  'Fitting closure request is invalid.',
-);
-export const validateFittingClosureUpdate = bodyValidator(
-  fittingClosureUpdateRequest,
-  (req, data) => {
-    req.fittingClosureUpdateRequest = data;
-  },
-  'Fitting closure request is invalid.',
-);
-export const validateFittingClosureRemove = bodyValidator(
-  fittingClosureRemoveRequest,
-  (req, data) => {
-    req.fittingClosureRemoveRequest = data;
-  },
-  'Fitting closure removal request is invalid.',
 );

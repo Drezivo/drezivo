@@ -201,8 +201,9 @@ async function seedWorkspace(label: string): Promise<Seed> {
       [tenantId, branchId],
     );
     await client.query(
-      `INSERT INTO fitting_hours (tenant_id,branch_id,weekday,starts_local,ends_local)
-       SELECT $1,$2,weekday,'00:00'::time,'23:59'::time FROM generate_series(1,7) AS weekday`,
+      `UPDATE branch
+          SET operating_hours = '{"opens_local":"00:00","closes_local":"23:59","closed_weekdays":[]}'::jsonb
+        WHERE tenant_id = $1 AND id = $2`,
       [tenantId, branchId],
     );
     const slotId = requireId(

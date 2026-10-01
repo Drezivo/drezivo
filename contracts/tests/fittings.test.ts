@@ -4,8 +4,6 @@ import {
   errorCode,
   fittingActionResponse,
   fittingCancelRequest,
-  fittingClosureCreateRequest,
-  fittingClosureListQuery,
   fittingCompleteRequest,
   fittingCreateRequest,
   fittingDetail,
@@ -25,8 +23,6 @@ import {
   fittingSettings,
   fittingSettingsUpdateRequest,
   fittingState,
-  fittingWeeklyHours,
-  fittingWeeklyHoursUpdateRequest,
   idempotentRequestHeaders,
   refundCreateRequest,
   refundResolveRequest,
@@ -42,7 +38,6 @@ const ids = {
   variantGuaranteed: '00000000-0000-4000-8000-000000000107',
   asset: '00000000-0000-4000-8000-000000000108',
   payment: '00000000-0000-4000-8000-000000000109',
-  closure: '00000000-0000-4000-8000-000000000110',
   paymentMethod: '00000000-0000-4000-8000-000000000111',
   paymentReceipt: '00000000-0000-4000-8000-000000000112',
   file: '00000000-0000-4000-8000-000000000113',
@@ -53,22 +48,6 @@ const period = {
   start: '2026-10-10T02:00:00.000Z',
   end: '2026-10-10T03:00:00.000Z',
 };
-
-const weeklyHours = [
-  {
-    weekday: 'monday' as const,
-    windows: [
-      { starts_local: '09:00', ends_local: '12:00' },
-      { starts_local: '13:00', ends_local: '17:00' },
-    ],
-  },
-  { weekday: 'tuesday' as const, windows: [{ starts_local: '09:00', ends_local: '17:00' }] },
-  { weekday: 'wednesday' as const, windows: [{ starts_local: '09:00', ends_local: '17:00' }] },
-  { weekday: 'thursday' as const, windows: [{ starts_local: '09:00', ends_local: '17:00' }] },
-  { weekday: 'friday' as const, windows: [{ starts_local: '09:00', ends_local: '17:00' }] },
-  { weekday: 'saturday' as const, windows: [{ starts_local: '09:00', ends_local: '15:00' }] },
-  { weekday: 'sunday' as const, windows: [] },
-];
 
 const baseDetail = {
   id: ids.fitting,
@@ -524,26 +503,6 @@ describe('fitting contracts', () => {
     expect(fittingDetail.safeParse(invalid).success).toBe(false);
   });
 
-  it('models recurring breaks as non-overlapping gaps between weekly windows', () => {
-    expect(fittingWeeklyHours.safeParse(weeklyHours).success).toBe(true);
-  });
-
-  it('rejects overlapping weekly fitting windows', () => {
-    const overlapping = weeklyHours.map((day) =>
-      day.weekday === 'monday'
-        ? {
-            ...day,
-            windows: [
-              { starts_local: '09:00', ends_local: '13:00' },
-              { starts_local: '12:30', ends_local: '17:00' },
-            ],
-          }
-        : day,
-    );
-
-    expect(fittingWeeklyHours.safeParse(overlapping).success).toBe(false);
-  });
-
   it('keeps branch currency/timezone and hidden capacity slots out of settings mutation authority', () => {
     const result = fittingSettingsUpdateRequest.safeParse({
       version: 1,
@@ -559,8 +518,8 @@ describe('fitting contracts', () => {
     expect(result.success).toBe(false);
   });
 
-  it('returns complete branch fitting settings without exposing internal slots', () => {
-    const result = fittingSettings.safeParse({
+  it('returns fitting-specific settings without weekly schedule ownership', () => {
+    const scalarSettings = {
       branch_id: ids.branch,
       enabled: true,
       capacity: 3,
@@ -568,44 +527,17 @@ describe('fitting contracts', () => {
       fee_minor: '30000',
       currency: 'PHP',
       timezone: 'Asia/Manila',
-      weekly_hours: weeklyHours,
       version: 4,
       updated_at: '2026-10-01T00:00:00.000Z',
-    });
+    };
 
-    expect(result.success).toBe(true);
-  });
-
-  it('requires all seven weekdays on weekly-hours replacement', () => {
+    expect(fittingSettings.safeParse(scalarSettings).success).toBe(true);
     expect(
-      fittingWeeklyHoursUpdateRequest.safeParse({
-        version: 1,
-        weekly_hours: weeklyHours.slice(0, 6),
-      }).success,
+      fittingSettings.safeParse({ ...scalarSettings, weekly_hours: [] }).success,
     ).toBe(false);
-  });
-
-  it('bounds date-specific closure reads and validates closure writes', () => {
-    const results = [
-      fittingClosureListQuery.safeParse({
-        period_start: '2026-01-01T00:00:00.000Z',
-        period_end: '2026-12-31T00:00:00.000Z',
-      }).success,
-      fittingClosureListQuery.safeParse({
-        period_start: '2026-01-01T00:00:00.000Z',
-        period_end: '2028-01-01T00:00:00.000Z',
-      }).success,
-      fittingClosureCreateRequest.safeParse({
-        settings_version: 2,
-        period: {
-          start: '2026-12-24T01:00:00.000Z',
-          end: '2026-12-24T09:00:00.000Z',
-        },
-        reason: 'Private event',
-      }).success,
-    ];
-
-    expect(results).toEqual([true, false, true]);
+    expect(
+      fittingSettings.safeParse({ ...scalarSettings, closures: [] }).success,
+    ).toBe(false);
   });
 
   it('extends the shared stable error vocabulary with schedule conflict semantics', () => {

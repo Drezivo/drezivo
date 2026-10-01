@@ -31,6 +31,7 @@ const api = vi.hoisted(() => ({
   getFittingDetail: vi.fn(),
   getFittingIntakeOptions: vi.fn(),
   getFittingSettings: vi.fn(),
+  updateFittingSettings: vi.fn(),
   getFittings: vi.fn(),
   markFittingNoShow: vi.fn(),
   rejectFitting: vi.fn(),
@@ -149,9 +150,6 @@ const settings = fittingSettings.parse({
   fee_minor: "50000",
   currency: "PHP",
   timezone: "Asia/Manila",
-  weekly_hours: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].map(
-    (weekday) => ({ weekday, windows: [{ starts_local: "09:00", ends_local: "17:00" }] })
-  ),
   version: 1,
   updated_at: "2026-09-27T00:00:00.000Z",
 });
@@ -182,6 +180,10 @@ function installDefaults() {
   });
   clerk.getToken.mockResolvedValue("test-token");
   api.getFittingSettings.mockResolvedValue({ data: settings, requestId: "request-settings" });
+  api.updateFittingSettings.mockResolvedValue({
+    data: { settings: { ...settings, version: 2 } },
+    requestId: "request-settings-update",
+  });
   api.getFittingDashboardSummary.mockResolvedValue({ data: summary, requestId: "request-summary" });
   api.getFittings.mockResolvedValue(page());
   api.getFittingDetail.mockResolvedValue({ data: detail, requestId: "request-detail" });
@@ -216,6 +218,105 @@ describe("FittingsPage production cutover", () => {
     expect(api.getFittings).toHaveBeenCalledWith(
       expect.objectContaining({ limit: 10, sort: "starts_at_asc" })
     );
+  });
+
+  it("opens Fitting settings as a modal and refreshes the page configuration after save", async () => {
+    api.updateFittingSettings.mockResolvedValueOnce({
+      data: { settings: { ...settings, enabled: false, version: 2 } },
+      requestId: "request-settings-disabled",
+    });
+    render(<FittingsPage />);
+    await screen.findByText("Real Fitting Customer");
+
+    expect(screen.queryByText("Schedule & Availability")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Fitting settings" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/follow the active branch Business Hours/i)).toBeVisible();
+    expect(within(dialog).getByRole("link", { name: /Manage business hours/i })).toHaveAttribute("href", "/settings");
+
+    fireEvent.click(within(dialog).getByRole("switch", { name: "Accept fitting appointments" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save fitting settings" }));
+
+    await waitFor(() =>
+      expect(api.updateFittingSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ version: 1, enabled: false }),
+        expect.any(String),
+      ),
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "New Fitting" })).toBeDisabled());
+  });
+
+  it("opens and closes the Fitting settings modal without weekly-hours or closure controls", async () => {
+    render(<FittingsPage />);
+    await screen.findByText("Real Fitting Customer");
+
+    fireEvent.click(screen.getByRole("button", { name: "Fitting settings" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText("Accept fitting appointments")).toBeVisible();
+    expect(within(dialog).getByLabelText("Maximum simultaneous fittings")).toBeVisible();
+    expect(within(dialog).getByLabelText("Appointment duration")).toBeVisible();
+    expect(within(dialog).getByLabelText("Fitting fee (PHP)")).toBeVisible();
+    expect(within(dialog).queryByText(/weekly fitting hours/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/date-specific closure/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/special closed date/i)).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close fitting settings" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("saves enabled state, capacity, duration, and fee from the Fitting settings modal", async () => {
+    api.updateFittingSettings.mockResolvedValueOnce({
+      data: {
+        settings: {
+          ...settings,
+          enabled: false,
+          capacity: 4,
+          duration_minutes: 90,
+          fee_minor: "75000",
+          version: 2,
+        },
+      },
+      requestId: "request-settings-all-fields",
+    });
+    render(<FittingsPage />);
+    await screen.findByText("Real Fitting Customer");
+
+    fireEvent.click(screen.getByRole("button", { name: "Fitting settings" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("switch", { name: "Accept fitting appointments" }));
+    fireEvent.change(within(dialog).getByLabelText("Maximum simultaneous fittings"), {
+      target: { value: "4" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Appointment duration"), {
+      target: { value: "90" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Fitting fee (PHP)"), {
+      target: { value: "750.00" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save fitting settings" }));
+
+    await waitFor(() =>
+      expect(api.updateFittingSettings).toHaveBeenCalledWith(
+        {
+          version: 1,
+          enabled: false,
+          capacity: 4,
+          duration_minutes: 90,
+          fee_minor: "75000",
+        },
+        expect.any(String),
+      ),
+    );
+  });
+
+  it("keeps New Fitting guarded when fitting appointments are disabled", async () => {
+    api.getFittingSettings.mockResolvedValue({
+      data: { ...settings, enabled: false },
+      requestId: "request-settings-disabled",
+    });
+    render(<FittingsPage />);
+
+    expect(await screen.findByRole("button", { name: "New Fitting" })).toBeDisabled();
   });
 
   it("initializes the Today filter from the URL and requests the branch-local day", async () => {
@@ -253,7 +354,9 @@ describe("FittingsPage production cutover", () => {
 
     fireEvent.pointerDown(screen.getByRole("button", { name: "Status: All statuses" }), {
       button: 0,
+      buttons: 1,
       ctrlKey: false,
+      pointerType: "mouse",
     });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Pending" }));
     await waitFor(() =>

@@ -3,7 +3,7 @@ title: Rental Calendar End-to-End Implementation Checklist
 type: implementation-checklist
 status: in-progress
 owner: Drezivo team
-updated: 2026-09-29
+updated: 2026-10-01
 tags: [drezivo, calendar, schedule, reservations, fittings, operations, checklist]
 ---
 
@@ -52,8 +52,12 @@ Fitting Appointment
   status/customer/lines ────► Calendar display projection
   id ──────────────────────► Fitting Details Sheet
 
+Branch Business Hours
+  operating_hours ──────────► Calendar visible start/end + recurring closed weekdays
+  branch_closure ───────────► Calendar special closed-date presentation
+
 Calendar
-  stores no booking state
+  stores no booking or Business Hours state
   performs no calendar-specific booking mutation
 ```
 
@@ -74,7 +78,10 @@ These rules must be covered by the backend integration evidence before any Calen
 
 - Tenant and active branch come from authenticated actor context, never browser-supplied authority fields.
 - Calendar range queries are bounded. The backend accepts validated UTC instants; the frontend derives Week, Month, and day boundaries from the active branch timezone before calling the endpoint.
-- Week, Month, and Day Agenda use the same event projection; no separate business logic per view.
+- Week, Month, and Day Agenda use the same operational event projection; no separate booking logic per view.
+- Active-branch Business Hours are framing/presentation input only: they determine the Week grid's visible start/end and closed-day treatment, while Reservation/Fitting records remain the only Calendar events.
+- Recurring closed weekdays come from `branch.operating_hours.closed_weekdays`; special closed dates come from `branch_closure`. Neither becomes a stored Calendar event.
+- Reservation pickups/returns that exist outside Business Hours remain discoverable and are explicitly presented as outside Business Hours rather than being clipped away.
 - Pickup is derived from Reservation `pickup_at`; Return is derived from Reservation `due_at`.
 - Fitting is derived from persisted `fitting_appointment.period`; FIT-BE-080 makes those persisted appointments production-authoritative. FE-1 has removed prototype fitting data from the production Schedule UI.
 - Calendar event `source_id` must resolve to the same Reservation/Fitting record shown on its owning page.

@@ -16,6 +16,9 @@ const api = vi.hoisted(() => ({
   setStorefrontPublished: vi.fn(),
   getBusinessSettings: vi.fn(),
   updateBusinessSettings: vi.fn(),
+  getBusinessHours: vi.fn(),
+  updateBusinessHours: vi.fn(),
+  getBranchClosures: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({ useAuth: clerk.useAuth }));
@@ -157,6 +160,23 @@ describe("business settings page", () => {
     clerk.getToken.mockResolvedValue("token");
     clerk.useAuth.mockReturnValue({ getToken: clerk.getToken });
     api.getBusinessSettings.mockResolvedValue({ data: business, requestId: "r" });
+    api.getBusinessHours.mockResolvedValue({
+      data: {
+        branch_id: "00000000-0000-4000-8000-000000009001",
+        branch_name: "Main Branch",
+        opens_local: "08:00",
+        closes_local: "20:00",
+        closed_weekdays: ["sunday"],
+        timezone: "Asia/Manila",
+        version: 1,
+        updated_at: "2026-09-29T02:00:00.000Z",
+      },
+      requestId: "r-hours",
+    });
+    api.getBranchClosures.mockResolvedValue({
+      data: { items: [], page_meta: { next_cursor: null, has_more: false } },
+      requestId: "r-closures",
+    });
   });
 
   it("shows fixed regional settings and disables save for an invalid phone", async () => {

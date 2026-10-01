@@ -25,16 +25,10 @@ import {
   type FittingMutationContext,
 } from './fittings.mutation.service.js';
 import {
-  createFittingClosureCommand,
-  removeFittingClosureCommand,
-  updateFittingClosureCommand,
   updateFittingSettingsCommand,
-  updateFittingWeeklyHoursCommand,
-  type FittingClosureCommandContext,
   type FittingConfigurationCommandContext,
-} from './fittings.schedule.command.service.js';
+} from './fittings.settings.command.service.js';
 import {
-  getFittingClosures,
   getFittingDetail,
   getFittingIntakeOptions,
   getFittingList,
@@ -173,53 +167,6 @@ export async function updateFittingSettingsController(req: Request, res: Respons
   res.status(result.status).json(result.body);
 }
 
-export async function updateFittingHoursController(req: Request, res: Response): Promise<void> {
-  if (!req.fittingWeeklyHoursUpdateRequest) {
-    throw new ValidationError('Weekly fitting-hours request is invalid.');
-  }
-  const result = await updateFittingWeeklyHoursCommand(
-    configurationContext(req),
-    req.fittingWeeklyHoursUpdateRequest,
-  );
-  res.status(result.status).json(result.body);
-}
-
-export async function listFittingClosuresController(req: Request, res: Response): Promise<void> {
-  if (!req.fittingClosureListQuery) throw new ValidationError('Fitting closure query is invalid.');
-  sendSuccess(req, res, await getFittingClosures(readContext(req), req.fittingClosureListQuery));
-}
-
-export async function createFittingClosureController(req: Request, res: Response): Promise<void> {
-  if (!req.fittingClosureCreateRequest)
-    throw new ValidationError('Fitting closure request is invalid.');
-  const result = await createFittingClosureCommand(
-    configurationContext(req),
-    req.fittingClosureCreateRequest,
-  );
-  res.status(result.status).json(result.body);
-}
-
-export async function updateFittingClosureController(req: Request, res: Response): Promise<void> {
-  if (!req.fittingClosureUpdateRequest)
-    throw new ValidationError('Fitting closure request is invalid.');
-  const result = await updateFittingClosureCommand(
-    closureContext(req),
-    req.fittingClosureUpdateRequest,
-  );
-  res.status(result.status).json(result.body);
-}
-
-export async function removeFittingClosureController(req: Request, res: Response): Promise<void> {
-  if (!req.fittingClosureRemoveRequest) {
-    throw new ValidationError('Fitting closure removal request is invalid.');
-  }
-  const result = await removeFittingClosureCommand(
-    closureContext(req),
-    req.fittingClosureRemoveRequest,
-  );
-  res.status(result.status).json(result.body);
-}
-
 function requireTenant(req: Request): NonNullable<Request['tenantContext']> {
   const context = req.tenantContext;
   if (!context) throw new ValidationError('Tenant context is required.');
@@ -291,11 +238,7 @@ function configurationContext(req: Request): FittingConfigurationCommandContext 
     requestId: req.requestId,
     idempotencyKey: requireIdempotencyKey(req),
     role: tenant.role,
+    permissionCodes: tenant.permissionCodes,
     effectiveTenantStatus: tenant.effectiveTenantStatus,
   };
-}
-
-function closureContext(req: Request): FittingClosureCommandContext {
-  if (!req.fittingClosureId) throw new ValidationError('A valid fitting closure id is required.');
-  return { ...configurationContext(req), closureId: req.fittingClosureId };
 }

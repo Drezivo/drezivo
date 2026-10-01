@@ -103,7 +103,9 @@ plan rows; forward-only policy migration `0053_update_v1_entitlements_and_trial_
 the prices and sets their 125/300/1,000 physical-asset and 0/2/10 Front Desk-seat limits. The winning
 database transaction creates the tenant, `Main Branch`, Owner membership/grant, draft storefront,
 trialing subscription, `trial_started` event, both audit records, and a `tenant.bootstrapped`
-outbox event, then finalizes the safe response. A no-op worker handler acknowledges that event
+outbox event, then finalizes the safe response. `Main Branch` starts with canonical Business Hours
+`08:00–20:00` and Sunday closed in `branch.operating_hours`; this is a safe bootstrap default, not
+a fitting-specific schedule. A no-op worker handler acknowledges that event
 until later consumers are introduced.
 
 TBF-032 adds `0018_entitlement_runtime_privileges.sql` as the forward-only plan-data boundary.

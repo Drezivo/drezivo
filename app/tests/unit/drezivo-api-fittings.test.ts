@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  fittingClosure,
   fittingSettings,
   type CustomerId,
   type ProductVariantId,
@@ -77,7 +76,7 @@ function detail(status: "pending" | "confirmed" = "pending", version = 1) {
   };
 }
 
-function scheduleSettings(version = 1) {
+function scalarSettings(version = 1) {
   return fittingSettings.parse({
     branch_id: branchId,
     enabled: true,
@@ -86,27 +85,10 @@ function scheduleSettings(version = 1) {
     fee_minor: "50000",
     currency: "PHP",
     timezone: "Asia/Manila",
-    weekly_hours: [
-      "monday",
-      "tuesday",
-      "wednesday",
-      "thursday",
-      "friday",
-      "saturday",
-      "sunday",
-    ].map((weekday) => ({ weekday, windows: [{ starts_local: "09:00", ends_local: "17:00" }] })),
     version,
     updated_at: "2026-09-27T00:00:00.000Z",
   });
 }
-
-const closure = fittingClosure.parse({
-  id: "00000000-0000-4000-8000-000000003006",
-  period: { start: "2026-10-05T02:00:00.000Z", end: "2026-10-05T03:00:00.000Z" },
-  timezone_snapshot: "Asia/Manila",
-  reason: "Holiday closure",
-  created_at: "2026-09-27T01:00:00.000Z",
-});
 
 describe("Drezivo fittings API client", () => {
   const fetchMock = vi.fn<typeof fetch>();
@@ -222,44 +204,13 @@ describe("Drezivo fittings API client", () => {
     });
   });
 
-  it("serializes settings, weekly-hours, and closure operations with guarded contract payloads", async () => {
-    fetchMock
-      .mockResolvedValueOnce(success({ settings: scheduleSettings(2) }))
-      .mockResolvedValueOnce(success({ settings: scheduleSettings(3) }))
-      .mockResolvedValueOnce(
-        success({ items: [closure], page_meta: { next_cursor: null, has_more: false } })
-      )
-      .mockResolvedValueOnce(success({ closure, settings_version: 4 }, 201))
-      .mockResolvedValueOnce(success({ closure, settings_version: 5 }))
-      .mockResolvedValueOnce(success({ closure_id: closure.id, settings_version: 6 }));
+  it("serializes fitting-specific scalar settings with the guarded contract payload", async () => {
+    fetchMock.mockResolvedValueOnce(success({ settings: scalarSettings(2) }));
 
     const client = createDrezivoApiClient(getToken);
-    await client.updateFittingSettings(
+    const result = await client.updateFittingSettings(
       { version: 1, enabled: true, capacity: 3, duration_minutes: 60, fee_minor: "12500" },
       "fit-settings-test-key"
-    );
-    await client.updateFittingWeeklyHours(
-      { version: 2, weekly_hours: scheduleSettings().weekly_hours },
-      "fit-hours-test-key"
-    );
-    await client.getFittingClosures({
-      limit: 100,
-      period_start: "2026-10-01T00:00:00.000Z",
-      period_end: "2026-11-01T00:00:00.000Z",
-    });
-    await client.createFittingClosure(
-      { settings_version: 3, period: closure.period, reason: closure.reason },
-      "fit-closure-create-test-key"
-    );
-    await client.updateFittingClosure(
-      closure.id,
-      { settings_version: 4, period: closure.period, reason: "Updated closure" },
-      "fit-closure-update-test-key"
-    );
-    await client.removeFittingClosure(
-      closure.id,
-      { settings_version: 5 },
-      "fit-closure-remove-test-key"
     );
 
     const settingsUpdate = fetchMock.mock.calls[0];
@@ -275,24 +226,7 @@ describe("Drezivo fittings API client", () => {
       duration_minutes: 60,
       fee_minor: "12500",
     });
-
-    expect(new URL(String(fetchMock.mock.calls[1]?.[0])).pathname).toBe(
-      "/api/v1/fittings/settings/hours"
-    );
-    const closuresUrl = new URL(String(fetchMock.mock.calls[2]?.[0]));
-    expect(closuresUrl.pathname).toBe("/api/v1/fittings/closures");
-    expect(closuresUrl.searchParams.get("limit")).toBe("100");
-    expect(closuresUrl.searchParams.get("period_start")).toBe("2026-10-01T00:00:00.000Z");
-    expect(closuresUrl.searchParams.get("period_end")).toBe("2026-11-01T00:00:00.000Z");
-    expect(new URL(String(fetchMock.mock.calls[3]?.[0])).pathname).toBe(
-      "/api/v1/fittings/closures"
-    );
-    expect(new URL(String(fetchMock.mock.calls[4]?.[0])).pathname).toBe(
-      `/api/v1/fittings/closures/${closure.id}`
-    );
-    expect(new URL(String(fetchMock.mock.calls[5]?.[0])).pathname).toBe(
-      `/api/v1/fittings/closures/${closure.id}/remove`
-    );
-    expect(fetchMock.mock.calls[5]?.[1]?.method).toBe("POST");
+    expect(result.data.settings.version).toBe(2);
+    expect(JSON.stringify(result.data.settings)).not.toContain("weekly_hours");
   });
 });

@@ -19,6 +19,24 @@ export const isoInstant = z.string().datetime({ offset: true });
 /** A calendar date with no time component (e.g. an optional event date). */
 export const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be an ISO-8601 date (YYYY-MM-DD)');
 
+/** Branch-local wall-clock time with minute precision. */
+export const localTime = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'must be a local 24-hour time in HH:mm format');
+export type LocalTime = z.infer<typeof localTime>;
+
+/** Canonical weekday names shared by branch scheduling domains. */
+export const weekday = z.enum([
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+]);
+export type Weekday = z.infer<typeof weekday>;
+
 /**
  * IANA timezone database identifier, e.g. "Asia/Manila". Validated as a
  * non-empty `Area/Location` shape; the authoritative check against the tz

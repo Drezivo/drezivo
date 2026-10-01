@@ -115,13 +115,13 @@ export async function createStaffFittingCommand(
       if (!schedule.is_future) {
         throw new ScheduleConflictError('Fitting start must be in the future.');
       }
-      if (!schedule.within_weekly_hours) {
+      if (!schedule.within_business_hours) {
         throw new ScheduleConflictError(
-          'Fitting must fit completely inside one branch operating window.',
+          'Fitting must fit completely inside the active branch Business Hours on an open weekday.',
         );
       }
-      if (!schedule.closure_free) {
-        throw new ScheduleConflictError('Fitting overlaps a branch closure.');
+      if (!schedule.closed_date_free) {
+        throw new ScheduleConflictError('Fitting falls on a special closed date for this branch.');
       }
 
       const distinctVariantIds = [...new Set(request.garments.map((line) => line.variant_id))];

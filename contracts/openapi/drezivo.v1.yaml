@@ -555,41 +555,6 @@ components:
         timezone:
           type: string
           pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
-        weekly_hours:
-          type: array
-          items:
-            type: object
-            properties:
-              weekday:
-                type: string
-                enum: &a43
-                  - monday
-                  - tuesday
-                  - wednesday
-                  - thursday
-                  - friday
-                  - saturday
-                  - sunday
-              windows:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    starts_local:
-                      type: string
-                      pattern: ^([01]\d|2[0-3]):[0-5]\d$
-                    ends_local:
-                      type: string
-                      pattern: ^([01]\d|2[0-3]):[0-5]\d$
-                  required:
-                    - starts_local
-                    - ends_local
-                  additionalProperties: false
-                maxItems: 8
-            required:
-              - weekday
-              - windows
-            additionalProperties: false
         version:
           type: integer
           exclusiveMinimum: 0
@@ -604,10 +569,112 @@ components:
         - fee_minor
         - currency
         - timezone
-        - weekly_hours
         - version
         - updated_at
       additionalProperties: false
+    BranchBusinessHours:
+      type: object
+      properties:
+        opens_local:
+          type: string
+          pattern: ^([01]\d|2[0-3]):[0-5]\d$
+        closes_local:
+          type: string
+          pattern: ^([01]\d|2[0-3]):[0-5]\d$
+        closed_weekdays:
+          type: array
+          items:
+            type: string
+            enum: &a45
+              - monday
+              - tuesday
+              - wednesday
+              - thursday
+              - friday
+              - saturday
+              - sunday
+          maxItems: 7
+        branch_id:
+          type: string
+          format: uuid
+        branch_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        timezone:
+          type: string
+          pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
+        version:
+          type: integer
+          exclusiveMinimum: 0
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - opens_local
+        - closes_local
+        - closed_weekdays
+        - branch_id
+        - branch_name
+        - timezone
+        - version
+        - updated_at
+      additionalProperties: false
+    BranchClosureListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              branch_id:
+                type: string
+                format: uuid
+              local_date:
+                type: string
+                pattern: ^\d{4}-\d{2}-\d{2}$
+              reason:
+                type: string
+                minLength: 1
+                maxLength: 240
+              version:
+                type: integer
+                exclusiveMinimum: 0
+              created_at:
+                type: string
+                format: date-time
+              updated_at:
+                type: string
+                format: date-time
+            required:
+              - id
+              - branch_id
+              - local_date
+              - reason
+              - version
+              - created_at
+              - updated_at
+            additionalProperties: false
+        page_meta:
+          type: object
+          properties:
+            next_cursor:
+              type:
+                - string
+                - "null"
+              minLength: 1
+            has_more:
+              type: boolean
+          required:
+            - next_cursor
+            - has_more
+      required:
+        - items
+        - page_meta
     OnboardingStatus:
       type: string
       enum: &a6
@@ -20484,7 +20551,7 @@ paths:
       tags:
         - fittings
       summary: Read branch fitting enabled state, simultaneous capacity, strict
-        duration, fee and weekly hours.
+        duration and fee.
       responses:
         "200":
           description: Current branch fitting settings without hidden capacity-slot
@@ -20523,34 +20590,6 @@ paths:
                       timezone:
                         type: string
                         pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
-                      weekly_hours:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            weekday:
-                              type: string
-                              enum: *a43
-                            windows:
-                              type: array
-                              items:
-                                type: object
-                                properties:
-                                  starts_local:
-                                    type: string
-                                    pattern: ^([01]\d|2[0-3]):[0-5]\d$
-                                  ends_local:
-                                    type: string
-                                    pattern: ^([01]\d|2[0-3]):[0-5]\d$
-                                required:
-                                  - starts_local
-                                  - ends_local
-                                additionalProperties: false
-                              maxItems: 8
-                          required:
-                            - weekday
-                            - windows
-                          additionalProperties: false
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -20565,7 +20604,6 @@ paths:
                       - fee_minor
                       - currency
                       - timezone
-                      - weekly_hours
                       - version
                       - updated_at
                     additionalProperties: false
@@ -20702,34 +20740,6 @@ paths:
                           timezone:
                             type: string
                             pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
-                          weekly_hours:
-                            type: array
-                            items:
-                              type: object
-                              properties:
-                                weekday:
-                                  type: string
-                                  enum: *a43
-                                windows:
-                                  type: array
-                                  items:
-                                    type: object
-                                    properties:
-                                      starts_local:
-                                        type: string
-                                        pattern: ^([01]\d|2[0-3]):[0-5]\d$
-                                      ends_local:
-                                        type: string
-                                        pattern: ^([01]\d|2[0-3]):[0-5]\d$
-                                    required:
-                                      - starts_local
-                                      - ends_local
-                                    additionalProperties: false
-                                  maxItems: 8
-                              required:
-                                - weekday
-                                - windows
-                              additionalProperties: false
                           version:
                             type: integer
                             exclusiveMinimum: 0
@@ -20744,7 +20754,6 @@ paths:
                           - fee_minor
                           - currency
                           - timezone
-                          - weekly_hours
                           - version
                           - updated_at
                         additionalProperties: false
@@ -20849,1205 +20858,6 @@ paths:
                   - request_id
         "422":
           description: The fitting settings request is invalid.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-  /fittings/settings/hours:
-    put:
-      tags:
-        - fittings
-      summary: Owner-only full replacement of recurring branch fitting windows.
-      parameters:
-        - schema:
-            type: string
-            minLength: 8
-            maxLength: 255
-          required: true
-          name: Idempotency-Key
-          in: header
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                version:
-                  type: integer
-                  exclusiveMinimum: 0
-                weekly_hours:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      weekday:
-                        type: string
-                        enum: *a43
-                      windows:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            starts_local:
-                              type: string
-                              pattern: ^([01]\d|2[0-3]):[0-5]\d$
-                            ends_local:
-                              type: string
-                              pattern: ^([01]\d|2[0-3]):[0-5]\d$
-                          required:
-                            - starts_local
-                            - ends_local
-                          additionalProperties: false
-                        maxItems: 8
-                    required:
-                      - weekday
-                      - windows
-                    additionalProperties: false
-              required:
-                - version
-                - weekly_hours
-              additionalProperties: false
-      responses:
-        "200":
-          description: Weekly fitting windows updated; gaps represent recurring breaks.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - true
-                  data:
-                    type: object
-                    properties:
-                      settings:
-                        type: object
-                        properties:
-                          branch_id:
-                            type: string
-                            format: uuid
-                          enabled:
-                            type: boolean
-                          capacity:
-                            type: integer
-                            minimum: 1
-                            maximum: 100
-                          duration_minutes:
-                            type: integer
-                            minimum: 30
-                            maximum: 1440
-                          fee_minor:
-                            type: string
-                            pattern: ^-?(0|[1-9]\d*)$
-                          currency:
-                            type: string
-                            pattern: ^[A-Z]{3}$
-                          timezone:
-                            type: string
-                            pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
-                          weekly_hours:
-                            type: array
-                            items:
-                              type: object
-                              properties:
-                                weekday:
-                                  type: string
-                                  enum: *a43
-                                windows:
-                                  type: array
-                                  items:
-                                    type: object
-                                    properties:
-                                      starts_local:
-                                        type: string
-                                        pattern: ^([01]\d|2[0-3]):[0-5]\d$
-                                      ends_local:
-                                        type: string
-                                        pattern: ^([01]\d|2[0-3]):[0-5]\d$
-                                    required:
-                                      - starts_local
-                                      - ends_local
-                                    additionalProperties: false
-                                  maxItems: 8
-                              required:
-                                - weekday
-                                - windows
-                              additionalProperties: false
-                          version:
-                            type: integer
-                            exclusiveMinimum: 0
-                          updated_at:
-                            type: string
-                            format: date-time
-                        required:
-                          - branch_id
-                          - enabled
-                          - capacity
-                          - duration_minutes
-                          - fee_minor
-                          - currency
-                          - timezone
-                          - weekly_hours
-                          - version
-                          - updated_at
-                        additionalProperties: false
-                    required:
-                      - settings
-                    additionalProperties: false
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - data
-                  - request_id
-        "403":
-          description: Only Owner may mutate fitting configuration.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-        "409":
-          description: SCHEDULE_CONFLICT, STALE_VERSION, or IDEMPOTENCY_KEY_REUSED.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-        "422":
-          description: The weekly fitting-hours request is invalid.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-  /fittings/closures:
-    get:
-      tags:
-        - fittings
-      summary: List date-specific fitting closures in one bounded period window.
-      parameters:
-        - schema:
-            type: string
-            minLength: 1
-          required: false
-          name: cursor
-          in: query
-        - schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
-          required: false
-          name: limit
-          in: query
-        - schema:
-            type: string
-            format: date-time
-          required: true
-          name: period_start
-          in: query
-        - schema:
-            type: string
-            format: date-time
-          required: true
-          name: period_end
-          in: query
-      responses:
-        "200":
-          description: Paginated date-specific fitting closures.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - true
-                  data:
-                    type: object
-                    properties:
-                      items:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            id:
-                              type: string
-                              format: uuid
-                            period:
-                              type: object
-                              properties:
-                                start:
-                                  type: string
-                                  format: date-time
-                                end:
-                                  type: string
-                                  format: date-time
-                              required:
-                                - start
-                                - end
-                            timezone_snapshot:
-                              type: string
-                              pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
-                            reason:
-                              type: string
-                              minLength: 1
-                              maxLength: 240
-                            created_at:
-                              type: string
-                              format: date-time
-                          required:
-                            - id
-                            - period
-                            - timezone_snapshot
-                            - reason
-                            - created_at
-                          additionalProperties: false
-                      page_meta:
-                        type: object
-                        properties:
-                          next_cursor:
-                            type:
-                              - string
-                              - "null"
-                            minLength: 1
-                          has_more:
-                            type: boolean
-                        required:
-                          - next_cursor
-                          - has_more
-                    required:
-                      - items
-                      - page_meta
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - data
-                  - request_id
-        "403":
-          description: Fitting settings read permission is required.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-        "422":
-          description: The closure list window is invalid.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-    post:
-      tags:
-        - fittings
-      summary: Owner-only creation of a date-specific fitting closure.
-      parameters:
-        - schema:
-            type: string
-            minLength: 8
-            maxLength: 255
-          required: true
-          name: Idempotency-Key
-          in: header
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                settings_version:
-                  type: integer
-                  exclusiveMinimum: 0
-                period:
-                  type: object
-                  properties:
-                    start:
-                      type: string
-                      format: date-time
-                    end:
-                      type: string
-                      format: date-time
-                  required:
-                    - start
-                    - end
-                reason:
-                  type: string
-                  minLength: 1
-                  maxLength: 240
-              required:
-                - settings_version
-                - period
-                - reason
-              additionalProperties: false
-      responses:
-        "201":
-          description: Fitting closure created.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - true
-                  data:
-                    type: object
-                    properties:
-                      closure:
-                        type: object
-                        properties:
-                          id:
-                            type: string
-                            format: uuid
-                          period:
-                            type: object
-                            properties:
-                              start:
-                                type: string
-                                format: date-time
-                              end:
-                                type: string
-                                format: date-time
-                            required:
-                              - start
-                              - end
-                          timezone_snapshot:
-                            type: string
-                            pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
-                          reason:
-                            type: string
-                            minLength: 1
-                            maxLength: 240
-                          created_at:
-                            type: string
-                            format: date-time
-                        required:
-                          - id
-                          - period
-                          - timezone_snapshot
-                          - reason
-                          - created_at
-                        additionalProperties: false
-                      settings_version:
-                        type: integer
-                        exclusiveMinimum: 0
-                    required:
-                      - closure
-                      - settings_version
-                    additionalProperties: false
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - data
-                  - request_id
-        "403":
-          description: Only Owner may mutate fitting configuration.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-        "409":
-          description: SCHEDULE_CONFLICT, STALE_VERSION, or IDEMPOTENCY_KEY_REUSED.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-        "422":
-          description: The fitting closure request is invalid.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-  /fittings/closures/{closureId}:
-    put:
-      tags:
-        - fittings
-      summary: Owner-only update of one date-specific fitting closure.
-      parameters:
-        - schema:
-            type: string
-            format: uuid
-          required: true
-          name: closureId
-          in: path
-        - schema:
-            type: string
-            minLength: 8
-            maxLength: 255
-          required: true
-          name: Idempotency-Key
-          in: header
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                settings_version:
-                  type: integer
-                  exclusiveMinimum: 0
-                period:
-                  type: object
-                  properties:
-                    start:
-                      type: string
-                      format: date-time
-                    end:
-                      type: string
-                      format: date-time
-                  required:
-                    - start
-                    - end
-                reason:
-                  type: string
-                  minLength: 1
-                  maxLength: 240
-              required:
-                - settings_version
-                - period
-                - reason
-              additionalProperties: false
-      responses:
-        "200":
-          description: Fitting closure updated.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - true
-                  data:
-                    type: object
-                    properties:
-                      closure:
-                        type: object
-                        properties:
-                          id:
-                            type: string
-                            format: uuid
-                          period:
-                            type: object
-                            properties:
-                              start:
-                                type: string
-                                format: date-time
-                              end:
-                                type: string
-                                format: date-time
-                            required:
-                              - start
-                              - end
-                          timezone_snapshot:
-                            type: string
-                            pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
-                          reason:
-                            type: string
-                            minLength: 1
-                            maxLength: 240
-                          created_at:
-                            type: string
-                            format: date-time
-                        required:
-                          - id
-                          - period
-                          - timezone_snapshot
-                          - reason
-                          - created_at
-                        additionalProperties: false
-                      settings_version:
-                        type: integer
-                        exclusiveMinimum: 0
-                    required:
-                      - closure
-                      - settings_version
-                    additionalProperties: false
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - data
-                  - request_id
-        "403":
-          description: Only Owner may mutate fitting configuration.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-        "404":
-          description: The fitting closure was not found for the active tenant/branch.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-        "409":
-          description: SCHEDULE_CONFLICT, STALE_VERSION, or IDEMPOTENCY_KEY_REUSED.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-        "422":
-          description: The fitting closure request is invalid.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-  /fittings/closures/{closureId}/remove:
-    post:
-      tags:
-        - fittings
-      summary: Owner-only removal of one date-specific fitting closure.
-      parameters:
-        - schema:
-            type: string
-            format: uuid
-          required: true
-          name: closureId
-          in: path
-        - schema:
-            type: string
-            minLength: 8
-            maxLength: 255
-          required: true
-          name: Idempotency-Key
-          in: header
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                settings_version:
-                  type: integer
-                  exclusiveMinimum: 0
-              required:
-                - settings_version
-              additionalProperties: false
-      responses:
-        "200":
-          description: Fitting closure removed.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - true
-                  data:
-                    type: object
-                    properties:
-                      closure_id:
-                        type: string
-                        format: uuid
-                      settings_version:
-                        type: integer
-                        exclusiveMinimum: 0
-                    required:
-                      - closure_id
-                      - settings_version
-                    additionalProperties: false
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - data
-                  - request_id
-        "403":
-          description: Only Owner may mutate fitting configuration.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-        "404":
-          description: The fitting closure was not found for the active tenant/branch.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-        "409":
-          description: STALE_VERSION or IDEMPOTENCY_KEY_REUSED.
           content:
             application/json:
               schema:
@@ -22379,7 +21189,7 @@ paths:
                               type:
                                 - string
                                 - "null"
-                              enum: &a45
+                              enum: &a44
                                 - requested
                                 - processing
                                 - completed
@@ -22737,7 +21547,7 @@ paths:
                   pattern: ^[A-Z]{3}$
                 purpose:
                   type: string
-                  enum: &a44
+                  enum: &a43
                     - rental_refund
                     - security_deposit_release
                     - goodwill_adjustment
@@ -22784,10 +21594,10 @@ paths:
                             pattern: ^[A-Z]{3}$
                           purpose:
                             type: string
-                            enum: *a44
+                            enum: *a43
                           status:
                             type: string
-                            enum: *a45
+                            enum: *a44
                           merchant_reference:
                             type:
                               - string
@@ -22960,6 +21770,1226 @@ paths:
             payment_receipt, verification_document, storefront_asset,
             export_result, subscription_payment_proof, payment_method_material
             for allowed purposes.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /settings/business-hours:
+    get:
+      tags:
+        - settings
+      summary: Read authoritative Business Hours for the active branch.
+      responses:
+        "200":
+          description: Active-branch Business Hours.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      opens_local:
+                        type: string
+                        pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                      closes_local:
+                        type: string
+                        pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                      closed_weekdays:
+                        type: array
+                        items:
+                          type: string
+                          enum: *a45
+                        maxItems: 7
+                      branch_id:
+                        type: string
+                        format: uuid
+                      branch_name:
+                        type: string
+                        minLength: 1
+                        maxLength: 120
+                      timezone:
+                        type: string
+                        pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
+                      version:
+                        type: integer
+                        exclusiveMinimum: 0
+                      updated_at:
+                        type: string
+                        format: date-time
+                    required:
+                      - opens_local
+                      - closes_local
+                      - closed_weekdays
+                      - branch_id
+                      - branch_name
+                      - timezone
+                      - version
+                      - updated_at
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Business Hours read permission is required.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+    patch:
+      tags:
+        - settings
+      summary: Owner-only replacement of active-branch Business Hours.
+      parameters:
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                opens_local:
+                  type: string
+                  pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                closes_local:
+                  type: string
+                  pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                closed_weekdays:
+                  type: array
+                  items:
+                    type: string
+                    enum: *a45
+                  maxItems: 7
+                version:
+                  type: integer
+                  exclusiveMinimum: 0
+              required:
+                - opens_local
+                - closes_local
+                - closed_weekdays
+                - version
+              additionalProperties: false
+      responses:
+        "200":
+          description: Business Hours updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      opens_local:
+                        type: string
+                        pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                      closes_local:
+                        type: string
+                        pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                      closed_weekdays:
+                        type: array
+                        items:
+                          type: string
+                          enum: *a45
+                        maxItems: 7
+                      branch_id:
+                        type: string
+                        format: uuid
+                      branch_name:
+                        type: string
+                        minLength: 1
+                        maxLength: 120
+                      timezone:
+                        type: string
+                        pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
+                      version:
+                        type: integer
+                        exclusiveMinimum: 0
+                      updated_at:
+                        type: string
+                        format: date-time
+                    required:
+                      - opens_local
+                      - closes_local
+                      - closed_weekdays
+                      - branch_id
+                      - branch_name
+                      - timezone
+                      - version
+                      - updated_at
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Only an authorized owner may mutate Business Hours.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "409":
+          description: SCHEDULE_CONFLICT, STALE_VERSION, or IDEMPOTENCY_KEY_REUSED.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "422":
+          description: The Business Hours request is invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /settings/business-hours/closures:
+    get:
+      tags:
+        - settings
+      summary: List special whole-day closures for the active branch.
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+          required: false
+          name: cursor
+          in: query
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          required: false
+          name: limit
+          in: query
+        - schema:
+            type: string
+            pattern: ^\d{4}-\d{2}-\d{2}$
+          required: true
+          name: date_start
+          in: query
+        - schema:
+            type: string
+            pattern: ^\d{4}-\d{2}-\d{2}$
+          required: true
+          name: date_end
+          in: query
+      responses:
+        "200":
+          description: Paginated active-branch closed dates.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              format: uuid
+                            branch_id:
+                              type: string
+                              format: uuid
+                            local_date:
+                              type: string
+                              pattern: ^\d{4}-\d{2}-\d{2}$
+                            reason:
+                              type: string
+                              minLength: 1
+                              maxLength: 240
+                            version:
+                              type: integer
+                              exclusiveMinimum: 0
+                            created_at:
+                              type: string
+                              format: date-time
+                            updated_at:
+                              type: string
+                              format: date-time
+                          required:
+                            - id
+                            - branch_id
+                            - local_date
+                            - reason
+                            - version
+                            - created_at
+                            - updated_at
+                          additionalProperties: false
+                      page_meta:
+                        type: object
+                        properties:
+                          next_cursor:
+                            type:
+                              - string
+                              - "null"
+                            minLength: 1
+                          has_more:
+                            type: boolean
+                        required:
+                          - next_cursor
+                          - has_more
+                    required:
+                      - items
+                      - page_meta
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Business Hours read permission is required.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "422":
+          description: The closed-date list window is invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+    post:
+      tags:
+        - settings
+      summary: Owner-only creation of a special whole-day branch closure.
+      parameters:
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                local_date:
+                  type: string
+                  pattern: ^\d{4}-\d{2}-\d{2}$
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 240
+              required:
+                - local_date
+                - reason
+              additionalProperties: false
+      responses:
+        "201":
+          description: Branch closed date created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      closure:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          branch_id:
+                            type: string
+                            format: uuid
+                          local_date:
+                            type: string
+                            pattern: ^\d{4}-\d{2}-\d{2}$
+                          reason:
+                            type: string
+                            minLength: 1
+                            maxLength: 240
+                          version:
+                            type: integer
+                            exclusiveMinimum: 0
+                          created_at:
+                            type: string
+                            format: date-time
+                          updated_at:
+                            type: string
+                            format: date-time
+                        required:
+                          - id
+                          - branch_id
+                          - local_date
+                          - reason
+                          - version
+                          - created_at
+                          - updated_at
+                        additionalProperties: false
+                    required:
+                      - closure
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Only an authorized owner may mutate Business Hours.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "409":
+          description: SCHEDULE_CONFLICT or IDEMPOTENCY_KEY_REUSED.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "422":
+          description: The closed-date request is invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /settings/business-hours/closures/{closureId}:
+    patch:
+      tags:
+        - settings
+      summary: Owner-only update of one special branch closed date.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: closureId
+          in: path
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                local_date:
+                  type: string
+                  pattern: ^\d{4}-\d{2}-\d{2}$
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 240
+                version:
+                  type: integer
+                  exclusiveMinimum: 0
+              required:
+                - local_date
+                - reason
+                - version
+              additionalProperties: false
+      responses:
+        "200":
+          description: Branch closed date updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      closure:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          branch_id:
+                            type: string
+                            format: uuid
+                          local_date:
+                            type: string
+                            pattern: ^\d{4}-\d{2}-\d{2}$
+                          reason:
+                            type: string
+                            minLength: 1
+                            maxLength: 240
+                          version:
+                            type: integer
+                            exclusiveMinimum: 0
+                          created_at:
+                            type: string
+                            format: date-time
+                          updated_at:
+                            type: string
+                            format: date-time
+                        required:
+                          - id
+                          - branch_id
+                          - local_date
+                          - reason
+                          - version
+                          - created_at
+                          - updated_at
+                        additionalProperties: false
+                    required:
+                      - closure
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Only an authorized owner may mutate Business Hours.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "404":
+          description: The closed date was not found for the active branch.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "409":
+          description: SCHEDULE_CONFLICT, STALE_VERSION, or IDEMPOTENCY_KEY_REUSED.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "422":
+          description: The closed-date request is invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /settings/business-hours/closures/{closureId}/remove:
+    post:
+      tags:
+        - settings
+      summary: Owner-only removal of one special branch closed date.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: closureId
+          in: path
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                version:
+                  type: integer
+                  exclusiveMinimum: 0
+              required:
+                - version
+              additionalProperties: false
+      responses:
+        "200":
+          description: Branch closed date removed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      closure_id:
+                        type: string
+                        format: uuid
+                    required:
+                      - closure_id
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Only an authorized owner may mutate Business Hours.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "404":
+          description: The closed date was not found for the active branch.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "409":
+          description: STALE_VERSION or IDEMPOTENCY_KEY_REUSED.
           content:
             application/json:
               schema:

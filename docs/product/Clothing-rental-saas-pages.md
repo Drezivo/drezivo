@@ -336,16 +336,16 @@ Show:
 - Notes
 - Appointment status
 
-### Fitting Availability / Schedule
+### Fitting Settings
 
-Configure:
+Configure fitting-specific behavior from the Fittings page modal:
 
-- Operating hours
-- Available days
+- Accept fitting appointments
 - Appointment duration
-- Breaks
-- Maximum appointments per slot
+- Maximum simultaneous fittings
 - Fitting fee
+
+Opening/closing times, recurring closed weekdays, and special closed dates are configured once under Business Settings → Business Hours and are shared by Calendar and fitting availability.
 
 ---
 
@@ -609,12 +609,11 @@ If the goal is to avoid overbuilding, prioritize these first.
 7. **Clothing Details + Availability**
 8. **Customers**
 9. **Customer Details**
-10. **Fitting Appointments**
-11. **Fitting Schedule**
-12. **Payments**
-13. **Storefront Management**
-14. **Business Settings**
-15. **Business Onboarding**
+10. **Fitting Appointments + Fitting Settings modal**
+11. **Payments**
+12. **Storefront Management**
+13. **Business Settings + Business Hours**
+14. **Business Onboarding**
 
 ---
 

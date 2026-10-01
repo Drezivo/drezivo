@@ -5,7 +5,6 @@ import { customerAddress, customerSocialMedia } from '../common/customer';
 import {
   branchId,
   customerId,
-  fittingClosureId,
   fittingId,
   fittingLineId,
   paymentId,
@@ -34,14 +33,6 @@ export const fittingParams = z
   })
   .strict();
 export type FittingParams = z.infer<typeof fittingParams>;
-
-/** Route params for one date-specific fitting closure. */
-export const fittingClosureParams = z
-  .object({
-    closureId: fittingClosureId,
-  })
-  .strict();
-export type FittingClosureParams = z.infer<typeof fittingClosureParams>;
 
 /** Minimal customer identity safe for the operational fitting list. */
 export const fittingCustomerSummary = z

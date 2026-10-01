@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
+import type { PermissionCode } from '@drezivo/contracts';
+
 import '../../src/config/load-env.js';
 import {
   buildAppRoleDatabaseUrl,
@@ -147,8 +149,9 @@ async function seedTenant(label: string, capacity: number, assetCount = 0): Prom
       [tenantId, branchId, capacity],
     );
     await client.query(
-      `INSERT INTO fitting_hours (tenant_id,branch_id,weekday,starts_local,ends_local)
-       SELECT $1,$2,weekday,'09:00'::time,'17:00'::time FROM generate_series(1,7) weekday`,
+      `UPDATE branch
+          SET operating_hours = '{"opens_local":"09:00","closes_local":"17:00","closed_weekdays":[]}'::jsonb
+        WHERE tenant_id = $1 AND id = $2`,
       [tenantId, branchId],
     );
     return { tenantId, branchId, membershipId, principalId, customerId, variantId, assetIds };
@@ -170,7 +173,20 @@ function configContext(seed: Seed, idempotencyKey = randomUUID()) {
   return {
     ...createContext(seed, idempotencyKey),
     role: 'owner' as const,
+    permissionCodes: ['reservations.manage'] as PermissionCode[],
     effectiveTenantStatus: 'active' as const,
+  };
+}
+
+function settingsContext(seed: Seed) {
+  return {
+    tenantId: seed.tenantId,
+    branchId: seed.branchId,
+    membershipId: seed.membershipId,
+    principalId: seed.principalId,
+    permissionCodes: ['policies.manage'] as PermissionCode[],
+    effectiveTenantStatus: 'active' as const,
+    requestId: randomUUID(),
   };
 }
 
@@ -202,11 +218,9 @@ describe('FIT-BE-092 fitting concurrency falsification', async () => {
     await import('../../src/modules/fittings/fittings.command.service.js');
   const { rescheduleFittingCommand } =
     await import('../../src/modules/fittings/fittings.mutation.service.js');
-  const {
-    createFittingClosureCommand,
-    updateFittingSettingsCommand,
-    updateFittingWeeklyHoursCommand,
-  } = await import('../../src/modules/fittings/fittings.schedule.command.service.js');
+  const { updateFittingSettingsCommand } =
+    await import('../../src/modules/fittings/fittings.settings.command.service.js');
+  const { settingsService } = await import('../../src/modules/settings/settings.service.js');
   const { getFittingDetail } = await import('../../src/modules/fittings/fittings.service.js');
 
   beforeAll(async () => {
@@ -265,35 +279,26 @@ describe('FIT-BE-092 fitting concurrency falsification', async () => {
     expect([booking.status, setting.status].filter((status) => status < 300)).toHaveLength(1);
   });
 
-  it('serializes weekly-hours replacement against create so an invalid booking cannot commit', async () => {
+  it('serializes Business Hours replacement against create so an invalid booking cannot commit', async () => {
     const seed = await seedTenant('hours-config', 1);
-    const closedMorning = [
-      'monday',
-      'tuesday',
-      'wednesday',
-      'thursday',
-      'friday',
-      'saturday',
-      'sunday',
-    ].map((weekday) => ({ weekday, windows: [{ starts_local: '12:00', ends_local: '17:00' }] }));
-
     const [booking, hours] = await Promise.all([
       createOne(createStaffFittingCommand, seed, '2099-01-05T02:00:00.000Z'),
-      updateFittingWeeklyHoursCommand(configContext(seed), {
+      settingsService.updateBusinessHours(settingsContext(seed), randomUUID(), {
         version: 1,
-        weekly_hours: closedMorning as never,
+        opens_local: '12:00',
+        closes_local: '17:00',
+        closed_weekdays: [],
       }),
     ]);
     expect([booking.status, hours.status].filter((status) => status < 300)).toHaveLength(1);
   });
 
-  it('serializes a closure against create so an overlapping fitting cannot survive the winning closure', async () => {
+  it('serializes a special closed date against create so an overlapping fitting cannot survive the winning closure', async () => {
     const seed = await seedTenant('closure-config', 1);
     const [booking, closure] = await Promise.all([
       createOne(createStaffFittingCommand, seed, '2099-01-05T02:00:00.000Z'),
-      createFittingClosureCommand(configContext(seed), {
-        settings_version: 1,
-        period: { start: '2099-01-05T02:00:00.000Z', end: '2099-01-05T03:00:00.000Z' },
+      settingsService.createBranchClosure(settingsContext(seed), randomUUID(), {
+        local_date: '2099-01-05',
         reason: 'Private event',
       }),
     ]);

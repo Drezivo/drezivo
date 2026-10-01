@@ -22,8 +22,8 @@ export interface FittingCreateVariantRow {
 
 export interface FittingScheduleValidationRow {
   is_future: boolean;
-  within_weekly_hours: boolean;
-  closure_free: boolean;
+  within_business_hours: boolean;
+  closed_date_free: boolean;
 }
 
 /** Locks settings so create/reschedule serialize with configuration and later capacity work. */
@@ -667,24 +667,27 @@ export async function validateFittingScheduleForCreate(
        EXISTS (
          SELECT 1
            FROM branch b
-           JOIN fitting_hours fh
-             ON fh.tenant_id = b.tenant_id
-            AND fh.branch_id = b.id
           WHERE b.tenant_id = $1
             AND b.id = $2
-            AND extract(isodow FROM ($3::timestamptz AT TIME ZONE b.timezone))::integer = fh.weekday
             AND ($3::timestamptz AT TIME ZONE b.timezone)::date =
                 ($4::timestamptz AT TIME ZONE b.timezone)::date
-            AND ($3::timestamptz AT TIME ZONE b.timezone)::time >= fh.starts_local
-            AND ($4::timestamptz AT TIME ZONE b.timezone)::time <= fh.ends_local
-       ) AS within_weekly_hours,
+            AND NOT (
+              b.operating_hours->'closed_weekdays'
+              ? lower(to_char($3::timestamptz AT TIME ZONE b.timezone, 'FMDay'))
+            )
+            AND ($3::timestamptz AT TIME ZONE b.timezone)::time >=
+                (b.operating_hours->>'opens_local')::time
+            AND ($4::timestamptz AT TIME ZONE b.timezone)::time <=
+                (b.operating_hours->>'closes_local')::time
+       ) AS within_business_hours,
        NOT EXISTS (
          SELECT 1
-           FROM fitting_closure fc
-          WHERE fc.tenant_id = $1
-            AND fc.branch_id = $2
-            AND fc.period && tstzrange($3::timestamptz, $4::timestamptz, '[)')
-       ) AS closure_free`,
+           FROM branch_closure bc
+           JOIN branch b ON b.tenant_id = bc.tenant_id AND b.id = bc.branch_id
+          WHERE bc.tenant_id = $1
+            AND bc.branch_id = $2
+            AND bc.local_date = ($3::timestamptz AT TIME ZONE b.timezone)::date
+       ) AS closed_date_free`,
     [input.tenantId, input.branchId, input.startsAt, input.endsAt],
   );
   const row = result.rows[0];

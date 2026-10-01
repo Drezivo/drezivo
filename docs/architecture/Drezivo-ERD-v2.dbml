@@ -132,13 +132,15 @@ Table branch {
   timezone varchar(64) [not null]
   address jsonb [not null]
   operating_hours jsonb [not null]
+  operating_hours_version bigint [not null]
+  operating_hours_updated_at timestamptz [not null]
   status varchar(20) [not null]
   created_at timestamptz [not null]
   indexes {
     (tenant_id, id) [pk]
     (tenant_id, code) [unique]
   }
-  Note: 'V1. One default branch in V1; multiple in V2. Partial unique default and at-least-one default enforced in migrations/service.'
+  Note: 'V1. One default branch in V1; multiple in V2. Business Hours are canonical here: one opening time, one closing time, recurring closed weekdays, optimistic version, and update timestamp. Partial unique default and at-least-one default enforced in migrations/service.'
 }
 
 Table membership {
@@ -1031,32 +1033,20 @@ Table fitting_slot_allocation {
   Note: 'V1.1. One slot per scheduled fitting. SQL EXCLUDE same tenant/slot overlapping period while blocking; released rows remain history.'
 }
 
-Table fitting_hours {
+Table branch_closure {
   tenant_id uuid [not null]
   id uuid [not null]
   branch_id uuid [not null]
-  weekday integer [not null]
-  starts_local time [not null]
-  ends_local time [not null]
-  created_at timestamptz [not null]
-  indexes {
-    (tenant_id, id) [pk]
-  }
-  Note: 'V1.1. Multiple local windows per weekday; gaps are recurring breaks. A fitting must fit fully within one window.'
-}
-
-Table fitting_closure {
-  tenant_id uuid [not null]
-  id uuid [not null]
-  branch_id uuid [not null]
-  period tstzrange [not null]
-  timezone_snapshot varchar(64) [not null]
+  local_date date [not null]
   reason varchar(240) [not null]
+  version bigint [not null]
   created_at timestamptz [not null]
+  updated_at timestamptz [not null]
   indexes {
     (tenant_id, id) [pk]
+    (tenant_id, branch_id, local_date) [unique]
   }
-  Note: 'V1.1. Date-specific partial/full-day closure. Configuration mutation must reject a closure that would invalidate an existing future fitting.'
+  Note: 'V1.1. Whole-day branch-local special closure. Recurring closed weekdays live in branch.operating_hours. Mutation must reject a closure that would invalidate an accepted future fitting.'
 }
 
 Table location {
@@ -1178,8 +1168,7 @@ Ref: fitting_appointment.tenant_id > tenant.id [delete: restrict, update: no act
 Ref: fitting_line.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: fitting_capacity_slot.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: fitting_slot_allocation.tenant_id > tenant.id [delete: restrict, update: no action]
-Ref: fitting_hours.tenant_id > tenant.id [delete: restrict, update: no action]
-Ref: fitting_closure.tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: branch_closure.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: location.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: transfer_order.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: transfer_line.tenant_id > tenant.id [delete: restrict, update: no action]
@@ -1260,8 +1249,7 @@ Ref: fitting_line.(tenant_id, asset_id) > physical_asset.(tenant_id, id) [delete
 Ref: fitting_capacity_slot.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
 Ref: fitting_slot_allocation.(tenant_id, slot_id) > fitting_capacity_slot.(tenant_id, id) [delete: restrict, update: no action]
 Ref: fitting_slot_allocation.(tenant_id, fitting_id) > fitting_appointment.(tenant_id, id) [delete: restrict, update: no action]
-Ref: fitting_hours.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
-Ref: fitting_closure.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
+Ref: branch_closure.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
 Ref: location.(tenant_id, branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
 Ref: transfer_order.(tenant_id, from_branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
 Ref: transfer_order.(tenant_id, to_branch_id) > branch.(tenant_id, id) [delete: restrict, update: no action]
@@ -1333,8 +1321,10 @@ TableGroup V1_1_Fittings {
   fitting_line
   fitting_capacity_slot
   fitting_slot_allocation
-  fitting_hours
-  fitting_closure
+}
+
+TableGroup V1_1_Business_Hours {
+  branch_closure
 }
 
 TableGroup V2_Branches {

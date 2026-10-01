@@ -336,8 +336,10 @@ export class GuestBookingService {
             startsAt: startsAt.toISOString(),
             endsAt: endsAt.toISOString(),
           });
-          if (!schedule.is_future || !schedule.within_weekly_hours || !schedule.closure_free) {
-            throw new ScheduleConflictError('That time is no longer open. Choose another time.');
+          if (!schedule.is_future || !schedule.within_business_hours || !schedule.closed_date_free) {
+            throw new ScheduleConflictError(
+              'That time is outside Business Hours or falls on a closed date. Choose another time.',
+            );
           }
           for (const variantId of request.variant_ids) {
             if (!(await isVisibleVariant(client, store.tenantId, variantId))) {

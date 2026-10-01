@@ -685,7 +685,7 @@ function StepAppointment({
         </div>
       </div>
       <p className="mt-3 text-xs text-dashboard-muted">
-        Duration is fixed by branch settings. The server checks operating hours, closures, and
+        Duration is fixed by fitting settings. The server checks Business Hours, closed dates, and
         simultaneous fitting capacity when you create the appointment.
       </p>
     </section>
