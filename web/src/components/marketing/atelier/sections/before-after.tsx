@@ -4,7 +4,7 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useEffect, useRef, type ReactNode } from 'react';
 
-import { motionAllowed } from '../motion/motion-tokens';
+import { EASE_REVEAL, motionAllowed } from '../motion/motion-tokens';
 import {
   AfterCalendar,
   AfterDeposit,
@@ -86,24 +86,63 @@ export function BeforeAfter() {
   useEffect(() => {
     const host = root.current;
     if (!host || !motionAllowed()) return;
-    const context = gsap.context(() => {
-      gsap.utils.toArray<HTMLElement>('[data-ba-row]').forEach((row) => {
-        const before = row.querySelector('[data-ba-before]');
-        const after = row.querySelector('[data-ba-after]');
-        const line = row.querySelector('[data-ba-line]');
-        const skeleton = row.querySelector('[data-ba-skeleton]');
-        const data = row.querySelector('[data-ba-data]');
+    const parts = (row: HTMLElement) => ({
+      pair: row.querySelector<HTMLElement>('.at-snap-pair'),
+      before: row.querySelector<HTMLElement>('[data-ba-before]'),
+      after: row.querySelector<HTMLElement>('[data-ba-after]'),
+      handoff: row.querySelector<HTMLElement>('[data-ba-line]'),
+      skeleton: row.querySelector<HTMLElement>('[data-ba-skeleton]'),
+      data: row.querySelector<HTMLElement>('[data-ba-data]'),
+    });
+    const mm = gsap.matchMedia(host);
+
+    // Side by side (640px and up): the change is scrubbed by scroll, so it plays at the reader's pace.
+    mm.add('(min-width: 40rem)', () => {
+      gsap.utils.toArray<HTMLElement>('[data-ba-row]', host).forEach((row) => {
+        const { before, after, handoff, skeleton, data } = parts(row);
         gsap
           .timeline({ scrollTrigger: { trigger: row, start: 'top 78%', end: 'center 48%', scrub: 0.6 } })
           // The before stays fully readable; it only cools a little as the after takes the stage.
           .fromTo(before, { filter: 'grayscale(0)' }, { filter: 'grayscale(0.35)', ease: 'none' }, 0)
-          .fromTo(line, { scaleX: 0 }, { scaleX: 1, ease: 'none' }, 0.05)
+          .fromTo(handoff, { scale: 0, rotate: -90 }, { scale: 1, rotate: 0, ease: 'none' }, 0.05)
           .fromTo(after, { clipPath: 'inset(0% 100% 0% 0% round 24px)', y: 24 }, { clipPath: 'inset(0% 0% 0% 0% round 24px)', y: 0, ease: 'none' }, 0.12)
           .fromTo(skeleton, { autoAlpha: 1 }, { autoAlpha: 0, ease: 'none' }, 0.62)
           .fromTo(data, { autoAlpha: 0 }, { autoAlpha: 1, ease: 'none' }, 0.66);
       });
-    }, host);
-    return () => context.revert();
+    });
+
+    // Phones: the after card sits off-screen in a swipe row, so a scrubbed reveal would play unseen.
+    // Each row plays once as a short scene instead: the before settles in, the row swipes itself to
+    // the after (unless the visitor already touched it), and the after screen loads.
+    mm.add('(max-width: 39.99rem)', () => {
+      const cleanups: Array<() => void> = [];
+      gsap.utils.toArray<HTMLElement>('[data-ba-row]', host).forEach((row) => {
+        const { pair, before, after, skeleton, data } = parts(row);
+        if (!pair || !after) return;
+        let touched = false;
+        const markTouched = () => { touched = true; };
+        pair.addEventListener('pointerdown', markTouched, { once: true });
+        gsap.set(skeleton, { autoAlpha: 1 });
+        gsap.set(data, { autoAlpha: 0 });
+        const showAfter = () => {
+          if (touched) return;
+          const inset = parseFloat(getComputedStyle(pair).scrollPaddingLeft) || 0;
+          pair.scrollTo({ left: after.offsetLeft - inset, behavior: 'smooth' });
+        };
+        const scene = gsap
+          .timeline({ paused: true })
+          .fromTo(before, { autoAlpha: 0, y: 32 }, { autoAlpha: 1, y: 0, duration: 0.7, ease: EASE_REVEAL })
+          .call(showAfter, undefined, '+=0.9')
+          .to(before, { filter: 'grayscale(0.35)', duration: 0.6, ease: 'none' }, '<')
+          .to(skeleton, { autoAlpha: 0, duration: 0.3, ease: 'none' }, '+=0.5')
+          .to(data, { autoAlpha: 1, duration: 0.5, ease: EASE_REVEAL });
+        ScrollTrigger.create({ trigger: pair, start: 'top 70%', once: true, onEnter: () => scene.play() });
+        cleanups.push(() => pair.removeEventListener('pointerdown', markTouched));
+      });
+      return () => cleanups.forEach((cleanup) => cleanup());
+    });
+
+    return () => mm.revert();
   }, []);
 
   return (
