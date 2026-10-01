@@ -144,7 +144,7 @@ export async function resolveActorContext(input: {
   return withActorTenantResolutionTransaction(input.principalId, async (context) => {
     const tenantResult = await context.client.query<TenantRow>(
       `SELECT id, clerk_org_id, name, slug, status, currency, timezone, created_at, updated_at
-       FROM tenant WHERE clerk_org_id = $1 LIMIT 1`,
+       FROM resolve_actor_tenant($1) LIMIT 1`,
       [input.clerkOrgId],
     );
     const tenant = tenantResult.rows[0];

@@ -95,7 +95,7 @@ export async function claimMembershipInvitation(
   const clerk = input.clerk ?? createClerkServerAdapter();
 
   return withActorTenantResolutionTransaction(input.clerkUserId, async (context) => {
-    const tenant = await findClaimTenant(context.client, input.clerkOrgId);
+    const tenant = await findClaimTenant(context.client, input.clerkOrgId, input.invitationId);
     if (!tenant) throw new NotFoundError('The invitation is not available.');
     await context.setTenantContext(tenant.id);
     try {
