@@ -86,7 +86,10 @@ describe("BusinessSettingsPage Business Hours editor", () => {
     expect(await screen.findByText("Main Branch")).toBeVisible();
     expect(screen.getByLabelText("Opening time")).toHaveValue("09:00");
     expect(screen.getByLabelText("Closing time")).toHaveValue("20:00");
-    expect(screen.getByLabelText("Sunday closed")).toBeChecked();
+    expect(screen.getByText("Open days")).toBeVisible();
+    expect(screen.getByText("Select the days this branch is normally open.")).toBeVisible();
+    expect(screen.getByLabelText("Monday open")).toBeChecked();
+    expect(screen.getByLabelText("Sunday open")).not.toBeChecked();
     expect(screen.getByText("Christmas Day")).toBeVisible();
     expect(screen.getByText(/control the operational Calendar and fitting availability/i)).toBeVisible();
 
@@ -114,7 +117,7 @@ describe("BusinessSettingsPage Business Hours editor", () => {
     render(<BusinessSettingsPage />);
 
     fireEvent.change(await screen.findByLabelText("Opening time"), { target: { value: "10:00" } });
-    fireEvent.click(screen.getByLabelText("Monday closed"));
+    fireEvent.click(screen.getByLabelText("Monday open"));
     fireEvent.click(screen.getByRole("button", { name: "Save business hours" }));
 
     await waitFor(() =>
