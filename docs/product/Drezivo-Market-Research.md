@@ -1,7 +1,7 @@
 # Drezivo — Market Research and Product Review
 
 **Research date:** 15 September 2026  
-**Owner-confirmed pricing:** Starter PHP 300/month; Professional PHP 499/month; Business PHP 1,299/month. Confirmed during this review; conflicting screenshot prices are outdated. Market willingness to pay and contribution margins remain unmeasured.
+**Current pilot offer (updated 1 October 2026):** one Standard plan at PHP 300/month, with up to 1,000 active physical assets and 10 Front Desk seats; internal plan code `starter`. The 15 September 2026 review documented a three-tier offer that is no longer sellable. Market willingness to pay and contribution margins remain unmeasured.
 **Scope:** desk research for a Philippine clothing-rental operations SaaS. This is evidence for a product decision, not proof of product–market fit. No merchant interviews, paid experiments, competitor trials, or production benchmarks were conducted.
 
 ## 1. Recommendation
@@ -75,10 +75,10 @@ The archive preserves the original PRD. The following observations concern that 
 |---|---|---|
 | Uploaded evidence can appear as payment | Original FR-21 and Storefront/(7) Confirmation Details.png display Paid while reservation remains pending | Show proof submitted / awaiting verification. Only merchant verification creates a settled payment. |
 | Hold semantics conflict | Original FR-22 only blocks dates after confirmation but also calls a pending item soft-held | Acquire an exclusive expiring hold before displaying payment instructions; confirmation retains the same allocation atomically. |
-| Price sources disagree | PRD: PHP 300 / 499 / 1,299; Public/Landing Page/(3) Pricing and FAQ.png: PHP 999 / 1,999 / 3,999 | Owner confirmed PRD prices during review. Use PHP 300 / 499 / 1,299; update the outdated screen when implementing. |
+| Price sources disagree | On 15 September, PRD listed PHP 300 / 499 / 1,299 while the pricing screenshot showed PHP 999 / 1,999 / 3,999 | The former three-tier offer is historical. The 1 October pilot decision is one Standard plan at PHP 300/month; update any remaining old pricing copy. |
 | Current status mixes different concepts | Inventory form offers Available and calendar blocks; calendar displays future rentals and cleaning | Separate actual readiness/custody from availability for a requested interval. |
 | Payment examples imply integrations | Original Payments section includes Card/PayPal and customer copy mentions SMS | V1 lists only configured manual methods and email. Do not imply integrations. |
-| Staff benefit precedes permissions | Business plan offers staff, but original v1 has only an owner role | Include a minimal safe staff role at launch, or remove staff from every sold plan. Recommended: include it. |
+| Staff benefit precedes permissions | The historical Business plan offered staff, but original v1 had only an owner role | The current Standard offer includes up to 10 Front Desk seats; server-side membership permissions remain required. |
 | Customer privacy is overspecified | Original customer detail includes DOB, socials and identity verification | Minimize default fields; justify optional verification and retention. |
 | SaaS operating lifecycle absent | Operator controls, billing grace, restore, exports are mostly unspecified | Define them before trusting real business records to the platform. |
 | Screenshot success claims too strong | Confirmation screen asserts email was sent | Show notification queued until provider acknowledgment; delivery can still fail. |
@@ -106,7 +106,7 @@ These are recommended gates, not calendar commitments. If interviews show fittin
 
 ## 6. Pricing and unit economics
 
-The owner confirmed the monthly prices as **PHP 300 / 499 / 1,299** for Starter / Professional / Business. This resolves the source discrepancy and is the authoritative commercial input. It does not itself measure willingness to pay or unit economics. Do not advertise “Most Popular,” unlimited storage/items, or dedicated support without evidence and a support budget. Reliability, basic access control, usable export, and prevention of duplicate bookings should not be premium safety features.
+The current pilot sells one **Standard** plan for PHP 300/month, internally represented by `starter` v1. It includes up to 1,000 active physical assets and 10 Front Desk seats. The prior Starter/Professional/Business offer has been superseded by [ADR 0011](../decisions/0011-single-standard-pilot-plan.md). This owner decision does not measure willingness to pay or unit economics. Do not advertise “Most Popular,” unlimited assets, dedicated support, or unreleased features. Reliability, access control, usable export, and prevention of duplicate bookings are not premium gates.
 
 Booqable's public page separates base plans, billing cadence, and add-ons. Exact checkout currency, regional taxation, billing terms, and add-on totals must be verified when making a purchasing comparison. Drezivo should present its own all-in cost clearly rather than compare an ambiguous foreign headline price against a PHP plan. [Booqable pricing](https://booqable.com/pricing/).
 
@@ -154,4 +154,4 @@ Report sample sizes and distributions, including failed onboarding and churn. Re
 
 No paywalled market-size reports were treated as facts; no unsupported CAGR is included. Vendor documentation can change. Sources were reviewed on the date above; historical reports retain their historical year. No conclusion here establishes tax-invoice compliance, security certification, merchant acquiring eligibility, or a vendor SLA for Drezivo.
 
-Decisions still requiring business validation: plan allowances and margins at the confirmed prices; whether fittings must move into V1; maximum manual review window and opening-hours treatment; merchant legal/policy templates; retention periods; hosting region and paid service plans; renter-payment integration provider; enterprise isolation/SSO requirements. Technical defaults and launch gates are provided in the companion documents so development planning can proceed.
+Decisions still requiring business validation: Standard's allowances and support margin at PHP 300/month; whether fittings must move into V1; maximum manual review window and opening-hours treatment; merchant legal/policy templates; retention periods; hosting region and paid service plans; renter-payment integration provider; enterprise isolation/SSO requirements. Any future tiers or price changes remain undecided until pilot evidence and a new owner decision.

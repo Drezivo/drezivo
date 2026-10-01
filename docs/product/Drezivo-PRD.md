@@ -1,6 +1,6 @@
 # Drezivo Product Requirements Document
 
-**Version:** 2.1 (revised) · **Status:** V1 product definition with approved V1.1 fitting boundary · **Updated:** 26 September 2026
+**Version:** 2.2 · **Status:** V1 product definition with approved V1.1 fitting boundary · **Updated:** 1 October 2026
 
 ## 1. Product decision and release contract
 
@@ -16,7 +16,7 @@ This is incremental, not feature-complete interpretation of every supplied scree
 | V2                 | Branches, branch permissions, transfers and custody                                                                                                                                                                                                | Separate migration/security gate              |
 | V3 conditional     | Enterprise governance, SSO, advanced audit/reporting                                                                                                                                                                                               | Demand/readiness gate                         |
 
-Verified public sign-up creates a minimal Drezivo account, not a tenant. The backend then creates one Clerk organization and one local incomplete onboarding for the owner candidate. Tenant, default branch, Owner membership, draft storefront, and subscription exist only after idempotent bootstrap. Tenant-owned records carry tenant scope; operational records also carry the relevant branch. Platform plan definitions are global. The authoritative user-confirmed monthly prices (15 September 2026) are Starter ₱300, Professional ₱499, and Business ₱1,299. The ₱999/₱1,999/₱3,999 screenshot is outdated and must not be used. Willingness to pay, retention, and unit economics remain unmeasured; that is a validation topic, not a price-selection question.
+Verified public sign-up creates a minimal Drezivo account, not a tenant. The backend then creates one Clerk organization and one local incomplete onboarding for the owner candidate. Tenant, default branch, Owner membership, draft storefront, and subscription exist only after idempotent bootstrap. Tenant-owned records carry tenant scope; operational records also carry the relevant branch. Platform plan definitions are global. The current pilot has one customer-facing plan, **Standard**, at ₱300/month, backed by internal plan code `starter` v1. It includes up to 1,000 active physical assets and 10 Front Desk seats. The former Starter/Professional/Business offer is superseded for the pilot by [ADR 0011](../decisions/0011-single-standard-pilot-plan.md); market willingness to pay, retention, and unit economics remain unmeasured.
 
 ## 2. Boundaries and users
 
@@ -44,7 +44,7 @@ Every mutation has disabled/pending state and early-return guard. One idempotenc
 
 ### Onboarding/live publish (FR4, FR13, FR14)
 
-After email verification, a public user is an owner candidate. The API, not the browser, creates one Clerk organization and a resumable local onboarding record. The candidate chooses Starter, Professional, or Business before bootstrap. A successful, idempotent bootstrap creates the tenant, Owner membership, default branch, draft storefront, selected-plan subscription, PHP and Asia/Manila defaults, and a fourteen-day trial from database time. The first business needs no card or payment account. An invited Front Desk recipient bypasses owner onboarding and may only claim the verified invitation. The later setup wizard requires business name/contact, branch address/hours, payment instruction, duration, pickup/return, deposit, cancellation policy, privacy/contact copy, and one style/variant/asset before publishing. CSV import offers preview, row validation, duplicate detection, idempotent commit; invalid rows write nothing.
+After email verification, a public user is an owner candidate. The API, not the browser, creates one Clerk organization and a resumable local onboarding record. During the pilot, onboarding presents the single Standard offer and asks the owner to confirm a fourteen-day trial; there is no tier chooser. An idempotent start-trial command creates the tenant, Owner membership, default branch, draft storefront, Standard subscription, PHP and Asia/Manila defaults, and a fourteen-day trial from database time. The first eligible business needs no card or payment account. An invited Front Desk recipient bypasses owner onboarding and may only claim the verified invitation. The later setup wizard requires business name/contact, branch address/hours, payment instruction, duration, pickup/return, deposit, cancellation policy, privacy/contact copy, and one style/variant/asset before publishing. CSV import offers preview, row validation, duplicate detection, idempotent commit; invalid rows write nothing.
 
 Publish requires contact, policy, payment instruction, and one active rentable asset. Preview must equal public route. Acceptance: anonymous mobile visitor opens URL, views a style, selects future date, gets real availability, and sees contact. Publish/first availability are instrumented.
 
@@ -94,26 +94,27 @@ Collect minimum name/contact/booking data. A customer address supports fulfillme
 
 ## 6. Pricing, entitlements, notifications, operator admin, billing
 
-### Authoritative plans
+### Current pilot offer
 
-|                                                       |                                                   Starter |           Professional |                                                                     Business |
-| ----------------------------------------------------- | --------------------------------------------------------: | ---------------------: | ---------------------------------------------------------------------------: |
-| Monthly price                                         |                                                      ₱300 |                   ₱499 |                                                                       ₱1,299 |
-| Active physical assets                                |                                                 Up to 125 |             Up to 300 | Up to 1,000 (recommended bounded cap; confirm capacity budget before launch) |
-| Owner + Front desk roles                              |                                                 Owner only |    Up to 2 Front Desk |                                                         Owner + up to 10 Front Desk |
-| Core reliability, isolation, exports, returns/refunds |                                                  Included |               Included |                                                                     Included |
-| Fittings with guarded branch capacity                 | Not available until V1.1 ships; then plan entitlement TBD |                   Same |                                                                         Same |
-| Multi-item booking UI                                 |                                      V1.1 entitlement TBD |   V1.1 entitlement TBD |                                                         V1.1 entitlement TBD |
-| Branches/transfers                                    |                                    Not available; V2 only | Not available; V2 only |                                                       Not available; V2 only |
-| Advanced reporting/governance                         |                                              Not promised |           Not promised |                                                           Future V3 decision |
+| Offer detail | Standard |
+| --- | --- |
+| Monthly price | ₱300 (30,000 PHP minor units) |
+| Internal plan row | `starter`, version 1 |
+| Active physical assets | Up to 1,000 |
+| Front Desk seats | Up to 10, plus the Owner |
+| Trial | 14 days for the first eligible verified person |
+| Payment after trial | Manual payment with uploaded proof and operator review |
+| Fittings and multi-item booking UI | Not available until the relevant V1.1 release |
+| Branches and transfers | Not available; V2 only |
+| Advanced reporting and governance | Not promised; future decision |
 
-The table separates customer price from proposed quotas and release availability. Asset quota counts active physical assets, not styles. A plan check is enforced at creation/import/activation and gives a clear upgrade or archive path; it never deletes records. Basic integrity and the Owner role are available on every plan; Front Desk access is an entitlement. No plan sells V2 branches early. Fitting is not available in V1 even if Professional or Business copy suggests it; marketing and entitlements change only when V1.1 ships. The v1 seat model is Owner-only on Starter, up to two Front Desk seats on Professional, and up to ten on Business.
+Standard is the only sellable plan during the pilot. Onboarding does not offer tier selection or self-service plan changes. Asset quota counts active physical assets, not styles. The server checks limits during creation, activation, and CSV import; a limit failure never deletes records. Front Desk seats count active memberships and unexpired pending invitations; the Owner is not counted. Reliability, roles, privacy, exports, and safe financial handling are not premium gates. Additional plans require a new owner decision and versioned entitlement/pricing changes.
 
-Pricing copy must use these exact PHP amounts and say monthly. Do not carry “Most Popular,” unlimited assets, dedicated support, payment integrations, or feature promises from the outdated screenshot without a separately approved entitlement and support budget. Reliability, roles, privacy, export, and safe financial lifecycle are never premium gates. Revenue and willingness-to-pay metrics remain hypotheses to measure through the pilot.
+Pricing copy must show ₱300 per month and the Standard inclusions. Do not carry “Most Popular,” unlimited assets, dedicated support, payment integrations, or feature promises from outdated screenshots without separate approval and an implemented entitlement. Revenue and willingness-to-pay remain hypotheses to measure through the pilot.
 
 Notification outbox states are queued, sending, sent, failed with bounded retry. UI says queued until provider acknowledgment; no SMS promise.
 
-Billing lifecycle is trialing (fourteen days), active, past_due (seven-day normal-access grace), restricted, and cancelled. A verified person receives one lifetime trial, even if an operator later closes their current tenant. Trial limits apply immediately: Starter allows 125 active physical assets and no Front Desk seats, Professional 300 and two, and Business 1,000 and ten. A seat is an active Front Desk membership or an unexpired pending invitation; the Owner does not consume a Front Desk seat. Later businesses are payment-pending until audited manual operator verification, not tenants with operational capacity. Operator V1 supports payment verification, entitlement changes, restriction/recovery, closure, and actor/reason audit. Restricted access blocks new bookings, publishing, assets, and invitations but preserves explicitly approved returns, refunds, settlement, exports, and existing-rental reads. Cancelled tenants retain read-only settlement/export access. Downgrade, restriction, and cancellation never delete data or prevent approved returns/refunds.
+The first eligible verified person receives one lifetime fourteen-day trial; a person who has used that trial follows audited payment-pending operator activation instead of receiving another trial. Standard limits apply from tenant creation. After the trial or a paid period ends without an approved payment, access is read-only for up to 30 days. During the first three days, the storefront remains online but does not take bookings or fittings; it is offline for the rest of the read-only period. After 30 days, the workspace is locked except for subscribing. An operator may grant a dated read-only extension. Access is derived from subscription dates on every request. The Owner submits a payment reference and receipt; an authorized Drezivo operator verifies the payment and starts the paid month. V1 has no card collection or recurring billing provider. Operator actions require actor/reason audit. Restricted or closed businesses retain only the approved settlement, return, refund, and export access defined by the shared policy; billing changes never delete business data.
 
 ## 7. Requirements map
 
@@ -141,7 +142,7 @@ See [Drezivo-Market-Research.md](Drezivo-Market-Research.md) for evidence limits
 
 | Requirement                         | Concrete acceptance example                                                                                                                                                                                                                                                                                 |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR3, OR2 — correct commercial offer | Every plan surface and billing record shows ₱300/₱499/₱1,299 monthly; quotas are checked server-side, including concurrent CSV import/asset activation. Features not released cannot be purchased as available.                                                                                             |
+| FR3, OR2 — correct commercial offer | Every offer surface and billing record shows Standard at ₱300/month with up to 1,000 active physical assets and 10 Front Desk seats; limits are checked server-side, including concurrent CSV import/asset activation. Features not released cannot be purchased as available. |
 | FR7–FR8 — time and rates            | Customer or staff selects a fixed-duration or daily tariff configured by the merchant. A fixed-duration base price is also a hard minimum elapsed rental duration: for example, ₱500 / 3 days rejects shorter than 72 hours, accepts 72 hours at ₱500, and prices longer intervals with the configured extra-day rule. Show explicit pickup and return deadlines and the extra-day price. Charging duration is separate from blocked prep/cleaning time. Adjacent intervals work; a conflicting garment cannot be confirmed by another staff member. |
 | FR8 — inventory history             | Archiving a style/variant/asset hides new intake while preserving existing reservations and history. Refuse retirement with unresolved custody without a resolution workflow. The Add Clothing command may generate one piece per selected size in V1, but serialized assets remain distinct rows. Reusable default measurement guides avoid duplicate images; custom variant measurements and per-asset overrides remain distinguishable. |
 | FR9, FR13 — publish controls        | Hidden categories and unpublished storefronts disappear from public results. Existing guests retain private access to their own accepted booking. Preview uses draft content without exposing it publicly.                                                                                                  |
@@ -153,7 +154,7 @@ See [Drezivo-Market-Research.md](Drezivo-Market-Research.md) for evidence limits
 
 ### Policy defaults versus validated facts
 
-The launch geography, confirmed monthly prices, fourteen-day trial, seven-day renewal grace, physical-asset limits (125 / 300 / 1,000), and Front Desk seat limits (0 / 2 / 10) come from the owner/initial brief. Payment hold 15 minutes and maximum manual review 24 hours remain recommendations. Policies must be visible before checkout and snapshotted. Test opening-hours treatment during the pilot; do not let an unattended overnight payment flow imply immediate confirmation.
+The launch geography and current Standard price and limits come from owner direction. The pilot uses a fourteen-day lifetime trial, a 30-day read-only period after expiry, and a three-day online storefront window without new bookings or fittings; see [ADR 0011](../decisions/0011-single-standard-pilot-plan.md). Payment hold 15 minutes and maximum manual review 24 hours remain recommendations. Policies must be visible before checkout and snapshotted. Test opening-hours treatment during the pilot; do not let an unattended overnight payment flow imply immediate confirmation.
 
 Cancellation and no-show rules are merchant-configured, versioned and accepted before payment. Owner records reason, permitted deduction and refund obligation; Drezivo does not automatically impose a universal non-refundable fee. A requested extension needs fresh capacity and repricing; actual late custody still records if extension is denied. Minimum booking notice, maximum rental length, buffer minutes, refund timelines and delivery zones must have bounded validated configuration before a storefront goes live.
 

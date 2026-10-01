@@ -66,8 +66,8 @@ explicit constraints, RLS policies, and forward-only correction rather than dest
 - **Why:** Conflicting trial, quota, membership, or authority language could make each workspace
   implement a different tenancy model.
 - **What:** The PRD, TRD, data model, ERD, and onboarding checklist agree on the fourteen-day trial,
-  one-trial-per-verified-person policy, 125/300/1,000 asset limits, 0/2/10 Front Desk caps,
-  payment-pending onboarding, closure, and Clerk/Drezivo authority boundaries.
+  one-trial-per-verified-person policy, and current Standard pilot limits of 1,000 assets and 10
+  Front Desk seats, along with payment-pending onboarding, closure, and Clerk/Drezivo authority boundaries.
 - **How:** Conflicting legacy statements were replaced in the canonical documents and the accepted
   lifecycle was recorded before implementation work began.
 - **Dependencies:** None.
@@ -251,8 +251,8 @@ intentionally deferred to Phase 4.
 
 - **Why:** Prices and quotas must come from authoritative versioned plan data, never browser input or
   duplicated constants in individual modules.
-- **What:** One internal service resolves active v1 Starter, Professional, and Business plans and
-  enforces physical-asset and Front Desk capacity.
+- **What:** One internal service resolves the single active v1 Standard plan (`starter`) during the
+  pilot and enforces its physical-asset and Front Desk capacity.
 - **How:** The resolver fails closed on missing, inactive, malformed, non-v1, or unsupported plans.
   Quota guards lock the tenant row, count active physical assets and active Front Desk memberships,
   and retain the caller transaction lock through its write. Pending invitation reservations are added
@@ -264,13 +264,12 @@ intentionally deferred to Phase 4.
 
 - **Why:** A delayed worker must not extend a trial or leave an expired tenant unrestricted, and
   restricted/cancelled behavior must be consistent across every endpoint.
-- **What:** Database-time reconciliation transitions `trialing` to `past_due` and then `restricted`,
-  while preserving terminal cancellation. Owners can change plans only during trial, subject to
-  target-plan capacity checks.
-- **How:** Actor-context requests and the subscription sweep share one locked transition service,
-  deterministic event keys, and the existing restricted/cancelled action matrix. Plan changes use
-  tenant idempotency and preserve the original trial/period timestamps. Paid-plan changes and payment
-  activation remain deferred.
+- **What:** Current pilot access is derived from subscription dates as full, read-only for up to 30
+  days, then locked; terminal cancellation stays locked.
+- **How:** Request-time checks and the existing cancelled action matrix are authoritative. The
+  storefront stays online without bookings or fittings for the first three days after expiry, then
+  goes offline. There are no owner-facing plan changes while Standard is the only sellable offer;
+  manual payment approval starts a paid period.
 - **Dependencies:** TBF-030, TBF-032.
 - **Status:** Complete.
 
@@ -485,8 +484,10 @@ cover webhook replay, payment, provider loss, closure, transfer, and terminal jo
 
 ## Reading Notes
 
-- The accepted plan limits are 125 / 300 / 1,000 active physical assets and 0 / 2 / 10 Front Desk
-  seats. Any older PRD table showing 50 / 200 / 1,000 is stale.
+- The original 16 September plan limits were 125 / 300 / 1,000 active physical assets and 0 / 2 /
+  10 Front Desk seats. Migration `0063_pilot_billing.sql` and ADR 0011 supersede those tiers with
+  Standard at 1,000 assets and 10 Front Desk seats. Any older PRD table showing 50 / 200 / 1,000
+  is also stale.
 - The checklist header still says only Phase 0 is complete, but its task-level checkboxes and the
   backend checklist mark TBF-000 through TBF-042 implemented. This guide follows the task-level
   status and keeps the TBF-041/TBF-042 integration-evidence gates explicit.

@@ -1,6 +1,6 @@
 Project Drezivo {
   database_type: 'PostgreSQL'
-  Note: 'ERD-ready logical specification. V1/V1.1/V2 tables are grouped; do not deploy all phases blindly. SQL invariants in Drezivo-Data-Model.md are mandatory. TBF-031 workspace discovery uses a narrow resolver function, not a new entity. TBF-032 resolves v1 plan entitlements through one internal service; runtime plan writes are migration-owned.'
+  Note: 'ERD-ready logical specification. V1/V1.1/V2 tables are grouped; do not deploy all phases blindly. SQL invariants in Drezivo-Data-Model.md are mandatory. TBF-031 workspace discovery uses a narrow resolver function, not a new entity. TBF-032 resolves v1 plan entitlements through one internal service; the pilot has one active Standard offer (`starter` v1), set by migration 0063; runtime plan writes are migration-owned.'
 }
 
 Table account {
@@ -830,7 +830,7 @@ Table plan {
   indexes {
     (code, version) [unique]
   }
-  Note: 'V1. Owner confirmed Starter30000 Professional49900 Business129900 PHP minor units/month. TBF-030 seeds version 1 before bootstrap. TBF-032 validates the active v1 row and runtime roles retain SELECT only. Immutable price versions.'
+  Note: 'V1. Current pilot offer: Standard at 30000 PHP minor units/month, internal code `starter` v1. Migration 0063 deactivates Professional and Business v1 while retaining their rows for history. TBF-032 validates the active v1 row and runtime roles retain SELECT only. Price versions are migration-owned.'
 }
 
 Table plan_entitlement {
@@ -843,7 +843,7 @@ Table plan_entitlement {
   indexes {
     (plan_id, capability) [unique]
   }
-  Note: 'V1. TBF-030 seeds physical_assets.max at 125/300/1000 and frontdesk_seats.max at 0/2/10. TBF-032 guards usage under a tenant row lock; limits and release flags both required; null means nonnumeric capability, not implicitly unlimited.'
+  Note: 'V1. Current Standard limits after migration 0063: physical_assets.max 1000 and frontdesk_seats.max 10. TBF-032 guards usage under a tenant row lock; limits and release flags both required; null means nonnumeric capability, not implicitly unlimited.'
 }
 
 Table subscription {
@@ -862,7 +862,7 @@ Table subscription {
     (tenant_id, id) [pk]
     (tenant_id) [unique]
   }
-  Note: 'V1. Current subscription one/tenant. Versioned plan pointer; history captured in subscription_event. Restriction preserves existing rental settlement.'
+  Note: 'V1. One current subscription per tenant. The pilot derives full/read-only/locked access from period dates; grace_ends_at is an operator-granted read-only extension. subscription_event preserves history; restricted/cancelled actions follow the shared policy.'
 }
 
 Table subscription_event {

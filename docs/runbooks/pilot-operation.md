@@ -57,8 +57,9 @@ booking emails, and owner alerts go to the business email in Settings → Busine
 
 ## Subscription: one plan, trial, and manual payment
 
-- **One plan, Standard:** ₱300 a month, up to 1,000 garments and 10 staff. Internally the plan code
-  stays `starter`, because the operator app only accepts the original three plan codes.
+- **One plan, Standard:** ₱300 a month, up to 1,000 active physical assets and 10 Front Desk seats.
+  Internally the plan code stays `starter`; migration `0063_pilot_billing.sql` deactivates the
+  former Professional and Business rows while preserving them for history.
 - **Sign-up:** an owner signs up (for example with Google), names the business, confirms **"Start
   your 14-day trial?"**, and lands on the dashboard. There is no plan choice and no billing page.
 - **Paying:** the owner opens **Subscribe** from the banner or prompt.

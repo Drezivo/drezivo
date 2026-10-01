@@ -4,7 +4,7 @@ type: architecture
 status: current
 owner: Drezivo platform team
 source: "[Tenancy checklist](../../../api/TENANCY-ONBOARDING-V1-CHECKLIST.md); [Backend checklist](../../../api/V1-BACKEND-CHECKLIST.md); [[02-Architecture/Tenancy Checklist - What Why How]]; [TRD](../../architecture/Drezivo-TRD.md); [Data Model](../../architecture/Drezivo-Data-Model.md); [ERD](../../architecture/Drezivo-ERD.dbml); [Migration plan](../../architecture/Tenancy-Onboarding-Migration-Plan.md)"
-updated: 2026-09-18
+updated: 2026-10-01
 tags:
   - drezivo
   - architecture
@@ -41,10 +41,10 @@ The owner journey can use these backend boundaries:
 | Resume owner setup | `GET /api/v1/onboarding/current` | On every authenticated app entry before choosing a workspace |
 | Start owner setup | `POST /api/v1/onboarding` | Once the verified user submits an organization name and optional slug |
 | Abandon owner setup | `POST /api/v1/onboarding/:onboardingId/abandon` | When the owner intentionally pauses or abandons setup |
-| Create the tenant graph | `POST /api/v1/onboarding/:onboardingId/bootstrap` | After an eligible onboarding has a selected plan |
+| Start the pilot trial | `POST /api/v1/onboarding/:onboardingId/start-trial` | After the eligible owner confirms the Standard offer |
 | Discover workspaces | `GET /api/v1/workspaces` | After a tenant exists, or for an invited member |
 | Resolve active workspace | `GET /api/v1/actor-context` | After Clerk active organization is selected |
-| Change a trial plan | `POST /api/v1/subscription/plan` | After bootstrap, while the subscription is still trialing |
+| Change a trial plan | Not available during the single-plan pilot | Standard is the only sellable plan |
 
 The optional Front Desk journey has these additional boundaries:
 
@@ -134,32 +134,34 @@ If the request times out or reports an in-progress/provider-uncertain state, cal
 `GET /api/v1/onboarding/current` and retry the original command with the same idempotency key only
 when the UI is still completing that same intent. Do not issue a second Clerk organization create.
 
-### 4. Select a plan before bootstrap
+### 4. Confirm Standard and start the pilot trial
 
-The business flow is: choose Starter, Professional, or Business, then bootstrap the tenant. Plan
-limits are authoritative in the backend: 125/300/1,000 active physical assets and 0/2/10 Front
-Desk seats. The browser does not send prices or limits.
+The pilot offers one customer-facing plan, Standard, for PHP 300/month. It includes up to 1,000
+active physical assets and 10 Front Desk seats; the internal plan code is `starter` v1. The browser
+does not supply price, limits, or plan authority. There is no tier chooser or owner-facing plan
+change during the pilot.
 
-The pre-tenant plan-selection command is `POST /api/v1/onboarding/:onboardingId/plan` with the
-strict body `{ "plan_code": "starter" | "professional" | "business" }` and a mandatory
-`Idempotency-Key`. The command is account-scoped, validates the shared contract at the HTTP
-boundary, persists only the selected plan code, and is registered in OpenAPI. Do not call
-`POST /api/v1/subscription/plan` for this step; that route requires an existing tenant and is only
-for a trial subscription after bootstrap.
+The owner confirms **Start your 14-day trial?** in the final onboarding step. The client calls
+`POST /api/v1/onboarding/:onboardingId/start-trial` with an empty body and an `Idempotency-Key`.
+The API records the active `starter` plan, then delegates workspace creation to the established
+bootstrap command using a derived key. Retries replay both steps; the bootstrap transaction creates
+the tenant graph atomically. Retired plan codes fail closed where an active entitlement is required.
 
-The intended semantics are already defined:
+Trial and owner eligibility are checked by the API:
 
-- A lifetime-trial-eligible account remains `incomplete` after choosing a plan.
-- An account that has consumed its lifetime trial becomes `payment_pending`.
-- Plan selection alone creates no tenant, membership, subscription, or trial.
+- A first eligible verified person receives one lifetime trial of fourteen days.
+- An account that has used its lifetime trial follows the payment-pending/operator path.
+- Closing the confirmation dialog does not create a tenant or start a trial.
 
 ### 5. Bootstrap the complete tenant graph
 
-Once the onboarding projection contains the selected plan and is still eligible, call:
+When the eligible owner confirms the trial, the client calls:
 
-`POST /api/v1/onboarding/:onboardingId/bootstrap`
+`POST /api/v1/onboarding/:onboardingId/start-trial`
 
-with the strict body `{}` and a mandatory idempotency key.
+with the strict empty body `{}` and a mandatory idempotency key. The API selects Standard, then
+invokes the existing bootstrap command; the browser does not send a plan code or make a second
+bootstrap request.
 
 The API checks the active Clerk organization against the saved `clerk_org_id`, then atomically:
 
@@ -167,7 +169,7 @@ The API checks the active Clerk organization against the saved `clerk_org_id`, t
 - creates the `Main Branch` in `Asia/Manila`;
 - creates the active Owner membership and full Owner branch grant;
 - creates the draft storefront;
-- creates the fourteen-day trial subscription and immutable trial event;
+- creates the Standard (`starter` v1) subscription, fourteen-day trial, and immutable trial event;
 - marks the account's trial/owned-tenant state;
 - marks onboarding `provisioned`;
 - writes the required audit and outbox records.
@@ -220,9 +222,9 @@ for local-first removal and approved Owner transfer.
 | No Clerk session | Show Clerk sign-in/sign-up |
 | Primary email unverified | Keep the verification UI; retry after verification |
 | No onboarding, no owned tenant | Show create organization |
-| Incomplete onboarding | Resume saved setup; complete plan selection when its command exists |
+| Incomplete onboarding | Resume saved setup; confirm Standard and start the trial when ready |
 | Provider operation in progress/unknown | Poll current state and retry the same idempotency key; never create a second organization |
-| Payment-pending onboarding | Show payment/operator handoff; do not call bootstrap |
+| Payment-pending onboarding | Show payment/operator handoff; do not start a trial |
 | Provisioned onboarding/current owned tenant | Discover workspaces and resolve actor context |
 | `STALE_CONTEXT`/generic state conflict | Re-fetch onboarding/workspaces/context, then show the resulting state rather than guessing |
 | Rate limit or transient provider failure | Back off and retry the same idempotency key where the command is idempotent |
@@ -233,24 +235,24 @@ next action without trying to distinguish another person's tenant or invitation 
 
 ## What is the last API in the owner journey?
 
-`POST /api/v1/onboarding/:onboardingId/bootstrap` is the final provisioning command. It is the
-last API that turns pre-tenant onboarding into a tenant graph.
+`POST /api/v1/onboarding/:onboardingId/start-trial` is the final provisioning command. It starts
+the Standard trial and turns pre-tenant onboarding into a tenant graph.
 
 After it succeeds, the normal workspace load is:
 
 `GET /api/v1/workspaces` → Clerk `setActive` (if needed) → `GET /api/v1/actor-context`.
 
 `GET /api/v1/actor-context` is therefore the last API in the initial sign-up/onboarding handoff
-to the operational frontend. Later, the Owner may call `POST /api/v1/subscription/plan` to change
-the trial plan, subject to capacity and lifecycle rules. That subscription command is not a
-pre-tenant onboarding API.
+to the operational frontend. While Standard is the only sellable offer, there is no owner-facing
+plan change. A future offer change requires an owner decision and a reviewed entitlement migration.
 
 ## Frontend boundaries to keep explicit
 
 - Do not create a Drezivo account separately from owner onboarding.
 - Do not call Clerk's backend API or use Clerk private metadata from browser code.
 - Do not trust a browser-supplied organization or tenant ID as authorization.
-- Do not bootstrap until a selected plan is persisted by the backend.
+- Do not start a trial until the API confirms the owner is eligible; the API assigns the active
+  Standard plan.
 - Do not infer local access from a Clerk organization membership or webhook.
 - Do not store or display recipient email ciphertext, digest, provider metadata, invitation tokens,
   provider IDs, or raw webhook payloads.
@@ -260,9 +262,9 @@ pre-tenant onboarding API.
 ## Backend follow-up before frontend wiring is complete
 
 The core owner path is implemented through account creation, Clerk organization creation,
-resumable onboarding, pre-tenant plan selection, tenant bootstrap, workspace discovery, and actor
-context. The plan-selection command is now exposed and documented; remaining work below is focused
-on later membership, operator, reconciliation, and launch-readiness gates.
+resumable onboarding, Standard trial confirmation, tenant bootstrap, workspace discovery, and actor
+context. The pilot has no tier-selection step; remaining work below is focused on later membership,
+operator, reconciliation, and launch-readiness gates.
 
 The remaining backend work does not block building the owner sign-up shell, but it does affect
 production completion:

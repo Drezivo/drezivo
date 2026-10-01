@@ -51,7 +51,7 @@ variant family.
 | Clerk organization creation | The Drezivo backend creates the Clerk organization. The client receives the result and sets that organization active in Clerk.                                                   |
 | Incomplete work             | Exactly one unfinished onboarding is allowed per owner. It can be resumed or abandoned. Abandonment archives Drezivo state but retains the Clerk organization and audit history. |
 | Existing businesses         | The app switches only among provisioned Drezivo businesses where the actor has an active local membership.                                                                       |
-| Trial                       | A verified person receives one fourteen-day lifetime trial. The selected plan's real limits apply immediately.                                                                    |
+| Trial                       | A verified person receives one fourteen-day lifetime trial on the single Standard pilot offer. Standard limits apply immediately.                                                   |
 | Later business              | After a trial is used, a replacement business is payment-pending. No tenant exists until a platform operator verifies payment.                                                   |
 | Closure                     | Operator-assisted permanent closure releases the one-owned-business slot. The former owner retains a limited read-only settlement and export view.                               |
 | Billing V1                  | Billing is manual and audited. V1 has no card collection, stored card, recurring charge, or payment gateway.                                                                     |
@@ -197,9 +197,10 @@ the onboarding record. For a trial-eligible owner, completion runs one idempoten
 
 Bootstrap creates `Main Branch` (`main`) in `Asia/Manila` with empty address and canonical default Business Hours of `08:00–20:00` with Sunday closed. These defaults are stored in `branch.operating_hours`; later owner edits use the Business Information Settings flow. A supplied slug is preserved exactly. When no slug was supplied, the server
 normalizes the organization name and adds a stable onboarding-derived suffix only if the shared
-tenant/storefront slug namespace is occupied. The Starter, Professional, and Business version-1
-plan rows are seeded before bootstrap can run, with 125/300/1,000 physical-asset limits and
-0/2/10 Front Desk seats.
+tenant/storefront slug namespace is occupied. Migrations `0016` and `0053` originally seeded the
+Starter, Professional, and Business v1 rows. Migration `0063_pilot_billing.sql` leaves only
+Standard (`starter` v1) active at PHP 300/month, with 1,000 active physical assets and 10 Front
+Desk seats; the other rows remain inactive for history.
 
 Duplicate requests return the original result. Concurrent requests create at most one tenant,
 membership, subscription, and trial. The first business needs no card or payment account.
@@ -282,16 +283,15 @@ evidence, a reason-coded audit record, and a second internal approval before loc
 
 ## Plans, entitlement, and billing lifecycle
 
-### V1 plan limits
+### Current pilot offer
 
-| Plan         | Monthly price | Active physical assets | Front Desk seats |
-| ------------ | ------------: | ---------------------: | ---------------: |
-| Starter      |       PHP 300 |                    125 |                0 |
-| Professional |       PHP 499 |                    300 |                2 |
-| Business     |     PHP 1,299 |                  1,000 |               10 |
+| Customer-facing plan | Internal code | Monthly price | Active physical assets | Front Desk seats |
+| -------------------- | ------------- | ------------: | ---------------------: | ---------------: |
+| Standard             | `starter` v1  |      PHP 300  |                  1,000 |               10 |
 
-Prices are PHP minor units 30000, 49900, and 129900. Entitlements are versioned with the plan, not
-copied as mutable browser configuration.
+The price is 30,000 PHP minor units. Standard is the only sellable pilot offer. The inactive
+Professional and Business rows remain for history; their old prices and limits are not current
+offers. Entitlements are versioned with the plan, not copied as mutable browser configuration.
 
 Asset quota counts active physical assets only. Styles, variants, drafts, and archived assets are
 not quota units. Creation, activation, and CSV import commit check the limit under a tenant lock.
@@ -303,43 +303,38 @@ not consume a Front Desk seat.
 
 ### Trial, plan changes, and downgrade
 
-- The first trial is fourteen days from database time and applies the selected plan immediately.
-- The owner may change plan during trial through `POST /api/v1/subscription/plan`. The new
-  entitlement set is resolved from the active version-1 plan, checked against current usage, and
-  applied immediately with an immutable plan-change event and tenant audit record. Paid-plan
-  changes remain deferred to later operator/payment work.
-- A downgrade is rejected when active assets or counted seats exceed the new plan. Nothing is
-  automatically suspended or deactivated.
-- Trial expiry transitions `trialing` to `past_due`, sets `grace_ends_at` to seven days after the
-  original trial boundary, and keeps normal operational access.
-- Grace expiry transitions subscription and tenant to `restricted` unless verified payment has
-  started a paid period.
+- The first eligible verified person receives a fourteen-day trial from database time. Standard's
+  1,000-asset and 10-seat limits apply immediately.
+- There is no owner-facing plan change during the single-plan pilot. The backend resolves the active
+  plan and rejects inactive or unsupported plan codes.
+- When a trial or paid period ends without approved payment, access is read-only for up to 30 days.
+  The storefront stays online without bookings or fittings for the first three days, then stays
+  offline for the rest of that period. The workspace locks after day 30 except for subscribing. An
+  operator may grant a dated read-only extension.
 
-Request-time checks are authoritative. Actor-context resolution runs the same database-time
-transition service before returning the tenant projection. A durable per-tenant expiry worker
-performs the same transitions for prompt convergence, while deterministic subscription-event keys
-make request/worker races and duplicate jobs safe. A late worker can never create extra access.
+Request-time checks are authoritative. Access is derived from subscription dates for each request;
+the pilot does not rely on a worker to move a subscription through expiry states.
 
 ### Restricted and cancelled behavior
 
 `cancelled` is the persisted tenant status; “closed” is only the product description of the
 business outcome.
 
-| Capability                                      | Active, trialing, or past-due grace | Restricted | Cancelled                        |
-| ----------------------------------------------- | ----------------------------------- | ---------- | -------------------------------- |
-| Existing-rental reads, returns, refunds, export | Allowed                             | Allowed    | Read-only settlement/export only |
-| New bookings, holds, or public intake           | Allowed                             | Denied     | Denied                           |
-| Publish or materially change storefront         | Allowed                             | Denied     | Denied                           |
-| New assets or activation                        | Allowed within quota                | Denied     | Denied                           |
-| Staff invitations or membership changes         | Allowed within quota                | Denied     | Denied                           |
+| Capability                                      | Full (before period end) | Billing read-only | Restricted | Cancelled                        |
+| ----------------------------------------------- | ------------------------ | ----------------- | ---------- | -------------------------------- |
+| Existing-rental reads, returns, refunds, export | Allowed                  | Read-only         | Allowed    | Read-only settlement/export only |
+| New bookings, holds, or public intake           | Allowed                  | Denied            | Denied     | Denied                           |
+| Publish or materially change storefront         | Allowed                  | Denied            | Denied     | Denied                           |
+| New assets or activation                        | Allowed within quota     | Denied            | Denied     | Denied                           |
+| Staff invitations or membership changes         | Allowed within quota     | Denied            | Denied     | Denied                           |
 
 ### Manual operator payment
 
 Platform operators are a local Clerk-ID allowlist using separate routes. Their actions require a
 reason, stable business key, immutable audit event, and fresh authorization.
 
-For an existing tenant, verified payment records immutable subscription payment/event, activates the
-chosen plan, and starts the paid month at database time. For payment-pending onboarding, no tenant
+For an existing tenant, verified payment records immutable subscription payment/event, activates
+Standard, and starts the paid month at database time. For payment-pending onboarding, no tenant
 exists yet. The system records pre-provision payment verification globally, then an idempotent
 activation creates tenant, subscription, paid-period event, and linked subscription payment. This
 prevents an externally received payment from appearing rolled back when tenant creation must retry.
@@ -390,7 +385,7 @@ Clerk references consulted 2026-09-16:
 | Tenant                          | Global root                       | Clerk org ID unique; active, restricted, or cancelled; retained after provider loss.                              |
 | Membership                      | Tenant-owned                      | One Clerk user per tenant; Owner or Front Desk; removal preserves history.                                        |
 | Membership invitation           | Tenant-owned                      | Stable intent per reserved seat; seven-day expiry; provider correlation; no raw provider token in ordinary reads. |
-| Plan and entitlement            | Global                            | Versioned prices/limits; 125/300/1000 asset and 0/2/10 seat limits explicit.                                       |
+| Plan and entitlement            | Global                            | Current Standard price/limits are versioned: 30,000 PHP minor units, 1,000 active assets, and 10 Front Desk seats. |
 | Subscription and events         | Tenant-owned                      | One current subscription; immutable history; database-time transitions.                                           |
 | Webhook inbox                   | Global                            | Provider/event identity unique before tenant resolution; verified raw payload handling.                           |
 | Outbox event                    | Tenant-owned or explicitly global | Stable dedupe key, lease, bounded retry, terminal failure visibility.                                             |
@@ -407,11 +402,11 @@ implementation. Intended command groups are:
 
 | Command group            | Actor                  | Purpose                                                                           |
 | ------------------------ | ---------------------- | --------------------------------------------------------------------------------- |
-| Owner onboarding         | Verified public user   | Create organization, resume/abandon setup, choose plan, complete bootstrap.       |
+| Owner onboarding         | Verified public user   | Create organization, resume/abandon setup, confirm Standard trial, complete bootstrap. |
 | Workspace context        | Active local member    | Read only provisioned organizations and local actor context.                      |
 | Membership invitations   | Tenant Owner           | Create, resend, cancel, and list safe invitation state.                           |
 | Membership claim         | Accepted Clerk invitee | Verify Clerk membership and activate one local Front Desk membership.             |
-| Subscription plan change | Tenant Owner           | Change trial/active plan after entitlement checks.                                |
+| Subscription plan change | Tenant Owner           | No alternate plan is sellable during the current pilot; future changes need a new decision. |
 | Operator billing         | Platform operator      | Verify manual payment and activate subscription or payment-pending onboarding.    |
 | Operator recovery        | Platform operator      | Restrict/recover provider loss, close tenant, or execute approved owner transfer. |
 | Clerk webhook            | Clerk only             | Verify raw signed event, durable-dedupe, queue reconciliation.                    |
@@ -493,9 +488,9 @@ integration evidence.
 
 - Adopted backend-created, create-only Clerk organization onboarding.
 - Adopted one incomplete onboarding and one current owned business per verified person.
-- Adopted a fourteen-day per-person trial, then seven-day normal-access past-due grace, then
-  restriction.
-- Set physical-asset limits to 125 / 300 / 1,000 and Front Desk seats to 0 / 2 / 10.
+- Adopted a fourteen-day per-person trial, then the original seven-day normal-access past-due grace,
+  then restriction.
+- Set initial physical-asset limits to 125 / 300 / 1,000 and Front Desk seats to 0 / 2 / 10.
 - Chose manual operator-verified billing, no V1 payment gateway, and payment-pending replacement
   businesses.
 - Chose immediate verified invitation claim with webhook reconciliation, seven-day invitation
@@ -506,6 +501,9 @@ integration evidence.
   and records the additive migration/RLS/backfill boundary before persistence work begins. Local
   compose provides loopback-only PostgreSQL and MinIO for migration rehearsal; it does not make
   object storage integration complete.
+
+The plan tiers and seven-day billing grace above record the 16 September decision. They were
+superseded for the pilot on 1 October by [ADR 0011](../../decisions/0011-single-standard-pilot-plan.md).
 
 ## Related notes
 

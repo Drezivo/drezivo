@@ -157,7 +157,10 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   pilot validation.
 - `PAYMENT_REVIEW_MAX_HOURS` — proposed 24 hours maximum manual review deadline (TRD §5, PRD
   §11).
-- `TRIAL_PERIOD_DAYS` / `RENEWAL_GRACE_DAYS` — seven days each (TRD §6, PRD §11).
+- Trial and subscription access windows are code-owned policy, not environment overrides. The
+  current pilot uses a 14-day trial, 3-day reminder, 30-day read-only period, and 3-day storefront
+  online window after a period ends. Do not add `TRIAL_PERIOD_DAYS` or `RENEWAL_GRACE_DAYS`; the API
+  does not read them. See `contracts/src/tenancy/billing.ts` and `api/src/modules/billing/access.ts`.
 - `OUTBOX_MAX_ATTEMPTS` — proposed eight attempts before terminal failure (TRD §8).
 - `CONTRACTS_PACKAGE_VERSION` — not an env var but a `package.json` dependency pin on
   `@drezivo/contracts` (`docs/decisions/0003-shared-contracts-package.md`); listed here as a
