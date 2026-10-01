@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { Client } from 'pg';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   claimFittingCapacitySlot,
@@ -167,6 +167,10 @@ describe('FIT-BE-041 fitting schedule and capacity validation', () => {
     await ensureAppRoleLogin(adminUrl);
   });
   afterEach(async () => resetTestDatabase(adminUrl));
+  afterAll(async () => {
+    const { closePool } = await import('../../src/db/client.js');
+    await closePool();
+  });
 
   it('requires a future period wholly inside Business Hours and outside branch closed dates', async () => {
     const client = await openClient();
