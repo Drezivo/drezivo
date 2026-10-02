@@ -247,7 +247,9 @@ describe('storefront guest booking', async () => {
     const { reservation, guest_token } = created.body.data;
 
     const upload = await booking.authorizeReceiptUpload(reservation.id, guest_token, { content_type: 'image/png', byte_size: PNG.length, sha256: pngSha });
-    expect(upload.upload_url).toContain(`/guest-receipts/${reservation.id}/`);
+    const newReceiptKey = `tenant-files/${ws.tenantId}/payment-receipts/${reservation.id}/${upload.file_id}/source`;
+    expect(upload.upload_url).toContain(newReceiptKey);
+    expect(uploads.has(newReceiptKey)).toBe(true);
 
     const submitted = await booking.submitReceipt(reservation.id, guest_token, { requestId: 's', idempotencyKey: 'receipt-1' }, upload.file_id);
     expect(submitted.status).toBe(200);
@@ -271,6 +273,32 @@ describe('storefront guest booking', async () => {
     if (!second.body.success) throw new Error('second hold failed');
     const foreign = booking.submitReceipt(second.body.data.reservation.id, second.body.data.guest_token, { requestId: 'x', idempotencyKey: 'receipt-x' }, upload.file_id);
     await expect(foreign).rejects.toMatchObject({ status: 422 });
+
+    const legacyUpload = await booking.authorizeReceiptUpload(
+      second.body.data.reservation.id,
+      second.body.data.guest_token,
+      { content_type: 'image/png', byte_size: PNG.length, sha256: pngSha },
+    );
+    const legacyReceiptKey = `tenant-files/${ws.tenantId}/guest-receipts/${second.body.data.reservation.id}/${legacyUpload.file_id}`;
+    const currentReceiptKey = `tenant-files/${ws.tenantId}/payment-receipts/${second.body.data.reservation.id}/${legacyUpload.file_id}/source`;
+    const uploadedBytes = uploads.get(currentReceiptKey);
+    if (!uploadedBytes) throw new Error('Expected the new guest receipt object to exist.');
+    uploads.set(legacyReceiptKey, uploadedBytes);
+    const rekeyed = await admin.query(
+      `UPDATE file_object
+          SET storage_key = $1
+        WHERE tenant_id = $2 AND id = $3 AND purpose = 'payment_receipt'`,
+      [legacyReceiptKey, ws.tenantId, legacyUpload.file_id],
+    );
+    expect(rekeyed.rowCount).toBe(1);
+
+    const legacySubmission = await booking.submitReceipt(
+      second.body.data.reservation.id,
+      second.body.data.guest_token,
+      { requestId: 'legacy-submit', idempotencyKey: 'legacy-receipt-submit' },
+      legacyUpload.file_id,
+    );
+    expect(legacySubmission.status).toBe(200);
   });
 
   it('turns a verified guest fitting request into a pending storefront fitting, one per slot', async () => {

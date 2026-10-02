@@ -187,6 +187,9 @@ describe('CLT-022 clothing file attachment flow', async () => {
 
     const fileId = authorization.body.data.file_id;
     const pending = await readFile(seed.tenantId, seed.principalId, fileId);
+    expect(storage.authorized[0]?.storageKey).toBe(
+      `tenant-files/${seed.tenantId}/catalogue-images/${fileId}/source`,
+    );
     expect(pending).toMatchObject({
       purpose: 'catalogue_image',
       mime_type: 'image/png',
@@ -259,6 +262,9 @@ describe('CLT-022 clothing file attachment flow', async () => {
 
     const fileId = authorization.body.data.file_id;
     const pending = await readFile(seed.tenantId, seed.principalId, fileId);
+    expect(storage.authorized[0]?.storageKey).toBe(
+      `tenant-files/${seed.tenantId}/payment-receipts/${fileId}/source`,
+    );
     storage.objects.set(pending.storage_key, {
       contentType: 'application/pdf',
       byteSize: 512,
@@ -343,6 +349,45 @@ describe('CLT-022 clothing file attachment flow', async () => {
       ),
     ).rejects.toThrow('provider unavailable');
     expect((await readFile(seed.tenantId, seed.principalId, second)).lifecycle_status).toBe('pending_upload');
+  });
+
+  it('finalizes an existing upload by its stored legacy object key', async () => {
+    const seed = await seedTenant('org_clt022_legacy_key', 'user_clt022_legacy_key');
+    const storage = new FakeStorage();
+    const fileId = fileObjectId.parse('00000000-0000-4000-8000-000000000123');
+    const legacyStorageKey = `tenant-files/${seed.tenantId}/${fileId}/source`;
+
+    await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query(
+        `INSERT INTO file_object
+           (id, tenant_id, purpose, storage_key, sha256, mime_type, byte_size,
+            lifecycle_status, is_private, upload_expires_at)
+         VALUES ($1, $2, 'catalogue_image', $3, $4, 'image/png', 512,
+                 'pending_upload', true, now() + interval '10 minutes')`,
+        [fileId, seed.tenantId, legacyStorageKey, SHA_A],
+      ),
+    );
+    storage.objects.set(legacyStorageKey, {
+      contentType: 'image/png',
+      byteSize: 512,
+      sha256: SHA_A,
+      versionId: 'legacy-version-1',
+      prefix: PNG_PREFIX,
+    });
+
+    const finalized = await finalizeUpload(
+      {
+        ...seed.fileContext,
+        fileId,
+        requestId: 'req-clt022-legacy-finalize',
+        idempotencyKey: 'legacy-test',
+      },
+      storage,
+    );
+
+    expect(finalized.status).toBe(200);
+    expect(storage.inspected).toEqual([legacyStorageKey]);
+    expect((await readFile(seed.tenantId, seed.principalId, fileId)).version_id).toBe('legacy-version-1');
   });
 
   it('conceals foreign uploads before storage inspection', async () => {
