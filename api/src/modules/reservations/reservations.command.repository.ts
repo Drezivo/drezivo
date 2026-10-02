@@ -13,6 +13,9 @@ export interface ExpiredReservationHoldRow {
   version: number;
 }
 
+/** Caps rows transitioned and journaled in one expired-hold reclaim pass. */
+export const RESERVATION_HOLD_RECLAIM_BATCH_SIZE = 100;
+
 export interface CreatedReservationGraphRow {
   reservation_id: string;
   reservation_line_id: string;
@@ -82,7 +85,7 @@ export async function lockEligibleReservationAssets(
  */
 export async function releaseExpiredReservationHolds(
   client: PoolClient,
-  input: { tenantId: string; branchId: string; assetIds: string[] },
+  input: { tenantId: string; branchId: string; assetIds: string[]; batchSize: number },
 ): Promise<ExpiredReservationHoldRow[]> {
   if (input.assetIds.length === 0) return [];
 
@@ -108,8 +111,9 @@ export async function releaseExpiredReservationHolds(
              AND aa.is_blocking = true
         )
       ORDER BY r.id ASC
+      LIMIT $4
       FOR UPDATE OF r`,
-    [input.tenantId, input.branchId, input.assetIds],
+    [input.tenantId, input.branchId, input.assetIds, input.batchSize],
   );
   const reservationIds = expired.rows.map((row) => row.reservation_id);
   if (reservationIds.length === 0) return [];
@@ -142,7 +146,11 @@ export async function releaseExpiredReservationHolds(
       RETURNING id AS reservation_id, version`,
     [input.tenantId, input.branchId, reservationIds],
   );
-  return updated.rows;
+  const updatedById = new Map(updated.rows.map((row) => [row.reservation_id, row]));
+  return expired.rows.flatMap((row) => {
+    const updatedRow = updatedById.get(row.reservation_id);
+    return updatedRow ? [updatedRow] : [];
+  });
 }
 
 /** Chooses the first locked asset that is still free for the exact authoritative buffered range. */
@@ -451,5 +459,61 @@ export async function appendReservationOutboxEvent(
     `INSERT INTO outbox_event (tenant_id, dedupe_key, event_type, payload)
      VALUES ($1, $2, $3, $4::jsonb)`,
     [input.tenantId, input.dedupeKey, input.eventType, JSON.stringify(input.payload)],
+  );
+}
+
+export async function appendExpiredReservationAuditEvents(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    requestId: string;
+    rows: ExpiredReservationHoldRow[];
+  },
+): Promise<void> {
+  if (input.rows.length === 0) return;
+
+  await client.query(
+    `INSERT INTO audit_event
+       (tenant_id, actor_kind, actor_key, action, entity_type, entity_id,
+        redacted_summary, request_id, occurred_at, outcome)
+     SELECT $1, 'system', 'system:reservation-expiry', 'reservation.expired', 'reservation',
+            expired.reservation_id, jsonb_build_object(
+              'reason', 'hold_deadline_elapsed', 'version', expired.version
+            ), $2, statement_timestamp(), 'succeeded'
+       FROM unnest($3::uuid[], $4::integer[]) WITH ORDINALITY
+         AS expired(reservation_id, version, ordinal)
+      ORDER BY expired.ordinal`,
+    [
+      input.tenantId,
+      input.requestId,
+      input.rows.map((row) => row.reservation_id),
+      input.rows.map((row) => row.version),
+    ],
+  );
+}
+
+export async function appendExpiredReservationOutboxEvents(
+  client: PoolClient,
+  input: { tenantId: string; rows: ExpiredReservationHoldRow[] },
+): Promise<void> {
+  if (input.rows.length === 0) return;
+
+  await client.query(
+    `INSERT INTO outbox_event (tenant_id, dedupe_key, event_type, payload)
+     SELECT $1,
+            'reservation-expired:' || expired.reservation_id::text || ':' || expired.version::text,
+            'reservation.hold_expired',
+            jsonb_build_object(
+              'reservationId', expired.reservation_id,
+              'reservationVersion', expired.version
+            )
+       FROM unnest($2::uuid[], $3::integer[]) WITH ORDINALITY
+         AS expired(reservation_id, version, ordinal)
+      ORDER BY expired.ordinal`,
+    [
+      input.tenantId,
+      input.rows.map((row) => row.reservation_id),
+      input.rows.map((row) => row.version),
+    ],
   );
 }

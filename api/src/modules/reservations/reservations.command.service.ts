@@ -27,6 +27,8 @@ import {
 import { withTenantTransaction } from '../../db/client.js';
 import { resolveReservationQuote } from './reservations.quote.js';
 import {
+  appendExpiredReservationAuditEvents,
+  appendExpiredReservationOutboxEvents,
   appendReservationAuditEvent,
   appendReservationOutboxEvent,
   chooseAvailableLockedAsset,
@@ -35,6 +37,7 @@ import {
   fillReservationCustomerAddress,
   lockEligibleReservationAssets,
   readReservationCustomerForCreate,
+  RESERVATION_HOLD_RECLAIM_BATCH_SIZE,
   releaseExpiredReservationHolds,
   type ReservationCustomerSnapshotRow,
 } from './reservations.command.repository.js';
@@ -200,31 +203,26 @@ export async function claimReservationAsset(
     throw new CapacityConflictError('No ready garment is available for this reservation.');
   }
 
-  const expired = await releaseExpiredReservationHolds(client, {
-    tenantId: input.tenantId,
-    branchId: input.branchId,
-    assetIds: lockedAssetIds,
-  });
-  for (const row of expired) {
-    await appendReservationAuditEvent(client, {
+  while (true) {
+    const expired = await releaseExpiredReservationHolds(client, {
       tenantId: input.tenantId,
-      actorKind: 'system',
-      actorKey: 'system:reservation-expiry',
-      action: 'reservation.expired',
-      entityType: 'reservation',
-      entityId: row.reservation_id,
-      redactedSummary: { reason: 'hold_deadline_elapsed', version: row.version },
+      branchId: input.branchId,
+      assetIds: lockedAssetIds,
+      batchSize: RESERVATION_HOLD_RECLAIM_BATCH_SIZE,
+    });
+    if (expired.length === 0) break;
+
+    await appendExpiredReservationAuditEvents(client, {
+      tenantId: input.tenantId,
       requestId: input.requestId,
+      rows: expired,
     });
-    await appendReservationOutboxEvent(client, {
+    await appendExpiredReservationOutboxEvents(client, {
       tenantId: input.tenantId,
-      dedupeKey: `reservation-expired:${row.reservation_id}:${row.version}`,
-      eventType: 'reservation.hold_expired',
-      payload: {
-        reservationId: row.reservation_id,
-        reservationVersion: row.version,
-      },
+      rows: expired,
     });
+
+    if (expired.length < RESERVATION_HOLD_RECLAIM_BATCH_SIZE) break;
   }
 
   const assetId = await chooseAvailableLockedAsset(client, {
