@@ -243,16 +243,22 @@ export type StorefrontPolicyRules = z.infer<typeof storefrontPolicyRules>;
 export const storefrontStatusValue = z.enum(['draft', 'published', 'suspended']);
 export type StorefrontStatusValue = z.infer<typeof storefrontStatusValue>;
 
+export const STOREFRONT_SLUG_MIN_LENGTH = 3;
+export const STOREFRONT_SLUG_MAX_LENGTH = 50;
+
 const RESERVED_SLUGS = new Set([
   'admin', 'api', 'app', 'auth', 'dashboard', 'drezivo', 'guest', 'help', 'login', 'new',
   'pricing', 'privacy', 'settings', 'signin', 'signup', 'static', 'store', 'support', 'terms',
 ]);
+const STOREFRONT_SLUG_PATTERN = new RegExp(
+  `^[a-z0-9](?:[a-z0-9-]{${STOREFRONT_SLUG_MIN_LENGTH - 2},${STOREFRONT_SLUG_MAX_LENGTH - 2}}[a-z0-9])$`,
+);
 
 export const storefrontSlug = z
   .string()
   .trim()
   .toLowerCase()
-  .regex(/^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$/, 'use 3–50 lowercase letters, numbers, or hyphens')
+  .regex(STOREFRONT_SLUG_PATTERN, 'use 3–50 lowercase letters, numbers, or hyphens')
   .refine((value) => !value.includes('--'), 'hyphens must not repeat')
   .refine((value) => !RESERVED_SLUGS.has(value), 'this address is reserved');
 

@@ -8,6 +8,7 @@ import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   itemDetail,
   MAX_CLOTHING_PHOTOS,
+  STOREFRONT_SLUG_MAX_LENGTH,
   notificationPreferences,
   publicAvailabilityQuery,
   storefrontDocument,
@@ -125,6 +126,8 @@ describe('storefront CMS contract', () => {
     expect(storefrontSlug.safeParse('a--b').success).toBe(false);
     expect(storefrontSlug.safeParse('-luna').success).toBe(false);
     expect(storefrontSlug.safeParse('lu').success).toBe(false);
+    expect(storefrontSlug.safeParse('a'.repeat(STOREFRONT_SLUG_MAX_LENGTH)).success).toBe(true);
+    expect(storefrontSlug.safeParse('a'.repeat(STOREFRONT_SLUG_MAX_LENGTH + 1)).success).toBe(false);
   });
 
   it('keeps delivery fees within integer minor units', () => {
