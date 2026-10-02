@@ -470,22 +470,22 @@ function AvailabilityHeading() {
 
       <nav
         aria-label="Calendar views"
-        className="grid w-full overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-surface sm:w-auto sm:grid-cols-2"
+        className="grid w-full grid-cols-2 overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-surface sm:w-auto"
       >
         <Link
           href="/calendar"
-          className="flex min-h-11 min-w-44 items-center justify-center gap-2 px-5 text-sm font-medium text-dashboard-navy transition-colors hover:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/30"
+          className="flex min-h-10 min-w-0 items-center justify-center gap-2 px-3 text-xs font-medium text-dashboard-navy transition-colors hover:bg-dashboard-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/30 sm:min-h-11 sm:min-w-44 sm:px-5 sm:text-sm"
         >
-          <CalendarDays className="h-4 w-4 text-dashboard-accent" aria-hidden="true" />
-          Schedule
+          <CalendarDays className="h-4 w-4 shrink-0 text-dashboard-accent" aria-hidden="true" />
+          <span className="truncate">Schedule</span>
         </Link>
         <Link
           href="/calendar/availability"
           aria-current="page"
-          className="flex min-h-11 min-w-52 items-center justify-center gap-2 border-t border-dashboard-accent bg-dashboard-active px-5 text-sm font-semibold text-dashboard-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/30 sm:border-l sm:border-t-0"
+          className="flex min-h-10 min-w-0 items-center justify-center gap-2 border-l border-dashboard-accent bg-dashboard-active px-3 text-xs font-semibold text-dashboard-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/30 sm:min-h-11 sm:min-w-52 sm:px-5 sm:text-sm"
         >
-          <Shirt className="h-4 w-4" aria-hidden="true" />
-          Clothing Availability
+          <Shirt className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="truncate">Clothing Availability</span>
         </Link>
       </nav>
     </section>
@@ -539,8 +539,8 @@ function AvailabilityControls({
 
   return (
     <Card className="relative z-40 gap-0 overflow-visible py-0">
-      <CardContent className="flex flex-col gap-3 p-3">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+      <CardContent className="flex flex-col gap-3 p-2.5 sm:p-3">
+        <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center">
           <label className="relative min-w-0 flex-1">
             <span className="sr-only">Search clothing availability</span>
             <Search
@@ -551,68 +551,70 @@ function AvailabilityControls({
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
               placeholder="Search clothing by name or category..."
-              className="pl-9"
+              className="h-10 pl-9"
             />
           </label>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)_2.25rem_auto] items-center gap-2 sm:flex sm:flex-wrap">
             <Button
               variant="ghost"
               size="icon"
               aria-label="Previous date range"
               disabled={dateNavigationDisabled}
               onClick={onPreviousRange}
-              className="border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+              className="h-9 w-9 border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
             >
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Next date range"
-              disabled={dateNavigationDisabled}
-              onClick={onNextRange}
-              className="border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
-            >
-              <ChevronRight className="h-4 w-4" aria-hidden="true" />
             </Button>
             <DateRangePickerField
               ariaLabel="Calendar availability date range"
               value={dateRangeValue}
               onChange={onDateRangeChange}
               startFreshOnOpen
-              popoverAlign="end"
+              popoverAlign="start"
               disabled={dateNavigationDisabled}
               placeholder={dateRangeLabel}
-              className="w-[11.5rem] sm:w-[13rem]"
+              className="min-w-0 w-full sm:w-[13rem]"
             />
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Next date range"
+              disabled={dateNavigationDisabled}
+              onClick={onNextRange}
+              className="h-9 w-9 border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+            >
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </Button>
             <Button
               type="button"
               variant="ghost"
               aria-label="Return to the current date range"
               disabled={dateNavigationDisabled}
               onClick={onResetRange}
-              className="h-10 border border-dashboard-border bg-dashboard-surface px-3 text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy"
+              className="h-9 border border-dashboard-border bg-dashboard-surface px-2.5 text-xs text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy sm:px-3 sm:text-sm"
             >
               Today
             </Button>
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
-            <FilterMenu label={categoryFilter} options={categories} onSelect={onCategoryChange} />
-            <FilterMenu label={sizeFilter} options={sizes} onSelect={onSizeChange} />
-            <FilterMenu
-              label={statusFilter}
-              options={STATUS_OPTIONS}
-              onSelect={onStatusChange}
-            />
-            <span className="text-xs text-dashboard-muted">
+        <div className="flex flex-col gap-2.5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="-mx-0.5 flex items-center gap-2 overflow-x-auto px-0.5 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
+              <FilterMenu label={categoryFilter} options={categories} onSelect={onCategoryChange} />
+              <FilterMenu label={sizeFilter} options={sizes} onSelect={onSizeChange} />
+              <FilterMenu
+                label={statusFilter}
+                options={STATUS_OPTIONS}
+                onSelect={onStatusChange}
+              />
+            </div>
+            <p className="mt-1.5 text-[0.68rem] leading-4 text-dashboard-muted sm:text-xs">
               {hasCatalogueFilter
                 ? "Matching clothing may include items with no blocking activity in this range"
                 : "Showing only clothing with activity in this date range"}
-            </span>
+            </p>
           </div>
 
           <AvailabilityLegend />
@@ -636,10 +638,10 @@ function FilterMenu({
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          className="min-w-32 justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+          className="h-9 max-w-[10.5rem] shrink-0 justify-between gap-2 border border-dashboard-border bg-dashboard-surface px-3 text-xs text-dashboard-navy hover:bg-dashboard-active sm:h-10 sm:min-w-32 sm:max-w-none sm:text-sm"
         >
-          {label}
-          <ChevronRight className="h-3.5 w-3.5 rotate-90 text-dashboard-muted" aria-hidden="true" />
+          <span className="truncate">{label}</span>
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 rotate-90 text-dashboard-muted" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
@@ -720,12 +722,12 @@ function AvailabilityTimeline({
           aria-label="Clothing availability timeline"
           className="max-h-[clamp(34rem,64vh,46rem)] overflow-auto"
         >
-          <div className="min-w-[58rem] sm:min-w-[68rem] lg:min-w-[78rem]">
+          <div className="min-w-[55rem] sm:min-w-[62rem] lg:min-w-[72rem]">
             <div
               className="sticky top-0 z-30 grid border-b border-dashboard-border bg-dashboard-surface shadow-sm"
-              style={{ gridTemplateColumns: `12rem repeat(${days.length}, minmax(3.5rem, 1fr))` }}
+              style={{ gridTemplateColumns: `9rem repeat(${days.length}, minmax(3.25rem, 1fr))` }}
             >
-              <div className="sticky left-0 z-40 flex items-center border-r border-dashboard-border bg-dashboard-surface px-2 py-3 text-xs font-semibold text-dashboard-navy sm:px-3 sm:text-sm lg:px-4">
+              <div className="sticky left-0 z-40 flex items-center border-r border-dashboard-border bg-dashboard-surface px-2 py-2.5 text-[0.68rem] font-semibold text-dashboard-navy sm:px-3 sm:py-3 sm:text-sm">
                 Clothing Item
               </div>
               {days.map((day) => (
@@ -882,12 +884,12 @@ function AvailabilityRow({
   return (
     <div
       className="grid border-b border-dashboard-border last:border-b-0"
-      style={{ gridTemplateColumns: `12rem repeat(${days.length}, minmax(3.5rem, 1fr))` }}
+      style={{ gridTemplateColumns: `9rem repeat(${days.length}, minmax(3.25rem, 1fr))` }}
     >
-      <div className="sticky left-0 z-20 flex min-h-20 items-center gap-2 border-r border-dashboard-border bg-dashboard-surface px-2 text-left shadow-[4px_0_8px_-8px_var(--color-dashboard-muted)] sm:gap-3 sm:px-3">
+      <div className="sticky left-0 z-20 flex min-h-16 items-center gap-2 border-r border-dashboard-border bg-dashboard-surface px-2 text-left shadow-[4px_0_8px_-8px_var(--color-dashboard-muted)] sm:min-h-20 sm:gap-2.5 sm:px-3">
         <ClothingThumbnail item={item} compact />
-        <span className="min-w-0">
-          <span className="block truncate text-[0.7rem] font-semibold text-dashboard-navy sm:text-xs">
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[0.68rem] font-semibold text-dashboard-navy sm:text-xs">
             {item.product.name}
           </span>
           <span className="mt-1 block text-[0.64rem] text-dashboard-muted sm:hidden">
@@ -931,10 +933,10 @@ function AvailabilityRow({
         </div>
 
         <div
-          className="relative z-10 grid min-h-20"
+          className="relative z-10 grid min-h-16 sm:min-h-20"
           style={{
             gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))`,
-            gridTemplateRows: `repeat(${laneCount}, minmax(4rem, auto))`,
+            gridTemplateRows: `repeat(${laneCount}, minmax(3.5rem, auto))`,
           }}
         >
           {item.agendas.length === 0 && hasCatalogueFilter ? (
@@ -990,12 +992,15 @@ function TimelineLoadingState({ days }: { days: readonly AvailabilityDay[] }) {
       {Array.from({ length: 5 }, (_, index) => (
         <div
           key={index}
-          className="grid min-h-20 border-b border-dashboard-border"
-          style={{ gridTemplateColumns: `12rem repeat(${days.length}, minmax(3.5rem, 1fr))` }}
+          className="grid min-h-16 border-b border-dashboard-border sm:min-h-20"
+          style={{ gridTemplateColumns: `9rem repeat(${days.length}, minmax(3.25rem, 1fr))` }}
         >
-          <div className="sticky left-0 z-20 border-r border-dashboard-border bg-dashboard-surface p-3">
-            <div className="h-3 w-3/4 rounded bg-dashboard-active" />
-            <div className="mt-3 h-2 w-1/2 rounded bg-dashboard-active" />
+          <div className="sticky left-0 z-20 flex items-center gap-2 border-r border-dashboard-border bg-dashboard-surface p-2 sm:p-3">
+            <div className="h-9 w-8 shrink-0 rounded bg-dashboard-active sm:h-10 sm:w-9" />
+            <div className="min-w-0 flex-1">
+              <div className="h-3 w-3/4 rounded bg-dashboard-active" />
+              <div className="mt-2 h-2 w-1/2 rounded bg-dashboard-active" />
+            </div>
           </div>
           <div
             className="m-3 rounded-lg bg-dashboard-active/70"
@@ -1293,7 +1298,7 @@ function ClothingThumbnail({
     <span
       className={cn(
         "shrink-0 items-center justify-center overflow-hidden rounded-lg bg-dashboard-active font-semibold text-dashboard-accent",
-        compact ? "hidden h-12 w-10 text-xs sm:flex" : "flex h-20 w-16 text-sm"
+        compact ? "flex h-9 w-8 text-[0.6rem] sm:h-10 sm:w-9 sm:text-xs" : "flex h-20 w-16 text-sm"
       )}
     >
       {item.product.primary_image_url ? (

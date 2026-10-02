@@ -75,6 +75,7 @@ function timelineResponse(
   options: {
     hasMore?: boolean;
     idle?: boolean;
+    imageUrl?: string | null;
     name?: string;
     nextCursor?: string | null;
     readiness?: "ready" | "needs_cleaning" | "needs_repair" | "unready";
@@ -99,7 +100,7 @@ function timelineResponse(
         product: {
           id: "00000000-0000-4000-8000-000000000206",
           name,
-          primary_image_url: null,
+          primary_image_url: options.imageUrl ?? null,
         },
         variant: {
           id: "00000000-0000-4000-8000-000000000207",
@@ -276,6 +277,26 @@ describe("CalendarAvailabilityPage", () => {
 
     expect(timeline).toHaveClass("max-h-[clamp(34rem,64vh,46rem)]");
     expect(timeline).not.toHaveClass("h-[clamp(34rem,64vh,46rem)]");
+  });
+
+  it("keeps the mobile calendar compact and shows the clothing thumbnail", async () => {
+    api.getClothingAvailabilityTimeline.mockImplementationOnce(
+      async (input: { start_date: string; end_date: string }) => ({
+        data: timelineResponse(input.start_date, input.end_date, {
+          imageUrl: "https://cdn.example.test/emerald-gown.webp",
+        }),
+      })
+    );
+
+    render(<CalendarAvailabilityPage />);
+
+    const image = await screen.findByAltText("Emerald Evening Gown catalogue photo");
+    expect(image).toBeVisible();
+    expect(image.parentElement).toHaveClass("h-9", "w-8");
+    expect(screen.getByRole("navigation", { name: "Calendar views" })).toHaveClass("grid-cols-2");
+    expect(screen.getByLabelText("Clothing availability timeline").firstElementChild).toHaveClass(
+      "min-w-[55rem]"
+    );
   });
 
   it("renders database-backed agenda data and opens the selected agenda drawer", async () => {
