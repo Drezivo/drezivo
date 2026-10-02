@@ -127,7 +127,7 @@ export default function TermsPage() {
       <p>
         The business confirms that it has the rights, permissions, notices, and lawful basis needed
         for content and personal information it submits. Do not upload material that infringes
-        another person's rights or information that you are not legally permitted to process.
+        another person&apos;s rights or information that you are not legally permitted to process.
       </p>
 
       <h2>7. Privacy and data protection</h2>
@@ -168,7 +168,7 @@ export default function TermsPage() {
         described in the <a href="/privacy">Privacy Policy</a>.
       </p>
       <p>
-        Third-party outages, network failures, or changes outside Drezivo's reasonable control may
+        Third-party outages, network failures, or changes outside Drezivo&apos;s reasonable control may
         temporarily affect the service. Drezivo remains responsible for its own obligations when
         selecting and configuring service providers.
       </p>
@@ -218,7 +218,7 @@ export default function TermsPage() {
       <h2>13. Disclaimers and limitation of liability</h2>
       <p>
         To the maximum extent permitted by Philippine law, Drezivo does not warrant that the service
-        will meet every business requirement, prevent every loss, or replace a business's legal,
+        will meet every business requirement, prevent every loss, or replace a business&apos;s legal,
         accounting, tax, insurance, security, payment-verification, or operational controls. Rental
         businesses remain responsible for the merchant decisions described in these Terms.
       </p>
@@ -234,10 +234,10 @@ export default function TermsPage() {
       <h2>14. Responsibility for third-party claims</h2>
       <p>
         To the extent permitted by law, a business using Drezivo is responsible for third-party
-        claims resulting from that business's unlawful content, unlawful processing of personal
+        claims resulting from that business&apos;s unlawful content, unlawful processing of personal
         information, infringement of third-party rights, misleading customer promises, or merchant
-        activities that are outside Drezivo's role as a software provider. This does not shift
-        responsibility to the business for Drezivo's own unlawful conduct.
+        activities that are outside Drezivo&apos;s role as a software provider. This does not shift
+        responsibility to the business for Drezivo&apos;s own unlawful conduct.
       </p>
 
       <h2>15. Governing law and complaints</h2>

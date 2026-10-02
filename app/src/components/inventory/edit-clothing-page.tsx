@@ -13,7 +13,6 @@ import {
   Info,
   Loader2,
   Package,
-  PhilippinePeso,
   Plus,
   Ruler,
   Save,
