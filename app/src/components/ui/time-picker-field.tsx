@@ -423,32 +423,6 @@ function TimeSelect({
   );
 }
 
-function parseFlexibleTime(value: string): string | null {
-  const normalized = value.trim().toUpperCase().replace(/\s+/g, " ");
-  if (!normalized) return null;
-
-  const twentyFourHour = /^(\d{1,2}):(\d{2})$/.exec(normalized);
-  if (twentyFourHour) {
-    const hour = Number(twentyFourHour[1]);
-    const minute = Number(twentyFourHour[2]);
-    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
-      return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-    }
-  }
-
-  const compact = normalized.replace(/\s/g, "");
-  const twelveHour = /^(\d{1,2})(?::?(\d{2}))?([AP])(?:M)?$/.exec(compact);
-  if (!twelveHour) return null;
-
-  const hour12 = Number(twelveHour[1]);
-  const minute = Number(twelveHour[2] ?? "00");
-  if (hour12 < 1 || hour12 > 12 || minute < 0 || minute > 59) return null;
-
-  let hour24 = hour12 % 12;
-  if (twelveHour[3] === "P") hour24 += 12;
-  return `${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-}
-
 function parseTime(value: string): TimeParts | null {
   const match = /^(\d{2}):(\d{2})$/.exec(value);
   if (!match) return null;

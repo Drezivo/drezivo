@@ -16,13 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  useCallback,
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useDeferredValue, useEffect, useState } from "react";
 
 import type {
   CatalogueCategory,
@@ -289,7 +283,8 @@ export function ClothingPage() {
               Manage the clothing styles, variants, and serialized pieces in this workspace.
             </p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {/* Phones: both actions on one row so the clothing list starts higher on screen. */}
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
             <Link
               href="/inventory/categories"
               className={buttonVariants({ variant: "secondary" })}
@@ -322,8 +317,9 @@ export function ClothingPage() {
         ) : null}
 
         <Card className="gap-0 py-0">
-          <CardContent className="flex flex-col gap-2 p-3 lg:flex-row lg:items-center">
-            <div className="relative min-w-0 flex-1 lg:max-w-md">
+          {/* Phones: search on its own row, then the four filters as a 2×2 grid. */}
+          <CardContent className="grid grid-cols-2 gap-2 p-3 lg:flex lg:items-center">
+            <div className="relative col-span-2 min-w-0 flex-1 lg:max-w-md">
               <Search
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-dashboard-muted"
                 aria-hidden="true"
@@ -355,7 +351,8 @@ export function ClothingPage() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+        {/* On phones the counts come after the list, so the clothing itself is what shows first. */}
+        <div className="grid grid-cols-2 gap-2 max-sm:order-last xl:grid-cols-4">
           <MetricCard label="Total Clothing" value={summary.total_products} icon={Shirt} tone="blue" />
           <MetricCard label="Active Rental Items" value={summary.active_rental_items} icon={Boxes} tone="mint" />
           <MetricCard label="Categories" value={summary.active_categories} icon={Tags} tone="purple" />
@@ -708,7 +705,7 @@ function CategoryFilterMenu({
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          className="min-w-36 justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+          className="min-w-0 justify-between border border-dashboard-border bg-dashboard-surface lg:min-w-36 text-dashboard-navy hover:bg-dashboard-active"
         >
           {selected?.name ?? "All Categories"}
           <ChevronRight className="h-3.5 w-3.5 rotate-90 text-dashboard-muted" />
@@ -740,7 +737,7 @@ function FilterMenu<Option extends string>({
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          className="min-w-36 justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+          className="min-w-0 justify-between border border-dashboard-border bg-dashboard-surface lg:min-w-36 text-dashboard-navy hover:bg-dashboard-active"
         >
           {label}
           <ChevronRight className="h-3.5 w-3.5 rotate-90 text-dashboard-muted" />
@@ -771,7 +768,7 @@ function SortMenu({
         <Button
           variant="ghost"
           aria-label="Sort clothing"
-          className="min-w-32 justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+          className="min-w-0 justify-between border border-dashboard-border bg-dashboard-surface lg:min-w-32 text-dashboard-navy hover:bg-dashboard-active"
         >
           {selected.label}
           <ChevronRight className="h-3.5 w-3.5 rotate-90 text-dashboard-muted" />

@@ -15,6 +15,15 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  // The landing site (another subdomain of the same site) prerenders the sign-in and sign-up
+  // pages on hover so they open instantly. Chrome only prerenders a same-site, cross-origin page
+  // that opts in with this header. Both pages are public and identical for every visitor.
+  async headers() {
+    return ["/sign-in", "/sign-up"].map((source) => ({
+      source,
+      headers: [{ key: "Supports-Loading-Mode", value: "credentialed-prerender" }],
+    }));
+  },
 };
 
 export default nextConfig;
