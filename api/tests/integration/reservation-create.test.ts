@@ -1456,7 +1456,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
       await client.query(
         `INSERT INTO asset_allocation
            (tenant_id, branch_id, asset_id, reservation_line_id, kind, period, is_blocking)
-         SELECT $1, $2, requested.asset_id, line.id, 'reservation_hold',
+         SELECT $1, $2, requested.asset_id, requested.line_id, 'reservation_hold',
                 tstzrange('2026-10-10T01:00:00Z', '2026-10-13T04:00:00Z', '[)'), true
            FROM unnest($3::uuid[], $4::uuid[]) AS requested(asset_id, line_id)`,
         [
