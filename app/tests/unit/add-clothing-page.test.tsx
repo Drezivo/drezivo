@@ -116,11 +116,12 @@ describe("AddClothingPage", () => {
     });
   });
 
-  it("shows an optional clothing code field", () => {
+  it("does not ask staff to enter a clothing code", async () => {
     renderPage();
+    await screen.findByText("Default Size Guide");
 
-    expect(screen.getByLabelText("Clothing Code")).toBeVisible();
-    expect(screen.getByText(/Leave blank and Drezivo will generate one for you/)).toBeVisible();
+    expect(screen.queryByLabelText("Clothing Code")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Drezivo will generate one for you/)).not.toBeInTheDocument();
   });
 
   it("defaults to a single free-size variant", () => {
@@ -170,6 +171,31 @@ describe("AddClothingPage", () => {
     });
   });
 
+  it("saves the LONG preset as a product subcategory", async () => {
+    renderPage();
+    await screen.findByText("Default Size Guide");
+    fireEvent.change(screen.getByLabelText("Clothing Name *"), { target: { value: "Long Gown" } });
+    fireEvent.change(screen.getByLabelText("Subcategory"), { target: { value: "LONG" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save as Draft" }));
+
+    await waitFor(() => expect(api.createClothing).toHaveBeenCalledTimes(1));
+    expect(api.createClothing.mock.calls[0]?.[0]).toMatchObject({ subcategory: "LONG" });
+  });
+
+  it("offers a custom subcategory input and trims it before saving", async () => {
+    renderPage();
+    await screen.findByText("Default Size Guide");
+    fireEvent.change(screen.getByLabelText("Clothing Name *"), { target: { value: "Tea Dress" } });
+    fireEvent.change(screen.getByLabelText("Subcategory"), { target: { value: "custom" } });
+    const customInput = screen.getByLabelText("Custom subcategory");
+    expect(customInput).toBeVisible();
+    fireEvent.change(customInput, { target: { value: "  Tea Length  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save as Draft" }));
+
+    await waitFor(() => expect(api.createClothing).toHaveBeenCalledTimes(1));
+    expect(api.createClothing.mock.calls[0]?.[0]).toMatchObject({ subcategory: "Tea Length" });
+  });
+
   it("uses the default guide until a size opts into custom measurements", async () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Sized" }));
@@ -177,10 +203,7 @@ describe("AddClothingPage", () => {
     expect(screen.queryByLabelText("S bust")).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Default guide" })).toHaveLength(4);
 
-    fireEvent.pointerDown(screen.getAllByRole("button", { name: "Default guide" })[0]!, {
-      button: 0,
-      ctrlKey: false,
-    });
+    fireEvent.keyDown(screen.getAllByRole("button", { name: "Default guide" })[0]!, { key: "ArrowDown" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Custom measurements" }));
 
     expect(screen.getByLabelText("S bust")).toBeVisible();
@@ -412,19 +435,13 @@ describe("AddClothingPage", () => {
     fireEvent.change(screen.getByLabelText("Clothing Name *"), {
       target: { value: "Emerald Evening Gown" },
     });
-    fireEvent.change(screen.getByLabelText("Clothing Code"), {
-      target: { value: "GOWN-001" },
-    });
     expect(screen.getByRole("button", { name: /Rental Timing/ })).toHaveAttribute("aria-expanded", "true");
     fireEvent.change(screen.getByLabelText("Recovery Days After Return"), {
       target: { value: "2" },
     });
 
     await waitFor(() => expect(screen.getAllByRole("button", { name: "Default guide" })).toHaveLength(4));
-    fireEvent.pointerDown(screen.getAllByRole("button", { name: "Default guide" })[0]!, {
-      button: 0,
-      ctrlKey: false,
-    });
+    fireEvent.keyDown(screen.getAllByRole("button", { name: "Default guide" })[0]!, { key: "ArrowDown" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Custom measurements" }));
     fireEvent.change(screen.getByLabelText("S bust"), { target: { value: "34" } });
     fireEvent.change(screen.getByLabelText("S waist"), { target: { value: "28" } });
@@ -438,7 +455,6 @@ describe("AddClothingPage", () => {
     expect(idempotencyKey.length).toBeGreaterThanOrEqual(8);
     expect(requestBody).toMatchObject({
       name: "Emerald Evening Gown",
-      code: "GOWN-001",
       category_id: "00000000-0000-4000-8000-000000000001",
       color_label: null,
       image_file_ids: [],
@@ -454,6 +470,7 @@ describe("AddClothingPage", () => {
       },
       activate: false,
     });
+    expect(requestBody).not.toHaveProperty("code");
     expect(requestBody.sizes).toHaveLength(4);
     expect(requestBody.sizes[0]).toMatchObject({
       size_label: "S",

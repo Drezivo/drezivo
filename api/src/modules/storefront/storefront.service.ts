@@ -34,6 +34,7 @@ import {
   readPublicCategories,
   readPublicItem,
   readPublicSizes,
+  readPublicSubcategories,
   readStoreCore,
   readStorefrontPaymentMethods,
   withPublishedStore,
@@ -152,10 +153,12 @@ export class PublicStorefrontService {
         offset: (query.page - 1) * query.page_size,
         ...(query.search ? { search: query.search } : {}),
         ...(query.category ? { categoryId: query.category } : {}),
+        ...(query.subcategory ? { subcategory: query.subcategory } : {}),
         ...(query.size ? { size: query.size } : {}),
       };
       const rows = await readCatalogueCards(client, store.tenantId, filter);
       const sizes = await readPublicSizes(client, store.tenantId);
+      const subcategories = await readPublicSubcategories(client, store.tenantId);
       const urls = await this.media.sign(client, store.tenantId, rows.map((row) => row.image_file_id));
       return catalogueResponse.parse({
         items: rows.map((row) => toCard(row, (id) => (id ? (urls.get(id) ?? null) : null))),
@@ -163,6 +166,7 @@ export class PublicStorefrontService {
         page: query.page,
         page_size: query.page_size,
         sizes,
+        subcategories,
       });
     }, preview);
     if (!result) throw new NotFoundError(NOT_FOUND);
@@ -182,6 +186,7 @@ export class PublicStorefrontService {
         name: found.item.name,
         description: found.item.description,
         category: found.item.category,
+        subcategory: found.item.subcategory,
         image_urls: found.item.image_file_ids.flatMap((id) => {
           const url = urls.get(id);
           return url ? [url] : [];
@@ -268,6 +273,7 @@ function toCard(row: CatalogueCardRow, urlOf: (id: string | null) => string | nu
     product_id: row.product_id,
     name: row.name,
     category: row.category,
+    subcategory: row.subcategory,
     image_url: urlOf(row.image_file_id),
     price_from_minor: row.price_from_minor,
     pricing_mode: row.pricing_mode,

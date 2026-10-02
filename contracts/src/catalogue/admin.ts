@@ -223,11 +223,18 @@ export const clothingImageFileIds = z
   });
 export type ClothingImageFileIds = z.infer<typeof clothingImageFileIds>;
 
+/** Optional style-level catalogue label. Empty input is normalized to no subcategory. */
+export const clothingSubcategory = z.preprocess(
+  (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+  z.string().trim().min(1).max(120).nullable(),
+);
+
 export const createClothingRequest = z
   .object({
     name: z.string().trim().min(1).max(200),
     code: optionalClothingStyleCode,
     description: z.string().trim().max(2_000).default(''),
+    subcategory: clothingSubcategory.optional(),
     category_id: categoryId,
     color_label: z.preprocess(
       (value) =>
@@ -287,6 +294,7 @@ export type CreateClothingRequest = z.infer<typeof createClothingRequest>;
 export const createClothingResponse = z.object({
   product_id: productId,
   code: clothingStyleCode,
+  subcategory: z.string().trim().min(1).max(120).nullable().optional(),
   sizing_mode: productSizingMode,
   variant_count: z.number().int().positive(),
   physical_piece_count: z.number().int().positive(),

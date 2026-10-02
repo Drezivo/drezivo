@@ -15,6 +15,7 @@ import { paginatedResponse, paginationRequest } from '../common/pagination';
 import { instantInterval, isoInstant } from '../common/time';
 import {
   cataloguePricingMode,
+  clothingSubcategory,
   clothingImageFileIds,
   clothingPricingInput,
   clothingStyleCode,
@@ -140,6 +141,7 @@ export const clothingListItem = z.object({
   product_id: productId,
   code: clothingStyleCode,
   name: z.string().trim().min(1).max(200),
+  subcategory: z.string().trim().min(1).max(120).nullable().optional(),
   category: clothingCategorySummary.nullable(),
   product_status: clothingProductLifecycle,
   sizing_mode: productSizingMode,
@@ -299,6 +301,7 @@ export const clothingDetail = z.object({
   code: clothingStyleCode,
   name: z.string().trim().min(1).max(200),
   description: z.string().max(2_000),
+  subcategory: z.string().trim().min(1).max(120).nullable().optional(),
   category: clothingCategorySummary.nullable(),
   status: clothingProductLifecycle,
   sizing_mode: productSizingMode,
@@ -317,10 +320,11 @@ export const updateClothingProductRequest = z
     name: z.string().trim().min(1).max(200).optional(),
     description: z.string().trim().max(2_000).optional(),
     category_id: categoryId.optional(),
+    subcategory: clothingSubcategory.optional(),
   })
   .strict()
   .refine(
-    (value) => value.name !== undefined || value.description !== undefined || value.category_id !== undefined,
+    (value) => value.name !== undefined || value.description !== undefined || value.category_id !== undefined || value.subcategory !== undefined,
     { message: 'At least one editable product field is required.' },
   );
 export type UpdateClothingProductRequest = z.infer<typeof updateClothingProductRequest>;
@@ -329,6 +333,7 @@ export const updateClothingProductResponse = z.object({
   product_id: productId,
   name: z.string().trim().min(1).max(200),
   description: z.string().max(2_000),
+  subcategory: z.string().trim().min(1).max(120).nullable().optional(),
   category: clothingCategorySummary.nullable(),
   status: clothingProductLifecycle,
   sizing_mode: productSizingMode,

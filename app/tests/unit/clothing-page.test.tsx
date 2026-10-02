@@ -60,6 +60,7 @@ const firstItem = {
   product_id: "00000000-0000-4000-8000-000000000010",
   code: "GWN-001",
   name: "Real Black Satin Gown",
+  subcategory: "LONG",
   category: { id: category.id, name: category.name },
   product_status: "active" as const,
   sizing_mode: "sized" as const,
@@ -203,6 +204,7 @@ describe("ClothingPage", () => {
 
     expect(await screen.findByRole("status")).toHaveTextContent("Clothing added");
     expect(await screen.findByText("Real Black Satin Gown")).toBeVisible();
+    expect(screen.getAllByText("LONG").length).toBeGreaterThan(0);
     expect(api.getCatalogueClothing).toHaveBeenCalledWith({ limit: 10, sort: "newest", product_status: "active" });
     expect(sessionStorage.getItem("drezivo:inventory-notice")).toBeNull();
   });

@@ -238,6 +238,7 @@ Table product {
   code varchar(80) [not null]
   name varchar(200) [not null]
   description text [not null]
+  subcategory varchar(120) [null]
   sizing_mode varchar(20) [not null, default: 'sized']
   status varchar(20) [not null]
   created_at timestamptz [not null]
@@ -246,7 +247,7 @@ Table product {
     (tenant_id, category_id, status)
     (tenant_id, code) [unique]
   }
-  Note: 'V1. Style-level marketing entry, not stock quantity. sizing_mode is sized or free_size; active variants may use only the current mode. Mode changes archive old variants so historical reservations/fittings keep their identity.'
+  Note: 'V1. Style-level marketing entry, not stock quantity. Optional free-form subcategory (max 120 characters) supports LONG/MINI presets and custom labels. sizing_mode is sized or free_size; active variants may use only the current mode. Mode changes archive old variants so historical reservations/fittings keep their identity.'
 }
 
 Table measurement_guide {

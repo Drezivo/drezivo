@@ -71,6 +71,7 @@ type PricingMode = "fixed_duration" | "daily";
 type MeasurementMode = "default_guide" | "custom" | "none";
 type MeasurementUnit = "cm" | "in";
 type PhotoStatus = "ready" | "uploading" | "uploaded" | "error";
+type SubcategorySelection = "none" | "LONG" | "MINI" | "custom";
 type PhotoFileId = ClothingDetail["images"][number]["file_id"];
 type MeasurementGuideId = ClothingVariantDetail["measurement_guide_id"];
 
@@ -129,6 +130,8 @@ export function EditClothingPage({ productId }: { productId: string }) {
   const [defaultGuide, setDefaultGuide] = useState<MeasurementGuide | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [subcategorySelection, setSubcategorySelection] = useState<SubcategorySelection>("none");
+  const [customSubcategory, setCustomSubcategory] = useState("");
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [variants, setVariants] = useState<VariantDraft[]>([]);
   const [photos, setPhotos] = useState<EditablePhoto[]>([]);
@@ -170,6 +173,17 @@ export function EditClothingPage({ productId }: { productId: string }) {
       initialItemRef.current = item;
       setName(item.name);
       setDescription(item.description);
+      const savedSubcategory = item.subcategory ?? null;
+      if (savedSubcategory === "LONG" || savedSubcategory === "MINI") {
+        setSubcategorySelection(savedSubcategory);
+        setCustomSubcategory("");
+      } else if (savedSubcategory) {
+        setSubcategorySelection("custom");
+        setCustomSubcategory(savedSubcategory);
+      } else {
+        setSubcategorySelection("none");
+        setCustomSubcategory("");
+      }
       setCategoryId(item.category?.id ?? null);
       setVariants(item.variants.map(variantToDraft));
       setPhotos(
@@ -422,6 +436,8 @@ export function EditClothingPage({ productId }: { productId: string }) {
         name,
         description,
         categoryId,
+        subcategorySelection,
+        customSubcategory,
       });
       const variantPatches = variants
         .map((variantDraft) => {
@@ -686,6 +702,37 @@ export function EditClothingPage({ productId }: { productId: string }) {
                       ))}
                     </DropdownMenuContent>
                   </DropdownMenu>
+                </Field>
+                <Field label="Subcategory">
+                  <select
+                    aria-label="Subcategory"
+                    value={subcategorySelection}
+                    disabled={saveGuard.isSubmitting}
+                    onChange={(event) => {
+                      setSubcategorySelection(event.target.value as SubcategorySelection);
+                      markDirty();
+                    }}
+                    className="h-10 w-full rounded-md border border-dashboard-border bg-dashboard-surface px-3 text-sm text-dashboard-navy outline-none transition focus:border-dashboard-accent focus:ring-2 focus:ring-dashboard-accent/20 disabled:opacity-60"
+                  >
+                    <option value="none">None</option>
+                    <option value="LONG">LONG</option>
+                    <option value="MINI">MINI</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                  {subcategorySelection === "custom" ? (
+                    <Input
+                      aria-label="Custom subcategory"
+                      value={customSubcategory}
+                      maxLength={120}
+                      disabled={saveGuard.isSubmitting}
+                      onChange={(event) => {
+                        setCustomSubcategory(event.target.value);
+                        markDirty();
+                      }}
+                      placeholder="Enter a subcategory"
+                      className="mt-2"
+                    />
+                  ) : null}
                 </Field>
               </div>
               <Field label="Description">
@@ -1723,7 +1770,13 @@ function ArchivedEditState({ item }: { item: ClothingDetail }) {
 
 function buildProductPatch(
   initial: ClothingDetail,
-  current: { name: string; description: string; categoryId: string | null }
+  current: {
+    name: string;
+    description: string;
+    categoryId: string | null;
+    subcategorySelection: SubcategorySelection;
+    customSubcategory: string;
+  }
 ): UpdateClothingProductRequest | null {
   const patch: Partial<UpdateClothingProductRequest> & { expected_updated_at: string } = {
     expected_updated_at: initial.updated_at,
@@ -1734,6 +1787,13 @@ function buildProductPatch(
     if (!current.categoryId) throw new Error("Choose an active category before saving this change.");
     patch.category_id = current.categoryId as UpdateClothingProductRequest["category_id"];
   }
+  const subcategory =
+    current.subcategorySelection === "LONG" || current.subcategorySelection === "MINI"
+      ? current.subcategorySelection
+      : current.subcategorySelection === "custom"
+        ? current.customSubcategory.trim() || null
+        : null;
+  if (subcategory !== (initial.subcategory ?? null)) patch.subcategory = subcategory;
   return Object.keys(patch).length > 1 ? (patch as UpdateClothingProductRequest) : null;
 }
 

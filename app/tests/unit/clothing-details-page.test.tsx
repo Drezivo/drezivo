@@ -46,6 +46,7 @@ const detail = {
   code: "GWN-001",
   name: "Emerald Evening Gown",
   description: "Elegant emerald gown from the real catalogue response.",
+  subcategory: "MINI",
   category: {
     id: "00000000-0000-4000-8000-000000000011",
     name: "Gowns",
@@ -169,6 +170,10 @@ describe("ClothingDetailsPage", () => {
     render(<ClothingDetailsPage productId={productId} />);
 
     expect(await screen.findByRole("heading", { name: "Emerald Evening Gown" })).toBeVisible();
+    expect(screen.getAllByText("MINI")).toHaveLength(2);
+    for (const subcategoryLabel of screen.getAllByText("MINI")) {
+      expect(subcategoryLabel).toBeVisible();
+    }
     expect(api.getCatalogueClothingDetail).toHaveBeenCalledWith(productId);
     expect(screen.getByRole("heading", { name: "Variants & Pricing" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Serialized Pieces" })).toBeVisible();
@@ -382,7 +387,9 @@ describe("ClothingDetailsPage", () => {
     );
     await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledTimes(2));
     expect(await screen.findByRole("status")).toHaveTextContent("AST-GWN-001-M-01 is now Ready.");
-    expect(screen.getByText("Ready")).toBeVisible();
+    for (const readyLabel of screen.getAllByText("Ready")) {
+      expect(readyLabel).toBeVisible();
+    }
   });
 
   it("archives from detail using the backend updated_at token and then reloads authoritative detail", async () => {

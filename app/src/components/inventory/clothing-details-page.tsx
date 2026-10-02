@@ -311,6 +311,11 @@ function DetailContent({
                           {item.category.name}
                         </span>
                       ) : null}
+                      {item.subcategory ? (
+                        <span className="inline-flex rounded-full border border-dashboard-border bg-dashboard-surface px-2.5 py-1 text-xs font-medium text-dashboard-navy">
+                          {item.subcategory}
+                        </span>
+                      ) : null}
                       <LifecycleBadge status={item.status} />
                     </div>
                     <h1 className="mt-3 dashboard-page-title">
@@ -505,6 +510,7 @@ function DetailContent({
                 </div>
                 <dl className="mt-4 space-y-3 text-sm">
                   <DetailPair label="Category" value={item.category?.name ?? "Uncategorized"} />
+                  {item.subcategory ? <DetailPair label="Subcategory" value={item.subcategory} /> : null}
                   <DetailPair label="Status" value={labelize(item.status)} />
                   <DetailPair label="Created" value={formatDateTime(item.created_at)} />
                   <DetailPair label="Last updated" value={formatDateTime(item.updated_at)} />
