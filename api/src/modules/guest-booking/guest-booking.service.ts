@@ -36,6 +36,7 @@ import { digestRecipientEmail } from '../../shared/protected-recipient.js';
 export { guestTokenFor };
 import { acceptFileObject, insertPendingFile, rejectFileObject } from '../files/files.repository.js';
 import { validateUploadedObject } from '../files/files.service.js';
+import { guestReceiptStorageKey, isGuestReceiptStorageKey } from '../files/files.storage-keys.js';
 import {
   claimFittingCapacitySlot,
   createFittingAppointmentBase,
@@ -202,7 +203,7 @@ export class GuestBookingService {
       assertAwaitingReceipt(reservation);
 
       const fileId = randomUUID();
-      const storageKey = receiptStorageKey(tenantId, reservationId, fileId);
+      const storageKey = guestReceiptStorageKey(tenantId, reservationId, fileId);
       const authorization = await this.storage.authorizeUpload({
         storageKey,
         contentType: request.content_type,
@@ -231,7 +232,7 @@ export class GuestBookingService {
   async submitReceipt(reservationId: string, bearer: string, meta: GuestRequestMeta, fileId: string): Promise<CommandResult<GuestReservationView>> {
     const tenantId = await this.resolveGuestTenant(reservationId, bearer);
     const before = await withTenantTransaction(tenantId, 'guest', (client) => readReceiptFile(client, tenantId, fileId));
-    if (!before || !before.storage_key.startsWith(receiptStorageKey(tenantId, reservationId, ''))) {
+    if (!before || !isGuestReceiptStorageKey(before.storage_key, tenantId, reservationId, fileId)) {
       throw new ValidationError('Upload the receipt again before submitting.');
     }
     const uploaded = before.lifecycle_status === 'accepted'
@@ -483,10 +484,6 @@ function assertAwaitingReceipt(reservation: GuestReservationRow): void {
   if (!reservation.hold_expires_at || reservation.hold_expires_at.getTime() <= Date.now()) {
     throw new HoldExpiredError('Your 15-minute hold ended. Please book again.');
   }
-}
-
-function receiptStorageKey(tenantId: string, reservationId: string, fileId: string): string {
-  return `tenant-files/${tenantId}/guest-receipts/${reservationId}/${fileId}`;
 }
 
 function paymentNote(destination: Record<string, unknown>): string | undefined {
