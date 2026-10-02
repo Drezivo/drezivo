@@ -380,7 +380,7 @@ describe('CLT-022 clothing file attachment flow', async () => {
         ...seed.fileContext,
         fileId,
         requestId: 'req-clt022-legacy-finalize',
-        idempotencyKey: 'clt022-legacy-finalize',
+        idempotencyKey: 'legacy-test',
       },
       storage,
     );
