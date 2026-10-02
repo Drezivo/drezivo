@@ -307,6 +307,94 @@ describe('storefront guest booking', async () => {
     expect(lines.rows).toEqual([{ garment_guaranteed: false }]);
   });
 
+  it('creates fitting lines for multiple publicly visible variants in one request', async () => {
+    const ws = await liveStore('gv-fit-multi', (doc) => {
+      doc.checkout.fitting_requests = true;
+    });
+    const date = addDays(localDate(new Date(), 'Asia/Manila'), 3);
+    await admin.query(
+      `INSERT INTO fitting_settings (tenant_id, branch_id, enabled, capacity, duration_minutes, fee_minor, currency)
+       VALUES ($1, $2, true, 1, 60, 0, 'PHP')`,
+      [ws.tenantId, ws.branchId],
+    );
+    await admin.query(
+      `UPDATE branch
+          SET operating_hours = '{"opens_local":"10:00","closes_local":"12:00","closed_weekdays":[]}'::jsonb
+        WHERE tenant_id = $1 AND id = $2`,
+      [ws.tenantId, ws.branchId],
+    );
+    const email = 'multi-fitting@example.test';
+    const token = await verified(ws.slug, ws.tenantId, email);
+    const body = guestFittingRequest.parse({
+      verification_token: token,
+      email,
+      customer: { full_name: 'Ana Reyes', phone: '09171234567', address: null, social_handle: null },
+      start_at: `${date}T10:00:00+08:00`,
+      variant_ids: [ws.variantIds.m, ws.variantIds.l],
+      note: null,
+    });
+
+    const result = await booking.requestFitting(ws.slug, { requestId: 'fmulti', idempotencyKey: 'fit-multi' }, body);
+
+    expect(result.status).toBe(201);
+    expect(result.body.success).toBe(true);
+    const fittings = await admin.query<{ id: string }>(`SELECT id FROM fitting_appointment WHERE tenant_id = $1`, [ws.tenantId]);
+    expect(fittings.rows).toHaveLength(1);
+    const lines = await admin.query<{ variant_id: string; garment_guaranteed: boolean }>(
+      `SELECT variant_id, garment_guaranteed FROM fitting_line WHERE tenant_id = $1 AND fitting_id = $2 ORDER BY variant_id`,
+      [ws.tenantId, fittings.rows[0]?.id],
+    );
+    expect(lines.rows).toEqual(
+      [ws.variantIds.l, ws.variantIds.m].sort().map((variant_id) => ({ variant_id, garment_guaranteed: false })),
+    );
+  });
+
+  it('rejects a foreign variant before writing a guest customer, fitting, or fitting lines', async () => {
+    const ws = await liveStore('gv-fit-foreign', (doc) => {
+      doc.checkout.fitting_requests = true;
+    });
+    const other = await createStorefrontWorkspace('gv-fit-foreign-other');
+    const date = addDays(localDate(new Date(), 'Asia/Manila'), 3);
+    await admin.query(
+      `INSERT INTO fitting_settings (tenant_id, branch_id, enabled, capacity, duration_minutes, fee_minor, currency)
+       VALUES ($1, $2, true, 1, 60, 0, 'PHP')`,
+      [ws.tenantId, ws.branchId],
+    );
+    await admin.query(
+      `UPDATE branch
+          SET operating_hours = '{"opens_local":"10:00","closes_local":"12:00","closed_weekdays":[]}'::jsonb
+        WHERE tenant_id = $1 AND id = $2`,
+      [ws.tenantId, ws.branchId],
+    );
+    const email = 'foreign-fitting@example.test';
+    const token = await verified(ws.slug, ws.tenantId, email);
+    const body = guestFittingRequest.parse({
+      verification_token: token,
+      email,
+      customer: { full_name: 'Ana Reyes', phone: '09171234567', address: null, social_handle: null },
+      start_at: `${date}T10:00:00+08:00`,
+      variant_ids: [ws.variantIds.m, other.variantIds.m],
+      note: null,
+    });
+
+    const result = await booking.requestFitting(ws.slug, { requestId: 'fforeign', idempotencyKey: 'fit-foreign' }, body);
+
+    expect(result.status).toBe(422);
+    expect(result.body).toMatchObject({
+      success: false,
+      error: { message: 'One of the pieces you chose is no longer available.' },
+    });
+    const customers = await admin.query<{ count: number }>(
+      `SELECT count(*)::int AS count FROM customer WHERE tenant_id = $1 AND lower(email) = $2`,
+      [ws.tenantId, email],
+    );
+    const fittings = await admin.query<{ count: number }>(`SELECT count(*)::int AS count FROM fitting_appointment WHERE tenant_id = $1`, [ws.tenantId]);
+    const lines = await admin.query<{ count: number }>(`SELECT count(*)::int AS count FROM fitting_line WHERE tenant_id = $1`, [ws.tenantId]);
+    expect(customers.rows[0]?.count).toBe(0);
+    expect(fittings.rows[0]?.count).toBe(0);
+    expect(lines.rows[0]?.count).toBe(0);
+  });
+
   // Pilot: NOTIFICATION_PREFERENCES_ENFORCED is false, so a stored "off" preference must not stop
   // a customer email (the Notifications tab is hidden and owners cannot switch it back on).
   it('sends customer emails even when a stored preference says off', async () => {
