@@ -40,6 +40,7 @@ import {
   rejectFileObject,
   type FileObjectRow,
 } from './files.repository.js';
+import { staffUploadStorageKey, type SupportedUploadPurpose } from './files.storage-keys.js';
 
 const AUTHORIZE_UPLOAD_OPERATION = 'files.upload.authorize';
 const FINALIZE_UPLOAD_OPERATION = 'files.upload.finalize';
@@ -100,7 +101,7 @@ export async function authorizeUpload(
 
     try {
       const fileId = randomUUID();
-      const storageKey = `tenant-files/${input.tenantId}/${fileId}/source`;
+      const storageKey = staffUploadStorageKey(input.tenantId, request.purpose, fileId);
       const authorization = await storage.authorizeUpload({
         storageKey,
         contentType: request.content_type,
@@ -294,7 +295,9 @@ function assertFileWriteContext(input: FileContext, purpose: FileObjectRow['purp
   }
 }
 
-function assertSupportedUpload(request: UploadAuthorizationRequest): void {
+function assertSupportedUpload(
+  request: UploadAuthorizationRequest,
+): asserts request is UploadAuthorizationRequest & { purpose: SupportedUploadPurpose } {
   const isCataloguePurpose =
     request.purpose === 'catalogue_image' ||
     request.purpose === 'measurement_guide' ||

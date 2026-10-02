@@ -20,6 +20,25 @@ API
 The browser never receives object-storage credentials. New upload keys are unique and the signed PUT
 requires `If-None-Match: *`, so a reused URL cannot overwrite an existing object.
 
+## Tenant object-key layout
+
+New tenant uploads stay in the private bucket under `tenant-files/{tenantId}/{category}/...`.
+The tenant identifier remains an opaque UUID; readable category prefixes organize files but are not
+an authorization boundary. The server selects the category from the upload purpose:
+
+| Upload purpose | Key category |
+| --- | --- |
+| `catalogue_image` | `catalogue-images` |
+| `payment_receipt` | `payment-receipts` |
+| `measurement_guide`, `storefront_asset`, `payment_method_material` | `workspace-assets` |
+| `subscription_payment_proof` | `billing-evidence` |
+
+Staff uploads use `tenant-files/{tenantId}/{category}/{fileId}/source`. Guest reservation receipts
+use `tenant-files/{tenantId}/payment-receipts/{reservationId}/{fileId}/source`, preserving their
+reservation scope. Existing file rows keep their stored object keys and remain readable in place;
+this layout change does not copy, rename, or delete existing objects. The guest receipt submission
+path also accepts the previous `guest-receipts` key shape for existing records and in-flight uploads.
+
 ## Required configuration
 
 Production and staging use these deployment-managed names:
