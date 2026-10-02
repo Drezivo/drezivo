@@ -356,6 +356,20 @@ export async function isVisibleVariant(client: PoolClient, tenantId: string, var
   return (result.rowCount ?? 0) > 0;
 }
 
+/** Visible requested variants under the same tenant-scoped catalogue rules as isVisibleVariant. */
+export async function readVisibleVariantIds(client: PoolClient, tenantId: string, variantIds: string[]): Promise<string[]> {
+  if (variantIds.length === 0) return [];
+  const result = await client.query<{ variant_id: string }>(
+    `SELECT v.id AS variant_id
+       FROM product_variant v
+       JOIN product p ON p.tenant_id = v.tenant_id AND p.id = v.product_id
+       LEFT JOIN category c ON c.tenant_id = p.tenant_id AND c.id = p.category_id
+      WHERE ${VISIBLE_PRODUCT} AND v.id = ANY($2::uuid[]) AND v.status = 'active'`,
+    [tenantId, variantIds],
+  );
+  return result.rows.map((row) => row.variant_id);
+}
+
 /**
  * Open fitting start times for one local date, using the same rules as fitting creation: ISO
  * weekday windows in the branch timezone, 30-minute starts, the whole appointment inside one

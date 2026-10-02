@@ -812,11 +812,20 @@ export async function createFittingAppointmentBase(
     ],
   );
 
-  for (const line of input.garments) {
+  if (input.garments.length > 0) {
     await client.query(
       `INSERT INTO fitting_line (id, tenant_id, fitting_id, variant_id, asset_id, garment_guaranteed)
-       VALUES ($1,$2,$3,$4,$5,$6)`,
-      [line.lineId, input.tenantId, input.fittingId, line.variantId, line.assetId, line.guaranteed],
+       SELECT lines.line_id, $1, $2, lines.variant_id, lines.asset_id, lines.guaranteed
+         FROM unnest($3::uuid[], $4::uuid[], $5::uuid[], $6::boolean[])
+           AS lines(line_id, variant_id, asset_id, guaranteed)`,
+      [
+        input.tenantId,
+        input.fittingId,
+        input.garments.map((line) => line.lineId),
+        input.garments.map((line) => line.variantId),
+        input.garments.map((line) => line.assetId),
+        input.garments.map((line) => line.guaranteed),
+      ],
     );
   }
 

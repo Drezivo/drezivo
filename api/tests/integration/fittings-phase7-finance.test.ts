@@ -886,7 +886,7 @@ describe('FIT-BE-070..072 fitting finance integration', async () => {
     });
   });
 
-  it('failed manual refund restores allocation balance and permits an explicit new refund instruction', async () => {
+  it('failed manual refund restores allocation balance and a later refund reverses allocations oldest-first', async () => {
     const seed = await seedTenant('refund-failed');
     const fitting = await createFitting(seed);
     const paymentId = await verifyCashFittingFee(seed, fitting.id);
@@ -924,6 +924,26 @@ describe('FIT-BE-070..072 fitting finance integration', async () => {
       expect(state.rows[0]).toEqual({ payment_status: 'paid', net_allocated: '500' });
     });
 
+    const applyRows = await withAdmin(async (client) => {
+      const result = await client.query<{ id: string; business_key: string }>(
+        `SELECT id, business_key
+           FROM payment_allocation
+          WHERE tenant_id=$1 AND payment_id=$2::uuid AND direction='apply'
+          ORDER BY created_at ASC, id ASC`,
+        [seed.tenantId, paymentId],
+      );
+      return result.rows;
+    });
+    const originalAllocation = applyRows.find(
+      ({ business_key }) => business_key === `fitting:${fitting.id}:fee-allocation`,
+    );
+    const restoredAllocation = applyRows.find(
+      ({ business_key }) => business_key === `refund:${refundId}:allocation-restore`,
+    );
+    if (!originalAllocation || !restoredAllocation) {
+      throw new Error('Expected original and restored fitting fee allocations.');
+    }
+
     const retried = await requestFittingFeeRefundCommand(
       {
         ...financeContext(seed, fitting.id, ['reservations.manage', 'payments.manage']),
@@ -931,13 +951,118 @@ describe('FIT-BE-070..072 fitting finance integration', async () => {
       },
       {
         payment_id: paymentId as never,
-        amount_minor: '500',
+        amount_minor: '450',
         currency: 'PHP',
         purpose: 'fitting_fee_refund',
-        reason: 'New explicit refund attempt after failure.',
+        reason: 'New explicit partial refund attempt after failure.',
       },
     );
     expect(retried.status).toBe(201);
+    if (!retried.body.success) throw new Error('Expected refund request success.');
+    const retriedRefundId = retried.body.data.refund.id;
+
+    const reversalState = await withAdmin(async (client) => {
+      const reversals = await client.query<{
+        amount_minor: number;
+        reverses_id: string;
+        business_key: string;
+      }>(
+        `SELECT amount_minor, reverses_id, business_key
+           FROM payment_allocation
+          WHERE tenant_id=$1
+            AND payment_id=$2::uuid
+            AND business_key LIKE ('refund:' || $3::text || ':allocation-reverse:%')
+          ORDER BY business_key ASC`,
+        [seed.tenantId, paymentId, retriedRefundId],
+      );
+      const netAllocated = await client.query<{ amount_minor: string }>(
+        `SELECT COALESCE(sum(CASE WHEN direction='apply' THEN amount_minor ELSE -amount_minor END),0)::text AS amount_minor
+           FROM payment_allocation
+          WHERE tenant_id=$1 AND payment_id=$2::uuid`,
+        [seed.tenantId, paymentId],
+      );
+      return { reversals: reversals.rows, netAllocated: netAllocated.rows[0]?.amount_minor };
+    });
+    expect(reversalState).toEqual({
+      reversals: [
+        {
+          amount_minor: 300,
+          reverses_id: originalAllocation.id,
+          business_key: `refund:${retriedRefundId}:allocation-reverse:1`,
+        },
+        {
+          amount_minor: 150,
+          reverses_id: restoredAllocation.id,
+          business_key: `refund:${retriedRefundId}:allocation-reverse:2`,
+        },
+      ],
+      netAllocated: '50',
+    });
+  });
+
+  it('rolls back refund and reversal rows when PostgreSQL rejects the reversal batch', async () => {
+    const seed = await seedTenant('refund-rejected-batch');
+    const fitting = await createFitting(seed);
+    const paymentId = await verifyCashFittingFee(seed, fitting.id);
+
+    try {
+      await withAdmin(async (client) => {
+        await client.query(
+          'DROP TRIGGER IF EXISTS test_reject_fitting_refund_reversal ON payment_allocation',
+        );
+        await client.query('DROP FUNCTION IF EXISTS test_reject_fitting_refund_reversal()');
+        await client.query(`
+          CREATE FUNCTION test_reject_fitting_refund_reversal() RETURNS trigger
+          LANGUAGE plpgsql AS $$
+          BEGIN
+            IF NEW.direction = 'reverse' THEN
+              RAISE EXCEPTION USING
+                ERRCODE = '23514',
+                CONSTRAINT = 'test_refund_reversal_rejected',
+                MESSAGE = 'Test-only rejection of fitting refund reversal.';
+            END IF;
+            RETURN NEW;
+          END;
+          $$
+        `);
+        await client.query(`
+          CREATE TRIGGER test_reject_fitting_refund_reversal
+          BEFORE INSERT ON payment_allocation
+          FOR EACH ROW EXECUTE FUNCTION test_reject_fitting_refund_reversal()
+        `);
+      });
+
+      await expect(
+        requestFittingFeeRefundCommand(
+          financeContext(seed, fitting.id, ['reservations.manage', 'payments.manage']),
+          {
+            payment_id: paymentId as never,
+            amount_minor: '200',
+            currency: 'PHP',
+            purpose: 'fitting_fee_refund',
+            reason: 'Test that a failed reversal batch is rolled back.',
+          },
+        ),
+      ).rejects.toMatchObject({ constraint: 'test_refund_reversal_rejected' });
+
+      const persisted = await withAdmin(async (client) => {
+        const result = await client.query<{ refunds: string; reversals: string }>(
+          `SELECT
+             (SELECT count(*)::text FROM refund WHERE tenant_id=$1 AND payment_id=$2::uuid) AS refunds,
+             (SELECT count(*)::text FROM payment_allocation WHERE tenant_id=$1 AND payment_id=$2::uuid AND direction='reverse') AS reversals`,
+          [seed.tenantId, paymentId],
+        );
+        return result.rows[0];
+      });
+      expect(persisted).toEqual({ refunds: '0', reversals: '0' });
+    } finally {
+      await withAdmin(async (client) => {
+        await client.query(
+          'DROP TRIGGER IF EXISTS test_reject_fitting_refund_reversal ON payment_allocation',
+        );
+        await client.query('DROP FUNCTION IF EXISTS test_reject_fitting_refund_reversal()');
+      });
+    }
   });
 
   it('manual completion records the refund once, fully refunds payment only after completion, and leaves fitting lifecycle unchanged', async () => {

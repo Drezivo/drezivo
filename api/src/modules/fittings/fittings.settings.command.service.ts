@@ -21,16 +21,19 @@ import {
 } from '../../shared/errors.js';
 import { runIdempotentCommand, type CommandResult } from '../../shared/idempotent-command.js';
 import {
-  claimFittingCapacitySlot,
   ensureFittingCapacitySlots,
 } from './fittings.command.repository.js';
 import {
   appendFittingSettingsAudit,
   deactivateFittingCapacitySlotsAbove,
+  insertFittingCapacityClaimsForRebalance,
+  lockFittingCapacitySlotsForRebalance,
   lockFittingSettingsForCommand,
   lockScheduledFittingsForCapacityConfiguration,
   releaseScheduledFittingCapacityClaims,
   updateFittingSettingsScalars,
+  type FittingCapacityClaimAssignment,
+  type FittingCapacitySlotRebalanceRow,
   type ScheduledFittingCapacityRow,
 } from './fittings.settings.command.repository.js';
 import { toFittingSettings } from './fittings.settings.mapper.js';
@@ -119,16 +122,17 @@ export async function updateFittingSettingsCommand(
               capacity: request.capacity,
             });
 
-            for (const appointment of scheduled) {
-              const slotId = await claimFittingCapacitySlot(client, {
-                allocationId: randomUUID(),
+            if (scheduled.length > 0) {
+              const slots = await lockFittingCapacitySlotsForRebalance(client, {
                 tenantId: context.tenantId,
                 branchId: context.branchId,
-                fittingId: appointment.id,
-                startsAt: appointment.starts_at.toISOString(),
-                endsAt: appointment.ends_at.toISOString(),
               });
-              if (!slotId) {
+              const assignments = assignFittingCapacitySlots(scheduled, slots);
+              const inserted = await insertFittingCapacityClaimsForRebalance(client, {
+                tenantId: context.tenantId,
+                assignments,
+              });
+              if (inserted !== assignments.length) {
                 throw new StateConflictError(
                   'Accepted fittings could not be safely rebalanced within the reduced capacity.',
                 );
@@ -213,6 +217,54 @@ function maximumSimultaneousFittings(rows: ScheduledFittingCapacityRow[]): numbe
     maximum = Math.max(maximum, concurrent);
   }
   return maximum;
+}
+
+function assignFittingCapacitySlots(
+  scheduled: ScheduledFittingCapacityRow[],
+  slotRows: FittingCapacitySlotRebalanceRow[],
+): FittingCapacityClaimAssignment[] {
+  const slots = new Map<string, { id: string; number: number; lastEndsAt: number }>();
+
+  for (const row of slotRows) {
+    if (row.blocking_starts_at || row.blocking_ends_at) {
+      throw new StateConflictError(
+        'Fitting capacity claims could not be safely rebalanced from the current state.',
+      );
+    }
+    slots.set(row.slot_id, {
+      id: row.slot_id,
+      number: row.slot_number,
+      lastEndsAt: Number.NEGATIVE_INFINITY,
+    });
+  }
+
+  const orderedSlots = [...slots.values()].sort(
+    (left, right) => left.number - right.number || left.id.localeCompare(right.id),
+  );
+  const assignments: FittingCapacityClaimAssignment[] = [];
+
+  for (const appointment of scheduled) {
+    const startsAt = appointment.starts_at.getTime();
+    const endsAt = appointment.ends_at.getTime();
+    const slot = orderedSlots.find((candidate) => candidate.lastEndsAt <= startsAt);
+
+    if (!slot) {
+      throw new StateConflictError(
+        'Accepted fittings could not be safely rebalanced within the reduced capacity.',
+      );
+    }
+
+    slot.lastEndsAt = endsAt;
+    assignments.push({
+      allocationId: randomUUID(),
+      fittingId: appointment.id,
+      slotId: slot.id,
+      startsAt: appointment.starts_at.toISOString(),
+      endsAt: appointment.ends_at.toISOString(),
+    });
+  }
+
+  return assignments;
 }
 
 function mapFittingSettingsConflict(error: unknown): unknown {

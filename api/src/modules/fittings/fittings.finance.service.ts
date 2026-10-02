@@ -56,7 +56,7 @@ import {
   insertFittingFeePaymentAllocation,
   insertFittingPaymentVerification,
   insertFittingRefundAllocationRestore,
-  insertFittingRefundAllocationReversal,
+  insertFittingRefundAllocationReversals,
   lockCanonicalFittingPayment,
   lockFittingFeeCharge,
   lockFittingForFinance,
@@ -72,6 +72,7 @@ import {
   resolveFittingRefundStatus,
   markFittingPaymentRefunded,
   verifyFittingPaymentCollection,
+  type FittingRefundAllocationReversalInput,
   type LockedFittingReceiptRow,
 } from './fittings.finance.repository.js';
 import { recordFittingCommandFailure } from './fittings.observability.js';
@@ -582,9 +583,30 @@ export async function requestFittingFeeRefundCommand(
         );
       }
 
+      const refundId = randomUUID();
+      let remaining = amount;
+      let sequence = 0;
+      const reversals: FittingRefundAllocationReversalInput[] = [];
+      for (const apply of applyCapacity) {
+        if (remaining === 0n) break;
+        const available = BigInt(apply.amount_minor) - BigInt(apply.reversed_minor);
+        if (available <= 0n) continue;
+        const reversalAmount = available < remaining ? available : remaining;
+        sequence += 1;
+        reversals.push({
+          allocationId: randomUUID(),
+          amountMinor: Number(reversalAmount),
+          reversesId: apply.allocation_id,
+          businessKey: `refund:${refundId}:allocation-reverse:${sequence}`,
+        });
+        remaining -= reversalAmount;
+      }
+      if (remaining !== 0n) {
+        throw new StateConflictError('Fitting payment allocation changed during refund creation.');
+      }
+
       await client.query(`SAVEPOINT ${FINANCE_EFFECTS_SAVEPOINT}`);
       savepointOpen = true;
-      const refundId = randomUUID();
       const refund = await createFittingRefundInstruction(client, {
         refundId,
         tenantId: context.tenantId,
@@ -594,27 +616,13 @@ export async function requestFittingFeeRefundCommand(
         currency: request.currency,
         businessKey: `fitting:${context.fittingId}:fee-refund:${context.idempotencyKey}`,
       });
-
-      let remaining = amount;
-      let sequence = 0;
-      for (const apply of applyCapacity) {
-        if (remaining === 0n) break;
-        const available = BigInt(apply.amount_minor) - BigInt(apply.reversed_minor);
-        if (available <= 0n) continue;
-        const reversalAmount = available < remaining ? available : remaining;
-        sequence += 1;
-        await insertFittingRefundAllocationReversal(client, {
-          allocationId: randomUUID(),
-          tenantId: context.tenantId,
-          paymentId: payment.payment_id,
-          chargeId: charge.charge_id,
-          amountMinor: Number(reversalAmount),
-          reversesId: apply.allocation_id,
-          businessKey: `refund:${refundId}:allocation-reverse:${sequence}`,
-        });
-        remaining -= reversalAmount;
-      }
-      if (remaining !== 0n) {
+      const insertedReversals = await insertFittingRefundAllocationReversals(client, {
+        tenantId: context.tenantId,
+        paymentId: payment.payment_id,
+        chargeId: charge.charge_id,
+        reversals,
+      });
+      if (insertedReversals !== reversals.length) {
         throw new StateConflictError('Fitting payment allocation changed during refund creation.');
       }
 

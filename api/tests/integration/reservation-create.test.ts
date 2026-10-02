@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { Client } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CustomerId, PermissionCode, StaffReservationCreateRequest } from '@drezivo/contracts';
@@ -61,6 +62,16 @@ describe('RSV-021/022 staff reservation creation', async () => {
   beforeEach(() => clerk.getAuth.mockReset());
   afterEach(async () => resetTestDatabase(adminUrl));
   afterAll(async () => closePool());
+
+  async function withAdmin<T>(fn: (client: Client) => Promise<T>): Promise<T> {
+    const client = new Client({ connectionString: adminUrl });
+    await client.connect();
+    try {
+      return await fn(client);
+    } finally {
+      await client.end();
+    }
+  }
 
   it('atomically creates one held reservation, customer, line, allocation, audit, outbox, and idempotency result', async () => {
     const seed = await seedWorkspace('org_rsv021_success', 'user_rsv021_success', ['reservations.manage']);
@@ -531,6 +542,141 @@ describe('RSV-021/022 staff reservation creation', async () => {
       payload: { reservationId: expiredReservationId, reservationVersion: 2 },
     });
     expect((await graphCounts(seed)).reservations).toBe(2);
+  });
+
+  it('reclaims expired holds in batches atomically and can safely retry after a later batch fails', async () => {
+    const seed = await seedWorkspace('org_rsv021_expiry_batch', 'user_rsv021_expiry_batch', [
+      'reservations.manage',
+    ]);
+    const expiredReservationIds = await seedExpiredHoldBatch(seed, 101);
+    const lastReservationId = [...expiredReservationIds].sort().at(-1);
+    if (!lastReservationId) throw new Error('Expected an expired reservation batch.');
+
+    try {
+      await withAdmin(async (client) => {
+        await client.query(
+          'DROP TRIGGER IF EXISTS test_reject_reservation_expiry_outbox ON outbox_event',
+        );
+        await client.query('DROP FUNCTION IF EXISTS test_reject_reservation_expiry_outbox()');
+        await client.query(`
+          CREATE FUNCTION test_reject_reservation_expiry_outbox() RETURNS trigger
+          LANGUAGE plpgsql AS $$
+          BEGIN
+            IF NEW.dedupe_key = 'reservation-expired:${lastReservationId}:2' THEN
+              RAISE EXCEPTION USING
+                ERRCODE = '23514',
+                CONSTRAINT = 'test_reservation_expiry_rejected',
+                MESSAGE = 'Test-only rejection of the second reservation expiry batch.';
+            END IF;
+            RETURN NEW;
+          END;
+          $$
+        `);
+        await client.query(`
+          CREATE TRIGGER test_reject_reservation_expiry_outbox
+          BEFORE INSERT ON outbox_event
+          FOR EACH ROW EXECUTE FUNCTION test_reject_reservation_expiry_outbox()
+        `);
+      });
+
+      const context = commandContext(seed, 'req-expiry-batch', 'idem-expiry-batch');
+      await expect(createStaffReservation(context, createRequest(seed))).rejects.toMatchObject({
+        constraint: 'test_reservation_expiry_rejected',
+      });
+
+      const rolledBack = await withTenantTransaction(
+        seed.tenantId,
+        seed.principalId,
+        async (client) => {
+          const result = await client.query<{
+            held: number;
+            blocking: number;
+            audit_events: number;
+            outbox_events: number;
+          }>(
+            `SELECT
+               (SELECT count(*)::int FROM reservation
+                 WHERE tenant_id = $1 AND id = ANY($2::uuid[]) AND status = 'held') AS held,
+               (SELECT count(*)::int FROM asset_allocation
+                 WHERE tenant_id = $1 AND is_blocking = true
+                   AND reservation_line_id IN (
+                     SELECT id FROM reservation_line WHERE tenant_id = $1 AND reservation_id = ANY($2::uuid[])
+                   )) AS blocking,
+               (SELECT count(*)::int FROM audit_event
+                 WHERE tenant_id = $1 AND entity_id = ANY($2::uuid[])
+                   AND action = 'reservation.expired') AS audit_events,
+               (SELECT count(*)::int FROM outbox_event
+                 WHERE tenant_id = $1 AND dedupe_key LIKE 'reservation-expired:%') AS outbox_events`,
+            [seed.tenantId, expiredReservationIds],
+          );
+          return requireRow(result.rows, 'rolled back expiry state');
+        },
+      );
+      expect(rolledBack).toEqual({ held: 101, blocking: 101, audit_events: 0, outbox_events: 0 });
+      expect((await graphCounts(seed)).reservations).toBe(101);
+
+      await withAdmin(async (client) => {
+        await client.query('DROP TRIGGER test_reject_reservation_expiry_outbox ON outbox_event');
+        await client.query('DROP FUNCTION test_reject_reservation_expiry_outbox()');
+      });
+
+      const retry = await createStaffReservation(context, createRequest(seed));
+      expect(retry.status).toBe(201);
+
+      const reclaimed = await withTenantTransaction(
+        seed.tenantId,
+        seed.principalId,
+        async (client) => {
+          const result = await client.query<{
+            expired: number;
+            released: number;
+            audit_events: number;
+            outbox_events: number;
+            valid_audit_events: number;
+            valid_outbox_events: number;
+          }>(
+            `SELECT
+               (SELECT count(*)::int FROM reservation
+                 WHERE tenant_id = $1 AND id = ANY($2::uuid[]) AND status = 'expired') AS expired,
+               (SELECT count(*)::int FROM asset_allocation
+                 WHERE tenant_id = $1 AND is_blocking = false
+                   AND reservation_line_id IN (
+                     SELECT id FROM reservation_line WHERE tenant_id = $1 AND reservation_id = ANY($2::uuid[])
+                   )) AS released,
+               (SELECT count(*)::int FROM audit_event
+                 WHERE tenant_id = $1 AND entity_id = ANY($2::uuid[])
+                   AND action = 'reservation.expired') AS audit_events,
+               (SELECT count(*)::int FROM audit_event
+                 WHERE tenant_id = $1 AND entity_id = ANY($2::uuid[])
+                   AND action = 'reservation.expired' AND request_id = 'req-expiry-batch'
+                   AND redacted_summary = '{"reason":"hold_deadline_elapsed","version":2}'::jsonb) AS valid_audit_events,
+               (SELECT count(*)::int FROM outbox_event
+                 WHERE tenant_id = $1 AND dedupe_key LIKE 'reservation-expired:%') AS outbox_events,
+               (SELECT count(*)::int FROM outbox_event
+                 WHERE tenant_id = $1 AND dedupe_key = 'reservation-expired:' || (payload->>'reservationId') || ':2'
+                   AND event_type = 'reservation.hold_expired' AND payload->>'reservationVersion' = '2') AS valid_outbox_events`,
+            [seed.tenantId, expiredReservationIds],
+          );
+          return requireRow(result.rows, 'reclaimed expiry state');
+        },
+      );
+      expect(reclaimed).toEqual({
+        expired: 101,
+        released: 101,
+        audit_events: 101,
+        outbox_events: 101,
+        valid_audit_events: 101,
+        valid_outbox_events: 101,
+      });
+      expect((await graphCounts(seed)).reservations).toBe(102);
+    } finally {
+      await withAdmin(async (client) => {
+        await client.query(
+          'DROP TRIGGER IF EXISTS test_reject_reservation_expiry_outbox ON outbox_event',
+        );
+        await client.query('DROP FUNCTION IF EXISTS test_reject_reservation_expiry_outbox()');
+      });
+    }
   });
 
   it('exposes bounded staff intake options without payment destination secrets', async () => {
@@ -1237,6 +1383,91 @@ describe('RSV-021/022 staff reservation creation', async () => {
         [seed.tenantId, seed.branchId, seed.assetId, lineId],
       );
       return reservationId;
+    });
+  }
+
+  async function seedExpiredHoldBatch(seed: CreateSeed, count: number): Promise<string[]> {
+    return withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const extraAssets = await client.query<{ id: string }>(
+        `INSERT INTO physical_asset
+           (tenant_id, branch_id, variant_id, asset_code, lifecycle_status, readiness, custody_kind)
+         SELECT $1, $2, $3, 'RSV021-ASSET-BATCH-' || number::text, 'active', 'ready', 'at_branch'
+           FROM generate_series(2, $4) AS number
+         RETURNING id`,
+        [seed.tenantId, seed.branchId, seed.variantId, count],
+      );
+      const assetIds = [seed.assetId, ...extraAssets.rows.map((row) => row.id)];
+      if (assetIds.length !== count) {
+        throw new Error(`Expected ${count} candidate assets, received ${assetIds.length}.`);
+      }
+
+      const referenceCodes = assetIds.map(
+        (_, index) => `RSV-EXPIRED-BATCH-${String(index + 1).padStart(3, '0')}`,
+      );
+      const reservations = await client.query<{ id: string; reference_code: string }>(
+        `INSERT INTO reservation
+           (tenant_id, branch_id, storefront_id, policy_snapshot_id, payment_method_id,
+            reference_code, status, pickup_at, due_at, timezone_snapshot, delivery_snapshot,
+            price_snapshot, currency, rental_total_minor, security_required_minor, due_now_minor,
+            hold_acquired_at, hold_expires_at)
+         SELECT $1, $2, $3, $4, $5, requested.reference_code, 'held',
+                '2026-10-10T02:00:00Z', '2026-10-12T04:00:00Z', 'Asia/Manila',
+                '{"fulfillment_method":"pickup"}'::jsonb, '{}'::jsonb, 'PHP', 150000, 50000, 200000,
+                statement_timestamp() - interval '20 minutes', statement_timestamp() - interval '5 minutes'
+           FROM unnest($6::text[]) AS requested(reference_code)
+         RETURNING id, reference_code`,
+        [
+          seed.tenantId,
+          seed.branchId,
+          seed.storefrontId,
+          seed.policySnapshotId,
+          seed.paymentMethodId,
+          referenceCodes,
+        ],
+      );
+      const reservationIdsByReference = new Map(
+        reservations.rows.map((row) => [row.reference_code, row.id]),
+      );
+      const reservationIds = referenceCodes.map((referenceCode) => {
+        const id = reservationIdsByReference.get(referenceCode);
+        if (!id) throw new Error(`Expected reservation ${referenceCode} to be inserted.`);
+        return id;
+      });
+
+      const lines = await client.query<{ id: string; reservation_id: string }>(
+        `INSERT INTO reservation_line
+           (tenant_id, reservation_id, variant_id, line_number, name_snapshot,
+            measurements_snapshot, pricing_snapshot, rental_minor, deposit_minor, currency)
+         SELECT $1, requested.reservation_id, $2, 1, 'Expired Gown', '{}'::jsonb, '{}'::jsonb,
+                150000, 50000, 'PHP'
+           FROM unnest($3::uuid[]) AS requested(reservation_id)
+         RETURNING id, reservation_id`,
+        [seed.tenantId, seed.variantId, reservationIds],
+      );
+      const assetsByReservation = new Map(reservationIds.map((id, index) => [id, assetIds[index]]));
+      const lineRows = lines.rows.map((line) => ({
+        lineId: line.id,
+        assetId: assetsByReservation.get(line.reservation_id),
+      }));
+      if (lineRows.some((line) => !line.assetId)) {
+        throw new Error('Expected every expired reservation line to map to its candidate asset.');
+      }
+
+      await client.query(
+        `INSERT INTO asset_allocation
+           (tenant_id, branch_id, asset_id, reservation_line_id, kind, period, is_blocking)
+         SELECT $1, $2, requested.asset_id, requested.line_id, 'reservation_hold',
+                tstzrange('2026-10-10T01:00:00Z', '2026-10-13T04:00:00Z', '[)'), true
+           FROM unnest($3::uuid[], $4::uuid[]) AS requested(asset_id, line_id)`,
+        [
+          seed.tenantId,
+          seed.branchId,
+          lineRows.map((line) => line.assetId),
+          lineRows.map((line) => line.lineId),
+        ],
+      );
+
+      return reservationIds;
     });
   }
 

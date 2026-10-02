@@ -62,6 +62,7 @@ import { toDocument } from '../storefront-cms/storefront-cms.service.js';
 import { storefrontMediaSigner } from '../storefront/storefront-media.js';
 import {
   isVisibleVariant,
+  readVisibleVariantIds,
   readStoreCore,
   readStorefrontPaymentMethods,
   resolvePublishedStore,
@@ -342,10 +343,9 @@ export class GuestBookingService {
               'That time is outside Business Hours or falls on a closed date. Choose another time.',
             );
           }
-          for (const variantId of request.variant_ids) {
-            if (!(await isVisibleVariant(client, store.tenantId, variantId))) {
-              throw new ValidationError('One of the pieces you chose is no longer available.');
-            }
+          const visibleVariantIds = await readVisibleVariantIds(client, store.tenantId, request.variant_ids);
+          if (visibleVariantIds.length !== request.variant_ids.length) {
+            throw new ValidationError('One of the pieces you chose is no longer available.');
           }
 
           try {
