@@ -50,7 +50,9 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
         </div>
 
         <div data-reveal="text" className="lg:sticky lg:top-24 lg:self-start">
-          {item.category ? <p className="text-sm text-sf-muted">{item.category}</p> : null}
+          {item.category || item.subcategory ? (
+            <p className="text-sm text-sf-muted">{[item.category, item.subcategory].filter(Boolean).join(' · ')}</p>
+          ) : null}
           <h1 className="mt-1 font-sf-display text-4xl font-light leading-tight sm:text-5xl">{item.name}</h1>
           {shown ? (
             <p className="mt-4 text-xl">

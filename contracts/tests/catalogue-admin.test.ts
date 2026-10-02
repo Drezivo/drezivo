@@ -166,6 +166,29 @@ describe('catalogue admin contract', () => {
     ).toBe(false);
   });
 
+  it('normalizes optional style subcategories and enforces the custom-value limit', () => {
+    const base = {
+      name: 'Subcategory Dress',
+      category_id: categoryId,
+      sizes: [{ size_label: null, measurement_mode: 'none' as const, measurement_unit: 'cm' as const }],
+      pricing: {
+        mode: 'daily' as const,
+        rental_price_minor: '30000',
+        security_deposit_minor: '0',
+        extra_day_price_minor: '0',
+        prep_minutes: 0,
+        turnaround_minutes: 0,
+      },
+    };
+
+    expect(createClothingRequest.parse(base).subcategory).toBeUndefined();
+    expect(createClothingRequest.parse({ ...base, subcategory: 'LONG' }).subcategory).toBe('LONG');
+    expect(createClothingRequest.parse({ ...base, subcategory: '  Tea Length  ' }).subcategory).toBe('Tea Length');
+    expect(createClothingRequest.parse({ ...base, subcategory: null }).subcategory).toBeNull();
+    expect(createClothingRequest.parse({ ...base, subcategory: '   ' }).subcategory).toBeNull();
+    expect(createClothingRequest.safeParse({ ...base, subcategory: 'x'.repeat(121) }).success).toBe(false);
+  });
+
   it('allows exactly one canonical Free size variant and never mixes sizing modes', () => {
     const base = {
       name: 'One Size Wrap',

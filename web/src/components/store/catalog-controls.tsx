@@ -13,12 +13,13 @@ const SORTS = [
 ];
 
 /** Filters live in the URL so results are shareable, back-button friendly, and rendered on the server. */
-export function CatalogControls({ categories, sizes }: { categories: PublicCategory[]; sizes: string[] }) {
+export function CatalogControls({ categories, sizes, subcategories }: { categories: PublicCategory[]; sizes: string[]; subcategories: string[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
   const [search, setSearch] = useState(params.get('search') ?? '');
+  const [subcategoryFilterOpen, setSubcategoryFilterOpen] = useState(false);
 
   useEffect(() => setSearch(params.get('search') ?? ''), [params]);
 
@@ -98,6 +99,42 @@ export function CatalogControls({ categories, sizes }: { categories: PublicCateg
             ))}
           </select>
         </label>
+      </div>
+      <div className="mt-4">
+        <button
+          type="button"
+          aria-expanded={subcategoryFilterOpen}
+          aria-controls="catalog-subcategory-filter"
+          onClick={() => setSubcategoryFilterOpen((open) => !open)}
+          className="sf-button min-h-10 px-4 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sf-accent"
+        >
+          {params.get('subcategory') ? `Filter · ${params.get('subcategory')}` : 'Filter'}
+        </button>
+        {subcategoryFilterOpen ? (
+          <div id="catalog-subcategory-filter" className="mt-3 max-w-sm border border-sf-line p-4">
+            <label htmlFor="catalog-subcategory" className="flex flex-col gap-2 text-sm">
+              <span className="text-sf-muted">Subcategory</span>
+              <select
+                id="catalog-subcategory"
+                className="sf-input"
+                value={params.get('subcategory') ?? ''}
+                onChange={(event) => apply({ subcategory: event.target.value || null })}
+              >
+                <option value="">All subcategories</option>
+                {subcategories.map((subcategory) => (
+                  <option key={subcategory.toLocaleLowerCase()} value={subcategory}>
+                    {subcategory}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {params.get('subcategory') ? (
+              <button type="button" className="mt-3 text-sm underline underline-offset-4" onClick={() => apply({ subcategory: null })}>
+                Clear subcategory filter
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );

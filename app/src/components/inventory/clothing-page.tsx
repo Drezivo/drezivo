@@ -16,13 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  useCallback,
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useDeferredValue, useEffect, useState } from "react";
 
 import type {
   CatalogueCategory,
@@ -512,6 +506,7 @@ function ClothingRow({
           <div className="min-w-0">
             <p className="truncate font-semibold text-dashboard-navy">{item.name}</p>
             <p className="mt-1 text-xs text-dashboard-muted">{item.code}</p>
+            {item.subcategory ? <p className="mt-1 text-xs font-medium text-dashboard-accent">{item.subcategory}</p> : null}
           </div>
           {item.product_status === "archived" ? (
             <span className="rounded-full bg-dashboard-neutral-soft px-2 py-1 text-[0.65rem] font-medium text-dashboard-neutral-text">
@@ -527,7 +522,9 @@ function ClothingRow({
         <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs md:hidden">
           <div className="min-w-0">
             <dt className="text-dashboard-muted">Category</dt>
-            <dd className="mt-0.5 truncate font-medium text-dashboard-navy">{item.category?.name ?? "Uncategorized"}</dd>
+            <dd className="mt-0.5 truncate font-medium text-dashboard-navy">
+              {[item.category?.name ?? "Uncategorized", item.subcategory].filter(Boolean).join(" · ")}
+            </dd>
           </div>
           <div className="min-w-0">
             <dt className="text-dashboard-muted">Sizes</dt>

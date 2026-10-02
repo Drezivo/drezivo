@@ -155,6 +155,7 @@ export interface CatalogueCardRow {
   product_id: string;
   name: string;
   category: string | null;
+  subcategory: string | null;
   image_file_id: string | null;
   price_from_minor: string;
   pricing_mode: 'fixed_duration' | 'daily';
@@ -166,6 +167,7 @@ export interface CatalogueCardRow {
 export interface CatalogueFilter {
   search?: string;
   categoryId?: string;
+  subcategory?: string;
   size?: string;
   productIds?: string[];
   sort: 'featured' | 'newest' | 'price_asc' | 'price_desc';
@@ -200,6 +202,10 @@ export async function readCatalogueCards(client: PoolClient, tenantId: string, f
     params.push(filter.categoryId);
     where.push(`p.category_id = $${params.length}`);
   }
+  if (filter.subcategory) {
+    params.push(filter.subcategory);
+    where.push(`lower(btrim(p.subcategory)) = lower($${params.length})`);
+  }
   if (filter.size) {
     params.push(filter.size);
     where.push(`EXISTS (SELECT 1 FROM product_variant sv WHERE sv.tenant_id = p.tenant_id AND sv.product_id = p.id
@@ -212,7 +218,7 @@ export async function readCatalogueCards(client: PoolClient, tenantId: string, f
   params.push(filter.limit, filter.offset);
 
   const result = await client.query<CatalogueCardRow>(
-    `SELECT p.id AS product_id, p.name, c.name AS category,
+    `SELECT p.id AS product_id, p.name, c.name AS category, p.subcategory,
             price.rental_price_minor::text AS price_from_minor, price.pricing_mode, price.included_duration_minutes,
             COALESCE(sizes.labels, ARRAY[]::text[]) AS sizes,
             cover.file_id AS image_file_id,
@@ -281,11 +287,28 @@ export async function readPublicSizes(client: PoolClient, tenantId: string): Pro
   return result.rows.map((row) => row.size_label);
 }
 
+/** Subcategory filter options use the same visibility rules as published product cards. */
+export async function readPublicSubcategories(client: PoolClient, tenantId: string): Promise<string[]> {
+  const result = await client.query<{ subcategory: string }>(
+    `SELECT DISTINCT ON (lower(btrim(p.subcategory))) btrim(p.subcategory) AS subcategory
+       FROM product p
+       LEFT JOIN category c ON c.tenant_id = p.tenant_id AND c.id = p.category_id
+      WHERE ${VISIBLE_PRODUCT}
+        AND p.subcategory IS NOT NULL
+        AND length(btrim(p.subcategory)) > 0
+      ORDER BY lower(btrim(p.subcategory)), btrim(p.subcategory)
+      LIMIT 1000`,
+    [tenantId],
+  );
+  return result.rows.map((row) => row.subcategory);
+}
+
 export interface ItemRow {
   product_id: string;
   name: string;
   description: string | null;
   category: string | null;
+  subcategory: string | null;
   image_file_ids: string[];
 }
 
@@ -310,7 +333,7 @@ export async function readPublicItem(
   productId: string,
 ): Promise<{ item: ItemRow; variants: ItemVariantRow[] } | null> {
   const item = await client.query<ItemRow>(
-    `SELECT p.id AS product_id, p.name, p.description, c.name AS category,
+    `SELECT p.id AS product_id, p.name, p.description, c.name AS category, p.subcategory,
             COALESCE(ARRAY(
               SELECT pi.file_id
                 FROM product_image pi

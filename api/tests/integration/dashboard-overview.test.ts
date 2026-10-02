@@ -179,8 +179,8 @@ describe('Dashboard overview API', async () => {
       },
     );
 
-    expect(queryPlan).not.toContain('Seq Scan on reservation');
-    expect(queryPlan).not.toContain('Seq Scan on customer');
+    expect(queryPlan).not.toMatch(/Seq Scan on reservation(?:\s|$)/);
+    expect(queryPlan).not.toMatch(/Seq Scan on customer(?:\s|$)/);
     expect(queryPlan).toContain('reservation_tenant_branch_completed_at_idx');
     expect(queryPlan).toContain('customer_tenant_active_created_idx');
   });

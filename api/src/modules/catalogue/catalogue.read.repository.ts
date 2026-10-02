@@ -13,6 +13,7 @@ export interface ClothingListReadRow {
   product_id: string;
   code: string;
   name: string;
+  subcategory: string | null;
   category_id: string | null;
   category_name: string | null;
   product_status: 'draft' | 'active' | 'archived';
@@ -63,6 +64,7 @@ export interface ClothingDetailProductRow {
   code: string;
   name: string;
   description: string | null;
+  subcategory: string | null;
   product_status: 'draft' | 'active' | 'archived';
   category_id: string | null;
   category_name: string | null;
@@ -233,6 +235,7 @@ export async function listClothingReadModel(
          p.tenant_id,
          p.code,
          p.name,
+         p.subcategory,
          p.sizing_mode,
          c.id AS category_id,
          c.name AS category_name,
@@ -255,6 +258,7 @@ export async function listClothingReadModel(
        p.name,
        p.category_id,
        p.category_name,
+       p.subcategory,
        p.status AS product_status,
        p.sizing_mode,
        COALESCE(variant_summary.has_free_size, false) AS has_free_size,
@@ -594,6 +598,7 @@ export async function readClothingDetailModel(
        p.code,
        p.name,
        p.description,
+       p.subcategory,
        p.sizing_mode,
        p.status AS product_status,
        c.id AS category_id,
