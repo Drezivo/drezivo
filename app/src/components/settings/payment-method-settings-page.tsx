@@ -98,8 +98,8 @@ export function PaymentMethodSettingsPage() {
     <div className="w-full">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="font-display text-2xl font-semibold tracking-tight text-dashboard-navy">Payment methods</h2>
-          <p className="mt-1 max-w-2xl text-sm text-dashboard-muted">
+          {/* The page title comes from the Settings layout (SettingsHeading). */}
+          <p className="max-w-2xl text-sm text-dashboard-muted">
             How renters pay you. Add up to {MAX_ONLINE_PAYMENT_METHODS} online methods (e-wallets or banks). For each one, type the details or upload the
             instructions you already use, as a PDF or an image with your QR code.
           </p>
@@ -117,7 +117,7 @@ export function PaymentMethodSettingsPage() {
       </div>
 
       {error ? (
-        <div role="alert" className="mb-4 rounded-lg border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-500">
+        <div role="alert" className="mb-4 rounded-lg border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-dashboard-danger">
           {error}
         </div>
       ) : null}
@@ -407,7 +407,7 @@ function PaymentMethodEditor({ method, onSaved }: { method: PaymentMethodSetting
             </div>
           </div>
           {!staffOnly ? (
-            <Badge variant="outline" className={method.storefront_ready ? "text-emerald-600" : "text-dashboard-muted"}>
+            <Badge variant="outline" className={method.storefront_ready ? "text-dashboard-green-text" : "text-dashboard-muted"}>
               {method.storefront_ready ? "Storefront ready" : "Storefront not ready"}
             </Badge>
           ) : null}
@@ -506,7 +506,7 @@ function PaymentMethodEditor({ method, onSaved }: { method: PaymentMethodSetting
             )}
 
             {storefrontEnabled && !method.storefront_ready ? (
-              <p className="mt-3 text-xs text-amber-600">This method stays hidden on the storefront until its details or file are saved.</p>
+              <p className="mt-3 text-xs text-dashboard-gold-text">This method stays hidden on the storefront until its details or file are saved.</p>
             ) : null}
           </div>
         ) : null}
@@ -580,7 +580,7 @@ function RemovedMethodRow({ method, disabled, onRestored }: { method: PaymentMet
       <span className="text-sm text-dashboard-navy">{method.name}</span>
       <span className="flex items-center gap-3">
         {message ? (
-          <span role="alert" className="text-xs text-red-500">
+          <span role="alert" className="text-xs text-dashboard-danger">
             {message}
           </span>
         ) : null}
@@ -623,7 +623,7 @@ function FilePicker({
           {label}
         </label>
         {configured && !file ? (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-dashboard-green-text">
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> {configuredLabel}
           </span>
         ) : null}

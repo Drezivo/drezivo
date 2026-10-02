@@ -50,7 +50,7 @@ export function SubscribeDialog({ open, onOpenChange, onSubmitted }: { open: boo
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
-        <Dialog.Content className="dashboard-theme-dark fixed inset-x-0 bottom-0 z-50 max-h-[92svh] overflow-y-auto rounded-t-2xl border border-dashboard-border bg-dashboard-surface p-5 text-dashboard-navy shadow-2xl outline-none sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[calc(100%-2rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:p-7">
+        <Dialog.Content className="fixed inset-x-0 bottom-0 z-50 max-h-[92svh] overflow-y-auto rounded-t-2xl border border-dashboard-border bg-dashboard-surface p-5 text-dashboard-navy shadow-2xl outline-none sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[calc(100%-2rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:p-7">
           <div className="flex items-start justify-between gap-4">
             <div>
               <Dialog.Title className="font-display text-2xl">Subscribe to Drezivo</Dialog.Title>
@@ -345,7 +345,7 @@ function History({ payments }: { payments: SubscriptionPaymentView[] }) {
             <span className="min-w-0">
               {shortDate(payment.submitted_at)} · {payment.payment_method_label} · Ref {payment.reference}
             </span>
-            <span className={`inline-flex items-center gap-1 text-xs font-medium ${payment.status === "verified" ? "text-emerald-600" : payment.status === "failed" ? "text-red-500" : "text-amber-500"}`}>
+            <span className={`inline-flex items-center gap-1 text-xs font-medium ${payment.status === "verified" ? "text-dashboard-green-text" : payment.status === "failed" ? "text-red-500" : "text-amber-500"}`}>
               {payment.status === "verified" ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
               {label[payment.status]} · {peso(payment.amount_minor)}
             </span>

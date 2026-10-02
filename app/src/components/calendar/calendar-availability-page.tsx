@@ -459,7 +459,7 @@ function AvailabilityHeading() {
         <p className="text-xs font-medium uppercase tracking-[0.12em] text-dashboard-muted">Calendar</p>
         <h1
           id="availability-heading"
-          className="mt-1 font-display text-3xl font-semibold tracking-tight text-dashboard-navy sm:text-4xl"
+          className="mt-1 dashboard-page-title"
         >
           Rental Calendar
         </h1>

@@ -279,7 +279,7 @@ export function ReservationsPage() {
   };
 
   return (
-    <div className="min-h-[calc(100svh-4.5rem)] bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-[calc(100svh-4.5rem)] bg-dashboard-canvas px-ws-gutter py-6">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-5">
         <PageHeading
           canCreate={permissionCodes.includes("reservations.manage")}
@@ -420,7 +420,7 @@ function PageHeading({
       <div>
         <h1
           id="reservations-heading"
-          className="text-2xl font-bold tracking-tight text-dashboard-navy"
+          className="dashboard-page-title"
         >
           Reservations
         </h1>
@@ -748,7 +748,7 @@ function ReservationPagination({
           onClick={onPrevious}
           className={cn(
             "h-8 w-8 bg-transparent hover:bg-transparent",
-            pageIndex === 0 ? "cursor-not-allowed text-dashboard-muted opacity-35" : "text-white"
+            pageIndex === 0 ? "cursor-not-allowed text-dashboard-muted opacity-35" : "text-dashboard-navy hover:text-dashboard-accent"
           )}
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
@@ -765,7 +765,7 @@ function ReservationPagination({
           onClick={onNext}
           className={cn(
             "h-8 w-8 bg-transparent hover:bg-transparent",
-            !hasMore ? "cursor-not-allowed text-dashboard-muted opacity-35" : "text-white"
+            !hasMore ? "cursor-not-allowed text-dashboard-muted opacity-35" : "text-dashboard-navy hover:text-dashboard-accent"
           )}
         >
           <ChevronRight className="h-4 w-4" aria-hidden="true" />

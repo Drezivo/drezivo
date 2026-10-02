@@ -13,8 +13,6 @@ import {
   AlertCircle,
   CalendarCheck2,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   LockKeyhole,
   MoreHorizontal,
   RefreshCw,
@@ -36,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { ListPagination } from "@/components/ui/list-pagination";
 import {
   Table,
   TableBody,
@@ -444,7 +443,7 @@ export function CustomersPage() {
     <div className="min-h-[calc(100svh-4.5rem)] overflow-x-hidden bg-dashboard-canvas px-3 py-5 sm:px-6 sm:py-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-5">
         <section aria-labelledby="customers-heading">
-          <h1 id="customers-heading" className="text-2xl font-bold tracking-tight text-dashboard-navy">
+          <h1 id="customers-heading" className="dashboard-page-title">
             Customers
           </h1>
           <p className="mt-1 text-sm text-dashboard-muted">
@@ -505,7 +504,9 @@ export function CustomersPage() {
                   />
                 )}
                 {!isLoading && rows.length > 0 ? (
-                  <CustomerPagination
+                  <ListPagination
+                    label="Customers pagination"
+                    noun={{ one: "customer", other: "customers" }}
                     pageIndex={pageIndex}
                     shown={rows.length}
                     hasMore={pageMeta.has_more}
@@ -587,7 +588,7 @@ function CustomerSummarySection({
 }) {
   return (
     <>
-      <section aria-label="Customer overview" className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <section aria-label="Customer overview" className="grid grid-cols-2 gap-2 xl:grid-cols-4">
         {SUMMARY_ITEMS.map((item) => {
           const Icon = item.icon;
           return (
@@ -609,7 +610,7 @@ function CustomerSummarySection({
                       aria-label={`Loading ${item.label}`}
                     />
                   ) : (
-                    <span className="block text-xl font-semibold leading-none text-dashboard-navy">
+                    <span className="block text-ws-kpi font-semibold tabular-nums tracking-tight leading-none text-dashboard-navy">
                       {summary?.[item.key] ?? "—"}
                     </span>
                   )}
@@ -796,66 +797,119 @@ function CustomersTable({
   }
 
   return (
-    <Table aria-label="Customers">
-      <TableHeader>
-        <TableRow className="bg-dashboard-surface hover:bg-dashboard-surface">
-          <TableHead className="pl-4">Customer</TableHead>
-          <TableHead>Contact</TableHead>
-          <TableHead className="text-center">Reservations</TableHead>
-          <TableHead className="text-center">Fittings</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="pr-4 text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
+    <>
+      {/* Phones: one card per customer, so every field stays reachable without sideways scrolling. */}
+      <ul aria-label="Customers" className="divide-y divide-dashboard-border sm:hidden">
         {customers.map((customer) => (
-          <TableRow key={customer.id}>
-            <TableCell className="pl-4 align-top">
-              <div className="min-w-0">
-                <p className="max-w-52 truncate font-semibold text-dashboard-navy">
-                  {customer.full_name}
-                </p>
-                <p className="mt-1 text-xs text-dashboard-muted">
-                  Customer since {formatCustomerSince(customer.created_at)}
-                </p>
-              </div>
-            </TableCell>
-            <TableCell className="align-top">
-              <div className="space-y-1">
-                <p className="max-w-52 truncate font-medium text-dashboard-navy">
-                  {customer.phone ?? "No phone"}
-                </p>
-                <p className="max-w-52 truncate text-xs text-dashboard-muted">
-                  {customer.email ?? "No email"}
-                </p>
-              </div>
-            </TableCell>
-            <TableCell className="text-center align-top font-medium text-dashboard-navy">
-              {customer.reservation_count}
-            </TableCell>
-            <TableCell className="text-center align-top font-medium text-dashboard-navy">
-              {customer.fitting_count}
-            </TableCell>
-            <TableCell className="align-top">
-              <Badge
-                variant="outline"
-                className={cn(
-                  "font-medium",
-                  customer.status === "active"
-                    ? "dashboard-tone-mint border-transparent"
-                    : "border-dashboard-border bg-dashboard-canvas text-dashboard-muted"
-                )}
-              >
-                {customer.status === "active" ? "Active" : "Archived"}
-              </Badge>
-            </TableCell>
-            <TableCell className="pr-4 text-right align-top">
-              <CustomerActions customer={customer} onArchive={onArchive} onEdit={onEdit} onView={onView} />
-            </TableCell>
-          </TableRow>
+          <li key={customer.id} className="flex items-start gap-3 px-4 py-4">
+            <button
+              type="button"
+              onClick={() => onView(customer)}
+              className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/40"
+            >
+              <span className="flex items-center gap-2">
+                <span className="truncate font-medium text-dashboard-navy">{customer.full_name}</span>
+                <CustomerStatusBadge status={customer.status} />
+              </span>
+              <span className="mt-1 block truncate text-sm text-dashboard-muted">
+                {[customer.phone, customer.email].filter(Boolean).join(" · ") || "No contact details"}
+              </span>
+              <span className="mt-2 flex gap-4 text-xs text-dashboard-muted">
+                <span>
+                  <span className="font-medium text-dashboard-navy">{customer.reservation_count}</span>{" "}
+                  {customer.reservation_count === 1 ? "reservation" : "reservations"}
+                </span>
+                <span>
+                  <span className="font-medium text-dashboard-navy">{customer.fitting_count}</span>{" "}
+                  {customer.fitting_count === 1 ? "fitting" : "fittings"}
+                </span>
+              </span>
+            </button>
+            <CustomerActions customer={customer} onArchive={onArchive} onEdit={onEdit} onView={onView} />
+          </li>
         ))}
-      </TableBody>
-    </Table>
+      </ul>
+
+      <Table aria-label="Customers" className="hidden sm:table">
+        <TableHeader>
+          <TableRow className="bg-dashboard-surface hover:bg-dashboard-surface">
+            <TableHead className="pl-4">Customer</TableHead>
+            <TableHead>Contact</TableHead>
+            <TableHead className="text-center">Reservations</TableHead>
+            <TableHead className="text-center">Fittings</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="pr-4 text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {customers.map((customer) => (
+            // The whole row opens details for pointer users; the name button is the keyboard path.
+            <TableRow
+              key={customer.id}
+              onClick={() => onView(customer)}
+              className="cursor-pointer hover:bg-dashboard-active/60"
+            >
+              <TableCell className="pl-4 align-top">
+                <div className="min-w-0">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onView(customer);
+                    }}
+                    className="max-w-52 truncate rounded-sm text-left font-medium text-dashboard-navy hover:text-dashboard-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/40"
+                  >
+                    {customer.full_name}
+                  </button>
+                  <p className="mt-1 text-xs text-dashboard-muted">
+                    Customer since {formatCustomerSince(customer.created_at)}
+                  </p>
+                </div>
+              </TableCell>
+              <TableCell className="align-top">
+                <div className="space-y-1">
+                  <p className="max-w-52 truncate font-medium text-dashboard-navy">
+                    {customer.phone ?? "No phone"}
+                  </p>
+                  <p className="max-w-52 truncate text-xs text-dashboard-muted">
+                    {customer.email ?? "No email"}
+                  </p>
+                </div>
+              </TableCell>
+              <TableCell className="text-center align-top font-medium text-dashboard-navy">
+                {customer.reservation_count}
+              </TableCell>
+              <TableCell className="text-center align-top font-medium text-dashboard-navy">
+                {customer.fitting_count}
+              </TableCell>
+              <TableCell className="align-top">
+                <CustomerStatusBadge status={customer.status} />
+              </TableCell>
+              {/* Clicks inside the actions menu must not also open the details sheet. */}
+              <TableCell className="pr-4 text-right align-top" onClick={(event) => event.stopPropagation()}>
+                <CustomerActions customer={customer} onArchive={onArchive} onEdit={onEdit} onView={onView} />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </>
+  );
+}
+
+function CustomerStatusBadge({ status }: { status: CustomerListItem["status"] }) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "shrink-0 font-medium",
+        status === "active"
+          ? "dashboard-tone-mint border-transparent"
+          : "border-dashboard-border bg-dashboard-canvas text-dashboard-muted"
+      )}
+    >
+      {status === "active" ? "Active" : "Archived"}
+    </Badge>
   );
 }
 
@@ -896,55 +950,6 @@ function CustomerActions({
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-function CustomerPagination({
-  hasMore,
-  onNext,
-  onPrevious,
-  pageIndex,
-  shown,
-}: {
-  hasMore: boolean;
-  onNext: () => void;
-  onPrevious: () => void;
-  pageIndex: number;
-  shown: number;
-}) {
-  return (
-    <div className="flex flex-col gap-3 border-t border-dashboard-border px-4 py-3 text-xs text-dashboard-muted sm:flex-row sm:items-center sm:justify-between">
-      <p>
-        Page {pageIndex + 1} · {shown} {shown === 1 ? "customer" : "customers"} loaded
-      </p>
-      <div className="flex items-center gap-1">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Previous customers page"
-          disabled={pageIndex === 0}
-          onClick={onPrevious}
-          className="h-8 w-8"
-        >
-          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-        </Button>
-        <span className="min-w-8 px-2 text-center font-medium text-dashboard-navy">
-          {pageIndex + 1}
-        </span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Next customers page"
-          disabled={!hasMore}
-          onClick={onNext}
-          className="h-8 w-8"
-        >
-          <ChevronRight className="h-4 w-4" aria-hidden="true" />
-        </Button>
-      </div>
-    </div>
   );
 }
 

@@ -12,12 +12,13 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("NotFound", () => {
-  it("renders the dedicated dark dashboard 404 experience", () => {
+  it("renders the shared Drezivo 404 in the workspace theme", () => {
     render(<NotFound />);
 
-    expect(screen.getByRole("main").className).toContain("dashboard-theme-dark");
+    // Follows the visitor's light/dark choice through the dashboard tokens, never a forced theme.
+    expect(screen.getByRole("main").className).toContain("bg-dashboard-canvas");
     expect(screen.getByRole("heading", { name: "Page not found" })).toBeTruthy();
-    expect(screen.getByText("ERROR 404")).toBeTruthy();
+    expect(screen.getByText("Error 404")).toBeTruthy();
 
     const dashboardLink = screen.getByRole("link", { name: "Back to dashboard" });
     expect(dashboardLink.getAttribute("href")).toBe("/");

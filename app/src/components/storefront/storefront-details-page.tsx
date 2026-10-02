@@ -1,7 +1,6 @@
 "use client";
 
-import { ArrowLeft, AtSign, Link2, Palette, Store } from "lucide-react";
-import Link from "next/link";
+import { AtSign, Link2, Palette, Store } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { ErrorState, Field, LoadingState, PageHeader, SaveBar, Section } from "@/components/forms/form-kit";
@@ -34,7 +33,6 @@ export function StorefrontDetailsPage() {
 
   return (
     <PageShell>
-      <BackLink />
       <PageHeader title="Store details" description="Your name, look, and how renters reach you. Changes go live when you save if the storefront is published." />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -140,16 +138,8 @@ export function StorefrontDetailsPage() {
 
 export function PageShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-full bg-dashboard-canvas px-4 pt-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-dashboard-canvas px-ws-gutter pt-6">
       <div className="mx-auto w-full max-w-5xl">{children}</div>
     </div>
-  );
-}
-
-export function BackLink() {
-  return (
-    <Link href="/storefront" className="mb-3 inline-flex items-center gap-1.5 text-sm text-dashboard-muted hover:text-dashboard-navy">
-      <ArrowLeft className="h-4 w-4" /> Storefront
-    </Link>
   );
 }

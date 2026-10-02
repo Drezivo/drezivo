@@ -13,7 +13,7 @@ import { createDrezivoApiClient } from "@/lib/drezivo-api";
 import { cn } from "@/lib/utils";
 
 import { ImageField } from "./image-field";
-import { BackLink, PageShell } from "./storefront-details-page";
+import { PageShell } from "./storefront-details-page";
 import { useDocumentDraft, useStorefrontEditor } from "./storefront-editor";
 
 const orNull = (value: string): string | null => (value.trim() === "" ? null : value);
@@ -41,7 +41,6 @@ export function StorefrontContentPage() {
 
   return (
     <PageShell>
-      <BackLink />
       <PageHeader title="Homepage content" description="What renters see first, and which sections your storefront shows." />
 
       <div className="grid gap-4">
@@ -177,7 +176,7 @@ function FeaturedPicker({ selected, onChange, error }: { selected: ProductId[]; 
                 </span>
                 <span className="block truncate px-2 py-1.5 text-xs font-medium text-dashboard-navy">{item.name}</span>
                 {chosen ? (
-                  <span className="absolute right-1.5 top-1.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-dashboard-accent px-1.5 text-xs font-semibold text-white">
+                  <span className="absolute right-1.5 top-1.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-dashboard-primary px-1.5 text-xs font-semibold text-dashboard-primary-ink">
                     {position + 1}
                   </span>
                 ) : (

@@ -611,7 +611,7 @@ export function ReservationMutationActions({
                             <span
                               className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
                                 isSelected
-                                  ? "border-dashboard-accent bg-dashboard-accent text-white"
+                                  ? "border-dashboard-accent bg-dashboard-primary text-dashboard-primary-ink"
                                   : "border-dashboard-border text-transparent"
                               }`}
                               aria-hidden="true"

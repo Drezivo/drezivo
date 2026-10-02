@@ -162,7 +162,7 @@ describe("CustomersPage production wiring", () => {
   it("renders database-backed customers and summary values", async () => {
     render(<CustomersPage />);
 
-    expect(await screen.findByText("Real Database Customer")).toBeVisible();
+    expect(await within(await screen.findByRole("table", { name: "Customers" })).findByText("Real Database Customer")).toBeVisible();
     expect(screen.getByText("real.customer@example.test")).toBeVisible();
     expect(screen.getByText("42")).toBeVisible();
     expect(screen.getByText("8")).toBeVisible();
@@ -187,15 +187,15 @@ describe("CustomersPage production wiring", () => {
     });
 
     render(<CustomersPage />);
-    await screen.findByText("Real Database Customer");
+    await within(await screen.findByRole("table", { name: "Customers" })).findByText("Real Database Customer");
 
-    fireEvent.click(screen.getByRole("button", { name: "Next customers page" }));
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Customers pagination" })).getByRole("button", { name: /Next/ }));
     await waitFor(() =>
       expect(api.getCustomers).toHaveBeenCalledWith(
         expect.objectContaining({ cursor: "next-cursor", limit: 10, status: "active" })
       )
     );
-    expect(screen.getByText("Page 2 · 1 customer loaded")).toBeVisible();
+    expect(screen.getByText("Page 2 · 1 customer")).toBeVisible();
 
     fireEvent.change(screen.getByRole("textbox", { name: "Search customers" }), {
       target: { value: "second" },
@@ -207,7 +207,7 @@ describe("CustomersPage production wiring", () => {
         status: "active",
       })
     );
-    expect(screen.getByText("Page 1 · 1 customer loaded")).toBeVisible();
+    expect(screen.getByText("Page 1 · 1 customer")).toBeVisible();
 
     fireEvent.pointerDown(screen.getByRole("button", { name: "Status: Active" }), {
       button: 0,
@@ -230,12 +230,12 @@ describe("CustomersPage production wiring", () => {
     });
 
     render(<CustomersPage />);
-    await screen.findByText("Real Database Customer");
-    fireEvent.click(screen.getByRole("button", { name: "Next customers page" }));
+    await within(await screen.findByRole("table", { name: "Customers" })).findByText("Real Database Customer");
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Customers pagination" })).getByRole("button", { name: /Next/ }));
 
     await waitFor(() => expect(api.getCustomers).toHaveBeenCalledTimes(3));
-    expect(await screen.findByText("Page 1 · 1 customer loaded")).toBeVisible();
-    expect(screen.getByText("Real Database Customer")).toBeVisible();
+    expect(await screen.findByText("Page 1 · 1 customer")).toBeVisible();
+    expect(within(screen.getByRole("table", { name: "Customers" })).getByText("Real Database Customer")).toBeVisible();
   });
 
   it("renders empty and permission states from API responses", async () => {
@@ -272,7 +272,7 @@ describe("CustomersPage production wiring", () => {
 
     api.getCustomers.mockResolvedValueOnce(page());
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByText("Real Database Customer")).toBeVisible();
+    expect(await within(await screen.findByRole("table", { name: "Customers" })).findByText("Real Database Customer")).toBeVisible();
   });
 
   it("keeps summary failures independent from a healthy customer directory", async () => {
@@ -286,7 +286,7 @@ describe("CustomersPage production wiring", () => {
 
     expect(await screen.findByText("Summary temporarily unavailable")).toBeVisible();
     expect(screen.getByText("Request ID: request-summary-error")).toBeVisible();
-    expect(await screen.findByText("Real Database Customer")).toBeVisible();
+    expect(await within(await screen.findByRole("table", { name: "Customers" })).findByText("Real Database Customer")).toBeVisible();
   });
 
   it("renders independent loading states while API requests are pending", async () => {
@@ -316,8 +316,8 @@ describe("CustomersPage production wiring", () => {
 
   it("opens live details with edit enabled while keeping archive available", async () => {
     render(<CustomersPage />);
-    await screen.findByText("Real Database Customer");
-    const actions = screen.getByRole("button", { name: "Actions for Real Database Customer" });
+    await within(await screen.findByRole("table", { name: "Customers" })).findByText("Real Database Customer");
+    const actions = within(screen.getByRole("table", { name: "Customers" })).getByRole("button", { name: "Actions for Real Database Customer" });
     actions.focus();
     fireEvent.keyDown(actions, { key: "Enter", code: "Enter" });
 
@@ -341,8 +341,8 @@ describe("CustomersPage production wiring", () => {
 
   it("edits a live customer from the row action and refreshes the directory without refetching summary", async () => {
     render(<CustomersPage />);
-    await screen.findByText("Real Database Customer");
-    const actions = screen.getByRole("button", { name: "Actions for Real Database Customer" });
+    await within(await screen.findByRole("table", { name: "Customers" })).findByText("Real Database Customer");
+    const actions = within(screen.getByRole("table", { name: "Customers" })).getByRole("button", { name: "Actions for Real Database Customer" });
     actions.focus();
     fireEvent.keyDown(actions, { key: "Enter", code: "Enter" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
@@ -384,8 +384,8 @@ describe("CustomersPage production wiring", () => {
     );
 
     render(<CustomersPage />);
-    await screen.findByText("Real Database Customer");
-    const actions = screen.getByRole("button", { name: "Actions for Real Database Customer" });
+    await within(await screen.findByRole("table", { name: "Customers" })).findByText("Real Database Customer");
+    const actions = within(screen.getByRole("table", { name: "Customers" })).getByRole("button", { name: "Actions for Real Database Customer" });
     actions.focus();
     fireEvent.keyDown(actions, { key: "Enter", code: "Enter" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
@@ -401,8 +401,8 @@ describe("CustomersPage production wiring", () => {
 
   it("archives a customer with concurrency data and refreshes the list and summary", async () => {
     render(<CustomersPage />);
-    await screen.findByText("Real Database Customer");
-    const actions = screen.getByRole("button", { name: "Actions for Real Database Customer" });
+    await within(await screen.findByRole("table", { name: "Customers" })).findByText("Real Database Customer");
+    const actions = within(screen.getByRole("table", { name: "Customers" })).getByRole("button", { name: "Actions for Real Database Customer" });
     actions.focus();
     fireEvent.keyDown(actions, { key: "Enter", code: "Enter" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Archive" }));

@@ -45,14 +45,6 @@ export function DashboardAccessGate({ children }: { children: React.ReactNode })
     setActiveRef.current = setActive;
   }, [setActive]);
 
-  useEffect(() => {
-    document.documentElement.dataset["dashboardTheme"] = "dark";
-
-    return () => {
-      delete document.documentElement.dataset["dashboardTheme"];
-    };
-  }, []);
-
   const verifyAccess = useCallback(async () => {
     if (!isLoaded) return;
     if (!isSignedIn) {
@@ -93,7 +85,7 @@ export function DashboardAccessGate({ children }: { children: React.ReactNode })
   }
 
   return (
-    <main className="dashboard-theme-dark flex min-h-svh items-center justify-center bg-dashboard-canvas px-5 py-10 text-dashboard-navy sm:px-8">
+    <main className="flex min-h-svh items-center justify-center bg-dashboard-canvas px-5 py-10 text-dashboard-navy sm:px-8">
       <section
         className="w-full max-w-lg rounded-2xl border border-dashboard-border bg-dashboard-surface p-7 shadow-sm sm:p-9"
         aria-live="polite"

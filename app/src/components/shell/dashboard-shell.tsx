@@ -9,6 +9,7 @@ import { SubscriptionBanner, SubscriptionProvider, SubscriptionWall } from "@/co
 import { PendingHoldGuard } from "@/components/reservations/pending-hold-guard";
 import { DashboardHeader } from "@/components/shell/dashboard-header";
 import { DashboardSidebar } from "@/components/shell/dashboard-sidebar";
+import { MobileTabBar } from "@/components/shell/mobile-tab-bar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { createDrezivoApiClient } from "@/lib/drezivo-api";
 
@@ -16,6 +17,7 @@ export interface DashboardIdentity {
   businessName: string;
   businessLogoUrl?: string;
   roleLabel: string;
+  userEmail: string;
   userImageUrl?: string;
   userName: string;
 }
@@ -100,24 +102,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       businessName: actorContext?.tenant.name ?? "",
       ...(businessLogoUrl ? { businessLogoUrl } : {}),
       roleLabel: roleLabel(actorContext?.membership.role),
+      userEmail: user?.primaryEmailAddress?.emailAddress ?? "",
       ...(user?.imageUrl ? { userImageUrl: user.imageUrl } : {}),
       userName:
         user?.fullName || clerkName || user?.primaryEmailAddress?.emailAddress || "Account",
     };
   }, [actorContext, businessLogoUrl, user]);
 
-  useEffect(() => {
-    // Theme switching is intentionally disabled for now; the dashboard always uses dark mode.
-    document.documentElement.dataset["dashboardTheme"] = "dark";
-
-    return () => {
-      delete document.documentElement.dataset["dashboardTheme"];
-    };
-  }, []);
-
   return (
     <SubscriptionProvider access={access} onChanged={refreshActor}>
-    <SidebarProvider className="dashboard-theme-dark h-svh min-h-0 overflow-hidden">
+    <SidebarProvider className="h-svh min-h-0 overflow-hidden">
       <DashboardSidebar identity={identity} />
       <SidebarInset className="h-svh min-h-0 overflow-hidden">
         <DashboardHeader identity={identity} />
@@ -128,6 +122,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           {/* Locked after the 30 view-only days: every page shows the Subscribe wall. The API enforces it too. */}
           {access?.level === "locked" ? <SubscriptionWall access={access} /> : children}
         </main>
+        {/* Phones only: thumb-reach tabs + Menu sheet, in the column so sticky save bars sit above it. */}
+        <MobileTabBar identity={identity} />
         {/* Reopens a live garment hold after navigation or refresh; see components/reservations/pending-hold-guard.tsx. */}
         <PendingHoldGuard />
       </SidebarInset>

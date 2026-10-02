@@ -511,7 +511,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
     .filter((asset) => asset.lifecycle_status === "active").length;
 
   return (
-    <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-dashboard-canvas px-ws-gutter py-6">
       <div className="mx-auto w-full max-w-screen-2xl">
         <div className="mb-5">
           <nav aria-label="Breadcrumb">
@@ -529,7 +529,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
               </li>
             </ol>
           </nav>
-          <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight text-dashboard-navy sm:text-4xl">
+          <h1 className="mt-3 dashboard-page-title">
             Edit Clothing
           </h1>
           <p className="mt-1 max-w-3xl text-sm text-dashboard-muted">
@@ -1489,7 +1489,7 @@ function VariantRemoveControl({
                 type="button"
                 disabled={removeGuard.isSubmitting}
                 onClick={() => void removeVariant()}
-                className="bg-dashboard-danger text-white hover:bg-dashboard-danger/90"
+                className="bg-dashboard-danger text-dashboard-primary-ink hover:bg-dashboard-danger/90"
               >
                 {removeGuard.isSubmitting ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -1535,7 +1535,7 @@ function DiscardChangesDialog({
             <Button
               type="button"
               onClick={onDiscard}
-              className="bg-dashboard-danger text-white hover:bg-dashboard-danger/90"
+              className="bg-dashboard-danger text-dashboard-primary-ink hover:bg-dashboard-danger/90"
             >
               Discard changes
             </Button>
@@ -1674,7 +1674,7 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 
 function EditLoadingState() {
   return (
-    <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-dashboard-canvas px-ws-gutter py-6">
       <div className="mx-auto flex min-h-80 w-full max-w-screen-2xl items-center justify-center rounded-xl border border-dashboard-border bg-dashboard-surface text-sm text-dashboard-muted">
         Loading clothing values…
       </div>
@@ -1684,7 +1684,7 @@ function EditLoadingState() {
 
 function EditErrorState({ error, onRetry }: { error: DrezivoApiError; onRetry: () => Promise<void> }) {
   return (
-    <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-dashboard-canvas px-ws-gutter py-6">
       <div className="mx-auto flex min-h-80 w-full max-w-screen-2xl flex-col items-center justify-center gap-4 rounded-xl border border-dashboard-border bg-dashboard-surface px-6 text-center">
         <AlertCircle className="h-8 w-8 text-dashboard-muted" aria-hidden="true" />
         <div>
@@ -1704,7 +1704,7 @@ function EditErrorState({ error, onRetry }: { error: DrezivoApiError; onRetry: (
 
 function ArchivedEditState({ item }: { item: ClothingDetail }) {
   return (
-    <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-dashboard-canvas px-ws-gutter py-6">
       <div className="mx-auto flex min-h-80 w-full max-w-screen-2xl flex-col items-center justify-center gap-4 rounded-xl border border-dashboard-border bg-dashboard-surface px-6 text-center">
         <Package className="h-8 w-8 text-dashboard-muted" aria-hidden="true" />
         <div>
