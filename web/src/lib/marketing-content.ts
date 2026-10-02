@@ -72,7 +72,7 @@ export const MARKETING_TRIAL_DAYS = 14;
 
 /**
  * One plan during the pilot (internal code `starter`, sold as Standard). The API owns the real price,
- * limits, and trial length; keep this copy in step with billing.constants / migration 0061.
+ * limits, and trial length; keep this copy in step with billing.constants / migration 0063.
  */
 export const MARKETING_PLANS: readonly MarketingPlan[] = [
   {
@@ -80,8 +80,8 @@ export const MARKETING_PLANS: readonly MarketingPlan[] = [
     price: '300.00',
     blurb: 'Everything you need to run your rental shop, with a 14-day free trial.',
     features: [
-      'Up to 125 garments',
-      'For the shop owner (no staff accounts)',
+      'Up to 125 active garments',
+      'For the shop owner only',
       'Online storefront with bookings and fittings',
       'Reservations, calendar & availability',
       'Customers, payments, returns & exports',
@@ -105,25 +105,26 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
     faqs: [
       {
         question: 'What happens when my free trial ends? Will I lose my data?',
-        answer: `Your trial lasts ${MARKETING_TRIAL_DAYS} days, then you receive a further seven-day normal-access grace period if payment is overdue. After that, new bookings, publishing, new assets, and staff invitations can be restricted, but existing rentals, returns, refunds, settlement work, and exports remain accessible. Cancellation does not automatically delete your data.`,
+        answer: `Your trial lasts ${MARKETING_TRIAL_DAYS} days. If you do not subscribe when it ends, the workspace becomes read-only for up to 30 days. The public storefront stays online for the first 3 days with new bookings paused, then goes offline. After 30 days the workspace locks.`,
       },
       {
         question: 'Can I still see or export my records after cancelling?',
         answer:
-          'Yes. A cancelled business retains read-only settlement and export access. The precise export window and retention schedule still need to be finalized and published before launch.',
+          'If a trial or paid month simply expires without renewal, the workspace can remain read-only for up to 30 days. An explicit cancellation may lock access sooner. Drezivo retains the workspace data for 30 days after the subscription is no longer active; contact support for any available recovery or export option during that period.',
       },
       {
         question: 'Do I need a credit card to start?',
-        answer: 'No. Your first business can start its trial without a card or payment account.',
+        answer:
+          'No. Your first business can start its trial without a card or payment account. During the pilot, Drezivo subscriptions are paid manually through a listed GCash, Maya, or bank-transfer option, then you upload the payment proof in the app for review.',
       },
       {
         question: 'How much does Drezivo cost?',
-        answer: `One plan, Standard, at ₱300 a month after the ${MARKETING_TRIAL_DAYS}-day free trial. It includes up to 125 garments for the shop owner, with no staff accounts. Asset limits are based on active physical garments, not the number of styles in your catalogue.`,
+        answer: `One plan, Standard, at ₱300 a month after the ${MARKETING_TRIAL_DAYS}-day free trial. It includes up to 125 active physical garments for the shop owner only. Asset limits are based on active physical garments, not the number of styles in your catalogue.`,
       },
       {
-        question: 'Will upgrading or downgrading delete my catalogue or booking history?',
+        question: 'What happens if I do not renew after the trial or a paid month?',
         answer:
-          'No. Drezivo should give you an upgrade or archive path if you exceed a limit. Restriction, downgrade, and cancellation must not delete records or block approved returns and refunds.',
+          'Your workspace becomes read-only for up to 30 days and then locks. Drezivo retains the workspace data for 30 days after the subscription is no longer active, subject to limited legal, accounting, security, backup, or dispute-retention exceptions.',
       },
     ],
   },
@@ -158,7 +159,7 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
       {
         question: 'Can a customer cancel or change their reservation?',
         answer:
-          'Yes, through the secure guest link, subject to the shop’s own cancellation policy. A reschedule checks the new dates before releasing the original item, so a failed change does not accidentally lose the existing booking.',
+          'Not through the guest link in V1. Customers should contact the rental business directly. The business handles any cancellation or date change, and cancellation does not automatically issue a refund.',
       },
     ],
   },
@@ -173,12 +174,12 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
       {
         question: 'Can I import my existing clothing catalogue?',
         answer:
-          'Yes. CSV import is planned with preview, row-level validation, duplicate detection, and an all-or-nothing commit: invalid rows should not create partial catalogue data.',
+          'Not yet. CSV catalogue import is planned, but the current product adds clothing through the inventory workflow in the business app.',
       },
       {
         question: 'Can staff access everything in my account?',
         answer:
-          'The Standard plan is for the shop owner alone, with no staff accounts. Where staff accounts are available, owners keep control of business policies, payments, publishing, users, exports, and refunds. Front-desk staff can handle daily reservations, pickup, return, and garment readiness, but do not receive unrestricted access to sensitive documents, refunds, or business settings.',
+          'The Standard plan is for the shop owner only and does not include staff accounts. Staff access may be offered in a future plan or release, but it is not part of the current Standard plan.',
       },
       {
         question: 'How is customer and business data protected?',
@@ -199,4 +200,6 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
   },
 ];
 
-export const MARKETING_FAQS: readonly MarketingFaq[] = MARKETING_FAQ_GROUPS.flatMap((group) => group.faqs);
+export const MARKETING_FAQS: readonly MarketingFaq[] = MARKETING_FAQ_GROUPS.flatMap(
+  (group) => group.faqs,
+);

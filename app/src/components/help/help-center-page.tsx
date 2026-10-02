@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { PageHero } from "@/components/shell/page-hero";
 
-const CONTACT_EMAIL = process.env["NEXT_PUBLIC_CONTACT_EMAIL"] || "hello@drezivo.shop";
+const CONTACT_EMAIL = "drezivoshop@gmail.com";
 
 /** Public FAQ on the marketing site; absent when the storefront origin is not configured. */
 function faqUrl(): string | null {
