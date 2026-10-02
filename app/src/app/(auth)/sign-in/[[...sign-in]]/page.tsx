@@ -1,13 +1,7 @@
-import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
-
 import { StaffAuthPage } from "@/components/auth/staff-auth-page";
 
-export default async function SignInPage() {
-  const { userId } = await auth();
-  if (userId) {
-    redirect("/calendar");
-  }
-
+// Static on purpose: a signed-in visitor is redirected by the middleware before this renders,
+// so the page needs no per-request server work and is served from the CDN cache.
+export default function SignInPage() {
   return <StaffAuthPage />;
 }
