@@ -57,6 +57,13 @@ export interface FittingAllocationApplyCapacityRow {
   reversed_minor: string;
 }
 
+export interface FittingRefundAllocationReversalInput {
+  allocationId: string;
+  amountMinor: number;
+  reversesId: string;
+  businessKey: string;
+}
+
 export interface LockedFittingRefundRow {
   refund_id: string;
   payment_id: string;
@@ -447,32 +454,36 @@ export async function createFittingRefundInstruction(
   return row;
 }
 
-export async function insertFittingRefundAllocationReversal(
+export async function insertFittingRefundAllocationReversals(
   client: PoolClient,
   input: {
-    allocationId: string;
     tenantId: string;
     paymentId: string;
     chargeId: string;
-    amountMinor: number;
-    reversesId: string;
-    businessKey: string;
+    reversals: FittingRefundAllocationReversalInput[];
   },
-): Promise<void> {
-  await client.query(
+): Promise<number> {
+  if (input.reversals.length === 0) return 0;
+
+  const result = await client.query(
     `INSERT INTO payment_allocation
        (id, tenant_id, payment_id, charge_id, amount_minor, direction, reverses_id, business_key)
-     VALUES ($1,$2,$3::uuid,$4::uuid,$5,'reverse',$6::uuid,$7)`,
+     SELECT reversal.allocation_id, $1, $2::uuid, $3::uuid, reversal.amount_minor,
+            'reverse', reversal.reverses_id, reversal.business_key
+       FROM unnest($4::uuid[], $5::integer[], $6::uuid[], $7::text[])
+         WITH ORDINALITY AS reversal(allocation_id, amount_minor, reverses_id, business_key, ordinal)
+      ORDER BY reversal.ordinal`,
     [
-      input.allocationId,
       input.tenantId,
       input.paymentId,
       input.chargeId,
-      input.amountMinor,
-      input.reversesId,
-      input.businessKey,
+      input.reversals.map(({ allocationId }) => allocationId),
+      input.reversals.map(({ amountMinor }) => amountMinor),
+      input.reversals.map(({ reversesId }) => reversesId),
+      input.reversals.map(({ businessKey }) => businessKey),
     ],
   );
+  return result.rowCount ?? 0;
 }
 
 export async function lockFittingRefund(
