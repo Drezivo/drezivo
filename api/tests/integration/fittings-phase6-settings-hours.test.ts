@@ -282,6 +282,16 @@ describe('fitting scalar settings configuration', async () => {
     expect(result.status).toBe(409);
     expect(result.body.success ? null : result.body.error.code).toBe('STATE_CONFLICT');
     expect((await getFittingSettings(readContext(seed))).capacity).toBe(2);
+    await withAdmin(async (client) => {
+      const claims = await client.query<{ count: string }>(
+        `SELECT count(*)::text AS count
+           FROM fitting_slot_allocation
+          WHERE tenant_id = $1
+            AND is_blocking`,
+        [seed.tenantId],
+      );
+      expect(claims.rows[0]?.count).toBe('2');
+    });
   });
 
   it('can reduce capacity after accepted demand is released', async () => {
@@ -303,6 +313,48 @@ describe('fitting scalar settings configuration', async () => {
     });
     expect(result.status).toBe(200);
     expect(result.body.success && result.body.data.settings.capacity).toBe(1);
+  });
+
+  it('rebalances many fittings by first-fit slot order while allowing adjacent periods', async () => {
+    const seed = await seedTenant('capacity-rebalance', { capacity: 3 });
+    const startsAt = [
+      '2099-01-05T01:00:00.000Z',
+      '2099-01-05T01:30:00.000Z',
+      '2099-01-05T02:00:00.000Z',
+      '2099-01-05T02:30:00.000Z',
+    ];
+    const fittings: Array<{ id: string }> = [];
+    for (const start of startsAt) fittings.push(await createPreference(seed, start));
+
+    const result = await updateFittingSettingsCommand(ownerContext(seed), {
+      version: 1,
+      enabled: true,
+      capacity: 2,
+      duration_minutes: 60,
+      fee_minor: '500',
+    });
+
+    expect(result.status).toBe(200);
+    await withAdmin(async (client) => {
+      const claims = await client.query<{ fitting_id: string; slot_number: number }>(
+        `SELECT fsa.fitting_id,
+                fcs.slot_number
+           FROM fitting_slot_allocation fsa
+           JOIN fitting_capacity_slot fcs
+             ON fcs.tenant_id = fsa.tenant_id
+            AND fcs.id = fsa.slot_id
+          WHERE fsa.tenant_id = $1
+            AND fsa.is_blocking
+          ORDER BY lower(fsa.period), upper(fsa.period), fsa.fitting_id`,
+        [seed.tenantId],
+      );
+      expect(claims.rows).toEqual(
+        fittings.map((fitting, index) => ({
+          fitting_id: fitting.id,
+          slot_number: index % 2 === 0 ? 1 : 2,
+        })),
+      );
+    });
   });
 
   it('replays one scalar settings intent without applying the mutation twice', async () => {
