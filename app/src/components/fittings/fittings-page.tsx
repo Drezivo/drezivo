@@ -43,7 +43,6 @@ import {
   FITTING_PAYMENT_CLASSES,
   FITTING_STATUS_CLASSES,
   FITTING_STATUS_LABELS,
-  fittingGarmentModeLabel,
   fittingPaymentLabel,
   fittingVariantLabel,
   formatFittingDate,
