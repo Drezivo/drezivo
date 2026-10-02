@@ -148,9 +148,42 @@ describe('public storefront read API', async () => {
   it('filters, searches, and pages the catalogue without treating input as SQL wildcards', async () => {
     const ws = await publishedWorkspace('pub-cat');
     const app = createApp();
+    await admin.query(`UPDATE product SET subcategory = 'LONG' WHERE tenant_id = $1 AND id = $2`, [ws.tenantId, ws.productId]);
+    const miniProduct = await admin.query<{ id: string }>(
+      `INSERT INTO product (tenant_id, category_id, code, name, description, subcategory, status)
+       SELECT tenant_id, category_id, 'PUB-MINI-001', 'Mini Dress', 'A published mini dress.', 'MINI', 'active'
+         FROM product WHERE tenant_id = $1 AND id = $2
+       RETURNING id`,
+      [ws.tenantId, ws.productId],
+    );
+    await admin.query(
+      `INSERT INTO product_variant
+         (tenant_id, product_id, sku, size_label, color_label, measurements, measurement_unit, measurement_mode,
+          rental_price_minor, security_deposit_minor, currency, pricing_mode, included_duration_minutes,
+          extra_day_price_minor, prep_minutes, turnaround_minutes, status)
+       SELECT tenant_id, $2, 'PUB-MINI-M', size_label, color_label, measurements, measurement_unit, measurement_mode,
+              rental_price_minor, security_deposit_minor, currency, pricing_mode, included_duration_minutes,
+              extra_day_price_minor, prep_minutes, turnaround_minutes, 'active'
+         FROM product_variant WHERE tenant_id = $1 AND id = $3`,
+      [ws.tenantId, miniProduct.rows[0]?.id, ws.variantIds.m],
+    );
+    await admin.query(
+      `INSERT INTO product (tenant_id, category_id, code, name, description, subcategory, status)
+       SELECT tenant_id, category_id, 'DRAFT-SUB-001', 'Hidden Dress', '', 'DRAFT-ONLY', 'draft'
+         FROM product WHERE tenant_id = $1 AND id = $2`,
+      [ws.tenantId, ws.productId],
+    );
     const all = await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue`);
-    expect(dataOf<CatalogueResponse>(all)).toMatchObject({ total: 1, page: 1, page_size: 24, sizes: ['M', 'L'] });
-    expect(dataOf<CatalogueResponse>(all).items[0]).toMatchObject({ name: 'Emerald Gown', price_from_minor: '180000', sizes: ['M', 'L'] });
+    expect(dataOf<CatalogueResponse>(all)).toMatchObject({ total: 2, page: 1, page_size: 24, sizes: ['M', 'L'], subcategories: ['LONG', 'MINI'] });
+    expect(dataOf<CatalogueResponse>(all).items.find((item) => item.name === 'Emerald Gown')).toMatchObject({ subcategory: 'LONG', price_from_minor: '180000', sizes: ['M', 'L'] });
+    expect(dataOf<CatalogueResponse>(all).items.find((item) => item.name === 'Mini Dress')).toMatchObject({ subcategory: 'MINI' });
+    expect(dataOf<CatalogueResponse>(await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue?subcategory=mini`))).toMatchObject({
+      total: 1,
+      items: [expect.objectContaining({ name: 'Mini Dress', subcategory: 'MINI' })],
+      subcategories: ['LONG', 'MINI'],
+    });
+    expect(dataOf<CatalogueResponse>(await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue?subcategory=DRAFT-ONLY`)).total).toBe(0);
+    expect(dataOf<CatalogueResponse>(all).subcategories).not.toContain('DRAFT-ONLY');
 
     expect(dataOf<CatalogueResponse>(await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue?search=emerald`)).total).toBe(1);
     expect(dataOf<CatalogueResponse>(await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue?search=%25`)).total).toBe(0);
@@ -164,6 +197,7 @@ describe('public storefront read API', async () => {
     const app = createApp();
     const item = await request(app).get(`/api/v1/public/stores/${ws.slug}/products/${ws.productId}`);
     expect(item.status).toBe(200);
+    expect(dataOf<ItemDetail>(item).subcategory).toBeNull();
     expect(dataOf<ItemDetail>(item).variants.map((v) => v.size_label)).toEqual(['M', 'L']);
     expect(dataOf<ItemDetail>(item).variants[0]?.measurement).toEqual({
       mode: 'custom',

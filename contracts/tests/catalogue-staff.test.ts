@@ -168,6 +168,13 @@ describe('catalogue staff contract', () => {
     ).toBe(false);
   });
 
+  it('accepts optional subcategory updates including explicit clearing', () => {
+    expect(updateClothingProductRequest.parse({ expected_updated_at: instant, subcategory: null }).subcategory).toBeNull();
+    expect(updateClothingProductRequest.parse({ expected_updated_at: instant, subcategory: '  LONG  ' }).subcategory).toBe('LONG');
+    expect(updateClothingProductRequest.parse({ expected_updated_at: instant, subcategory: '   ' }).subcategory).toBeNull();
+    expect(updateClothingProductRequest.safeParse({ expected_updated_at: instant, subcategory: 'x'.repeat(121) }).success).toBe(false);
+  });
+
   it('allows only a bounded explicit availability projection window', () => {
     expect(
       clothingListQuery.safeParse({

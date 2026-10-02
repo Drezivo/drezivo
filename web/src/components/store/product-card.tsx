@@ -26,7 +26,7 @@ export function ProductCard({ slug, item, priority = false }: { slug: string; it
         <p className="shrink-0 text-sm tabular-nums">{formatMinor(item.price_from_minor)}</p>
       </div>
       <p className="mt-0.5 flex justify-between gap-3 text-xs text-sf-muted">
-        <span className="truncate">{[item.category, item.sizes.length > 0 ? item.sizes.join(' · ') : null].filter(Boolean).join(' — ')}</span>
+        <span className="truncate">{[item.category, item.subcategory, item.sizes.length > 0 ? item.sizes.join(' · ') : null].filter(Boolean).join(' — ')}</span>
         <span className="shrink-0">{durationLabel(item.pricing_mode, item.included_duration_minutes)}</span>
       </p>
     </Link>

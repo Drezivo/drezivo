@@ -75,6 +75,7 @@ export const product = pgTable(
     code: text('code').notNull(),
     name: text('name').notNull(),
     description: text('description'),
+    subcategory: text('subcategory'),
     sizingMode: text('sizing_mode').$type<ProductSizingMode>().notNull().default('sized'),
     status: productStatusEnum('status').notNull().default('draft'),
     ...updatableTimestamps,
@@ -99,6 +100,7 @@ export const product = pgTable(
       name: 'product_category_same_tenant_fk',
     }).onDelete('restrict'),
     check('product_name_not_blank', sql`length(btrim(${table.name})) BETWEEN 1 AND 200`),
+    check('product_subcategory_length_check', sql`${table.subcategory} IS NULL OR length(btrim(${table.subcategory})) BETWEEN 1 AND 120`),
     check('product_sizing_mode_check', sql`${table.sizingMode} IN ('free_size', 'sized')`),
   ],
 );

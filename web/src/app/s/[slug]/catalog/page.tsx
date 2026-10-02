@@ -24,6 +24,7 @@ export default async function CatalogPage({ params, searchParams }: { params: Pr
   const parsed = catalogueQuery.safeParse({
     search: first(raw['search']),
     category: first(raw['category']),
+    subcategory: first(raw['subcategory']),
     size: first(raw['size']),
     sort: first(raw['sort']),
     page: first(raw['page']),
@@ -32,6 +33,7 @@ export default async function CatalogPage({ params, searchParams }: { params: Pr
   const result = await readCatalogue(slug, {
     search: query.search,
     category: query.category,
+    subcategory: query.subcategory,
     size: query.size,
     sort: query.sort,
     page: String(query.page),
@@ -41,7 +43,7 @@ export default async function CatalogPage({ params, searchParams }: { params: Pr
   const category = store.categories.find((entry) => entry.id === query.category);
   const pageHref = (page: number) => {
     const next = new URLSearchParams();
-    for (const key of ['search', 'category', 'size', 'sort'] as const) {
+    for (const key of ['search', 'category', 'subcategory', 'size', 'sort'] as const) {
       const value = first(raw[key]);
       if (value) next.set(key, value);
     }
@@ -60,7 +62,7 @@ export default async function CatalogPage({ params, searchParams }: { params: Pr
       </header>
 
       <Suspense>
-        <CatalogControls categories={store.categories} sizes={result.sizes} />
+        <CatalogControls categories={store.categories} sizes={result.sizes} subcategories={result.subcategories ?? []} />
       </Suspense>
 
       <div className="mt-10">

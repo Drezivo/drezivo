@@ -59,6 +59,7 @@ type MeasurementTarget = ClothingSize | "FREE_SIZE";
 type PricingMode = "fixed_duration" | "daily";
 type MeasurementUnit = "in" | "cm";
 type MeasurementMode = "default_guide" | "custom" | "none";
+type SubcategorySelection = "none" | "LONG" | "MINI" | "custom";
 type PhotoStatus = "ready" | "uploading" | "uploaded" | "error";
 type PendingNavigation = { kind: "href"; href: string } | { kind: "back" };
 
@@ -108,8 +109,9 @@ export function AddClothingPage() {
   const [guideLoading, setGuideLoading] = useState(true);
   const [guideLoadError, setGuideLoadError] = useState(false);
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
   const [description, setDescription] = useState("");
+  const [subcategorySelection, setSubcategorySelection] = useState<SubcategorySelection>("none");
+  const [customSubcategory, setCustomSubcategory] = useState("");
   const [color, setColor] = useState("");
   const [photos, setPhotos] = useState<PendingPhoto[]>([]);
   const [sizingMode, setSizingMode] = useState<SizingMode>("free_size");
@@ -653,8 +655,13 @@ export function AddClothingPage() {
 
     return createClothingRequest.parse({
       name: name.trim(),
-      code: code.trim(),
       description: description.trim(),
+      subcategory:
+        subcategorySelection === "LONG" || subcategorySelection === "MINI"
+          ? subcategorySelection
+          : subcategorySelection === "custom"
+            ? customSubcategory.trim() || null
+            : null,
       category_id: categoryId,
       color_label: color.trim() || null,
       image_file_ids: imageFileIds,
@@ -850,22 +857,6 @@ export function AddClothingPage() {
                     placeholder="e.g. Emerald Evening Gown"
                   />
                 </Field>
-                <Field label="Clothing Code">
-                  <div>
-                    <Input
-                      aria-label="Clothing Code"
-                      value={code}
-                      onChange={(event) => {
-                        setCode(event.target.value);
-                        markDirty();
-                      }}
-                      placeholder="e.g. GWN-023"
-                    />
-                    <p className="mt-1.5 text-xs text-dashboard-muted">
-                      Optional. Leave blank and Drezivo will generate one for you.
-                    </p>
-                  </div>
-                </Field>
                 <Field label="Category" required>
                   <div>
                     <DropdownMenu>
@@ -875,7 +866,7 @@ export function AddClothingPage() {
                           disabled={
                             categoryLoading || !isLoaded || !isSignedIn || activeCategories.length === 0
                           }
-                          className="w-full justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+                          className="w-full justify-between border border-dashboard-border bg-dashboard-surface pr-5 text-dashboard-navy hover:bg-dashboard-active"
                         >
                           {selectedCategory?.name ??
                             (categoryLoading
@@ -916,6 +907,46 @@ export function AddClothingPage() {
                       </p>
                     ) : null}
                   </div>
+                </Field>
+                <Field label="Subcategory">
+                  <div className="relative">
+                    <select
+                      aria-label="Subcategory"
+                      value={subcategorySelection}
+                      disabled={isSubmitting}
+                      onChange={(event) => {
+                        const value = event.target.value as SubcategorySelection;
+                        if (subcategorySelection !== value) {
+                          setSubcategorySelection(value);
+                          markDirty();
+                        }
+                      }}
+                      className="h-ws-control w-full appearance-none rounded-md border border-dashboard-border bg-dashboard-surface py-2 pl-4 pr-12 text-sm font-medium text-dashboard-navy outline-none transition focus-visible:ring-2 focus-visible:ring-dashboard-accent/30 disabled:pointer-events-none disabled:opacity-50"
+                    >
+                      <option value="none">None</option>
+                      <option value="LONG">LONG</option>
+                      <option value="MINI">MINI</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-5 top-1/2 h-4 w-4 -translate-y-1/2 text-dashboard-muted"
+                      aria-hidden="true"
+                    />
+                  </div>
+                  {subcategorySelection === "custom" ? (
+                    <Input
+                      aria-label="Custom subcategory"
+                      value={customSubcategory}
+                      maxLength={120}
+                      disabled={isSubmitting}
+                      onChange={(event) => {
+                        setCustomSubcategory(event.target.value);
+                        markDirty();
+                      }}
+                      placeholder="Enter a subcategory"
+                      className="mt-2"
+                    />
+                  ) : null}
                 </Field>
               </div>
 

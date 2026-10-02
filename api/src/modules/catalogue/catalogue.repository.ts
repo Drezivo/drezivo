@@ -66,6 +66,7 @@ export interface CreatedClothingGraph {
 export interface EditableProductRow {
   id: string;
   category_id: string | null;
+  subcategory: string | null;
   name: string;
   description: string | null;
   sizing_mode: 'free_size' | 'sized';
@@ -372,7 +373,7 @@ export async function readProductForEdit(
   productId: string,
 ): Promise<EditableProductRow | null> {
   const result = await client.query<EditableProductRow>(
-    `SELECT id, category_id, name, description, sizing_mode, status, updated_at
+    `SELECT id, category_id, subcategory, name, description, sizing_mode, status, updated_at
        FROM product
       WHERE tenant_id = $1 AND id = $2
       LIMIT 1
@@ -396,15 +397,17 @@ export async function updateProductForEdit(
         SET name = $3,
             description = $4,
             category_id = $5,
+            subcategory = $6,
             updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
       WHERE tenant_id = $1 AND id = $2
-      RETURNING id, category_id, name, description, sizing_mode, status, updated_at`,
+      RETURNING id, category_id, subcategory, name, description, sizing_mode, status, updated_at`,
     [
       input.tenantId,
       input.productId,
       input.request.name ?? input.current.name,
       input.request.description !== undefined ? input.request.description : input.current.description,
       input.request.category_id ?? input.current.category_id,
+      input.request.subcategory !== undefined ? input.request.subcategory : input.current.subcategory,
     ],
   );
   const row = result.rows[0];
@@ -421,7 +424,7 @@ export async function updateProductSizingMode(
         SET sizing_mode = $3,
             updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
       WHERE tenant_id = $1 AND id = $2
-      RETURNING id, category_id, name, description, sizing_mode, status, updated_at`,
+      RETURNING id, category_id, subcategory, name, description, sizing_mode, status, updated_at`,
     [input.tenantId, input.productId, input.sizingMode],
   );
   const row = result.rows[0];
@@ -604,7 +607,7 @@ export async function publishClothingGraph(
         SET status = 'active',
             updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
       WHERE tenant_id = $1 AND id = $2 AND status = 'draft'
-      RETURNING id, category_id, name, description, sizing_mode, status, updated_at`,
+      RETURNING id, category_id, subcategory, name, description, sizing_mode, status, updated_at`,
     [tenantId, productId],
   );
   const row = product.rows[0];
@@ -622,7 +625,7 @@ export async function restoreClothingGraph(
         SET status = 'draft',
             updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
       WHERE tenant_id = $1 AND id = $2 AND status = 'archived'
-      RETURNING id, category_id, name, description, sizing_mode, status, updated_at`,
+      RETURNING id, category_id, subcategory, name, description, sizing_mode, status, updated_at`,
     [tenantId, productId],
   );
   const row = product.rows[0];
@@ -933,7 +936,7 @@ export async function archiveClothingGraph(
       WHERE tenant_id = $1
         AND id = $2
         AND status <> 'archived'
-      RETURNING id, category_id, name, description, sizing_mode, status, updated_at`,
+      RETURNING id, category_id, subcategory, name, description, sizing_mode, status, updated_at`,
     [input.tenantId, input.productId],
   );
   const productRow = product.rows[0];
@@ -1035,6 +1038,7 @@ export async function createClothingGraph(
     productId,
     tenantId: input.tenantId,
     categoryId: input.request.category_id,
+    subcategory: input.request.subcategory ?? null,
     requestedCode: input.request.code,
     name: input.request.name,
     description: input.request.description,
@@ -1149,6 +1153,7 @@ async function insertProductWithCode(
     productId: string;
     tenantId: string;
     categoryId: string;
+    subcategory: string | null;
     requestedCode: string | undefined;
     name: string;
     description: string;
@@ -1161,8 +1166,8 @@ async function insertProductWithCode(
     const code = input.requestedCode?.trim() || generatedStyleCode();
     const result = await client.query<{ code: string }>(
       `INSERT INTO product
-         (id, tenant_id, category_id, code, name, description, sizing_mode, status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())
+         (id, tenant_id, category_id, code, name, description, subcategory, sizing_mode, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), now())
        ON CONFLICT DO NOTHING
        RETURNING code`,
       [
@@ -1172,6 +1177,7 @@ async function insertProductWithCode(
         code,
         input.name,
         input.description,
+        input.subcategory,
         input.sizingMode,
         input.status,
       ],
