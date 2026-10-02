@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 import { PolicyImagesField } from "./policy-images-field";
-import { BackLink, PageShell } from "./storefront-details-page";
+import { PageShell } from "./storefront-details-page";
 import { useDocumentDraft, useStorefrontEditor } from "./storefront-editor";
 
 const EMPTY_RULES: StorefrontPolicyRules = {
@@ -86,7 +86,6 @@ export function StorefrontPoliciesPage() {
 
   return (
     <PageShell>
-      <BackLink />
       <PageHeader
         title="Rental policies"
         description="Renters accept these before they pay. Each save publishes a new version; existing bookings keep the version they accepted."
@@ -208,7 +207,7 @@ function RequirementRow({ label, description, value, onChange }: { label: string
             onClick={() => onChange(option.value)}
             className={cn(
               "rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/40",
-              value === option.value ? "bg-dashboard-accent text-white" : "text-dashboard-muted hover:text-dashboard-navy",
+              value === option.value ? "bg-dashboard-primary text-dashboard-primary-ink" : "text-dashboard-muted hover:text-dashboard-navy",
             )}
           >
             {option.label}
@@ -238,7 +237,6 @@ export function StorefrontRequirementsPage() {
 
   return (
     <PageShell>
-      <BackLink />
       <PageHeader title="Customer requirements" description="Ask only for what you need. Every renter always gives a full name, a verified email, and an address." />
       <Section icon={ClipboardList} title="Checkout details">
         <div className="divide-y divide-dashboard-border">
@@ -263,7 +261,6 @@ export function StorefrontBookingSettingsPage() {
 
   return (
     <PageShell>
-      <BackLink />
       <PageHeader title="Booking settings" description="When renters can book, and for how long." />
       <div className="grid gap-4">
         <Section icon={CalendarClock} title="Rental timing">

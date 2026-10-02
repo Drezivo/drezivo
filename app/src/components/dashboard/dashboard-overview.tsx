@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PageHero } from "@/components/shell/page-hero";
 import { calendarDateKeyAt } from "@/components/calendar/calendar-schedule-data";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { cn } from "@/lib/utils";
@@ -181,29 +182,21 @@ export function DashboardOverview() {
   const today = calendarDateKeyAt(new Date(overview.window.as_of), overview.window.timezone);
 
   return (
-    <div className="min-h-[calc(100svh-72px)] px-4 py-5 sm:px-6 sm:py-6 xl:px-10">
+    <div className="min-h-full px-ws-gutter py-5 sm:py-6">
       <div className="mx-auto space-y-5">
-        <section
-          aria-labelledby="dashboard-heading"
-          className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end"
-        >
-          <div>
-            <h1
-              id="dashboard-heading"
-              className="text-[24px] font-bold tracking-[-0.03em] text-dashboard-navy"
-            >
-              Your rental business today
-            </h1>
-            <p className="mt-1 text-sm text-dashboard-muted">
-              Live activity for this branch, plus performance for the current calendar month.
-            </p>
-          </div>
-          <p className="text-sm font-medium text-dashboard-muted">
-            {formatDate(overview.window.as_of, overview.window.timezone)}
-          </p>
-        </section>
+        <PageHero
+          headingId="dashboard-heading"
+          eyebrow={formatDate(overview.window.as_of, overview.window.timezone)}
+          title={
+            <>
+              Your rental business <em className="text-dashboard-accent">today</em>
+            </>
+          }
+          description="Live activity for this branch, plus performance for the current calendar month."
+        />
 
-        <section aria-label="Today's overview" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {/* Bento: two across on phones (the fifth card spans both), five across on wide screens. */}
+        <section aria-label="Today's overview" className="grid grid-cols-2 gap-ws-gap xl:grid-cols-5 [&>*:last-child]:col-span-2 xl:[&>*:last-child]:col-span-1">
           {metricEntries.map(({ key, value }) => {
             const metric = DASHBOARD_METRIC_PRESENTATION[key];
             const Icon = metric.icon;
@@ -214,8 +207,8 @@ export function DashboardOverview() {
                 aria-label={`View ${metric.label}`}
                 className="group block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent focus-visible:ring-offset-2 focus-visible:ring-offset-dashboard-canvas"
               >
-                <Card className="min-h-[166px] justify-between py-5 transition-colors group-hover:border-dashboard-accent/50 group-focus-visible:border-dashboard-accent">
-                  <CardContent className="flex h-full flex-col justify-between px-5">
+                <Card className="min-h-36 justify-between py-4 sm:min-h-[166px] sm:py-5 transition-colors group-hover:border-dashboard-accent/50 group-focus-visible:border-dashboard-accent">
+                  <CardContent className="flex h-full flex-col justify-between px-4 sm:px-5">
                     <div className="flex items-center justify-between">
                       <div
                         className={cn(
@@ -234,7 +227,7 @@ export function DashboardOverview() {
                       <CardTitle as="h2" className="text-sm font-medium text-dashboard-navy/80">
                         {metric.label}
                       </CardTitle>
-                      <p className="mt-1 text-[30px] font-semibold leading-none tracking-[-0.04em] text-dashboard-navy">
+                      <p className="mt-1 text-ws-kpi font-semibold tabular-nums tracking-tight leading-none text-dashboard-navy">
                         {value.toLocaleString("en-PH")}
                       </p>
                       <p className="mt-1.5 text-sm text-dashboard-muted">{metric.description}</p>

@@ -278,11 +278,11 @@ export function ClothingPage() {
   const pageRangeEnd = pageRangeStart === 0 ? 0 : pageRangeStart + rows.length - 1;
 
   return (
-    <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-dashboard-canvas px-ws-gutter py-6">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="font-display text-3xl font-semibold tracking-tight text-dashboard-navy sm:text-4xl">
+            <h1 className="dashboard-page-title">
               Clothing
             </h1>
             <p className="mt-1 text-sm text-dashboard-muted">
@@ -435,7 +435,7 @@ export function ClothingPage() {
                       "h-8 w-8",
                       pageIndex === 0
                         ? "cursor-not-allowed text-dashboard-muted opacity-35"
-                        : "text-white hover:bg-transparent hover:text-white"
+                        : "text-dashboard-navy hover:bg-transparent hover:text-dashboard-accent"
                     )}
                   >
                     <ChevronLeft className="h-4 w-4" />
@@ -453,7 +453,7 @@ export function ClothingPage() {
                       "h-8 w-8",
                       !pageMeta.has_more || !pageMeta.next_cursor
                         ? "cursor-not-allowed text-dashboard-muted opacity-35"
-                        : "text-white hover:bg-transparent hover:text-white"
+                        : "text-dashboard-navy hover:bg-transparent hover:text-dashboard-accent"
                     )}
                   >
                     <ChevronRight className="h-4 w-4" />

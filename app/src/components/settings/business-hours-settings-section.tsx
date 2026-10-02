@@ -488,7 +488,7 @@ function RemoveClosureDialog({
           {error ? <p role="alert" className="mt-4 text-sm font-medium text-dashboard-danger">{error}</p> : null}
           <div className="mt-6 flex justify-end gap-2">
             <Dialog.Close asChild><Button type="button" variant="secondary" disabled={guard.isSubmitting}>Cancel</Button></Dialog.Close>
-            <Button type="button" disabled={guard.isSubmitting} onClick={() => void remove()} className="bg-dashboard-danger text-white hover:bg-dashboard-danger/90">
+            <Button type="button" disabled={guard.isSubmitting} onClick={() => void remove()} className="bg-dashboard-danger text-dashboard-primary-ink hover:bg-dashboard-danger/90">
               {guard.isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Trash2 className="h-4 w-4" aria-hidden="true" />}
               {guard.isSubmitting ? "Removing…" : "Remove closed date"}
             </Button>

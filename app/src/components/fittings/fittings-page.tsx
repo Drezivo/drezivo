@@ -5,8 +5,6 @@ import { useSearchParams } from "next/navigation";
 import {
   CalendarClock,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   CircleAlert,
   Clock3,
   Info,
@@ -37,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { ListPagination } from "@/components/ui/list-pagination";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { cn } from "@/lib/utils";
 
@@ -322,11 +321,12 @@ export function FittingsPage() {
             )}
 
             {!isLoading && !error && rows.length > 0 ? (
-              <AppointmentsPagination
-                currentPage={pageIndex + 1}
-                loadedCount={rows.length}
+              <ListPagination
+                label="Fittings pagination"
+                noun={{ one: "fitting", other: "fittings" }}
+                pageIndex={pageIndex}
+                shown={rows.length}
                 hasMore={pageMeta.has_more}
-                hasPrevious={pageIndex > 0}
                 onNext={goNext}
                 onPrevious={goPrevious}
               />
@@ -390,7 +390,7 @@ function FittingsHeading({
       className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
     >
       <div>
-        <h1 id="fittings-heading" className="text-2xl font-bold tracking-tight text-dashboard-navy">
+        <h1 id="fittings-heading" className="dashboard-page-title">
           Fittings
         </h1>
         <p className="mt-1 text-sm text-dashboard-muted">
@@ -450,7 +450,7 @@ function SummarySection({
                 {loading ? (
                   <span className="mb-1 block h-5 w-8 animate-pulse rounded bg-dashboard-active" />
                 ) : (
-                  <span className="block text-xl font-semibold leading-none text-dashboard-navy">
+                  <span className="block text-ws-kpi font-semibold tabular-nums tracking-tight leading-none text-dashboard-navy">
                     {summary ? values[item.key] : "—"}
                   </span>
                 )}
@@ -577,7 +577,7 @@ function AppointmentList({
                 type="button"
                 onClick={() => onSelect(appointment)}
                 aria-label={`Open fitting for ${appointment.customer.full_name} on ${formatFittingDate(appointment.period.start, timeZone)}`}
-                className="grid w-full grid-cols-2 gap-x-4 gap-y-3 px-4 py-4 text-left transition-colors hover:bg-dashboard-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/30 lg:grid-cols-[minmax(9rem,1fr)_minmax(10rem,1.1fr)_minmax(12rem,1.4fr)_minmax(9rem,1fr)_minmax(7.5rem,0.8fr)_minmax(9rem,1fr)] lg:items-start lg:gap-4"
+                className="grid w-full cursor-pointer grid-cols-2 gap-x-4 gap-y-3 px-4 py-4 text-left transition-colors hover:bg-dashboard-active/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/30 lg:grid-cols-[minmax(9rem,1fr)_minmax(10rem,1.1fr)_minmax(12rem,1.4fr)_minmax(9rem,1fr)_minmax(7.5rem,0.8fr)_minmax(9rem,1fr)] lg:items-start lg:gap-4"
               >
                 <AppointmentCell label="Date & time" className="col-span-2 lg:col-span-1">
                   <p className="font-semibold text-dashboard-navy">
@@ -702,62 +702,6 @@ function AttentionSummary({ attention }: { attention: readonly string[] }) {
         );
       })}
     </div>
-  );
-}
-
-function AppointmentsPagination({
-  currentPage,
-  hasMore,
-  hasPrevious,
-  loadedCount,
-  onNext,
-  onPrevious,
-}: {
-  currentPage: number;
-  hasMore: boolean;
-  hasPrevious: boolean;
-  loadedCount: number;
-  onNext: () => void;
-  onPrevious: () => void;
-}) {
-  return (
-    <nav
-      aria-label="Fittings pagination"
-      className="flex flex-wrap items-center justify-between gap-2 border-t border-dashboard-border px-3 py-3 text-sm text-dashboard-muted sm:px-4"
-    >
-      <span aria-live="polite">
-        Page {currentPage} · {loadedCount} fittings loaded
-      </span>
-      <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-label="Previous page"
-          disabled={!hasPrevious}
-          onClick={onPrevious}
-        >
-          <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Previous
-        </Button>
-        <span
-          aria-label={`Page ${currentPage}`}
-          aria-current="page"
-          className="px-2 font-medium text-dashboard-navy"
-        >
-          {currentPage}
-        </span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-label="Next page"
-          disabled={!hasMore}
-          onClick={onNext}
-        >
-          Next <ChevronRight className="h-4 w-4" aria-hidden="true" />
-        </Button>
-      </div>
-    </nav>
   );
 }
 

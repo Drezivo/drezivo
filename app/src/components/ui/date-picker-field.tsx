@@ -104,7 +104,7 @@ export function DatePickerField({
               type="button"
               size="sm"
               variant="ghost"
-              className="text-zinc-200 hover:text-white disabled:text-dashboard-muted"
+              className="text-dashboard-navy hover:text-dashboard-accent disabled:text-dashboard-muted"
               disabled={!todayAllowed}
               onClick={() => {
                 onChange(formatIsoDate(today));

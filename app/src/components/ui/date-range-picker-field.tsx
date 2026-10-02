@@ -146,7 +146,7 @@ export function DateRangePickerField({
               type="button"
               size="sm"
               variant="ghost"
-              className="text-zinc-200 hover:text-white"
+              className="text-dashboard-navy hover:text-dashboard-accent"
               onClick={() => {
                 const date = formatIsoDate(today);
                 onChange({ from: date, to: date });

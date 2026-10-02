@@ -1,48 +1,47 @@
-import { Home, SearchX } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 
 import { NotFoundBackButton } from "@/components/shell/not-found-back-button";
 
+/**
+ * The Drezivo 404. The same layout and copy ship in the landing site, storefronts, and operator
+ * console (web/src/app/not-found.tsx, Drezivo-Operator-Web); only the primary action differs.
+ */
 export default function NotFound() {
   return (
-    <main className="dashboard-theme-dark relative flex min-h-svh items-center justify-center overflow-hidden bg-dashboard-canvas px-6 py-12 text-dashboard-navy">
-      <div
+    <main className="relative flex min-h-svh flex-col items-center justify-center overflow-hidden bg-dashboard-canvas px-6 py-16 text-center text-dashboard-navy">
+      <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_32%,color-mix(in_srgb,var(--color-dashboard-accent)_10%,transparent),transparent_34%)]"
-      />
+        className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 select-none font-display text-[clamp(10rem,34vw,26rem)] italic leading-none text-dashboard-accent/[0.07]"
+      >
+        404
+      </span>
 
-      <section className="relative w-full max-w-xl text-center">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-dashboard-border bg-dashboard-surface shadow-sm">
-          <SearchX className="h-6 w-6 text-dashboard-accent" aria-hidden="true" />
-        </div>
+      <div className="relative flex max-w-lg flex-col items-center">
+        <Link href="/" aria-label="Drezivo" className="flex items-center gap-2">
+          <Image src="/brand/drezivo-mark.png" alt="" width={497} height={600} className="h-9 w-9 object-contain" />
+          <span className="font-display text-2xl font-medium">Drezivo</span>
+        </Link>
 
-        <div className="mt-6 inline-flex items-center rounded-full border border-dashboard-border bg-dashboard-surface px-3 py-1 text-xs font-semibold tracking-[0.18em] text-dashboard-accent">
-          ERROR 404
-        </div>
-
-        <h1 className="mt-4 text-3xl font-semibold tracking-tight text-dashboard-navy sm:text-4xl">
+        <p className="dashboard-eyebrow mt-12">Error 404</p>
+        <h1 className="mt-3 font-display text-[clamp(2.25rem,1.6rem+3vw,3.75rem)] font-medium leading-[1.05] tracking-[-0.02em]">
           Page not found
         </h1>
-        <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-dashboard-muted sm:text-base">
-          The page you&apos;re looking for doesn&apos;t exist, may have moved, or isn&apos;t
-          available in this workspace.
+        <span aria-hidden="true" className="mt-6 block h-px w-16 bg-dashboard-accent/60" />
+        <p className="mt-6 text-base leading-7 text-dashboard-muted">
+          The page you are looking for does not exist or has moved.
         </p>
 
-        <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
+        <div className="mt-10 flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
           <Link
             href="/"
-            className="dashboard-button-default inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent focus-visible:ring-offset-2 focus-visible:ring-offset-dashboard-canvas"
+            className="dashboard-button-default inline-flex min-h-12 items-center justify-center rounded-full px-7 text-sm font-medium transition-colors"
           >
-            <Home className="h-4 w-4" aria-hidden="true" />
             Back to dashboard
           </Link>
           <NotFoundBackButton />
         </div>
-
-        <p className="mt-8 text-xs text-dashboard-muted">
-          If you reached this page from Drezivo, return to the dashboard and try again.
-        </p>
-      </section>
+      </div>
     </main>
   );
 }

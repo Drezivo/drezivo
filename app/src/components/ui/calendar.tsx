@@ -37,7 +37,7 @@ export function Calendar({
         range_middle: "rounded-none bg-dashboard-active/60",
         range_end: "rounded-r-md bg-dashboard-active",
         selected: "bg-dashboard-active font-semibold text-dashboard-accent",
-        today: "font-semibold text-zinc-200",
+        today: "font-semibold text-dashboard-accent underline underline-offset-4",
         outside: "text-dashboard-muted opacity-50",
         disabled: "pointer-events-none text-dashboard-muted opacity-40",
         hidden: "invisible",

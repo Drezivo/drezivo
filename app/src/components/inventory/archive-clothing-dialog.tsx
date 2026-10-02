@@ -116,7 +116,7 @@ export function ArchiveClothingDialog({
               type="button"
               disabled={isSubmitting}
               onClick={() => void archive()}
-              className="bg-dashboard-danger text-white hover:bg-dashboard-danger/90"
+              className="bg-dashboard-danger text-dashboard-primary-ink hover:bg-dashboard-danger/90"
             >
               {isSubmitting ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />

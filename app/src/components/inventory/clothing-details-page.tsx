@@ -206,7 +206,7 @@ function DetailContent({
   };
 
   return (
-    <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-dashboard-canvas px-ws-gutter py-6">
       <div className="mx-auto w-full max-w-screen-2xl space-y-4">
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <Link href="/inventory" className="text-dashboard-muted transition-colors hover:text-dashboard-navy">
@@ -313,7 +313,7 @@ function DetailContent({
                       ) : null}
                       <LifecycleBadge status={item.status} />
                     </div>
-                    <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight text-dashboard-navy sm:text-4xl">
+                    <h1 className="mt-3 dashboard-page-title">
                       {item.name}
                     </h1>
                     <p className="mt-1 text-sm text-dashboard-muted">{item.code}</p>
@@ -607,7 +607,7 @@ function DetailContent({
 
 function DetailLoadingState() {
   return (
-    <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-dashboard-canvas px-ws-gutter py-6">
       <div className="mx-auto flex min-h-80 w-full max-w-screen-2xl items-center justify-center rounded-xl border border-dashboard-border bg-dashboard-surface text-sm text-dashboard-muted">
         Loading clothing details…
       </div>
@@ -618,7 +618,7 @@ function DetailLoadingState() {
 function DetailErrorState({ error, onRetry }: { error: DrezivoApiError; onRetry: () => Promise<void> }) {
   const notFound = error.status === 404 || error.code === "NOT_FOUND";
   return (
-    <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-dashboard-canvas px-ws-gutter py-6">
       <div className="mx-auto flex min-h-80 w-full max-w-screen-2xl flex-col items-center justify-center gap-4 rounded-xl border border-dashboard-border bg-dashboard-surface px-6 text-center">
         <CircleAlert className="h-8 w-8 text-dashboard-muted" aria-hidden="true" />
         <div>

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DashboardShell } from "@/components/shell/dashboard-shell";
@@ -90,7 +90,9 @@ describe("DashboardShell", () => {
       </DashboardShell>
     );
 
-    const reservationsLink = screen.getByRole("link", { name: "Reservations" });
+    // The phone tab bar also links to Reservations; this test is about the sidebar.
+    const sidebar = screen.getByRole("navigation", { name: "Primary" });
+    const reservationsLink = within(sidebar).getByRole("link", { name: "Reservations" });
     expect(reservationsLink).toHaveTextContent("Reservations");
 
     fireEvent.click(screen.getByRole("button", { name: "Toggle navigation" }));
@@ -98,35 +100,39 @@ describe("DashboardShell", () => {
     expect(reservationsLink).not.toHaveTextContent("Reservations");
   });
 
-  it("defaults to the charcoal and gold dark theme and lets the user switch themes", async () => {
+  it("follows the system theme by default and remembers the user's switch", async () => {
     render(
       <DashboardShell>
         <div>Shell content</div>
       </DashboardShell>
     );
 
-    await waitFor(() => expect(document.documentElement.dataset["dashboardTheme"]).toBe("dark"));
-    const themeToggle = screen.getByRole("button", { name: "Switch to light mode" });
+    // jsdom has no prefers-color-scheme, so "system" resolves to light.
+    const themeToggle = await screen.findByRole("button", { name: "Switch to dark theme" });
     fireEvent.click(themeToggle);
 
-    expect(document.documentElement.dataset["dashboardTheme"]).toBe("light");
-    expect(window.localStorage.getItem("drezivo.dashboard.theme")).toBe("light");
-    expect(screen.getByRole("button", { name: "Switch to dark mode" })).toBeVisible();
+    expect(document.documentElement.dataset["dashboardTheme"]).toBe("dark");
+    expect(window.localStorage.getItem("drezivo-theme")).toBe("dark");
+    expect(screen.getByRole("button", { name: "Switch to light theme" })).toBeVisible();
   });
 
-  it("opens notifications and account menus when clicked", async () => {
+  it("keeps the personal account menu separate from the business workspace menu", async () => {
     render(
       <DashboardShell>
         <div>Shell content</div>
       </DashboardShell>
     );
 
-    openMenu(screen.getByRole("button", { name: "Open notifications" }));
-    expect(await screen.findByText("New reservation request")).toBeVisible();
+    openMenu(screen.getByRole("button", { name: "Open account menu" }));
+    expect(await screen.findByRole("menuitem", { name: "Your profile" })).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: "Password and security" })).toBeVisible();
+    expect(screen.getByRole("menuitemradio", { name: "Match system" })).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: "Sign out" })).toBeVisible();
 
     fireEvent.keyDown(document.body, { key: "Escape" });
-    openMenu(screen.getByRole("button", { name: /Ryanny Romero/ }));
-    expect(await screen.findByText("My account")).toBeVisible();
+    openMenu(await screen.findByRole("button", { name: "Open Romero Formalwear menu" }));
+    expect(await screen.findByRole("menuitem", { name: "Business information" })).toHaveAttribute("href", "/settings");
+    expect(screen.getByRole("menuitem", { name: "Payment methods" })).toHaveAttribute("href", "/settings/payment-methods");
   });
 
   it("shows the active business, signed-in user, resolved role, and saved business logo", async () => {
@@ -138,7 +144,7 @@ describe("DashboardShell", () => {
 
     expect(await screen.findByText("Romero Formalwear")).toBeVisible();
     expect(screen.getByText("Ryanny Romero")).toBeVisible();
-    expect(screen.getAllByText("Business Owner")).toHaveLength(2);
+    expect(screen.getByText("ryanny@example.test")).toBeVisible();
     expect(await screen.findByRole("img", { name: "Romero Formalwear logo" })).toHaveAttribute(
       "src",
       "https://img.example.test/store-logo.png"
@@ -169,6 +175,25 @@ describe("DashboardShell", () => {
         "https://img.example.test/new-logo.png"
       )
     );
+  });
+
+  it("offers phone tabs and a Menu sheet with the remaining pages", async () => {
+    render(
+      <DashboardShell>
+        <div>Shell content</div>
+      </DashboardShell>
+    );
+
+    const tabs = screen.getByRole("navigation", { name: "Quick navigation" });
+    expect(within(tabs).getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
+    fireEvent.click(within(tabs).getByRole("button", { name: "Menu" }));
+
+    const sheet = await screen.findByRole("dialog");
+    expect(within(sheet).getByRole("link", { name: "Customers" })).toHaveAttribute("href", "/customers");
+    expect(within(sheet).getByRole("link", { name: "Help Center" })).toHaveAttribute("href", "/help");
+    fireEvent.click(within(sheet).getByRole("radio", { name: "Dark" }));
+    expect(document.documentElement.dataset["dashboardTheme"]).toBe("dark");
+    expect(within(sheet).getByRole("button", { name: /Sign out/ })).toBeVisible();
   });
 
   it("opens the navigation as a Sheet on mobile", async () => {

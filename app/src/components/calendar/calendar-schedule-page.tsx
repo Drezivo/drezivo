@@ -653,7 +653,7 @@ function CalendarHeading() {
           </p>
           <h1
             id="calendar-heading"
-            className="mt-1 font-display text-3xl font-semibold tracking-tight text-dashboard-navy sm:text-4xl"
+            className="mt-1 dashboard-page-title"
           >
             Rental Calendar
           </h1>
@@ -1336,7 +1336,7 @@ function MonthGrid({
                   onClick={() => onOpenDay(dateKey)}
                   className={cn(
                     "mb-1 flex h-11 min-w-11 items-center justify-center rounded-full px-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent",
-                    dateKey === todayKey ? "bg-dashboard-accent text-white" : "text-dashboard-navy",
+                    dateKey === todayKey ? "bg-dashboard-primary text-dashboard-primary-ink" : "text-dashboard-navy",
                     !inMonth && "text-dashboard-muted"
                   )}
                   aria-label={`Open ${formatCalendarDate(dateKey, { month: "long", day: "numeric", year: "numeric" })} agenda`}

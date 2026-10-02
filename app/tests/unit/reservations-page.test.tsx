@@ -437,7 +437,7 @@ describe("ReservationsPage", () => {
     await screen.findByText("RSV-REAL-001");
 
     expect(screen.getByRole("button", { name: "Previous reservations page" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Next reservations page" })).toHaveClass("text-white");
+    expect(screen.getByRole("button", { name: "Next reservations page" })).toHaveClass("text-dashboard-navy");
     expect(screen.getByRole("button", { name: "Next reservations page" })).not.toHaveClass("bg-dashboard-active");
 
     fireEvent.click(screen.getByRole("button", { name: "Next reservations page" }));
@@ -450,7 +450,7 @@ describe("ReservationsPage", () => {
     );
     expect(await screen.findByText("RSV-HOLD-002")).toBeVisible();
     expect(screen.getByText("Page 2 · 1 reservation loaded")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Previous reservations page" })).toHaveClass("text-white");
+    expect(screen.getByRole("button", { name: "Previous reservations page" })).toHaveClass("text-dashboard-navy");
     expect(screen.getByRole("button", { name: "Next reservations page" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Previous reservations page" }));

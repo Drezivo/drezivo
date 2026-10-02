@@ -9,13 +9,13 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "dashboard-button-default",
-        primary: "bg-brand-600 text-white hover:bg-brand-700",
+        primary: "dashboard-button-default",
         secondary: "dashboard-button-secondary border border-dashboard-border",
-        danger: "bg-danger-500 text-white hover:bg-danger-500/90",
-        ghost: "text-ink-700 hover:bg-dashboard-active hover:text-dashboard-navy",
+        danger: "bg-dashboard-danger text-dashboard-primary-ink hover:bg-dashboard-danger/90",
+        ghost: "text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy",
       },
       size: {
-        default: "h-10 px-4 py-2",
+        default: "h-ws-control px-4 py-2",
         sm: "h-9 rounded-md px-3",
         lg: "h-11 rounded-md px-6",
         icon: "h-10 w-10",

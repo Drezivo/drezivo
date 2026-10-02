@@ -85,7 +85,7 @@ export function StorefrontOverviewPage() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-dashboard-canvas px-ws-gutter py-6">
       <div className="mx-auto w-full max-w-6xl">{children}</div>
     </div>
   );
@@ -161,10 +161,11 @@ function OverviewCard({ settings }: { settings: StorefrontSettings }) {
                 <StorefrontPreviewButton />
               )}
             </dd>
+            {/* Inside a dd: a <dl> group may hold only dt and dd elements. */}
             {settings.status === "published" ? null : (
-              <p className="mt-1.5 text-xs leading-5 text-dashboard-muted">
+              <dd className="mt-1.5 text-xs leading-5 text-dashboard-muted">
                 Not live yet. Renters see &ldquo;Page not found&rdquo; at this address until you publish. Use Preview to see it the way they will.
-              </p>
+              </dd>
             )}
           </div>
           <div>

@@ -17,18 +17,21 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
   const requestId = error.digest;
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-ink-100 px-6 text-center">
-      <h1 className="text-lg font-semibold text-ink-900">Something went wrong</h1>
-      <p className="max-w-md text-sm text-ink-500">
+    <main className="flex min-h-svh flex-col items-center justify-center bg-dashboard-canvas px-6 text-center text-dashboard-navy">
+      <p className="dashboard-eyebrow">Error</p>
+      <h1 className="mt-3 font-display text-[clamp(2rem,1.5rem+2.5vw,3rem)] font-medium leading-tight">Something went wrong</h1>
+      <p className="mt-4 max-w-md text-sm leading-6 text-dashboard-muted">
         We couldn&apos;t load this page. Try again, and if it keeps happening, share this reference with
         support.
       </p>
       {requestId && (
-        <code className="rounded-md bg-white px-3 py-1 text-xs text-ink-700 shadow-sm">
+        <code className="mt-4 rounded-md border border-dashboard-border bg-dashboard-surface px-3 py-1 text-xs text-dashboard-muted">
           Reference: {requestId}
         </code>
       )}
-      <Button onClick={reset}>Try again</Button>
-    </div>
+      <Button onClick={reset} className="mt-8 min-h-12 rounded-full px-7">
+        Try again
+      </Button>
+    </main>
   );
 }

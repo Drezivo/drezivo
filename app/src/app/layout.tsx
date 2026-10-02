@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
+import { Bodoni_Moda, Jost } from "next/font/google";
+
+import { THEME_BOOT_SCRIPT } from "@/lib/theme-boot";
+
 import "./globals.css";
+
+// The landing page's type pair (web/src/app/(marketing)/layout.tsx): Bodoni Moda for display,
+// Jost for interface text. globals.css maps them to --font-display and --font-sans.
+const display = Bodoni_Moda({ subsets: ["latin"], axes: ["opsz"], variable: "--font-bodoni", display: "swap" });
+const body = Jost({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-jost", display: "swap" });
 
 export const metadata: Metadata = {
   title: {
@@ -12,7 +21,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: the theme boot script sets data-dashboard-theme before React hydrates.
+    <html lang="en" className={`${display.variable} ${body.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body suppressHydrationWarning>
         <ClerkProvider
           signInUrl="/sign-in"

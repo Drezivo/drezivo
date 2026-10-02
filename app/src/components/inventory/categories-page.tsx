@@ -83,7 +83,7 @@ export function CategoriesPage() {
   }
 
   return (
-    <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-dashboard-canvas px-ws-gutter py-6">
       <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex items-start gap-3">
@@ -95,7 +95,7 @@ export function CategoriesPage() {
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </Link>
             <div>
-              <h1 className="font-display text-3xl font-semibold tracking-tight text-dashboard-navy sm:text-4xl">
+              <h1 className="dashboard-page-title">
                 Categories
               </h1>
               <p className="mt-1 text-sm text-dashboard-muted">

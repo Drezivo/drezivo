@@ -740,7 +740,7 @@ export function AddClothingPage() {
   };
 
   return (
-    <div className="min-h-full bg-dashboard-canvas px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-dashboard-canvas px-ws-gutter py-6">
       <div className="mx-auto w-full max-w-screen-2xl">
         <div className="mb-5 flex flex-wrap items-center gap-2 text-sm">
           <Link
@@ -755,7 +755,7 @@ export function AddClothingPage() {
         </div>
 
         <div className="mb-5">
-          <h1 className="font-display text-3xl font-semibold tracking-tight text-dashboard-navy sm:text-4xl">
+          <h1 className="dashboard-page-title">
             Add Clothing
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-dashboard-muted">
