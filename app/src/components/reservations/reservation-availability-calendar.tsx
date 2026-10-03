@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { DateRange, DayButtonProps } from "react-day-picker";
 
 import type {
@@ -9,6 +9,7 @@ import type {
 } from "@drezivo/contracts";
 
 import { Calendar } from "@/components/ui/calendar";
+import { DatePickerField } from "@/components/ui/date-picker-field";
 import { cn } from "@/lib/utils";
 
 export function ReservationAvailabilityCalendar({
@@ -39,9 +40,12 @@ export function ReservationAvailabilityCalendar({
     if (!from) return undefined;
     return { from, to: parseCalendarDate(dueDate) ?? undefined };
   }, [dueDate, pickupDate]);
-  const minimumCalendarDays = availability
+  // The pickup date is Day 1, so an N-day package spans N - 1 nights: a 3-day rental picked up
+  // Oct 5 is returned Oct 7. react-day-picker's range `min` counts nights.
+  const includedRentalDays = availability
     ? Math.floor(availability.pricing.minimum_duration_minutes / (24 * 60))
     : 0;
+  const minimumNights = Math.max(0, includedRentalDays - 1);
   const branchToday = parseCalendarDate(todayInTimeZone(timeZone));
   const disabledDates = useMemo(
     () =>
@@ -52,9 +56,47 @@ export function ReservationAvailabilityCalendar({
     [availability?.days]
   );
   const earliestCandidateReturn =
-    selected?.from && !selected.to && minimumCalendarDays > 0
-      ? addCalendarDays(selected.from, minimumCalendarDays)
+    selected?.from && !selected.to && minimumNights > 0
+      ? addCalendarDays(selected.from, minimumNights)
       : null;
+
+  const [fieldNotice, setFieldNotice] = useState<string | null>(null);
+  const todayIso = todayInTimeZone(timeZone);
+
+  /** First unavailable day inside the range, so a typed range cannot skip over a busy day. */
+  const firstBusyDate = (start: string, end: string): string | null => {
+    for (let day = start; day <= end; day = addIsoDays(day, 1)) {
+      if (byDate.get(day)?.state === "unavailable") return day;
+    }
+    return null;
+  };
+
+  const choosePickupFromField = (date: string) => {
+    setFieldNotice(null);
+    if (!date) {
+      onRangeChange({ pickupDate: "", dueDate: "" });
+      return;
+    }
+    // Keep a return date that still works; otherwise suggest the earliest one the package allows.
+    const earliest = addIsoDays(date, minimumNights);
+    const keep = dueDate && dueDate >= earliest && !firstBusyDate(date, dueDate) ? dueDate : null;
+    const suggested = keep ?? (firstBusyDate(date, earliest) ? "" : earliest);
+    onRangeChange({ pickupDate: date, dueDate: suggested });
+  };
+
+  const chooseReturnFromField = (date: string) => {
+    setFieldNotice(null);
+    if (!date || !pickupDate) {
+      onRangeChange({ pickupDate, dueDate: "" });
+      return;
+    }
+    const busy = firstBusyDate(pickupDate, date);
+    if (busy) {
+      setFieldNotice(`${formatIsoForNotice(busy)} is not available in that range. Choose another return date.`);
+      return;
+    }
+    onRangeChange({ pickupDate, dueDate: date });
+  };
 
   const AvailabilityDayButton = ({
     day,
@@ -114,7 +156,7 @@ export function ReservationAvailabilityCalendar({
           month={month}
           onMonthChange={onMonthChange}
           selected={selected}
-          min={minimumCalendarDays}
+          min={minimumNights}
           resetOnSelect
           disabled={[
             ...(branchToday ? [{ before: branchToday }] : []),
@@ -122,8 +164,9 @@ export function ReservationAvailabilityCalendar({
           ]}
           excludeDisabled
           onSelect={(range, triggerDate) => {
+            setFieldNotice(null);
             if (
-              minimumCalendarDays === 0 &&
+              minimumNights === 0 &&
               selected?.from &&
               !selected.to &&
               isSameCalendarDay(selected.from, triggerDate)
@@ -174,9 +217,39 @@ export function ReservationAvailabilityCalendar({
           Loading variant availability…
         </p>
       ) : null}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <span className="mb-1.5 block text-xs font-medium text-dashboard-navy">Date from · pickup (Day 1)</span>
+          <DatePickerField
+            ariaLabel="Date from"
+            placeholder="Pickup date"
+            value={pickupDate}
+            min={todayIso}
+            disabledDates={disabledDates}
+            onChange={choosePickupFromField}
+          />
+        </div>
+        <div>
+          <span className="mb-1.5 block text-xs font-medium text-dashboard-navy">Date to · return</span>
+          <DatePickerField
+            ariaLabel="Date to"
+            placeholder={pickupDate ? "Return date" : "Choose pickup first"}
+            value={dueDate}
+            min={pickupDate ? addIsoDays(pickupDate, minimumNights) : todayIso}
+            disabled={!pickupDate}
+            disabledDates={disabledDates}
+            onChange={chooseReturnFromField}
+          />
+        </div>
+      </div>
+      {fieldNotice ? (
+        <p className="text-xs text-warning-500" role="alert">
+          {fieldNotice}
+        </p>
+      ) : null}
       {earliestCandidateReturn ? (
         <p className="text-xs text-dashboard-muted">
-          Earliest candidate return date for this fixed rental: {formatCalendarDate(earliestCandidateReturn)}. Exact pickup and return times must still meet the minimum duration.
+          This is a {includedRentalDays}-day rental. The pickup date counts as Day 1, so the earliest return date is {formatCalendarDate(earliestCandidateReturn)}.
         </p>
       ) : null}
       <p className="text-xs text-dashboard-muted">
@@ -261,4 +334,16 @@ function formatCalendarDate(date: Date): string {
     day: "numeric",
     year: "numeric",
   }).format(date);
+}
+
+function addIsoDays(isoDate: string, days: number): string {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Date(Date.UTC(year!, month! - 1, day! + days)).toISOString().slice(0, 10);
+}
+
+function formatIsoForNotice(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-PH", { month: "short", day: "numeric", timeZone: "UTC" }).format(
+    new Date(Date.UTC(year!, month! - 1, day!))
+  );
 }

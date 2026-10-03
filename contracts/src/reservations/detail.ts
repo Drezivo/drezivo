@@ -5,6 +5,7 @@ import { physicalAssetReadiness } from '../catalogue/staff';
 import {
   branchId,
   customerId,
+  fileObjectId,
   physicalAssetId,
   productVariantId,
   reservationId,
@@ -12,6 +13,7 @@ import {
   storefrontId,
 } from '../common/ids';
 import { currencyCode, moneyString } from '../common/money';
+import { paymentEvidenceStatus } from '../finance/payment-status';
 import { ianaTimezone, isoDate, isoInstant } from '../common/time';
 import { reservationPaymentProjection } from './list';
 import {
@@ -95,6 +97,12 @@ export const reservationDetail = z
     delivery_snapshot: reservationDeliverySnapshot,
     price_snapshot: reservationMoneySnapshot,
     payment: reservationPaymentProjection.nullable(),
+    /**
+     * Where the booking came from: `online` for a renter's storefront booking (they upload a payment
+     * receipt for the owner to verify), `walk_in` for one staff created at the counter (staff log
+     * the payment they received). Optional so the API and app can deploy in either order.
+     */
+    booking_channel: z.enum(['online', 'walk_in']).optional(),
     hold_acquired_at: isoInstant,
     hold_expires_at: isoInstant.nullable(),
     terms_accepted_at: isoInstant.nullable(),
@@ -107,3 +115,23 @@ export const reservationDetail = z
   })
   .strict();
 export type ReservationDetail = z.infer<typeof reservationDetail>;
+
+/**
+ * A renter's uploaded payment receipt, readable only by staff who may verify payments. `url` is a
+ * short-lived signed link; receipts are private evidence and never part of the reservation detail.
+ */
+export const reservationPaymentReceipt = z
+  .object({
+    file_id: fileObjectId,
+    content_type: z.enum(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
+    url: z.string().url(),
+    submitted_at: isoInstant,
+    evidence_status: paymentEvidenceStatus,
+  })
+  .strict();
+export type ReservationPaymentReceipt = z.infer<typeof reservationPaymentReceipt>;
+
+export const reservationPaymentReceiptsResponse = z
+  .object({ receipts: z.array(reservationPaymentReceipt).max(20) })
+  .strict();
+export type ReservationPaymentReceiptsResponse = z.infer<typeof reservationPaymentReceiptsResponse>;

@@ -12,9 +12,9 @@ import {
   type CatalogueResponse,
   type FittingSlotsResponse,
   type ItemDetail,
+  type PublicAvailabilityDay,
   type PublicAvailabilityQuery,
   type PublicAvailabilityResponse,
-  type PublicDayState,
   type PublicMeasurement,
   type PublicStorefront,
   type StorefrontDocument,
@@ -22,6 +22,7 @@ import {
 
 import { NotFoundError } from '../../shared/errors.js';
 import { toDocument } from '../storefront-cms/storefront-cms.service.js';
+import { closedReason, readShopClosures } from './shop-closures.js';
 import { storefrontMediaSigner, type StorefrontMediaSigner } from './storefront-media.js';
 import { fromPolicyColumns } from './storefront-policy.js';
 import {
@@ -34,6 +35,7 @@ import {
   readPublicCategories,
   readPublicItem,
   readPublicSizes,
+  readPublicSubcategories,
   readStoreCore,
   readStorefrontPaymentMethods,
   withPublishedStore,
@@ -152,10 +154,12 @@ export class PublicStorefrontService {
         offset: (query.page - 1) * query.page_size,
         ...(query.search ? { search: query.search } : {}),
         ...(query.category ? { categoryId: query.category } : {}),
+        ...(query.subcategory ? { subcategory: query.subcategory } : {}),
         ...(query.size ? { size: query.size } : {}),
       };
       const rows = await readCatalogueCards(client, store.tenantId, filter);
       const sizes = await readPublicSizes(client, store.tenantId);
+      const subcategories = await readPublicSubcategories(client, store.tenantId);
       const urls = await this.media.sign(client, store.tenantId, rows.map((row) => row.image_file_id));
       return catalogueResponse.parse({
         items: rows.map((row) => toCard(row, (id) => (id ? (urls.get(id) ?? null) : null))),
@@ -163,6 +167,7 @@ export class PublicStorefrontService {
         page: query.page,
         page_size: query.page_size,
         sizes,
+        subcategories,
       });
     }, preview);
     if (!result) throw new NotFoundError(NOT_FOUND);
@@ -182,6 +187,7 @@ export class PublicStorefrontService {
         name: found.item.name,
         description: found.item.description,
         category: found.item.category,
+        subcategory: found.item.subcategory,
         image_urls: found.item.image_file_ids.flatMap((id) => {
           const url = urls.get(id);
           return url ? [url] : [];
@@ -212,7 +218,11 @@ export class PublicStorefrontService {
       if (!(await isVisibleVariant(client, found.tenantId, query.variant_id))) return null;
       const core = await this.requireCore(client, found);
       const today = localDate(new Date(), core.timezone);
-      return { timezone: core.timezone, earliest: addDays(today, toDocument(core).checkout.min_notice_days) };
+      return {
+        timezone: core.timezone,
+        earliest: addDays(today, toDocument(core).checkout.min_notice_days),
+        closures: await readShopClosures(client, found, query.from, query.to),
+      };
     }, preview);
     if (!store) throw new NotFoundError(NOT_FOUND);
 
@@ -228,13 +238,16 @@ export class PublicStorefrontService {
 
     return publicAvailabilityResponse.parse({
       variant_id: query.variant_id,
-      days: days.map((date, index): { date: string; state: PublicDayState } => {
+      days: days.map((date, index): PublicAvailabilityDay => {
         const row = rows[index];
-        if (date < store.earliest || !row) return { date, state: 'unavailable' };
-        if (row.available_units > 0) return { date, state: 'available' };
-        if (row.blocking_reasons.includes('reservation')) return { date, state: 'reserved' };
-        if (row.blocking_reasons.includes('fitting')) return { date, state: 'fitting' };
-        return { date, state: 'unavailable' };
+        // Closed days keep the garment's own state: they only rule out pickup and return, not a
+        // rental that runs across them.
+        const closed = closedReason(store.closures, date) ? { closed: true } : {};
+        if (date < store.earliest || !row) return { date, state: 'unavailable', ...closed };
+        if (row.available_units > 0) return { date, state: 'available', ...closed };
+        if (row.blocking_reasons.includes('reservation')) return { date, state: 'reserved', ...closed };
+        if (row.blocking_reasons.includes('fitting')) return { date, state: 'fitting', ...closed };
+        return { date, state: 'unavailable', ...closed };
       }),
     });
   }
@@ -268,6 +281,7 @@ function toCard(row: CatalogueCardRow, urlOf: (id: string | null) => string | nu
     product_id: row.product_id,
     name: row.name,
     category: row.category,
+    subcategory: row.subcategory,
     image_url: urlOf(row.image_file_id),
     price_from_minor: row.price_from_minor,
     pricing_mode: row.pricing_mode,

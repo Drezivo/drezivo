@@ -1,7 +1,8 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { AlertTriangle, Check, CheckCircle2, Loader2 } from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
+import { AlertTriangle, Check, CheckCircle2, Eye, Loader2, ShieldCheck } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import type {
@@ -18,6 +19,8 @@ import { Input } from "@/components/ui/input";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 
+import { PaymentProof, usePaymentProof } from "./payment-proof";
+
 export type ReservationMutationNotice = {
   tone: "success" | "attention";
   message: string;
@@ -27,6 +30,7 @@ type ReservationAction =
   | "complete_reservation"
   | "record_cash"
   | "verify_payment"
+  | "log_payment"
   | "confirm_reservation"
   | "cancel"
   | "reject"
@@ -90,6 +94,9 @@ export function ReservationMutationActions({
   const [socialMedia, setSocialMedia] = useState("");
   const [notes, setNotes] = useState("");
   const [mutationError, setMutationError] = useState<DrezivoApiError | null>(null);
+  const [proofViewerOpen, setProofViewerOpen] = useState(false);
+  const [confirmVerifyOpen, setConfirmVerifyOpen] = useState(false);
+  const proof = usePaymentProof(detail.id, selectedAction === "verify_payment");
 
   const actions = useMemo(
     () => getVisibleMutationActions(detail, permissionCodes),
@@ -249,14 +256,15 @@ export function ReservationMutationActions({
               idempotencyKey
             );
           }
-          case "verify_payment": {
+          case "verify_payment":
+          case "log_payment": {
             if (!detail.payment) throw new Error("Reservation payment is missing.");
             await api.verifyReservationPayment(
               detail.id,
               {
                 version: detail.version,
                 verified_amount_minor: detail.payment.amount_minor,
-                ...(merchantReference.trim()
+                ...(selectedAction === "log_payment" && merchantReference.trim()
                   ? { merchant_reference: merchantReference.trim() }
                   : {}),
               },
@@ -374,7 +382,8 @@ export function ReservationMutationActions({
       !cashReceived ||
       cashTenderedMinor === null ||
       BigInt(cashTenderedMinor) < BigInt(detail.payment.amount_minor));
-  const verifyPaymentInvalid = selectedAction === "verify_payment" && !detail.payment;
+  const verifyPaymentInvalid =
+    (selectedAction === "verify_payment" || selectedAction === "log_payment") && !detail.payment;
   const submitDisabled =
     submitGuard.isSubmitting ||
     completionNeedsCustomer ||
@@ -739,11 +748,20 @@ export function ReservationMutationActions({
             {selectedAction === "verify_payment" && detail.payment ? (
               <>
                 <ActionMessage>
-                  Verify {formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)} received via {detail.payment.method_name}. This records the merchant verification and confirms the reservation when all checks pass.
+                  Open the proof, then check that {formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)} arrived in your {detail.payment.method_name} account before you verify.
+                </ActionMessage>
+                <PaymentProof state={proof} viewerOpen={proofViewerOpen} onViewerOpenChange={setProofViewerOpen} />
+              </>
+            ) : null}
+
+            {selectedAction === "log_payment" && detail.payment ? (
+              <>
+                <ActionMessage>
+                  Log the {formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)} paid at the counter via {detail.payment.method_name}. No receipt is needed for a walk-in.
                 </ActionMessage>
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
-                    Merchant/reference number (optional)
+                    Reference number (optional)
                   </span>
                   <Input
                     aria-label="Merchant reference"
@@ -857,7 +875,9 @@ export function ReservationMutationActions({
                   selectedAction === "cancel" || selectedAction === "reject" ? "danger" : "default"
                 }
                 disabled={submitDisabled}
-                onClick={() => void submitAction()}
+                onClick={() =>
+                  selectedAction === "verify_payment" ? setConfirmVerifyOpen(true) : void submitAction()
+                }
               >
                 {submitGuard.isSubmitting ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -870,7 +890,89 @@ export function ReservationMutationActions({
           </CardContent>
         </Card>
       ) : null}
+
+      {detail.payment ? (
+        <VerifyPaymentDialog
+          open={confirmVerifyOpen}
+          onOpenChange={setConfirmVerifyOpen}
+          amount={formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)}
+          methodName={detail.payment.method_name}
+          customerName={detail.customer.snapshot?.full_name ?? null}
+          onViewProof={() => {
+            setConfirmVerifyOpen(false);
+            const receipts = proof.kind === "ready" ? proof.receipts : [];
+            const firstDocument = receipts.find((receipt) => receipt.content_type === "application/pdf");
+            if (receipts.some((receipt) => receipt.content_type !== "application/pdf")) setProofViewerOpen(true);
+            else if (firstDocument) window.open(firstDocument.url, "_blank", "noopener,noreferrer");
+          }}
+          onConfirm={() => {
+            setConfirmVerifyOpen(false);
+            void submitAction();
+          }}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * Last check before an online payment is verified: the owner confirms they matched the renter's
+ * proof against their own wallet or bank history, or goes back to look at the proof again.
+ */
+function VerifyPaymentDialog({
+  open,
+  onOpenChange,
+  amount,
+  methodName,
+  customerName,
+  onViewProof,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  amount: string;
+  methodName: string;
+  customerName: string | null;
+  onViewProof: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/55" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-dashboard-border bg-dashboard-surface p-5 shadow-xl focus:outline-none sm:p-6">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-dashboard-active text-dashboard-accent">
+              <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <Dialog.Title className="text-lg font-semibold text-dashboard-navy">
+                Is this payment verified?
+              </Dialog.Title>
+              <Dialog.Description className="mt-1 text-sm leading-6 text-dashboard-muted">
+                Confirm only after you have seen {amount}
+                {customerName ? ` from ${customerName}` : ""} in your own {methodName} transaction history. The reservation is confirmed right after.
+              </Dialog.Description>
+            </div>
+          </div>
+          <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Dialog.Close asChild>
+              <Button type="button" variant="ghost" className="text-dashboard-navy hover:text-dashboard-navy">
+                Cancel
+              </Button>
+            </Dialog.Close>
+            <Button type="button" variant="secondary" onClick={onViewProof}>
+              <Eye className="h-4 w-4" aria-hidden="true" />
+              View proof again
+            </Button>
+            <Button type="button" onClick={onConfirm}>
+              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+              Yes, it&apos;s verified
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
@@ -956,7 +1058,12 @@ function getVisibleMutationActions(
           paymentAction.push({ action: "record_cash", label: "Record Cash & Confirm" });
         }
       } else if (canVerifyEvidence) {
-        paymentAction.push({ action: "verify_payment", label: "Verify Payment" });
+        // A walk-in paid at the counter, so staff log it; an online renter sent proof to verify.
+        paymentAction.push(
+          detail.booking_channel === "walk_in"
+            ? { action: "log_payment", label: "Log Payment" }
+            : { action: "verify_payment", label: "Verify Payment" }
+        );
       }
       return [
         ...paymentAction,
@@ -1017,6 +1124,8 @@ function actionTitle(action: ReservationAction): string {
       return "Record Cash & Confirm";
     case "verify_payment":
       return "Verify Payment";
+    case "log_payment":
+      return "Log Payment";
     case "confirm_reservation":
       return "Confirm Reservation";
     case "cancel":
@@ -1042,6 +1151,8 @@ function confirmLabel(action: ReservationAction): string {
       return "Record Cash & Confirm";
     case "verify_payment":
       return "Verify & Confirm";
+    case "log_payment":
+      return "Log Payment & Confirm";
     case "confirm_reservation":
       return "Confirm Reservation";
     case "cancel":
@@ -1066,7 +1177,9 @@ function actionDescription(action: ReservationAction): string {
     case "record_cash":
       return "Record the cash physically received from the customer, verify that collection, and confirm the reservation in one staff action.";
     case "verify_payment":
-      return "Verify the uploaded manual-payment evidence against the merchant account, then confirm the reservation if all checks pass.";
+      return "Online booking. Compare the renter's proof of payment with your own wallet or bank history, then verify to confirm the reservation.";
+    case "log_payment":
+      return "Walk-in booking. Record the payment received at the counter; the reservation is confirmed right after.";
     case "confirm_reservation":
       return "Payment is already verified. Confirm the reservation and keep its garment allocation.";
     case "cancel":
@@ -1092,6 +1205,7 @@ function mutationSuccessNotice(
     (action === "complete_reservation" ||
       action === "record_cash" ||
       action === "verify_payment" ||
+      action === "log_payment" ||
       action === "confirm_reservation") &&
     isConfirmedReservationResult(data)
   ) {
@@ -1102,6 +1216,8 @@ function mutationSuccessNotice(
           ? "Cash payment recorded and reservation confirmed."
           : action === "verify_payment"
             ? "Payment verified and reservation confirmed."
+            : action === "log_payment"
+              ? "Payment logged and reservation confirmed."
             : "Reservation confirmed.",
     };
   }
@@ -1110,6 +1226,7 @@ function mutationSuccessNotice(
     (action === "complete_reservation" ||
       action === "record_cash" ||
       action === "verify_payment" ||
+      action === "log_payment" ||
       action === "confirm_reservation") &&
     isStaffCompletionResult(data)
   ) {
@@ -1147,6 +1264,7 @@ function mutationSuccessNotice(
     case "complete_reservation":
     case "record_cash":
     case "verify_payment":
+    case "log_payment":
     case "confirm_reservation":
       return { tone: "attention", message: "Reservation completion requires another review." };
   }

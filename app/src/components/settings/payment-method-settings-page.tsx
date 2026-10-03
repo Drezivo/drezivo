@@ -176,7 +176,8 @@ function AddPaymentMethodCard({ onCancel, onCreated }: { onCancel: () => void; o
           {
             name: trimmed,
             rail,
-            storefront_enabled: false,
+            // Online methods are meant for renters; the storefront still hides one until it is ready.
+            storefront_enabled: true,
             destination: { account_name: null, account_number: null, instructions: null },
             qr_file_id: null,
             presentation: "details",
@@ -347,7 +348,8 @@ function PaymentMethodEditor({ method, onSaved }: { method: PaymentMethodSetting
           {
             version: method.version,
             active,
-            storefront_enabled: staffOnly ? false : storefrontEnabled,
+            // Uploading a QR or instructions file is the owner asking renters to pay with it.
+            storefront_enabled: staffOnly ? false : storefrontEnabled || Boolean(qrFile) || Boolean(materialFile),
             destination: {
               account_name: accountName.trim() || null,
               account_number: accountNumber.trim() || null,
@@ -505,8 +507,10 @@ function PaymentMethodEditor({ method, onSaved }: { method: PaymentMethodSetting
               />
             )}
 
-            {storefrontEnabled && !method.storefront_ready ? (
-              <p className="mt-3 text-xs text-dashboard-gold-text">This method stays hidden on the storefront until its details or file are saved.</p>
+            {!method.storefront_ready ? (
+              <p className="mt-3 text-xs text-dashboard-gold-text" role="status">
+                {storefrontGap(method)}
+              </p>
             ) : null}
           </div>
         ) : null}
@@ -703,4 +707,20 @@ function errorMessage(error: unknown, fallback: string): string {
   }
   if (error instanceof Error && error.message) return error.message;
   return fallback;
+}
+
+/**
+ * Why a saved online method is not shown to renters, in the owner's words. Mirrors the server's
+ * readiness rule (payment-method-readiness.ts); the server stays the authority.
+ */
+export function storefrontGap(method: PaymentMethodSettingsItem): string {
+  if (!method.active) return "Turn on \"Accepted by staff\" and save to show this method to renters.";
+  if (!method.storefront_enabled) return "Turn on \"Available on storefront\" and save to show this method to renters.";
+  if (method.presentation === "material") {
+    return method.material ? "Your instructions file did not finish uploading. Upload it again and save." : "Upload your instructions file and save.";
+  }
+  if (method.rail === "manual_qr") {
+    return method.qr_file_id ? "Your QR image did not finish uploading. Upload it again and save." : "Upload your QR image and save.";
+  }
+  return "Add the account number and save.";
 }

@@ -67,6 +67,7 @@ const detail = {
   code: "GWN-023",
   name: "Emerald Evening Gown",
   description: "Floor-length formal gown with fitted bodice.",
+  subcategory: "Tea Length",
   category: { id: categoryId, name: "Gowns" },
   status: "active" as const,
   sizing_mode: "sized" as const,
@@ -253,6 +254,8 @@ describe("EditClothingPage", () => {
     expect(screen.getByLabelText("Clothing Name")).toHaveValue("Emerald Evening Gown");
     expect(screen.getByLabelText("Clothing Code")).toHaveValue("GWN-023");
     expect(screen.getByLabelText("Description")).toHaveValue(detail.description);
+    expect(screen.getByLabelText("Subcategory")).toHaveValue("custom");
+    expect(screen.getByLabelText("Custom subcategory")).toHaveValue("Tea Length");
     expect(screen.getByLabelText("GWN-023-M Size Label")).toHaveValue("M");
     expect(screen.getByLabelText("GWN-023-M Color")).toHaveValue("Emerald Green");
     expect(screen.getByLabelText("GWN-023-M bust")).toHaveValue("90");
@@ -265,6 +268,19 @@ describe("EditClothingPage", () => {
     const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
     expect(within(breadcrumb).getByRole("link", { name: "Clothing" })).toHaveAttribute("href", "/inventory");
     expect(within(breadcrumb).getByText("Edit Emerald Evening Gown")).toHaveAttribute("aria-current", "page");
+  });
+
+  it("clears an existing subcategory when None is selected", async () => {
+    render(<EditClothingPage productId={productId} />);
+    await screen.findByRole("heading", { name: "Edit Clothing" });
+    fireEvent.change(screen.getByLabelText("Subcategory"), { target: { value: "none" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(api.updateClothingProduct).toHaveBeenCalledTimes(1));
+    expect(api.updateClothingProduct.mock.calls[0]?.[1]).toEqual({
+      expected_updated_at: productUpdatedAt,
+      subcategory: null,
+    });
   });
 
   it("migrates a sized clothing item to Free size through the dedicated command", async () => {

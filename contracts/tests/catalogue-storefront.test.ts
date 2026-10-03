@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   businessInformation,
   catalogueQuery,
+  catalogueResponse,
   defaultStorefrontDocument,
   DEFAULT_NOTIFICATION_PREFERENCES,
   itemDetail,
   MAX_CLOTHING_PHOTOS,
+  STOREFRONT_SLUG_MAX_LENGTH,
   notificationPreferences,
   publicAvailabilityQuery,
   storefrontDocument,
@@ -49,6 +51,32 @@ describe('catalogue storefront contract', () => {
     expect(catalogueQuery.parse({})).toMatchObject({ page: 1, page_size: 24, sort: 'featured' });
     expect(catalogueQuery.safeParse({ page_size: '49' }).success).toBe(false);
     expect(catalogueQuery.safeParse({ tenant_id: 'x' }).success).toBe(false);
+  });
+
+  it('accepts a trimmed single subcategory filter and returns public facet values', () => {
+    expect(catalogueQuery.parse({ subcategory: '  mini ' }).subcategory).toBe('mini');
+    expect(catalogueQuery.safeParse({ subcategory: 'x'.repeat(121) }).success).toBe(false);
+    expect(catalogueQuery.safeParse({ subcategories: ['LONG'] }).success).toBe(false);
+    expect(
+      catalogueResponse.safeParse({
+        items: [{
+          product_id: productId,
+          name: 'Tea Dress',
+          category: 'Dresses',
+          subcategory: 'MINI',
+          image_url: null,
+          price_from_minor: '30000',
+          pricing_mode: 'daily',
+          included_duration_minutes: 1440,
+          sizes: ['S'],
+        }],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        sizes: ['S'],
+        subcategories: ['MINI'],
+      }).success,
+    ).toBe(true);
   });
 
   it('keeps availability windows bounded and ordered', () => {
@@ -98,6 +126,8 @@ describe('storefront CMS contract', () => {
     expect(storefrontSlug.safeParse('a--b').success).toBe(false);
     expect(storefrontSlug.safeParse('-luna').success).toBe(false);
     expect(storefrontSlug.safeParse('lu').success).toBe(false);
+    expect(storefrontSlug.safeParse('a'.repeat(STOREFRONT_SLUG_MAX_LENGTH)).success).toBe(true);
+    expect(storefrontSlug.safeParse('a'.repeat(STOREFRONT_SLUG_MAX_LENGTH + 1)).success).toBe(false);
   });
 
   it('keeps delivery fees within integer minor units', () => {

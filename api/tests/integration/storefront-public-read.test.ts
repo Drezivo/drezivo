@@ -33,6 +33,7 @@ describe('public storefront read API', async () => {
   const { closePool } = await import('../../src/db/client.js');
   const { storefrontCmsService: cms } = await import('../../src/modules/storefront-cms/storefront-cms.service.js');
   const { addDays, localDate } = await import('../../src/modules/storefront/storefront.service.js');
+  const { weekdayOf } = await import('../../src/modules/storefront/shop-closures.js');
   const { createStorefrontAsset, createStorefrontWorkspace } = await import('./helpers/storefront-fixture.js');
   const { defaultStorefrontDocument, fileObjectId, productId } = await import('@drezivo/contracts');
   const admin = new pg.Pool({ connectionString: adminUrl, max: 2 });
@@ -148,9 +149,42 @@ describe('public storefront read API', async () => {
   it('filters, searches, and pages the catalogue without treating input as SQL wildcards', async () => {
     const ws = await publishedWorkspace('pub-cat');
     const app = createApp();
+    await admin.query(`UPDATE product SET subcategory = 'LONG' WHERE tenant_id = $1 AND id = $2`, [ws.tenantId, ws.productId]);
+    const miniProduct = await admin.query<{ id: string }>(
+      `INSERT INTO product (tenant_id, category_id, code, name, description, subcategory, status)
+       SELECT tenant_id, category_id, 'PUB-MINI-001', 'Mini Dress', 'A published mini dress.', 'MINI', 'active'
+         FROM product WHERE tenant_id = $1 AND id = $2
+       RETURNING id`,
+      [ws.tenantId, ws.productId],
+    );
+    await admin.query(
+      `INSERT INTO product_variant
+         (tenant_id, product_id, sku, size_label, color_label, measurements, measurement_unit, measurement_mode,
+          rental_price_minor, security_deposit_minor, currency, pricing_mode, included_duration_minutes,
+          extra_day_price_minor, prep_minutes, turnaround_minutes, status)
+       SELECT tenant_id, $2, 'PUB-MINI-M', size_label, color_label, measurements, measurement_unit, measurement_mode,
+              rental_price_minor, security_deposit_minor, currency, pricing_mode, included_duration_minutes,
+              extra_day_price_minor, prep_minutes, turnaround_minutes, 'active'
+         FROM product_variant WHERE tenant_id = $1 AND id = $3`,
+      [ws.tenantId, miniProduct.rows[0]?.id, ws.variantIds.m],
+    );
+    await admin.query(
+      `INSERT INTO product (tenant_id, category_id, code, name, description, subcategory, status)
+       SELECT tenant_id, category_id, 'DRAFT-SUB-001', 'Hidden Dress', '', 'DRAFT-ONLY', 'draft'
+         FROM product WHERE tenant_id = $1 AND id = $2`,
+      [ws.tenantId, ws.productId],
+    );
     const all = await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue`);
-    expect(dataOf<CatalogueResponse>(all)).toMatchObject({ total: 1, page: 1, page_size: 24, sizes: ['M', 'L'] });
-    expect(dataOf<CatalogueResponse>(all).items[0]).toMatchObject({ name: 'Emerald Gown', price_from_minor: '180000', sizes: ['M', 'L'] });
+    expect(dataOf<CatalogueResponse>(all)).toMatchObject({ total: 2, page: 1, page_size: 24, sizes: ['M', 'L'], subcategories: ['LONG', 'MINI'] });
+    expect(dataOf<CatalogueResponse>(all).items.find((item) => item.name === 'Emerald Gown')).toMatchObject({ subcategory: 'LONG', price_from_minor: '180000', sizes: ['M', 'L'] });
+    expect(dataOf<CatalogueResponse>(all).items.find((item) => item.name === 'Mini Dress')).toMatchObject({ subcategory: 'MINI' });
+    expect(dataOf<CatalogueResponse>(await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue?subcategory=mini`))).toMatchObject({
+      total: 1,
+      items: [expect.objectContaining({ name: 'Mini Dress', subcategory: 'MINI' })],
+      subcategories: ['LONG', 'MINI'],
+    });
+    expect(dataOf<CatalogueResponse>(await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue?subcategory=DRAFT-ONLY`)).total).toBe(0);
+    expect(dataOf<CatalogueResponse>(all).subcategories).not.toContain('DRAFT-ONLY');
 
     expect(dataOf<CatalogueResponse>(await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue?search=emerald`)).total).toBe(1);
     expect(dataOf<CatalogueResponse>(await request(app).get(`/api/v1/public/stores/${ws.slug}/catalogue?search=%25`)).total).toBe(0);
@@ -164,6 +198,7 @@ describe('public storefront read API', async () => {
     const app = createApp();
     const item = await request(app).get(`/api/v1/public/stores/${ws.slug}/products/${ws.productId}`);
     expect(item.status).toBe(200);
+    expect(dataOf<ItemDetail>(item).subcategory).toBeNull();
     expect(dataOf<ItemDetail>(item).variants.map((v) => v.size_label)).toEqual(['M', 'L']);
     expect(dataOf<ItemDetail>(item).variants[0]?.measurement).toEqual({
       mode: 'custom',
@@ -184,13 +219,39 @@ describe('public storefront read API', async () => {
     expect(response.status).toBe(200);
     const days = dataOf<PublicAvailabilityResponse>(response).days;
     expect(days).toHaveLength(7);
-    expect(days[0]).toEqual({ date: today, state: 'unavailable' }); // default notice is 1 day
+    // Days may carry `closed` (new branches close on Sundays); it never changes the garment's state.
+    expect(days[0]).toMatchObject({ date: today, state: 'unavailable' }); // default notice is 1 day
     expect(days.slice(1).every((day) => day.state === 'available')).toBe(true);
 
     const foreign = await request(app).get(`/api/v1/public/stores/${ws.slug}/availability?variant_id=${other.variantIds.m}&from=${today}&to=${to}`);
     expect(foreign.status).toBe(404);
     const tooWide = await request(app).get(`/api/v1/public/stores/${ws.slug}/availability?variant_id=${ws.variantIds.m}&from=${today}&to=${addDays(today, 90)}`);
     expect(tooWide.status).toBe(422);
+  });
+
+  it('marks closed weekdays and special closures without blocking the garment', async () => {
+    const ws = await publishedWorkspace('pub-avail-closed');
+    const app = createApp();
+    const today = localDate(new Date(), 'Asia/Manila');
+    const closureDate = addDays(today, 4);
+    const closedWeekday = weekdayOf(addDays(today, 2));
+    await admin.query(
+      `UPDATE branch SET operating_hours = jsonb_set(operating_hours, '{closed_weekdays}', $3::jsonb) WHERE tenant_id = $1 AND id = $2`,
+      [ws.tenantId, ws.branchId, JSON.stringify([closedWeekday])],
+    );
+    await admin.query(`INSERT INTO branch_closure (tenant_id, branch_id, local_date, reason) VALUES ($1, $2, $3, 'Inventory')`, [ws.tenantId, ws.branchId, closureDate]);
+
+    const response = await request(app).get(`/api/v1/public/stores/${ws.slug}/availability?variant_id=${ws.variantIds.m}&from=${today}&to=${addDays(today, 13)}`);
+    expect(response.status).toBe(200);
+    const days = dataOf<PublicAvailabilityResponse>(response).days;
+    const closed = days.filter((day) => day.closed).map((day) => day.date);
+    const expected = days.map((day) => day.date).filter((date) => date === closureDate || weekdayOf(date) === closedWeekday);
+    expect(closed).toEqual(expected);
+    expect(closed).toContain(closureDate);
+    // The flag is only ever `true`, and a closed day keeps its real (bookable) state.
+    expect(days.filter((day) => day.date !== today && day.closed).every((day) => day.state === 'available')).toBe(true);
+    expect(days.filter((day) => !day.closed).every((day) => !('closed' in day))).toBe(true);
+    expect(JSON.stringify(response.body)).not.toContain('Inventory');
   });
 
   it('offers fitting slots only when the owner opts in, within hours, capacity, and closures', async () => {

@@ -34,6 +34,7 @@ import {
   reservationPaymentVerifyRequest,
   reservationPaymentVerifyResponse,
   reservationDetail,
+  reservationPaymentReceiptsResponse,
   reservationInspectionRequest,
   reservationInspectionResponse,
   reservationListQuery,
@@ -174,6 +175,7 @@ import {
   type ReservationPaymentVerifyRequest,
   type ReservationPaymentVerifyResponse,
   type ReservationDetail,
+  type ReservationPaymentReceiptsResponse,
   type ReservationInspectionRequest,
   type ReservationInspectionResponse,
   type ReservationListQuery,
@@ -711,6 +713,14 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "GET",
         path: `/api/v1/reservations/${encodeURIComponent(reservationId)}`,
         responseSchema: apiEnvelope(reservationDetail),
+      }),
+    /** The renter's uploaded receipts, as short-lived links; needs payment-verification permission. */
+    getReservationPaymentReceipts: (reservationId: string) =>
+      request<ReservationPaymentReceiptsResponse>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/payment-receipts`,
+        responseSchema: apiEnvelope(reservationPaymentReceiptsResponse),
       }),
     getStaffReservationIntakeOptions: (input: StaffReservationIntakeQuery) => {
       const query = staffReservationIntakeQuery.parse(input);

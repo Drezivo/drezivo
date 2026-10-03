@@ -264,6 +264,7 @@ export async function getCatalogueClothingList(
           product_id: row.product_id,
           code: row.code,
           name: row.name,
+          subcategory: row.subcategory,
           category:
             row.category_id && row.category_name
               ? { id: row.category_id, name: row.category_name }
@@ -364,6 +365,7 @@ export async function getCatalogueClothingDetail(
       code: model.product.code,
       name: model.product.name,
       description: model.product.description ?? '',
+      subcategory: model.product.subcategory,
       category:
         model.product.category_id && model.product.category_name
           ? { id: model.product.category_id, name: model.product.category_name }
@@ -788,6 +790,7 @@ export async function createClothing(input: CommandContext & {
       const data = createClothingResponse.parse({
         product_id: graph.productId,
         code: graph.code,
+        subcategory: request.subcategory ?? null,
         sizing_mode: graph.sizingMode,
         variant_count: graph.variantCount,
         physical_piece_count: graph.physicalPieceCount,
@@ -1054,6 +1057,7 @@ export async function updateClothingProduct(input: CommandContext & {
         product_id: updated.id,
         name: updated.name,
         description: updated.description ?? '',
+        subcategory: updated.subcategory,
         category: category ? { id: category.id, name: category.name } : null,
         status: updated.status,
         sizing_mode: updated.sizing_mode,

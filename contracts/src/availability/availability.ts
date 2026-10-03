@@ -109,7 +109,12 @@ export const staffReservationAvailabilityPricing = z
     rental_price_minor: nonNegativeMoneyString,
     security_deposit_minor: nonNegativeMoneyString,
     currency: currencyCode,
+    /**
+     * Package length as whole rental days x 1,440. Rental days are branch-local calendar dates with
+     * the pickup date as Day 1, so 4,320 means "pickup date plus two more dates", not 72 hours.
+     */
     included_duration_minutes: z.number().int().positive(),
+    /** Same unit as included_duration_minutes; 0 when the tariff has no minimum (daily pricing). */
     minimum_duration_minutes: z.number().int().nonnegative(),
     extra_day_price_minor: nonNegativeMoneyString,
     recovery_minutes: z.number().int().nonnegative(),

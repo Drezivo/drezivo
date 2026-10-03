@@ -276,6 +276,41 @@ describe('CLT-021 Add Clothing HTTP route', async () => {
     });
   });
 
+  it('trims a custom subcategory on create and treats blank input as no subcategory', async () => {
+    const seed = await seedRouteTenant(
+      'org_clt021_subcategory',
+      'user_clt021_subcategory',
+      ['assets.manage'],
+    );
+    useClerk(seed);
+    const app = createApp();
+    const custom = await request(app)
+      .post('/api/v1/catalogue/clothing')
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt021-subcategory-custom')
+      .send({ ...validRequest(seed.categoryId, 'SUB-CUSTOM-001'), subcategory: '  Tea Length  ' });
+    const blank = await request(app)
+      .post('/api/v1/catalogue/clothing')
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt021-subcategory-blank')
+      .send({ ...validRequest(seed.categoryId, 'SUB-BLANK-001'), subcategory: '   ' });
+
+    expect(custom.status).toBe(201);
+    expect(readSuccessData<{ subcategory: string | null }>(custom.body).subcategory).toBe('Tea Length');
+    expect(blank.status).toBe(201);
+    expect(readSuccessData<{ subcategory: string | null }>(blank.body).subcategory).toBeNull();
+    const persisted = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) =>
+      client.query<{ code: string; subcategory: string | null }>(
+        `SELECT code, subcategory FROM product WHERE tenant_id = $1 ORDER BY code`,
+        [seed.tenantId],
+      ),
+    );
+    expect(persisted.rows).toEqual([
+      { code: 'SUB-BLANK-001', subcategory: null },
+      { code: 'SUB-CUSTOM-001', subcategory: 'Tea Length' },
+    ]);
+  });
+
   it('creates through the route for authorized Front Desk staff and replays the same idempotency intent', async () => {
     const seed = await seedRouteTenant(
       'org_clt021_success',
@@ -521,6 +556,13 @@ describe('CLT-021 Add Clothing HTTP route', async () => {
     expect(parsed.error?.message).toEqual(expect.any(String));
     expect(parsed.error?.stack).toBeUndefined();
     expect(parsed.request_id).toEqual(expect.any(String));
+  }
+
+  function readSuccessData<T>(body: unknown): T {
+    if (typeof body !== 'object' || body === null || !('data' in body)) {
+      throw new Error('Expected success response data.');
+    }
+    return (body as { data: T }).data;
   }
 
   function requireRow<T>(rows: T[], label: string): T {

@@ -114,7 +114,6 @@ Never commit these values. They live in each host's settings.
 - `NEXT_PUBLIC_SITE_URL=https://drezivo.shop`
 - `NEXT_PUBLIC_PARTNERS_URL=https://partners.drezivo.shop`
 - `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
-- `NEXT_PUBLIC_CONTACT_EMAIL`, if it is not `hello@drezivo.shop`
 
 **Business app (`partners.drezivo.shop`):**
 

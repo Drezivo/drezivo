@@ -6,7 +6,7 @@ import { useEffect, useReducer, useRef } from 'react';
 import type { CatalogueVariant, FulfillmentMethod, GuestReservationRequest, GuestReservationView, ItemDetail, PublicStorefront } from '@drezivo/contracts';
 
 import { createReservation, StorefrontApiError } from '@/lib/storefront-api';
-import { dateIn, daysBetween, formatDay, formatMinor, formatTime, zonedInstant } from '@/lib/storefront-format';
+import { dateIn, formatDay, formatMinor, formatTime, rentalDays, zonedInstant } from '@/lib/storefront-format';
 
 import { lockPageScroll } from '../motion/scroll';
 import { AvailabilityCalendar, type DateRange } from './availability-calendar';
@@ -110,7 +110,7 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
   const inFlight = useRef(false);
   const intent = useRef<{ fingerprint: string; key: string } | null>(null);
   const requirements = store.checkout.requirements;
-  const days = state.range ? daysBetween(state.range.start, state.range.end) : 0;
+  const days = state.range ? rentalDays(state.range.start, state.range.end) : 0;
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -240,7 +240,8 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
               <div>
                 <h3 className="font-sf-display text-2xl">Choose your dates</h3>
                 <p className="mt-1 text-sm text-sf-muted">
-                  Tap your pickup date, then your return date. Handover is at {formatTime(store.checkout.handover_time)}.
+                  Tap your pickup date, then your return date. The pickup date counts as Day 1, so a 3-day rental is
+                  pickup, event, return. Handover is at {formatTime(store.checkout.handover_time)}.
                   {minimumRentalDays(variant) > 1 ? ` Rentals are at least ${minimumRentalDays(variant)} days.` : ''}
                 </p>
               </div>

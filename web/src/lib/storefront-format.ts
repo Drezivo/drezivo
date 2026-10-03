@@ -29,6 +29,14 @@ export function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 }
 
+/**
+ * Rental days between two calendar dates, counted inclusively: the pickup date is Day 1, so
+ * Oct 5 to Oct 7 is a 3-day rental. The server prices with the same count.
+ */
+export function rentalDays(pickupDate: string, returnDate: string): number {
+  return daysBetween(pickupDate, returnDate) + 1;
+}
+
 /** UTC offset of a zone on a date, e.g. "+08:00" (V1 zones have no daylight saving). */
 export function offsetOf(timeZone: string, date: string): string {
   const name = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' })

@@ -14,12 +14,14 @@ export const pricingMode = z.enum(['fixed_duration', 'daily']);
 export type PricingMode = z.infer<typeof pricingMode>;
 
 export const CATALOGUE_PAGE_SIZE_MAX = 48;
+export const CATALOGUE_SUBCATEGORY_OPTIONS_MAX = 1_000;
 
 /** GET /public/stores/{slug}/catalogue query. Unknown keys are rejected. */
 export const catalogueQuery = z
   .object({
     search: z.string().trim().min(1).max(80).optional(),
     category: categoryId.optional(),
+    subcategory: z.string().trim().min(1).max(120).optional(),
     size: z.string().trim().min(1).max(40).optional(),
     sort: z.enum(['featured', 'newest', 'price_asc', 'price_desc']).default('featured'),
     page: z.coerce.number().int().min(1).max(500).default(1),
@@ -34,6 +36,7 @@ export const catalogueCard = z
     product_id: productId,
     name: z.string().min(1),
     category: z.string().nullable(),
+    subcategory: z.string().min(1).max(120).nullable().optional(),
     image_url: z.string().url().nullable(),
     price_from_minor: moneyString,
     pricing_mode: pricingMode,
@@ -50,6 +53,7 @@ export const catalogueResponse = z
     page: z.number().int().positive(),
     page_size: z.number().int().positive(),
     sizes: z.array(z.string()).max(60),
+    subcategories: z.array(z.string().min(1).max(120)).max(CATALOGUE_SUBCATEGORY_OPTIONS_MAX).optional(),
   })
   .strict();
 export type CatalogueResponse = z.infer<typeof catalogueResponse>;
@@ -89,6 +93,7 @@ export const itemDetail = z
     name: z.string().min(1),
     description: z.string().nullable(),
     category: z.string().nullable(),
+    subcategory: z.string().min(1).max(120).nullable().optional(),
     image_urls: z.array(z.string().url()).max(MAX_CLOTHING_PHOTOS),
     variants: z.array(catalogueVariant).min(1),
   })
@@ -112,10 +117,18 @@ export type PublicAvailabilityQuery = z.infer<typeof publicAvailabilityQuery>;
 export const publicDayState = z.enum(['available', 'reserved', 'fitting', 'unavailable']);
 export type PublicDayState = z.infer<typeof publicDayState>;
 
+/**
+ * One day of a size's availability. `closed` is present (true) only when the shop is closed that
+ * day (a closed weekday or a special closure). A closed day cannot be a pickup or return day, but
+ * it is not blocked: it may sit in the middle of a rental, so `state` keeps describing the garment.
+ */
+export const publicAvailabilityDay = z.object({ date: isoDate, state: publicDayState, closed: z.boolean().optional() }).strict();
+export type PublicAvailabilityDay = z.infer<typeof publicAvailabilityDay>;
+
 export const publicAvailabilityResponse = z
   .object({
     variant_id: productVariantId,
-    days: z.array(z.object({ date: isoDate, state: publicDayState }).strict()).max(MAX_AVAILABILITY_WINDOW_DAYS),
+    days: z.array(publicAvailabilityDay).max(MAX_AVAILABILITY_WINDOW_DAYS),
   })
   .strict();
 export type PublicAvailabilityResponse = z.infer<typeof publicAvailabilityResponse>;

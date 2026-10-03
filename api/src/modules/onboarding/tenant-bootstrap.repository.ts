@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import type { PermissionCode } from '@drezivo/contracts';
+import {
+  STOREFRONT_SLUG_MAX_LENGTH,
+  storefrontSlug,
+  type PermissionCode,
+} from '@drezivo/contracts';
 import type { PoolClient } from 'pg';
 
 import type { BootstrapTransactionContext } from '../../db/client.js';
@@ -457,7 +461,10 @@ async function chooseBootstrapSlug(
     withStableSuffix(base, hashSuffix(onboardingId, 32)),
   ];
 
-  for (const candidate of candidates) {
+  for (const rawCandidate of candidates) {
+    const parsed = storefrontSlug.safeParse(rawCandidate);
+    if (!parsed.success) continue;
+    const candidate = parsed.data;
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [candidate]);
     const conflict = await client.query<{ available: boolean }>(
       'SELECT bootstrap_slug_available($1) AS available',
@@ -474,7 +481,7 @@ function slugify(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 100)
+    .slice(0, STOREFRONT_SLUG_MAX_LENGTH)
     .replace(/-+$/g, '');
   return normalized || 'business';
 }
@@ -484,6 +491,6 @@ function hashSuffix(value: string, length: number): string {
 }
 
 function withStableSuffix(base: string, suffix: string): string {
-  const available = Math.max(1, 100 - suffix.length - 1);
+  const available = Math.max(1, STOREFRONT_SLUG_MAX_LENGTH - suffix.length - 1);
   return `${base.slice(0, available).replace(/-+$/g, '')}-${suffix}`;
 }

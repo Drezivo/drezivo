@@ -24,12 +24,12 @@ export function Hero({ store }: { store: PublicStorefront }) {
   const image = store.content.hero.image_url ?? store.cover_url;
   const base = `/s/${store.slug}`;
   const actions = (
-    <div className="mt-8 flex flex-wrap gap-3">
-      <Link href={`${base}/catalog`} className="sf-button sf-button-primary">
+    <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+      <Link href={`${base}/catalog`} className="sf-button sf-button-primary w-full sm:w-auto">
         Browse the collection
       </Link>
       {store.content.sections.how_it_works ? (
-        <Link href={`${base}#how-it-works`} className="sf-button sf-button-outline">
+        <Link href={`${base}#how-it-works`} className="sf-button sf-button-outline w-full sm:w-auto">
           How renting works
         </Link>
       ) : null}
@@ -67,7 +67,8 @@ export function Hero({ store }: { store: PublicStorefront }) {
         {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL */}
         <img src={image} alt="" className="h-full w-full object-cover object-[50%_30%]" fetchPriority="high" />
       </div>
-      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-black/65 via-black/20 to-black/5" />
+      {/* Phones put the text over the busiest part of the photo, so the scrim is deeper there. */}
+      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-black/85 via-black/45 to-black/10 sm:from-black/65 sm:via-black/20 sm:to-black/5" />
       <div data-hero-content className={`${container} w-full pb-14 pt-32 text-white sm:pb-20`}>
         {heading('max-w-3xl text-5xl leading-[1.02] sm:text-7xl')}
         {store.content.hero.body ? (

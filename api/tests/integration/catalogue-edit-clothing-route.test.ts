@@ -157,6 +157,37 @@ describe('CLT-030 product and variant edit commands', async () => {
     ]);
   });
 
+  it('persists, projects, and clears a style subcategory through edit, detail, and list reads', async () => {
+    const seed = await seedEditableCatalogue('org_clt030_subcategory', 'user_clt030_subcategory');
+    useClerk(seed);
+    const app = createApp();
+    const saved = await request(app)
+      .patch(`/api/v1/catalogue/clothing/${seed.productId}`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt030-subcategory-save')
+      .send({ expected_updated_at: seed.productUpdatedAt, subcategory: '  LONG  ' });
+
+    expect(saved.status).toBe(200);
+    expect(readSuccessData<{ subcategory: string | null }>(saved.body).subcategory).toBe('LONG');
+    const detail = await request(app).get(`/api/v1/catalogue/clothing/${seed.productId}`);
+    expect(readSuccessData<{ subcategory: string | null }>(detail.body).subcategory).toBe('LONG');
+    const list = await request(app).get('/api/v1/catalogue/clothing?limit=10&sort=name_asc');
+    const listItems = readSuccessData<{ items: Array<{ product_id: string; subcategory: string | null }> }>(list.body).items;
+    expect(listItems.find((item) => item.product_id === seed.productId)?.subcategory).toBe('LONG');
+    expect((await readEditState(seed)).product.subcategory).toBe('LONG');
+
+    const cleared = await request(app)
+      .patch(`/api/v1/catalogue/clothing/${seed.productId}`)
+      .set('Content-Type', 'application/json')
+      .set('Idempotency-Key', 'clt030-subcategory-clear')
+      .send({ expected_updated_at: readUpdatedAt(saved.body), subcategory: null });
+    expect(cleared.status).toBe(200);
+    expect(readSuccessData<{ subcategory: string | null }>(cleared.body).subcategory).toBeNull();
+    const clearedDetail = await request(app).get(`/api/v1/catalogue/clothing/${seed.productId}`);
+    expect(readSuccessData<{ subcategory: string | null }>(clearedDetail.body).subcategory).toBeNull();
+    expect((await readEditState(seed)).product.subcategory).toBeNull();
+  });
+
   it('rejects stale product and variant edit tokens with STALE_VERSION', async () => {
     const seed = await seedEditableCatalogue('org_clt030_stale', 'user_clt030_stale');
     useClerk(seed);
@@ -495,8 +526,8 @@ describe('CLT-030 product and variant edit commands', async () => {
 
   async function readEditState(seed: Awaited<ReturnType<typeof seedEditableCatalogue>>) {
     return withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const product = await client.query<{ name: string; description: string | null; category_id: string | null }>(
-        `SELECT name, description, category_id
+      const product = await client.query<{ name: string; description: string | null; category_id: string | null; subcategory: string | null }>(
+        `SELECT name, description, category_id, subcategory
            FROM product
           WHERE tenant_id = $1 AND id = $2`,
         [seed.tenantId, seed.productId],
@@ -569,6 +600,13 @@ describe('CLT-030 product and variant edit commands', async () => {
     const updatedAt = envelope.data?.updated_at;
     if (typeof updatedAt !== 'string') throw new Error('Expected success response to include updated_at.');
     return updatedAt;
+  }
+
+  function readSuccessData<T>(body: unknown): T {
+    if (typeof body !== 'object' || body === null || !('data' in body)) {
+      throw new Error('Expected success response data.');
+    }
+    return (body as { data: T }).data;
   }
 
   function asEnvelope(body: unknown): {

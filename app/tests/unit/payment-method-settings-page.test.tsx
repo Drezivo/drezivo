@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PaymentMethodSettingsPage } from "@/components/settings/payment-method-settings-page";
+import type { PaymentMethodSettingsItem } from "@drezivo/contracts";
+
+import { PaymentMethodSettingsPage, storefrontGap } from "@/components/settings/payment-method-settings-page";
 
 const clerk = vi.hoisted(() => ({ getToken: vi.fn(), useAuth: vi.fn() }));
 const api = vi.hoisted(() => ({
@@ -138,5 +140,24 @@ describe("PaymentMethodSettingsPage", () => {
 
     await waitFor(() => expect(api.archivePaymentMethod).toHaveBeenCalledTimes(1));
     expect(api.archivePaymentMethod).toHaveBeenCalledWith(gcashId, { version: 1 }, expect.any(String));
+  });
+
+  it("says exactly what keeps an online method off the storefront", async () => {
+    render(<PaymentMethodSettingsPage />);
+
+    // The fixture GCash has "Available on storefront" off, the state that hid configured QR methods.
+    expect(await screen.findByText('Turn on "Available on storefront" and save to show this method to renters.')).toBeVisible();
+  });
+});
+
+describe("storefrontGap", () => {
+  const gcash = { ...methods[1], storefront_enabled: true } as unknown as PaymentMethodSettingsItem;
+
+  it("names each missing step", () => {
+    expect(storefrontGap({ ...gcash, active: false })).toMatch(/Accepted by staff/);
+    expect(storefrontGap({ ...gcash, storefront_enabled: false })).toMatch(/Available on storefront/);
+    expect(storefrontGap(gcash)).toBe("Upload your QR image and save.");
+    expect(storefrontGap({ ...gcash, qr_file_id: gcashId as PaymentMethodSettingsItem["qr_file_id"] })).toMatch(/did not finish uploading/);
+    expect(storefrontGap({ ...gcash, rail: "manual_transfer" })).toBe("Add the account number and save.");
   });
 });

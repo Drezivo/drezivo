@@ -153,8 +153,8 @@ describe("OnboardingPlan", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Start your 14-day trial?" });
     expect(dialog).toHaveTextContent("₱300 a month");
-    expect(dialog).toHaveTextContent("Up to 1,000 garments");
-    expect(dialog).toHaveTextContent("Up to 10 staff");
+    expect(dialog).toHaveTextContent("Up to 125 garments");
+    expect(dialog).toHaveTextContent("For the shop owner only");
     expect(screen.queryByRole("radio")).toBeNull();
     expect(api.startOnboardingTrial).not.toHaveBeenCalled();
   });
@@ -182,7 +182,7 @@ describe("OnboardingPlan", () => {
     fireEvent.click(confirm);
     fireEvent.click(confirm);
 
-    await waitFor(() => expect(locationReplace).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(locationReplace).toHaveBeenCalledWith("/calendar"));
     expect(api.startOnboardingTrial).toHaveBeenCalledTimes(1);
     expect(api.startOnboardingTrial).toHaveBeenCalledWith(onboarding.id, expect.any(String));
     expect(clerk.setActive).toHaveBeenCalledWith({ organization: "org_123" });
@@ -216,7 +216,7 @@ describe("OnboardingPlan", () => {
     expect(await screen.findByRole("heading", { name: "Your workspace was created" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Try loading workspace again" }));
 
-    await waitFor(() => expect(locationReplace).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(locationReplace).toHaveBeenCalledWith("/calendar"));
     expect(api.getWorkspaces).toHaveBeenCalledTimes(2);
     expect(api.startOnboardingTrial).toHaveBeenCalledTimes(1);
   });

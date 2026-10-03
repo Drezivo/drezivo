@@ -15,11 +15,13 @@ const strip = (value: string) => value.replace(/\/$/, '');
 const isDevelopment = process.env.NODE_ENV !== 'production';
 
 export const SITE_URL = strip(
-  process.env.NEXT_PUBLIC_SITE_URL || (isDevelopment ? 'http://localhost:3100' : 'https://drezivo.shop'),
+  process.env.NEXT_PUBLIC_SITE_URL ||
+    (isDevelopment ? 'http://localhost:3100' : 'https://drezivo.shop'),
 );
 export const PARTNERS_URL = strip(
-  process.env.NEXT_PUBLIC_PARTNERS_URL || (isDevelopment ? 'http://localhost:3000' : 'https://partners.drezivo.shop'),
+  process.env.NEXT_PUBLIC_PARTNERS_URL ||
+    (isDevelopment ? 'http://localhost:3000' : 'https://partners.drezivo.shop'),
 );
 export const SIGN_IN_URL = `${PARTNERS_URL}/sign-in`;
 export const SIGN_UP_URL = `${PARTNERS_URL}/sign-up`;
-export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL || 'hello@drezivo.shop';
+export const CONTACT_EMAIL = 'drezivoshop@gmail.com';

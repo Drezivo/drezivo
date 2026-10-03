@@ -1,6 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 
+import { storefrontSlug } from '@drezivo/contracts';
+
 import '../../src/config/load-env.js';
 import {
   buildAppRoleDatabaseUrl,
@@ -243,6 +245,43 @@ describe('TBF-030 tenant bootstrap', async () => {
       return tenants.rows[0]?.count ?? -1;
     });
     expect(count).toBe(0);
+  });
+
+  it('generates storefront-contract-valid slugs for reserved, short, and long business names', async () => {
+    const cases = [
+      { key: 'reserved', organizationName: 'Drezivo', expectedPrefix: 'drezivo-' },
+      { key: 'short', organizationName: 'X', expectedPrefix: 'x-' },
+      { key: 'long', organizationName: 'A'.repeat(80), expectedPrefix: null },
+    ] as const;
+
+    for (const testCase of cases) {
+      const principalId = `user_tbf030_${testCase.key}`;
+      const account = await ensureAccount(principalId);
+      const onboarding = await createOrResumeOnboarding(
+        account.id,
+        `org_tbf030_${testCase.key}`,
+        principalId,
+        { organizationName: testCase.organizationName },
+      );
+      if (onboarding.kind !== 'created') throw new Error(`expected ${testCase.key} onboarding creation`);
+      await chooseOnboardingPlan(onboarding.onboarding.id, 'starter', principalId);
+
+      const result = await runTenantBootstrap({
+        principalId,
+        clerkOrgId: `org_tbf030_${testCase.key}`,
+        onboardingId: onboarding.onboarding.id,
+        idempotencyKey: `bootstrap-${testCase.key}-001`,
+        payloadHash: canonicalRequestHash({ onboarding_id: onboarding.onboarding.id, body: {} }),
+        requestId: `req-tbf030-${testCase.key}`,
+      });
+
+      expect(result.kind).toBe('success');
+      if (result.kind !== 'success') throw new Error(`expected ${testCase.key} bootstrap success`);
+      const slug = result.body.data.tenant.slug;
+      expect(storefrontSlug.safeParse(slug).success).toBe(true);
+      if (testCase.expectedPrefix) expect(slug).toMatch(new RegExp(`^${testCase.expectedPrefix}`));
+      if (testCase.key === 'long') expect(slug.length).toBeLessThanOrEqual(50);
+    }
   });
 
   it('generates a storefront slug and deterministically suffixes a same-name collision', async () => {

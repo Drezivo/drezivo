@@ -3,7 +3,7 @@ title: Drezivo Product Brief
 type: product
 status: current
 source: ../../product/Drezivo-PRD.md
-updated: 2026-10-01
+updated: 2026-10-02
 tags: [drezivo, product, prd]
 ---
 
@@ -21,3 +21,10 @@ exports, and audit. Branch expansion and enterprise controls arrive incrementall
 
 The [current PRD](../../product/Drezivo-PRD.md) is authoritative for product scope. This note is a linked
 orientation summary, not a replacement.
+
+## Catalogue subcategories
+
+Product styles may have an optional free-form subcategory (up to 120 trimmed characters). The staff
+form offers `LONG`, `MINI`, or a custom value; storefront cards/details display it, and the published
+catalogue offers a single-select, case-insensitive filter. See the [PRD](../../product/Drezivo-PRD.md)
+and [data model](../../architecture/Drezivo-Data-Model.md) for canonical behavior.

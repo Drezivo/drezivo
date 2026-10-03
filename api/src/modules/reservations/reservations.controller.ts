@@ -11,6 +11,7 @@ import {
   confirmReservation,
   createStaffReservation,
   getReservationDetail,
+  getReservationPaymentReceipts,
   getReservationList,
   getStaffReservationAvailabilityCalendar,
   getStaffReservationAvailabilityCheck,
@@ -33,6 +34,11 @@ export async function listReservationsController(req: Request, res: Response): P
 export async function getReservationDetailController(req: Request, res: Response): Promise<void> {
   if (!req.reservationId) throw new ValidationError('A valid reservation id is required.');
   sendSuccess(req, res, await getReservationDetail(requireContext(req), req.reservationId));
+}
+
+export async function getReservationPaymentReceiptsController(req: Request, res: Response): Promise<void> {
+  if (!req.reservationId) throw new ValidationError('A valid reservation id is required.');
+  sendSuccess(req, res, await getReservationPaymentReceipts(requireContext(req), req.reservationId));
 }
 
 export async function getStaffReservationIntakeOptionsController(

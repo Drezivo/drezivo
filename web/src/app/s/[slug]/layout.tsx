@@ -8,6 +8,7 @@ import { MotionRoot } from '@/components/store/motion/motion-root';
 import { StoreFooter } from '@/components/store/store-footer';
 import { StoreHeader } from '@/components/store/store-header';
 import { themeStyle } from '@/components/store/theme';
+import { StoreTransition } from '@/components/store/motion/store-transition';
 import { PreviewProvider } from '@/components/store/preview-context';
 import { previewToken, readStore } from '@/lib/storefront-preview';
 import { buildStorefrontMetadata } from '@/lib/seo';
@@ -45,11 +46,12 @@ export default async function StorefrontLayout({ children, params }: Props) {
       {/* Runs before the page paints, so reveal targets start hidden instead of flashing. */}
       <script dangerouslySetInnerHTML={{ __html: MOTION_BOOT }} />
       <MotionRoot />
+      <StoreTransition slug={slug} />
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:bg-sf-surface focus:px-4 focus:py-2">
         Skip to content
       </a>
       {preview ? (
-        <div role="status" className="sticky top-0 z-40 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 bg-[#1f1b16] px-4 py-2 text-center text-xs text-[#f3eee6]">
+        <div role="status" className="relative z-40 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 bg-[#1f1b16] px-4 py-2 text-center text-xs text-[#f3eee6]">
           <span>Preview. Renters cannot see this storefront until you publish it. Booking is turned off.</span>
           <a href={`/s/${slug}/preview/exit`} className="underline underline-offset-2">
             Exit preview

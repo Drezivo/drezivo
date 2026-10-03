@@ -151,6 +151,11 @@ function ReservationDetails({
           >
             {RESERVATION_STATUS_LABELS[detail.status]}
           </Badge>
+          {detail.booking_channel ? (
+            <Badge variant="outline" className="whitespace-nowrap px-2 py-1 text-xs text-dashboard-muted">
+              {detail.booking_channel === "online" ? "Online booking" : "Walk-in"}
+            </Badge>
+          ) : null}
         </div>
         <SheetDescription className="mt-1">
           Created {formatDateTime(detail.created_at, effectiveTimeZone)} · Version {detail.version}

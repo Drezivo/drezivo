@@ -40,7 +40,8 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
               ))}
             </ul>
           ) : null}
-          <div data-reveal="image" className={`order-1 aspect-[3/4] overflow-hidden bg-sf-line sm:order-2 ${item.image_urls.length > 1 ? '' : 'sm:col-span-2'}`}>
+          {/* First-screen content: shown immediately, never held back for a scroll reveal. */}
+          <div className={`order-1 aspect-[3/4] overflow-hidden bg-sf-line sm:order-2 ${item.image_urls.length > 1 ? '' : 'sm:col-span-2'}`}>
             {image ? (
               // Keyed by URL so choosing another photo crossfades it in.
               // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
@@ -49,8 +50,10 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
           </div>
         </div>
 
-        <div data-reveal="text" className="lg:sticky lg:top-24 lg:self-start">
-          {item.category ? <p className="text-sm text-sf-muted">{item.category}</p> : null}
+        <div className="lg:sticky lg:top-24 lg:self-start">
+          {item.category || item.subcategory ? (
+            <p className="text-sm text-sf-muted">{[item.category, item.subcategory].filter(Boolean).join(' · ')}</p>
+          ) : null}
           <h1 className="mt-1 font-sf-display text-4xl font-light leading-tight sm:text-5xl">{item.name}</h1>
           {shown ? (
             <p className="mt-4 text-xl">

@@ -21,10 +21,10 @@ describe("SignInPage", () => {
 });
 
 describe("routeAccess (middleware)", () => {
-  it("sends an already signed-in user from the sign-in page to the dashboard", async () => {
+  it("sends an already signed-in user from the sign-in page to the calendar", async () => {
     const response = await routeAccess(authAs("user_123"), new NextRequest("http://localhost:3000/sign-in"));
     expect(response?.status).toBe(307);
-    expect(response?.headers.get("location")).toBe("http://localhost:3000/");
+    expect(response?.headers.get("location")).toBe("http://localhost:3000/calendar");
   });
 
   it("lets a signed-out visitor see the sign-in page", async () => {

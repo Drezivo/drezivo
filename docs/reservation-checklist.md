@@ -130,37 +130,44 @@ Example business rule:
 Extra day: ₱150/day
 ```
 
-Agreed behavior:
+Agreed behavior (owner rule confirmed 2026-10-03, replacing the earlier 72-hour reading):
 
-- [x] `included_duration_minutes` is the base-price duration.
-- [x] For `fixed_duration`, it is also a **hard minimum rental duration**.
-- [x] A 3-day fixed rental cannot be booked for 1 or 2 days.
-- [x] Exactly 3 days uses the base rental price.
-- [x] More than 3 days is allowed.
-- [x] Extra time is charged using the existing extra-day price rule.
-- [x] Partial extra days round upward according to the existing quote logic.
-- [x] `daily` pricing does not inherit the fixed-duration minimum rule.
+- [x] Rental days are branch-local calendar dates counted inclusively. **The pickup date is Day 1.**
+- [x] The owner-facing package length is stored as `included_duration_minutes = days × 1,440`; it means
+      "N rental days", not N × 24 elapsed hours. Values that are not whole days are refused.
+- [x] For `fixed_duration`, the package length is also the minimum: a 3-day package cannot be returned on Day 2.
+- [x] Returning on the last included date uses the base rental price.
+- [x] Each later return date adds one extra day at the extra-day price.
+- [x] Pickup and return clock times never change the day count; a 4 PM pickup is still a full Day 1.
+- [x] `daily` pricing uses the same count: every rental date, the pickup date included, is charged.
+- [x] Every new price snapshot records `rental_day_basis: calendar_day_inclusive`,
+      `included_rental_days`, and `rental_day_count`. Older snapshots have no basis and were priced on
+      elapsed 24-hour blocks; they are never re-priced.
 
-Examples:
+Examples for a 3-day package picked up Oct 5:
 
 ```text
-72 hours   → base price
-73–96 hrs  → base + 1 extra day
-97–120 hrs → base + 2 extra days
+Oct 5 → Oct 6  (2 days) → rejected, below the package
+Oct 5 → Oct 7  (3 days) → base price   (Day 1 pickup, Day 2 event, Day 3 return)
+Oct 5 → Oct 8  (4 days) → base + 1 extra day
+Oct 5 → Oct 9  (5 days) → base + 2 extra days
 ```
 
-### Exact-time minimum enforcement
+### Minimum enforcement
 
-- [x] The UI checks exact pickup and return timestamps.
-- [x] API quote/check paths also reject intervals shorter than the fixed-duration minimum.
+- [x] The staff calendar suggests the earliest return date (pickup + N − 1) and refuses earlier ones.
+- [x] API quote, availability-check, staff create, and guest hold paths all use one calculator
+      (`computeRentalTotal` in `api/src/modules/reservations/reservations.quote.ts`).
 - [x] This cannot be bypassed by calling the API directly.
+- [x] Asset blocking stays timestamp-precise: `pickup_at` to `due_at` plus Recovery. Calendar-day
+      pricing does not widen or shrink the exclusion interval.
 
 Example:
 
 ```text
-Pickup: Sep 25 · 12:58 PM
-3-day minimum
-Earliest valid return: Sep 28 · 12:58 PM
+Pickup: Oct 5 · 4:00 PM
+3-day package
+Earliest return date: Oct 7 (any return time after pickup)
 ```
 
 ---
@@ -201,7 +208,7 @@ Example message direction:
 - [x] Return time is a separate input.
 - [x] Exact timestamps are converted using the selected branch timezone.
 - [x] Return must be after pickup.
-- [x] Fixed-duration minimum is enforced using elapsed timestamp duration.
+- [x] Fixed-duration minimum is enforced on branch-local rental dates (pickup date is Day 1).
 - [x] Existing maximum rental-period guard remains in place.
 - [x] Exact availability is cleared/rechecked whenever dates or times change.
 
@@ -561,7 +568,7 @@ Before considering the staff reservation experience fully polished in-browser:
   - light red = unavailable/busy
   - accent = selected
 - [ ] Confirm previous/next month buttons remain inside the calendar header.
-- [ ] Verify a 3-day fixed rental cannot be reserved below the exact 72-hour boundary.
+- [ ] Verify a 3-day fixed rental picked up Oct 5 accepts an Oct 7 return and rejects Oct 6.
 - [ ] Verify a 3-day + 1-day prep + 1-day turnaround variant communicates the 5-day inventory impact clearly.
 - [ ] Verify extra-day pricing in the UI matches backend quote response.
 - [ ] Verify an Event Date outside the rental range cannot be submitted.
