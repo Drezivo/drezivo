@@ -20,8 +20,8 @@ describe("NotFound", () => {
     expect(screen.getByRole("heading", { name: "Page not found" })).toBeTruthy();
     expect(screen.getByText("Error 404")).toBeTruthy();
 
-    const dashboardLink = screen.getByRole("link", { name: "Back to dashboard" });
-    expect(dashboardLink.getAttribute("href")).toBe("/");
+    const homeLink = screen.getByRole("link", { name: "Back to calendar" });
+    expect(homeLink.getAttribute("href")).toBe("/calendar");
 
     fireEvent.click(screen.getByRole("button", { name: "Go back" }));
     expect(navigation.back).toHaveBeenCalledTimes(1);

@@ -12,9 +12,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { setThemePreference, useTheme, type ThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
-const TABS = TAB_HREFS.map((href) => NAV_ITEMS.find((item) => item.href === href)!).map((item) =>
-  item.href === "/" ? { ...item, label: "Home" } : item,
-);
+const TABS = TAB_HREFS.map((href) => NAV_ITEMS.find((item) => item.href === href)!);
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
   { value: "light", label: "Light", icon: Sun },
