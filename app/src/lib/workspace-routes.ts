@@ -3,8 +3,14 @@
  * title. A route that is not listed here (a record id, for example) falls back to the label given
  * in DYNAMIC_SEGMENT_LABELS, then to no crumb at all, never to a raw URL segment.
  */
+/**
+ * Where a signed-in owner or staff member lands. Rental shops run their day from the calendar, so
+ * it is the first screen; the dashboard is one click away at /dashboard.
+ */
+export const WORKSPACE_HOME = "/calendar";
+
 const ROUTE_LABELS: Record<string, string> = {
-  "/": "Dashboard",
+  "/dashboard": "Dashboard",
   "/reservations": "Reservations",
   "/calendar": "Calendar",
   "/calendar/availability": "Availability",
@@ -44,11 +50,10 @@ export interface Crumb {
   label: string;
 }
 
-/** Dashboard › Section › Sub-page for a pathname. The last crumb is the current page. */
+/** Section › Sub-page for a pathname. The last crumb is the current page. */
 export function breadcrumbsFor(pathname: string): Crumb[] {
-  const path = pathname.replace(/\/+$/, "") || "/";
-  const crumbs: Crumb[] = [{ href: "/", label: ROUTE_LABELS["/"] ?? "Dashboard" }];
-  if (path === "/") return crumbs;
+  const path = pathname.replace(/\/+$/, "") || WORKSPACE_HOME;
+  const crumbs: Crumb[] = [];
 
   const segments = path.split("/").filter(Boolean);
   for (let index = 0; index < segments.length; index += 1) {

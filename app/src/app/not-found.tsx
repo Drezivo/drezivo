@@ -34,10 +34,10 @@ export default function NotFound() {
 
         <div className="mt-10 flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
           <Link
-            href="/"
+            href="/calendar"
             className="dashboard-button-default inline-flex min-h-12 items-center justify-center rounded-full px-7 text-sm font-medium transition-colors"
           >
-            Back to dashboard
+            Back to calendar
           </Link>
           <NotFoundBackButton />
         </div>

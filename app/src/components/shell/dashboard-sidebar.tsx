@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sidebar, useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+import { WORKSPACE_HOME } from "@/lib/workspace-routes";
 
 const WORKSPACE_LINKS = [
   { href: "/settings", label: "Business information", icon: Building2 },
@@ -128,7 +129,7 @@ export function DashboardSidebar({ identity }: { identity: DashboardIdentity }) 
     <Sidebar aria-label="Primary navigation">
       <div className="flex min-h-0 flex-1 flex-col">
         <div className={collapsed ? "flex h-16 items-center justify-center" : "flex h-16 items-center px-5"}>
-          <Link href="/" aria-label="Drezivo dashboard" className="flex items-center gap-2.5">
+          <Link href={WORKSPACE_HOME} aria-label="Drezivo calendar" className="flex items-center gap-2.5">
             <DrezivoMark />
             {!collapsed && (
               <span className="font-display text-[1.625rem] font-medium leading-none tracking-[-0.01em] text-dashboard-navy">

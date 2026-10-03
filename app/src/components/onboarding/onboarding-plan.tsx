@@ -16,6 +16,7 @@ import { OnboardingStatusPage } from "@/components/onboarding/onboarding-status-
 import { RestartOnboardingDialog } from "@/components/onboarding/restart-onboarding-dialog";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
+import { WORKSPACE_HOME } from "@/lib/workspace-routes";
 
 type LoadState =
   | { kind: "loading" }
@@ -167,7 +168,7 @@ export function OnboardingPlan() {
         }
       });
       // Full navigation: Clerk refreshes the router after switching organizations (see post-auth-resolver).
-      window.location.replace("/");
+      window.location.replace(WORKSPACE_HOME);
     } catch (caughtError) {
       setLaunchError(toDrezivoApiError(caughtError));
       setLaunchPhase("context-error");

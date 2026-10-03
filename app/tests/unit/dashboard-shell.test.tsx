@@ -26,7 +26,7 @@ vi.mock("@/lib/drezivo-api", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/",
+  usePathname: () => "/calendar",
   // The shell mounts the pending-hold guard, which navigates with the router.
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
 }));
@@ -68,7 +68,7 @@ describe("DashboardShell", () => {
     delete document.documentElement.dataset["dashboardTheme"];
   });
 
-  it("renders the reference navigation with Dashboard active", () => {
+  it("lists Calendar first and marks it active on the workspace home", () => {
     render(
       <DashboardShell>
         <div>Shell content</div>
@@ -80,7 +80,10 @@ describe("DashboardShell", () => {
     expect(navigation).toHaveTextContent("Reservations");
     expect(navigation).toHaveTextContent("Clothing");
     expect(navigation).toHaveTextContent("Storefront");
-    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
+    const links = within(navigation).getAllByRole("link");
+    expect(links[0]).toHaveTextContent("Calendar");
+    expect(within(navigation).getByRole("link", { name: "Calendar" })).toHaveAttribute("aria-current", "page");
+    expect(within(navigation).getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/dashboard");
   });
 
   it("collapses the desktop navigation from the header trigger", () => {
@@ -185,7 +188,8 @@ describe("DashboardShell", () => {
     );
 
     const tabs = screen.getByRole("navigation", { name: "Quick navigation" });
-    expect(within(tabs).getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
+    expect(within(tabs).getAllByRole("link")[0]).toHaveTextContent("Calendar");
+    expect(within(tabs).getByRole("link", { name: "Calendar" })).toHaveAttribute("aria-current", "page");
     fireEvent.click(within(tabs).getByRole("button", { name: "Menu" }));
 
     const sheet = await screen.findByRole("dialog");

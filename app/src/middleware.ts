@@ -1,5 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse, type NextRequest } from "next/server";
+import { WORKSPACE_HOME } from "@/lib/workspace-routes";
 
 // Only the auth pages and the readiness probe are public. Everything else in this app is
 // staff-only — fail closed by default rather than relying on a route allowlist.
@@ -24,7 +25,7 @@ type MiddlewareAuth = {
 export async function routeAccess(auth: MiddlewareAuth, request: NextRequest): Promise<NextResponse | undefined> {
   if (isSignInRoute(request)) {
     const { userId } = await auth();
-    return userId ? NextResponse.redirect(new URL("/", request.url)) : undefined;
+    return userId ? NextResponse.redirect(new URL(WORKSPACE_HOME, request.url)) : undefined;
   }
   if (!isPublicRoute(request)) {
     await auth.protect();

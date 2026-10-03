@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { AuthBrand } from "@/components/auth/auth-brand";
 import { DrezivoApiError } from "@/lib/drezivo-api";
 import { resolveStaffLanding } from "@/lib/resolve-staff-landing";
+import { WORKSPACE_HOME } from "@/lib/workspace-routes";
 
 type ResolveState =
   | { kind: "resolving" }
@@ -48,7 +49,7 @@ export function PostAuthResolver() {
         // A full navigation, not router.replace: Clerk refreshes the router right after sign-in, and
         // that refresh cancelled the soft navigation, leaving this spinner up until a manual reload.
         // replace() also keeps this page out of history, so Back does not return to it.
-        window.location.replace(resolution.kind === "workspace" ? "/calendar" : "/onboarding");
+        window.location.replace(resolution.kind === "workspace" ? WORKSPACE_HOME : "/onboarding");
       })
       .catch((error: unknown) => setState({ kind: "error", error: toDrezivoApiError(error) }))
       .finally(() => clearTimeout(timer));

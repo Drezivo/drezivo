@@ -19,6 +19,7 @@ import { RestartOnboardingDialog } from "@/components/onboarding/restart-onboard
 import { OnboardingStatusPage } from "@/components/onboarding/onboarding-status-page";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
+import { WORKSPACE_HOME } from "@/lib/workspace-routes";
 
 type LoadState =
   | { kind: "loading" }
@@ -145,10 +146,10 @@ export function OnboardingEntry() {
           action={
             <button
               type="button"
-              onClick={() => router.replace("/")}
+              onClick={() => router.replace(WORKSPACE_HOME)}
               className={primaryButtonClass}
             >
-              Go to dashboard
+              Go to your workspace
             </button>
           }
           description="Your workspace is ready. We will resolve the active workspace before loading operational tools."
