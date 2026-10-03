@@ -87,6 +87,7 @@ import {
 } from './reservations.review.service.js';
 import {
   countStaffVariantAvailableAssets,
+  readActiveBranchTimezone,
   readStaffVariantCalendarAvailability,
 } from './reservations.availability.repository.js';
 import {
@@ -185,9 +186,15 @@ export async function getStaffReservationAvailabilityCheck(
       requestedInterval,
     });
     if (!catalogue) throw new NotFoundError('Clothing variant could not be found.');
+    const timeZone = await readActiveBranchTimezone(client, {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+    });
+    if (!timeZone) throw new NotFoundError('Branch could not be found.');
 
     const rental = computeRentalTotal({
       requestedInterval,
+      timeZone,
       pricingMode: catalogue.variant.pricing_mode,
       baseRentalMinor: catalogue.variant.rental_price_minor,
       includedDurationMinutes: catalogue.variant.included_duration_minutes,

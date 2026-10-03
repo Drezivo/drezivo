@@ -258,3 +258,19 @@ export async function countStaffVariantAvailableAssets(
   );
   return result.rows[0]?.available_assets ?? 0;
 }
+
+/** The active branch's IANA timezone, which decides the local dates rental days are counted on. */
+export async function readActiveBranchTimezone(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string },
+): Promise<string | null> {
+  const result = await client.query<{ timezone: string }>(
+    `SELECT timezone
+       FROM branch
+      WHERE tenant_id = $1::uuid
+        AND id = $2::uuid
+        AND status = 'active'`,
+    [input.tenantId, input.branchId],
+  );
+  return result.rows[0]?.timezone ?? null;
+}

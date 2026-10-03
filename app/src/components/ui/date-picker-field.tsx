@@ -14,6 +14,7 @@ export function DatePickerField({
   placeholder = "Select date",
   min,
   max,
+  disabledDates,
   disabled = false,
   clearable = true,
   invalid = false,
@@ -25,6 +26,8 @@ export function DatePickerField({
   placeholder?: string;
   min?: string;
   max?: string;
+  /** Individual dates that cannot be chosen, such as days with no available garment. */
+  disabledDates?: readonly Date[];
   disabled?: boolean;
   clearable?: boolean;
   invalid?: boolean;
@@ -92,6 +95,7 @@ export function DatePickerField({
             disabled={[
               ...(minDate ? [{ before: minDate }] : []),
               ...(maxDate ? [{ after: maxDate }] : []),
+              ...(disabledDates ?? []),
             ]}
             onSelect={(date) => {
               if (!date) return;

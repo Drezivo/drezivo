@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { addDays, daysBetween, durationLabel, formatMinor, offsetOf, zonedInstant } from '@/lib/storefront-format';
+import { addDays, daysBetween, durationLabel, formatMinor, offsetOf, rentalDays, zonedInstant } from '@/lib/storefront-format';
 import { receiptProblem } from '@/lib/receipt-upload';
 
 describe('storefront formatting', () => {
@@ -30,5 +30,12 @@ describe('storefront formatting', () => {
     expect(receiptProblem(new File(['x'], 'r.png', { type: 'image/png' }))).toBeNull();
     expect(receiptProblem(new File(['x'], 'r.gif', { type: 'image/gif' }))).toMatch(/JPG, PNG, WebP, or PDF/);
     expect(receiptProblem(new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'r.pdf', { type: 'application/pdf' }))).toMatch(/10 MB/);
+  });
+
+  it('counts rental days with the pickup date as Day 1', () => {
+    // Owner rule: Oct 1 pickup, Oct 2 event, Oct 3 return is a 3-day rental.
+    expect(rentalDays('2026-10-01', '2026-10-03')).toBe(3);
+    expect(rentalDays('2026-10-05', '2026-10-06')).toBe(2);
+    expect(rentalDays('2026-12-31', '2027-01-02')).toBe(3);
   });
 });

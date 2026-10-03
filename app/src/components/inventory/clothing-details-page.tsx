@@ -772,7 +772,7 @@ function formatHeroPricingSummary(variants: ClothingVariantDetail[]): string {
 function formatVariantRentalPrice(variant: ClothingVariantDetail): string {
   const price = formatMoney(variant.rental_price_minor, variant.currency);
   if (variant.pricing_mode === "daily") return `${price} / day`;
-  return `${price} / ${formatDurationDays(variant.included_duration_minutes)}`;
+  return `${price} / ${formatDurationDays(variant.included_duration_minutes)} (pickup day is Day 1)`;
 }
 
 function formatPricingModeLabel(variant: ClothingVariantDetail): string {

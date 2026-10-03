@@ -22,8 +22,15 @@ import {
 } from './reservations.repository.js';
 
 const POSTGRES_INT_MAX = 2_147_483_647n;
-const DAY_MS = 24n * 60n * 60n * 1_000n;
-const MINUTE_MS = 60n * 1_000n;
+const MINUTES_PER_DAY = 24 * 60;
+const MS_PER_DAY = 86_400_000;
+
+/**
+ * How rental days are counted for new quotes. Recorded on every new price snapshot so an accepted
+ * reservation always says which rule produced its total; snapshots written before this rule have
+ * no basis and were priced on elapsed 24-hour blocks.
+ */
+export const RENTAL_DAY_BASIS = 'calendar_day_inclusive';
 
 export interface ReservationQuote {
   branch_id: string;
@@ -61,6 +68,9 @@ export interface ReservationQuote {
     included_duration_minutes: number;
     extra_day_price_minor: string;
     extra_day_count: number;
+    rental_day_basis: typeof RENTAL_DAY_BASIS;
+    included_rental_days: number;
+    rental_day_count: number;
   };
   delivery_snapshot: {
     fulfillment_method: FulfillmentMethod;
@@ -163,6 +173,7 @@ export async function resolveReservationQuote(
 
   const rental = computeRentalTotal({
     requestedInterval: input.request.requested_interval,
+    timeZone: foundation.branch_timezone,
     pricingMode: catalogue.variant.pricing_mode,
     baseRentalMinor: catalogue.variant.rental_price_minor,
     includedDurationMinutes: catalogue.variant.included_duration_minutes,
@@ -216,6 +227,9 @@ export async function resolveReservationQuote(
       included_duration_minutes: catalogue.variant.included_duration_minutes,
       extra_day_price_minor: catalogue.variant.extra_day_price_minor,
       extra_day_count: rental.extraDayCount,
+      rental_day_basis: RENTAL_DAY_BASIS,
+      included_rental_days: rental.includedRentalDays,
+      rental_day_count: rental.rentalDayCount,
     },
     delivery_snapshot: {
       fulfillment_method: input.request.fulfillment_method,
@@ -241,24 +255,33 @@ export async function resolveReservationQuote(
   };
 }
 
+/**
+ * Rental days are branch-local calendar dates counted inclusively: the pickup date is Day 1 and the
+ * return date is the last rental day (owner rule, 2026-10-03). A 3-day package picked up Oct 5 is
+ * returned Oct 7 at the base price; an Oct 8 return adds one extra day. Pickup and return clock times
+ * never change the count, so a late-afternoon pickup is still a full Day 1. Asset blocking stays
+ * timestamp-precise and is handled separately from this pricing count.
+ *
+ * `daily` pricing is a 1-day package whose extra-day price is the daily rate, so it follows the
+ * same count: Oct 5 to Oct 7 is three days at the daily rate.
+ */
 export function computeRentalTotal(input: {
   requestedInterval: InstantInterval;
+  timeZone: string;
   pricingMode: 'fixed_duration' | 'daily';
   baseRentalMinor: string;
   includedDurationMinutes: number;
   extraDayPriceMinor: string;
-}): { totalMinor: bigint; extraDayCount: number } {
-  const startMs = BigInt(new Date(input.requestedInterval.start).getTime());
-  const endMs = BigInt(new Date(input.requestedInterval.end).getTime());
-  const durationMs = endMs - startMs;
-  const includedMs = BigInt(input.includedDurationMinutes) * MINUTE_MS;
-  assertMinimumRentalDuration({
-    durationMs,
-    pricingMode: input.pricingMode,
-    includedDurationMinutes: input.includedDurationMinutes,
-  });
-  const extraDurationMs = durationMs > includedMs ? durationMs - includedMs : 0n;
-  const extraDays = extraDurationMs === 0n ? 0n : (extraDurationMs + DAY_MS - 1n) / DAY_MS;
+}): { totalMinor: bigint; extraDayCount: number; includedRentalDays: number; rentalDayCount: number } {
+  const includedRentalDays = includedRentalDaysOf(input.includedDurationMinutes);
+  const rentalDayCount = countRentalDays(input.requestedInterval, input.timeZone);
+  if (rentalDayCount < 1) {
+    throw new ValidationError('The return date cannot be before the pickup date.');
+  }
+  if (input.pricingMode === 'fixed_duration' && rentalDayCount < includedRentalDays) {
+    throw new StateConflictError(minimumRentalDaysMessage(includedRentalDays));
+  }
+  const extraDays = BigInt(Math.max(0, rentalDayCount - includedRentalDays));
 
   const baseRental = parseMinorUnits(input.baseRentalMinor, 'Rental price');
   const extraDayPrice = parseMinorUnits(input.extraDayPriceMinor, 'Extra-day price');
@@ -266,23 +289,44 @@ export function computeRentalTotal(input: {
     baseRental + extraDays * extraDayPrice,
     'Rental total',
   );
-  if (extraDays > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new StateConflictError('Rental duration exceeds the supported quote range.');
-  }
-  return { totalMinor, extraDayCount: Number(extraDays) };
+  return {
+    totalMinor,
+    extraDayCount: Number(extraDays),
+    includedRentalDays,
+    rentalDayCount,
+  };
 }
 
-export function assertMinimumRentalDuration(input: {
-  durationMs: bigint;
-  pricingMode: 'fixed_duration' | 'daily';
-  includedDurationMinutes: number;
-}): void {
-  if (input.pricingMode !== 'fixed_duration') return;
-  const minimumMs = BigInt(input.includedDurationMinutes) * MINUTE_MS;
-  if (input.durationMs >= minimumMs) return;
-  throw new StateConflictError(
-    `This clothing variant requires a minimum rental period of ${formatDuration(input.includedDurationMinutes)}.`,
-  );
+/** Inclusive branch-local calendar days from the pickup date to the return date. */
+export function countRentalDays(interval: InstantInterval, timeZone: string): number {
+  const pickupDay = isoDateDayNumber(localIsoDate(interval.start, timeZone));
+  const returnDay = isoDateDayNumber(localIsoDate(interval.end, timeZone));
+  return returnDay - pickupDay + 1;
+}
+
+/**
+ * Tariffs store their package length as whole days times 1,440 minutes (the owner enters days).
+ * A value that is not whole days cannot be counted in calendar days, so it is refused rather than
+ * rounded into a price the owner never set.
+ */
+function includedRentalDaysOf(includedDurationMinutes: number): number {
+  if (includedDurationMinutes <= 0 || includedDurationMinutes % MINUTES_PER_DAY !== 0) {
+    throw new StateConflictError(
+      'This clothing variant has a rental period that is not in whole days. Update its pricing before booking.',
+    );
+  }
+  return includedDurationMinutes / MINUTES_PER_DAY;
+}
+
+function minimumRentalDaysMessage(days: number): string {
+  if (days === 1) return 'This clothing variant is a 1-day rental.';
+  const lastDay = days - 1;
+  return `This clothing variant is a ${days}-day rental. The pickup date counts as Day 1, so the return date must be at least ${lastDay} ${lastDay === 1 ? 'day' : 'days'} after the pickup date.`;
+}
+
+/** Days since the epoch for a YYYY-MM-DD date. Pure date arithmetic, so DST cannot skew it. */
+function isoDateDayNumber(isoDate: string): number {
+  return Date.parse(`${isoDate}T00:00:00Z`) / MS_PER_DAY;
 }
 
 function assertEventDateWithinRentalPeriod(input: {
@@ -310,18 +354,6 @@ function localIsoDate(instantValue: string, timeZone: string): string {
       .map((part) => [part.type, part.value]),
   );
   return `${parts['year']}-${parts['month']}-${parts['day']}`;
-}
-
-function formatDuration(minutes: number): string {
-  if (minutes % (24 * 60) === 0) {
-    const days = minutes / (24 * 60);
-    return `${days} ${days === 1 ? 'day' : 'days'}`;
-  }
-  if (minutes % 60 === 0) {
-    const hours = minutes / 60;
-    return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
-  }
-  return `${minutes} minutes`;
 }
 
 function resolveDeliveryFee(

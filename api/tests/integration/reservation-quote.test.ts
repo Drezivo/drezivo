@@ -110,15 +110,19 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
         measurements: { bust: 91.5, waist: 72 },
       },
       price_snapshot: {
-        rental_total_minor: '190000',
+        // Oct 10 to Oct 14 is five rental days (the pickup date is Day 1): 3 included + 2 extra.
+        rental_total_minor: '230000',
         security_required_minor: '50000',
         delivery_total_minor: '25000',
-        due_now_minor: '265000',
+        due_now_minor: '305000',
         currency: 'PHP',
         pricing_mode: 'fixed_duration',
         included_duration_minutes: 4320,
         extra_day_price_minor: '40000',
-        extra_day_count: 1,
+        extra_day_count: 2,
+        rental_day_basis: 'calendar_day_inclusive',
+        included_rental_days: 3,
+        rental_day_count: 5,
       },
       delivery_snapshot: { fulfillment_method: 'delivery', fee_minor: '25000' },
       policy_snapshot: {
@@ -155,7 +159,7 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
     expect(writes).toEqual({ reservations: 0, allocations: 0 });
   });
 
-  it('rejects a fixed-duration rental that is shorter than the included duration', async () => {
+  it('rejects a fixed-duration rental returned before its last included day and accepts the owner example', async () => {
     const seed = await seedQuoteWorkspace({
       clerkOrgId: 'org_rsv020_minimum',
       principalId: 'user_rsv020_minimum',
@@ -178,13 +182,32 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
           fulfillment_method: 'pickup',
           requested_interval: {
             start: '2026-10-10T02:00:00.000Z',
-            end: '2026-10-13T01:59:00.000Z',
+            end: '2026-10-11T09:00:00.000Z',
           },
         }),
       ),
     ).rejects.toMatchObject({
       code: 'STATE_CONFLICT',
-      message: 'This clothing variant requires a minimum rental period of 3 days.',
+      message:
+        'This clothing variant is a 3-day rental. The pickup date counts as Day 1, so the return date must be at least 2 days after the pickup date.',
+    });
+
+    // Owner example: a 4 PM pickup on Oct 10 returned at 9 AM on Oct 12 is the 3-day package.
+    const quote = await getStaffReservationQuote(
+      reservationContext(seed),
+      staffRequest(seed, {
+        fulfillment_method: 'pickup',
+        requested_interval: {
+          start: '2026-10-10T08:00:00.000Z',
+          end: '2026-10-12T01:00:00.000Z',
+        },
+      }),
+    );
+    expect(quote.price_snapshot).toMatchObject({
+      rental_total_minor: '50000',
+      extra_day_count: 0,
+      included_rental_days: 3,
+      rental_day_count: 3,
     });
   });
 
@@ -324,7 +347,8 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
       deliveryRules: {},
     });
 
-    // 01:30 EST on Mar 14 -> 01:30 EDT on Mar 15 is 23 elapsed hours because DST springs forward.
+    // 01:30 EST on Mar 14 -> 01:30 EDT on Mar 15 is 23 elapsed hours because DST springs forward,
+    // but it is two local rental dates, so a daily rate is charged twice.
     const quote = await getStaffReservationQuote(
       reservationContext(seed),
       staffRequest(seed, {
@@ -344,9 +368,10 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
       end: '2027-03-15T06:30:00.000Z',
     });
     expect(quote.price_snapshot).toMatchObject({
-      rental_total_minor: '30000',
-      extra_day_count: 0,
+      rental_total_minor: '60000',
+      extra_day_count: 1,
       pricing_mode: 'daily',
+      rental_day_count: 2,
     });
   });
 
