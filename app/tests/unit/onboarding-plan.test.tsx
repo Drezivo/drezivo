@@ -153,8 +153,8 @@ describe("OnboardingPlan", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Start your 14-day trial?" });
     expect(dialog).toHaveTextContent("₱300 a month");
-    expect(dialog).toHaveTextContent("Up to 1,000 garments");
-    expect(dialog).toHaveTextContent("Up to 10 staff");
+    expect(dialog).toHaveTextContent("Up to 125 garments");
+    expect(dialog).toHaveTextContent("For the shop owner only");
     expect(screen.queryByRole("radio")).toBeNull();
     expect(api.startOnboardingTrial).not.toHaveBeenCalled();
   });
