@@ -8,6 +8,7 @@ import { MotionRoot } from '@/components/store/motion/motion-root';
 import { StoreFooter } from '@/components/store/store-footer';
 import { StoreHeader } from '@/components/store/store-header';
 import { themeStyle } from '@/components/store/theme';
+import { StoreTransition } from '@/components/store/motion/store-transition';
 import { PreviewProvider } from '@/components/store/preview-context';
 import { previewToken, readStore } from '@/lib/storefront-preview';
 import { buildStorefrontMetadata } from '@/lib/seo';
@@ -45,6 +46,7 @@ export default async function StorefrontLayout({ children, params }: Props) {
       {/* Runs before the page paints, so reveal targets start hidden instead of flashing. */}
       <script dangerouslySetInnerHTML={{ __html: MOTION_BOOT }} />
       <MotionRoot />
+      <StoreTransition slug={slug} />
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:bg-sf-surface focus:px-4 focus:py-2">
         Skip to content
       </a>
