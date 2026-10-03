@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
   completeStaffReservation: vi.fn(),
   confirmReservation: vi.fn(),
   getStaffReservationIntakeOptions: vi.fn(),
+  getReservationPaymentReceipts: vi.fn(),
   verifyReservationPayment: vi.fn(),
   inspectReservationReturn: vi.fn(),
   pickupReservation: vi.fn(),
@@ -480,5 +481,92 @@ describe("ReservationMutationActions", () => {
       },
       expect.any(String)
     );
+  });
+
+  describe("payment by booking channel", () => {
+    const pendingManual = (bookingChannel: "online" | "walk_in") =>
+      reservationDetail.parse({
+        ...confirmedDetail,
+        status: "pending_confirmation",
+        booking_channel: bookingChannel,
+        confirmed_at: null,
+        payment: {
+          ...confirmedDetail.payment!,
+          method_name: "Maya",
+          rail: "manual_qr",
+          status: "pending",
+          evidence_status: bookingChannel === "online" ? "under_review" : "awaiting_upload",
+          verified_at: null,
+        },
+      });
+
+    beforeEach(() => {
+      api.getReservationPaymentReceipts.mockResolvedValue({
+        data: {
+          receipts: [
+            {
+              file_id: "00000000-0000-4000-8000-000000000901",
+              content_type: "image/png",
+              url: "https://files.test/receipt.png",
+              submitted_at: "2026-10-10T02:05:00.000Z",
+              evidence_status: "under_review",
+            },
+          ],
+        },
+        requestId: "req-receipts",
+      });
+      api.verifyReservationPayment.mockResolvedValue({ data: {}, requestId: "req-verify" });
+      api.completeStaffReservation.mockResolvedValue(mutationResult("confirmed"));
+    });
+
+    it("shows an online renter's proof and asks before verifying", async () => {
+      renderActions(pendingManual("online"));
+
+      fireEvent.click(screen.getByRole("button", { name: "Verify Payment" }));
+      const thumbnail = await screen.findByRole("button", { name: "View proof of payment 1 full size" });
+      expect(screen.queryByLabelText("Merchant reference")).not.toBeInTheDocument();
+
+      // Verifying asks first; "View proof again" reopens the receipt instead of verifying.
+      fireEvent.click(screen.getByRole("button", { name: "Verify & Confirm" }));
+      expect(await screen.findByText("Is this payment verified?")).toBeVisible();
+      fireEvent.click(screen.getByRole("button", { name: "View proof again" }));
+      expect(await screen.findByAltText("Proof of payment 1")).toBeVisible();
+      expect(api.verifyReservationPayment).not.toHaveBeenCalled();
+      expect(thumbnail).toBeInTheDocument();
+    });
+
+    it("verifies an online payment only after the owner confirms", async () => {
+      renderActions(pendingManual("online"));
+
+      fireEvent.click(screen.getByRole("button", { name: "Verify Payment" }));
+      await screen.findByRole("button", { name: "View proof of payment 1 full size" });
+      fireEvent.click(screen.getByRole("button", { name: "Verify & Confirm" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Yes, it's verified" }));
+
+      await waitFor(() => expect(api.verifyReservationPayment).toHaveBeenCalledTimes(1));
+      expect(api.verifyReservationPayment.mock.calls[0]![1]).toEqual({
+        version: 3,
+        verified_amount_minor: "200000",
+      });
+      await waitFor(() => expect(api.completeStaffReservation).toHaveBeenCalledTimes(1));
+    });
+
+    it("lets staff log a walk-in payment without a receipt or a confirmation prompt", async () => {
+      renderActions(pendingManual("walk_in"));
+
+      expect(screen.queryByRole("button", { name: "Verify Payment" })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Log Payment" }));
+      expect(api.getReservationPaymentReceipts).not.toHaveBeenCalled();
+      fireEvent.change(screen.getByLabelText("Merchant reference"), { target: { value: "MAYA-123" } });
+      fireEvent.click(screen.getByRole("button", { name: "Log Payment & Confirm" }));
+
+      await waitFor(() => expect(api.verifyReservationPayment).toHaveBeenCalledTimes(1));
+      expect(api.verifyReservationPayment.mock.calls[0]![1]).toEqual({
+        version: 3,
+        verified_amount_minor: "200000",
+        merchant_reference: "MAYA-123",
+      });
+      expect(screen.queryByText("Is this payment verified?")).not.toBeInTheDocument();
+    });
   });
 });

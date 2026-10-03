@@ -3,11 +3,13 @@ import {
   productVariantId,
   tenantId,
   reservationDetail,
+  reservationPaymentReceiptsResponse,
   reservationListItem,
   reservationListResponse,
   reservationPaymentProjection,
   type PermissionCode,
   type ReservationDetail,
+  type ReservationPaymentReceiptsResponse,
   type ReservationListItem,
   type ReservationListQuery,
   type ReservationListResponse,
@@ -94,6 +96,7 @@ import {
   listReservationsReadModel,
   listStaffReservationPaymentMethodOptions,
   readReservationDetailModel,
+  readReservationPaymentReceipts,
   searchStaffReservationCustomerOptions,
   type ReservationDetailHeaderRow,
   type ReservationListReadRow,
@@ -501,6 +504,49 @@ export async function getReservationList(
   });
 }
 
+/**
+ * The renter's uploaded payment receipts, for staff who may verify payments. Receipts are private
+ * evidence, so this is its own permission-gated read with five-minute signed links instead of part
+ * of the reservation detail. A receipt whose link cannot be signed is left out rather than failing
+ * the whole list.
+ */
+export async function getReservationPaymentReceipts(
+  input: ReservationReadContext,
+  reservationId: string,
+  storage: ObjectStorage = objectStorage,
+): Promise<ReservationPaymentReceiptsResponse> {
+  assertReservationReadContext(input);
+  if (!input.permissionCodes.includes('payments.manage') || !input.permissionCodes.includes('evidence.verify')) {
+    throw new ForbiddenError('Payment evidence verification permission is required.');
+  }
+  const rows = await withTenantTransaction(input.tenantId, input.principalId, (client) =>
+    readReservationPaymentReceipts(client, { tenantId: input.tenantId, branchId: input.branchId, reservationId }),
+  );
+  if (!rows) throw new NotFoundError('Reservation could not be found.');
+
+  const receipts = await Promise.all(
+    rows.map(async (row) => {
+      try {
+        const { readUrl } = await storage.authorizeRead({
+          storageKey: row.storage_key,
+          versionId: row.version_id,
+          expiresInSeconds: 5 * 60,
+        });
+        return {
+          file_id: row.file_id,
+          content_type: row.mime_type,
+          url: readUrl,
+          submitted_at: row.submitted_at.toISOString(),
+          evidence_status: row.evidence_status,
+        };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return reservationPaymentReceiptsResponse.parse({ receipts: receipts.filter((receipt) => receipt !== null) });
+}
+
 /** Authoritative staff detail shared by Reservations and Schedule drawers. */
 export async function getReservationDetail(
   input: ReservationReadContext,
@@ -591,6 +637,7 @@ export async function getReservationDetail(
       currency: header.reservation_currency,
     },
     payment: header.payment_id ? toPaymentProjection(header) : null,
+    booking_channel: header.booking_channel,
     hold_acquired_at: header.hold_acquired_at.toISOString(),
     hold_expires_at: header.hold_expires_at?.toISOString() ?? null,
     terms_accepted_at: header.terms_accepted_at?.toISOString() ?? null,

@@ -108,6 +108,8 @@ export interface ReservationDetailHeaderRow {
   payment_verified_at: Date | null;
   payment_cash_tendered_minor: string | number | null;
   payment_change_due_minor: string | number | null;
+  /** Storefront bookings carry a guest access token; staff-created ones never do. */
+  booking_channel: 'online' | 'walk_in';
   version: number;
   created_at: Date;
 }
@@ -389,7 +391,8 @@ export async function listReservationsReadModel(
  * Reads one authoritative reservation detail without joining live catalogue/customer fields.
  * Historical customer, garment, measurement, delivery, and price facts come only from accepted
  * snapshots. Current allocated-asset readiness is projected separately for operational return
- * gating. Receipt files and payment-verification notes are deliberately not projected here.
+ * gating. Receipt files and payment-verification notes are deliberately not projected here; staff
+ * who may verify payments read receipts through readReservationPaymentReceipts.
  */
 export async function readReservationDetailModel(
   client: PoolClient,
@@ -445,6 +448,13 @@ export async function readReservationDetailModel(
            AND pv.decision = 'verified'
          ORDER BY pv.decided_at DESC, pv.id DESC
          LIMIT 1) AS payment_change_due_minor,
+       CASE
+         WHEN EXISTS (
+           SELECT 1 FROM guest_access_token gat
+            WHERE gat.tenant_id = r.tenant_id AND gat.reservation_id = r.id
+         ) THEN 'online'
+         ELSE 'walk_in'
+       END AS booking_channel,
        r.version,
        r.created_at
      FROM reservation r
@@ -784,4 +794,46 @@ function decodeListCursor(
 
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
+export interface ReservationPaymentReceiptRow {
+  file_id: string;
+  storage_key: string;
+  version_id: string | null;
+  mime_type: string;
+  submitted_at: Date;
+  evidence_status: string;
+}
+
+/**
+ * The renter's uploaded receipts for a reservation's payment, newest first. Only accepted,
+ * finalized receipt files are returned; the caller signs short-lived read links for them.
+ */
+export async function readReservationPaymentReceipts(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; reservationId: string },
+): Promise<ReservationPaymentReceiptRow[] | null> {
+  const reservation = await client.query<{ id: string }>(
+    `SELECT id FROM reservation WHERE tenant_id = $1 AND branch_id = $2 AND id = $3::uuid`,
+    [input.tenantId, input.branchId, input.reservationId],
+  );
+  if (!reservation.rows[0]) return null;
+  const result = await client.query<ReservationPaymentReceiptRow>(
+    `SELECT pr.file_id, f.storage_key, f.version_id, f.mime_type, pr.submitted_at, pr.evidence_status
+       FROM payment p
+       JOIN payment_receipt pr
+         ON pr.tenant_id = p.tenant_id
+        AND pr.payment_id = p.id
+       JOIN file_object f
+         ON f.tenant_id = pr.tenant_id
+        AND f.id = pr.file_id
+        AND f.purpose = 'payment_receipt'
+        AND f.lifecycle_status = 'accepted'
+      WHERE p.tenant_id = $1
+        AND p.reservation_id = $2::uuid
+      ORDER BY pr.submitted_at DESC, pr.id DESC
+      LIMIT 20`,
+    [input.tenantId, input.reservationId],
+  );
+  return result.rows;
 }
