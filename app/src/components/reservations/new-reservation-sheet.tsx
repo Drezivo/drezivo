@@ -2,7 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { CalendarDays, Check, ChevronDown, FileUp, Search, Shirt, TimerReset, UserRound } from "lucide-react";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type {
   BranchBusinessHours,
@@ -36,6 +36,7 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { uploadAuthorizedFile } from "@/lib/authorized-file-upload";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { displaySizeLabel } from "@/lib/catalogue-display";
 import { useVerifiedActorContext } from "@/components/shell/dashboard-access-gate";
 import { claimHoldOwner, clearPendingHold, readHoldDraft, saveHoldDraft, savePendingHold } from "@/lib/pending-hold";
@@ -94,7 +95,8 @@ export function NewReservationSheet({
     text: string;
   } | null>(null);
   const [search, setSearch] = useState("");
-  const deferredSearch = useDeferredValue(search.trim());
+  const debouncedSearch = useDebouncedValue(search.trim());
+  const isProductSearchPending = search.trim() !== debouncedSearch;
   const [pickupDate, setPickupDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [pickupTime, setPickupTime] = useState("");
@@ -134,7 +136,10 @@ export function NewReservationSheet({
 
   const [customerMode, setCustomerMode] = useState<CustomerMode>("new");
   const [customerSearch, setCustomerSearch] = useState("");
-  const deferredCustomerSearch = useDeferredValue(customerSearch.trim());
+  const debouncedCustomerSearch = useDebouncedValue(customerSearch.trim());
+  const isCustomerSearchTooShort = customerSearch.trim().length < 2;
+  const isCustomerSearchPending =
+    !isCustomerSearchTooShort && customerSearch.trim() !== debouncedCustomerSearch;
   const [customerOptions, setCustomerOptions] = useState<StaffReservationCustomerOption[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<CustomerId | "">("");
   const [fullName, setFullName] = useState("");
@@ -273,14 +278,18 @@ export function NewReservationSheet({
 
   useEffect(() => {
     if (!open || step !== "select") return;
+    if (isProductSearchPending) {
+      setProductsLoading(true);
+      return;
+    }
     let cancelled = false;
     setProductsLoading(true);
 
     const query = {
       limit: PRODUCT_LIMIT,
-      sort: deferredSearch ? ("name_asc" as const) : ("newest" as const),
+      sort: debouncedSearch ? ("name_asc" as const) : ("newest" as const),
       product_status: "active" as const,
-      ...(deferredSearch ? { search: deferredSearch } : {}),
+      ...(debouncedSearch ? { search: debouncedSearch } : {}),
     };
 
     void createDrezivoApiClient(getToken)
@@ -298,7 +307,7 @@ export function NewReservationSheet({
     return () => {
       cancelled = true;
     };
-  }, [deferredSearch, getToken, open, step]);
+  }, [debouncedSearch, getToken, isProductSearchPending, open, step]);
 
   useEffect(() => {
     if (!selectedProduct) {
@@ -429,14 +438,16 @@ export function NewReservationSheet({
       !open ||
       step !== "held" ||
       customerMode !== "existing" ||
-      deferredCustomerSearch.length < 2
+      isCustomerSearchTooShort ||
+      isCustomerSearchPending ||
+      debouncedCustomerSearch.length < 2
     ) {
       setCustomerOptions([]);
       return;
     }
     let cancelled = false;
     void createDrezivoApiClient(getToken)
-      .getStaffReservationIntakeOptions({ customer_search: deferredCustomerSearch })
+      .getStaffReservationIntakeOptions({ customer_search: debouncedCustomerSearch })
       .then((result) => {
         if (!cancelled) setCustomerOptions(result.data.customers);
       })
@@ -446,7 +457,7 @@ export function NewReservationSheet({
     return () => {
       cancelled = true;
     };
-  }, [customerMode, deferredCustomerSearch, getToken, open, step]);
+  }, [customerMode, debouncedCustomerSearch, getToken, isCustomerSearchPending, isCustomerSearchTooShort, open, step]);
 
   useEffect(() => {
     if (!held?.reservation.hold_expires_at || step !== "held") return;
@@ -835,8 +846,10 @@ export function NewReservationSheet({
                 onChange={(event) => setSearch(event.target.value)}
               />
               <div className="mt-3 grid gap-2">
-                {productsLoading ? (
-                  <p className="text-sm text-dashboard-muted">Loading active clothing…</p>
+                {isProductSearchPending || productsLoading ? (
+                  <p className="text-sm text-dashboard-muted">
+                    {isProductSearchPending ? "Waiting to search clothing…" : "Loading active clothing…"}
+                  </p>
                 ) : products.length === 0 ? (
                   <p className="text-sm text-dashboard-muted">
                     No active clothing matches this search.
@@ -899,9 +912,9 @@ export function NewReservationSheet({
                   ))
                 )}
               </div>
-              {!productsLoading && products.length > 0 ? (
+              {!isProductSearchPending && !productsLoading && products.length > 0 ? (
                 <p className="mt-2 text-xs text-dashboard-muted">
-                  {deferredSearch
+                  {debouncedSearch
                     ? "Showing up to 5 matching clothing items. Refine your search to narrow the results."
                     : "Showing up to 5 recent clothing items. Search to find more clothing."}
                 </p>
@@ -1448,13 +1461,15 @@ export function NewReservationSheet({
                           completeGuard.resetIntent();
                         }}
                       />
-                      {deferredCustomerSearch.length < 2 ? (
+                      {customerSearch.trim().length < 2 ? (
                         <p className="mt-2 text-xs text-dashboard-muted">
                           Type at least 2 characters to find an existing customer.
                         </p>
                       ) : null}
                       <div className="mt-2 grid gap-2">
-                        {customerOptions.map((customer) => {
+                        {isCustomerSearchPending ? (
+                          <p className="text-sm text-dashboard-muted">Waiting to search customers…</p>
+                        ) : isCustomerSearchTooShort ? null : customerOptions.map((customer) => {
                           const isSelected = selectedCustomerId === customer.id;
                           return (
                             <button

@@ -15,7 +15,7 @@ import {
   UserCheck,
   X,
 } from "lucide-react";
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type {
   DashboardFittingSummaryResponse,
@@ -37,6 +37,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ListPagination } from "@/components/ui/list-pagination";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { cn } from "@/lib/utils";
 
 import {
@@ -92,7 +93,8 @@ export function FittingsPage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query.trim());
+  const debouncedQuery = useDebouncedValue(query.trim());
+  const isSearchPending = query.trim() !== debouncedQuery;
   const [status, setStatus] = useState<FittingState | null>(null);
   const [dateFilter, setDateFilter] = useState<FittingDateFilter>(() =>
     parseFittingDateFilter(searchParams.get("date"))
@@ -118,7 +120,7 @@ export function FittingsPage() {
   const currentCursor = pageCursors[pageIndex] ?? null;
   const timeZone = settings?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
   const period = useMemo(() => fittingPeriodFilter(dateFilter, timeZone), [dateFilter, timeZone]);
-  const hasActiveFilters = Boolean(deferredQuery || status || dateFilter !== "all");
+  const hasActiveFilters = Boolean(query.trim() || status || dateFilter !== "all");
   const permissionRestricted = error?.status === 403 || error?.code === "FORBIDDEN";
 
   const resetPagination = useCallback(() => {
@@ -148,6 +150,10 @@ export function FittingsPage() {
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
+    if (isSearchPending) {
+      setIsLoading(true);
+      return;
+    }
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -157,7 +163,7 @@ export function FittingsPage() {
         limit: FITTINGS_PAGE_SIZE,
         sort: "starts_at_asc",
         ...(currentCursor ? { cursor: currentCursor } : {}),
-        ...(deferredQuery ? { search: deferredQuery } : {}),
+        ...(debouncedQuery ? { search: debouncedQuery } : {}),
         ...(status ? { status } : {}),
         ...(period ? { period_start: period.start, period_end: period.end } : {}),
       })
@@ -179,7 +185,7 @@ export function FittingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [currentCursor, deferredQuery, getToken, isLoaded, isSignedIn, period, reloadVersion, status]);
+  }, [currentCursor, debouncedQuery, getToken, isLoaded, isSearchPending, isSignedIn, period, reloadVersion, status]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !selectedFittingId) return;

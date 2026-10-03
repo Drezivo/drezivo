@@ -350,9 +350,11 @@ describe("FittingsPage production cutover", () => {
     render(<FittingsPage />);
     await screen.findByText("Real Fitting Customer");
 
+    const requestCountBeforeSearch = api.getFittings.mock.calls.length;
     fireEvent.change(screen.getByRole("textbox", { name: "Search fittings" }), {
       target: { value: "Emerald" },
     });
+    expect(api.getFittings).toHaveBeenCalledTimes(requestCountBeforeSearch);
     await waitFor(() =>
       expect(api.getFittings).toHaveBeenCalledWith(expect.objectContaining({ search: "Emerald" }))
     );
@@ -368,11 +370,11 @@ describe("FittingsPage production cutover", () => {
       expect(api.getFittings).toHaveBeenCalledWith(expect.objectContaining({ status: "pending" }))
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Next" }));
     await waitFor(() =>
       expect(api.getFittings).toHaveBeenCalledWith(expect.objectContaining({ cursor: "next-page" }))
     );
-    expect(screen.getByText("Page 2 · 1 fittings loaded")).toBeVisible();
+    expect(await screen.findByText("Page 2 · 1 fitting")).toBeVisible();
   });
 
   it("shows fitting details without profile address or social media", async () => {

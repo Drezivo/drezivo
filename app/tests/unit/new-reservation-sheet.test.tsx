@@ -780,9 +780,40 @@ describe("NewReservationSheet", () => {
     fireEvent.change(screen.getByLabelText("Search existing customer"), {
       target: { value: "Maria" },
     });
-    const existingCustomer = await screen.findByRole("button", { name: /Maria Existing/i });
-    fireEvent.click(existingCustomer);
-    expect(existingCustomer).toHaveAttribute("aria-pressed", "true");
+    await screen.findByRole("button", { name: /Maria Existing/i });
+
+    fireEvent.change(screen.getByLabelText("Search existing customer"), {
+      target: { value: "Another" },
+    });
+    expect(screen.queryByRole("button", { name: /Maria Existing/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Waiting to search customers…")).toBeVisible();
+    await waitFor(() =>
+      expect(api.getStaffReservationIntakeOptions).toHaveBeenLastCalledWith({
+        customer_search: "Another",
+      })
+    );
+    await screen.findByRole("button", { name: /Maria Existing/i });
+
+    const requestCountBeforeShortQuery = api.getStaffReservationIntakeOptions.mock.calls.length;
+    fireEvent.change(screen.getByLabelText("Search existing customer"), {
+      target: { value: "A" },
+    });
+    expect(screen.queryByRole("button", { name: /Maria Existing/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Type at least 2 characters to find an existing customer.")).toBeVisible();
+    expect(screen.queryByText("Waiting to search customers…")).not.toBeInTheDocument();
+    expect(api.getStaffReservationIntakeOptions).toHaveBeenCalledTimes(requestCountBeforeShortQuery);
+
+    fireEvent.change(screen.getByLabelText("Search existing customer"), {
+      target: { value: "Another" },
+    });
+    await waitFor(() =>
+      expect(api.getStaffReservationIntakeOptions).toHaveBeenLastCalledWith({
+        customer_search: "Another",
+      })
+    );
+    const refreshedCustomer = await screen.findByRole("button", { name: /Maria Existing/i });
+    fireEvent.click(refreshedCustomer);
+    expect(refreshedCustomer).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Selected customer")).toBeVisible();
     fireEvent.click(
       screen.getByRole("checkbox", {

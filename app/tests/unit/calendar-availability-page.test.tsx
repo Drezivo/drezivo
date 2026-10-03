@@ -488,9 +488,11 @@ describe("CalendarAvailabilityPage", () => {
     render(<CalendarAvailabilityPage />);
     await screen.findByText("Emerald Evening Gown");
 
+    const requestCountBeforeSearch = api.getClothingAvailabilityTimeline.mock.calls.length;
     fireEvent.change(screen.getByLabelText("Search clothing availability"), {
       target: { value: "searched" },
     });
+    expect(api.getClothingAvailabilityTimeline).toHaveBeenCalledTimes(requestCountBeforeSearch);
 
     expect(await screen.findByText("Searched Database Gown")).toBeVisible();
     await waitFor(() => {

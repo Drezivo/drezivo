@@ -194,6 +194,26 @@ describe("NewFittingSheet production cutover", () => {
       expect(api.getFittingIntakeOptions).toHaveBeenCalledWith({ customer_search: "Ex" })
     );
     expect(await screen.findByRole("radio", { name: /Existing Customer/ })).toBeVisible();
+
+    fireEvent.change(screen.getByPlaceholderText("Name, email, or phone..."), {
+      target: { value: "Another" },
+    });
+
+    expect(screen.queryByRole("radio", { name: /Existing Customer/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Searching customers…")).toBeVisible();
+    await waitFor(() =>
+      expect(api.getFittingIntakeOptions).toHaveBeenLastCalledWith({ customer_search: "Another" })
+    );
+    expect(await screen.findByRole("radio", { name: /Existing Customer/ })).toBeVisible();
+
+    const requestCountBeforeShortQuery = api.getFittingIntakeOptions.mock.calls.length;
+    fireEvent.change(screen.getByPlaceholderText("Name, email, or phone..."), {
+      target: { value: "A" },
+    });
+    expect(screen.queryByRole("radio", { name: /Existing Customer/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Type at least 2 characters to search existing customers.")).toBeVisible();
+    expect(screen.queryByText("Searching customers…")).not.toBeInTheDocument();
+    expect(api.getFittingIntakeOptions).toHaveBeenCalledTimes(requestCountBeforeShortQuery);
   });
 
   it("requires walk-in contact and creates a guaranteed fitting from canonical API input", async () => {

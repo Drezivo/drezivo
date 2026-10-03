@@ -20,7 +20,6 @@ import {
 import Link from "next/link";
 import {
   useCallback,
-  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -44,6 +43,7 @@ import {
 } from "@/components/inventory/manage-physical-asset-dialog";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { cn } from "@/lib/utils";
 
 import {
@@ -102,7 +102,8 @@ export function CalendarAvailabilityPage() {
   const [manageReadinessError, setManageReadinessError] = useState<string | null>(null);
   const [readinessNotice, setReadinessNotice] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query.trim());
+  const debouncedQuery = useDebouncedValue(query.trim());
+  const isSearchPending = query.trim() !== debouncedQuery;
   const [categoryId, setCategoryId] = useState<
     TimelineFacets["categories"][number]["id"] | null
   >(null);
@@ -129,7 +130,7 @@ export function CalendarAvailabilityPage() {
     (categoryId ? facets.categories.find((category) => category.id === categoryId)?.name : null) ??
     "All Categories";
   const statusLabel = statusFilter ? availabilityStatusLabel(statusFilter) : "All Statuses";
-  const hasCatalogueFilter = Boolean(deferredQuery || categoryId || sizeFilter);
+  const hasCatalogueFilter = Boolean(query.trim() || categoryId || sizeFilter);
   const permissionRestricted = error?.status === 403 || error?.code === "FORBIDDEN";
 
   const resetPagination = useCallback(() => {
@@ -221,6 +222,10 @@ export function CalendarAvailabilityPage() {
     ) {
       return;
     }
+    if (isSearchPending) {
+      setIsLoading(true);
+      return;
+    }
 
     let cancelled = false;
     setIsLoading(true);
@@ -233,7 +238,7 @@ export function CalendarAvailabilityPage() {
         end_date: windowEnd,
         limit: pageSize,
         ...(currentCursor ? { cursor: currentCursor } : {}),
-        ...(deferredQuery ? { search: deferredQuery } : {}),
+        ...(debouncedQuery ? { search: debouncedQuery } : {}),
         ...(categoryId ? { category_id: categoryId } : {}),
         ...(sizeFilter ? { size_label: sizeFilter } : {}),
         ...(statusFilter ? { status: statusFilter } : {}),
@@ -257,10 +262,11 @@ export function CalendarAvailabilityPage() {
   }, [
     categoryId,
     currentCursor,
-    deferredQuery,
+    debouncedQuery,
     getToken,
     isContextResolved,
     isLoaded,
+    isSearchPending,
     isSignedIn,
     pageSize,
     reloadVersion,

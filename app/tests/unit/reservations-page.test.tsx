@@ -354,10 +354,12 @@ describe("ReservationsPage", () => {
   it("sends search and status filters to the reservations endpoint instead of filtering rows in memory", async () => {
     render(<ReservationsPage />);
     await screen.findByText("RSV-REAL-001");
+    const requestCountBeforeSearch = api.getReservations.mock.calls.length;
 
     fireEvent.change(screen.getByLabelText("Search reservations"), {
       target: { value: "Emerald" },
     });
+    expect(api.getReservations).toHaveBeenCalledTimes(requestCountBeforeSearch);
     fireEvent.click(screen.getByRole("tab", { name: "Confirmed" }));
 
     await waitFor(() =>
@@ -371,6 +373,35 @@ describe("ReservationsPage", () => {
     expect(navigation.replace).toHaveBeenCalledWith(expect.stringContaining("q=Emerald"), {
       scroll: false,
     });
+  });
+
+  it("does not fetch the previous search while resetting a later-page cursor", async () => {
+    api.getReservations
+      .mockResolvedValueOnce(page([reservation], "cursor-page-2"))
+      .mockResolvedValueOnce(page([anonymousHold]))
+      .mockResolvedValue(page([reservation]));
+
+    render(<ReservationsPage />);
+    await screen.findByText("RSV-REAL-001");
+
+    fireEvent.click(screen.getByRole("button", { name: "Next reservations page" }));
+    await screen.findByText("RSV-HOLD-002");
+    const requestsBeforeSearch = api.getReservations.mock.calls.length;
+
+    fireEvent.change(screen.getByLabelText("Search reservations"), {
+      target: { value: "Emerald" },
+    });
+
+    expect(api.getReservations).toHaveBeenCalledTimes(requestsBeforeSearch);
+
+    await waitFor(() =>
+      expect(api.getReservations).toHaveBeenLastCalledWith({
+        limit: 10,
+        sort: "created_desc",
+        search: "Emerald",
+      })
+    );
+    expect(api.getReservations).toHaveBeenCalledTimes(requestsBeforeSearch + 1);
   });
 
   it.each([
