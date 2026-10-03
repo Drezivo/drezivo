@@ -3,7 +3,7 @@
 import { useAuth } from "@clerk/nextjs";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AlertTriangle, Check, CheckCircle2, Eye, Loader2, ShieldCheck } from "lucide-react";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type {
   CustomerId,
@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 
 import { PaymentProof, usePaymentProof } from "./payment-proof";
@@ -84,7 +85,10 @@ export function ReservationMutationActions({
   const [merchantReference, setMerchantReference] = useState("");
   const [customerMode, setCustomerMode] = useState<CustomerMode>("new");
   const [customerSearch, setCustomerSearch] = useState("");
-  const deferredCustomerSearch = useDeferredValue(customerSearch.trim());
+  const debouncedCustomerSearch = useDebouncedValue(customerSearch.trim());
+  const isCustomerSearchTooShort = customerSearch.trim().length < 2;
+  const isCustomerSearchPending =
+    !isCustomerSearchTooShort && customerSearch.trim() !== debouncedCustomerSearch;
   const [customerOptions, setCustomerOptions] = useState<StaffReservationCustomerOption[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<CustomerId | "">("");
   const [fullName, setFullName] = useState("");
@@ -134,7 +138,9 @@ export function ReservationMutationActions({
       selectedAction !== "complete_reservation" ||
       detail.customer.snapshot ||
       customerMode !== "existing" ||
-      deferredCustomerSearch.length < 2
+      isCustomerSearchTooShort ||
+      isCustomerSearchPending ||
+      debouncedCustomerSearch.length < 2
     ) {
       setCustomerOptions([]);
       return;
@@ -142,7 +148,7 @@ export function ReservationMutationActions({
 
     let cancelled = false;
     void createDrezivoApiClient(getToken)
-      .getStaffReservationIntakeOptions({ customer_search: deferredCustomerSearch })
+      .getStaffReservationIntakeOptions({ customer_search: debouncedCustomerSearch })
       .then((result) => {
         if (!cancelled) setCustomerOptions(result.data.customers);
       })
@@ -153,7 +159,7 @@ export function ReservationMutationActions({
     return () => {
       cancelled = true;
     };
-  }, [customerMode, deferredCustomerSearch, detail.customer.snapshot, getToken, selectedAction]);
+  }, [customerMode, debouncedCustomerSearch, detail.customer.snapshot, getToken, isCustomerSearchPending, isCustomerSearchTooShort, selectedAction]);
 
   if (actions.length === 0) return null;
 
@@ -583,13 +589,15 @@ export function ReservationMutationActions({
                         })
                       }
                     />
-                    {deferredCustomerSearch.length < 2 ? (
+                    {customerSearch.trim().length < 2 ? (
                       <p className="mt-2 text-xs text-dashboard-muted">
                         Type at least 2 characters to find an existing customer.
                       </p>
                     ) : null}
                     <div className="mt-2 grid gap-2">
-                      {customerOptions.map((customer) => {
+                      {isCustomerSearchPending ? (
+                        <p className="text-sm text-dashboard-muted">Waiting to search customers…</p>
+                      ) : isCustomerSearchTooShort ? null : customerOptions.map((customer) => {
                         const isSelected = selectedCustomerId === customer.id;
                         return (
                           <button

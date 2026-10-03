@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useDeferredValue, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type {
   CatalogueCategory,
@@ -46,6 +46,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { displayProductSizeCount, displayProductSizes } from "@/lib/catalogue-display";
 import { cn } from "@/lib/utils";
 
@@ -82,7 +83,8 @@ export function ClothingPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
-  const deferredQuery = useDeferredValue(query.trim());
+  const debouncedQuery = useDebouncedValue(query.trim());
+  const isSearchPending = query.trim() !== debouncedQuery;
   const [categoryId, setCategoryId] = useState<CatalogueCategory["id"] | null>(() =>
     parseCategoryFilter(searchParams.get("category"))
   );
@@ -121,7 +123,7 @@ export function ClothingPage() {
 
   useEffect(() => {
     const params = new URLSearchParams();
-    if (deferredQuery) params.set("q", deferredQuery);
+    if (debouncedQuery) params.set("q", debouncedQuery);
     if (categoryId) params.set("category", categoryId);
     if (size !== "All Sizes") params.set("size", size);
     if (status === "All Statuses") params.set("status", "all");
@@ -131,7 +133,7 @@ export function ClothingPage() {
     const nextSearch = params.toString();
     if (nextSearch === searchParams.toString()) return;
     router.replace(nextSearch ? `${pathname}?${nextSearch}` : pathname, { scroll: false });
-  }, [categoryId, deferredQuery, pathname, router, searchParams, size, sort, status]);
+  }, [categoryId, debouncedQuery, pathname, router, searchParams, size, sort, status]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -153,6 +155,10 @@ export function ClothingPage() {
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
+    if (isSearchPending) {
+      setIsLoading(true);
+      return;
+    }
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -163,7 +169,7 @@ export function ClothingPage() {
         limit: PAGE_SIZE,
         sort,
         ...(currentCursor ? { cursor: currentCursor } : {}),
-        ...(deferredQuery ? { search: deferredQuery } : {}),
+        ...(debouncedQuery ? { search: debouncedQuery } : {}),
         ...(categoryId ? { category_id: categoryId } : {}),
         ...(size !== "All Sizes" ? { size_label: size } : {}),
         ...(productStatus ? { product_status: productStatus } : {}),
@@ -191,9 +197,10 @@ export function ClothingPage() {
   }, [
     categoryId,
     currentCursor,
-    deferredQuery,
+    debouncedQuery,
     getToken,
     isLoaded,
+    isSearchPending,
     isSignedIn,
     reloadVersion,
     size,
@@ -231,7 +238,7 @@ export function ClothingPage() {
     resetPagination();
   };
 
-  const hasActiveFilters = Boolean(deferredQuery || categoryId || size !== "All Sizes" || status !== DEFAULT_STATUS);
+  const hasActiveFilters = Boolean(query.trim() || categoryId || size !== "All Sizes" || status !== DEFAULT_STATUS);
 
   const clearFilters = () => {
     setQuery("");

@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type {
   PermissionCode,
@@ -34,6 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { cn } from "@/lib/utils";
 
 import { NewReservationSheet } from "./new-reservation-sheet";
@@ -68,7 +69,8 @@ export function ReservationsPage() {
   const searchParams = useSearchParams();
 
   const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
-  const deferredQuery = useDeferredValue(query.trim());
+  const debouncedQuery = useDebouncedValue(query.trim());
+  const isSearchPending = query.trim() !== debouncedQuery;
   const [status, setStatus] = useState<ReservationState | null>(() =>
     parseReservationStatus(searchParams.get("status"))
   );
@@ -108,12 +110,12 @@ export function ReservationsPage() {
     () => (dateRangeError ? null : toPickupInstantRange(dateRange, timeZone)),
     [dateRange, dateRangeError, timeZone]
   );
-  const hasActiveFilters = Boolean(deferredQuery || status || dateRange.from || dateRange.to);
+  const hasActiveFilters = Boolean(query.trim() || status || dateRange.from || dateRange.to);
   const permissionRestricted = error?.status === 403 || error?.code === "FORBIDDEN";
 
   useEffect(() => {
     const params = new URLSearchParams();
-    if (deferredQuery) params.set("q", deferredQuery);
+    if (debouncedQuery) params.set("q", debouncedQuery);
     if (status) params.set("status", status);
     if (dateRange.from) params.set("from", dateRange.from);
     if (dateRange.to) params.set("to", dateRange.to);
@@ -121,7 +123,7 @@ export function ReservationsPage() {
     const nextSearch = params.toString();
     if (nextSearch === searchParams.toString()) return;
     router.replace(nextSearch ? `${pathname}?${nextSearch}` : pathname, { scroll: false });
-  }, [dateRange.from, dateRange.to, deferredQuery, pathname, router, searchParams, status]);
+  }, [dateRange.from, dateRange.to, debouncedQuery, pathname, router, searchParams, status]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -178,12 +180,17 @@ export function ReservationsPage() {
   }, [detailReloadVersion, getToken, isLoaded, isSignedIn, selectedReservationId]);
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || dateRangeError || !dateFilterTimeZoneReady) {
+    if (!isLoaded || !isSignedIn) return;
+    if (dateRangeError || !dateFilterTimeZoneReady) {
       if (dateRangeError) {
         setRows([]);
         setPageMeta({ next_cursor: null, has_more: false });
         setIsLoading(false);
       }
+      return;
+    }
+    if (isSearchPending) {
+      setIsLoading(true);
       return;
     }
 
@@ -196,7 +203,7 @@ export function ReservationsPage() {
         limit: PAGE_SIZE,
         sort: "created_desc",
         ...(currentCursor ? { cursor: currentCursor } : {}),
-        ...(deferredQuery ? { search: deferredQuery } : {}),
+        ...(debouncedQuery ? { search: debouncedQuery } : {}),
         ...(status ? { status } : {}),
         ...(dateQuery
           ? {
@@ -227,8 +234,9 @@ export function ReservationsPage() {
     currentCursor,
     dateQuery,
     dateRangeError,
-    deferredQuery,
+    debouncedQuery,
     getToken,
+    isSearchPending,
     isLoaded,
     isSignedIn,
     dateFilterTimeZoneReady,

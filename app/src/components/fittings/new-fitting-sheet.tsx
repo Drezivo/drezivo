@@ -2,7 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { Check, ChevronLeft, ChevronRight, Plus, Search, Shirt } from "lucide-react";
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type {
   BranchBusinessHours,
@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { TimePickerField } from "@/components/ui/time-picker-field";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
 
@@ -61,7 +62,10 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
   const [step, setStep] = useState<Step>(1);
   const [customerMode, setCustomerMode] = useState<CustomerMode>("existing");
   const [customerQuery, setCustomerQuery] = useState("");
-  const deferredCustomerQuery = useDeferredValue(customerQuery.trim());
+  const debouncedCustomerQuery = useDebouncedValue(customerQuery.trim());
+  const isCustomerSearchTooShort = customerQuery.trim().length < 2;
+  const isCustomerSearchPending =
+    !isCustomerSearchTooShort && customerQuery.trim() !== debouncedCustomerQuery;
   const [customerOptions, setCustomerOptions] = useState<FittingCustomerOption[]>([]);
   const [customersLoading, setCustomersLoading] = useState(false);
   const [existingCustomerId, setExistingCustomerId] = useState("");
@@ -72,7 +76,8 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
   const [startTime, setStartTime] = useState("10:00");
   const [businessHours, setBusinessHours] = useState<BranchBusinessHours | null>(null);
   const [garmentQuery, setGarmentQuery] = useState("");
-  const deferredGarmentQuery = useDeferredValue(garmentQuery.trim());
+  const debouncedGarmentQuery = useDebouncedValue(garmentQuery.trim());
+  const isGarmentSearchPending = garmentQuery.trim() !== debouncedGarmentQuery;
   const [products, setProducts] = useState<ClothingListItem[]>([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
@@ -92,7 +97,8 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
   const selectedCustomer =
     customerOptions.find((customer) => customer.id === existingCustomerId) ?? null;
   const walkInLookup = walkInLookupTerm(walkInName, walkInEmail, walkInPhone);
-  const deferredWalkInLookup = useDeferredValue(walkInLookup);
+  const debouncedWalkInLookup = useDebouncedValue(walkInLookup);
+  const isWalkInLookupPending = walkInLookup !== debouncedWalkInLookup;
   const walkInMatchKind: WalkInMatchKind =
     walkInLookup !== "" && walkInLookup === walkInName.trim() ? "name" : "contact";
 
@@ -170,13 +176,13 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
   // Typing a walk-in's details looks them up, so a returning customer is reused instead of duplicated.
   // The lookup is only a hint: a failure never blocks creating the walk-in.
   useEffect(() => {
-    if (!open || customerMode !== "walk-in" || !deferredWalkInLookup) {
+    if (!open || customerMode !== "walk-in" || isWalkInLookupPending || !debouncedWalkInLookup) {
       setWalkInMatches([]);
       return;
     }
     let cancelled = false;
     void createDrezivoApiClient(getToken)
-      .getFittingIntakeOptions({ customer_search: deferredWalkInLookup })
+      .getFittingIntakeOptions({ customer_search: debouncedWalkInLookup })
       .then((result) => {
         if (!cancelled) setWalkInMatches(result.data.customers);
       })
@@ -186,7 +192,7 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
     return () => {
       cancelled = true;
     };
-  }, [customerMode, deferredWalkInLookup, getToken, open]);
+  }, [customerMode, debouncedWalkInLookup, getToken, isWalkInLookupPending, open]);
 
   // An exact email or phone match is the same person; a name match is only a suggestion.
   const shownWalkInMatches = walkInMatches
@@ -216,16 +222,30 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
     setValidationMessage(null);
   };
 
+  const updateCustomerQuery = (value: string) => {
+    setCustomerQuery(value);
+    setExistingCustomerId("");
+  };
+
   useEffect(() => {
-    if (!open || customerMode !== "existing" || deferredCustomerQuery.length < 2) {
+    if (!open || customerMode !== "existing") {
       setCustomerOptions([]);
       setCustomersLoading(false);
+      return;
+    }
+    if (isCustomerSearchTooShort) {
+      setCustomerOptions([]);
+      setCustomersLoading(false);
+      return;
+    }
+    if (isCustomerSearchPending) {
+      setCustomersLoading(true);
       return;
     }
     let cancelled = false;
     setCustomersLoading(true);
     void createDrezivoApiClient(getToken)
-      .getFittingIntakeOptions({ customer_search: deferredCustomerQuery })
+      .getFittingIntakeOptions({ customer_search: debouncedCustomerQuery })
       .then((result) => {
         if (cancelled) return;
         setCustomerOptions(result.data.customers);
@@ -243,10 +263,14 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
     return () => {
       cancelled = true;
     };
-  }, [customerMode, deferredCustomerQuery, getToken, open]);
+  }, [customerMode, debouncedCustomerQuery, getToken, isCustomerSearchPending, isCustomerSearchTooShort, open]);
 
   useEffect(() => {
     if (!open || step !== 2) return;
+    if (isGarmentSearchPending) {
+      setProductsLoading(true);
+      return;
+    }
     let cancelled = false;
     setProductsLoading(true);
     void createDrezivoApiClient(getToken)
@@ -254,7 +278,7 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
         limit: PRODUCT_LIMIT,
         sort: "name_asc",
         product_status: "active",
-        ...(deferredGarmentQuery ? { search: deferredGarmentQuery } : {}),
+        ...(debouncedGarmentQuery ? { search: debouncedGarmentQuery } : {}),
       })
       .then((result) => {
         if (!cancelled) setProducts(result.data.items);
@@ -269,7 +293,7 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
     return () => {
       cancelled = true;
     };
-  }, [deferredGarmentQuery, getToken, open, step]);
+  }, [debouncedGarmentQuery, getToken, isGarmentSearchPending, open, step]);
 
   useEffect(() => {
     if (!open || step !== 2 || !selectedProductId) {
@@ -492,6 +516,7 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
               customerQuery={customerQuery}
               customers={customerOptions}
               customersLoading={customersLoading}
+              isCustomerSearchPending={isCustomerSearchPending}
               existingCustomerId={existingCustomerId}
               walkInName={walkInName}
               walkInEmail={walkInEmail}
@@ -501,7 +526,7 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
               durationMinutes={settings?.duration_minutes ?? null}
               businessHours={businessHours}
               onCustomerModeChange={setCustomerMode}
-              onCustomerQueryChange={setCustomerQuery}
+              onCustomerQueryChange={updateCustomerQuery}
               onExistingCustomerChange={setExistingCustomerId}
               onWalkInNameChange={setWalkInName}
               onWalkInEmailChange={setWalkInEmail}
@@ -514,6 +539,7 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
               scheduleNotice={scheduleNotice}
               walkInMatches={shownWalkInMatches}
               walkInMatchKind={walkInMatchKind}
+              walkInLookupPending={isWalkInLookupPending}
               onUseExistingCustomer={chooseExistingCustomer}
             />
           ) : step === 2 ? (
@@ -521,6 +547,7 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
               query={garmentQuery}
               products={products}
               productsLoading={productsLoading}
+              isSearchPending={isGarmentSearchPending}
               selectedProductId={selectedProductId}
               productDetail={productDetail}
               productDetailLoading={productDetailLoading}
@@ -610,6 +637,7 @@ function StepAppointment({
   customerQuery,
   customers,
   customersLoading,
+  isCustomerSearchPending,
   existingCustomerId,
   walkInName,
   walkInEmail,
@@ -632,12 +660,14 @@ function StepAppointment({
   scheduleNotice,
   walkInMatches,
   walkInMatchKind,
+  walkInLookupPending,
   onUseExistingCustomer,
 }: {
   customerMode: CustomerMode;
   customerQuery: string;
   customers: readonly FittingCustomerOption[];
   customersLoading: boolean;
+  isCustomerSearchPending: boolean;
   existingCustomerId: string;
   walkInName: string;
   walkInEmail: string;
@@ -661,6 +691,7 @@ function StepAppointment({
   scheduleNotice: string | null;
   walkInMatches: readonly FittingCustomerOption[];
   walkInMatchKind: WalkInMatchKind;
+  walkInLookupPending: boolean;
   onUseExistingCustomer: (customer: FittingCustomerOption) => void;
 }) {
   return (
@@ -723,7 +754,7 @@ function StepAppointment({
               <p className="rounded-lg border border-dashed border-dashboard-border px-3 py-4 text-sm text-dashboard-muted">
                 Type at least 2 characters to search existing customers.
               </p>
-            ) : customersLoading ? (
+            ) : isCustomerSearchPending || customersLoading ? (
               <p className="px-3 py-4 text-sm text-dashboard-muted">Searching customers…</p>
             ) : customers.length === 0 ? (
               <p className="rounded-lg border border-dashed border-dashboard-border px-3 py-4 text-sm text-dashboard-muted">
@@ -795,7 +826,11 @@ function StepAppointment({
           <p className="text-xs text-dashboard-muted sm:col-span-2">
             Full name plus at least one contact method is required.
           </p>
-          {walkInMatches.length > 0 ? (
+          {walkInLookupPending ? (
+            <p role="status" className="text-sm text-dashboard-muted sm:col-span-2">
+              Checking for an existing customer…
+            </p>
+          ) : walkInMatches.length > 0 ? (
             <div
               role="status"
               className="rounded-lg border border-dashboard-accent/40 bg-dashboard-active px-3 py-3 sm:col-span-2"
@@ -888,6 +923,7 @@ function StepGarments({
   query,
   products,
   productsLoading,
+  isSearchPending,
   selectedProductId,
   productDetail,
   productDetailLoading,
@@ -902,6 +938,7 @@ function StepGarments({
   query: string;
   products: readonly ClothingListItem[];
   productsLoading: boolean;
+  isSearchPending: boolean;
   selectedProductId: string | null;
   productDetail: ClothingDetail | null;
   productDetailLoading: boolean;
@@ -938,8 +975,10 @@ function StepGarments({
         </label>
 
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {productsLoading ? (
-            <p className="text-sm text-dashboard-muted">Loading garments…</p>
+          {isSearchPending || productsLoading ? (
+            <p className="text-sm text-dashboard-muted">
+              {isSearchPending ? "Waiting to search garments…" : "Loading garments…"}
+            </p>
           ) : products.length === 0 ? (
             <p className="text-sm text-dashboard-muted">No active garments match this search.</p>
           ) : (
