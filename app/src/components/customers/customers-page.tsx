@@ -22,7 +22,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { useCallback, useDeferredValue, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { cn } from "@/lib/utils";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 
@@ -94,7 +95,8 @@ export function CustomersPage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<CustomerStatusFilter>("active");
-  const deferredQuery = useDeferredValue(query.trim());
+  const debouncedQuery = useDebouncedValue(query.trim());
+  const isSearchPending = query.trim() !== debouncedQuery;
   const [pageIndex, setPageIndex] = useState(0);
   const [pageCursors, setPageCursors] = useState<Array<string | null>>([null]);
   const [rows, setRows] = useState<CustomerListItem[]>([]);
@@ -138,7 +140,7 @@ export function CustomersPage() {
   const currentCursor = pageCursors[pageIndex] ?? null;
   const reservationCursor = reservationCursors[reservationPageIndex] ?? null;
   const fittingCursor = fittingCursors[fittingPageIndex] ?? null;
-  const hasActiveFilters = Boolean(deferredQuery || status !== "active");
+  const hasActiveFilters = Boolean(query.trim() || status !== "active");
   const permissionRestricted = error?.status === 403 || error?.code === "FORBIDDEN";
 
   const resetPagination = useCallback(() => {
@@ -344,6 +346,10 @@ export function CustomersPage() {
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
+    if (isSearchPending) {
+      setIsLoading(true);
+      return;
+    }
     let cancelled = false;
 
     setIsLoading(true);
@@ -354,7 +360,7 @@ export function CustomersPage() {
         limit: CUSTOMERS_PAGE_SIZE,
         status,
         ...(currentCursor ? { cursor: currentCursor } : {}),
-        ...(deferredQuery ? { search: deferredQuery } : {}),
+        ...(debouncedQuery ? { search: debouncedQuery } : {}),
       })
       .then((result) => {
         if (cancelled) return;
@@ -383,10 +389,11 @@ export function CustomersPage() {
     };
   }, [
     currentCursor,
-    deferredQuery,
+    debouncedQuery,
     directoryReloadVersion,
     getToken,
     isLoaded,
+    isSearchPending,
     isSignedIn,
     status,
   ]);

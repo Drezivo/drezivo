@@ -372,9 +372,11 @@ describe("ClothingPage", () => {
     render(<ClothingPage />);
     await screen.findByText("Real Black Satin Gown");
 
+    const requestCountBeforeSearch = api.getCatalogueClothing.mock.calls.length;
     fireEvent.change(screen.getByRole("textbox", { name: "Search clothing" }), {
       target: { value: "DRS-002" },
     });
+    expect(api.getCatalogueClothing).toHaveBeenCalledTimes(requestCountBeforeSearch);
 
     await waitFor(() =>
       expect(api.getCatalogueClothing).toHaveBeenLastCalledWith({

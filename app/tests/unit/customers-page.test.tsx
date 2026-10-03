@@ -197,9 +197,11 @@ describe("CustomersPage production wiring", () => {
     );
     expect(screen.getByText("Page 2 · 1 customer")).toBeVisible();
 
+    const requestCountBeforeSearch = api.getCustomers.mock.calls.length;
     fireEvent.change(screen.getByRole("textbox", { name: "Search customers" }), {
       target: { value: "second" },
     });
+    expect(api.getCustomers).toHaveBeenCalledTimes(requestCountBeforeSearch);
     await waitFor(() =>
       expect(api.getCustomers).toHaveBeenCalledWith({
         limit: 10,
