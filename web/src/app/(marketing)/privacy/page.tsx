@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalLayout title="Privacy Policy" updated="October 2, 2026">
+    <LegalLayout title="Privacy Policy" updated="October 3, 2026">
       <p>
         Drezivo is a software platform for clothing rental businesses. This Privacy Policy explains
         how personal information is processed through Drezivo&apos;s websites, business dashboard,
@@ -178,11 +178,14 @@ export default function PrivacyPage() {
         prevention, and operation of the service.
       </p>
       <p>
-        Drezivo does not currently use advertising pixels or behavioral-advertising technologies on
-        the public storefront as part of the functionality described in this policy. If Drezivo
-        later introduces non-essential analytics, advertising, session replay, or similar tracking
-        technologies, we will update the applicable notice and implement any consent or user
-        controls required before those technologies are enabled.
+        Drezivo uses Vercel Web Analytics to measure visits to its marketing pages and public
+        storefronts. Vercel Web Analytics does not use cookies and provides aggregated traffic
+        reporting. The information may include the page URL, referrer, timestamp, approximate
+        location, and browser, operating-system, and device information. Drezivo removes query
+        strings, generalizes item identifiers, and does not send booking-flow pageviews to
+        analytics. Vercel describes its visitor identifier as a daily hash that expires after 24
+        hours; analytics data is otherwise retained according to the applicable Vercel service
+        settings. This analytics is not used for behavioral advertising or session replay.
       </p>
 
       <h2>8. Payments</h2>
@@ -207,8 +210,8 @@ export default function PrivacyPage() {
         to operate Drezivo. Depending on the production configuration, these include Clerk for
         authentication and identity services, Supabase for database infrastructure, Cloudflare for
         object storage and security services such as R2 and Turnstile, Resend for transactional
-        email when enabled, and hosting or infrastructure providers used to operate Drezivo&apos;s
-        websites, applications, and API.
+        email when enabled, Vercel for website analytics and hosting or infrastructure providers
+        used to operate Drezivo&apos;s websites, applications, and API.
       </p>
       <p>
         Providers receive information reasonably necessary to perform their services, subject to our

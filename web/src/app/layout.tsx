@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { VercelAnalytics } from '@/components/analytics';
 import { QueryProvider } from '@/components/ui/query-provider';
 import './globals.css';
 import { SITE_URL } from '@/lib/site-urls';
@@ -17,6 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>
       <body suppressHydrationWarning>
         <QueryProvider>{children}</QueryProvider>
+        <VercelAnalytics />
       </body>
     </html>
   );
