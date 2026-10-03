@@ -266,6 +266,31 @@ body {
 [data-store-header] {
   transition: transform 450ms cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+/* Page-change loader: a thin ring in the shop's accent over its hairline colour. */
+.sf-loader {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  border: 2px solid var(--sf-line);
+  border-top-color: var(--sf-accent);
+  animation: sf-loader-spin 0.9s linear infinite;
+}
+@keyframes sf-loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sf-loader {
+    animation: sf-loader-pulse 1.6s ease-in-out infinite;
+  }
+}
+@keyframes sf-loader-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
 [data-store-header].is-tucked:not(:focus-within) {
   transform: translateY(-100%);
 }
