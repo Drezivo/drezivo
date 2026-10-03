@@ -97,6 +97,7 @@ html {
   --ws-control: 2.75rem;
   --ws-gutter: 1rem;
   --ws-gap: 0.75rem;
+  --ws-scrollbar-thin: 0.375rem;
   --ws-radius-card: 1.125rem;
   --ws-header: 3.75rem;
   --ws-tabbar: 4.25rem;
@@ -693,6 +694,30 @@ body {
 html {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--color-dashboard-accent) 55%, transparent) transparent;
+}
+
+.settings-nav-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-dashboard-accent) 55%, transparent) transparent;
+}
+
+.settings-nav-scrollbar::-webkit-scrollbar {
+  height: var(--ws-scrollbar-thin);
+}
+
+.settings-nav-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-nav-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background-color: color-mix(in srgb, var(--color-dashboard-accent) 55%, transparent);
+}
+
+.settings-nav-scrollbar::-webkit-scrollbar-button {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 * {
