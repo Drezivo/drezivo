@@ -51,9 +51,15 @@ vi.mock("@/components/reservations/reservation-availability-calendar", () => ({
       </button>
       <button
         type="button"
-        onClick={() => onRangeChange({ pickupDate: "2026-10-10", dueDate: "2026-10-12" })}
+        onClick={() => onRangeChange({ pickupDate: "2026-10-10", dueDate: "2026-10-11" })}
       >
         Select short range
+      </button>
+      <button
+        type="button"
+        onClick={() => onRangeChange({ pickupDate: "2026-10-10", dueDate: "2026-10-12" })}
+      >
+        Select pickup-day-one range
       </button>
       <button
         type="button"
@@ -511,7 +517,7 @@ describe("NewReservationSheet", () => {
     );
   });
 
-  it("keeps a three-day fixed rental from progressing with only a two-day exact interval", async () => {
+  it("keeps a three-day fixed rental from progressing when the return date is only Day 2", async () => {
     renderSheet();
     fireEvent.click(await screen.findByRole("button", { name: /Emerald Gown/i }));
     fireEvent.click(await screen.findByRole("button", { name: /M · Emerald/i }));
@@ -519,11 +525,28 @@ describe("NewReservationSheet", () => {
     setPickerTime("Pickup time", "10", "00", "AM");
     setPickerTime("Return time", "10", "00", "AM");
 
-    expect(await screen.findByText(/this is a 3 days fixed rental/i)).toBeVisible();
+    expect(
+      await screen.findByText(
+        /This is a 3-day rental\. The pickup date counts as Day 1, so for a pickup on Oct 10, 2026 the earliest return date is Oct 12, 2026\./
+      )
+    ).toBeVisible();
     expect(screen.getAllByText(/stays unavailable for 1 day of recovery/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/preparation/i)).not.toBeInTheDocument();
     expect(api.getStaffReservationAvailabilityCheck).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Reserve" })).toBeDisabled();
+  });
+
+  it("accepts the owner's example: pickup on Day 1, return on Day 3 is a 3-day rental", async () => {
+    renderSheet();
+    fireEvent.click(await screen.findByRole("button", { name: /Emerald Gown/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /M · Emerald/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Select pickup-day-one range" }));
+    // A late-afternoon pickup and a morning return still count Oct 10 to Oct 12 as three days.
+    setPickerTime("Pickup time", "4", "00", "PM");
+    setPickerTime("Return time", "9", "00", "AM");
+
+    await waitFor(() => expect(api.getStaffReservationAvailabilityCheck).toHaveBeenCalled());
+    expect(screen.queryByText(/This is a 3-day rental\./)).not.toBeInTheDocument();
   });
 
   it("bounds event date to the selected rental dates and clears it when the range changes", async () => {

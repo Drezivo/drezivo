@@ -29,7 +29,9 @@ function assertRequirement(label: string, requirement: FieldRequirement, value: 
 /**
  * The shop's checkout rules, enforced on the server whatever the browser sent: which optional
  * details are required or not collected, the handover time, minimum notice, and maximum length.
- * Rentals run in whole days from the handover time on the pickup date to the same time on return.
+ * Rentals run from the handover time on the pickup date to the same time on the return date. The
+ * pickup date is Day 1, so an Oct 5 pickup returned Oct 7 is a 3-day rental; the maximum counts
+ * rental days the same way the price does.
  */
 export function assertCheckoutRules(
   rules: StorefrontCheckout,
@@ -53,7 +55,8 @@ export function assertCheckoutRules(
   if (spanMs < DAY_MS || spanMs % DAY_MS !== 0) {
     throw new ValidationError('Choose a rental of at least one full day.');
   }
-  if (spanMs / DAY_MS > rules.max_rental_days) {
+  const rentalDays = (Date.parse(`${due.date}T00:00:00Z`) - Date.parse(`${pickup.date}T00:00:00Z`)) / DAY_MS + 1;
+  if (rentalDays > rules.max_rental_days) {
     throw new ValidationError(`Rentals can be at most ${rules.max_rental_days} days.`);
   }
 

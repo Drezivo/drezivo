@@ -90,9 +90,10 @@ describe('RSV-021/022 staff reservation creation', async () => {
           variant_id: seed.variantId,
           fulfillment_method: 'delivery',
           price_snapshot: {
-            rental_total_minor: '150000',
+            // Oct 10 to Oct 13 is four rental days: the 3-day package plus one extra day.
+            rental_total_minor: '190000',
             security_required_minor: '50000',
-            due_now_minor: '225000',
+            due_now_minor: '265000',
             currency: 'PHP',
           },
         },
@@ -186,10 +187,14 @@ describe('RSV-021/022 staff reservation creation', async () => {
       fee_minor: '25000',
     });
     expect(persisted.reservation.price_snapshot).toMatchObject({
-      rental_total_minor: '150000',
+      rental_total_minor: '190000',
       security_required_minor: '50000',
       delivery_total_minor: '25000',
-      due_now_minor: '225000',
+      due_now_minor: '265000',
+      extra_day_count: 1,
+      rental_day_basis: 'calendar_day_inclusive',
+      included_rental_days: 3,
+      rental_day_count: 4,
     });
     expect(persisted.reservation.hold_expires_at.getTime() - persisted.reservation.hold_acquired_at.getTime())
       .toBe(15 * 60 * 1000);
@@ -197,7 +202,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
     expect(persisted.allocation).toMatchObject({ asset_id: seed.assetId, is_blocking: true });
     expect(persisted.allocation.starts_at.toISOString()).toBe('2026-10-10T02:00:00.000Z');
     expect(persisted.allocation.ends_at.toISOString()).toBe('2026-10-14T02:00:00.000Z');
-    expect(persisted.payment).toEqual({ status: 'pending', amount_minor: 225000 });
+    expect(persisted.payment).toEqual({ status: 'pending', amount_minor: 265000 });
     expect(persisted.customer).toEqual({
       address: '123 Test Street, Quezon City',
       social_media: '@walkin',
@@ -862,20 +867,33 @@ describe('RSV-021/022 staff reservation creation', async () => {
           end: '2026-10-14T02:00:00.000Z',
         },
         rental_preview: {
-          rental_total_minor: '150000',
-          extra_day_count: 0,
+          rental_total_minor: '190000',
+          extra_day_count: 1,
           currency: 'PHP',
         },
       },
     });
     expect(await graphCounts(seed)).toMatchObject({ reservations: 0, allocations: 0 });
 
+    // Owner rule: pickup Oct 10 (Day 1), Oct 11 (Day 2), return Oct 12 (Day 3) is the 3-day package.
+    const pickupDayOne = await request(createApp())
+      .get('/api/v1/reservations/availability-check')
+      .query({
+        variant_id: seed.variantId,
+        pickup_at: '2026-10-10T08:00:00.000Z',
+        due_at: '2026-10-12T01:00:00.000Z',
+      });
+    expect(pickupDayOne.status).toBe(200);
+    expect(pickupDayOne.body).toMatchObject({
+      data: { rental_preview: { rental_total_minor: '150000', extra_day_count: 0, currency: 'PHP' } },
+    });
+
     const tooShort = await request(createApp())
       .get('/api/v1/reservations/availability-check')
       .query({
         variant_id: seed.variantId,
         pickup_at: '2026-10-10T02:00:00.000Z',
-        due_at: '2026-10-12T02:00:00.000Z',
+        due_at: '2026-10-11T08:00:00.000Z',
       });
     expect(tooShort.status).toBe(409);
     expectSafeError(tooShort.body, 'STATE_CONFLICT');

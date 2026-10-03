@@ -1033,16 +1033,6 @@ export function NewReservationSheet({
                             quickStart={businessHours?.opens_local ?? "08:00"}
                             quickEnd={businessHours?.closes_local ?? "20:00"}
                             value={dueTime}
-                            {...(() => {
-                              const minTime = minimumReturnTime(
-                                selectedVariant,
-                                pickupDate,
-                                dueDate,
-                                pickupTime,
-                                timeZone
-                              );
-                              return minTime ? { min: minTime } : {};
-                            })()}
                             onChange={(value) => {
                               setDueTime(value);
                               setExactAvailability(null);
@@ -1679,51 +1669,59 @@ function toRequestedInterval(
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
+/**
+ * Rental days are branch-local dates counted inclusively: the pickup date is Day 1, so a 3-day
+ * package picked up Oct 5 is returned Oct 7. Clock times do not change the count. The API applies
+ * the same rule and remains authoritative for the price.
+ */
 function minimumRentalDurationIssue(
   variant: ClothingDetail["variants"][number] | null,
   requestedInterval: { start: string; end: string } | null,
   timeZone: string
 ): string | null {
   if (!variant || !requestedInterval || variant.pricing_mode !== "fixed_duration") return null;
-  const start = new Date(requestedInterval.start);
-  const end = new Date(requestedInterval.end);
-  const durationMs = end.getTime() - start.getTime();
-  const minimumMs = variant.included_duration_minutes * 60 * 1_000;
-  if (durationMs >= minimumMs) return null;
-  const earliestReturn = new Date(start.getTime() + minimumMs);
-  return `This is a ${formatDurationMinutes(variant.included_duration_minutes)} fixed rental. With this pickup time, the earliest valid return is ${formatInstantForBranch(earliestReturn, timeZone)}. ${formatRecoveryPolicy(variant)}`;
+  const includedDays = includedRentalDays(variant);
+  const pickupDate = localDateTimeParts(new Date(requestedInterval.start), timeZone).date;
+  const returnDate = localDateTimeParts(new Date(requestedInterval.end), timeZone).date;
+  if (inclusiveRentalDays(pickupDate, returnDate) >= includedDays) return null;
+  const earliestReturn = addIsoDays(pickupDate, includedDays - 1);
+  return `This is a ${includedDays}-day rental. The pickup date counts as Day 1, so for a pickup on ${formatIsoDateForDisplay(pickupDate)} the earliest return date is ${formatIsoDateForDisplay(earliestReturn)}. ${formatRecoveryPolicy(variant)}`;
 }
 
-function minimumReturnTime(
-  variant: ClothingDetail["variants"][number],
-  pickupDate: string,
-  dueDate: string,
-  pickupTime: string,
-  timeZone: string
-): string | undefined {
-  if (variant.pricing_mode !== "fixed_duration" || !pickupTime) return undefined;
-  const pickup = zonedLocalDateTimeToInstant(`${pickupDate}T${pickupTime}`, timeZone);
-  if (!pickup) return undefined;
-  const earliestReturn = new Date(
-    pickup.getTime() + variant.included_duration_minutes * 60 * 1_000
-  );
-  const localEarliest = localDateTimeParts(earliestReturn, timeZone);
-  return dueDate === localEarliest.date ? localEarliest.time : undefined;
+function includedRentalDays(variant: ClothingDetail["variants"][number]): number {
+  return Math.max(1, Math.floor(variant.included_duration_minutes / (24 * 60)));
+}
+
+function inclusiveRentalDays(pickupDate: string, returnDate: string): number {
+  return (isoDateToUtcMs(returnDate) - isoDateToUtcMs(pickupDate)) / 86_400_000 + 1;
+}
+
+function addIsoDays(isoDate: string, days: number): string {
+  return new Date(isoDateToUtcMs(isoDate) + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+function isoDateToUtcMs(isoDate: string): number {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return Date.UTC(year!, month! - 1, day!);
+}
+
+function formatRentalPackage(variant: ClothingDetail["variants"][number]): string {
+  const days = includedRentalDays(variant);
+  return `${days}-day rental (pickup day is Day 1)`;
 }
 
 function formatVariantPricingRule(variant: ClothingDetail["variants"][number]): string {
   const price = formatMinorMoney(variant.rental_price_minor, variant.currency);
   if (variant.pricing_mode === "daily") return `${price}/day`;
-  const duration = formatDurationMinutes(variant.included_duration_minutes);
   const extra = formatMinorMoney(variant.extra_day_price_minor, variant.currency);
-  return `${price} · ${duration} fixed rental · Extra days ${extra}/day`;
+  return `${price} · ${formatRentalPackage(variant)} · Extra days ${extra}/day`;
 }
 
 function formatRentalAvailabilityPolicy(variant: ClothingDetail["variants"][number]): string {
   const rentalRule =
     variant.pricing_mode === "fixed_duration"
-      ? `${formatDurationMinutes(variant.included_duration_minutes)} fixed rental`
-      : "Daily rental";
+      ? formatRentalPackage(variant)
+      : "Daily rental, priced per calendar day with the pickup day as Day 1";
   return `${rentalRule}. ${formatRecoveryPolicy(variant)}`;
 }
 
@@ -1733,17 +1731,6 @@ function formatRecoveryPolicy(variant: ClothingDetail["variants"][number]): stri
     return "No recovery period is added after return.";
   }
   return `After return, this garment stays unavailable for ${recovery} of recovery before it can be rented again.`;
-}
-
-function formatInstantForBranch(instant: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-PH", {
-    timeZone,
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(instant);
 }
 
 function formatDurationMinutes(minutes: number): string {

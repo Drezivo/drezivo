@@ -1171,6 +1171,7 @@ function AddVariantDialog({
                     <Input aria-label="New Variant Included Duration" inputMode="numeric" value={includedDays} disabled={submitGuard.isSubmitting} onChange={(event) => setIncludedDays(event.target.value)} className="pr-14" />
                     <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">days</span>
                   </div>
+                  <p className="mt-1.5 text-xs text-dashboard-muted">Pickup day counts as Day 1. A 3-day rental is pickup, event, return.</p>
                 </Field>
               ) : null}
               <MoneyField label="Extra Day Price" value={extraDayPrice} disabled={submitGuard.isSubmitting || pricingMode === "daily"} onChange={setExtraDayPrice} />
@@ -1422,6 +1423,7 @@ function VariantEditor({
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">days</span>
               </div>
+              <p className="mt-1.5 text-xs text-dashboard-muted">Pickup day counts as Day 1. A 3-day rental is pickup, event, return.</p>
             </Field>
           ) : null}
           <MoneyField

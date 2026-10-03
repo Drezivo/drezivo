@@ -1282,6 +1282,7 @@ export function AddClothingPage() {
                       />
                       <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dashboard-muted">days</span>
                     </div>
+                    <p className="mt-1.5 text-xs text-dashboard-muted">Pickup day counts as Day 1. A 3-day rental is pickup, event, return.</p>
                   </Field>
                   <MoneyField
                     label="Extra Day Price"

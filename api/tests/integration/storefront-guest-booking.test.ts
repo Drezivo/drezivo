@@ -182,7 +182,8 @@ describe('storefront guest booking', async () => {
     if (!first.body.success) throw new Error('expected success');
     const created = first.body.data;
     expect(created.reservation).toMatchObject({ status: 'held', item_name: 'Emerald Gown', size_label: 'M', receipt_submitted: false });
-    expect(created.reservation.money).toEqual({ rental_total_minor: '180000', security_required_minor: '200000', delivery_total_minor: '0', due_now_minor: '380000' });
+    // interval(3) spans four rental dates (the pickup date is Day 1), so one extra day is charged.
+    expect(created.reservation.money).toEqual({ rental_total_minor: '230000', security_required_minor: '200000', delivery_total_minor: '0', due_now_minor: '430000' });
     expect(created.reservation.payment_instructions?.destination_note).toContain('Account number: 001234567890');
     expect(created.guest_token).toBe(guestTokenFor(created.reservation.id));
 
