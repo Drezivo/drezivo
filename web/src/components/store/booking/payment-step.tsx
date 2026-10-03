@@ -36,7 +36,7 @@ export function MoneyBreakdown({ reservation }: { reservation: GuestReservationV
         </div>
       ))}
       <div className="flex justify-between gap-4 border-t border-sf-line pt-2 font-medium">
-        <dt>Pay now</dt>
+        <dt>Paid</dt>
         <dd className="tabular-nums">{formatMinor(money.due_now_minor)}</dd>
       </div>
     </dl>
