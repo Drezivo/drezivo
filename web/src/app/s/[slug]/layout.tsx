@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
-import { Jost, Newsreader } from 'next/font/google';
 import { notFound } from 'next/navigation';
+import '@fontsource-variable/jost/wght.css';
+import '@fontsource-variable/newsreader/opsz.css';
+import '@fontsource-variable/newsreader/opsz-italic.css';
 
 import 'lenis/dist/lenis.css';
 
@@ -12,9 +14,6 @@ import { StoreTransition } from '@/components/store/motion/store-transition';
 import { PreviewProvider } from '@/components/store/preview-context';
 import { previewToken, readStore } from '@/lib/storefront-preview';
 import { buildStorefrontMetadata } from '@/lib/seo';
-
-const display = Newsreader({ subsets: ['latin'], weight: ['300', '400'], style: ['normal', 'italic'], variable: '--font-newsreader', display: 'swap' });
-const body = Jost({ subsets: ['latin'], weight: ['400', '500'], variable: '--font-jost', display: 'swap' });
 
 const MOTION_BOOT = "if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.classList.add('sf-motion')";
 
@@ -42,7 +41,7 @@ export default async function StorefrontLayout({ children, params }: Props) {
   if (!store) notFound();
 
   return (
-    <div className={`storefront-shell ${display.variable} ${body.variable} flex min-h-screen flex-col`} style={themeStyle(store.theme)}>
+    <div className="storefront-shell flex min-h-screen flex-col" style={themeStyle(store.theme)}>
       {/* Runs before the page paints, so reveal targets start hidden instead of flashing. */}
       <script dangerouslySetInnerHTML={{ __html: MOTION_BOOT }} />
       <MotionRoot />
