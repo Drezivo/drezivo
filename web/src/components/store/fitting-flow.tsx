@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { CatalogueCard, FittingSlotsResponse, GuestFittingCreated, GuestFittingRequest, ItemDetail, PublicStorefront } from '@drezivo/contracts';
 
@@ -17,6 +17,8 @@ interface Pick {
 }
 
 const DAYS_AHEAD = 21;
+/** Fitting times already fetched are reused for this long when switching days. */
+const SLOT_TTL_MS = 60_000;
 
 export function FittingFlow({ store, items }: { store: PublicStorefront; items: CatalogueCard[] }) {
   const today = dateIn(store.timezone);
@@ -38,18 +40,35 @@ export function FittingFlow({ store, items }: { store: PublicStorefront; items: 
   const intent = useRef<{ fingerprint: string; key: string } | null>(null);
   const phoneRule = store.checkout.requirements.phone;
 
+  // Times already fetched stay usable for a minute and the next two days load in the background, so
+  // switching days is instant. The server re-checks the chosen time when the request is sent.
+  const slotCache = useRef(new Map<string, { at: number; request: Promise<FittingSlotsResponse> }>());
+  const loadSlots = useCallback(
+    (day: string, fresh = false): Promise<FittingSlotsResponse> => {
+      const hit = slotCache.current.get(day);
+      if (hit && !fresh && Date.now() - hit.at < SLOT_TTL_MS) return hit.request;
+      const request = getFittingSlots(store.slug, day);
+      slotCache.current.set(day, { at: Date.now(), request });
+      request.catch(() => slotCache.current.delete(day));
+      return request;
+    },
+    [store.slug],
+  );
+
   useEffect(() => {
     let cancelled = false;
     setSlots(null);
     setStartAt(null);
     setSlotError(null);
-    getFittingSlots(store.slug, date)
+    loadSlots(date)
       .then((result) => !cancelled && setSlots(result))
       .catch(() => !cancelled && setSlotError('Could not load times for this day.'));
+    const next = dates.indexOf(date);
+    for (const day of dates.slice(next + 1, next + 3)) loadSlots(day).catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [store.slug, date]);
+  }, [date, dates, loadSlots]);
 
   async function openItem(productId: string) {
     const item = await getItem(store.slug, productId).catch(() => null);
@@ -100,7 +119,7 @@ export function FittingFlow({ store, items }: { store: PublicStorefront; items: 
     } catch (caught) {
       if (caught instanceof StorefrontApiError && caught.status === 409) {
         setStartAt(null);
-        getFittingSlots(store.slug, date).then(setSlots).catch(() => undefined);
+        loadSlots(date, true).then(setSlots).catch(() => undefined);
       }
       if (caught instanceof StorefrontApiError && caught.status === 401) setVerified(null);
       setError(caught instanceof StorefrontApiError ? caught.message : 'Something went wrong. Please try again.');
