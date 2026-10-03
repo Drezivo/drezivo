@@ -16,6 +16,7 @@ import {
   confirmReservationController,
   createStaffReservationController,
   getReservationDetailController,
+  getReservationPaymentReceiptsController,
   getStaffReservationAvailabilityCalendarController,
   getStaffReservationAvailabilityCheckController,
   getStaffReservationIntakeOptionsController,
@@ -284,6 +285,17 @@ reservationsRouter.get(
   requireReservationManagePermission,
   validateReservationListQuery,
   listReservationsController,
+);
+
+reservationsRouter.get(
+  '/reservations/:reservationId/payment-receipts',
+  requireStaffAuth,
+  requireTenantContext,
+  readRateLimit,
+  requireTenantAction('existing_rental_read'),
+  requireReservationManagePermission,
+  validateReservationId,
+  getReservationPaymentReceiptsController,
 );
 
 reservationsRouter.get(

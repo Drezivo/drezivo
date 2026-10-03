@@ -497,6 +497,8 @@ describe('RSV Phase 1 reservation read model', async () => {
     expect(detail).toMatchObject({
       id: reservationId,
       reference_code: 'RSV-DETAIL-1',
+      // Staff-created at the counter: no guest access token, so the payment is logged, not verified.
+      booking_channel: 'walk_in',
       status: 'picked_up',
       customer: {
         snapshot: {

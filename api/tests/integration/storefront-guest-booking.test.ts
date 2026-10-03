@@ -40,6 +40,7 @@ describe('storefront guest booking', async () => {
   const { openSealedEmail, emailNotifications } = await import('../../src/modules/notifications/email-notifications.js');
   const { addDays, localDate } = await import('../../src/modules/storefront/storefront.service.js');
   const { createStorefrontWorkspace } = await import('./helpers/storefront-fixture.js');
+  const { getReservationDetail, getReservationPaymentReceipts } = await import('../../src/modules/reservations/reservations.service.js');
   const { defaultStorefrontDocument, guestFittingRequest, guestReservationRequest } = await import('@drezivo/contracts');
   const admin = new pg.Pool({ connectionString: adminUrl, max: 3 });
 
@@ -258,6 +259,16 @@ describe('storefront guest booking', async () => {
 
     const again = await booking.submitReceipt(reservation.id, guest_token, { requestId: 's2', idempotencyKey: 'receipt-2' }, upload.file_id);
     expect(again.status).toBe(409);
+
+    // The owner sees an online booking and can open the renter's receipt before verifying it.
+    const verifier = { ...ws.owner, permissionCodes: [...ws.owner.permissionCodes, 'evidence.verify' as const] };
+    expect((await getReservationDetail(verifier, reservation.id)).booking_channel).toBe('online');
+    const proof = await getReservationPaymentReceipts(verifier, reservation.id, storage);
+    expect(proof.receipts).toEqual([
+      expect.objectContaining({ file_id: upload.file_id, content_type: 'image/png', url: `https://files.test/${newReceiptKey}`, evidence_status: 'under_review' }),
+    ]);
+    // Receipts are private evidence: staff without verification permission cannot read them.
+    await expect(getReservationPaymentReceipts(ws.owner, reservation.id, storage)).rejects.toMatchObject({ code: 'FORBIDDEN' });
 
     const emails = await admin.query<Record<string, unknown>>(`SELECT dedupe_key, payload FROM outbox_event WHERE tenant_id = $1 AND event_type = 'notification.email' AND dedupe_key LIKE 'reservation-email:%' ORDER BY dedupe_key`, [ws.tenantId]);
     const opened = emails.rows.map((row) => ({ key: String(row['dedupe_key']), ...openSealedEmail(row['payload'] as Record<string, unknown>) }));
