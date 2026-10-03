@@ -12,9 +12,9 @@ import {
   type CatalogueResponse,
   type FittingSlotsResponse,
   type ItemDetail,
+  type PublicAvailabilityDay,
   type PublicAvailabilityQuery,
   type PublicAvailabilityResponse,
-  type PublicDayState,
   type PublicMeasurement,
   type PublicStorefront,
   type StorefrontDocument,
@@ -22,6 +22,7 @@ import {
 
 import { NotFoundError } from '../../shared/errors.js';
 import { toDocument } from '../storefront-cms/storefront-cms.service.js';
+import { closedReason, readShopClosures } from './shop-closures.js';
 import { storefrontMediaSigner, type StorefrontMediaSigner } from './storefront-media.js';
 import { fromPolicyColumns } from './storefront-policy.js';
 import {
@@ -217,7 +218,11 @@ export class PublicStorefrontService {
       if (!(await isVisibleVariant(client, found.tenantId, query.variant_id))) return null;
       const core = await this.requireCore(client, found);
       const today = localDate(new Date(), core.timezone);
-      return { timezone: core.timezone, earliest: addDays(today, toDocument(core).checkout.min_notice_days) };
+      return {
+        timezone: core.timezone,
+        earliest: addDays(today, toDocument(core).checkout.min_notice_days),
+        closures: await readShopClosures(client, found, query.from, query.to),
+      };
     }, preview);
     if (!store) throw new NotFoundError(NOT_FOUND);
 
@@ -233,13 +238,16 @@ export class PublicStorefrontService {
 
     return publicAvailabilityResponse.parse({
       variant_id: query.variant_id,
-      days: days.map((date, index): { date: string; state: PublicDayState } => {
+      days: days.map((date, index): PublicAvailabilityDay => {
         const row = rows[index];
-        if (date < store.earliest || !row) return { date, state: 'unavailable' };
-        if (row.available_units > 0) return { date, state: 'available' };
-        if (row.blocking_reasons.includes('reservation')) return { date, state: 'reserved' };
-        if (row.blocking_reasons.includes('fitting')) return { date, state: 'fitting' };
-        return { date, state: 'unavailable' };
+        // Closed days keep the garment's own state: they only rule out pickup and return, not a
+        // rental that runs across them.
+        const closed = closedReason(store.closures, date) ? { closed: true } : {};
+        if (date < store.earliest || !row) return { date, state: 'unavailable', ...closed };
+        if (row.available_units > 0) return { date, state: 'available', ...closed };
+        if (row.blocking_reasons.includes('reservation')) return { date, state: 'reserved', ...closed };
+        if (row.blocking_reasons.includes('fitting')) return { date, state: 'fitting', ...closed };
+        return { date, state: 'unavailable', ...closed };
       }),
     });
   }

@@ -5,12 +5,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { addDays } from '@/lib/storefront-format';
 
 const busy = new Set(['2026-10-14']);
+// Sundays: the shop is closed, so they cannot be a pickup or return day.
+const closed = new Set(['2026-10-04', '2026-10-11', '2026-10-18']);
 
 vi.mock('@/lib/storefront-api', () => ({
   getAvailability: vi.fn(async (_slug: string, _variant: string, from: string, to: string) => {
     const days = [];
     for (let date = from; date <= to; date = addDays(date, 1)) {
-      days.push({ date, state: busy.has(date) ? 'reserved' : 'available' });
+      days.push({ date, state: busy.has(date) ? 'reserved' : 'available', ...(closed.has(date) ? { closed: true } : {}) });
     }
     return { days };
   }),
@@ -78,6 +80,30 @@ describe('storefront Date from / Date to fields', () => {
     await pickInPopover(/October 16/);
 
     expect(onChange).toHaveBeenLastCalledWith(null, 'Oct 14 is not available in that range. Choose other dates.');
+  });
+
+  it('does not offer a closed day as pickup or return, but lets a rental run across one', async () => {
+    const onChange = renderCalendar(2);
+
+    // Sunday Oct 11 is closed: it cannot be chosen at all.
+    await waitFor(() => expect((screen.getAllByRole('button', { name: /October 10/ })[0] as HTMLButtonElement | undefined)?.disabled).toBe(false));
+    expect((screen.getAllByRole('button', { name: /October 11/ })[0] as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getAllByRole('button', { name: /October 11, shop closed/ }).length).toBeGreaterThan(0);
+
+    // Saturday pickup, Monday return: the closed Sunday in between is fine.
+    fireEvent.click(screen.getAllByRole('button', { name: /October 10/ })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: /October 12/ })[0]!);
+    expect(onChange).toHaveBeenLastCalledWith({ start: '2026-10-10', end: '2026-10-12' }, undefined);
+  });
+
+  it('suggests the next open day when the earliest return date is closed', async () => {
+    const onChange = renderCalendar(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Date from' }));
+    await pickInPopover(/October 10/);
+
+    // Oct 11 (Day 2) is a Sunday, so the suggested return moves to Monday Oct 12.
+    expect(onChange).toHaveBeenLastCalledWith({ start: '2026-10-10', end: '2026-10-12' }, undefined);
   });
 
   it('greys out return dates shorter than the package', async () => {

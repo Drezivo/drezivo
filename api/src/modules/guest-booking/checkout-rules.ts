@@ -1,6 +1,7 @@
 import type { FieldRequirement, GuestReservationRequest, StorefrontCheckout } from '@drezivo/contracts';
 
 import { ValidationError } from '../../shared/errors.js';
+import { closedReason, type ShopClosures } from '../storefront/shop-closures.js';
 
 const DAY_MS = 86_400_000;
 
@@ -19,6 +20,42 @@ function localParts(instant: Date, timeZone: string): { date: string; time: stri
       .map((part) => [part.type, part.value]),
   );
   return { date: `${parts['year']}-${parts['month']}-${parts['day']}`, time: `${parts['hour']}:${parts['minute']}` };
+}
+
+/** Branch-local pickup and return dates of a guest request, the days the handover happens. */
+export function handoverDates(
+  request: Pick<GuestReservationRequest, 'requested_interval'>,
+  timeZone: string,
+): { pickup: string; return: string } {
+  return {
+    pickup: localParts(new Date(request.requested_interval.start), timeZone).date,
+    return: localParts(new Date(request.requested_interval.end), timeZone).date,
+  };
+}
+
+function closedMessage(reason: NonNullable<ReturnType<typeof closedReason>>, date: string, which: 'pickup' | 'return'): string {
+  const subject =
+    reason.kind === 'weekday'
+      ? `on ${reason.weekday.charAt(0).toUpperCase()}${reason.weekday.slice(1)}s`
+      : `on ${new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(`${date}T00:00:00Z`))}`;
+  return `The shop is closed ${subject}. Choose another ${which} date.`;
+}
+
+/**
+ * The shop must be open for the handover: pickup and return cannot land on a closed weekday or a
+ * special closure date. Days in the middle of a rental may be closed; the garment is simply kept.
+ * Fails closed: it is called with the closures read in the same transaction as the hold.
+ */
+export function assertShopOpenForHandover(
+  closures: ShopClosures,
+  request: Pick<GuestReservationRequest, 'requested_interval'>,
+  timeZone: string,
+): void {
+  const dates = handoverDates(request, timeZone);
+  const pickupClosed = closedReason(closures, dates.pickup);
+  if (pickupClosed) throw new ValidationError(closedMessage(pickupClosed, dates.pickup, 'pickup'));
+  const returnClosed = closedReason(closures, dates.return);
+  if (returnClosed) throw new ValidationError(closedMessage(returnClosed, dates.return, 'return'));
 }
 
 function assertRequirement(label: string, requirement: FieldRequirement, value: string | null): void {

@@ -14,6 +14,9 @@ export interface DateRange {
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+/** A closed day is not blocked (a rental may run across it); the shop just cannot hand over that day. */
+const CLOSED_STYLE = 'bg-sf-line/40 text-sf-muted/70 cursor-not-allowed';
+
 const STATE_STYLE: Record<PublicDayState, string> = {
   available: 'hover:bg-sf-line/70',
   reserved: 'bg-[#F4E6C9] text-[#6B4E12] cursor-not-allowed',
@@ -44,6 +47,7 @@ function shiftMonth(month: string, delta: number): string {
  */
 function useMonthAvailability(slug: string, variantId: string) {
   const [states, setStates] = useState<Record<string, PublicDayState>>({});
+  const [closedDays, setClosedDays] = useState<ReadonlySet<string>>(new Set());
   const [loadingMonths, setLoadingMonths] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const requested = useRef(new Set<string>());
@@ -51,6 +55,7 @@ function useMonthAvailability(slug: string, variantId: string) {
   useEffect(() => {
     requested.current = new Set();
     setStates({});
+    setClosedDays(new Set());
     setError(null);
   }, [slug, variantId]);
 
@@ -63,6 +68,7 @@ function useMonthAvailability(slug: string, variantId: string) {
       getAvailability(slug, variantId, grid[0]!, grid[grid.length - 1]!)
         .then((result) => {
           setStates((current) => ({ ...current, ...Object.fromEntries(result.days.map((day) => [day.date, day.state])) }));
+          setClosedDays((current) => new Set([...current, ...result.days.filter((day) => day.closed).map((day) => day.date)]));
           setError(null);
         })
         .catch(() => {
@@ -82,7 +88,8 @@ function useMonthAvailability(slug: string, variantId: string) {
   );
 
   const stateOf = useCallback((date: string): PublicDayState => states[date] ?? 'unavailable', [states]);
-  return { stateOf, ensureMonth, loadingMonths, error };
+  const isClosed = useCallback((date: string): boolean => closedDays.has(date), [closedDays]);
+  return { stateOf, isClosed, ensureMonth, loadingMonths, error };
 }
 
 function MonthGrid({
@@ -90,6 +97,7 @@ function MonthGrid({
   today,
   onMonthChange,
   stateOf,
+  isClosed,
   loading,
   isSelected,
   isEdge,
@@ -100,6 +108,7 @@ function MonthGrid({
   today: string;
   onMonthChange: (month: string) => void;
   stateOf: (date: string) => PublicDayState;
+  isClosed: (date: string) => boolean;
   loading: boolean;
   isSelected: (date: string) => boolean;
   isEdge: (date: string) => boolean;
@@ -138,18 +147,20 @@ function MonthGrid({
               const outside = date.slice(0, 7) !== month;
               const state = date < today ? 'unavailable' : stateOf(date);
               const selected = isSelected(date);
+              // Only an otherwise bookable day is shown as "closed"; a reserved closed day stays reserved.
+              const closed = state === 'available' && isClosed(date);
               if (outside) return <span role="gridcell" key={date} aria-hidden="true" />;
               return (
                 <span role="gridcell" key={date} className="flex justify-center">
                   <button
                     type="button"
-                    disabled={state !== 'available'}
+                    disabled={state !== 'available' || closed}
                     aria-pressed={selected}
-                    aria-label={`${formatDay(date, { weekday: 'long', month: 'long', day: 'numeric' })}, ${state === 'available' ? 'available' : state}`}
+                    aria-label={`${formatDay(date, { weekday: 'long', month: 'long', day: 'numeric' })}, ${closed ? 'shop closed' : state === 'available' ? 'available' : state}`}
                     onClick={() => onPick(date)}
                     className={[
                       `flex w-full ${cell} items-center justify-center text-sm tabular-nums transition-colors`,
-                      selected && isEdge(date) ? 'bg-sf-accent text-sf-accent-ink' : selected ? 'bg-sf-line' : STATE_STYLE[state],
+                      selected && isEdge(date) ? 'bg-sf-accent text-sf-accent-ink' : selected ? 'bg-sf-line' : closed ? CLOSED_STYLE : STATE_STYLE[state],
                     ].join(' ')}
                   >
                     {Number(date.slice(8))}
@@ -232,6 +243,7 @@ function DateField({
             today={today}
             onMonthChange={setMonth}
             stateOf={availability.stateOf}
+            isClosed={availability.isClosed}
             loading={availability.loadingMonths.has(month)}
             isSelected={(date) => date === value}
             isEdge={(date) => date === value}
@@ -245,7 +257,8 @@ function DateField({
 
 /**
  * Pick pickup then return on the calendar, or set either date in the fields below it; both stay in
- * step. Only days the API reports as available can be part of a range; the server re-checks
+ * step. Only days the API reports as available can be part of a range, and the pickup and return
+ * days must also be days the shop is open (days in between may be closed). The server re-checks
  * everything when the hold is placed, so this is guidance, not a guarantee.
  */
 export function AvailabilityCalendar({
@@ -271,7 +284,7 @@ export function AvailabilityCalendar({
   const [openField, setOpenField] = useState<'from' | 'to' | null>(null);
   const fieldsRef = useRef<HTMLDivElement>(null);
   const availability = useMonthAvailability(slug, variantId);
-  const { stateOf, ensureMonth, loadingMonths, error } = availability;
+  const { stateOf, isClosed, ensureMonth, loadingMonths, error } = availability;
 
   useEffect(() => ensureMonth(month), [month, ensureMonth]);
   useEffect(() => setAnchor(null), [variantId]);
@@ -304,6 +317,11 @@ export function AvailabilityCalendar({
       return `This piece rents for at least ${Math.max(minDays, 2)} days, counting the pickup date as Day 1. Choose a later return date.`;
     }
     if (length > maxDays) return `The longest rental is ${maxDays} day${maxDays === 1 ? '' : 's'}.`;
+    for (const handover of [start, end]) {
+      if (isClosed(handover)) {
+        return `The shop is closed on ${formatDay(handover, { weekday: 'long', month: 'short', day: 'numeric' })}. Choose another ${handover === start ? 'pickup' : 'return'} date.`;
+      }
+    }
     for (let day = start; day <= end; day = addDays(day, 1)) {
       if (stateOf(day) !== 'available') {
         return `${formatDay(day, { month: 'short', day: 'numeric' })} is not available in that range. Choose other dates.`;
@@ -313,11 +331,13 @@ export function AvailabilityCalendar({
   }
 
   function setPickup(date: string) {
-    if (stateOf(date) !== 'available') return;
+    if (stateOf(date) !== 'available' || isClosed(date)) return;
     setMonth(date.slice(0, 7));
-    // Keep a still-valid return date; otherwise suggest the earliest one the package allows.
+    // Keep a still-valid return date; otherwise suggest the earliest one the package allows,
+    // moving past closed days because the shop cannot take the garment back on one.
     const keep = value && !rangeProblem(date, value.end) ? value.end : null;
-    const suggested = keep ?? addDays(date, minimumNights);
+    let suggested = keep ?? addDays(date, minimumNights);
+    for (let step = 0; !keep && step < 7 && isClosed(suggested); step += 1) suggested = addDays(suggested, 1);
     if (!rangeProblem(date, suggested)) {
       setAnchor(null);
       onChange({ start: date, end: suggested });
@@ -341,7 +361,7 @@ export function AvailabilityCalendar({
   }
 
   function pickOnCalendar(date: string) {
-    if (stateOf(date) !== 'available') return;
+    if (stateOf(date) !== 'available' || isClosed(date)) return;
     if (!anchor || date <= anchor) {
       setAnchor(date);
       onChange(null);
@@ -360,6 +380,7 @@ export function AvailabilityCalendar({
         today={today}
         onMonthChange={setMonth}
         stateOf={stateOf}
+        isClosed={isClosed}
         loading={loadingMonths.has(month)}
         isSelected={inRange}
         isEdge={isEdge}
@@ -409,6 +430,7 @@ export function AvailabilityCalendar({
         <li className="flex items-center gap-2"><span className="h-3 w-3 border border-sf-ink/40" />Available</li>
         <li className="flex items-center gap-2"><span className="h-3 w-3 bg-[#F4E6C9]" />Reserved</li>
         <li className="flex items-center gap-2"><span className="h-3 w-3 bg-[#E9E4F6]" />Fitting</li>
+        <li className="flex items-center gap-2"><span className="h-3 w-3 bg-sf-line/40" />Shop closed</li>
         <li className="flex items-center gap-2"><span className="text-sf-muted/60 line-through">12</span>Not available</li>
       </ul>
       {error ? (

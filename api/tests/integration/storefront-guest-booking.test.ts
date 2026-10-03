@@ -39,6 +39,7 @@ describe('storefront guest booking', async () => {
   const { GuestBookingService, guestTokenFor } = await import('../../src/modules/guest-booking/guest-booking.service.js');
   const { openSealedEmail, emailNotifications } = await import('../../src/modules/notifications/email-notifications.js');
   const { addDays, localDate } = await import('../../src/modules/storefront/storefront.service.js');
+  const { weekdayOf } = await import('../../src/modules/storefront/shop-closures.js');
   const { createStorefrontWorkspace } = await import('./helpers/storefront-fixture.js');
   const { getReservationDetail, getReservationPaymentReceipts } = await import('../../src/modules/reservations/reservations.service.js');
   const { defaultStorefrontDocument, guestFittingRequest, guestReservationRequest } = await import('@drezivo/contracts');
@@ -98,7 +99,18 @@ describe('storefront guest booking', async () => {
     await cms.publishPolicy(ws.owner, `${label}-pol`, { expected_version: 1, rules: policy });
     const published = await cms.publish(ws.owner, `${label}-pub`, 2);
     expect(published.status).toBe(200);
+    // New branches close on Sundays; the rolling test dates must not depend on today's weekday.
+    await setClosedWeekdays(ws, []);
     return ws;
+  }
+
+  async function setClosedWeekdays(ws: { tenantId: string; branchId: string }, weekdays: string[]) {
+    await admin.query(
+      `UPDATE branch
+          SET operating_hours = jsonb_set(operating_hours, '{closed_weekdays}', $3::jsonb)
+        WHERE tenant_id = $1 AND id = $2`,
+      [ws.tenantId, ws.branchId, JSON.stringify(weekdays)],
+    );
   }
 
   async function latestCode(tenantId: string): Promise<string> {
@@ -237,6 +249,59 @@ describe('storefront guest booking', async () => {
     const cash = await admin.query<Record<string, unknown>>(`INSERT INTO payment_method (tenant_id, name, rail, destination_snapshot, active, storefront_enabled) VALUES ($1, 'Cash', 'cash', '{}', true, false) RETURNING id`, [ws.tenantId]);
     expect((await attempt('rule-cash', { payment_method_id: cash.rows[0]?.['id'] })).status).toBe(422);
     expect((await attempt('rule-token', { verification_token: 'x'.repeat(43) })).status).toBe(401);
+  });
+
+  describe('business hours', () => {
+    const pickupDate = () => addDays(localDate(new Date(), 'Asia/Manila'), 3);
+    const capitalized = (weekday: string) => `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}`;
+
+    async function attempt(label: string, closedWeekdays: string[], days = 3) {
+      const ws = await liveStore(label);
+      await setClosedWeekdays(ws, closedWeekdays);
+      const token = await verified(ws.slug, ws.tenantId, 'ana@example.test');
+      const result = await booking.createReservation(ws.slug, { requestId: label, idempotencyKey: label }, holdRequest(ws, token, 'ana@example.test', { requested_interval: interval(days) }));
+      const holds = await admin.query<Record<string, unknown>>('SELECT count(*)::int AS n FROM reservation WHERE tenant_id = $1', [ws.tenantId]);
+      return { ws, result, holds: holds.rows[0]?.['n'] };
+    }
+
+    it('refuses a pickup on a closed weekday and creates nothing', async () => {
+      const weekday = weekdayOf(pickupDate());
+      const { result, holds } = await attempt('bh-pickup', [weekday]);
+      expect(result.status).toBe(422);
+      expect(!result.body.success && result.body.error.message).toBe(`The shop is closed on ${capitalized(weekday)}s. Choose another pickup date.`);
+      expect(holds).toBe(0);
+    });
+
+    it('refuses a return on a closed weekday and creates nothing', async () => {
+      const weekday = weekdayOf(addDays(pickupDate(), 3));
+      const { result, holds } = await attempt('bh-return', [weekday]);
+      expect(result.status).toBe(422);
+      expect(!result.body.success && result.body.error.message).toBe(`The shop is closed on ${capitalized(weekday)}s. Choose another return date.`);
+      expect(holds).toBe(0);
+    });
+
+    it('refuses pickup or return on a special closure date, without revealing its reason', async () => {
+      const ws = await liveStore('bh-special');
+      await admin.query(`INSERT INTO branch_closure (tenant_id, branch_id, local_date, reason) VALUES ($1, $2, $3, 'Owner funeral')`, [ws.tenantId, ws.branchId, addDays(pickupDate(), 3)]);
+      const token = await verified(ws.slug, ws.tenantId, 'ana@example.test');
+      const result = await booking.createReservation(ws.slug, { requestId: 'bh-special', idempotencyKey: 'bh-special' }, holdRequest(ws, token, 'ana@example.test'));
+      expect(result.status).toBe(422);
+      const message = !result.body.success ? result.body.error.message : '';
+      expect(message).toContain('Choose another return date.');
+      expect(message).not.toContain('funeral');
+    });
+
+    it('accepts open pickup and return days, even when a closed day falls in between', async () => {
+      const middle = weekdayOf(addDays(pickupDate(), 1));
+      const { result, holds } = await attempt('bh-open', [middle]);
+      expect(result.status).toBe(201);
+      expect(holds).toBe(1);
+    });
+
+    it('accepts any day when the shop has no closed weekdays', async () => {
+      const { result } = await attempt('bh-none', []);
+      expect(result.status).toBe(201);
+    });
   });
 
   it('moves the hold to review when the guest submits a verified receipt, and emails per preferences', async () => {

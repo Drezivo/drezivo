@@ -117,10 +117,18 @@ export type PublicAvailabilityQuery = z.infer<typeof publicAvailabilityQuery>;
 export const publicDayState = z.enum(['available', 'reserved', 'fitting', 'unavailable']);
 export type PublicDayState = z.infer<typeof publicDayState>;
 
+/**
+ * One day of a size's availability. `closed` is present (true) only when the shop is closed that
+ * day (a closed weekday or a special closure). A closed day cannot be a pickup or return day, but
+ * it is not blocked: it may sit in the middle of a rental, so `state` keeps describing the garment.
+ */
+export const publicAvailabilityDay = z.object({ date: isoDate, state: publicDayState, closed: z.boolean().optional() }).strict();
+export type PublicAvailabilityDay = z.infer<typeof publicAvailabilityDay>;
+
 export const publicAvailabilityResponse = z
   .object({
     variant_id: productVariantId,
-    days: z.array(z.object({ date: isoDate, state: publicDayState }).strict()).max(MAX_AVAILABILITY_WINDOW_DAYS),
+    days: z.array(publicAvailabilityDay).max(MAX_AVAILABILITY_WINDOW_DAYS),
   })
   .strict();
 export type PublicAvailabilityResponse = z.infer<typeof publicAvailabilityResponse>;
