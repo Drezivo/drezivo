@@ -49,7 +49,7 @@ export default async function StorefrontLayout({ children, params }: Props) {
         Skip to content
       </a>
       {preview ? (
-        <div role="status" className="sticky top-0 z-40 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 bg-[#1f1b16] px-4 py-2 text-center text-xs text-[#f3eee6]">
+        <div role="status" className="relative z-40 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 bg-[#1f1b16] px-4 py-2 text-center text-xs text-[#f3eee6]">
           <span>Preview. Renters cannot see this storefront until you publish it. Booking is turned off.</span>
           <a href={`/s/${slug}/preview/exit`} className="underline underline-offset-2">
             Exit preview

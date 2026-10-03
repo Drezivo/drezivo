@@ -62,9 +62,12 @@ export function StoreHeader({ store }: { store: PublicStorefront }) {
           </nav>
 
           <div className="flex items-center gap-2">
-            <Link href={`${home}/catalog`} className="sf-button sf-button-outline hidden sm:inline-flex">
-              Reserve
-            </Link>
+            {/* Phones get "Browse the collection" in the menu; .sf-button's display would beat `hidden`. */}
+            <span className="hidden sm:block">
+              <Link href={`${home}/catalog`} className="sf-button sf-button-outline">
+                Reserve
+              </Link>
+            </span>
             <button
               ref={menuButton}
               type="button"
