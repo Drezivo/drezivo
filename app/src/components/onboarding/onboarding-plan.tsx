@@ -25,14 +25,16 @@ type LoadState =
 type LaunchPhase = "idle" | "bootstrapping" | "resolving" | "context-error";
 
 /**
- * Display copy for the only plan. The API decides the real price, limits, and trial length
- * (internal plan code `starter`, shown as Standard).
+ * Display copy for the only plan (internal plan code `starter`, shown as Standard). It must match
+ * the public offer on the marketing site (web/src/lib/marketing-content.ts). During pilot testing
+ * the API's entitlements stay higher (1,000 garments, 10 staff) until Final Production; that is a
+ * backend allowance, never the advertised plan.
  */
 const STANDARD_PLAN = {
   name: "Standard",
   monthlyPrice: "₱300",
-  assets: "Up to 1,000 garments",
-  seats: "Up to 10 staff",
+  assets: "Up to 125 garments",
+  seats: "For the shop owner only",
 } as const;
 
 /**
