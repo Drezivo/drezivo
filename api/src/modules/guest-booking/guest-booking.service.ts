@@ -68,7 +68,8 @@ import {
   resolvePublishedStore,
   type PublishedStore,
 } from '../storefront/storefront.repository.js';
-import { assertCheckoutRules } from './checkout-rules.js';
+import { readShopClosures } from '../storefront/shop-closures.js';
+import { assertCheckoutRules, assertShopOpenForHandover, handoverDates } from './checkout-rules.js';
 import {
   appendGuestAudit,
   findOrCreateGuestCustomer,
@@ -120,6 +121,8 @@ export class GuestBookingService {
           const core = await readStoreCore(client, store);
           if (!core) throw new NotFoundError(STORE_NOT_FOUND);
           assertCheckoutRules(toDocument(core).checkout, request, core.timezone);
+          const handover = handoverDates(request, core.timezone);
+          assertShopOpenForHandover(await readShopClosures(client, store, handover.pickup, handover.return), request, core.timezone);
 
           const methods = await readStorefrontPaymentMethods(client, store.tenantId);
           if (!methods.some((method) => method.id === request.payment_method_id)) {
