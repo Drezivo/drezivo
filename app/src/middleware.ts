@@ -10,7 +10,8 @@ const isPublicRoute = createRouteMatcher([
   "/sso-callback(.*)",
   "/api/health",
 ]);
-const isSignInRoute = createRouteMatcher(["/sign-in(.*)"]);
+// A session already exists here, so Clerk would refuse a second sign-in or sign-up (session_exists).
+const isAuthPage = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
 
 type MiddlewareAuth = {
   (): Promise<{ userId: string | null }>;
@@ -19,11 +20,11 @@ type MiddlewareAuth = {
 
 /**
  * Route access, decided at the edge from the verified session cookie (no network call).
- * A signed-in visitor on the sign-in page goes straight to the dashboard here, so the sign-in
- * and sign-up pages themselves stay static and are served from the CDN cache instantly.
+ * A signed-in visitor on the sign-in or sign-up page goes straight to the workspace here, so the
+ * auth pages themselves stay static and are served from the CDN cache instantly.
  */
 export async function routeAccess(auth: MiddlewareAuth, request: NextRequest): Promise<NextResponse | undefined> {
-  if (isSignInRoute(request)) {
+  if (isAuthPage(request)) {
     const { userId } = await auth();
     return userId ? NextResponse.redirect(new URL(WORKSPACE_HOME, request.url)) : undefined;
   }

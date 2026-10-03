@@ -33,6 +33,12 @@ describe("routeAccess (middleware)", () => {
     expect(auth.protect).not.toHaveBeenCalled();
   });
 
+  it("sends an already signed-in user from the sign-up page to the calendar", async () => {
+    const response = await routeAccess(authAs("user_123"), new NextRequest("http://localhost:3000/sign-up"));
+    expect(response?.status).toBe(307);
+    expect(response?.headers.get("location")).toBe("http://localhost:3000/calendar");
+  });
+
   it("protects every other page and leaves sign-up public", async () => {
     const auth = authAs(null);
     await routeAccess(auth, new NextRequest("http://localhost:3000/customers"));
