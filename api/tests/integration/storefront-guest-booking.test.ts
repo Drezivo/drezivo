@@ -140,7 +140,7 @@ describe('storefront guest booking', async () => {
     const ws = await liveStore('gv-hold');
     const body = holdRequest(ws, 'ana@example.test');
 
-    const first = await booking.createReservation(ws.slug, { requestId: 'r1', idempotencyKey: 'hold-1' }, body);
+    const first = await booking.createReservation(ws.slug, { requestId: 'r1', idempotencyKey: 'hold-0001' }, body);
     expect(first.status).toBe(201);
     if (!first.body.success) throw new Error('expected success');
     const created = first.body.data;
@@ -152,7 +152,7 @@ describe('storefront guest booking', async () => {
     expect(Date.parse(created.access_expires_at)).toBeGreaterThan(Date.now());
     const token = guestTokenFor(created.reservation.id);
 
-    const replay = await booking.createReservation(ws.slug, { requestId: 'r2', idempotencyKey: 'hold-1' }, body);
+    const replay = await booking.createReservation(ws.slug, { requestId: 'r2', idempotencyKey: 'hold-0001' }, body);
     expect(replay).toEqual({ ...first, body: { ...first.body, request_id: 'r1' } });
     const stored = await admin.query<Record<string, unknown>>('SELECT safe_response::text AS body FROM idempotency_record WHERE tenant_id = $1', [ws.tenantId]);
     expect(stored.rows.map((row) => String(row['body'])).join('')).not.toContain(token);
@@ -162,7 +162,7 @@ describe('storefront guest booking', async () => {
     const app = createApp();
     const createdByApi = await request(app)
       .post(`/api/v1/public/stores/${ws.slug}/holds`)
-      .set('Idempotency-Key', 'hold-1')
+      .set('Idempotency-Key', 'hold-0001')
       .send(body);
     expect(createdByApi.status).toBe(201);
     expect(createdByApi.text).not.toContain('guest_token');
