@@ -9,7 +9,8 @@ import { createReservation, StorefrontApiError } from '@/lib/storefront-api';
 import { dateIn, formatDay, formatMinor, formatTime, rentalDays, zonedInstant } from '@/lib/storefront-format';
 
 import { lockPageScroll } from '../motion/scroll';
-import { AvailabilityCalendar, type DateRange } from './availability-calendar';
+import { AvailabilityCalendar, type DateRange, type DateRangeNotice } from './availability-calendar';
+import { BookingDateNotice } from './booking-date-notice';
 import { EmailVerification, type VerifiedEmail } from './email-verification';
 import { MoneyBreakdown, PaymentStep } from './payment-step';
 
@@ -26,7 +27,7 @@ interface Customer {
 interface State {
   step: Step;
   range: DateRange | null;
-  notice: string | null;
+  notice: DateRangeNotice | null;
   verified: VerifiedEmail | null;
   customer: Customer;
   fulfillment: FulfillmentMethod;
@@ -39,7 +40,7 @@ interface State {
 }
 
 type Action =
-  | { type: 'range'; range: DateRange | null; notice?: string | undefined }
+  | { type: 'range'; range: DateRange | null; notice?: DateRangeNotice | undefined }
   | { type: 'step'; step: Step }
   | { type: 'verified'; value: VerifiedEmail | null }
   | { type: 'customer'; patch: Partial<Customer> }
@@ -182,7 +183,7 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
     } catch (caught) {
       if (caught instanceof StorefrontApiError && caught.status === 409) {
         // The server says why the dates were refused (taken meanwhile, minimum length, notice period).
-        dispatch({ type: 'range', range: null, notice: caught.message });
+        dispatch({ type: 'range', range: null, notice: { reason: 'other', message: caught.message } });
         dispatch({ type: 'error', message: null, step: 'dates' });
       } else if (caught instanceof StorefrontApiError && caught.status === 401) {
         dispatch({ type: 'verified', value: null });
@@ -255,9 +256,12 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                 onChange={(range, notice) => dispatch({ type: 'range', range, notice })}
               />
               {state.notice ? (
-                <p role="alert" className="text-sm text-[#b3311f]">
-                  {state.notice}
-                </p>
+                <BookingDateNotice
+                  notice={state.notice}
+                  maxDays={store.checkout.max_rental_days}
+                  facebookUrl={store.contact.facebook_url}
+                  instagramUrl={store.contact.instagram_url}
+                />
               ) : null}
               {state.range ? (
                 <p className="border border-sf-line bg-sf-surface px-4 py-3 text-sm">

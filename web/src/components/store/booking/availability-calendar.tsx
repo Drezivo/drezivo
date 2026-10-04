@@ -12,6 +12,10 @@ export interface DateRange {
   end: string;
 }
 
+export type DateRangeNotice =
+  | { reason: 'max_rental_days'; message: string }
+  | { reason: 'other'; message: string };
+
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /** A closed day is not blocked (a rental may run across it); the shop just cannot hand over that day. */
@@ -277,7 +281,7 @@ export function AvailabilityCalendar({
   minDays: number;
   maxDays: number;
   value: DateRange | null;
-  onChange: (range: DateRange | null, message?: string) => void;
+  onChange: (range: DateRange | null, notice?: DateRangeNotice) => void;
 }) {
   const [month, setMonth] = useState(today.slice(0, 7));
   const [anchor, setAnchor] = useState<string | null>(null);
@@ -311,20 +315,20 @@ export function AvailabilityCalendar({
   const minimumNights = Math.max(minDays - 1, 1);
 
   /** Why a range cannot be booked, or null when it can. Mirrors the server's checkout rules. */
-  function rangeProblem(start: string, end: string): string | null {
+  function rangeProblem(start: string, end: string): DateRangeNotice | null {
     const length = rentalDays(start, end);
     if (end <= start || length < minDays) {
-      return `This piece rents for at least ${Math.max(minDays, 2)} days, counting the pickup date as Day 1. Choose a later return date.`;
+      return { reason: 'other', message: `This piece rents for at least ${Math.max(minDays, 2)} days, counting the pickup date as Day 1. Choose a later return date.` };
     }
-    if (length > maxDays) return `The longest rental is ${maxDays} day${maxDays === 1 ? '' : 's'}.`;
+    if (length > maxDays) return { reason: 'max_rental_days', message: `The longest rental is ${maxDays} day${maxDays === 1 ? '' : 's'}.` };
     for (const handover of [start, end]) {
       if (isClosed(handover)) {
-        return `The shop is closed on ${formatDay(handover, { weekday: 'long', month: 'short', day: 'numeric' })}. Choose another ${handover === start ? 'pickup' : 'return'} date.`;
+        return { reason: 'other', message: `The shop is closed on ${formatDay(handover, { weekday: 'long', month: 'short', day: 'numeric' })}. Choose another ${handover === start ? 'pickup' : 'return'} date.` };
       }
     }
     for (let day = start; day <= end; day = addDays(day, 1)) {
       if (stateOf(day) !== 'available') {
-        return `${formatDay(day, { month: 'short', day: 'numeric' })} is not available in that range. Choose other dates.`;
+        return { reason: 'other', message: `${formatDay(day, { month: 'short', day: 'numeric' })} is not available in that range. Choose other dates.` };
       }
     }
     return null;
