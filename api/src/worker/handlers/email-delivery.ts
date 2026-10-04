@@ -10,6 +10,15 @@ import { PermanentOutboxError, type EventHandler } from '../runner.js';
  */
 export function createEmailDeliveryHandler(sender: EmailSender | null = createEmailSender()): EventHandler {
   return async (row) => {
+    // Customer-facing guest mail was discontinued. The migration removes queued rows; this guard
+    // also prevents a row already leased by an older worker from being sent after rollout.
+    const guestLifecycleMail =
+      row.dedupe_key.startsWith('guest-verification:') ||
+      ((row.dedupe_key.startsWith('reservation-email:') || row.dedupe_key.startsWith('fitting-email:')) &&
+        row.dedupe_key.endsWith(':customer'));
+    if (guestLifecycleMail) {
+      throw new PermanentOutboxError('Guest customer email is no longer sent.');
+    }
     if (!sender) throw new PermanentOutboxError('Email delivery is not configured.');
     let email: ReturnType<typeof openSealedEmail>;
     try {

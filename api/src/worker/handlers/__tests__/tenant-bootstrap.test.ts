@@ -8,6 +8,7 @@ describe('tenant.bootstrapped worker handler', () => {
       handleTenantBootstrapped({
         id: 'outbox-id',
         tenant_id: 'tenant-id',
+        dedupe_key: 'tenant-bootstrap:tenant-id',
         event_type: 'tenant.bootstrapped',
         payload: { tenant_id: 'tenant-id' },
         attempts: 0,

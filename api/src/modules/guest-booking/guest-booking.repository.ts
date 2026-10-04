@@ -5,43 +5,36 @@ import type { GuestCustomer } from '@drezivo/contracts';
 import type { FileObjectRow } from '../files/files.repository.js';
 import type { ReservationCustomerSnapshotRow } from '../reservations/reservations.command.repository.js';
 
-/**
- * Repeat guests are matched to one customer record by their verified email. The shop's saved
- * profile is never overwritten from the storefront; the booking keeps a snapshot of what the guest
- * entered, and a missing address on the profile is filled in once.
- */
+/** Reuse a guest profile only on an exact normalized name/email match; unverified input never edits saved profile data. */
 export async function findOrCreateGuestCustomer(
   client: PoolClient,
   tenantId: string,
   email: string,
   details: Omit<GuestCustomer, 'address'> & { address: string | null },
 ): Promise<ReservationCustomerSnapshotRow> {
-  const existing = await client.query<{ id: string; address: string | null }>(
-    `SELECT id, address FROM customer
-      WHERE tenant_id = $1 AND lower(email) = $2 AND anonymized_at IS NULL AND archived_at IS NULL
+  await client.query(
+    `SELECT pg_advisory_xact_lock(hashtextextended($1::text || ':' || lower(btrim($2)) || ':' || lower(btrim($3)), 0))`,
+    [tenantId, email, details.full_name],
+  );
+  const existing = await client.query<{ id: string }>(
+    `SELECT id FROM customer
+      WHERE tenant_id = $1 AND lower(btrim(email)) = lower(btrim($2))
+        AND lower(btrim(full_name)) = lower(btrim($3))
+        AND anonymized_at IS NULL AND archived_at IS NULL
       ORDER BY created_at, id
       LIMIT 1
       FOR UPDATE`,
-    [tenantId, email],
+    [tenantId, email, details.full_name],
   );
   const found = existing.rows[0];
-  let id: string;
-  if (found) {
-    id = found.id;
-    if (found.address === null && details.address !== null) {
-      await client.query('UPDATE customer SET address = $3, updated_at = statement_timestamp() WHERE tenant_id = $1 AND id = $2 AND address IS NULL', [tenantId, id, details.address]);
-    }
-  } else {
-    const created = await client.query<{ id: string }>(
-      `INSERT INTO customer (tenant_id, full_name, email, phone, address, social_media)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id`,
-      [tenantId, details.full_name, email, details.phone, details.address, details.social_handle],
-    );
-    const row = created.rows[0];
-    if (!row) throw new Error('Guest customer insert returned no row.');
-    id = row.id;
-  }
+  const created = found ? null : await client.query<{ id: string }>(
+    `INSERT INTO customer (tenant_id, full_name, email, phone, address, social_media)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id`,
+    [tenantId, details.full_name, email, details.phone, details.address, details.social_handle],
+  );
+  const id = found?.id ?? created?.rows[0]?.id;
+  if (!id) throw new Error('Guest customer insert returned no row.');
   return { id, full_name: details.full_name, phone: details.phone, email, address: details.address };
 }
 

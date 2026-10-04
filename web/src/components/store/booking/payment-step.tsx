@@ -44,7 +44,7 @@ export function MoneyBreakdown({ reservation }: { reservation: GuestReservationV
 }
 
 /** Shows how to pay, counts down the 15-minute hold, and uploads the receipt once. */
-export function PaymentStep({ reservation, token, onSubmitted }: { reservation: GuestReservationView; token: string; onSubmitted: (view: GuestReservationView) => void }) {
+export function PaymentStep({ reservation, onSubmitted }: { reservation: GuestReservationView; onSubmitted: (view: GuestReservationView) => void }) {
   const left = useCountdown(reservation.hold_expires_at);
   const [file, setFile] = useState<File | null>(null);
   const [pending, setPending] = useState(false);
@@ -63,7 +63,7 @@ export function PaymentStep({ reservation, token, onSubmitted }: { reservation: 
     setError(null);
     if (intent.current?.file !== file) intent.current = { file, key: crypto.randomUUID() };
     try {
-      onSubmitted(await uploadReceipt(reservation.id, token, file, intent.current.key));
+      onSubmitted(await uploadReceipt(reservation.id, file, intent.current.key));
     } catch (caught) {
       setError(caught instanceof StorefrontApiError ? caught.message : 'The receipt could not be sent. Try again.');
     } finally {

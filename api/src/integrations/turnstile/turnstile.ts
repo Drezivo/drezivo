@@ -14,7 +14,7 @@ export interface TurnstileVerifier {
 type FetchLike = (input: string, init: RequestInit) => Promise<Pick<Response, 'ok' | 'json'>>;
 
 /**
- * Cloudflare Turnstile check for anonymous endpoints that send email. Fails closed: a missing
+ * Cloudflare Turnstile check for anonymous storefront reservation and fitting submissions. Fails closed: a missing
  * token, a rejected token, a timeout, a network error, or an unreadable answer are all `failed`.
  * Without TURNSTILE_SECRET_KEY (local development) the check is skipped; server.ts logs that once
  * at startup. The secret and the token are never logged.

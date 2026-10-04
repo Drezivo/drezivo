@@ -1,7 +1,6 @@
 import {
   apiEnvelope,
   catalogueResponse,
-  confirmGuestVerificationResponse,
   fittingSlotsResponse,
   guestFittingCreated,
   guestReceiptUploadResponse,
@@ -10,9 +9,7 @@ import {
   itemDetail,
   publicAvailabilityResponse,
   publicStorefront,
-  startGuestVerificationResponse,
   type CatalogueResponse,
-  type ConfirmGuestVerificationResponse,
   type FittingSlotsResponse,
   type GuestFittingCreated,
   type GuestFittingRequest,
@@ -24,7 +21,6 @@ import {
   type ItemDetail,
   type PublicAvailabilityResponse,
   type PublicStorefront,
-  type StartGuestVerificationResponse,
 } from '@drezivo/contracts';
 import type { z } from 'zod';
 
@@ -50,7 +46,7 @@ interface CallOptions {
   method?: 'GET' | 'POST';
   body?: unknown;
   idempotencyKey?: string;
-  bearer?: string;
+  credentials?: RequestCredentials;
   /** Server reads may be cached briefly; guest and write calls never are. */
   revalidate?: number;
   /** Owner preview token (server reads only). A preview read is never cached. */
@@ -61,7 +57,6 @@ async function call<S extends z.ZodTypeAny>(path: string, schema: S, options: Ca
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
-  if (options.bearer) headers['Authorization'] = `Bearer ${options.bearer}`;
   if (options.preview) headers['X-Storefront-Preview'] = options.preview;
   const cacheable = options.revalidate !== undefined && !options.preview;
 
@@ -70,6 +65,7 @@ async function call<S extends z.ZodTypeAny>(path: string, schema: S, options: Ca
     response = await fetch(`${apiOrigin()}/api/v1${path}`, {
       method: options.method ?? 'GET',
       headers,
+      ...(options.credentials ? { credentials: options.credentials } : {}),
       ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
       ...(cacheable ? { next: { revalidate: options.revalidate } } : { cache: 'no-store' as const }),
     });
@@ -126,31 +122,22 @@ export function getFittingSlots(slug: string, date: string): Promise<FittingSlot
   return call(`${store(slug)}/fitting-slots?date=${encodeURIComponent(date)}`, fittingSlotsResponse);
 }
 
-export function startVerification(slug: string, email: string, turnstileToken?: string | null): Promise<StartGuestVerificationResponse> {
-  const body = turnstileToken ? { email, turnstile_token: turnstileToken } : { email };
-  return call(`${store(slug)}/verifications`, startGuestVerificationResponse, { method: 'POST', body });
-}
-
-export function confirmVerification(slug: string, email: string, code: string): Promise<ConfirmGuestVerificationResponse> {
-  return call(`${store(slug)}/verifications/confirm`, confirmGuestVerificationResponse, { method: 'POST', body: { email, code } });
-}
-
 export function createReservation(slug: string, body: GuestReservationRequest, idempotencyKey: string): Promise<GuestReservationCreated> {
-  return call(`${store(slug)}/holds`, guestReservationCreated, { method: 'POST', body, idempotencyKey });
+  return call(`${store(slug)}/holds`, guestReservationCreated, { method: 'POST', body, idempotencyKey, credentials: 'include' });
 }
 
 export function requestFitting(slug: string, body: GuestFittingRequest, idempotencyKey: string): Promise<GuestFittingCreated> {
   return call(`${store(slug)}/fittings`, guestFittingCreated, { method: 'POST', body, idempotencyKey });
 }
 
-export function getGuestReservation(id: string, token: string): Promise<GuestReservationView> {
-  return call(`/guest/reservations/${encodeURIComponent(id)}`, guestReservationView, { bearer: token });
+export function getGuestReservation(id: string): Promise<GuestReservationView> {
+  return call(`/guest/reservations/${encodeURIComponent(id)}`, guestReservationView, { credentials: 'include' });
 }
 
-export function authorizeReceipt(id: string, token: string, body: GuestReceiptUploadRequest): Promise<GuestReceiptUploadResponse> {
-  return call(`/guest/reservations/${encodeURIComponent(id)}/uploads`, guestReceiptUploadResponse, { method: 'POST', body, bearer: token });
+export function authorizeReceipt(id: string, body: GuestReceiptUploadRequest): Promise<GuestReceiptUploadResponse> {
+  return call(`/guest/reservations/${encodeURIComponent(id)}/uploads`, guestReceiptUploadResponse, { method: 'POST', body, credentials: 'include' });
 }
 
-export function submitReceipt(id: string, token: string, fileId: string, idempotencyKey: string): Promise<GuestReservationView> {
-  return call(`/guest/reservations/${encodeURIComponent(id)}/receipts`, guestReservationView, { method: 'POST', body: { file_id: fileId }, bearer: token, idempotencyKey });
+export function submitReceipt(id: string, fileId: string, idempotencyKey: string): Promise<GuestReservationView> {
+  return call(`/guest/reservations/${encodeURIComponent(id)}/receipts`, guestReservationView, { method: 'POST', body: { file_id: fileId }, idempotencyKey, credentials: 'include' });
 }

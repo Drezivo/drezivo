@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { GuestReservationView, PublicStorefront } from '@drezivo/contracts';
 
@@ -17,32 +17,77 @@ const STATUS: Record<GuestReservationView['status'], { title: string; body: stri
   picked_up: { title: 'Picked up', body: 'Enjoy your event. Remember your return date.' },
   returned: { title: 'Returned', body: 'Thank you. The shop is checking the piece before your deposit is settled.' },
   completed: { title: 'Completed', body: 'This rental is complete. Thank you for renting.' },
-  cancelled: { title: 'Cancelled', body: 'This rental was cancelled. The shop will contact you about any refund.' },
-  rejected: { title: 'Declined', body: 'The shop could not accept this request. They will contact you about any payment you sent.' },
+  cancelled: { title: 'Cancelled', body: 'This rental was cancelled. Contact the shop about any refund.' },
+  rejected: { title: 'Declined', body: 'The shop could not accept this request. Contact the shop about any payment you sent.' },
   expired: { title: 'Hold ended', body: 'The hold ended before a receipt arrived. You can choose your dates again.' },
 };
 
-/**
- * The guest link is /s/<slug>/booking#<id>.<token>. The fragment never reaches any server or a
- * Referer header; the token is sent only as a Bearer header to the API.
- */
-export function BookingStatus({ store }: { store: PublicStorefront }) {
-  const [access, setAccess] = useState<{ id: string; token: string } | null>(null);
+type ExitAttempt = { kind: 'history' } | { kind: 'link'; href: string };
+
+/** A private, cookie-authorized reservation proof page. The URL contains only the reservation ID. */
+export function BookingStatus({ store, reservationId }: { store: PublicStorefront; reservationId: string }) {
   const [view, setView] = useState<GuestReservationView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [exitAttempt, setExitAttempt] = useState<ExitAttempt | null>(null);
+  const allowLeave = useRef(false);
 
   useEffect(() => {
-    const match = /^#([0-9a-f-]{36})\.([A-Za-z0-9_-]{43})$/i.exec(window.location.hash);
-    if (!match?.[1] || !match[2]) {
-      setError('This link is incomplete. Open the link from your email again.');
-      return;
-    }
-    const next = { id: match[1], token: match[2] };
-    setAccess(next);
-    getGuestReservation(next.id, next.token)
+    getGuestReservation(reservationId)
       .then(setView)
       .catch((caught: unknown) => setError(caught instanceof StorefrontApiError ? caught.message : 'Could not load this request.'));
-  }, []);
+  }, [reservationId]);
+
+  const ready = view !== null;
+  useEffect(() => {
+    if (!ready) return;
+    window.history.pushState({ guestProofGuard: true }, '', window.location.href);
+
+    const onPopState = () => {
+      if (allowLeave.current) return;
+      window.history.pushState({ guestProofGuard: true }, '', window.location.href);
+      setExitAttempt({ kind: 'history' });
+    };
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (allowLeave.current) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const anchor = target.closest('a[href]');
+      if (!(anchor instanceof HTMLAnchorElement) || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+      const destination = new URL(anchor.href, window.location.href);
+      if (destination.origin === window.location.origin && destination.pathname === window.location.pathname && destination.search === window.location.search) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setExitAttempt({ kind: 'link', href: destination.href });
+    };
+
+    window.addEventListener('popstate', onPopState);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    document.addEventListener('click', onClick, true);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      document.removeEventListener('click', onClick, true);
+    };
+  }, [ready]);
+
+  function leaveProofPage() {
+    if (!exitAttempt) return;
+    allowLeave.current = true;
+    if (exitAttempt.kind === 'link') {
+      window.location.assign(exitAttempt.href);
+      return;
+    }
+    if (window.history.length > 2) {
+      window.history.go(-2);
+      return;
+    }
+    window.location.assign(`/s/${store.slug}`);
+  }
 
   if (error) {
     return (
@@ -55,51 +100,69 @@ export function BookingStatus({ store }: { store: PublicStorefront }) {
       </div>
     );
   }
-  if (!view || !access) return <p className="text-sf-muted" role="status">Loading your request…</p>;
+  if (!view) return <p className="text-sf-muted" role="status">Loading your request…</p>;
 
   const status = STATUS[view.status];
   return (
-    <div className="grid gap-12 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-      <div>
-        <p className="text-sm text-sf-muted">Reference {view.reference_code.slice(0, 12)}</p>
-        <h1 className="mt-2 font-sf-display text-5xl font-light">{status.title}</h1>
-        <p className="mt-4 max-w-xl text-sf-muted">{status.body}</p>
-        <dl className="mt-8 space-y-3 border-y border-sf-line py-6 text-sm">
-          <div className="flex justify-between gap-4">
-            <dt className="text-sf-muted">Item</dt>
-            <dd>
-              {view.item_name}
-              {view.size_label ? ` · ${view.size_label}` : ''}
-            </dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-sf-muted">Pickup</dt>
-            <dd>{formatInstant(view.pickup_at, store.timezone)}</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-sf-muted">Return</dt>
-            <dd>{formatInstant(view.due_at, store.timezone)}</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-sf-muted">{view.fulfillment_method === 'delivery' ? 'Delivery' : 'Pickup at'}</dt>
-            <dd className="text-right">{view.fulfillment_method === 'delivery' ? 'To your address' : (store.contact.address ?? store.name)}</dd>
-          </div>
-        </dl>
-        <div className="mt-6 max-w-sm">
-          <MoneyBreakdown reservation={view} />
-        </div>
+    <>
+      <div className="mb-8 border border-sf-ink bg-sf-surface px-5 py-4 text-sm" role="note">
+        <p className="font-medium">Screenshot this page before leaving.</p>
+        <p className="mt-1 text-sf-muted">We do not email reservation confirmations or receipts. Keep this page as your proof.</p>
       </div>
-      <aside>
-        {view.status === 'held' && !view.receipt_submitted ? (
-          <PaymentStep reservation={view} token={access.token} onSubmitted={setView} />
-        ) : (
-          <div className="border border-sf-line p-6 text-sm text-sf-muted">
-            Questions about this request? Contact {store.name}
-            {store.contact.phone ? ` at ${store.contact.phone}` : ''}
-            {store.contact.email ? ` or ${store.contact.email}` : ''}.
+      <div className="grid gap-12 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+        <div>
+          <p className="text-sm text-sf-muted">Reference {view.reference_code}</p>
+          <h1 className="mt-2 font-sf-display text-5xl font-light">{status.title}</h1>
+          <p className="mt-4 max-w-xl text-sf-muted">{status.body}</p>
+          <dl className="mt-8 space-y-3 border-y border-sf-line py-6 text-sm">
+            <div className="flex justify-between gap-4">
+              <dt className="text-sf-muted">Item</dt>
+              <dd>
+                {view.item_name}
+                {view.size_label ? ` · ${view.size_label}` : ''}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-sf-muted">Pickup</dt>
+              <dd>{formatInstant(view.pickup_at, store.timezone)}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-sf-muted">Return</dt>
+              <dd>{formatInstant(view.due_at, store.timezone)}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-sf-muted">{view.fulfillment_method === 'delivery' ? 'Delivery' : 'Pickup at'}</dt>
+              <dd className="text-right">{view.fulfillment_method === 'delivery' ? 'To your address' : (store.contact.address ?? store.name)}</dd>
+            </div>
+          </dl>
+          <div className="mt-6 max-w-sm">
+            <MoneyBreakdown reservation={view} />
           </div>
-        )}
-      </aside>
-    </div>
+        </div>
+        <aside>
+          {view.status === 'held' && !view.receipt_submitted ? (
+            <PaymentStep reservation={view} onSubmitted={setView} />
+          ) : (
+            <div className="border border-sf-line p-6 text-sm text-sf-muted">
+              Questions about this request? Contact {store.name}
+              {store.contact.phone ? ` at ${store.contact.phone}` : ''}
+              {store.contact.email ? ` or ${store.contact.email}` : ''}.
+            </div>
+          )}
+        </aside>
+      </div>
+      {exitAttempt ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5" role="presentation">
+          <section role="dialog" aria-modal="true" aria-labelledby="proof-exit-title" className="w-full max-w-md space-y-4 border border-sf-line bg-sf-bg p-6 shadow-xl">
+            <h2 id="proof-exit-title" className="font-sf-display text-3xl">Done screenshot?</h2>
+            <p className="text-sm text-sf-muted">Save a screenshot of this page before you leave. We will not email this reservation proof.</p>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" className="sf-button sf-button-outline" onClick={() => setExitAttempt(null)}>Keep viewing</button>
+              <button type="button" className="sf-button sf-button-primary" onClick={leaveProofPage}>I saved it — leave</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </>
   );
 }

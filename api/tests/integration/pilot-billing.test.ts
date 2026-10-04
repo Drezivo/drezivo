@@ -116,9 +116,22 @@ describe('pilot billing', async () => {
       const store = await request(app).get(`/api/v1/public/stores/${ws.slug}`);
       expect(store.status).toBe(200);
       expect(bodyOf(store).data).toMatchObject({ booking_open: false });
-      const verify = await request(app).post(`/api/v1/public/stores/${ws.slug}/verifications`).send({ email: 'ana@example.test' });
-      expect(verify.status).toBe(409);
-      expect(bodyOf(verify).error?.code).toBe('BOOKING_PAUSED');
+      const startsAt = new Date(Date.now() + 5 * 86_400_000);
+      const endsAt = new Date(startsAt.getTime() + 3 * 86_400_000);
+      const hold = await request(app)
+        .post(`/api/v1/public/stores/${ws.slug}/holds`)
+        .set('Idempotency-Key', 'pb-readonly-hold')
+        .send({
+          email: 'ana@example.test',
+          customer: { full_name: 'Ana Reyes', phone: '09171234567', address: '12 Mabini St, Quezon City', social_handle: null },
+          variant_id: ws.variantIds.m,
+          requested_interval: { start: startsAt.toISOString(), end: endsAt.toISOString() },
+          event_date: null,
+          fulfillment_method: 'pickup',
+          payment_method_id: ws.paymentMethodId,
+        });
+      expect(hold.status).toBe(409);
+      expect(bodyOf(hold).error?.code).toBe('BOOKING_PAUSED');
     });
 
     it('takes the storefront offline three days after the end, while staff can still read', async () => {
