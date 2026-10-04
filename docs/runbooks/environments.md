@@ -72,18 +72,16 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   real hop count on Render, Cloud Run, or behind a load balancer, or every anonymous visitor shares
   the proxy's address for per-IP rate limits. Never set it higher than the real count, or clients
   can spoof `X-Forwarded-For`.
-- `EMAIL_PROVIDER` — `none` (default), `file`, or `resend`. `none` makes guest email verification
-  answer 503 instead of pretending to send. `file` is for local development only and is refused in
-  production.
+- `EMAIL_PROVIDER` — `none` (default), `file`, or `resend`. Guest storefront reservation and
+  fitting flows do not send customer email; the provider is used for business/owner and other
+  operational notifications. `file` is for local development only and is refused in production.
 - `EMAIL_FROM` and `RESEND_API_KEY` — required when `EMAIL_PROVIDER=resend`. The key is a secret.
 - `EMAIL_FILE_SINK_DIR` — local folder for `EMAIL_PROVIDER=file`; each message is one JSON file.
-- `STOREFRONT_PUBLIC_ORIGIN` — public origin of `web` (for example `https://drezivo.shop`), used for
-  the private request-status link in renter emails. Without it, emails omit the link.
-- `GUEST_VERIFICATION_MODE`: `email` (the default) or `dev_accept_any`.
-  - `dev_accept_any` sends no verification email and accepts any 6-digit code. Use it for local
-    testing of storefront reservations and fitting requests without an email provider.
-  - Config refuses it when `NODE_ENV=production`, so the API will not start with it there.
-- The worker must run for email to leave the outbox, including guest verification codes.
+- `TURNSTILE_SECRET_KEY` — required in staging and production to protect public reservation and
+  fitting submissions. Local development may omit it; the verifier then logs one startup warning
+  and skips the challenge. If set, invalid or missing challenge tokens are rejected.
+- The worker must run for operational email to leave the outbox. It never sends guest verification,
+  reservation proof, receipt, or reservation/fitting lifecycle email.
 - `WORKER_ENABLED`: `true` or `false` (the default is `false`). Only these two words are accepted;
   any other value stops startup. `OBJECT_STORAGE_FORCE_PATH_STYLE` and
   `OBJECT_STORAGE_UPLOADS_ENABLED` follow the same strict boolean rule.
@@ -191,15 +189,17 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 
 - `API_ORIGIN` — server-side API origin for server-rendered storefront pages (may be an internal
   address). Falls back to `NEXT_PUBLIC_API_ORIGIN`.
-- `NEXT_PUBLIC_API_ORIGIN` — browser-reachable API origin for availability, verification, holds,
-  receipts, and fitting requests. Must be listed in the API's `CORS_ALLOWED_ORIGINS` origin set
-  alongside the `web` origin.
+- `NEXT_PUBLIC_API_ORIGIN` — browser-reachable API origin for availability, holds, guest reservation
+  proof/receipts, and fitting requests. Guest reservation calls use credentialed requests so the
+  API-host-only cookie can be set/read. Must be listed in the API's `CORS_ALLOWED_ORIGINS` origin
+  set alongside the `web` origin; the API must allow credentials only for exact listed origins.
 - `NEXT_PUBLIC_SITE_URL` — canonical public origin used for metadata, canonical links, and the
   sitemap.
 - `NEXT_PUBLIC_APP_ENV` — same as `app`.
-- Guest capability handling needs no client secret: TRD §3 requires bearer capability links kept
-  out of logs, analytics, referrers, and shared caches — this is a handling rule for `web`'s
-  code, not an environment variable.
+- Guest reservation capability handling is cookie-only. The API sets a host-only, HttpOnly cookie
+  scoped to one reservation's API path; never copy a capability into a URL, browser storage,
+  analytics, referrer, or log. The storefront uses credentialed requests and API CORS must allow
+  the exact storefront origin.
 
 ## `contracts` (`@drezivo/contracts`)
 

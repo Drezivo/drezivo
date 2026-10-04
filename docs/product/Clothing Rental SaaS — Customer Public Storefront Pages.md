@@ -614,7 +614,7 @@ The business should only collect information that is actually necessary.
 
 The goal is to avoid recreating an unnecessarily long Google Form.
 
-Email is required for guest checkout and is verified using a one-time code before the request can be submitted. The verified email is used to send status updates, provide secure access to the request, and match repeat guest bookings to the same customer record.
+Email is required contact information for guest checkout, but V1 does not verify it or send reservation/fitting messages to it. Reservation status and receipt access use a reservation-scoped HttpOnly API cookie set when the hold is created. After the receipt is submitted, show the reservation proof page, prompt the customer to take a screenshot before leaving, and confirm navigation with a “Done screenshot?” dialog. Match a repeat guest customer only when normalized full name and email both match exactly; never rewrite an existing customer profile from unverified checkout input. Public fitting requests also do not verify email or send guest email.
 
 ---
 
@@ -637,7 +637,7 @@ If additional information is required for a selected delivery method, display th
 
 # Verification
 
-If the business requires customer verification, the checkout should communicate what is required.
+If the business requires additional identity verification, the checkout should communicate what is required.
 
 For example:
 
@@ -685,7 +685,7 @@ Clothing
 Rental dates
 Pickup / delivery
 Customer information
-Verified email
+Contact email
 QR payment
 Uploaded receipt
 Total
@@ -738,7 +738,7 @@ for confirmation from the business.
 
 Do not show "Confirmed" when the reservation is actually pending.
 
-The customer and owner both receive an email when the request is submitted. Owner dashboard notifications are outside V1.
+The customer sees their reservation details on the proof page after submitting the receipt. The customer is not emailed a verification code, receipt, reservation link, or lifecycle update. Owner/business notification behavior is independent and may email the shop according to its configured notification rules.
 
 ---
 

@@ -63,7 +63,8 @@ export default function PrivacyPage() {
           intentionally displayed on the business&apos;s public storefront.
         </li>
         <li>
-          <strong>Customer and reservation information:</strong> full name, verified email address,
+          <strong>Customer and reservation information:</strong> full name, email address provided
+          as contact information (not verified by guest checkout),
           mobile number where collected, reservation or delivery address, optional social-media
           contact information, selected garment or size, rental dates, pickup and return details,
           optional event date, fulfillment method, reservation status, and related operational
@@ -157,14 +158,17 @@ export default function PrivacyPage() {
         appropriate legal basis and any notice required by law.
       </p>
 
-      <h2>6. Email verification and security checks</h2>
+      <h2>6. Guest contact and security checks</h2>
       <p>
-        Public storefronts may require a customer to verify control of an email address before
-        submitting certain requests. Verification codes are time-limited and currently expire after
-        approximately 10 minutes.
+        A guest must provide an email address as contact information when requesting a reservation
+        or fitting, but Drezivo does not verify the address or email a guest a verification code,
+        reservation proof/link, receipt acknowledgement, or reservation/fitting status update. A
+        reservation proof is shown on the storefront after receipt submission and is protected by
+        an HttpOnly cookie scoped to that reservation on the API host. The customer is asked to
+        save a screenshot before leaving the page.
       </p>
       <p>
-        Drezivo may use Cloudflare Turnstile to protect public verification and booking features
+        Drezivo uses Cloudflare Turnstile to protect public reservation and fitting submissions
         against automated abuse. When Turnstile is enabled, information required to perform the
         security check, including the Turnstile response and technical information such as the
         client&apos;s IP address, may be processed by Cloudflare. These checks are used for security
@@ -176,6 +180,12 @@ export default function PrivacyPage() {
         Drezivo may use cookies and similar browser technologies that are necessary for
         authentication, session continuity, storefront preview functionality, security, fraud
         prevention, and operation of the service.
+      </p>
+      <p>
+        When a guest creates a reservation, the API sets an HttpOnly cookie scoped to that
+        reservation&apos;s guest API path. It authorizes the guest&apos;s reservation summary and
+        receipt workflow, is not shared with other reservations, and expires according to its
+        technical purpose. The reservation identifier in the page URL is not an access credential.
       </p>
       <p>
         Drezivo uses Vercel Web Analytics to measure visits to its marketing pages and public
@@ -254,9 +264,8 @@ export default function PrivacyPage() {
         future use.
       </p>
       <p>
-        Short-lived security credentials and technical authorizations, such as verification codes,
-        guest access credentials, and upload authorizations, expire according to their technical
-        purpose. Backups are removed through their applicable rolling-expiry process rather than
+        Short-lived security credentials and technical authorizations, such as guest access cookies
+        and upload authorizations, expire according to their technical purpose. Backups are removed through their applicable rolling-expiry process rather than
         being used as an indefinite archive.
       </p>
 

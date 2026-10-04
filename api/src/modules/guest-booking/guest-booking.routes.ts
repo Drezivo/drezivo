@@ -2,36 +2,34 @@ import { Router, type Request, type RequestHandler, type Response } from 'expres
 import { z } from 'zod';
 
 import {
-  confirmGuestVerificationRequest,
   guestFittingRequest,
   guestReceiptSubmitRequest,
   guestReceiptUploadRequest,
   guestReservationRequest,
   reservationId,
-  startGuestVerificationRequest,
-  type ConfirmGuestVerificationRequest,
   type GuestFittingRequest,
   type GuestReceiptSubmitRequest,
   type GuestReceiptUploadRequest,
   type GuestReservationRequest,
-  type StartGuestVerificationRequest,
 } from '@drezivo/contracts';
 
+import { turnstileVerifier } from '../../integrations/turnstile/turnstile.js';
 import { idempotencyKeyOf } from '../../middleware/staff-command.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
 import { validate } from '../../middleware/validate.js';
-import { NotFoundError } from '../../shared/errors.js';
+import { ForbiddenError, NotFoundError } from '../../shared/errors.js';
+import { guestTokenFor } from '../../shared/guest-token.js';
 import type { CommandResult } from '../../shared/idempotent-command.js';
 import { sendSuccess } from '../../shared/response.js';
+import { readGuestAccessCookie, serializeGuestAccessCookie } from './guest-access-cookie.js';
 import { guestBookingService as booking } from './guest-booking.service.js';
-import { guestVerificationService as verification } from './guest-verification.service.js';
 
 export const guestBookingRouter = Router();
 
 const slugParams = z.object({ slug: z.string().min(1).max(80).regex(/^[a-z0-9-]+$/) }).strict();
 const reservationParams = z.object({ id: reservationId }).strict();
 
-/** Per-address budgets. Tight for anything that sends email or writes; normal browsing never hits them. */
+/** Per-address budgets are applied to writes, not normal storefront browsing. */
 const perIp = (name: string, max: number, windowMinutes: number): RequestHandler =>
   rateLimit({ windowMs: windowMinutes * 60_000, max, keyOf: (req) => `${name}:${req.ip ?? 'unknown'}` });
 
@@ -40,12 +38,21 @@ const noStore: RequestHandler = (_req, res, next) => {
   next();
 };
 
-/** The guest token travels only in the Authorization header, never in a URL. Missing or malformed is a concealed 404. */
-function bearerOf(req: Request): string {
-  const match = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(req.header('Authorization') ?? '');
-  if (!match?.[1]) throw new NotFoundError('This booking link is not valid or has expired.');
-  return match[1];
+/** A reservation capability is accepted only from its host-only, reservation-scoped cookie. */
+function capabilityOf(req: Request, reservationId: string): string {
+  const capability = readGuestAccessCookie(req.header('Cookie'), reservationId);
+  if (!capability) throw new NotFoundError('This booking link is not valid or has expired.');
+  return capability;
 }
+
+const requireSubmissionTurnstile: RequestHandler = async (req, _res, next) => {
+  const token = (req.body as { turnstile_token?: string } | undefined)?.turnstile_token;
+  if ((await turnstileVerifier.verify(token, req.ip)) === 'failed') {
+    next(new ForbiddenError('Please complete the security check and try again.'));
+    return;
+  }
+  next();
+};
 
 const slugOf = (req: Request): string => (req.params as { slug: string }).slug;
 const idOf = (req: Request): string => (req.params as { id: string }).id;
@@ -62,33 +69,19 @@ function sendCommand<T>(run: (req: Request) => Promise<CommandResult<T>>): Reque
 }
 
 guestBookingRouter.post(
-  '/public/stores/:slug/verifications',
-  noStore,
-  perIp('guest-verify-start', 10, 15),
-  validate({ params: slugParams, body: startGuestVerificationRequest }),
-  send((req) => {
-    const body = req.body as StartGuestVerificationRequest;
-    return verification.start(slugOf(req), body.email, { token: body.turnstile_token, remoteIp: req.ip });
-  }),
-);
-
-guestBookingRouter.post(
-  '/public/stores/:slug/verifications/confirm',
-  noStore,
-  perIp('guest-verify-confirm', 20, 15),
-  validate({ params: slugParams, body: confirmGuestVerificationRequest }),
-  send((req) => {
-    const body = req.body as ConfirmGuestVerificationRequest;
-    return verification.confirm(slugOf(req), body.email, body.code);
-  }),
-);
-
-guestBookingRouter.post(
   '/public/stores/:slug/holds',
   noStore,
   perIp('guest-hold', 20, 15),
   validate({ params: slugParams, body: guestReservationRequest }),
-  sendCommand((req) => booking.createReservation(slugOf(req), meta(req), req.body as GuestReservationRequest)),
+  requireSubmissionTurnstile,
+  async (req, res) => {
+    const result = await booking.createReservation(slugOf(req), meta(req), req.body as GuestReservationRequest);
+    if (result.body.success) {
+      const { reservation, access_expires_at: expiresAt } = result.body.data;
+      res.append('Set-Cookie', serializeGuestAccessCookie(reservation.id, guestTokenFor(reservation.id), new Date(expiresAt)));
+    }
+    res.status(result.status).json(result.body);
+  },
 );
 
 guestBookingRouter.post(
@@ -96,6 +89,7 @@ guestBookingRouter.post(
   noStore,
   perIp('guest-fitting', 10, 15),
   validate({ params: slugParams, body: guestFittingRequest }),
+  requireSubmissionTurnstile,
   sendCommand((req) => booking.requestFitting(slugOf(req), meta(req), req.body as GuestFittingRequest)),
 );
 
@@ -104,7 +98,7 @@ guestBookingRouter.get(
   noStore,
   perIp('guest-view', 60, 1),
   validate({ params: reservationParams }),
-  send((req) => booking.getReservation(idOf(req), bearerOf(req))),
+  send((req) => booking.getReservation(idOf(req), capabilityOf(req, idOf(req)))),
 );
 
 guestBookingRouter.post(
@@ -112,7 +106,7 @@ guestBookingRouter.post(
   noStore,
   perIp('guest-upload', 10, 15),
   validate({ params: reservationParams, body: guestReceiptUploadRequest }),
-  send((req) => booking.authorizeReceiptUpload(idOf(req), bearerOf(req), req.body as GuestReceiptUploadRequest)),
+  send((req) => booking.authorizeReceiptUpload(idOf(req), capabilityOf(req, idOf(req)), req.body as GuestReceiptUploadRequest)),
 );
 
 guestBookingRouter.post(
@@ -120,5 +114,5 @@ guestBookingRouter.post(
   noStore,
   perIp('guest-receipt', 10, 15),
   validate({ params: reservationParams, body: guestReceiptSubmitRequest }),
-  sendCommand((req) => booking.submitReceipt(idOf(req), bearerOf(req), meta(req), (req.body as GuestReceiptSubmitRequest).file_id)),
+  sendCommand((req) => booking.submitReceipt(idOf(req), capabilityOf(req, idOf(req)), meta(req), (req.body as GuestReceiptSubmitRequest).file_id)),
 );

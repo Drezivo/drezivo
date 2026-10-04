@@ -5,8 +5,7 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 /**
- * Guest booking against a real PostgreSQL with RLS: email verification (codes read back from the
- * sealed outbox exactly as the worker would), holds with double-fire and capacity races, checkout
+ * Guest booking against a real PostgreSQL with RLS: unverified contact emails, holds with double-fire and capacity races, checkout
  * rules, guest capability isolation, receipt submission, fitting requests, and notification prefs.
  */
 import '../../src/config/load-env.js';
@@ -23,6 +22,11 @@ vi.mock('@clerk/express', () => ({
   getAuth: () => ({ userId: null, orgId: null }),
 }));
 
+const turnstileState = vi.hoisted<{ outcome: 'passed' | 'failed' | 'skipped' }>(() => ({ outcome: 'skipped' }));
+vi.mock('../../src/integrations/turnstile/turnstile.js', () => ({
+  turnstileVerifier: { verify: vi.fn(() => Promise.resolve(turnstileState.outcome)) },
+}));
+
 const adminUrl = requireTestDatabaseUrl();
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = buildAppRoleDatabaseUrl(adminUrl);
@@ -32,12 +36,12 @@ const PNG_SHA = createHash('sha256').update(PNG).digest('base64');
 
 describe('storefront guest booking', async () => {
   const { createApp } = await import('../../src/app.js');
-  const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
+  const { closePool } = await import('../../src/db/client.js');
   const { storefrontCmsService: cms } = await import('../../src/modules/storefront-cms/storefront-cms.service.js');
   const { settingsService } = await import('../../src/modules/settings/settings.service.js');
-  const { GuestVerificationService } = await import('../../src/modules/guest-booking/guest-verification.service.js');
-  const { GuestBookingService, guestTokenFor } = await import('../../src/modules/guest-booking/guest-booking.service.js');
-  const { openSealedEmail, emailNotifications } = await import('../../src/modules/notifications/email-notifications.js');
+  const { GuestBookingService } = await import('../../src/modules/guest-booking/guest-booking.service.js');
+  const { guestTokenFor } = await import('../../src/shared/guest-token.js');
+  const { openSealedEmail } = await import('../../src/modules/notifications/email-notifications.js');
   const { addDays, localDate } = await import('../../src/modules/storefront/storefront.service.js');
   const { weekdayOf } = await import('../../src/modules/storefront/shop-closures.js');
   const { createStorefrontWorkspace } = await import('./helpers/storefront-fixture.js');
@@ -61,8 +65,7 @@ describe('storefront guest booking', async () => {
       return Promise.resolve(found ? { ...found, versionId: null, prefix: PNG } : null);
     },
   };
-  const verification = new GuestVerificationService(emailNotifications, () => true, () => false);
-  const booking = new GuestBookingService(verification, storage);
+  const booking = new GuestBookingService(storage);
   const pngSha = createHash('sha256').update(PNG).digest('base64');
 
   const policy = {
@@ -81,6 +84,7 @@ describe('storefront guest booking', async () => {
     await ensureAppRoleLogin(adminUrl);
   });
   afterEach(async () => {
+    turnstileState.outcome = 'skipped';
     uploads.clear();
     await resetTestDatabase(adminUrl);
   });
@@ -113,28 +117,14 @@ describe('storefront guest booking', async () => {
     );
   }
 
-  async function latestCode(tenantId: string): Promise<string> {
-    const rows = await admin.query<Record<string, unknown>>(`SELECT payload FROM outbox_event WHERE tenant_id = $1 AND event_type = 'notification.email' AND dedupe_key LIKE 'guest-verification:%' ORDER BY created_at DESC LIMIT 1`, [tenantId]);
-    const email = openSealedEmail((rows.rows[0]?.['payload'] ?? {}) as Record<string, unknown>);
-    const code = /is (\d{6})\./.exec(email.text)?.[1];
-    if (!code) throw new Error('no code in email');
-    return code;
-  }
-
-  async function verified(slug: string, tenantId: string, email: string): Promise<string> {
-    await verification.start(slug, email);
-    return (await verification.confirm(slug, email, await latestCode(tenantId))).verification_token;
-  }
-
   /** Pickup 3 days from now at the store's handover time, for `days` days. */
   function interval(days: number, offset = 3): { start: string; end: string } {
     const pickup = addDays(localDate(new Date(), 'Asia/Manila'), offset);
     return { start: `${pickup}T10:00:00+08:00`, end: `${addDays(pickup, days)}T10:00:00+08:00` };
   }
 
-  function holdRequest(ws: { variantIds: { m: string }; paymentMethodId: string }, token: string, email: string, overrides: Record<string, unknown> = {}) {
+  function holdRequest(ws: { variantIds: { m: string }; paymentMethodId: string }, email: string, overrides: Record<string, unknown> = {}) {
     return guestReservationRequest.parse({
-      verification_token: token,
       email,
       customer: { full_name: 'Ana Reyes', phone: '09171234567', address: '12 Mabini St, Quezon City', social_handle: null },
       variant_id: ws.variantIds.m,
@@ -146,51 +136,11 @@ describe('storefront guest booking', async () => {
     });
   }
 
-  it('verifies email with hashed, attempt-limited, rate-limited codes', async () => {
-    const ws = await liveStore('gv-codes');
-    await verification.start(ws.slug, 'Ana@Example.test');
-    const code = await latestCode(ws.tenantId);
-    const stored = await admin.query<Record<string, unknown>>('SELECT code_hash, email_digest FROM guest_email_verification WHERE tenant_id = $1', [ws.tenantId]);
-    expect(stored.rows[0]?.['code_hash']).not.toContain(code);
-    expect(stored.rows[0]?.['email_digest']).not.toContain('ana');
-
-    const wrong = code === '000000' ? '111111' : '000000';
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      await expect(verification.confirm(ws.slug, 'ana@example.test', wrong)).rejects.toMatchObject({ status: 401 });
-    }
-    // Locked after five misses, even with the right code.
-    await expect(verification.confirm(ws.slug, 'ana@example.test', code)).rejects.toMatchObject({ status: 401 });
-
-    for (let i = 0; i < 6; i += 1) await verification.start(ws.slug, 'ana@example.test');
-    const count = await admin.query<Record<string, unknown>>('SELECT count(*)::int AS n FROM guest_email_verification WHERE tenant_id = $1', [ws.tenantId]);
-    expect(count.rows[0]?.['n']).toBe(5);
-
-    const disabled = new GuestVerificationService(emailNotifications, () => false, () => false);
-    await expect(disabled.start(ws.slug, 'x@example.test')).rejects.toMatchObject({ status: 503 });
-    await expect(verification.start('no-such-store', 'x@example.test')).rejects.toMatchObject({ status: 404 });
-  });
-
-  it('in development accept-any mode sends no email and accepts any code, still per store', async () => {
-    const ws = await liveStore('gv-dev');
-    const devMode = new GuestVerificationService(emailNotifications, () => false, () => true);
-    await devMode.start(ws.slug, 'dev@example.test');
-    const sent = await admin.query<Record<string, unknown>>(`SELECT count(*)::int AS n FROM outbox_event WHERE tenant_id = $1 AND event_type = 'notification.email'`, [ws.tenantId]);
-    expect(sent.rows[0]?.['n']).toBe(0);
-
-    const { verification_token: token } = await devMode.confirm(ws.slug, 'dev@example.test', '123456');
-    const hold = await new GuestBookingService(devMode, storage).createReservation(ws.slug, { requestId: 'r-dev', idempotencyKey: 'gv-dev-hold' }, holdRequest(ws, token, 'dev@example.test'));
-    expect(hold.status).toBe(201);
-    // Still bound to an address that asked for a code, and to a real store.
-    await expect(devMode.confirm(ws.slug, 'never-asked@example.test', '123456')).rejects.toMatchObject({ status: 401 });
-    await expect(devMode.start('no-such-store', 'dev@example.test')).rejects.toMatchObject({ status: 404 });
-  });
-
-  it('creates one hold per key, replays the same token, and isolates guest links', async () => {
+  it('creates one hold per key without email verification, returns no capability, and isolates cookie access', async () => {
     const ws = await liveStore('gv-hold');
-    const token = await verified(ws.slug, ws.tenantId, 'ana@example.test');
-    const body = holdRequest(ws, token, 'ana@example.test');
+    const body = holdRequest(ws, 'ana@example.test');
 
-    const first = await booking.createReservation(ws.slug, { requestId: 'r1', idempotencyKey: 'hold-1' }, body);
+    const first = await booking.createReservation(ws.slug, { requestId: 'r1', idempotencyKey: 'hold-0001' }, body);
     expect(first.status).toBe(201);
     if (!first.body.success) throw new Error('expected success');
     const created = first.body.data;
@@ -198,36 +148,65 @@ describe('storefront guest booking', async () => {
     // interval(3) spans four rental dates (the pickup date is Day 1), so one extra day is charged.
     expect(created.reservation.money).toEqual({ rental_total_minor: '230000', security_required_minor: '200000', delivery_total_minor: '0', due_now_minor: '430000' });
     expect(created.reservation.payment_instructions?.destination_note).toContain('Account number: 001234567890');
-    expect(created.guest_token).toBe(guestTokenFor(created.reservation.id));
+    expect(created).not.toHaveProperty('guest_token');
+    expect(Date.parse(created.access_expires_at)).toBeGreaterThan(Date.now());
+    const token = guestTokenFor(created.reservation.id);
 
-    const replay = await booking.createReservation(ws.slug, { requestId: 'r2', idempotencyKey: 'hold-1' }, body);
+    const replay = await booking.createReservation(ws.slug, { requestId: 'r2', idempotencyKey: 'hold-0001' }, body);
     expect(replay).toEqual({ ...first, body: { ...first.body, request_id: 'r1' } });
     const stored = await admin.query<Record<string, unknown>>('SELECT safe_response::text AS body FROM idempotency_record WHERE tenant_id = $1', [ws.tenantId]);
-    expect(stored.rows.map((row) => String(row['body'])).join('')).not.toContain(created.guest_token);
+    expect(stored.rows.map((row) => String(row['body'])).join('')).not.toContain(token);
     const holds = await admin.query<Record<string, unknown>>(`SELECT count(*)::int AS n FROM reservation WHERE tenant_id = $1`, [ws.tenantId]);
     expect(holds.rows[0]?.['n']).toBe(1);
 
     const app = createApp();
-    const view = await request(app).get(`/api/v1/guest/reservations/${created.reservation.id}`).set('Authorization', `Bearer ${created.guest_token}`);
+    const createdByApi = await request(app)
+      .post(`/api/v1/public/stores/${ws.slug}/holds`)
+      .set('Idempotency-Key', 'hold-0001')
+      .send(body);
+    expect(createdByApi.status).toBe(201);
+    expect(createdByApi.text).not.toContain('guest_token');
+    const cookie = createdByApi.headers['set-cookie']?.[0];
+    expect(cookie).toBeDefined();
+    if (!cookie) throw new Error('expected a reservation access cookie');
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).toContain('SameSite=Strict');
+    expect(cookie).not.toMatch(/(?:^|;\s*)Domain=/i);
+    expect(cookie).toContain(`Path=/api/v1/guest/reservations/${created.reservation.id}`);
+    const cookiePair = cookie.split(';', 1)[0];
+    if (!cookiePair) throw new Error('expected a cookie name and value');
+    const view = await request(app).get(`/api/v1/guest/reservations/${created.reservation.id}`).set('Cookie', cookiePair);
     expect(view.status).toBe(200);
     expect(view.headers['cache-control']).toBe('no-store');
     expect((await request(app).get(`/api/v1/guest/reservations/${created.reservation.id}`)).status).toBe(404);
-    const other = await request(app).get(`/api/v1/guest/reservations/${created.reservation.id}`).set('Authorization', `Bearer ${guestTokenFor('00000000-0000-4000-8000-000000000000')}`);
+    const other = await request(app).get(`/api/v1/guest/reservations/${created.reservation.id}`).set('Authorization', `Bearer ${token}`);
     expect(other.status).toBe(404);
 
     const audit = await admin.query<Record<string, unknown>>(`SELECT actor_kind FROM audit_event WHERE tenant_id = $1 AND action = 'reservation.created'`, [ws.tenantId]);
     expect(audit.rows).toEqual([{ actor_kind: 'guest' }]);
   });
 
+  it('rejects guest reservation submissions when Turnstile fails before writing customer or hold data', async () => {
+    const ws = await liveStore('gv-turnstile');
+    turnstileState.outcome = 'failed';
+    const response = await request(createApp())
+      .post(`/api/v1/public/stores/${ws.slug}/holds`)
+      .set('Idempotency-Key', 'turnstile-failed')
+      .send(holdRequest(ws, 'ana@example.test', { turnstile_token: 'synthetic-challenge' }));
+    expect(response.status).toBe(403);
+    const counts = await admin.query<{ customers: number; holds: number }>(
+      `SELECT (SELECT count(*)::int FROM customer WHERE tenant_id = $1) AS customers,
+              (SELECT count(*)::int FROM reservation WHERE tenant_id = $1) AS holds`,
+      [ws.tenantId],
+    );
+    expect(counts.rows[0]).toEqual({ customers: 0, holds: 0 });
+  });
+
   it('lets only one of two guests win the last garment for overlapping dates', async () => {
     const ws = await liveStore('gv-race');
-    const [a, b] = await Promise.all([
-      verified(ws.slug, ws.tenantId, 'a@example.test'),
-      verified(ws.slug, ws.tenantId, 'b@example.test'),
-    ]);
     const results = await Promise.all([
-      booking.createReservation(ws.slug, { requestId: 'ra', idempotencyKey: 'race-a' }, holdRequest(ws, a, 'a@example.test')),
-      booking.createReservation(ws.slug, { requestId: 'rb', idempotencyKey: 'race-b' }, holdRequest(ws, b, 'b@example.test', { requested_interval: interval(2, 4) })),
+      booking.createReservation(ws.slug, { requestId: 'ra', idempotencyKey: 'race-a' }, holdRequest(ws, 'a@example.test')),
+      booking.createReservation(ws.slug, { requestId: 'rb', idempotencyKey: 'race-b' }, holdRequest(ws, 'b@example.test', { requested_interval: interval(2, 4) })),
     ]);
     expect(results.map((result) => result.status).sort()).toEqual([201, 409]);
   });
@@ -237,9 +216,8 @@ describe('storefront guest booking', async () => {
       doc.checkout.requirements.social_handle = 'hidden';
       doc.checkout.max_rental_days = 3;
     });
-    const token = await verified(ws.slug, ws.tenantId, 'ana@example.test');
     const attempt = (key: string, overrides: Record<string, unknown>) =>
-      booking.createReservation(ws.slug, { requestId: key, idempotencyKey: key }, holdRequest(ws, token, 'ana@example.test', overrides));
+      booking.createReservation(ws.slug, { requestId: key, idempotencyKey: key }, holdRequest(ws, 'ana@example.test', overrides));
 
     expect((await attempt('rule-social', { customer: { full_name: 'Ana Reyes', phone: null, address: '12 Mabini St', social_handle: '@ana' } })).status).toBe(422);
     expect((await attempt('rule-time', { requested_interval: { start: interval(3).start.replace('T10:00', 'T15:00'), end: interval(3).end.replace('T10:00', 'T15:00') } })).status).toBe(422);
@@ -248,7 +226,7 @@ describe('storefront guest booking', async () => {
 
     const cash = await admin.query<Record<string, unknown>>(`INSERT INTO payment_method (tenant_id, name, rail, destination_snapshot, active, storefront_enabled) VALUES ($1, 'Cash', 'cash', '{}', true, false) RETURNING id`, [ws.tenantId]);
     expect((await attempt('rule-cash', { payment_method_id: cash.rows[0]?.['id'] })).status).toBe(422);
-    expect((await attempt('rule-token', { verification_token: 'x'.repeat(43) })).status).toBe(401);
+    expect(guestReservationRequest.safeParse({ ...holdRequest(ws, 'ana@example.test'), verification_token: 'x'.repeat(43) }).success).toBe(false);
   });
 
   describe('business hours', () => {
@@ -258,8 +236,7 @@ describe('storefront guest booking', async () => {
     async function attempt(label: string, closedWeekdays: string[], days = 3) {
       const ws = await liveStore(label);
       await setClosedWeekdays(ws, closedWeekdays);
-      const token = await verified(ws.slug, ws.tenantId, 'ana@example.test');
-      const result = await booking.createReservation(ws.slug, { requestId: label, idempotencyKey: label }, holdRequest(ws, token, 'ana@example.test', { requested_interval: interval(days) }));
+      const result = await booking.createReservation(ws.slug, { requestId: label, idempotencyKey: label }, holdRequest(ws, 'ana@example.test', { requested_interval: interval(days) }));
       const holds = await admin.query<Record<string, unknown>>('SELECT count(*)::int AS n FROM reservation WHERE tenant_id = $1', [ws.tenantId]);
       return { ws, result, holds: holds.rows[0]?.['n'] };
     }
@@ -283,8 +260,7 @@ describe('storefront guest booking', async () => {
     it('refuses pickup or return on a special closure date, without revealing its reason', async () => {
       const ws = await liveStore('bh-special');
       await admin.query(`INSERT INTO branch_closure (tenant_id, branch_id, local_date, reason) VALUES ($1, $2, $3, 'Owner funeral')`, [ws.tenantId, ws.branchId, addDays(pickupDate(), 3)]);
-      const token = await verified(ws.slug, ws.tenantId, 'ana@example.test');
-      const result = await booking.createReservation(ws.slug, { requestId: 'bh-special', idempotencyKey: 'bh-special' }, holdRequest(ws, token, 'ana@example.test'));
+      const result = await booking.createReservation(ws.slug, { requestId: 'bh-special', idempotencyKey: 'bh-special' }, holdRequest(ws, 'ana@example.test'));
       expect(result.status).toBe(422);
       const message = !result.body.success ? result.body.error.message : '';
       expect(message).toContain('Choose another return date.');
@@ -304,25 +280,27 @@ describe('storefront guest booking', async () => {
     });
   });
 
-  it('moves the hold to review when the guest submits a verified receipt, and emails per preferences', async () => {
+  it('moves the hold to review with a receipt but emails only the business, not the guest', async () => {
     const ws = await liveStore('gv-receipt');
     const business = await settingsService.getBusiness(ws.owner);
     await settingsService.updateBusiness(ws.owner, 'biz', { version: business.version, business_name: 'Luna Gown Rentals', business_email: 'owner@luna.test', business_phone: null, business_address: null });
-    const token = await verified(ws.slug, ws.tenantId, 'ana@example.test');
-    const created = await booking.createReservation(ws.slug, { requestId: 'h', idempotencyKey: 'hold' }, holdRequest(ws, token, 'ana@example.test'));
+    const created = await booking.createReservation(ws.slug, { requestId: 'h', idempotencyKey: 'hold' }, holdRequest(ws, 'ana@example.test'));
     if (!created.body.success) throw new Error('hold failed');
-    const { reservation, guest_token } = created.body.data;
+    const { reservation } = created.body.data;
+    const capability = guestTokenFor(reservation.id);
+    const noEmailsBeforeReceipt = await admin.query<{ n: number }>(`SELECT count(*)::int AS n FROM outbox_event WHERE tenant_id = $1 AND event_type = 'notification.email'`, [ws.tenantId]);
+    expect(noEmailsBeforeReceipt.rows[0]?.n).toBe(0);
 
-    const upload = await booking.authorizeReceiptUpload(reservation.id, guest_token, { content_type: 'image/png', byte_size: PNG.length, sha256: pngSha });
+    const upload = await booking.authorizeReceiptUpload(reservation.id, capability, { content_type: 'image/png', byte_size: PNG.length, sha256: pngSha });
     const newReceiptKey = `tenant-files/${ws.tenantId}/payment-receipts/${reservation.id}/${upload.file_id}/source`;
     expect(upload.upload_url).toContain(newReceiptKey);
     expect(uploads.has(newReceiptKey)).toBe(true);
 
-    const submitted = await booking.submitReceipt(reservation.id, guest_token, { requestId: 's', idempotencyKey: 'receipt-1' }, upload.file_id);
+    const submitted = await booking.submitReceipt(reservation.id, capability, { requestId: 's', idempotencyKey: 'receipt-1' }, upload.file_id);
     expect(submitted.status).toBe(200);
     expect(submitted.body.success && submitted.body.data).toMatchObject({ status: 'pending_confirmation', receipt_submitted: true, hold_expires_at: null });
 
-    const again = await booking.submitReceipt(reservation.id, guest_token, { requestId: 's2', idempotencyKey: 'receipt-2' }, upload.file_id);
+    const again = await booking.submitReceipt(reservation.id, capability, { requestId: 's2', idempotencyKey: 'receipt-2' }, upload.file_id);
     expect(again.status).toBe(409);
 
     // The owner sees an online booking and can open the renter's receipt before verifying it.
@@ -339,21 +317,20 @@ describe('storefront guest booking', async () => {
     const opened = emails.rows.map((row) => ({ key: String(row['dedupe_key']), ...openSealedEmail(row['payload'] as Record<string, unknown>) }));
     expect(opened.map((email) => [email.key.split(':').slice(2).join(':'), email.to])).toEqual([
       ['new_request:business', 'owner@luna.test'],
-      ['request_received:customer', 'ana@example.test'],
     ]);
     const plaintext = await admin.query<Record<string, unknown>>(`SELECT payload::text AS p FROM outbox_event WHERE tenant_id = $1`, [ws.tenantId]);
     expect(plaintext.rows.map((row) => String(row['p'])).join('')).not.toContain('ana@example.test');
 
     // A receipt uploaded for a different booking can never be attached to this one.
-    const token2 = await verified(ws.slug, ws.tenantId, 'ben@example.test');
-    const second = await booking.createReservation(ws.slug, { requestId: 'h2', idempotencyKey: 'hold-2' }, holdRequest(ws, token2, 'ben@example.test', { variant_id: ws.variantIds.l }));
+    const second = await booking.createReservation(ws.slug, { requestId: 'h2', idempotencyKey: 'hold-2' }, holdRequest(ws, 'ben@example.test', { variant_id: ws.variantIds.l }));
     if (!second.body.success) throw new Error('second hold failed');
-    const foreign = booking.submitReceipt(second.body.data.reservation.id, second.body.data.guest_token, { requestId: 'x', idempotencyKey: 'receipt-x' }, upload.file_id);
+    const secondCapability = guestTokenFor(second.body.data.reservation.id);
+    const foreign = booking.submitReceipt(second.body.data.reservation.id, secondCapability, { requestId: 'x', idempotencyKey: 'receipt-x' }, upload.file_id);
     await expect(foreign).rejects.toMatchObject({ status: 422 });
 
     const legacyUpload = await booking.authorizeReceiptUpload(
       second.body.data.reservation.id,
-      second.body.data.guest_token,
+      secondCapability,
       { content_type: 'image/png', byte_size: PNG.length, sha256: pngSha },
     );
     const legacyReceiptKey = `tenant-files/${ws.tenantId}/guest-receipts/${second.body.data.reservation.id}/${legacyUpload.file_id}`;
@@ -371,14 +348,14 @@ describe('storefront guest booking', async () => {
 
     const legacySubmission = await booking.submitReceipt(
       second.body.data.reservation.id,
-      second.body.data.guest_token,
+      secondCapability,
       { requestId: 'legacy-submit', idempotencyKey: 'legacy-receipt-submit' },
       legacyUpload.file_id,
     );
     expect(legacySubmission.status).toBe(200);
   });
 
-  it('turns a verified guest fitting request into a pending storefront fitting, one per slot', async () => {
+  it('accepts fitting requests without email verification and sends only the owner notification', async () => {
     const ws = await liveStore('gv-fit', (doc) => {
       doc.checkout.fitting_requests = true;
     });
@@ -391,25 +368,66 @@ describe('storefront guest booking', async () => {
       [ws.tenantId, ws.branchId],
     );
 
-    const fittingRequest = (token: string, email: string) => guestFittingRequest.parse({
-      verification_token: token,
+    const fittingRequest = (email: string) => guestFittingRequest.parse({
       email,
       customer: { full_name: 'Ana Reyes', phone: '09171234567', address: null, social_handle: null },
       start_at: `${date}T10:00:00+08:00`,
       variant_ids: [ws.variantIds.m],
       note: 'Need it for a debut.',
     });
-    const a = await verified(ws.slug, ws.tenantId, 'a@example.test');
-    const b = await verified(ws.slug, ws.tenantId, 'b@example.test');
     const results = await Promise.all([
-      booking.requestFitting(ws.slug, { requestId: 'fa', idempotencyKey: 'fit-a' }, fittingRequest(a, 'a@example.test')),
-      booking.requestFitting(ws.slug, { requestId: 'fb', idempotencyKey: 'fit-b' }, fittingRequest(b, 'b@example.test')),
+      booking.requestFitting(ws.slug, { requestId: 'fa', idempotencyKey: 'fit-a' }, fittingRequest('a@example.test')),
+      booking.requestFitting(ws.slug, { requestId: 'fb', idempotencyKey: 'fit-b' }, fittingRequest('b@example.test')),
     ]);
     expect(results.map((result) => result.status).sort()).toEqual([201, 409]);
     const rows = await admin.query<Record<string, unknown>>(`SELECT booking_channel, status, internal_note FROM fitting_appointment WHERE tenant_id = $1`, [ws.tenantId]);
     expect(rows.rows).toEqual([{ booking_channel: 'storefront', status: 'pending', internal_note: 'Customer note: Need it for a debut.' }]);
     const lines = await admin.query<Record<string, unknown>>(`SELECT garment_guaranteed FROM fitting_line WHERE tenant_id = $1`, [ws.tenantId]);
     expect(lines.rows).toEqual([{ garment_guaranteed: false }]);
+    const guestMail = await admin.query<{ n: number }>(`SELECT count(*)::int AS n FROM outbox_event WHERE tenant_id = $1 AND event_type = 'notification.email' AND dedupe_key LIKE '%:customer'`, [ws.tenantId]);
+    expect(guestMail.rows[0]?.n).toBe(0);
+    const ownerMail = await admin.query<{ dedupe_key: string }>(`SELECT dedupe_key FROM outbox_event WHERE tenant_id = $1 AND event_type = 'notification.email'`, [ws.tenantId]);
+    expect(ownerMail.rows).toHaveLength(1);
+    expect(ownerMail.rows[0]?.dedupe_key).toMatch(/^fitting-email:.+:business$/);
+  });
+
+  it('rejects fitting submissions when Turnstile fails before writing customer or appointment data', async () => {
+    const ws = await liveStore('gv-fit-turnstile', (doc) => {
+      doc.checkout.fitting_requests = true;
+    });
+    turnstileState.outcome = 'failed';
+    const date = addDays(localDate(new Date(), 'Asia/Manila'), 3);
+    await admin.query(
+      `INSERT INTO fitting_settings (tenant_id, branch_id, enabled, capacity, duration_minutes, fee_minor, currency)
+       VALUES ($1, $2, true, 1, 60, 0, 'PHP')`,
+      [ws.tenantId, ws.branchId],
+    );
+    await admin.query(
+      `UPDATE branch
+          SET operating_hours = '{"opens_local":"10:00","closes_local":"12:00","closed_weekdays":[]}'::jsonb
+        WHERE tenant_id = $1 AND id = $2`,
+      [ws.tenantId, ws.branchId],
+    );
+    const response = await request(createApp())
+      .post(`/api/v1/public/stores/${ws.slug}/fittings`)
+      .set('Idempotency-Key', 'fit-turnstile-failed')
+      .send(guestFittingRequest.parse({
+        email: 'blocked-fitting@example.test',
+        customer: { full_name: 'Ana Reyes', phone: '09171234567', address: null, social_handle: null },
+        start_at: `${date}T10:00:00+08:00`,
+        variant_ids: [ws.variantIds.m],
+        note: null,
+        turnstile_token: 'synthetic-challenge',
+      }));
+
+    expect(response.status).toBe(403);
+    const counts = await admin.query<{ customers: number; appointments: number; lines: number }>(
+      `SELECT (SELECT count(*)::int FROM customer WHERE tenant_id = $1) AS customers,
+              (SELECT count(*)::int FROM fitting_appointment WHERE tenant_id = $1) AS appointments,
+              (SELECT count(*)::int FROM fitting_line WHERE tenant_id = $1) AS lines`,
+      [ws.tenantId],
+    );
+    expect(counts.rows[0]).toEqual({ customers: 0, appointments: 0, lines: 0 });
   });
 
   it('creates fitting lines for multiple publicly visible variants in one request', async () => {
@@ -429,9 +447,7 @@ describe('storefront guest booking', async () => {
       [ws.tenantId, ws.branchId],
     );
     const email = 'multi-fitting@example.test';
-    const token = await verified(ws.slug, ws.tenantId, email);
     const body = guestFittingRequest.parse({
-      verification_token: token,
       email,
       customer: { full_name: 'Ana Reyes', phone: '09171234567', address: null, social_handle: null },
       start_at: `${date}T10:00:00+08:00`,
@@ -472,9 +488,7 @@ describe('storefront guest booking', async () => {
       [ws.tenantId, ws.branchId],
     );
     const email = 'foreign-fitting@example.test';
-    const token = await verified(ws.slug, ws.tenantId, email);
     const body = guestFittingRequest.parse({
-      verification_token: token,
       email,
       customer: { full_name: 'Ana Reyes', phone: '09171234567', address: null, social_handle: null },
       start_at: `${date}T10:00:00+08:00`,
@@ -500,24 +514,26 @@ describe('storefront guest booking', async () => {
     expect(lines.rows[0]?.count).toBe(0);
   });
 
-  // Pilot: NOTIFICATION_PREFERENCES_ENFORCED is false, so a stored "off" preference must not stop
-  // a customer email (the Notifications tab is hidden and owners cannot switch it back on).
-  it('sends customer emails even when a stored preference says off', async () => {
-    const ws = await liveStore('gv-prefs');
-    const current = await settingsService.getNotifications(ws.owner);
-    await settingsService.updateNotifications(ws.owner, 'prefs', { version: current.version, email_enabled: true, customer: { ...current.customer, request_confirmed: false }, business: current.business });
-    const token = await verified(ws.slug, ws.tenantId, 'ana@example.test');
-    const created = await booking.createReservation(ws.slug, { requestId: 'h', idempotencyKey: 'hold' }, holdRequest(ws, token, 'ana@example.test'));
-    if (!created.body.success) throw new Error('hold failed');
-    const id = created.body.data.reservation.id;
-    await withTenantTransaction(ws.tenantId, 'test', async (client) => {
-      await emailNotifications.reservationEvent(client, ws.tenantId, id, 'request_confirmed');
-      await emailNotifications.reservationEvent(client, ws.tenantId, id, 'request_rejected');
-    });
-    const sent = await admin.query<Record<string, unknown>>(`SELECT dedupe_key FROM outbox_event WHERE tenant_id = $1 AND dedupe_key LIKE 'reservation-email:%'`, [ws.tenantId]);
-    expect(sent.rows.map((row) => row['dedupe_key']).sort()).toEqual([
-      `reservation-email:${id}:request_confirmed:customer`,
-      `reservation-email:${id}:request_rejected:customer`,
-    ]);
+  it('reuses only a normalized email and full-name match without overwriting the saved profile', async () => {
+    const ws = await liveStore('gv-customer-match');
+    const created = await admin.query<{ id: string }>(
+      `INSERT INTO customer (tenant_id, full_name, email, phone, address)
+       VALUES ($1, 'Ana Reyes', 'ana@example.test', '09170000000', 'Saved address') RETURNING id`,
+      [ws.tenantId],
+    );
+    const { findOrCreateGuestCustomer } = await import('../../src/modules/guest-booking/guest-booking.repository.js');
+    const { withTenantTransaction } = await import('../../src/db/client.js');
+    await withTenantTransaction(ws.tenantId, 'guest', (client) => findOrCreateGuestCustomer(client, ws.tenantId, ' ANA@EXAMPLE.TEST ', {
+      full_name: ' ana reyes ',
+      phone: '09179999999',
+      address: 'New request address',
+      social_handle: null,
+    }));
+    const saved = await admin.query<{ id: string; phone: string; address: string }>(
+      `SELECT id, phone, address FROM customer WHERE tenant_id = $1 AND email = 'ana@example.test'`,
+      [ws.tenantId],
+    );
+    expect(saved.rows).toEqual([{ id: created.rows[0]?.id, phone: '09170000000', address: 'Saved address' }]);
   });
+
 });

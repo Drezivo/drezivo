@@ -104,10 +104,6 @@ import {
   guestReceiptSubmitRequest,
   guestFittingRequest,
   guestFittingCreated,
-  startGuestVerificationRequest,
-  startGuestVerificationResponse,
-  confirmGuestVerificationRequest,
-  confirmGuestVerificationResponse,
   publicAvailabilityQuery,
   publicAvailabilityResponse,
   fittingSlotsQuery,
@@ -243,6 +239,7 @@ const jsonError = (description: string) => ({
 const idempotencyKeyHeader = z.object({
   'Idempotency-Key': z.string().min(8).max(255),
 });
+const guestAccessCookieHeader = z.object({ cookie: z.string().min(1).describe('The reservation-scoped HttpOnly cookie set by the hold endpoint.') });
 
 // ---- owner onboarding ----------------------------------------------------
 registry.registerPath({
@@ -613,10 +610,11 @@ registry.registerPath({
   },
   responses: {
     201: {
-      description: 'Hold created; the guest token is returned once.',
+      description: 'Hold created. A reservation-scoped HttpOnly cookie is set for API-host access; the capability is not included in JSON.',
+      headers: { 'Set-Cookie': { description: 'Host-only HttpOnly cookie scoped to this reservation API path.', schema: { type: 'string' } } },
       content: { 'application/json': { schema: successEnvelope(guestReservationCreated) } },
     },
-    401: jsonError('The email verification is missing, expired, or for a different address.'),
+    403: jsonError('The Turnstile submission check failed.'),
     409: jsonError('The requested asset/interval is no longer available (CAPACITY_CONFLICT).'),
     422: jsonError('Validation failed.'),
   },
@@ -1277,10 +1275,10 @@ registry.registerPath({
   path: '/guest/reservations/{id}',
   tags: ['guest'],
   summary: "Guest's own booking summary; `no-store` (TRD §4).",
-  request: { params: z.object({ id: z.string().uuid() }) },
+  request: { params: z.object({ id: z.string().uuid() }), headers: guestAccessCookieHeader },
   responses: {
     200: {
-      description: 'Reservation view scoped to the presented capability token.',
+      description: 'Reservation view authorized by the reservation-scoped HttpOnly cookie. The capability is never placed in a URL or response body.',
       content: { 'application/json': { schema: successEnvelope(guestReservationView) } },
     },
     404: jsonError('Concealed: invalid, expired, or revoked capability token.'),
@@ -1311,7 +1309,7 @@ registry.registerPath({
   summary: 'Attach payment evidence to a reservation (TRD §4).',
   request: {
     params: z.object({ id: z.string().uuid() }),
-    headers: idempotencyKeyHeader,
+    headers: idempotencyKeyHeader.extend(guestAccessCookieHeader.shape),
     body: { content: { 'application/json': { schema: guestReceiptSubmitRequest } } },
   },
   responses: {
@@ -1377,7 +1375,6 @@ registry.register('CustomerArchiveResponse', customerArchiveResponse);
 // ---- storefront CMS, settings, and guest booking ---------------------------
 const slugParams = z.object({ slug: z.string().min(1) });
 const guestIdParams = z.object({ id: z.string().uuid() });
-const guestAuthHeader = z.object({ authorization: z.string().regex(/^Bearer [A-Za-z0-9_-]{43}$/) });
 const jsonBody = (schema: z.ZodTypeAny) => ({ content: { 'application/json': { schema } } });
 
 registry.registerPath({
@@ -1501,6 +1498,8 @@ const extraPaths: Array<{
   summary: string;
   request: Record<string, unknown>;
   schema: z.ZodTypeAny;
+  successStatus?: 200 | 201;
+  turnstileProtected?: boolean;
 }> = [
   { method: 'get', path: '/storefront', tag: 'storefront-cms', summary: 'Storefront document, status, policy, and publish readiness.', request: {}, schema: storefrontSettings },
   { method: 'get', path: '/storefront/preview', tag: 'storefront-cms', summary: 'Short-lived owner preview credential for the storefront, published or not.', request: {}, schema: storefrontPreviewLink },
@@ -1513,11 +1512,9 @@ const extraPaths: Array<{
   { method: 'patch', path: '/settings/business', tag: 'settings', summary: 'Update business information (version checked).', request: { headers: idempotencyKeyHeader, body: jsonBody(updateBusinessSettingsRequest) }, schema: businessSettings },
   { method: 'get', path: '/settings/notifications', tag: 'settings', summary: 'Email notification preferences.', request: {}, schema: notificationSettings },
   { method: 'patch', path: '/settings/notifications', tag: 'settings', summary: 'Update email notification preferences (version checked).', request: { headers: idempotencyKeyHeader, body: jsonBody(updateNotificationSettingsRequest) }, schema: notificationSettings },
-  { method: 'post', path: '/public/stores/{slug}/verifications', tag: 'guest', summary: 'Send a 6-digit email code. The answer never reveals whether a code was sent.', request: { params: slugParams, body: jsonBody(startGuestVerificationRequest) }, schema: startGuestVerificationResponse },
-  { method: 'post', path: '/public/stores/{slug}/verifications/confirm', tag: 'guest', summary: 'Exchange a valid code for a short-lived verification token.', request: { params: slugParams, body: jsonBody(confirmGuestVerificationRequest) }, schema: confirmGuestVerificationResponse },
   { method: 'get', path: '/public/stores/{slug}/fitting-slots', tag: 'guest', summary: 'Open fitting start times for one date.', request: { params: slugParams, query: fittingSlotsQuery }, schema: fittingSlotsResponse },
-  { method: 'post', path: '/public/stores/{slug}/fittings', tag: 'guest', summary: 'Verified guest requests a fitting; it starts pending for staff review.', request: { params: slugParams, headers: idempotencyKeyHeader, body: jsonBody(guestFittingRequest) }, schema: guestFittingCreated },
-  { method: 'post', path: '/guest/reservations/{id}/uploads', tag: 'guest', summary: 'Authorize one receipt upload for the guest reservation.', request: { params: guestIdParams, headers: guestAuthHeader, body: jsonBody(guestReceiptUploadRequest) }, schema: guestReceiptUploadResponse },
+  { method: 'post', path: '/public/stores/{slug}/fittings', tag: 'guest', summary: 'Guest requests a fitting without email verification; Turnstile protects submission and it starts pending for staff review.', request: { params: slugParams, headers: idempotencyKeyHeader, body: jsonBody(guestFittingRequest) }, schema: guestFittingCreated, successStatus: 201, turnstileProtected: true },
+  { method: 'post', path: '/guest/reservations/{id}/uploads', tag: 'guest', summary: 'Authorize one receipt upload using the reservation-scoped HttpOnly cookie.', request: { params: guestIdParams, headers: guestAccessCookieHeader, body: jsonBody(guestReceiptUploadRequest) }, schema: guestReceiptUploadResponse },
 ];
 for (const entry of extraPaths) {
   registry.registerPath({
@@ -1527,7 +1524,8 @@ for (const entry of extraPaths) {
     summary: entry.summary,
     request: entry.request,
     responses: {
-      200: { description: 'Success.', content: { 'application/json': { schema: successEnvelope(entry.schema) } } },
+      [entry.successStatus ?? 200]: { description: 'Success.', content: { 'application/json': { schema: successEnvelope(entry.schema) } } },
+      ...(entry.turnstileProtected ? { 403: jsonError('The Turnstile submission check failed.') } : {}),
       409: jsonError('A newer version exists or an identical request is in progress.'),
       422: jsonError('Validation failed.'),
     },
