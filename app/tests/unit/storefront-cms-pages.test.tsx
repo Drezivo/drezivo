@@ -87,6 +87,64 @@ describe("storefront CMS pages", () => {
     expect(await screen.findByText("Saved")).toBeVisible();
   });
 
+  it("displays saved social handles as canonical profile URLs", async () => {
+    const document = defaultStorefrontDocument("Luna Gown Rentals");
+    api.getStorefront.mockResolvedValue({
+      data: settings({
+        document: {
+          ...document,
+          contact: { ...document.contact, instagram: "luna.gowns", facebook: "luna-rentals", tiktok: "luna.gowns" },
+        },
+      }),
+      requestId: "r",
+    });
+
+    render(
+      <StorefrontEditorProvider>
+        <StorefrontDetailsPage />
+      </StorefrontEditorProvider>,
+    );
+
+    expect(await screen.findByLabelText("Instagram")).toHaveValue("https://www.instagram.com/luna.gowns/");
+    expect(screen.getByLabelText("Facebook page")).toHaveValue("https://www.facebook.com/luna-rentals/");
+    expect(screen.getByLabelText("TikTok")).toHaveValue("https://www.tiktok.com/@luna.gowns");
+    expect(screen.getByRole("button", { name: /save changes/i })).toBeDisabled();
+  });
+
+  it("normalizes pasted social URLs on save and keeps their canonical URLs visible", async () => {
+    const document = defaultStorefrontDocument("Luna Gown Rentals");
+    const savedDocument = {
+      ...document,
+      contact: { ...document.contact, instagram: "luna.gowns", facebook: "luna-rentals", tiktok: "luna.gowns" },
+    };
+    api.updateStorefront.mockResolvedValue({ data: settings({ version: 4, document: savedDocument }) });
+
+    render(
+      <StorefrontEditorProvider>
+        <StorefrontDetailsPage />
+      </StorefrontEditorProvider>,
+    );
+
+    const instagram = await screen.findByLabelText("Instagram");
+    const facebook = screen.getByLabelText("Facebook page");
+    const tiktok = screen.getByLabelText("TikTok");
+    fireEvent.change(instagram, { target: { value: "https://instagram.com/luna.gowns" } });
+    fireEvent.change(facebook, { target: { value: "https://www.facebook.com/luna-rentals/" } });
+    fireEvent.change(tiktok, { target: { value: "https://tiktok.com/@luna.gowns/" } });
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => expect(api.updateStorefront).toHaveBeenCalledTimes(1));
+    expect(api.updateStorefront.mock.calls[0]?.[0]).toMatchObject({
+      document: { contact: { instagram: "luna.gowns", facebook: "luna-rentals", tiktok: "luna.gowns" } },
+    });
+    expect(await screen.findByText("Saved")).toBeVisible();
+    await waitFor(() => {
+      expect(instagram).toHaveValue("https://www.instagram.com/luna.gowns/");
+      expect(facebook).toHaveValue("https://www.facebook.com/luna-rentals/");
+      expect(tiktok).toHaveValue("https://www.tiktok.com/@luna.gowns");
+    });
+  });
+
   it("shows the cover as a display-only hero fallback", async () => {
     const coverUrl = "https://assets.example.test/store-cover.webp";
     api.getStorefront.mockResolvedValue({

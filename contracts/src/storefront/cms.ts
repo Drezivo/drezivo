@@ -2,8 +2,8 @@
  * Storefront CMS — the owner-edited content behind `/s/<slug>`.
  *
  * Everything the owner can type is plain, bounded text. Markup is never stored or rendered, and
- * social profiles are stored as handles so the public URL is always built by the server from a
- * fixed host (a pasted `javascript:` link cannot exist). Images are referenced by accepted
+ * social profile input is normalized to handles so the public URL is always built by the server
+ * from a fixed host, and unrelated links cannot be stored. Images are referenced by accepted
  * `storefront_asset` file ids from the same workspace, never by arbitrary URLs.
  */
 import { z } from 'zod';
@@ -46,6 +46,71 @@ export const facebookPage = z
   .string()
   .trim()
   .regex(/^[A-Za-z0-9.-]{1,80}$/, 'use the page name from facebook.com/<name>');
+
+function socialProfileInput(
+  platform: string,
+  hosts: readonly string[],
+  profileFromPath: (path: string) => string | null,
+  handleSchema: z.ZodType<string>,
+) {
+  return z
+    .string()
+    .trim()
+    .transform((value, context) => {
+      if (!/^[a-z][a-z\d+.-]*:/i.test(value)) return value;
+
+      let url: URL;
+      try {
+        url = new URL(value);
+      } catch {
+        context.addIssue({ code: z.ZodIssueCode.custom, message: `enter a ${platform} handle or canonical profile URL` });
+        return z.NEVER;
+      }
+
+      const rawAuthority = value.match(/^https:\/\/([^/?#]+)/i)?.[1] ?? '';
+      const rawPath = value.match(/^https:\/\/[^/?#]+([^?#]*)/i)?.[1] ?? '';
+      const pathMatch = rawPath.match(/^\/([^/]+)\/?$/);
+      const profile = pathMatch ? profileFromPath(pathMatch[1]!) : null;
+      const isSupportedUrl =
+        /^https:\/\//i.test(value) &&
+        hosts.includes(url.hostname) &&
+        rawAuthority.toLowerCase() === url.hostname &&
+        url.port === '' &&
+        url.username === '' &&
+        url.password === '' &&
+        !value.includes('?') &&
+        !value.includes('#') &&
+        url.pathname === rawPath &&
+        profile !== null;
+
+      if (!isSupportedUrl) {
+        context.addIssue({ code: z.ZodIssueCode.custom, message: `enter a ${platform} handle or canonical profile URL` });
+        return z.NEVER;
+      }
+
+      return profile;
+    })
+    .pipe(handleSchema);
+}
+
+const instagramProfile = socialProfileInput(
+  'Instagram',
+  ['instagram.com', 'www.instagram.com'],
+  (path) => (path.startsWith('@') ? null : path),
+  socialHandle,
+);
+const facebookProfile = socialProfileInput(
+  'Facebook',
+  ['facebook.com', 'www.facebook.com'],
+  (path) => path,
+  facebookPage,
+);
+const tiktokProfile = socialProfileInput(
+  'TikTok',
+  ['tiktok.com', 'www.tiktok.com'],
+  (path) => (path.startsWith('@') ? path.slice(1) : null),
+  socialHandle,
+);
 
 export const contactPhone = z
   .string()
@@ -108,9 +173,9 @@ export const storefrontContact = z
     phone: contactPhone.nullable(),
     email: z.string().trim().toLowerCase().email().max(254).nullable(),
     address: optionalText(300, true),
-    instagram: socialHandle.nullable(),
-    facebook: facebookPage.nullable(),
-    tiktok: socialHandle.nullable(),
+    instagram: instagramProfile.nullable(),
+    facebook: facebookProfile.nullable(),
+    tiktok: tiktokProfile.nullable(),
   })
   .strict();
 export type StorefrontContact = z.infer<typeof storefrontContact>;

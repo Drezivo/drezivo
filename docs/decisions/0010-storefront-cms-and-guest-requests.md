@@ -19,7 +19,9 @@ settings, and online fitting requests in one delivery.
    `@drezivo/contracts` (`storefront/cms.ts`) validates the whole document strictly on every
    write:
    - text is plain and bounded;
-   - social profiles are handles, so the server builds every public URL;
+   - owners may enter a social handle or canonical HTTPS profile URL; the contract validates the
+     platform host and profile path, then stores only the normalized handle so the server builds
+     every public URL from a fixed host;
    - images are accepted `storefront_asset` file ids from the same workspace;
    - the theme is one of four contrast-checked palettes.
 2. **Rental policies stay immutable versions** in `policy_snapshot`. Every save appends the next

@@ -106,11 +106,37 @@ describe('storefront CMS contract', () => {
     expect(storefrontDocument.safeParse(multi).success).toBe(true);
   });
 
-  it('stores social profiles as handles, never as URLs', () => {
+  it('accepts social handles and canonical profile URLs, storing normalized handles', () => {
     const withHandle = { ...valid, contact: { ...valid.contact, instagram: '@luna.gowns' } };
     expect(storefrontDocument.parse(withHandle).contact.instagram).toBe('luna.gowns');
-    const withUrl = { ...valid, contact: { ...valid.contact, instagram: 'javascript:alert(1)' } };
-    expect(storefrontDocument.safeParse(withUrl).success).toBe(false);
+
+    const withProfileUrls = {
+      ...valid,
+      contact: {
+        ...valid.contact,
+        instagram: 'https://www.instagram.com/luna.gowns/',
+        facebook: 'https://facebook.com/luna.rentals',
+        tiktok: 'https://www.tiktok.com/@luna.gowns/',
+      },
+    };
+    expect(storefrontDocument.parse(withProfileUrls).contact).toMatchObject({
+      instagram: 'luna.gowns',
+      facebook: 'luna.rentals',
+      tiktok: 'luna.gowns',
+    });
+  });
+
+  it.each([
+    ['a wrong-platform host', { ...valid.contact, instagram: 'https://facebook.com/luna' }],
+    ['a non-HTTPS URL', { ...valid.contact, instagram: 'http://instagram.com/luna' }],
+    ['an Instagram URL with an explicit port', { ...valid.contact, instagram: 'https://instagram.com:443/luna' }],
+    ['an Instagram share path', { ...valid.contact, instagram: 'https://instagram.com/share/luna' }],
+    ['a Facebook URL with a query', { ...valid.contact, facebook: 'https://facebook.com/luna?ref=profile' }],
+    ['a TikTok URL without the profile marker', { ...valid.contact, tiktok: 'https://tiktok.com/luna' }],
+    ['an unrelated URL', { ...valid.contact, instagram: 'https://example.com/luna' }],
+    ['a script URL', { ...valid.contact, instagram: 'javascript:alert(1)' }],
+  ])('rejects %s', (_description, contact) => {
+    expect(storefrontDocument.safeParse({ ...valid, contact }).success).toBe(false);
   });
 
   it('fails closed on unknown themes, keys, and repeated featured items', () => {

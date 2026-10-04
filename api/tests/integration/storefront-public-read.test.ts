@@ -66,6 +66,8 @@ describe('public storefront read API', async () => {
     const document = defaultStorefrontDocument('Luna Gown Rentals');
     document.contact.email = 'hello@luna.test';
     document.contact.instagram = 'luna.gowns';
+    document.contact.facebook = 'luna-rentals';
+    document.contact.tiktok = 'luna.gowns';
     document.content.featured_product_ids = [productId.parse(ws.productId)];
     tweak(document);
     expect((await cms.updateDocument(ws.owner, `${label}-doc`, { version: 1, document })).status).toBe(200);
@@ -87,7 +89,12 @@ describe('public storefront read API', async () => {
     const store = dataOf<PublicStorefront>(response);
     expect(store).toMatchObject({
       name: 'Luna Gown Rentals',
-      contact: { email: 'hello@luna.test', instagram_url: 'https://www.instagram.com/luna.gowns/' },
+      contact: {
+        email: 'hello@luna.test',
+        instagram_url: 'https://www.instagram.com/luna.gowns/',
+        facebook_url: 'https://www.facebook.com/luna-rentals',
+        tiktok_url: 'https://www.tiktok.com/@luna.gowns',
+      },
       fulfillment: { pickup: true, delivery: true, delivery_fee_minor: '15000' },
       policy: { version: 2, rental: rules.rental },
       fitting: { enabled: false },

@@ -76,6 +76,44 @@ describe('storefront CMS and settings HTTP boundary', async () => {
     expect(dataOf<StorefrontSettings>(scriptInText).document.branding.tagline).toBe('<script>alert(1)</script>');
   });
 
+  it('normalizes submitted social profile URLs before saving the storefront document', async () => {
+    const ws = await createStorefrontWorkspace('routes-social-urls');
+    clerk.getAuth.mockReturnValue({ userId: ws.owner.principalId, orgId: ws.clerkOrgId });
+    const app = createApp();
+    const document = defaultStorefrontDocument('A');
+    document.contact.instagram = 'https://www.instagram.com/luna.gowns/';
+    document.contact.facebook = 'https://facebook.com/luna-rentals';
+    document.contact.tiktok = 'https://www.tiktok.com/@luna.gowns/';
+
+    const saved = await request(app)
+      .patch('/api/v1/storefront')
+      .set('Idempotency-Key', 'routes-social-urls-save')
+      .send({ version: 1, document });
+    expect(saved.status).toBe(200);
+    expect(dataOf<StorefrontSettings>(saved).document.contact).toMatchObject({
+      instagram: 'luna.gowns',
+      facebook: 'luna-rentals',
+      tiktok: 'luna.gowns',
+    });
+
+    const legacyDocument = defaultStorefrontDocument('A');
+    legacyDocument.contact.instagram = '@luna.gowns';
+    legacyDocument.contact.facebook = 'luna-rentals';
+    legacyDocument.contact.tiktok = '@luna.gowns';
+    const legacyHandles = await request(app)
+      .patch('/api/v1/storefront')
+      .set('Idempotency-Key', 'routes-social-urls-legacy')
+      .send({ version: 2, document: legacyDocument });
+    expect(legacyHandles.status).toBe(200);
+
+    const reloaded = await request(app).get('/api/v1/storefront');
+    expect(dataOf<StorefrontSettings>(reloaded).document.contact).toMatchObject({
+      instagram: 'luna.gowns',
+      facebook: 'luna-rentals',
+      tiktok: 'luna.gowns',
+    });
+  });
+
   it('forbids front desk writes while allowing reads', async () => {
     const ws = await createStorefrontWorkspace('routes-desk');
     clerk.getAuth.mockReturnValue({ userId: ws.frontDesk.principalId, orgId: ws.clerkOrgId });

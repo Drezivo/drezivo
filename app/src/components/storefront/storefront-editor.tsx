@@ -4,10 +4,12 @@ import { useAuth } from "@clerk/nextjs";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
 import {
+  storefrontContact,
   storefrontDocument,
   storefrontPolicyRules,
   storefrontSlug,
   type StorefrontDocument,
+  type StorefrontContact,
   type StorefrontPolicyRules,
   type StorefrontSettings,
 } from "@drezivo/contracts";
@@ -187,11 +189,15 @@ export function StorefrontEditorProvider({ children }: { children: React.ReactNo
 export function useDocumentDraft<K extends keyof StorefrontDocument>(key: K) {
   const editor = useStorefrontEditor();
   const saved = editor.settings?.document[key] ?? null;
-  const [draft, setDraft] = useState<StorefrontDocument[K] | null>(saved);
+  const toDraft = (value: StorefrontDocument[K] | null) => {
+    if (key !== "contact" || value === null) return value;
+    return contactForEditing(value as StorefrontContact) as StorefrontDocument[K];
+  };
+  const [draft, setDraft] = useState<StorefrontDocument[K] | null>(() => toDraft(saved));
   const savedVersion = editor.settings?.version;
 
   useEffect(() => {
-    setDraft(editor.settings?.document[key] ?? null);
+    setDraft(toDraft(editor.settings?.document[key] ?? null));
     // Reset only when the server version moves, not on every render of the same data.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedVersion, key]);
@@ -204,5 +210,19 @@ export function useDocumentDraft<K extends keyof StorefrontDocument>(key: K) {
     [editor],
   );
 
-  return { draft, dirty: JSON.stringify(draft) !== JSON.stringify(saved), update, setDraft };
+  const parsedContact = key === "contact" && draft !== null ? storefrontContact.safeParse(draft) : null;
+  const dirty = parsedContact
+    ? !parsedContact.success || JSON.stringify(parsedContact.data) !== JSON.stringify(saved)
+    : JSON.stringify(draft) !== JSON.stringify(saved);
+
+  return { draft, dirty, update, setDraft };
+}
+
+function contactForEditing(contact: StorefrontContact): StorefrontContact {
+  return {
+    ...contact,
+    instagram: contact.instagram ? `https://www.instagram.com/${contact.instagram}/` : null,
+    facebook: contact.facebook ? `https://www.facebook.com/${contact.facebook}/` : null,
+    tiktok: contact.tiktok ? `https://www.tiktok.com/@${contact.tiktok}` : null,
+  };
 }
