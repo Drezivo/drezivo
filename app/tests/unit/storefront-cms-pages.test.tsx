@@ -4,15 +4,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultStorefrontDocument, type StorefrontSettings } from "@drezivo/contracts";
 
 import { BusinessSettingsPage } from "@/components/settings/business-settings-page";
+import { StorefrontContentPage } from "@/components/storefront/storefront-content-page";
 import { StorefrontDetailsPage } from "@/components/storefront/storefront-details-page";
 import { StorefrontEditorProvider } from "@/components/storefront/storefront-editor";
 import { StorefrontOverviewPage } from "@/components/storefront/storefront-overview-page";
+import { ImageField } from "@/components/storefront/image-field";
 import { minorToPesos, pesosToMinor } from "@/components/storefront/storefront-policy-pages";
 
 const clerk = vi.hoisted(() => ({ getToken: vi.fn(), useAuth: vi.fn() }));
 const api = vi.hoisted(() => ({
   getStorefront: vi.fn(),
   updateStorefront: vi.fn(),
+  getCatalogueClothing: vi.fn(),
   setStorefrontPublished: vi.fn(),
   getBusinessSettings: vi.fn(),
   updateBusinessSettings: vi.fn(),
@@ -82,6 +85,137 @@ describe("storefront CMS pages", () => {
     expect(key).toMatch(/.+/);
     pending.resolve({ data: settings({ version: 4 }) });
     expect(await screen.findByText("Saved")).toBeVisible();
+  });
+
+  it("shows the cover as a display-only hero fallback", async () => {
+    const coverUrl = "https://assets.example.test/store-cover.webp";
+    api.getStorefront.mockResolvedValue({
+      data: settings({ media: { logo_url: null, cover_url: coverUrl, hero_image_url: null, about_image_url: null } }),
+      requestId: "r",
+    });
+    api.getCatalogueClothing.mockResolvedValue({ data: { items: [] }, requestId: "clothing" });
+
+    const { container } = render(
+      <StorefrontEditorProvider>
+        <StorefrontContentPage />
+      </StorefrontEditorProvider>,
+    );
+
+    expect(await screen.findByText("Using cover photo")).toBeVisible();
+    expect(container.querySelector("img")).toHaveAttribute("src", coverUrl);
+    expect(screen.getByRole("button", { name: /save changes/i })).toBeDisabled();
+    expect(api.updateStorefront).not.toHaveBeenCalled();
+  });
+
+  it("updates the inherited preview when the cover changes but keeps an explicit hero", () => {
+    const onChange = vi.fn();
+    const coverUrl = "https://assets.example.test/store-cover.webp";
+    const updatedCoverUrl = "https://assets.example.test/store-cover-updated.webp";
+    const heroUrl = "https://assets.example.test/homepage-hero.webp";
+    const heroFileId = "00000000-0000-4000-8000-000000000099" as NonNullable<StorefrontSettings["document"]["content"]["hero"]["image_file_id"]>;
+    const { container, rerender } = render(
+      <ImageField
+        label="Hero photo"
+        hint="Portrait or wide, at least 1600 px."
+        fileId={null}
+        savedUrl={null}
+        fallbackUrl={coverUrl}
+        fallbackLabel="Using cover photo"
+        onChange={onChange}
+      />,
+    );
+
+    expect(container.querySelector("img")).toHaveAttribute("src", coverUrl);
+    rerender(
+      <ImageField
+        label="Hero photo"
+        hint="Portrait or wide, at least 1600 px."
+        fileId={null}
+        savedUrl={null}
+        fallbackUrl={updatedCoverUrl}
+        fallbackLabel="Using cover photo"
+        onChange={onChange}
+      />,
+    );
+    expect(container.querySelector("img")).toHaveAttribute("src", updatedCoverUrl);
+
+    rerender(
+      <ImageField
+        label="Hero photo"
+        hint="Portrait or wide, at least 1600 px."
+        fileId={heroFileId}
+        savedUrl={heroUrl}
+        fallbackUrl={updatedCoverUrl}
+        fallbackLabel="Using cover photo"
+        onChange={onChange}
+      />,
+    );
+    rerender(
+      <ImageField
+        label="Hero photo"
+        hint="Portrait or wide, at least 1600 px."
+        fileId={heroFileId}
+        savedUrl={heroUrl}
+        fallbackUrl={coverUrl}
+        fallbackLabel="Using cover photo"
+        onChange={onChange}
+      />,
+    );
+
+    expect(container.querySelector("img")).toHaveAttribute("src", heroUrl);
+    expect(screen.queryByText("Using cover photo")).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("returns to the cover fallback when an explicit hero is removed", async () => {
+    const coverUrl = "https://assets.example.test/store-cover.webp";
+    const heroUrl = "https://assets.example.test/homepage-hero.webp";
+    const heroFileId = "00000000-0000-4000-8000-000000000099" as NonNullable<StorefrontSettings["document"]["content"]["hero"]["image_file_id"]>;
+    const document = defaultStorefrontDocument("Luna Gown Rentals");
+    api.getStorefront.mockResolvedValue({
+      data: settings({
+        document: {
+          ...document,
+          content: { ...document.content, hero: { ...document.content.hero, image_file_id: heroFileId } },
+        },
+        media: { logo_url: null, cover_url: coverUrl, hero_image_url: heroUrl, about_image_url: null },
+      }),
+      requestId: "r",
+    });
+    api.getCatalogueClothing.mockResolvedValue({ data: { items: [] }, requestId: "clothing" });
+    api.updateStorefront.mockResolvedValue({ data: settings({ version: 4 }) });
+
+    const { container } = render(
+      <StorefrontEditorProvider>
+        <StorefrontContentPage />
+      </StorefrontEditorProvider>,
+    );
+
+    expect(await screen.findByText("Hero photo")).toBeVisible();
+    expect(container.querySelector("img")).toHaveAttribute("src", heroUrl);
+    fireEvent.click(screen.getByRole("button", { name: /remove/i }));
+    expect(await screen.findByText("Using cover photo")).toBeVisible();
+    expect(container.querySelector("img")).toHaveAttribute("src", coverUrl);
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => expect(api.updateStorefront).toHaveBeenCalledTimes(1));
+    expect(api.updateStorefront.mock.calls[0]?.[0]).toMatchObject({
+      document: { content: { hero: { image_file_id: null } } },
+    });
+  });
+
+  it("keeps the hero photo empty when neither a hero nor a cover exists", async () => {
+    api.getCatalogueClothing.mockResolvedValue({ data: { items: [] }, requestId: "clothing" });
+
+    const { container } = render(
+      <StorefrontEditorProvider>
+        <StorefrontContentPage />
+      </StorefrontEditorProvider>,
+    );
+
+    expect(await screen.findAllByText("Choose image")).toHaveLength(2);
+    expect(screen.queryByText("Using cover photo")).toBeNull();
+    expect(container.querySelector("img")).toBeNull();
   });
 
   it("blocks an invalid email before calling the API and says why", async () => {
