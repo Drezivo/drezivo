@@ -77,6 +77,39 @@ describe('storefront product subcategories', () => {
     expect(screen.getByText('Dresses · MINI').textContent).toBe('Dresses · MINI');
   });
 
+  it('shows a nonblank product description below the name and keeps the remaining information tabs', () => {
+    const description = 'An elegant dress.\nLightweight satin.';
+    render(
+      <PreviewProvider preview={false}>
+        <ItemView store={store} item={{ ...item, description }} />
+      </PreviewProvider>,
+    );
+
+    const name = screen.getByRole('heading', { name: item.name });
+    const descriptionText = screen.getByText(/An elegant dress\./);
+    expect(name.nextElementSibling).toBe(descriptionText);
+    expect(descriptionText.textContent).toBe(description);
+    expect(descriptionText.classList.contains('whitespace-pre-line')).toBe(true);
+    expect(screen.queryByRole('tab', { name: 'Details' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Measurements' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByRole('tab', { name: 'Rental info' })).not.toBeNull();
+  });
+
+  it.each([
+    ['null', null],
+    ['empty', ''],
+    ['whitespace-only', ' \n\t '],
+  ])('omits the description block for a %s description', (_label, description) => {
+    render(
+      <PreviewProvider preview={false}>
+        <ItemView store={store} item={{ ...item, description }} />
+      </PreviewProvider>,
+    );
+
+    const name = screen.getByRole('heading', { name: item.name });
+    expect(name.nextElementSibling?.textContent?.trim().startsWith('₱300')).toBe(true);
+  });
+
   it('filters by the published subcategory options and preserves other URL filters', () => {
     navigation.search = 'search=lace&category=00000000-0000-4000-8000-000000000009&size=M&page=3';
     render(<CatalogControls categories={[]} sizes={['M']} subcategories={['LONG', 'MINI']} />);

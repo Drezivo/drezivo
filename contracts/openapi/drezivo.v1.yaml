@@ -208,6 +208,11 @@ components:
                       - "null"
                     minLength: 1
                     maxLength: 80
+                  primary_image_url:
+                    type:
+                      - string
+                      - "null"
+                    format: uri
                 required:
                   - variant_id
                   - product_name
@@ -430,6 +435,11 @@ components:
                             - "null"
                           minLength: 1
                           maxLength: 80
+                        primary_image_url:
+                          type:
+                            - string
+                            - "null"
+                          format: uri
                       required:
                         - variant_id
                         - product_name
@@ -1826,6 +1836,12 @@ components:
           type: string
           maxLength: 2000
           default: ""
+        subcategory:
+          type:
+            - string
+            - "null"
+          minLength: 1
+          maxLength: 120
         category_id:
           type: string
           format: uuid
@@ -2287,6 +2303,12 @@ components:
         description:
           type: string
           maxLength: 2000
+        subcategory:
+          type:
+            - string
+            - "null"
+          minLength: 1
+          maxLength: 120
         category:
           type:
             - object
@@ -7262,6 +7284,12 @@ paths:
                               type:
                                 - string
                                 - "null"
+                            subcategory:
+                              type:
+                                - string
+                                - "null"
+                              minLength: 1
+                              maxLength: 120
                             image_url:
                               type:
                                 - string
@@ -7309,6 +7337,12 @@ paths:
                               type:
                                 - string
                                 - "null"
+                            subcategory:
+                              type:
+                                - string
+                                - "null"
+                              minLength: 1
+                              maxLength: 120
                             image_url:
                               type:
                                 - string
@@ -7581,6 +7615,13 @@ paths:
         - schema:
             type: string
             minLength: 1
+            maxLength: 120
+          required: false
+          name: subcategory
+          in: query
+        - schema:
+            type: string
+            minLength: 1
             maxLength: 40
           required: false
           name: size
@@ -7642,6 +7683,12 @@ paths:
                               type:
                                 - string
                                 - "null"
+                            subcategory:
+                              type:
+                                - string
+                                - "null"
+                              minLength: 1
+                              maxLength: 120
                             image_url:
                               type:
                                 - string
@@ -7686,6 +7733,13 @@ paths:
                         items:
                           type: string
                         maxItems: 60
+                      subcategories:
+                        type: array
+                        items:
+                          type: string
+                          minLength: 1
+                          maxLength: 120
+                        maxItems: 1000
                     required:
                       - items
                       - total
@@ -7747,6 +7801,12 @@ paths:
                         type:
                           - string
                           - "null"
+                      subcategory:
+                        type:
+                          - string
+                          - "null"
+                        minLength: 1
+                        maxLength: 120
                       image_urls:
                         type: array
                         items:
@@ -7975,6 +8035,8 @@ paths:
                                 - reserved
                                 - fitting
                                 - unavailable
+                            closed:
+                              type: boolean
                           required:
                             - date
                             - state
@@ -8017,9 +8079,10 @@ paths:
             schema:
               type: object
               properties:
-                verification_token:
+                turnstile_token:
                   type: string
-                  pattern: ^[A-Za-z0-9_-]{43}$
+                  minLength: 1
+                  maxLength: 2048
                 email:
                   type: string
                   maxLength: 254
@@ -8081,7 +8144,6 @@ paths:
                   type: string
                   format: uuid
               required:
-                - verification_token
                 - email
                 - customer
                 - variant_id
@@ -8092,7 +8154,13 @@ paths:
               additionalProperties: false
       responses:
         "201":
-          description: Hold created; the guest token is returned once.
+          description: Hold created. A reservation-scoped HttpOnly cookie is set for
+            API-host access; the capability is not included in JSON.
+          headers:
+            Set-Cookie:
+              description: Host-only HttpOnly cookie scoped to this reservation API path.
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -8208,16 +8276,12 @@ paths:
                           - money
                           - payment_instructions
                         additionalProperties: false
-                      guest_token:
-                        type: string
-                        pattern: ^[A-Za-z0-9_-]{43}$
-                      guest_token_expires_at:
+                      access_expires_at:
                         type: string
                         format: date-time
                     required:
                       - reservation
-                      - guest_token
-                      - guest_token_expires_at
+                      - access_expires_at
                     additionalProperties: false
                   request_id:
                     type: string
@@ -8226,9 +8290,8 @@ paths:
                   - success
                   - data
                   - request_id
-        "401":
-          description: The email verification is missing, expired, or for a different
-            address.
+        "403":
+          description: The Turnstile submission check failed.
           content:
             application/json:
               schema:
@@ -14239,6 +14302,11 @@ paths:
                                           - "null"
                                         minLength: 1
                                         maxLength: 80
+                                      primary_image_url:
+                                        type:
+                                          - string
+                                          - "null"
+                                        format: uri
                                     required:
                                       - variant_id
                                       - product_name
@@ -14652,6 +14720,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -15050,6 +15123,11 @@ paths:
                                     - "null"
                                   minLength: 1
                                   maxLength: 80
+                                primary_image_url:
+                                  type:
+                                    - string
+                                    - "null"
+                                  format: uri
                               required:
                                 - variant_id
                                 - product_name
@@ -15586,6 +15664,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -16023,6 +16106,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -16491,6 +16579,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -16954,6 +17047,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -17421,6 +17519,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -17888,6 +17991,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -18350,6 +18458,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -18812,6 +18925,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -19277,6 +19395,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -19742,6 +19865,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -20227,6 +20355,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -20922,9 +21055,18 @@ paths:
           required: true
           name: id
           in: path
+        - schema:
+            type: string
+            minLength: 1
+            description: The reservation-scoped HttpOnly cookie set by the hold endpoint.
+          required: true
+          description: The reservation-scoped HttpOnly cookie set by the hold endpoint.
+          name: cookie
+          in: header
       responses:
         "200":
-          description: Reservation view scoped to the presented capability token.
+          description: Reservation view authorized by the reservation-scoped HttpOnly
+            cookie. The capability is never placed in a URL or response body.
           content:
             application/json:
               schema:
@@ -21355,6 +21497,14 @@ paths:
             maxLength: 255
           required: true
           name: Idempotency-Key
+          in: header
+        - schema:
+            type: string
+            minLength: 1
+            description: The reservation-scoped HttpOnly cookie set by the hold endpoint.
+          required: true
+          description: The reservation-scoped HttpOnly cookie set by the hold endpoint.
+          name: cookie
           in: header
       requestBody:
         content:
@@ -23134,7 +23284,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -23624,7 +23773,6 @@ paths:
                           type:
                             - string
                             - "null"
-                          pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                         email:
                           type:
                             - string
@@ -23888,7 +24036,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -24549,7 +24696,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -25075,7 +25221,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -25601,7 +25746,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -26191,7 +26335,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -26642,7 +26785,6 @@ paths:
                         type:
                           - string
                           - "null"
-                        pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                       business_address:
                         type:
                           - string
@@ -26798,7 +26940,6 @@ paths:
                   type:
                     - string
                     - "null"
-                  pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                 business_address:
                   type:
                     - string
@@ -26844,7 +26985,6 @@ paths:
                         type:
                           - string
                           - "null"
-                        pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                       business_address:
                         type:
                           - string
@@ -27357,311 +27497,6 @@ paths:
                   - success
                   - error
                   - request_id
-  /public/stores/{slug}/verifications:
-    post:
-      tags:
-        - guest
-      summary: Send a 6-digit email code. The answer never reveals whether a code was
-        sent.
-      parameters:
-        - schema:
-            type: string
-            minLength: 1
-          required: true
-          name: slug
-          in: path
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                email:
-                  type: string
-                  maxLength: 254
-                  format: email
-                turnstile_token:
-                  type: string
-                  minLength: 1
-                  maxLength: 2048
-              required:
-                - email
-              additionalProperties: false
-      responses:
-        "200":
-          description: Success.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - true
-                  data:
-                    type: object
-                    properties:
-                      accepted:
-                        type: boolean
-                        enum:
-                          - true
-                      code_length:
-                        type: number
-                        enum:
-                          - 6
-                      expires_in_seconds:
-                        type: integer
-                        exclusiveMinimum: 0
-                    required:
-                      - accepted
-                      - code_length
-                      - expires_in_seconds
-                    additionalProperties: false
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - data
-                  - request_id
-        "409":
-          description: A newer version exists or an identical request is in progress.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-        "422":
-          description: Validation failed.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-  /public/stores/{slug}/verifications/confirm:
-    post:
-      tags:
-        - guest
-      summary: Exchange a valid code for a short-lived verification token.
-      parameters:
-        - schema:
-            type: string
-            minLength: 1
-          required: true
-          name: slug
-          in: path
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                email:
-                  type: string
-                  maxLength: 254
-                  format: email
-                code:
-                  type: string
-                  pattern: ^\d{6}$
-              required:
-                - email
-                - code
-              additionalProperties: false
-      responses:
-        "200":
-          description: Success.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - true
-                  data:
-                    type: object
-                    properties:
-                      verification_token:
-                        type: string
-                        pattern: ^[A-Za-z0-9_-]{43}$
-                      expires_at:
-                        type: string
-                        format: date-time
-                    required:
-                      - verification_token
-                      - expires_at
-                    additionalProperties: false
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - data
-                  - request_id
-        "409":
-          description: A newer version exists or an identical request is in progress.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-        "422":
-          description: Validation failed.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
   /public/stores/{slug}/fitting-slots:
     get:
       tags:
@@ -27827,7 +27662,8 @@ paths:
     post:
       tags:
         - guest
-      summary: Verified guest requests a fitting; it starts pending for staff review.
+      summary: Guest requests a fitting without email verification; Turnstile protects
+        submission and it starts pending for staff review.
       parameters:
         - schema:
             type: string
@@ -27848,9 +27684,10 @@ paths:
             schema:
               type: object
               properties:
-                verification_token:
+                turnstile_token:
                   type: string
-                  pattern: ^[A-Za-z0-9_-]{43}$
+                  minLength: 1
+                  maxLength: 2048
                 email:
                   type: string
                   maxLength: 254
@@ -27901,7 +27738,6 @@ paths:
                     - "null"
                   maxLength: 500
               required:
-                - verification_token
                 - email
                 - customer
                 - start_at
@@ -27909,7 +27745,7 @@ paths:
                 - note
               additionalProperties: false
       responses:
-        "200":
+        "201":
           description: Success.
           content:
             application/json:
@@ -27954,6 +27790,50 @@ paths:
                 required:
                   - success
                   - data
+                  - request_id
+        "403":
+          description: The Turnstile submission check failed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
                   - request_id
         "409":
           description: A newer version exists or an identical request is in progress.
@@ -28047,7 +27927,8 @@ paths:
     post:
       tags:
         - guest
-      summary: Authorize one receipt upload for the guest reservation.
+      summary: Authorize one receipt upload using the reservation-scoped HttpOnly
+        cookie.
       parameters:
         - schema:
             type: string
@@ -28057,9 +27938,11 @@ paths:
           in: path
         - schema:
             type: string
-            pattern: ^Bearer [A-Za-z0-9_-]{43}$
+            minLength: 1
+            description: The reservation-scoped HttpOnly cookie set by the hold endpoint.
           required: true
-          name: authorization
+          description: The reservation-scoped HttpOnly cookie set by the hold endpoint.
+          name: cookie
           in: header
       requestBody:
         content:

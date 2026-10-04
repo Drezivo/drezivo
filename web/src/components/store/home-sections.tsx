@@ -132,7 +132,7 @@ export function HowItWorks({ store }: { store: PublicStorefront }) {
     { title: 'Choose your piece and dates', body: 'Pick a size, then the days you need it. The calendar only offers dates it is free.' },
     {
       title: 'Pay and send your receipt',
-      body: `Verify your email, pay with ${store.payment_methods.map((method) => method.name).join(' or ') || 'the shop’s payment method'}, and upload the receipt. Your size is held while the shop reviews it.`,
+      body: `Pay with ${store.payment_methods.map((method) => method.name).join(' or ') || 'the shop’s payment method'}, then upload the receipt. Your size is held while the shop reviews it.`,
     },
     {
       title: store.fulfillment.delivery ? 'Pick up or have it delivered' : 'Pick up and return',

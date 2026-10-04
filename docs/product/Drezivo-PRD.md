@@ -1,6 +1,6 @@
 # Drezivo Product Requirements Document
 
-**Version:** 2.2 · **Status:** V1 product definition with approved V1.1 fitting boundary · **Updated:** 1 October 2026
+**Version:** 2.3 · **Status:** V1 product definition with approved V1.1 fitting boundary · **Updated:** 5 October 2026
 
 ## 1. Product decision and release contract
 
@@ -50,9 +50,9 @@ Publish requires contact, policy, payment instruction, and one active rentable a
 
 ### Guest booking (FR15–FR21)
 
-Catalog supports search/category/optional free-form subcategory/size/color/price/date. Subcategory belongs to the product style, is optional, and may use the `LONG` and `MINI` presets or a trimmed custom label up to 120 characters; published products expose a single-select, case-insensitive subcategory filter. V1 has one garment line; no cart/wishlist/reviews. Each product supports at most five ordered catalogue photos, with order `0` as the cover; measurement-guide and payment images use separate limits. Detail shows the selected variant's measurement source: the referenced reusable guide image, custom structured measurements, or no measurement section. It also shows advance rental, separate deposit, dates, buffers and policies. Booking details capture minimum name, phone, email, delivery/pickup address, variant, rental dates, optional event date, pickup/delivery, and method. Address is required before a reservation customer can be created or a held reservation submitted; it is snapshotted with the reservation. Government ID is not default; enabled verification must state purpose/retention/access. QR/cash instructions appear only after hold; evidence upload is not Paid.
+Catalog supports search/category/optional free-form subcategory/size/color/price/date. Subcategory belongs to the product style, is optional, and may use the `LONG` and `MINI` presets or a trimmed custom label up to 120 characters; published products expose a single-select, case-insensitive subcategory filter. V1 has one garment line; no cart/wishlist/reviews. Each product supports at most five ordered catalogue photos, with order `0` as the cover; measurement-guide and payment images use separate limits. Detail shows the selected variant's measurement source: the referenced reusable guide image, custom structured measurements, or no measurement section. It also shows advance rental, separate deposit, dates, buffers and policies. Booking details capture minimum name, phone, email, delivery/pickup address, variant, rental dates, optional event date, pickup/delivery, and method. Email remains required contact information, but guest reservation and fitting flows do not verify it or send guest-directed messages. Address is required before a reservation customer can be created or a held reservation submitted; it is snapshotted with the reservation. Government ID is not default; enabled identity verification must state purpose/retention/access. QR/cash instructions appear only after hold; evidence upload is not Paid.
 
-Review is read-only with snapshots, timezone dates, expiry, separate money lines. Confirmation says pending_confirmation, shows reference/evidence/expiry, never “Paid.” Resend guest link uses a hashed, expiring token; it reveals no reservation before verification and permits status, corrected evidence, cancellation, or reschedule. Reschedule validates replacement availability before releasing old allocation; failure leaves old booking intact.
+Review is read-only with snapshots, timezone dates, expiry, separate money lines. Confirmation says pending_confirmation, shows reference/evidence/expiry, never “Paid.” After receipt submission the customer is redirected to a proof page that shows reservation information, asks them to screenshot before leaving, and confirms departure with a guard modal. The API grants access through an expiring, reservation-path-scoped HttpOnly cookie set at hold creation; the reservation ID in the URL is only a selector. There is no email-link recovery or customer lifecycle email. Reschedule validates replacement availability before releasing old allocation; failure leaves old booking intact.
 
 ### Operations (FR5–FR12)
 
@@ -118,9 +118,9 @@ The first eligible verified person receives one lifetime fourteen-day trial; a p
 
 ## 7. Requirements map
 
-FR1 public problem/CTA; FR2 solution; FR3 pricing/FAQ; FR4 onboarding; FR5 dashboard; FR6 reservations; FR7 interval calendar; FR8 inventory model; FR9 categories; FR10 customers; FR11 fittings V1.1; FR12 ledger/evidence; FR13 storefront/policies/QR; FR14 settings; FR15 storefront; FR16 catalog; FR17 detail; FR18 single-garment availability; FR19 guest details/hold/evidence; FR20 review/snapshots; FR21 confirmation/link; FR22 merchant verification/atomic confirmation.
+FR1 public problem/CTA; FR2 solution; FR3 pricing/FAQ; FR4 onboarding; FR5 dashboard; FR6 reservations; FR7 interval calendar; FR8 inventory model; FR9 categories; FR10 customers; FR11 fittings V1.1; FR12 ledger/evidence; FR13 storefront/policies/QR; FR14 settings; FR15 storefront; FR16 catalog; FR17 detail; FR18 single-garment availability; FR19 guest details/hold/evidence; FR20 review/snapshots; FR21 cookie-authorized reservation proof page with screenshot reminder and leave confirmation, without guest email; FR22 merchant verification/atomic confirmation.
 
-Additional IDs: OR1 tenant provisioning; OR2 entitlement lifecycle; OR3 suspension continuity; OR4 recovery grant audit; OR5 hashed guest link; OR6 CSV preview/idempotent import; OR7 async exports; OR8 audit/recovery; OR9 deposit settlement; OR10 actual return/inspection/cleaning.
+Additional IDs: OR1 tenant provisioning; OR2 entitlement lifecycle; OR3 suspension continuity; OR4 recovery grant audit; OR5 reservation-scoped HttpOnly guest capability cookie; OR6 CSV preview/idempotent import; OR7 async exports; OR8 audit/recovery; OR9 deposit settlement; OR10 actual return/inspection/cleaning.
 
 ## 8. NFRs and falsification
 

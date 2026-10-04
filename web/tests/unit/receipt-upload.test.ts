@@ -39,11 +39,10 @@ describe('receipt upload', () => {
     mocks.submitReceipt.mockResolvedValue({ id: 'reservation-id' });
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 412 }));
 
-    await uploadReceipt('reservation-id', 'guest-token', file, 'receipt-intent');
+    await uploadReceipt('reservation-id', file, 'receipt-intent');
 
     expect(mocks.submitReceipt).toHaveBeenCalledWith(
       'reservation-id',
-      'guest-token',
       '0194f6a2-9dd6-7a4c-8e9f-142f1d310002',
       'receipt-intent',
     );

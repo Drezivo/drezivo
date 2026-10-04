@@ -6,7 +6,7 @@
  */
 
 .marketing-page {
-  /* Defined here, not at :root: next/font sets --font-bodoni and friends on this element. */
+  /* Fontsource registers these bundled families from this route group's layout. */
   --font-atelier-display: var(--font-bodoni), 'Bodoni 72', 'Didot', Georgia, serif;
   --font-atelier-body: var(--font-atelier-jost), 'Futura', ui-sans-serif, system-ui, sans-serif;
   /* Pages still on the older marketing classes (font-display) inherit the same pairing. */

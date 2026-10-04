@@ -30,7 +30,7 @@ import {
   ValidationError,
 } from '../../shared/errors.js';
 import { runIdempotentCommand, type CommandResult } from '../../shared/idempotent-command.js';
-import { guestTokenFor } from '../../shared/guest-token.js';
+import { guestAccessExpiresAt, guestTokenFor, guestTokenHash } from '../../shared/guest-token.js';
 import { digestRecipientEmail } from '../../shared/protected-recipient.js';
 
 export { guestTokenFor };
@@ -79,12 +79,10 @@ import {
   readReceiptFile,
   type GuestReservationRow,
 } from './guest-booking.repository.js';
-import { guestVerificationService, tokenHash, type GuestVerificationService } from './guest-verification.service.js';
 import { isPaymentMaterialContentType } from '../payment-methods/payment-method-readiness.js';
 
 const STORE_NOT_FOUND = 'This store is not available.';
 const GUEST_NOT_FOUND = 'This booking link is not valid or has expired.';
-const GUEST_TOKEN_DAYS_AFTER_RETURN = 30;
 const RECEIPT_UPLOAD_SECONDS = 10 * 60;
 const RECEIPT_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 const EXCLUSION_VIOLATION = '23P01';
@@ -98,13 +96,14 @@ export interface GuestRequestMeta {
 
 export class GuestBookingService {
   constructor(
-    private readonly verification: GuestVerificationService = guestVerificationService,
     private readonly storage: ObjectStorage = objectStorage,
   ) {}
 
-  /** Verified guest places a 15-minute hold on one size for whole days, then pays and uploads a receipt. */
+  /** A guest places a 15-minute hold on one size, then pays and uploads a receipt. */
   async createReservation(slug: string, meta: GuestRequestMeta, request: GuestReservationRequest): Promise<CommandResult<GuestReservationCreated>> {
     const store = await this.requireStore(slug);
+    const idempotencyRequest = { ...request };
+    delete idempotencyRequest.turnstile_token;
     const result = await withTenantTransaction(store.tenantId, guestActorKey(request.email), (client) =>
       runIdempotentCommand(
         client,
@@ -115,9 +114,8 @@ export class GuestBookingService {
           intentKey: meta.idempotencyKey,
           requestId: meta.requestId,
         },
-        { ...request, verification_token: tokenHash(request.verification_token) },
+        idempotencyRequest,
         async () => {
-          await this.verification.consume(client, store.tenantId, request.email, request.verification_token);
           const core = await readStoreCore(client, store);
           if (!core) throw new NotFoundError(STORE_NOT_FOUND);
           assertCheckoutRules(toDocument(core).checkout, request, core.timezone);
@@ -157,16 +155,16 @@ export class GuestBookingService {
               assetId,
               customer,
             });
-            const expiresAt = new Date(new Date(quote.due_at).getTime() + GUEST_TOKEN_DAYS_AFTER_RETURN * 86_400_000);
+            const expiresAt = guestAccessExpiresAt(quote.due_at);
             await insertGuestAccessToken(client, {
               tenantId: store.tenantId,
               reservationId: graph.reservation_id,
-              tokenHash: tokenHash(guestTokenFor(graph.reservation_id)),
+              tokenHash: guestTokenHash(guestTokenFor(graph.reservation_id)),
               expiresAt,
             });
             return {
               reservation: await this.view(client, store.tenantId, graph.reservation_id),
-              guest_token_expires_at: expiresAt.toISOString(),
+              access_expires_at: expiresAt.toISOString(),
             };
           } catch (error) {
             if (isAllocationOverlapViolation(error)) {
@@ -178,30 +176,24 @@ export class GuestBookingService {
         201,
       ),
     );
-    // The token is re-derived rather than stored, so replays return it too.
-    if (!result.body.success) return result as CommandResult<GuestReservationCreated>;
-    const data = result.body.data as Omit<GuestReservationCreated, 'guest_token'>;
-    return {
-      status: result.status,
-      body: { ...result.body, data: { ...data, guest_token: guestTokenFor(data.reservation.id) } },
-    };
+    return result;
   }
 
-  async getReservation(reservationId: string, bearer: string): Promise<GuestReservationView> {
-    const tenantId = await this.resolveGuestTenant(reservationId, bearer);
+  async getReservation(reservationId: string, capability: string): Promise<GuestReservationView> {
+    const tenantId = await this.resolveGuestTenant(reservationId, capability);
     return withTenantTransaction(tenantId, 'guest', async (client) => {
-      await this.requireScope(client, tenantId, reservationId, bearer, 'view_status');
+      await this.requireScope(client, tenantId, reservationId, capability, 'view_status');
       return this.view(client, tenantId, reservationId);
     });
   }
 
-  async authorizeReceiptUpload(reservationId: string, bearer: string, request: GuestReceiptUploadRequest): Promise<GuestReceiptUploadResponse> {
+  async authorizeReceiptUpload(reservationId: string, capability: string, request: GuestReceiptUploadRequest): Promise<GuestReceiptUploadResponse> {
     if (!config.OBJECT_STORAGE_UPLOADS_ENABLED) {
       throw new DependencyUnavailableError('File uploads are temporarily unavailable.');
     }
-    const tenantId = await this.resolveGuestTenant(reservationId, bearer);
+    const tenantId = await this.resolveGuestTenant(reservationId, capability);
     return withTenantTransaction(tenantId, 'guest', async (client) => {
-      await this.requireScope(client, tenantId, reservationId, bearer, 'submit_evidence');
+      await this.requireScope(client, tenantId, reservationId, capability, 'submit_evidence');
       const reservation = await readGuestReservation(client, tenantId, reservationId);
       if (!reservation) throw new NotFoundError(GUEST_NOT_FOUND);
       assertAwaitingReceipt(reservation);
@@ -233,8 +225,8 @@ export class GuestBookingService {
   }
 
   /** Verifies the uploaded file, attaches it, and moves the hold to owner review in one transaction. */
-  async submitReceipt(reservationId: string, bearer: string, meta: GuestRequestMeta, fileId: string): Promise<CommandResult<GuestReservationView>> {
-    const tenantId = await this.resolveGuestTenant(reservationId, bearer);
+  async submitReceipt(reservationId: string, capability: string, meta: GuestRequestMeta, fileId: string): Promise<CommandResult<GuestReservationView>> {
+    const tenantId = await this.resolveGuestTenant(reservationId, capability);
     const before = await withTenantTransaction(tenantId, 'guest', (client) => readReceiptFile(client, tenantId, fileId));
     if (!before || !isGuestReceiptStorageKey(before.storage_key, tenantId, reservationId, fileId)) {
       throw new ValidationError('Upload the receipt again before submitting.');
@@ -252,7 +244,7 @@ export class GuestBookingService {
         { tenantId, principalKey: `guest-reservation:${reservationId}`, operation: 'reservation.guest.receipt', intentKey: meta.idempotencyKey, requestId: meta.requestId },
         { reservation_id: reservationId, file_id: fileId },
         async () => {
-          await this.requireScope(client, tenantId, reservationId, bearer, 'submit_evidence');
+          await this.requireScope(client, tenantId, reservationId, capability, 'submit_evidence');
           const file = await readReceiptFile(client, tenantId, fileId, true);
           if (!file) throw new ValidationError('Upload the receipt again before submitting.');
           if (file.lifecycle_status !== 'accepted') {
@@ -297,16 +289,18 @@ export class GuestBookingService {
             eventType: 'reservation.pending_confirmation',
             payload: { reservationId, reservationVersion: newVersion },
           });
-          await emailNotifications.reservationEvent(client, tenantId, reservationId, 'request_received');
+          await emailNotifications.reservationRequestReceived(client, tenantId, reservationId);
           return this.view(client, tenantId, reservationId);
         },
       ),
     );
   }
 
-  /** Verified guest asks for a fitting. It is created `pending` for staff to confirm. */
+  /** A guest asks for a fitting. It is created `pending` for staff to confirm. */
   async requestFitting(slug: string, meta: GuestRequestMeta, request: GuestFittingRequest): Promise<CommandResult<GuestFittingCreated>> {
     const store = await this.requireStore(slug);
+    const idempotencyRequest = { ...request };
+    delete idempotencyRequest.turnstile_token;
     return withTenantTransaction(store.tenantId, guestActorKey(request.email), (client) =>
       runIdempotentCommand(
         client,
@@ -317,9 +311,8 @@ export class GuestBookingService {
           intentKey: meta.idempotencyKey,
           requestId: meta.requestId,
         },
-        { ...request, verification_token: tokenHash(request.verification_token) },
+        idempotencyRequest,
         async () => {
-          await this.verification.consume(client, store.tenantId, request.email, request.verification_token);
           const core = await readStoreCore(client, store);
           const document = core ? toDocument(core) : null;
           if (!document?.checkout.fitting_requests) throw new NotFoundError('This shop is not taking fitting requests online.');
@@ -393,8 +386,6 @@ export class GuestBookingService {
             await emailNotifications.fittingRequested(client, {
               tenantId: store.tenantId,
               fittingId,
-              email: request.email,
-              name: request.customer.full_name,
               startAt: startsAt,
               timezone: settings.timezone,
             });
@@ -469,15 +460,15 @@ export class GuestBookingService {
   }
 
   /** Guest routes carry no tenant; a narrow definer function maps a live token to its tenant. */
-  private async resolveGuestTenant(reservationId: string, bearer: string): Promise<string> {
-    const result = await pool.query<{ tenant_id: string | null }>('SELECT resolve_guest_access_tenant($1, $2) AS tenant_id', [tokenHash(bearer), reservationId]);
+  private async resolveGuestTenant(reservationId: string, capability: string): Promise<string> {
+    const result = await pool.query<{ tenant_id: string | null }>('SELECT resolve_guest_access_tenant($1, $2) AS tenant_id', [guestTokenHash(capability), reservationId]);
     const tenantId = result.rows[0]?.tenant_id;
     if (!tenantId) throw new NotFoundError(GUEST_NOT_FOUND);
     return tenantId;
   }
 
-  private async requireScope(client: PoolClient, tenantId: string, reservationId: string, bearer: string, scope: 'view_status' | 'submit_evidence'): Promise<void> {
-    const scopes = await readGuestTokenScopes(client, tenantId, reservationId, tokenHash(bearer));
+  private async requireScope(client: PoolClient, tenantId: string, reservationId: string, capability: string, scope: 'view_status' | 'submit_evidence'): Promise<void> {
+    const scopes = await readGuestTokenScopes(client, tenantId, reservationId, guestTokenHash(capability));
     if (!scopes?.includes(scope)) throw new NotFoundError(GUEST_NOT_FOUND);
   }
 }

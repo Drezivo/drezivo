@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useReducer, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useReducer, useRef, useState } from 'react';
 
 import type { CatalogueVariant, FulfillmentMethod, GuestReservationRequest, GuestReservationView, ItemDetail, PublicStorefront } from '@drezivo/contracts';
 
@@ -9,15 +10,16 @@ import { createReservation, StorefrontApiError } from '@/lib/storefront-api';
 import { dateIn, formatDay, formatMinor, formatTime, rentalDays, zonedInstant } from '@/lib/storefront-format';
 
 import { lockPageScroll } from '../motion/scroll';
+import { Turnstile, TURNSTILE_SITE_KEY, type TurnstileHandle } from '../turnstile';
 import { AvailabilityCalendar, type DateRange, type DateRangeNotice } from './availability-calendar';
 import { BookingDateNotice } from './booking-date-notice';
-import { EmailVerification, type VerifiedEmail } from './email-verification';
-import { MoneyBreakdown, PaymentStep } from './payment-step';
+import { PaymentStep } from './payment-step';
 
-type Step = 'dates' | 'details' | 'review' | 'pay' | 'done';
+type Step = 'dates' | 'details' | 'review' | 'pay';
 
 interface Customer {
   full_name: string;
+  email: string;
   phone: string;
   address: string;
   social_handle: string;
@@ -28,7 +30,6 @@ interface State {
   step: Step;
   range: DateRange | null;
   notice: DateRangeNotice | null;
-  verified: VerifiedEmail | null;
   customer: Customer;
   fulfillment: FulfillmentMethod;
   paymentMethodId: string | null;
@@ -36,19 +37,16 @@ interface State {
   pending: boolean;
   error: string | null;
   reservation: GuestReservationView | null;
-  token: string | null;
 }
 
 type Action =
   | { type: 'range'; range: DateRange | null; notice?: DateRangeNotice | undefined }
   | { type: 'step'; step: Step }
-  | { type: 'verified'; value: VerifiedEmail | null }
   | { type: 'customer'; patch: Partial<Customer> }
   | { type: 'set'; patch: Partial<Pick<State, 'fulfillment' | 'paymentMethodId' | 'accepted'>> }
   | { type: 'pending'; value: boolean }
   | { type: 'error'; message: string | null; step?: Step }
-  | { type: 'held'; reservation: GuestReservationView; token: string }
-  | { type: 'submitted'; reservation: GuestReservationView };
+  | { type: 'held'; reservation: GuestReservationView };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -56,8 +54,6 @@ function reducer(state: State, action: Action): State {
       return { ...state, range: action.range, notice: action.notice ?? null };
     case 'step':
       return { ...state, step: action.step, error: null };
-    case 'verified':
-      return { ...state, verified: action.value };
     case 'customer':
       return { ...state, customer: { ...state.customer, ...action.patch } };
     case 'set':
@@ -67,9 +63,7 @@ function reducer(state: State, action: Action): State {
     case 'error':
       return { ...state, error: action.message, ...(action.step ? { step: action.step } : {}) };
     case 'held':
-      return { ...state, reservation: action.reservation, token: action.token, step: 'pay', error: null };
-    case 'submitted':
-      return { ...state, reservation: action.reservation, step: 'done' };
+      return { ...state, reservation: action.reservation, step: 'pay', error: null };
   }
 }
 
@@ -92,24 +86,25 @@ const STEPS: Array<{ key: Step; label: string }> = [
 ];
 
 export function BookingDrawer({ store, item, variant, onClose }: { store: PublicStorefront; item: ItemDetail; variant: CatalogueVariant; onClose: () => void }) {
+  const router = useRouter();
   const today = dateIn(store.timezone);
   const [state, dispatch] = useReducer(reducer, {
     step: 'dates',
     range: null,
     notice: null,
-    verified: null,
-    customer: { full_name: '', phone: '', address: '', social_handle: '', event_date: '' },
+    customer: { full_name: '', email: '', phone: '', address: '', social_handle: '', event_date: '' },
     fulfillment: 'pickup',
     paymentMethodId: store.payment_methods[0]?.id ?? null,
     accepted: false,
     pending: false,
     error: null,
     reservation: null,
-    token: null,
   });
   const panel = useRef<HTMLDivElement>(null);
   const inFlight = useRef(false);
   const intent = useRef<{ fingerprint: string; key: string } | null>(null);
+  const robotCheck = useRef<TurnstileHandle>(null);
+  const [robotToken, setRobotToken] = useState<string | null>(null);
   const requirements = store.checkout.requirements;
   const days = state.range ? rentalDays(state.range.start, state.range.end) : 0;
 
@@ -139,8 +134,8 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
 
   function detailsProblem(): string | null {
     const c = state.customer;
-    if (!state.verified) return 'Verify your email first.';
     if (c.full_name.trim().length < 2) return 'Enter your full name.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email.trim())) return 'Enter a valid email address.';
     if (requirements.phone === 'required' && !/^\d{11}$/.test(c.phone)) return 'Enter an 11-digit mobile number, e.g. 09171234567.';
     if (c.phone && !/^\d{11}$/.test(c.phone)) return 'Mobile numbers have 11 digits, e.g. 09171234567.';
     if (c.address.trim().length < 5) return 'Enter the address for this rental.';
@@ -152,11 +147,15 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
   }
 
   async function placeHold() {
-    if (inFlight.current || !state.range || !state.verified || !state.paymentMethodId || !state.accepted) return;
+    if (inFlight.current || !state.range || !state.paymentMethodId || !state.accepted) return;
+    if (TURNSTILE_SITE_KEY && !robotToken) {
+      dispatch({ type: 'error', message: 'Complete the security check first.' });
+      return;
+    }
     const c = state.customer;
     const request: GuestReservationRequest = {
-      verification_token: state.verified.token,
-      email: state.verified.email,
+      ...(robotToken ? { turnstile_token: robotToken } : {}),
+      email: c.email.trim().toLowerCase(),
       customer: {
         full_name: c.full_name.trim(),
         phone: requirements.phone === 'hidden' || !c.phone ? null : c.phone,
@@ -172,27 +171,26 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
       fulfillment_method: state.fulfillment,
       payment_method_id: state.paymentMethodId as GuestReservationRequest['payment_method_id'],
     };
-    const fingerprint = JSON.stringify(request);
+    const fingerprint = JSON.stringify({ ...request, turnstile_token: undefined });
     if (intent.current?.fingerprint !== fingerprint) intent.current = { fingerprint, key: crypto.randomUUID() };
 
     inFlight.current = true;
     dispatch({ type: 'pending', value: true });
     try {
       const created = await createReservation(store.slug, request, intent.current.key);
-      dispatch({ type: 'held', reservation: created.reservation, token: created.guest_token });
+      dispatch({ type: 'held', reservation: created.reservation });
     } catch (caught) {
       if (caught instanceof StorefrontApiError && caught.status === 409) {
         // The server says why the dates were refused (taken meanwhile, minimum length, notice period).
         dispatch({ type: 'range', range: null, notice: { reason: 'other', message: caught.message } });
         dispatch({ type: 'error', message: null, step: 'dates' });
-      } else if (caught instanceof StorefrontApiError && caught.status === 401) {
-        dispatch({ type: 'verified', value: null });
-        dispatch({ type: 'error', message: caught.message, step: 'details' });
       } else {
         dispatch({ type: 'error', message: caught instanceof StorefrontApiError ? caught.message : 'Something went wrong. Please try again.' });
       }
     } finally {
       inFlight.current = false;
+      robotCheck.current?.reset();
+      setRobotToken(null);
       dispatch({ type: 'pending', value: false });
     }
   }
@@ -225,15 +223,13 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
           </button>
         </div>
 
-        {state.step !== 'done' ? (
-          <ol className="flex gap-2 border-b border-sf-line px-5 py-3 text-xs" aria-label="Booking steps">
+        <ol className="flex gap-2 border-b border-sf-line px-5 py-3 text-xs" aria-label="Booking steps">
             {STEPS.map((step, index) => (
               <li key={step.key} aria-current={index === stepIndex ? 'step' : undefined} className={`flex-1 border-t-2 pt-2 ${index <= stepIndex ? 'border-sf-ink text-sf-ink' : 'border-sf-line text-sf-muted'}`}>
                 {step.label}
               </li>
             ))}
-          </ol>
-        ) : null}
+        </ol>
 
         <div className="flex-1 overflow-y-auto p-5">
           {state.step === 'dates' ? (
@@ -274,10 +270,7 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
           {state.step === 'details' ? (
             <div className="space-y-5">
               <h3 className="font-sf-display text-2xl">Your details</h3>
-              <div>
-                <p className="mb-2 text-sm font-medium">Email</p>
-                <EmailVerification slug={store.slug} verified={state.verified} onVerified={(value) => dispatch({ type: 'verified', value })} />
-              </div>
+              <TextField label="Email address" type="email" autoComplete="email" inputMode="email" value={state.customer.email} onChange={(email) => dispatch({ type: 'customer', patch: { email } })} />
               <TextField label="Full name" autoComplete="name" value={state.customer.full_name} onChange={(full_name) => dispatch({ type: 'customer', patch: { full_name } })} />
               {requirements.phone !== 'hidden' ? (
                 <TextField label={`Mobile number${requirements.phone === 'optional' ? ' (optional)' : ''}`} autoComplete="tel" inputMode="numeric" placeholder="09171234567" value={state.customer.phone} onChange={(phone) => dispatch({ type: 'customer', patch: { phone: phone.replace(/\D/g, '').slice(0, 11) } })} />
@@ -326,7 +319,7 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                 <Row label="Handover" value={`${formatTime(store.checkout.handover_time)}, pickup and return`} />
                 <Row label="Size" value={variant.size_label ?? 'One size'} />
                 <Row label="Name" value={state.customer.full_name} />
-                <Row label="Email" value={state.verified?.email ?? ''} />
+                <Row label="Email" value={state.customer.email.trim().toLowerCase()} />
                 <Row label={state.fulfillment === 'delivery' ? 'Delivery to' : 'Address'} value={state.customer.address} />
                 <Row label="Payment" value={store.payment_methods.find((method) => method.id === state.paymentMethodId)?.name ?? ''} />
               </dl>
@@ -350,29 +343,13 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                   (version {store.policy.version}). My size is held for 15 minutes while I pay.
                 </span>
               </label>
+              <Turnstile ref={robotCheck} onToken={setRobotToken} onUnavailable={() => dispatch({ type: 'error', message: 'The security check could not load. Refresh the page and try again.' })} />
+              {TURNSTILE_SITE_KEY && !robotToken ? <p className="text-xs text-sf-muted">Complete the security check before sending your request.</p> : null}
             </div>
           ) : null}
 
-          {state.step === 'pay' && state.reservation && state.token ? (
-            <PaymentStep reservation={state.reservation} token={state.token} onSubmitted={(reservation) => dispatch({ type: 'submitted', reservation })} />
-          ) : null}
-
-          {state.step === 'done' && state.reservation && state.token ? (
-            <div className="space-y-5 py-4">
-              <p className="font-sf-display text-4xl font-light">Request sent</p>
-              <p className="text-sf-muted">
-                {store.name} is reviewing your request and receipt. Your size stays held meanwhile, and you will get an email when they confirm.
-              </p>
-              <dl className="space-y-2 border-y border-sf-line py-4 text-sm">
-                <Row label="Reference" value={state.reservation.reference_code.slice(0, 12)} />
-                <Row label="Dates" value={state.range ? `${formatDay(state.range.start)} → ${formatDay(state.range.end)}` : ''} />
-              </dl>
-              <MoneyBreakdown reservation={state.reservation} />
-              <Link href={`/s/${store.slug}/booking#${state.reservation.id}.${state.token}`} className="sf-button sf-button-outline w-full">
-                View request status
-              </Link>
-              <p className="text-xs text-sf-muted">Bookmark that page or keep the email. Anyone with the link can see this request, so do not share it.</p>
-            </div>
+          {state.step === 'pay' && state.reservation ? (
+            <PaymentStep reservation={state.reservation} onSubmitted={() => router.push(`/s/${store.slug}/booking?reservation=${encodeURIComponent(state.reservation!.id)}`)} />
           ) : null}
 
           {state.error ? (
@@ -406,7 +383,7 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                 Review request
               </button>
             ) : (
-              <button type="button" className="sf-button sf-button-primary flex-1" disabled={!state.accepted || state.pending} onClick={() => void placeHold()}>
+              <button type="button" className="sf-button sf-button-primary flex-1" disabled={!state.accepted || state.pending || (Boolean(TURNSTILE_SITE_KEY) && !robotToken)} onClick={() => void placeHold()}>
                 {state.pending ? 'Holding your size…' : 'Hold my size and pay'}
               </button>
             )}

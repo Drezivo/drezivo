@@ -1,6 +1,6 @@
 # Drezivo — Technical Requirements Document
 
-**Revision:** 1.6 · **Date:** 1 October 2026
+**Revision:** 1.7 · **Date:** 5 October 2026
 **Status:** Monorepo scaffold and architecture contract. Infrastructure remains unprovisioned; scaffold checks do not prove production performance, isolation or recovery.
 
 **Changes in 1.2.** The five former checkouts are now workspaces in one root Git repository. The root lockfile, license, review boundary, and release evidence are authoritative. Workspace ownership remains explicit: `contracts` provides shared schemas, `api` owns business transactions and the worker, `app` and `web` render user journeys, and `docs` owns specifications. The former polyrepo decision remains as a superseded ADR. Automatic CI is deferred until the scaffold gate is green, as recorded in `docs/runbooks/ci-baseline.md`. Security controls, tenant context, and migration windows now apply across workspaces in one pull request.
@@ -12,6 +12,8 @@
 **Changes in 1.5.** Cloudflare R2 replaces Amazon S3 as the production object-storage target while local development keeps MinIO. The public upload contract remains authorize → presigned create-only PUT → finalize. Finalization hashes the bytes actually stored instead of trusting provider checksum headers, and new R2 objects are pinned by SHA-256 rather than provider version IDs. See `docs/decisions/0010-cloudflare-r2-object-storage.md`.
 
 **Changes in 1.6.** The pilot now sells one Standard plan at PHP 300/month, internally backed by `starter` v1 with 1,000 active physical assets and 10 Front Desk seats. The former three-tier offer is superseded by ADR 0011; trial, read-only, and manual-payment behavior now follows the pilot runbook.
+
+**Changes in 1.7.** Storefront guests no longer verify email or receive reservation/fitting lifecycle email. Reservation proof is available after submission through a reservation-scoped API-host-only HttpOnly cookie, and the storefront asks guests to save a screenshot before leaving. See ADR 0012.
 
 Read with [PRD](../product/Drezivo-PRD.md), [market research](../product/Drezivo-Market-Research.md), and [logical data model](Drezivo-Data-Model.md). Product release V1 is distinct from document revision numbers. The DBML describes relationships; SQL migrations must implement constraints it cannot express.
 
@@ -47,7 +49,7 @@ Each deployable workspace (§2.1) is one release boundary. The `api` repository 
 | `api`       | Worker process | Managed container host | No public address; outbound only                            |
 | `contracts` | npm package    | GitHub Packages        | `@drezivo/contracts`, consumed by the three above           |
 
-All three browser-facing surfaces sit under one registrable parent domain. That is a deliberate isolation choice, not a cosmetic one: it lets the guest capability exchange in §3 set a host-scoped `__Host-` cookie, keeps the CORS allowlist an explicit three-entry list rather than a wildcard, and prevents a tenant slug from ever becoming a DNS-level identifier. **Tenant slugs are path segments under `/s/`, never subdomains.** A subdomain-per-tenant scheme would put tenant identity into the cookie origin, where a misconfiguration leaks one tenant's session to another; a path segment cannot.
+All three browser-facing surfaces sit under one registrable parent domain. This allows the web storefront to make credentialed requests to the API under an exact-origin CORS allowlist; the guest reservation cookie itself is host-only on the API and scoped to that reservation's API path. **Tenant slugs are path segments under `/s/`, never subdomains.** A subdomain-per-tenant scheme would put tenant identity into the cookie origin, where a misconfiguration leaks one tenant's session to another; a path segment cannot.
 
 For the first paid pilot, use a managed Next.js host (Vercel is a candidate), a managed container host for Express and the worker, Supabase PostgreSQL, and Cloudflare R2. Confirm provider placement, compatibility, and prices before selecting paid plans. Measure latency from Philippine mobile networks; geographical proximity alone is not a benchmark.
 
@@ -180,9 +182,9 @@ belongs in the root gate when automatic CI is enabled.
 
 ### Guest access
 
-Browsing a published tenant catalogue is intentionally public. Other guest actions require a server-issued scoped capability. At hold creation generate a cryptographically random secret, store only its hash, and scope it to one tenant/reservation and permitted actions with expiry/revocation. Use a capability exchange to an HttpOnly secure session where possible. Keep bearer links out of logs, third-party analytics, referrers and shared caches. Reference numbers and email addresses are not authentication.
+Browsing a published tenant catalogue is intentionally public. Guest reservations and public fitting requests do not verify email; the required email is contact data only. Turnstile and per-IP limits protect guest submission endpoints. No guest OTP, guest recovery-email, or guest reservation/fitting lifecycle email is sent. Owner/business notifications remain available.
 
-Require email/contact verification and abuse controls appropriate to pilot results; a resend endpoint always returns a generic answer and rate-limits by destination and source. A leaked booking capability must not reveal other bookings, full identity documents, or payment configuration.
+After a reservation hold is created, the API sets an HttpOnly, host-only cookie scoped to `/api/v1/guest/reservations/{id}`; `Secure` is required in staging and production, and `SameSite=Strict` is used. The cookie is scoped to one reservation and expires 30 days after its due time. The response body and page URL contain no capability. The storefront uses credentialed API requests and displays the reservation proof page after receipt submission; it prompts the customer to screenshot the page and confirms before navigation. The API accepts no bearer or query-token compatibility path. Reservation IDs and references select a record but are never authorization. Reference numbers and email addresses alone cannot read reservation details. A leaked cookie must not reveal other bookings, full identity documents, or payment configuration.
 
 ### Platform support
 
@@ -198,9 +200,10 @@ Use `/api/v1` for the first API major version. Product V2 branches do not requir
 | ------------------------------------ | ------------------------------ | ------------------------------------------------------------------------------- |
 | `/public/stores/{slug}`              | GET catalogue/policies         | Published projection, bounded public response                                   |
 | `/public/stores/{slug}/availability` | GET variant/date availability  | No customer details; short-lived answer, never a guarantee                      |
-| `/public/stores/{slug}/holds`        | POST checkout intent           | Rate-limited anonymous checkout identity + idempotency; database capacity claim |
-| `/guest/reservations/{id}/receipts`  | POST evidence attachment       | Scoped capability; immutable uploaded object; idempotency                       |
-| `/guest/reservations/{id}`           | GET own summary                | Scoped capability, `no-store`                                                   |
+| `/public/stores/{slug}/holds`        | POST checkout intent           | Turnstile + per-IP limit + idempotency; database capacity claim; sets scoped API-host cookie |
+| `/public/stores/{slug}/fittings`     | POST fitting request           | Turnstile + per-IP limit + idempotency; no email verification or guest email   |
+| `/guest/reservations/{id}/receipts`  | POST evidence attachment       | Reservation-path-scoped HttpOnly cookie; immutable uploaded object; idempotency |
+| `/guest/reservations/{id}`           | GET own summary                | Reservation-path-scoped HttpOnly cookie, `no-store`                             |
 | `/reservations/availability-calendar` | GET staff variant/day preview | Membership + reservation permission; branch-local bounded advisory projection, never a guarantee |
 | `/calendar/availability`             | GET staff physical-asset timeline | Verified staff + tenant context + `reservations.manage`; branch-timezone asset lanes with Reserved/Rented/Unavailable bars and Pickup/Return boundary labels |
 | `/reservations/availability-check`   | GET staff exact-time preview  | Membership + reservation permission; exact buffered interval and server pricing, still non-binding |
@@ -275,7 +278,7 @@ resolve readiness after the garment is physically back.
 2. Lock candidate physical assets in deterministic ID order. All code paths that change their allocation/readiness use that lock order.
 3. Transition expired blocking holds under lock, using database time. Deny archived/unready assets for the requested fulfillment conditions.
 4. Insert the reservation, price/policy snapshots and one blocking allocation per selected physical asset. A PostgreSQL GiST exclusion constraint rejects overlapping blocking periods.
-5. Commit the guest capability hash, idempotency outcome and relevant outbox records. Only now return payment instructions and the 15-minute expiry.
+5. Commit the guest capability hash, idempotency outcome and owner/business outbox records. Only now return payment instructions, the 15-minute expiry and the non-secret reservation identifier. The API response also sets the HttpOnly reservation-scoped cookie; no token is returned in JSON or a URL.
 
 The scheduled expiry worker is cleanup; correctness must not depend on it running on time. An availability response can lag; a hold cannot bypass the database constraint. Exclusion predicates use stored deterministic values such as `is_blocking`, not `now()`.
 
@@ -326,7 +329,7 @@ Write outbox events in the same transaction as the business event. Workers claim
 
 Persist attempts, next-attempt time, provider reference, last safe error, and terminal status. Use exponential backoff with jitter and a finite maximum (proposed eight attempts); alert on terminal failures. A job's stable deduplication key survives retries. Polling, not session `LISTEN`, is the initial design.
 
-Exactly-once email delivery cannot be promised with an external provider. Use provider idempotency where supported; otherwise duplicate-safe message content and delivery reconciliation. Never couple reservation success to email success. UI states distinguish queued, provider-accepted, delivered where known, bounced and failed. Reminders recheck the reservation version before sending so a reschedule does not send obsolete pickup details.
+Exactly-once email delivery cannot be promised with an external provider. Use provider idempotency where supported; otherwise duplicate-safe message content and delivery reconciliation. Never couple reservation success to email success. Guest reservation and fitting emails—including verification, receipt, approval, cancellation, or status updates—are not queued or sent; the guest email is contact information only. Business/owner notifications, staff invitations, operator subscription notices, and other explicitly addressed operational email continue through the outbox. Migration `0070_storefront_guest_no_email.sql` cancels queued/leased guest-directed verification and reservation/fitting lifecycle rows before dropping the verification table; an email already accepted by its provider cannot be recalled. The worker also rejects any legacy guest-directed keys it encounters.
 
 Webhook endpoints verify signatures over raw bytes and insert unique provider event IDs before processing. A duplicate event returns success without another effect. Events received out of order are reconciled to authoritative provider state or rejected from an invalid transition. Do not rely on arrival order.
 
@@ -408,7 +411,7 @@ Recovery scope includes database, object manifest, application configuration and
 14. Race fitting creates/reschedules at the last hidden branch-capacity slot and last eligible guaranteed garment; capacity and asset exclusion each produce one valid winner, and failed replacement leaves the original fitting intact.
 15. Race a fitting capacity/hour/closure configuration mutation against a new booking under the same branch fitting-settings serialization boundary; the result is either the old configuration plus accepted booking or the new valid configuration, never an accepted booking that violates the committed configuration.
 16. Exercise fitting timing/state guards: no 15/45-minute start boundary, no non-30-multiple duration, no schedule override, no reject/cancel/reschedule/garment edit after start, no complete before end, no no-show before start, and no automatic state transition merely because time passed.
-14. Point a consumer pinned to the previous `@drezivo/contracts` version at the current API during a migration window; both the old and the new shape are accepted and produce identical domain effects. Then remove the old shape and confirm the stale consumer fails loudly at the boundary with the standard error envelope, not with a silent `undefined` reaching the interface.
+17. Point a consumer pinned to the previous `@drezivo/contracts` version at the current API during a migration window; both the old and the new shape are accepted and produce identical domain effects. Then remove the old shape and confirm the stale consumer fails loudly at the boundary with the standard error envelope, not with a silent `undefined` reaching the interface.
 
 For V2 add opposing branch transfers, duplicate dispatch/receipt, partial arrival, lost items and revoked branch permissions. Tests run against PostgreSQL, not SQLite or mocked locking. Load tests report environment, dataset, error mix and raw percentiles. No test suite exists yet; these are implementation acceptance requirements.
 

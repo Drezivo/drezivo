@@ -14,6 +14,7 @@ const paymentId = '750e8400-e29b-41d4-a716-446655440000';
 const row = (payload: Record<string, unknown>): OutboxRow => ({
   id: 'outbox-7',
   tenant_id: 'tenant-1',
+  dedupe_key: 'subscription-payment:reviewed',
   event_type: 'subscription.payment_reviewed',
   payload,
   attempts: 0,

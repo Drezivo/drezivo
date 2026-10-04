@@ -75,6 +75,7 @@ describe('membership invitation dispatch worker', () => {
     await handler({
       id: 'outbox-1',
       tenant_id: tenantId,
+      dedupe_key: 'invitation:dispatch:1',
       event_type: 'clerk.invitation.dispatch_requested',
       payload: { invitation_id: invitationId, dispatch_version: 1, operation: 'create' },
       attempts: 0,
@@ -104,6 +105,7 @@ describe('membership invitation dispatch worker', () => {
     await stale.handler({
       id: 'outbox-2',
       tenant_id: tenantId,
+      dedupe_key: 'invitation:dispatch:2',
       event_type: 'clerk.invitation.dispatch_requested',
       payload: { invitation_id: invitationId, dispatch_version: 1, operation: 'resend' },
       attempts: 0,
@@ -116,6 +118,7 @@ describe('membership invitation dispatch worker', () => {
     await cancelled.handler({
       id: 'outbox-3',
       tenant_id: tenantId,
+      dedupe_key: 'invitation:dispatch:3',
       event_type: 'clerk.invitation.dispatch_requested',
       payload: { invitation_id: invitationId, dispatch_version: 1, operation: 'create' },
       attempts: 0,
@@ -140,6 +143,7 @@ describe('membership invitation dispatch worker', () => {
     await handler({
       id: 'outbox-4',
       tenant_id: tenantId,
+      dedupe_key: 'invitation:dispatch:4',
       event_type: 'clerk.invitation.dispatch_requested',
       payload: { invitation_id: invitationId, dispatch_version: 2, operation: 'resend' },
       attempts: 0,

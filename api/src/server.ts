@@ -22,7 +22,7 @@ const server = app.listen(config.PORT, () => {
 });
 
 if (!config.TURNSTILE_SECRET_KEY) {
-  logger.warn('TURNSTILE_SECRET_KEY is not set; storefront verification skips the Turnstile bot check');
+  logger.warn('TURNSTILE_SECRET_KEY is not set; storefront guest submissions skip the Turnstile bot check');
 }
 
 const embeddedWorker: EmbeddedWorkerHandle | null =

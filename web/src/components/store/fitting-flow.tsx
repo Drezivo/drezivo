@@ -7,7 +7,7 @@ import type { CatalogueCard, FittingSlotsResponse, GuestFittingCreated, GuestFit
 import { getFittingSlots, getItem, requestFitting, StorefrontApiError } from '@/lib/storefront-api';
 import { addDays, dateIn, formatDay, formatInstant, formatMinor } from '@/lib/storefront-format';
 
-import { EmailVerification, type VerifiedEmail } from './booking/email-verification';
+import { Turnstile, TURNSTILE_SITE_KEY, type TurnstileHandle } from './turnstile';
 
 interface Pick {
   productId: string;
@@ -29,7 +29,7 @@ export function FittingFlow({ store, items }: { store: PublicStorefront; items: 
   const [startAt, setStartAt] = useState<string | null>(null);
   const [picks, setPicks] = useState<Pick[]>([]);
   const [choosing, setChoosing] = useState<ItemDetail | null>(null);
-  const [verified, setVerified] = useState<VerifiedEmail | null>(null);
+  const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [note, setNote] = useState('');
@@ -38,6 +38,8 @@ export function FittingFlow({ store, items }: { store: PublicStorefront; items: 
   const [done, setDone] = useState<GuestFittingCreated | null>(null);
   const inFlight = useRef(false);
   const intent = useRef<{ fingerprint: string; key: string } | null>(null);
+  const robotCheck = useRef<TurnstileHandle>(null);
+  const [robotToken, setRobotToken] = useState<string | null>(null);
   const phoneRule = store.checkout.requirements.phone;
 
   // Times already fetched stay usable for a minute and the next two days load in the background, so
@@ -87,8 +89,8 @@ export function FittingFlow({ store, items }: { store: PublicStorefront; items: 
   function problem(): string | null {
     if (!startAt) return 'Choose a time.';
     if (picks.length === 0) return 'Choose at least one piece to try.';
-    if (!verified) return 'Verify your email.';
     if (name.trim().length < 2) return 'Enter your full name.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return 'Enter a valid email address.';
     if (phoneRule === 'required' && !/^\d{11}$/.test(phone)) return 'Enter an 11-digit mobile number.';
     if (phone && !/^\d{11}$/.test(phone)) return 'Mobile numbers have 11 digits.';
     return null;
@@ -100,16 +102,20 @@ export function FittingFlow({ store, items }: { store: PublicStorefront; items: 
       setError(issue);
       return;
     }
-    if (inFlight.current || !verified || !startAt) return;
+    if (inFlight.current || !startAt) return;
+    if (TURNSTILE_SITE_KEY && !robotToken) {
+      setError('Complete the security check first.');
+      return;
+    }
     const body: GuestFittingRequest = {
-      verification_token: verified.token,
-      email: verified.email,
+      ...(robotToken ? { turnstile_token: robotToken } : {}),
+      email: email.trim().toLowerCase(),
       customer: { full_name: name.trim(), phone: phoneRule === 'hidden' || !phone ? null : phone, address: null, social_handle: null },
       start_at: startAt,
       variant_ids: picks.map((pick) => pick.variantId) as GuestFittingRequest['variant_ids'],
       note: note.trim() || null,
     };
-    const fingerprint = JSON.stringify(body);
+    const fingerprint = JSON.stringify({ ...body, turnstile_token: undefined });
     if (intent.current?.fingerprint !== fingerprint) intent.current = { fingerprint, key: crypto.randomUUID() };
     inFlight.current = true;
     setPending(true);
@@ -121,10 +127,11 @@ export function FittingFlow({ store, items }: { store: PublicStorefront; items: 
         setStartAt(null);
         loadSlots(date, true).then(setSlots).catch(() => undefined);
       }
-      if (caught instanceof StorefrontApiError && caught.status === 401) setVerified(null);
       setError(caught instanceof StorefrontApiError ? caught.message : 'Something went wrong. Please try again.');
     } finally {
       inFlight.current = false;
+      robotCheck.current?.reset();
+      setRobotToken(null);
       setPending(false);
     }
   }
@@ -134,7 +141,7 @@ export function FittingFlow({ store, items }: { store: PublicStorefront; items: 
       <div className="max-w-xl border border-sf-line p-8">
         <p className="font-sf-display text-4xl font-light">Fitting requested</p>
         <p className="mt-4 text-sf-muted">
-          {formatInstant(done.start_at, store.timezone, { dateStyle: 'full', timeStyle: 'short' })}. {store.name} will confirm by email.
+          {formatInstant(done.start_at, store.timezone, { dateStyle: 'full', timeStyle: 'short' })}. Keep this page for your reference. The shop will review your request and follow up using the contact details you provided.
           {done.fee_minor ? ` The fitting fee is ${formatMinor(done.fee_minor)}, paid at the shop.` : ''}
         </p>
       </div>
@@ -231,7 +238,10 @@ export function FittingFlow({ store, items }: { store: PublicStorefront; items: 
 
       <aside className="min-w-0 space-y-5 lg:sticky lg:top-28 lg:self-start">
         <h2 className="font-sf-display text-3xl font-light">3. Your details</h2>
-        <EmailVerification slug={store.slug} verified={verified} onVerified={setVerified} />
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-medium">Email address</span>
+          <input className="sf-input" type="email" inputMode="email" autoComplete="email" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} />
+        </label>
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium">Full name</span>
           <input className="sf-input" autoComplete="name" maxLength={120} value={name} onChange={(event) => setName(event.target.value)} />
@@ -246,7 +256,8 @@ export function FittingFlow({ store, items }: { store: PublicStorefront; items: 
           <span className="mb-1.5 block text-sm font-medium">Anything the shop should know? (optional)</span>
           <textarea className="sf-input min-h-20" maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} />
         </label>
-        <button type="button" className="sf-button sf-button-primary w-full" disabled={pending} onClick={() => void submit()}>
+        <Turnstile ref={robotCheck} onToken={setRobotToken} onUnavailable={() => setError('The security check could not load. Refresh the page and try again.')} />
+        <button type="button" className="sf-button sf-button-primary w-full" disabled={pending || (Boolean(TURNSTILE_SITE_KEY) && !robotToken)} onClick={() => void submit()}>
           {pending ? 'Sending…' : 'Request fitting'}
         </button>
         {error ? (
