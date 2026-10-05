@@ -45,7 +45,9 @@ describe("resolveStaffLanding", () => {
   });
 
   it("routes an account with no workspaces back to onboarding and clears a stale Clerk organization", async () => {
-    api.getWorkspaces.mockResolvedValue({ data: { items: [], page_meta: { next_cursor: null, has_more: false } } });
+    api.getWorkspaces.mockResolvedValue({
+      data: { items: [], page_meta: { next_cursor: null, has_more: false } },
+    });
     api.getCurrentOnboarding.mockResolvedValue({
       data: {
         onboarding: null,
@@ -66,7 +68,9 @@ describe("resolveStaffLanding", () => {
     api.getWorkspaces.mockResolvedValue({
       data: { items: [workspaceA, workspaceB], page_meta: { next_cursor: null, has_more: false } },
     });
-    api.getActorContext.mockResolvedValue({ data: { tenant: { id: workspaceB.tenant.id } } });
+    api.getActorContext.mockResolvedValue({
+      data: { tenant: { id: workspaceB.tenant.id }, membership: { role: "frontdesk" } },
+    });
 
     const result = await resolveStaffLanding({
       activeOrganizationId: "org_b",
@@ -75,16 +79,43 @@ describe("resolveStaffLanding", () => {
     });
 
     // The verified actor is returned too, so the dashboard shell can reuse it instead of refetching.
-    expect(result).toEqual({ kind: "workspace", workspace: workspaceB, actor: { tenant: { id: workspaceB.tenant.id } } });
+    expect(result).toEqual({
+      kind: "workspace",
+      workspace: workspaceB,
+      actor: {
+        tenant: { id: workspaceB.tenant.id },
+        membership: { role: "frontdesk" },
+      },
+    });
     expect(setActive).not.toHaveBeenCalled();
     expect(api.getActorContext).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires an explicit workspace choice after sign-in when multiple businesses are accessible", async () => {
+    api.getWorkspaces.mockResolvedValue({
+      data: { items: [workspaceA, workspaceB], page_meta: { next_cursor: null, has_more: false } },
+    });
+
+    await expect(
+      resolveStaffLanding({
+        activeOrganizationId: "org_b",
+        getToken,
+        setActive,
+        requireWorkspaceChoice: true,
+      })
+    ).resolves.toEqual({ kind: "workspaces", workspaces: [workspaceA, workspaceB] });
+
+    expect(api.getActorContext).not.toHaveBeenCalled();
+    expect(setActive).not.toHaveBeenCalled();
   });
 
   it("switches from a stale Clerk organization to the first accessible Drezivo workspace", async () => {
     api.getWorkspaces.mockResolvedValue({
       data: { items: [workspaceA], page_meta: { next_cursor: null, has_more: false } },
     });
-    api.getActorContext.mockResolvedValue({ data: { tenant: { id: workspaceA.tenant.id } } });
+    api.getActorContext.mockResolvedValue({
+      data: { tenant: { id: workspaceA.tenant.id }, membership: { role: "owner" } },
+    });
 
     await expect(
       resolveStaffLanding({ activeOrganizationId: "org_stale", getToken, setActive })
@@ -94,7 +125,9 @@ describe("resolveStaffLanding", () => {
   });
 
   it("fails closed when the account claims an owned tenant but no accessible workspace exists", async () => {
-    api.getWorkspaces.mockResolvedValue({ data: { items: [], page_meta: { next_cursor: null, has_more: false } } });
+    api.getWorkspaces.mockResolvedValue({
+      data: { items: [], page_meta: { next_cursor: null, has_more: false } },
+    });
     api.getCurrentOnboarding.mockResolvedValue({
       data: {
         onboarding: null,
@@ -110,28 +143,24 @@ describe("resolveStaffLanding", () => {
 
   describe("invited front-desk members", () => {
     const empty = { data: { items: [], page_meta: { next_cursor: null, has_more: false } } };
-    const withWorkspaceB = { data: { items: [workspaceB], page_meta: { next_cursor: null, has_more: false } } };
 
-    it("accepts a pending invitation and waits for the claim instead of opening onboarding", async () => {
+    it("never accepts invitations automatically and routes pending invitation accounts to the invitation link", async () => {
       const accept = vi.fn().mockResolvedValue(undefined);
-      api.getWorkspaces.mockResolvedValueOnce(empty).mockResolvedValueOnce(empty).mockResolvedValue(withWorkspaceB);
-      api.getActorContext.mockResolvedValue({ data: { tenant: { id: workspaceB.tenant.id } } });
+      api.getWorkspaces.mockResolvedValue(empty);
 
       const result = await resolveStaffLanding({
         activeOrganizationId: null,
         getToken,
         setActive,
         invitations: { loadPending: async () => [{ accept }], isInvitedMember: false },
-        waitMs: 0,
       });
 
-      expect(accept).toHaveBeenCalledTimes(1);
-      expect(result).toMatchObject({ kind: "workspace", workspace: workspaceB });
-      expect(setActive).toHaveBeenCalledWith({ organization: "org_b" });
+      expect(result).toEqual({ kind: "invitation-required" });
+      expect(accept).not.toHaveBeenCalled();
       expect(api.getCurrentOnboarding).not.toHaveBeenCalled();
     });
 
-    it("fails with a retryable message, never onboarding, when the claim has not landed yet", async () => {
+    it("does not send an invited member with a delayed claim to owner onboarding", async () => {
       api.getWorkspaces.mockResolvedValue(empty);
 
       await expect(
@@ -140,9 +169,8 @@ describe("resolveStaffLanding", () => {
           getToken,
           setActive,
           invitations: { loadPending: async () => [], isInvitedMember: true },
-          waitMs: 0,
         })
-      ).rejects.toThrow(/invitation is still being set up/i);
+      ).resolves.toEqual({ kind: "invitation-required" });
 
       expect(api.getCurrentOnboarding).not.toHaveBeenCalled();
       expect(setActive).not.toHaveBeenCalled();
@@ -151,7 +179,11 @@ describe("resolveStaffLanding", () => {
     it("still sends an owner with no invitation to onboarding", async () => {
       api.getWorkspaces.mockResolvedValue(empty);
       api.getCurrentOnboarding.mockResolvedValue({
-        data: { onboarding: null, has_current_owned_tenant: false, has_consumed_lifetime_trial: false },
+        data: {
+          onboarding: null,
+          has_current_owned_tenant: false,
+          has_consumed_lifetime_trial: false,
+        },
       });
 
       await expect(
@@ -160,7 +192,6 @@ describe("resolveStaffLanding", () => {
           getToken,
           setActive,
           invitations: { loadPending: async () => [], isInvitedMember: false },
-          waitMs: 0,
         })
       ).resolves.toEqual({ kind: "onboarding" });
       expect(api.getWorkspaces).toHaveBeenCalledTimes(1);
@@ -177,7 +208,10 @@ describe("resolveStaffLanding", () => {
       expect(state?.isInvitedMember).toBe(false);
       await expect(state?.loadPending()).resolves.toEqual([{ accept }]);
       expect(user.getOrganizationInvitations).toHaveBeenCalledWith({ status: "pending" });
-      expect(invitationStateOf({ ...user, organizationMemberships: [{ role: "org:member" }] })?.isInvitedMember).toBe(true);
+      expect(
+        invitationStateOf({ ...user, organizationMemberships: [{ role: "org:member" }] })
+          ?.isInvitedMember
+      ).toBe(true);
       expect(invitationStateOf(null)).toBeUndefined();
     });
   });

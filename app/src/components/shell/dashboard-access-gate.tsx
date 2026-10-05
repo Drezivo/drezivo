@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth, useClerk } from "@clerk/nextjs";
-import { Loader2, RefreshCw, ShieldCheck } from "lucide-react";
+import { Loader2, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ActorContext } from "@drezivo/contracts";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
@@ -16,7 +16,9 @@ type GateState =
   | { kind: "error"; error: DrezivoApiError };
 
 /** The actor context the gate already loaded, so the shell does not fetch it a second time. */
-const VerifiedActorContext = createContext<{ actor: ActorContext; refresh: () => void } | null>(null);
+const VerifiedActorContext = createContext<{ actor: ActorContext; refresh: () => void } | null>(
+  null
+);
 
 export function useVerifiedActorContext(): ActorContext | null {
   return useContext(VerifiedActorContext)?.actor ?? null;
@@ -31,9 +33,12 @@ const noop = () => undefined;
 
 export function DashboardAccessGate({ children }: { children: React.ReactNode }) {
   const { getToken, isLoaded, isSignedIn, orgId } = useAuth();
-  const { setActive, user } = useClerk();
+  const { setActive, signOut, user } = useClerk();
   const router = useRouter();
   const [state, setState] = useState<GateState>({ kind: "checking" });
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState(false);
+  const signOutInFlight = useRef(false);
   const getTokenRef = useRef(getToken);
   const setActiveRef = useRef(setActive);
   const userRef = useRef(user);
@@ -62,9 +67,19 @@ export function DashboardAccessGate({ children }: { children: React.ReactNode })
       const resolution = await resolveStaffLanding({
         activeOrganizationId: orgId,
         getToken: () => getTokenRef.current(),
-        setActive: (params) => setActiveRef.current(params),
+        setActive: (params) => setActiveRef.current({ ...params, navigate: async () => undefined }),
         invitations: invitationStateOf(userRef.current),
       });
+      if (resolution.kind === "workspaces") {
+        router.replace("/workspaces/select");
+        return;
+      }
+      if (resolution.kind === "invitation-required") {
+        throw new DrezivoApiError(
+          "This account has a pending team invitation. Open the invitation link from your email to join that workspace.",
+          { status: 409 }
+        );
+      }
       if (resolution.kind === "onboarding") {
         router.replace("/onboarding");
         return;
@@ -86,8 +101,29 @@ export function DashboardAccessGate({ children }: { children: React.ReactNode })
       .catch(() => undefined);
   }, []);
 
+  const handleSignOut = useCallback(async () => {
+    if (signOutInFlight.current) return;
+
+    signOutInFlight.current = true;
+    setIsSigningOut(true);
+    setSignOutError(false);
+    try {
+      // Clerk clears the active session and redirects to a fresh auth page, which drops this
+      // dashboard's in-memory state and any client-side data loaded under the old session.
+      await signOut({ redirectUrl: "/sign-in" });
+    } catch {
+      signOutInFlight.current = false;
+      setIsSigningOut(false);
+      setSignOutError(true);
+    }
+  }, [signOut]);
+
   if (state.kind === "ready") {
-    return <VerifiedActorContext.Provider value={{ actor: state.actor, refresh: refreshActor }}>{children}</VerifiedActorContext.Provider>;
+    return (
+      <VerifiedActorContext.Provider value={{ actor: state.actor, refresh: refreshActor }}>
+        {children}
+      </VerifiedActorContext.Provider>
+    );
   }
 
   return (
@@ -116,7 +152,8 @@ export function DashboardAccessGate({ children }: { children: React.ReactNode })
               <h1 className="font-display text-2xl sm:text-3xl">Opening your workspace</h1>
             </div>
             <p className="mt-3 max-w-md text-sm leading-6 text-dashboard-muted">
-              We&apos;re confirming your account, workspace membership, and current access before loading the dashboard.
+              We&apos;re confirming your account, workspace membership, and current access before
+              loading the dashboard.
             </p>
             <div className="mt-7 h-1.5 overflow-hidden rounded-full bg-dashboard-border">
               <div className="h-full w-2/3 animate-pulse rounded-full bg-dashboard-accent" />
@@ -131,10 +168,26 @@ export function DashboardAccessGate({ children }: { children: React.ReactNode })
                 Support reference: {state.error.requestId}
               </p>
             ) : null}
-            <Button className="mt-7" onClick={() => void verifyAccess()}>
-              <RefreshCw className="h-4 w-4" aria-hidden="true" />
-              Check access again
-            </Button>
+            {signOutError ? (
+              <p className="mt-4 text-sm text-dashboard-danger" role="status">
+                We couldn&apos;t sign you out. Please try again.
+              </p>
+            ) : null}
+            <div className="mt-7 flex flex-wrap gap-3">
+              <Button disabled={isSigningOut} onClick={() => void verifyAccess()}>
+                <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                Check access again
+              </Button>
+              <Button
+                variant="secondary"
+                isPending={isSigningOut}
+                pendingLabel="Signing out…"
+                onClick={() => void handleSignOut()}
+              >
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                Sign out
+              </Button>
+            </div>
           </div>
         )}
       </section>
