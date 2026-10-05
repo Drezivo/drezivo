@@ -44,11 +44,11 @@ export function accessMessage(access: SubscriptionAccess): { tone: Tone; title: 
   const readOnlyEnds = access.read_only_until ? ` View-only access ends ${inDays(daysUntil(access.read_only_until))}.` : "";
   switch (access.reason) {
     case "trial":
-      return { tone: "info", title: `Free trial: ${plural(access.days_left ?? 0, "day")} left`, body: `Subscribe any time for ₱300 a month.${pending}` };
+      return { tone: "info", title: `Free trial: ${plural(access.days_left ?? 0, "day")} left`, body: `Subscribe any time for ₱299 a month.${pending}` };
     case "trial_ending":
-      return { tone: "attention", title: `Your free trial ends ${inDays(access.days_left)}`, body: `Subscribe for ₱300 a month to keep making changes and taking bookings.${pending}` };
+      return { tone: "attention", title: `Your free trial ends ${inDays(access.days_left)}`, body: `Subscribe for ₱299 a month to keep making changes and taking bookings.${pending}` };
     case "renewal_due":
-      return { tone: "attention", title: `Your subscription ends ${inDays(access.days_left)}`, body: `Pay ₱300 for next month to keep making changes and taking bookings.${pending}` };
+      return { tone: "attention", title: `Your subscription ends ${inDays(access.days_left)}`, body: `Pay ₱299 for next month to keep making changes and taking bookings.${pending}` };
     case "paid":
       return { tone: "info", title: "Subscription active", body: pending.trim() };
     case "trial_ended":
@@ -157,7 +157,7 @@ function SubscriptionPrompt({ access, onPay }: { access: SubscriptionAccess | nu
                 onPay();
               }}
             >
-              <Receipt className="mr-2 h-4 w-4" /> {access.pending_payment ? "Payment status" : "Subscribe for ₱300"}
+              <Receipt className="mr-2 h-4 w-4" /> {access.pending_payment ? "Payment status" : "Subscribe for ₱299"}
             </Button>
           </div>
         </Dialog.Content>
@@ -179,7 +179,7 @@ export function SubscriptionWall({ access }: { access: SubscriptionAccess }) {
         <h1 className="mt-5 font-display text-3xl text-dashboard-navy">{message.title}</h1>
         <p className="mt-3 text-sm leading-6 text-dashboard-muted">{message.body}</p>
         <Button type="button" className="mt-7" onClick={openSubscribe}>
-          <Receipt className="mr-2 h-4 w-4" /> {access.pending_payment ? "See payment status" : "Subscribe for ₱300 / month"}
+          <Receipt className="mr-2 h-4 w-4" /> {access.pending_payment ? "See payment status" : "Subscribe for ₱299 / month"}
         </Button>
       </section>
     </div>

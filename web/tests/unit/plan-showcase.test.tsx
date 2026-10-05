@@ -21,10 +21,10 @@ const plan = (code: string, price: string, highlighted = false): PublicPlan => (
 
 describe('plan showcase', () => {
   it('gives a single plan the whole stage, with its price as the headline', () => {
-    render(<PlanShowcase plans={[plan('standard', '300.00', true)]} signUpUrl="https://partners.example/sign-up" />);
+    render(<PlanShowcase plans={[plan('standard', '299.00', true)]} signUpUrl="https://partners.example/sign-up" />);
 
     expect(text(screen.getByRole('heading', { level: 2 }))).toBe('One plan. Everything in it.');
-    expect(screen.getByText('₱300')).toBeTruthy();
+    expect(screen.getByText('₱299')).toBeTruthy();
     expect(screen.getByText('a month, after your 14-day free trial')).toBeTruthy();
     const methods = within(screen.getByRole('list', { name: 'Accepted payment methods' })).getAllByRole('listitem');
     expect(methods.map(text)).toEqual(['GCash', 'Maya', 'Bank transfer']);
@@ -57,7 +57,7 @@ describe('public plans', () => {
   });
 
   it('formats whole pesos without centavos and keeps real centavos', () => {
-    expect(formatPlanPrice('300.00')).toBe('₱300');
+    expect(formatPlanPrice('299.00')).toBe('₱299');
     expect(formatPlanPrice('1299.00')).toBe('₱1,299');
     expect(formatPlanPrice('499.50')).toBe('₱499.50');
   });

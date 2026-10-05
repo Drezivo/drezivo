@@ -14,6 +14,18 @@ function answerFor(question: string): string {
 }
 
 describe('marketing FAQ, pricing, and terms', () => {
+  it('shows the current Standard offer in the pricing section', () => {
+    render(<PricingPage />);
+
+    const pricing = screen.getByRole('heading', { level: 1 }).closest('#pricing');
+    expect(pricing).not.toBeNull();
+    const pricingText = pricing?.textContent ?? '';
+    expect(pricingText).toContain('Standard');
+    expect(pricingText).toContain('₱299');
+    expect(pricingText).toContain('Up to 300 active garments');
+    expect(pricingText).toContain('Up to 3 Front Desk staff');
+  });
+
   it('moves billing-detail explanations to the FAQ instead of the pricing page', () => {
     render(<PricingPage />);
 
@@ -34,12 +46,12 @@ describe('marketing FAQ, pricing, and terms', () => {
     expect(answer).toContain('does not automatically issue a refund');
   });
 
-  it('keeps the current Standard plan owner-only', () => {
+  it('describes the current Standard staff allowance and quotas', () => {
     const answer = answerFor('Can staff access everything in my account?');
 
-    expect(answer).toContain('shop owner only');
-    expect(answer).toContain('does not include staff accounts');
-    expect(answerFor('How much does Drezivo cost?')).toContain('up to 125 active physical garments');
+    expect(answer).toContain('up to 3 Front Desk staff accounts');
+    expect(answer).toContain('role-limited');
+    expect(answerFor('How much does Drezivo cost?')).toContain('up to 300 active physical garments');
   });
 
   it('keeps the terms aligned with the current pilot subscription lifecycle', () => {

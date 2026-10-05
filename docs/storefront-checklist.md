@@ -597,7 +597,7 @@ Runbook: `docs/runbooks/pilot-operation.md`.
 - [x] The API runs the existing worker as a child process (`EMBEDDED_WORKER=true`, the
       `drezivo_worker` role), so emails and hold expiry work without a worker service. Reversible.
   - Tests: `api/src/worker/__tests__/embedded.test.ts`.
-- [x] One plan, Standard (₱300 a month, 1,000 active physical assets, 10 Front Desk seats), stored
+- [x] One plan, Standard (₱299 a month, 300 active physical clothing items, 3 Front Desk seats), stored
       as `starter`. Migration `0063_pilot_billing.sql` retires Professional and Business and moves
       every subscription while keeping prior-plan event history.
   - Onboarding has no tier chooser; the owner confirms the 14-day trial on Standard. Retired plan
