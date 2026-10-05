@@ -290,7 +290,7 @@ export function ClothingPage() {
               Manage the clothing styles, variants, and serialized pieces in this workspace.
             </p>
           </div>
-          {/* Phones: both actions on one row so the clothing list starts higher on screen. */}
+          {/* Phones: the actions share rows so the clothing list starts higher on screen. */}
           <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
             <Link
               href="/inventory/categories"
@@ -299,7 +299,11 @@ export function ClothingPage() {
               <Tags className="h-4 w-4" aria-hidden="true" />
               Manage Categories
             </Link>
-            <Link href="/inventory/new" className={buttonVariants()}>
+            <Link href="/inventory/import" className={buttonVariants({ variant: "secondary" })}>
+              <Layers3 className="h-4 w-4" aria-hidden="true" />
+              Batch Add
+            </Link>
+            <Link href="/inventory/new" className={buttonVariants({ className: "col-span-2 sm:col-span-1" })}>
               <Plus className="h-4 w-4" aria-hidden="true" />
               Add Clothing
             </Link>

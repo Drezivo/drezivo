@@ -292,6 +292,15 @@ import {
   type CustomerFittingHistoryResponse,
   type CustomerReservationHistoryResponse,
   type CustomerSummaryResponse,
+  batchResponse,
+  catalogueImportCapabilities,
+  clothingPhotoExtractResponse,
+  type BatchCreateClothingRequest,
+  type BatchResponse,
+  type BatchUploadAuthorizationRequest,
+  type BatchUploadFinalizeRequest,
+  type CatalogueImportCapabilities,
+  type ClothingPhotoExtractResponse,
 } from "@drezivo/contracts";
 
 type TokenGetter = () => Promise<string | null>;
@@ -1038,6 +1047,46 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "POST",
         path: `/api/v1/uploads/${encodeURIComponent(fileId)}/finalize`,
         responseSchema: apiEnvelope(uploadFinalizeResponse),
+      }),
+    getCatalogueImportCapabilities: () =>
+      request<CatalogueImportCapabilities>({
+        getToken,
+        method: "GET",
+        path: "/api/v1/catalogue/import/capabilities",
+        responseSchema: apiEnvelope(catalogueImportCapabilities),
+      }),
+    // Batch endpoints carry one idempotency key per row in the body, not one per request.
+    authorizeImportUploads: (input: BatchUploadAuthorizationRequest) =>
+      request<BatchResponse>({
+        getToken,
+        body: input,
+        method: "POST",
+        path: "/api/v1/catalogue/import/uploads",
+        responseSchema: apiEnvelope(batchResponse),
+      }),
+    finalizeImportUploads: (input: BatchUploadFinalizeRequest) =>
+      request<BatchResponse>({
+        getToken,
+        body: input,
+        method: "POST",
+        path: "/api/v1/catalogue/import/uploads/finalize",
+        responseSchema: apiEnvelope(batchResponse),
+      }),
+    createImportClothing: (input: BatchCreateClothingRequest) =>
+      request<BatchResponse>({
+        getToken,
+        body: input,
+        method: "POST",
+        path: "/api/v1/catalogue/import/clothing",
+        responseSchema: apiEnvelope(batchResponse),
+      }),
+    extractClothingPhoto: (fileId: string) =>
+      request<ClothingPhotoExtractResponse>({
+        getToken,
+        body: { file_id: fileId },
+        method: "POST",
+        path: "/api/v1/catalogue/import/extract",
+        responseSchema: apiEnvelope(clothingPhotoExtractResponse),
       }),
     createClothing: (input: CreateClothingRequest, idempotencyKey: string) =>
       request<CreateClothingResponse>({

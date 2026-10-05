@@ -6,7 +6,7 @@ import {
   clothingPhotoExtractRequest,
   type CatalogueImportCapabilities,
 } from '@drezivo/contracts';
-import { Router, type Request, type Response } from 'express';
+import { Router, type Request, type RequestHandler, type Response } from 'express';
 import type { z } from 'zod';
 
 import { requireStaffAuth } from '../../middleware/auth.js';
@@ -29,8 +29,12 @@ export const catalogueImportRouter = Router();
 const tenantKey = (req: Request): string =>
   req.tenantContext?.tenantId ?? req.clerkPrincipal?.clerkUserId ?? req.ip ?? 'unknown';
 
-// A batch request carries up to 25 rows, so 12 a minute is 300 rows a minute per shop.
-const batchRateLimit = rateLimit({ windowMs: 60_000, max: 12, keyOf: tenantKey });
+// A batch request carries up to 25 rows, so 12 a minute is 300 rows a minute per shop. Each step
+// (authorize, finalize, create) has its own budget: one import calls all three per 25 rows.
+const batchRateLimit = (): RequestHandler => rateLimit({ windowMs: 60_000, max: 12, keyOf: tenantKey });
+const authorizeRateLimit = batchRateLimit();
+const finalizeRateLimit = batchRateLimit();
+const createRateLimit = batchRateLimit();
 // Matches the strictest free vision tier we support (NVIDIA Build, 40 requests a minute).
 const extractRateLimit = rateLimit({ windowMs: 60_000, max: 40, keyOf: tenantKey });
 const readRateLimit = rateLimit({ windowMs: 60_000, max: 60, keyOf: tenantKey });
@@ -79,7 +83,7 @@ catalogueImportRouter.get(
 catalogueImportRouter.post(
   '/catalogue/import/uploads',
   ...guarded,
-  batchRateLimit,
+  authorizeRateLimit,
   writePolicy,
   requireAssetManagePermission,
   async (req: Request, res: Response): Promise<void> => {
@@ -91,7 +95,7 @@ catalogueImportRouter.post(
 catalogueImportRouter.post(
   '/catalogue/import/uploads/finalize',
   ...guarded,
-  batchRateLimit,
+  finalizeRateLimit,
   writePolicy,
   requireAssetManagePermission,
   async (req: Request, res: Response): Promise<void> => {
@@ -103,7 +107,7 @@ catalogueImportRouter.post(
 catalogueImportRouter.post(
   '/catalogue/import/clothing',
   ...guarded,
-  batchRateLimit,
+  createRateLimit,
   writePolicy,
   requireAssetManagePermission,
   async (req: Request, res: Response): Promise<void> => {
