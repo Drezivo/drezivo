@@ -179,6 +179,8 @@ describe('Owner member and invitation APIs', async () => {
     };
   }
 
+  // Created two weeks back so an already-expired invitation still satisfies
+  // membership_invitation_expiry_after_creation (expires_at > created_at).
   async function seedInvitation(
     workspace: TestWorkspace,
     email: string,
@@ -189,8 +191,8 @@ describe('Owner member and invitation APIs', async () => {
       const digest = digestRecipientEmail(email);
       await client.query(
         `INSERT INTO membership_invitation
-           (tenant_id, recipient_email_digest, recipient_email_ciphertext, business_key, status, expires_at)
-         VALUES ($1, $2, $3, $4, $5, now() + make_interval(days => $6::int))`,
+           (tenant_id, recipient_email_digest, recipient_email_ciphertext, business_key, status, created_at, expires_at)
+         VALUES ($1, $2, $3, $4, $5, now() - interval '14 days', now() + make_interval(days => $6::int))`,
         [
           workspace.tenantId,
           digest,

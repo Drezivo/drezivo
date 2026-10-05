@@ -23,7 +23,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/lib/resolve-staff-landing", () => ({
-  resolveStaffLanding: resolver.resolveStaffLanding,
+  invitationStateOf: () => undefined, resolveStaffLanding: resolver.resolveStaffLanding,
 }));
 
 describe("DashboardAccessGate", () => {

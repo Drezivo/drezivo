@@ -8,7 +8,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 
 import { Button } from "@/components/ui/button";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
-import { resolveStaffLanding } from "@/lib/resolve-staff-landing";
+import { invitationStateOf, resolveStaffLanding } from "@/lib/resolve-staff-landing";
 
 type GateState =
   | { kind: "checking" }
@@ -31,11 +31,12 @@ const noop = () => undefined;
 
 export function DashboardAccessGate({ children }: { children: React.ReactNode }) {
   const { getToken, isLoaded, isSignedIn, orgId } = useAuth();
-  const { setActive } = useClerk();
+  const { setActive, user } = useClerk();
   const router = useRouter();
   const [state, setState] = useState<GateState>({ kind: "checking" });
   const getTokenRef = useRef(getToken);
   const setActiveRef = useRef(setActive);
+  const userRef = useRef(user);
 
   useEffect(() => {
     getTokenRef.current = getToken;
@@ -44,6 +45,10 @@ export function DashboardAccessGate({ children }: { children: React.ReactNode })
   useEffect(() => {
     setActiveRef.current = setActive;
   }, [setActive]);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   const verifyAccess = useCallback(async () => {
     if (!isLoaded) return;
@@ -58,6 +63,7 @@ export function DashboardAccessGate({ children }: { children: React.ReactNode })
         activeOrganizationId: orgId,
         getToken: () => getTokenRef.current(),
         setActive: (params) => setActiveRef.current(params),
+        invitations: invitationStateOf(userRef.current),
       });
       if (resolution.kind === "onboarding") {
         router.replace("/onboarding");

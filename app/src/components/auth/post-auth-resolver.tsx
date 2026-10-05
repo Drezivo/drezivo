@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { AuthBrand } from "@/components/auth/auth-brand";
 import { DrezivoApiError } from "@/lib/drezivo-api";
-import { resolveStaffLanding } from "@/lib/resolve-staff-landing";
+import { invitationStateOf, resolveStaffLanding } from "@/lib/resolve-staff-landing";
 import { WORKSPACE_HOME } from "@/lib/workspace-routes";
 
 type ResolveState =
@@ -17,13 +17,13 @@ const RESOLVE_TIMEOUT_MS = 20_000;
 
 export function PostAuthResolver() {
   const { getToken, isLoaded, isSignedIn, orgId } = useAuth();
-  const { setActive } = useClerk();
+  const { setActive, user } = useClerk();
   const router = useRouter();
   const [state, setState] = useState<ResolveState>({ kind: "resolving" });
   // Clerk updates orgId and getToken while it finishes sign-in and while setActive runs. Read them
   // through refs so those updates do not start a second, overlapping resolution.
-  const latest = useRef({ getToken, orgId, setActive });
-  latest.current = { getToken, orgId, setActive };
+  const latest = useRef({ getToken, orgId, setActive, user });
+  latest.current = { getToken, orgId, setActive, user };
   const started = useRef(false);
 
   useEffect(() => {
@@ -42,9 +42,14 @@ export function PostAuthResolver() {
         RESOLVE_TIMEOUT_MS
       );
     });
-    const { getToken: token, orgId: activeOrganizationId, setActive: activate } = latest.current;
+    const { getToken: token, orgId: activeOrganizationId, setActive: activate, user: signedInUser } = latest.current;
 
-    Promise.race([resolveStaffLanding({ activeOrganizationId, getToken: token, setActive: activate }), timeout])
+    Promise.race([resolveStaffLanding({
+        activeOrganizationId,
+        getToken: token,
+        setActive: activate,
+        invitations: invitationStateOf(signedInUser),
+      }), timeout])
       .then((resolution) => {
         // A full navigation, not router.replace: Clerk refreshes the router right after sign-in, and
         // that refresh cancelled the soft navigation, leaving this spinner up until a manual reload.

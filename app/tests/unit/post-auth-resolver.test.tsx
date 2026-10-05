@@ -14,7 +14,7 @@ const resolver = vi.hoisted(() => ({ resolveStaffLanding: vi.fn() }));
 
 vi.mock("@clerk/nextjs", () => ({ useAuth: clerk.useAuth, useClerk: clerk.useClerk }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
-vi.mock("@/lib/resolve-staff-landing", () => ({ resolveStaffLanding: resolver.resolveStaffLanding }));
+vi.mock("@/lib/resolve-staff-landing", () => ({ invitationStateOf: () => undefined, resolveStaffLanding: resolver.resolveStaffLanding }));
 
 describe("PostAuthResolver", () => {
   const locationReplace = vi.fn();
