@@ -279,7 +279,7 @@ describe('catalogue staff contract', () => {
       activate: false,
       tenant_id: '00000000-0000-4000-8000-000000000099',
       branch_id: ids.branch,
-      physical_assets_max: 1000,
+      physical_assets_max: 300,
       availability: 'available',
     };
 

@@ -105,7 +105,7 @@ describe('Owner member and invitation APIs', async () => {
           role: 'frontdesk',
         },
       ],
-      frontdesk_seats: { used: 2, max: 10 },
+      frontdesk_seats: { used: 2, max: 3 },
     });
     expect(clerk.getUserProfiles).toHaveBeenCalledWith([workspace.ownerId, workspace.frontdeskId]);
 

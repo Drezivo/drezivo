@@ -206,7 +206,7 @@ describe('pilot billing', async () => {
         [ws.tenantId],
       );
       // The amount is the plan price from the server, never from the request.
-      expect(rows.rows[0]).toEqual({ n: 1, amount: 30000 });
+      expect(rows.rows[0]).toEqual({ n: 1, amount: 29900 });
     });
 
     it('allows one pending proof at a time and refuses a method or file it does not recognize', async () => {

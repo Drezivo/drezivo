@@ -54,7 +54,7 @@ export function SubscribeDialog({ open, onOpenChange, onSubmitted }: { open: boo
           <div className="flex items-start justify-between gap-4">
             <div>
               <Dialog.Title className="font-display text-2xl">Subscribe to Drezivo</Dialog.Title>
-              <Dialog.Description className="mt-1 text-sm text-dashboard-muted">Standard plan: ₱300 a month, up to 125 garments, for the shop owner only.</Dialog.Description>
+              <Dialog.Description className="mt-1 text-sm text-dashboard-muted">Standard plan: ₱299 a month, up to 300 active garments and 3 Front Desk staff.</Dialog.Description>
             </div>
             <Dialog.Close className="rounded-md p-1.5 text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy" aria-label="Close">
               <X className="h-5 w-5" />

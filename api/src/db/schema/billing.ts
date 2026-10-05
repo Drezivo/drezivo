@@ -32,7 +32,7 @@ export const subscriptionEventTypeEnum = pgEnum('subscription_event_type', [
 ]);
 export const subscriptionPaymentStatusEnum = pgEnum('subscription_payment_status', ['pending', 'verified', 'failed']);
 
-/** Immutable price versions — owner-confirmed PHP minor units per TRD §6: Starter 30000, Professional 49900, Business 129900. */
+/** Migration-managed plan prices, in PHP minor units; current Standard (`starter` v1) price is 29900. */
 export const plan = pgTable(
   'plan',
   {

@@ -104,8 +104,10 @@ replay-safe, and the bootstrap transaction creates the tenant graph atomically.
 Migration `0016_tenant_bootstrap.sql` originally seeded version-1 Starter, Professional, and Business
 rows; `0053_update_v1_entitlements_and_trial_policy.sql` set their historical 125/300/1,000
 physical-asset and 0/2/10 Front Desk-seat limits. The current pilot offer is one Standard plan:
-`0063_pilot_billing.sql` keeps `starter` v1 active at 30,000 PHP minor units/month, sets its limits
-to 1,000 assets and 10 Front Desk seats, and deactivates Professional and Business v1. It moves
+`0063_pilot_billing.sql` originally kept `starter` v1 active at 30,000 PHP minor units/month, initially setting
+its limits to 1,000 assets and 10 Front Desk seats, and deactivates Professional and Business v1.
+Migration `0071_starter_plan_limits.sql` lowers the current limits to 300 active physical clothing
+items and 3 Front Desk seats under [ADR 0013](../decisions/0013-starter-plan-capacity.md). It moves
 existing subscriptions to `starter` while recording prior plan ids in `subscription_event`, and
 normalizes expired/restricted billing states for the derived pilot access model. The old rows remain
 for audit history. The winning database transaction creates the tenant, `Main Branch`, Owner

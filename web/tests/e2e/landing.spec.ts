@@ -32,9 +32,10 @@ test.describe('marketing landing page', () => {
       'href',
       'https://app.drezivo.com/sign-in',
     );
-    await expect(page.locator('#pricing')).toContainText('300.00 / month');
-    await expect(page.locator('#pricing')).toContainText('499.00 / month');
-    await expect(page.locator('#pricing')).toContainText('1,299.00 / month');
+    await expect(page.locator('#pricing')).toContainText('₱299');
+    await expect(page.locator('#pricing')).toContainText('Standard');
+    await expect(page.locator('#pricing')).toContainText('Up to 300 active garments');
+    await expect(page.locator('#pricing')).toContainText('Up to 3 Front Desk staff');
 
     const faq = page.locator('#faq details').first();
     await faq.locator('summary').click();
