@@ -8,6 +8,8 @@ import {
   bootstrapTenantRequest,
   claimMembershipInvitationRequest,
   membershipInvitationStatus,
+  membershipInvitationList,
+  memberRosterResponse,
   onboardingStatus,
   organizationOnboarding,
   planCode,
@@ -63,9 +65,7 @@ describe('tenancy onboarding contracts', () => {
   });
 
   it('requires structured abandonment reasons and returns the opaque Clerk organization ID', () => {
-    expect(abandonOwnerOnboardingRequest.safeParse({ reason_code: 'payment_concern' }).success).toBe(
-      true,
-    );
+    expect(abandonOwnerOnboardingRequest.safeParse({ reason_code: 'payment_concern' }).success).toBe(true);
     expect(abandonOwnerOnboardingRequest.safeParse({ reason: 'free text' }).success).toBe(false);
     expect(
       organizationOnboarding.safeParse({
@@ -130,5 +130,53 @@ describe('tenancy onboarding contracts', () => {
   it('keeps invitation claim intentionally empty and server-authorized', () => {
     expect(claimMembershipInvitationRequest.safeParse({}).success).toBe(true);
     expect(claimMembershipInvitationRequest.safeParse({ tenant_id: 'nope' }).success).toBe(false);
+  });
+
+  it('models the owner-only member roster and invitation recipient projection', () => {
+    expect(
+      memberRosterResponse.safeParse({
+        members: [
+          {
+            id: 'bd6e4f50-93ff-4a2f-8d41-9e06f1af9b8e',
+            name: 'Business Owner',
+            email: 'owner@example.test',
+            role: 'owner',
+          },
+          {
+            id: 'de89a4a1-f781-467c-8cad-027fe1ee8b15',
+            name: null,
+            email: null,
+            role: 'frontdesk',
+          },
+        ],
+        frontdesk_seats: { used: 1, max: 10 },
+      }).success,
+    ).toBe(true);
+    expect(
+      memberRosterResponse.safeParse({
+        members: [],
+        frontdesk_seats: { used: -1, max: 10 },
+      }).success,
+    ).toBe(false);
+
+    const invitation = {
+      id: '9fbd891f-481b-47fd-a24e-6208f44e62ad',
+      email: 'frontdesk@example.test',
+      status: 'pending',
+      expires_at: '2026-10-12T00:00:00.000Z',
+      created_at: '2026-10-05T00:00:00.000Z',
+    };
+    expect(
+      membershipInvitationList.safeParse({
+        items: [invitation],
+        page_meta: { next_cursor: null, has_more: false },
+      }).success,
+    ).toBe(true);
+    expect(
+      membershipInvitationList.safeParse({
+        items: [{ ...invitation, email: undefined }],
+        page_meta: { next_cursor: null, has_more: false },
+      }).success,
+    ).toBe(false);
   });
 });

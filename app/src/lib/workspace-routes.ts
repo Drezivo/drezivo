@@ -28,6 +28,7 @@ const ROUTE_LABELS: Record<string, string> = {
   "/settings": "Settings",
   "/settings/payment-methods": "Payment methods",
   "/settings/measurement-guide": "Measurement guide",
+  "/settings/members": "Members",
   "/settings/account": "Your account",
   "/settings/notifications": "Notifications",
   "/help": "Help Center",

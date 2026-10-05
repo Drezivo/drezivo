@@ -208,6 +208,11 @@ components:
                       - "null"
                     minLength: 1
                     maxLength: 80
+                  primary_image_url:
+                    type:
+                      - string
+                      - "null"
+                    format: uri
                 required:
                   - variant_id
                   - product_name
@@ -430,6 +435,11 @@ components:
                             - "null"
                           minLength: 1
                           maxLength: 80
+                        primary_image_url:
+                          type:
+                            - string
+                            - "null"
+                          format: uri
                       required:
                         - variant_id
                         - product_name
@@ -846,11 +856,16 @@ components:
               created_at:
                 type: string
                 format: date-time
+              email:
+                type: string
+                maxLength: 320
+                format: email
             required:
               - id
               - status
               - expires_at
               - created_at
+              - email
         page_meta:
           type: object
           properties:
@@ -867,6 +882,54 @@ components:
       required:
         - items
         - page_meta
+    MemberRosterResponse:
+      type: object
+      properties:
+        members:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type:
+                  - string
+                  - "null"
+                minLength: 1
+                maxLength: 200
+              email:
+                type:
+                  - string
+                  - "null"
+                maxLength: 320
+                format: email
+              role:
+                type: string
+                enum: &a11
+                  - owner
+                  - frontdesk
+            required:
+              - id
+              - name
+              - email
+              - role
+        frontdesk_seats:
+          type: object
+          properties:
+            used:
+              type: integer
+              minimum: 0
+            max:
+              type: integer
+              minimum: 0
+          required:
+            - used
+            - max
+      required:
+        - members
+        - frontdesk_seats
     SubscriptionSummary:
       type: object
       properties:
@@ -989,7 +1052,7 @@ components:
               minLength: 1
             status:
               type: string
-              enum: &a11
+              enum: &a12
                 - active
                 - restricted
                 - cancelled
@@ -1051,9 +1114,7 @@ components:
               format: uuid
             role:
               type: string
-              enum: &a12
-                - owner
-                - frontdesk
+              enum: *a11
             status:
               type: string
               enum: &a13
@@ -1151,7 +1212,7 @@ components:
               minLength: 1
             status:
               type: string
-              enum: *a11
+              enum: *a12
             currency:
               type: string
               pattern: ^[A-Z]{3}$
@@ -1181,7 +1242,7 @@ components:
               format: uuid
             role:
               type: string
-              enum: *a12
+              enum: *a11
             status:
               type: string
               enum: *a13
@@ -1363,7 +1424,7 @@ components:
               minLength: 1
             status:
               type: string
-              enum: *a11
+              enum: *a12
             currency:
               type: string
               pattern: ^[A-Z]{3}$
@@ -1391,7 +1452,7 @@ components:
           maxLength: 200
         role:
           type: string
-          enum: *a12
+          enum: *a11
         membership_updated_at:
           type: string
           format: date-time
@@ -1422,7 +1483,7 @@ components:
                     minLength: 1
                   status:
                     type: string
-                    enum: *a11
+                    enum: *a12
                   currency:
                     type: string
                     pattern: ^[A-Z]{3}$
@@ -1450,7 +1511,7 @@ components:
                 maxLength: 200
               role:
                 type: string
-                enum: *a12
+                enum: *a11
               membership_updated_at:
                 type: string
                 format: date-time
@@ -1826,6 +1887,12 @@ components:
           type: string
           maxLength: 2000
           default: ""
+        subcategory:
+          type:
+            - string
+            - "null"
+          minLength: 1
+          maxLength: 120
         category_id:
           type: string
           format: uuid
@@ -2287,6 +2354,12 @@ components:
         description:
           type: string
           maxLength: 2000
+        subcategory:
+          type:
+            - string
+            - "null"
+          minLength: 1
+          maxLength: 120
         category:
           type:
             - object
@@ -3632,7 +3705,7 @@ paths:
                             minLength: 1
                           status:
                             type: string
-                            enum: *a11
+                            enum: *a12
                           currency:
                             type: string
                             pattern: ^[A-Z]{3}$
@@ -3689,7 +3762,7 @@ paths:
                             format: uuid
                           role:
                             type: string
-                            enum: *a12
+                            enum: *a11
                           status:
                             type: string
                             enum: *a13
@@ -4067,7 +4140,7 @@ paths:
                                   minLength: 1
                                 status:
                                   type: string
-                                  enum: *a11
+                                  enum: *a12
                                 currency:
                                   type: string
                                   pattern: ^[A-Z]{3}$
@@ -4095,7 +4168,7 @@ paths:
                               maxLength: 200
                             role:
                               type: string
-                              enum: *a12
+                              enum: *a11
                             membership_updated_at:
                               type: string
                               format: date-time
@@ -4213,7 +4286,7 @@ paths:
                             minLength: 1
                           status:
                             type: string
-                            enum: *a11
+                            enum: *a12
                           currency:
                             type: string
                             pattern: ^[A-Z]{3}$
@@ -4243,7 +4316,7 @@ paths:
                             format: uuid
                           role:
                             type: string
-                            enum: *a12
+                            enum: *a11
                           status:
                             type: string
                             enum: *a13
@@ -4758,6 +4831,165 @@ paths:
                   - success
                   - error
                   - request_id
+  /members:
+    get:
+      tags:
+        - membership-invitations
+      summary: List active tenant members and Front Desk seat usage for the Owner.
+      responses:
+        "200":
+          description: Active Owner and Front Desk members with Clerk identity and
+            reserved seat usage.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      members:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              format: uuid
+                            name:
+                              type:
+                                - string
+                                - "null"
+                              minLength: 1
+                              maxLength: 200
+                            email:
+                              type:
+                                - string
+                                - "null"
+                              maxLength: 320
+                              format: email
+                            role:
+                              type: string
+                              enum: *a11
+                          required:
+                            - id
+                            - name
+                            - email
+                            - role
+                      frontdesk_seats:
+                        type: object
+                        properties:
+                          used:
+                            type: integer
+                            minimum: 0
+                          max:
+                            type: integer
+                            minimum: 0
+                        required:
+                          - used
+                          - max
+                    required:
+                      - members
+                      - frontdesk_seats
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Only the active Owner can view tenant members.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "503":
+          description: The identity provider is temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
   /membership-invitations:
     post:
       tags:
@@ -4958,7 +5190,7 @@ paths:
     get:
       tags:
         - membership-invitations
-      summary: List safe Front Desk invitation state for the active tenant.
+      summary: List Front Desk invitations for the active tenant Owner.
       parameters:
         - schema:
             type: string
@@ -4976,7 +5208,8 @@ paths:
           in: query
       responses:
         "200":
-          description: Safe invitation projections without recipient or provider data.
+          description: Owner-only invitation details, including each recipient email and
+            no provider data.
           content:
             application/json:
               schema:
@@ -5006,11 +5239,16 @@ paths:
                             created_at:
                               type: string
                               format: date-time
+                            email:
+                              type: string
+                              maxLength: 320
+                              format: email
                           required:
                             - id
                             - status
                             - expires_at
                             - created_at
+                            - email
                       page_meta:
                         type: object
                         properties:
@@ -5659,7 +5897,7 @@ paths:
                             minLength: 1
                           status:
                             type: string
-                            enum: *a11
+                            enum: *a12
                           currency:
                             type: string
                             pattern: ^[A-Z]{3}$
@@ -5689,7 +5927,7 @@ paths:
                             format: uuid
                           role:
                             type: string
-                            enum: *a12
+                            enum: *a11
                           status:
                             type: string
                             enum: *a13
@@ -7262,6 +7500,12 @@ paths:
                               type:
                                 - string
                                 - "null"
+                            subcategory:
+                              type:
+                                - string
+                                - "null"
+                              minLength: 1
+                              maxLength: 120
                             image_url:
                               type:
                                 - string
@@ -7309,6 +7553,12 @@ paths:
                               type:
                                 - string
                                 - "null"
+                            subcategory:
+                              type:
+                                - string
+                                - "null"
+                              minLength: 1
+                              maxLength: 120
                             image_url:
                               type:
                                 - string
@@ -7581,6 +7831,13 @@ paths:
         - schema:
             type: string
             minLength: 1
+            maxLength: 120
+          required: false
+          name: subcategory
+          in: query
+        - schema:
+            type: string
+            minLength: 1
             maxLength: 40
           required: false
           name: size
@@ -7642,6 +7899,12 @@ paths:
                               type:
                                 - string
                                 - "null"
+                            subcategory:
+                              type:
+                                - string
+                                - "null"
+                              minLength: 1
+                              maxLength: 120
                             image_url:
                               type:
                                 - string
@@ -7686,6 +7949,13 @@ paths:
                         items:
                           type: string
                         maxItems: 60
+                      subcategories:
+                        type: array
+                        items:
+                          type: string
+                          minLength: 1
+                          maxLength: 120
+                        maxItems: 1000
                     required:
                       - items
                       - total
@@ -7747,6 +8017,12 @@ paths:
                         type:
                           - string
                           - "null"
+                      subcategory:
+                        type:
+                          - string
+                          - "null"
+                        minLength: 1
+                        maxLength: 120
                       image_urls:
                         type: array
                         items:
@@ -7975,6 +8251,8 @@ paths:
                                 - reserved
                                 - fitting
                                 - unavailable
+                            closed:
+                              type: boolean
                           required:
                             - date
                             - state
@@ -14239,6 +14517,11 @@ paths:
                                           - "null"
                                         minLength: 1
                                         maxLength: 80
+                                      primary_image_url:
+                                        type:
+                                          - string
+                                          - "null"
+                                        format: uri
                                     required:
                                       - variant_id
                                       - product_name
@@ -14652,6 +14935,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -15050,6 +15338,11 @@ paths:
                                     - "null"
                                   minLength: 1
                                   maxLength: 80
+                                primary_image_url:
+                                  type:
+                                    - string
+                                    - "null"
+                                  format: uri
                               required:
                                 - variant_id
                                 - product_name
@@ -15586,6 +15879,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -16023,6 +16321,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -16491,6 +16794,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -16954,6 +17262,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -17421,6 +17734,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -17888,6 +18206,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -18350,6 +18673,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -18812,6 +19140,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -19277,6 +19610,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -19742,6 +20080,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -20227,6 +20570,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -23134,7 +23482,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -23624,7 +23971,6 @@ paths:
                           type:
                             - string
                             - "null"
-                          pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                         email:
                           type:
                             - string
@@ -23888,7 +24234,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -24549,7 +24894,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -25075,7 +25419,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -25601,7 +25944,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -26191,7 +26533,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -26642,7 +26983,6 @@ paths:
                         type:
                           - string
                           - "null"
-                        pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                       business_address:
                         type:
                           - string
@@ -26798,7 +27138,6 @@ paths:
                   type:
                     - string
                     - "null"
-                  pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                 business_address:
                   type:
                     - string
@@ -26844,7 +27183,6 @@ paths:
                         type:
                           - string
                           - "null"
-                        pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                       business_address:
                         type:
                           - string
@@ -28272,7 +28610,7 @@ paths:
                             minLength: 1
                           status:
                             type: string
-                            enum: *a11
+                            enum: *a12
                           currency:
                             type: string
                             pattern: ^[A-Z]{3}$
@@ -28329,7 +28667,7 @@ paths:
                             format: uuid
                           role:
                             type: string
-                            enum: *a12
+                            enum: *a11
                           status:
                             type: string
                             enum: *a13

@@ -33,7 +33,8 @@ export async function listMembershipInvitationsController(
   res: Response,
 ): Promise<void> {
   const context = requireContext(req);
-  const page = req.query as unknown as PaginationRequest;
+  const page = req.membershipInvitationPagination as PaginationRequest | undefined;
+  if (!page) throw new ValidationError('Pagination is invalid.');
   const result = await listMembershipInvitations({ ...context, ...page });
   sendSuccess(req, res, result);
 }

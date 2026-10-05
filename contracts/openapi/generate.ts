@@ -49,6 +49,7 @@ import {
   membershipInvitationList,
   membershipInvitationParams,
   membershipInvitationStatus,
+  memberRosterResponse,
   onboardingActorContext,
   onboardingStatus,
   operatorActionResponse,
@@ -204,6 +205,7 @@ registry.register('OrganizationOnboarding', organizationOnboarding);
 registry.register('OnboardingActorContext', onboardingActorContext);
 registry.register('MembershipInvitation', membershipInvitation);
 registry.register('MembershipInvitationList', membershipInvitationList);
+registry.register('MemberRosterResponse', memberRosterResponse);
 registry.register('SubscriptionSummary', subscriptionSummary);
 registry.register('OperatorActionResponse', operatorActionResponse);
 registry.register('ClerkWebhookInboxRecord', clerkWebhookInboxRecord);
@@ -384,6 +386,21 @@ registry.registerPath({
 
 // ---- Owner Front Desk invitations ---------------------------------------
 registry.registerPath({
+  method: 'get',
+  path: '/members',
+  tags: ['membership-invitations'],
+  summary: 'List active tenant members and Front Desk seat usage for the Owner.',
+  responses: {
+    200: {
+      description: 'Active Owner and Front Desk members with Clerk identity and reserved seat usage.',
+      content: { 'application/json': { schema: successEnvelope(memberRosterResponse) } },
+    },
+    403: jsonError('Only the active Owner can view tenant members.'),
+    503: jsonError('The identity provider is temporarily unavailable.'),
+  },
+});
+
+registry.registerPath({
   method: 'post',
   path: '/membership-invitations',
   tags: ['membership-invitations'],
@@ -407,11 +424,11 @@ registry.registerPath({
   method: 'get',
   path: '/membership-invitations',
   tags: ['membership-invitations'],
-  summary: 'List safe Front Desk invitation state for the active tenant.',
+  summary: 'List Front Desk invitations for the active tenant Owner.',
   request: { query: paginationRequest },
   responses: {
     200: {
-      description: 'Safe invitation projections without recipient or provider data.',
+      description: 'Owner-only invitation details, including each recipient email and no provider data.',
       content: { 'application/json': { schema: successEnvelope(membershipInvitationList) } },
     },
     403: jsonError('Only the active Owner can list invitations.'),
@@ -1533,8 +1550,6 @@ for (const entry of extraPaths) {
     },
   });
 }
-
-
 // ---- pilot billing, start trial, payment methods, and held-reservation resume ----------------
 registry.registerPath({
   method: 'post',

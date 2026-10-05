@@ -21,6 +21,11 @@ export interface SafeInvitationRow {
   created_at: Date;
 }
 
+/** Ciphertext is selected only for the owner-authorized list path that must identify recipients. */
+export interface OwnerInvitationRow extends SafeInvitationRow {
+  recipient_email_ciphertext: string;
+}
+
 export interface InvitationDispatchSnapshot {
   invitation: InvitationRow;
   clerk_org_id: string;
@@ -34,21 +39,6 @@ export async function lockInvitationTenant(client: PoolClient, tenantId: string)
   const result = await client.query<{ id: string }>(
     'SELECT id FROM tenant WHERE id = $1 FOR UPDATE',
     [tenantId],
-  );
-  return result.rows.length === 1;
-}
-
-export async function assertOwnerMembership(
-  client: PoolClient,
-  input: { tenantId: string; membershipId: string; principalId: string },
-): Promise<boolean> {
-  const result = await client.query<{ id: string }>(
-    `SELECT id
-       FROM membership
-      WHERE id = $1 AND tenant_id = $2 AND clerk_user_id = $3
-        AND role = 'owner' AND status = 'active'
-      LIMIT 1`,
-    [input.membershipId, input.tenantId, input.principalId],
   );
   return result.rows.length === 1;
 }
@@ -254,12 +244,12 @@ export async function insertInvitationRevokeOutbox(
   );
 }
 
-export async function listSafeInvitations(
+export async function listOwnerInvitations(
   client: PoolClient,
   input: { tenantId: string; cursorCreatedAt?: Date; cursorId?: string; limit: number },
-): Promise<SafeInvitationRow[]> {
-  const result = await client.query<SafeInvitationRow>(
-    `SELECT id, status, expires_at, created_at
+): Promise<OwnerInvitationRow[]> {
+  const result = await client.query<OwnerInvitationRow>(
+    `SELECT id, recipient_email_ciphertext, status, expires_at, created_at
        FROM membership_invitation
       WHERE tenant_id = $1
         AND ($2::timestamptz IS NULL OR (created_at, id) < ($2::timestamptz, $3::uuid))

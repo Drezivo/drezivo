@@ -9,6 +9,7 @@ import {
   type TenantStatus,
   type WorkspaceSummary,
 } from '@drezivo/contracts';
+import type { PoolClient } from 'pg';
 import {
   withActorTenantResolutionTransaction,
   withGlobalTransaction,
@@ -82,6 +83,21 @@ export interface ResolvedActorContext extends ActorContext {
   /** Internal value used by middleware policy checks; it is intentionally not sent separately. */
   effectiveTenantStatus: TenantStatus;
   activePermissionCodes: PermissionCode[];
+}
+
+export async function hasActiveTenantOwnerMembership(
+  client: PoolClient,
+  input: { tenantId: string; membershipId: string; principalId: string },
+): Promise<boolean> {
+  const result = await client.query<{ id: string }>(
+    `SELECT id
+       FROM membership
+      WHERE id = $1 AND tenant_id = $2 AND clerk_user_id = $3
+        AND role = 'owner' AND status = 'active'
+      LIMIT 1`,
+    [input.membershipId, input.tenantId, input.principalId],
+  );
+  return result.rows.length === 1;
 }
 
 interface TenantRow {
@@ -230,7 +246,10 @@ async function resolveInsideTenant(
   if (!subscription) return { kind: 'state_conflict' };
 
   const entitlementSnapshot = await resolveTenantEntitlements(context.client, tenant.id);
-  if (subscription.plan_id !== entitlementSnapshot.planId || subscription.plan_code !== entitlementSnapshot.planCode) {
+  if (
+    subscription.plan_id !== entitlementSnapshot.planId ||
+    subscription.plan_code !== entitlementSnapshot.planCode
+  ) {
     throw new StateConflictError('Workspace entitlement state is inconsistent.');
   }
 
