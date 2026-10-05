@@ -1,12 +1,17 @@
 import type { RequestHandler } from 'express';
 import type { PermissionCode, WorkspaceList } from '@drezivo/contracts';
+import type { PoolClient } from 'pg';
 
 import {
   ForbiddenError,
   TenantCancelledError,
   TenantRestrictedError,
 } from '../../shared/errors.js';
-import { listActorWorkspaces, type ResolvedActorContext } from './tenancy.repository.js';
+import {
+  hasActiveTenantOwnerMembership,
+  listActorWorkspaces,
+  type ResolvedActorContext,
+} from './tenancy.repository.js';
 import { toWorkspaceList } from './tenancy.dto.js';
 
 export async function getWorkspaces(input: {
@@ -15,6 +20,15 @@ export async function getWorkspaces(input: {
   limit: number;
 }): Promise<WorkspaceList> {
   return toWorkspaceList(await listActorWorkspaces(input.principalId, input.cursor, input.limit));
+}
+
+export async function assertTenantOwnerMembership(
+  client: PoolClient,
+  input: { tenantId: string; membershipId: string; principalId: string },
+): Promise<void> {
+  if (!(await hasActiveTenantOwnerMembership(client, input))) {
+    throw new ForbiddenError('Only the active tenant owner can manage workspace members.');
+  }
 }
 
 export type TenantAction =

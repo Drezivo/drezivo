@@ -4,7 +4,7 @@ import { NotificationSettingsPage } from "@/components/settings/notification-set
 import { SHOW_NOTIFICATION_SETTINGS } from "@/lib/features";
 
 export default function Page() {
-  // Hidden during the pilot (customer emails always send); kept for when toggles return.
+  // Hidden during the pilot because notification preferences are not enforced yet.
   if (!SHOW_NOTIFICATION_SETTINGS) redirect("/settings");
   return <NotificationSettingsPage />;
 }

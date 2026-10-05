@@ -836,7 +836,7 @@ Table plan {
   indexes {
     (code, version) [unique]
   }
-  Note: 'V1. Current pilot offer: Standard at 30000 PHP minor units/month, internal code `starter` v1. Migration 0063 deactivates Professional and Business v1 while retaining their rows for history. TBF-032 validates the active v1 row and runtime roles retain SELECT only. Price versions are migration-owned.'
+  Note: 'V1. Current pilot offer: Standard at 29900 PHP minor units/month, internal code `starter` v1. Migrations 0063, 0071 and 0072 manage the active offer while retaining inactive plan rows and payment history. TBF-032 validates the active v1 row and runtime roles retain SELECT only. Prices are migration-managed.'
 }
 
 Table plan_entitlement {
@@ -849,7 +849,7 @@ Table plan_entitlement {
   indexes {
     (plan_id, capability) [unique]
   }
-  Note: 'V1. Current Standard limits after migration 0063: physical_assets.max 1000 and frontdesk_seats.max 10. TBF-032 guards usage under a tenant row lock; limits and release flags both required; null means nonnumeric capability, not implicitly unlimited.'
+  Note: 'V1. Current Standard limits after migration 0071: physical_assets.max 300 and frontdesk_seats.max 3. TBF-032 guards usage under a tenant row lock; limits and release flags both required; null means nonnumeric capability, not implicitly unlimited.'
 }
 
 Table subscription {

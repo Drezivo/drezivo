@@ -42,6 +42,13 @@ import {
   contractVersion,
   createMembershipInvitationRequest,
   createClothingRequest,
+  batchCreateClothingRequest,
+  batchResponse,
+  batchUploadAuthorizationRequest,
+  batchUploadFinalizeRequest,
+  catalogueImportCapabilities,
+  clothingPhotoExtractRequest,
+  clothingPhotoExtractResponse,
   changeClothingSizingModeRequest,
   changeClothingSizingModeResponse,
   createOwnerOnboardingRequest,
@@ -49,6 +56,7 @@ import {
   membershipInvitationList,
   membershipInvitationParams,
   membershipInvitationStatus,
+  memberRosterResponse,
   onboardingActorContext,
   onboardingStatus,
   operatorActionResponse,
@@ -104,10 +112,6 @@ import {
   guestReceiptSubmitRequest,
   guestFittingRequest,
   guestFittingCreated,
-  startGuestVerificationRequest,
-  startGuestVerificationResponse,
-  confirmGuestVerificationRequest,
-  confirmGuestVerificationResponse,
   publicAvailabilityQuery,
   publicAvailabilityResponse,
   fittingSlotsQuery,
@@ -204,6 +208,7 @@ registry.register('OrganizationOnboarding', organizationOnboarding);
 registry.register('OnboardingActorContext', onboardingActorContext);
 registry.register('MembershipInvitation', membershipInvitation);
 registry.register('MembershipInvitationList', membershipInvitationList);
+registry.register('MemberRosterResponse', memberRosterResponse);
 registry.register('SubscriptionSummary', subscriptionSummary);
 registry.register('OperatorActionResponse', operatorActionResponse);
 registry.register('ClerkWebhookInboxRecord', clerkWebhookInboxRecord);
@@ -243,6 +248,7 @@ const jsonError = (description: string) => ({
 const idempotencyKeyHeader = z.object({
   'Idempotency-Key': z.string().min(8).max(255),
 });
+const guestAccessCookieHeader = z.object({ cookie: z.string().min(1).describe('The reservation-scoped HttpOnly cookie set by the hold endpoint.') });
 
 // ---- owner onboarding ----------------------------------------------------
 registry.registerPath({
@@ -384,6 +390,21 @@ registry.registerPath({
 
 // ---- Owner Front Desk invitations ---------------------------------------
 registry.registerPath({
+  method: 'get',
+  path: '/members',
+  tags: ['membership-invitations'],
+  summary: 'List active tenant members and Front Desk seat usage for the Owner.',
+  responses: {
+    200: {
+      description: 'Active Owner and Front Desk members with Clerk identity and reserved seat usage.',
+      content: { 'application/json': { schema: successEnvelope(memberRosterResponse) } },
+    },
+    403: jsonError('Only the active Owner can view tenant members.'),
+    503: jsonError('The identity provider is temporarily unavailable.'),
+  },
+});
+
+registry.registerPath({
   method: 'post',
   path: '/membership-invitations',
   tags: ['membership-invitations'],
@@ -407,11 +428,11 @@ registry.registerPath({
   method: 'get',
   path: '/membership-invitations',
   tags: ['membership-invitations'],
-  summary: 'List safe Front Desk invitation state for the active tenant.',
+  summary: 'List Front Desk invitations for the active tenant Owner.',
   request: { query: paginationRequest },
   responses: {
     200: {
-      description: 'Safe invitation projections without recipient or provider data.',
+      description: 'Owner-only invitation details, including each recipient email and no provider data.',
       content: { 'application/json': { schema: successEnvelope(membershipInvitationList) } },
     },
     403: jsonError('Only the active Owner can list invitations.'),
@@ -613,10 +634,11 @@ registry.registerPath({
   },
   responses: {
     201: {
-      description: 'Hold created; the guest token is returned once.',
+      description: 'Hold created. A reservation-scoped HttpOnly cookie is set for API-host access; the capability is not included in JSON.',
+      headers: { 'Set-Cookie': { description: 'Host-only HttpOnly cookie scoped to this reservation API path.', schema: { type: 'string' } } },
       content: { 'application/json': { schema: successEnvelope(guestReservationCreated) } },
     },
-    401: jsonError('The email verification is missing, expired, or for a different address.'),
+    403: jsonError('The Turnstile submission check failed.'),
     409: jsonError('The requested asset/interval is no longer available (CAPACITY_CONFLICT).'),
     422: jsonError('Validation failed.'),
   },
@@ -793,6 +815,59 @@ registry.registerPath({
     },
     409: jsonError('A sizing mode transition conflicts with the current product state.'),
     422: jsonError('The sizing mode request is invalid.'),
+  },
+});
+
+// ---- catalogue batch import ------------------------------------------
+registry.registerPath({
+  method: 'get',
+  path: '/catalogue/import/capabilities',
+  tags: ['catalogue'],
+  summary: 'What this deployment offers for batch import (photo reading, batch size).',
+  responses: {
+    200: {
+      description: 'Batch import capabilities.',
+      content: { 'application/json': { schema: successEnvelope(catalogueImportCapabilities) } },
+    },
+  },
+});
+
+for (const [path, schema, summary] of [
+  ['/catalogue/import/uploads', batchUploadAuthorizationRequest, 'Authorize up to 25 catalogue photo uploads.'],
+  ['/catalogue/import/uploads/finalize', batchUploadFinalizeRequest, 'Finalize up to 25 uploaded catalogue photos.'],
+  ['/catalogue/import/clothing', batchCreateClothingRequest, 'Create up to 25 clothing products, one idempotency key per row.'],
+] as const) {
+  registry.registerPath({
+    method: 'post',
+    path,
+    tags: ['catalogue'],
+    summary,
+    request: { body: { content: { 'application/json': { schema } } } },
+    responses: {
+      200: {
+        description: 'Every row with the status and envelope its single-item command returned. Retrying a row with the same key replays it.',
+        content: { 'application/json': { schema: successEnvelope(batchResponse) } },
+      },
+      422: jsonError('The batch shape is invalid (empty, over 25 rows, or repeated keys).'),
+      429: jsonError('Batch rate limit exceeded.'),
+    },
+  });
+}
+
+registry.registerPath({
+  method: 'post',
+  path: '/catalogue/import/extract',
+  tags: ['catalogue'],
+  summary: 'Read garment details printed on one accepted catalogue photo (suggestions for review).',
+  request: { body: { content: { 'application/json': { schema: clothingPhotoExtractRequest } } } },
+  responses: {
+    200: {
+      description: 'Suggested fields; any field the photo does not show is null.',
+      content: { 'application/json': { schema: successEnvelope(clothingPhotoExtractResponse) } },
+    },
+    404: jsonError('The photo is not an accepted catalogue image of this shop.'),
+    429: jsonError('The photo reader is rate limited; retry after Retry-After seconds.'),
+    503: jsonError('Photo reading is not set up or the provider is unavailable.'),
   },
 });
 
@@ -1277,10 +1352,10 @@ registry.registerPath({
   path: '/guest/reservations/{id}',
   tags: ['guest'],
   summary: "Guest's own booking summary; `no-store` (TRD §4).",
-  request: { params: z.object({ id: z.string().uuid() }) },
+  request: { params: z.object({ id: z.string().uuid() }), headers: guestAccessCookieHeader },
   responses: {
     200: {
-      description: 'Reservation view scoped to the presented capability token.',
+      description: 'Reservation view authorized by the reservation-scoped HttpOnly cookie. The capability is never placed in a URL or response body.',
       content: { 'application/json': { schema: successEnvelope(guestReservationView) } },
     },
     404: jsonError('Concealed: invalid, expired, or revoked capability token.'),
@@ -1311,7 +1386,7 @@ registry.registerPath({
   summary: 'Attach payment evidence to a reservation (TRD §4).',
   request: {
     params: z.object({ id: z.string().uuid() }),
-    headers: idempotencyKeyHeader,
+    headers: idempotencyKeyHeader.extend(guestAccessCookieHeader.shape),
     body: { content: { 'application/json': { schema: guestReceiptSubmitRequest } } },
   },
   responses: {
@@ -1377,7 +1452,6 @@ registry.register('CustomerArchiveResponse', customerArchiveResponse);
 // ---- storefront CMS, settings, and guest booking ---------------------------
 const slugParams = z.object({ slug: z.string().min(1) });
 const guestIdParams = z.object({ id: z.string().uuid() });
-const guestAuthHeader = z.object({ authorization: z.string().regex(/^Bearer [A-Za-z0-9_-]{43}$/) });
 const jsonBody = (schema: z.ZodTypeAny) => ({ content: { 'application/json': { schema } } });
 
 registry.registerPath({
@@ -1501,6 +1575,8 @@ const extraPaths: Array<{
   summary: string;
   request: Record<string, unknown>;
   schema: z.ZodTypeAny;
+  successStatus?: 200 | 201;
+  turnstileProtected?: boolean;
 }> = [
   { method: 'get', path: '/storefront', tag: 'storefront-cms', summary: 'Storefront document, status, policy, and publish readiness.', request: {}, schema: storefrontSettings },
   { method: 'get', path: '/storefront/preview', tag: 'storefront-cms', summary: 'Short-lived owner preview credential for the storefront, published or not.', request: {}, schema: storefrontPreviewLink },
@@ -1513,11 +1589,9 @@ const extraPaths: Array<{
   { method: 'patch', path: '/settings/business', tag: 'settings', summary: 'Update business information (version checked).', request: { headers: idempotencyKeyHeader, body: jsonBody(updateBusinessSettingsRequest) }, schema: businessSettings },
   { method: 'get', path: '/settings/notifications', tag: 'settings', summary: 'Email notification preferences.', request: {}, schema: notificationSettings },
   { method: 'patch', path: '/settings/notifications', tag: 'settings', summary: 'Update email notification preferences (version checked).', request: { headers: idempotencyKeyHeader, body: jsonBody(updateNotificationSettingsRequest) }, schema: notificationSettings },
-  { method: 'post', path: '/public/stores/{slug}/verifications', tag: 'guest', summary: 'Send a 6-digit email code. The answer never reveals whether a code was sent.', request: { params: slugParams, body: jsonBody(startGuestVerificationRequest) }, schema: startGuestVerificationResponse },
-  { method: 'post', path: '/public/stores/{slug}/verifications/confirm', tag: 'guest', summary: 'Exchange a valid code for a short-lived verification token.', request: { params: slugParams, body: jsonBody(confirmGuestVerificationRequest) }, schema: confirmGuestVerificationResponse },
   { method: 'get', path: '/public/stores/{slug}/fitting-slots', tag: 'guest', summary: 'Open fitting start times for one date.', request: { params: slugParams, query: fittingSlotsQuery }, schema: fittingSlotsResponse },
-  { method: 'post', path: '/public/stores/{slug}/fittings', tag: 'guest', summary: 'Verified guest requests a fitting; it starts pending for staff review.', request: { params: slugParams, headers: idempotencyKeyHeader, body: jsonBody(guestFittingRequest) }, schema: guestFittingCreated },
-  { method: 'post', path: '/guest/reservations/{id}/uploads', tag: 'guest', summary: 'Authorize one receipt upload for the guest reservation.', request: { params: guestIdParams, headers: guestAuthHeader, body: jsonBody(guestReceiptUploadRequest) }, schema: guestReceiptUploadResponse },
+  { method: 'post', path: '/public/stores/{slug}/fittings', tag: 'guest', summary: 'Guest requests a fitting without email verification; Turnstile protects submission and it starts pending for staff review.', request: { params: slugParams, headers: idempotencyKeyHeader, body: jsonBody(guestFittingRequest) }, schema: guestFittingCreated, successStatus: 201, turnstileProtected: true },
+  { method: 'post', path: '/guest/reservations/{id}/uploads', tag: 'guest', summary: 'Authorize one receipt upload using the reservation-scoped HttpOnly cookie.', request: { params: guestIdParams, headers: guestAccessCookieHeader, body: jsonBody(guestReceiptUploadRequest) }, schema: guestReceiptUploadResponse },
 ];
 for (const entry of extraPaths) {
   registry.registerPath({
@@ -1527,14 +1601,13 @@ for (const entry of extraPaths) {
     summary: entry.summary,
     request: entry.request,
     responses: {
-      200: { description: 'Success.', content: { 'application/json': { schema: successEnvelope(entry.schema) } } },
+      [entry.successStatus ?? 200]: { description: 'Success.', content: { 'application/json': { schema: successEnvelope(entry.schema) } } },
+      ...(entry.turnstileProtected ? { 403: jsonError('The Turnstile submission check failed.') } : {}),
       409: jsonError('A newer version exists or an identical request is in progress.'),
       422: jsonError('Validation failed.'),
     },
   });
 }
-
-
 // ---- pilot billing, start trial, payment methods, and held-reservation resume ----------------
 registry.registerPath({
   method: 'post',

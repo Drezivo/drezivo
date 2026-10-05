@@ -4,7 +4,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 
 /**
  * Cloudflare Turnstile "I'm not a robot" check. The API verifies each token with Cloudflare before
- * sending a verification email, so bots cannot use the storefront to spam inboxes. Tokens are
+ * accepting a storefront reservation or fitting request. Tokens are
  * single-use: call `reset()` after every attempt. Without NEXT_PUBLIC_TURNSTILE_SITE_KEY (local
  * development) nothing renders, and the API skips the check when it has no secret either.
  */

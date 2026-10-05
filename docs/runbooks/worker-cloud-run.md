@@ -16,7 +16,7 @@ instead and delete these jobs. See `Drezivo-Worker-Hosting-Guide.docx`, section 
 | Job | Schedule | Settings | What it does |
 | --- | --- | --- | --- |
 | `drezivo-worker` | every 15 minutes | `WORKER_MODE=drain`, `WORKER_DRAIN_SCOPE=all` | Runs every sweep once (hold expiry, subscriptions, Clerk reconciliation and cleanup, garment recovery readiness), then works through the whole outbox and exits. |
-| `drezivo-worker-fast` | every 2 minutes | `WORKER_MODE=drain`, `WORKER_DRAIN_SCOPE=fast` | Releases expired holds and sends queued emails, then exits. An expired hold keeps its garment unbookable until it is released, and verification codes are valid for only 10 minutes, so neither can wait 15. |
+| `drezivo-worker-fast` | every 2 minutes | `WORKER_MODE=drain`, `WORKER_DRAIN_SCOPE=fast` | Releases expired holds and sends queued operational emails, then exits. An expired hold keeps its garment unbookable until it is released, so it cannot wait 15 minutes. Guest reservation/fitting email is not sent. |
 
 Both jobs run the same container image as the API, with the command `node dist/worker.js`.
 
@@ -67,9 +67,11 @@ Set the US$1 budget alert in step 1 so any surprise shows up in your email, not 
      `CORS_ALLOWED_ORIGINS`, `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_REGION`,
      `OBJECT_STORAGE_BUCKET_PRIVATE`, `OBJECT_STORAGE_ACCESS_KEY_ID`,
      `OBJECT_STORAGE_SECRET_ACCESS_KEY`, and `OBJECT_STORAGE_FORCE_PATH_STYLE`.
-5. **Resend is ready.** You need your API key and a sender address.
+5. **Resend is ready** if the deployment sends business/owner or other operational notifications.
+   You need your API key and a sender address.
    - `onboarding@resend.dev` only delivers to your own Resend account address.
-   - To email renters, verify your own domain in Resend and send from an address on it.
+   - Guest storefront flows do not send email to renters. Verify your own domain for owner and
+     operational messages.
 
 ## Step 1 — Google Cloud project (once, in the browser)
 
@@ -127,7 +129,6 @@ OBJECT_STORAGE_FORCE_PATH_STYLE=false
 EMAIL_PROVIDER=resend
 EMAIL_FROM=Drezivo <bookings@your-domain>
 RESEND_API_KEY=re_...
-STOREFRONT_PUBLIC_ORIGIN=https://your-storefront-domain
 ```
 
 ```powershell
@@ -244,8 +245,9 @@ gcloud scheduler jobs create http drezivo-worker-fast-every-2m --location=$REGIO
   --oauth-service-account-email=$SCHEDULER_SA
 ```
 
-To check that it works end to end, request a verification code on the live storefront. It should
-arrive within about 2 minutes.
+To check that it works end to end, submit a reservation and confirm the business notification
+arrives within about 2 minutes. Verify that the guest proof page works only in the browser that
+received the API-host-only reservation cookie; the page URL contains a reservation ID, not a secret.
 
 ## Step 8 — Releasing a new version
 
@@ -256,8 +258,14 @@ gcloud run jobs update drezivo-worker --image=$IMAGE
 gcloud run jobs update drezivo-worker-fast --image=$IMAGE
 ```
 
-Apply database migrations before the new image runs, following the expand-first rules in
-`docs/runbooks/migrations.md`.
+For ordinary releases, apply database migrations before the new image runs, following the
+expand-first rules in `docs/runbooks/migrations.md`. For the guest-email removal release, use the
+special coordinated rollout: pause and stop every old worker (including an embedded worker), stop
+and drain old API instances and temporarily disable guest submissions; then apply migration
+`0070_storefront_guest_no_email.sql`, deploy the updated API/worker and web app, and only then resume
+traffic/workers. This prevents the old code from reading the dropped verification table or sending
+queued customer mail. The migration cancels pending/leased guest-directed rows but cannot recall an
+email already accepted by the provider.
 
 ## Pause, resume, or roll back
 
@@ -277,6 +285,7 @@ Apply database migrations before the new image runs, following the expand-first 
 - Double-booking can never happen either way: the database constraint enforces capacity, and the
   sweep only decides how soon a released garment becomes bookable again.
 - Subscription, Clerk, and garment-readiness sweeps run every 15 minutes.
-- Owner and renter notification emails can take up to 2 minutes to arrive.
+- Business/owner operational emails can take up to 2 minutes to arrive. Guest customers are not
+  emailed by storefront reservation or fitting flows.
 - The Supabase free plan pauses a project after 7 days without queries. The 15-minute job keeps
   it active.

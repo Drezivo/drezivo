@@ -142,7 +142,7 @@ describe("OnboardingPlan", () => {
         active_branch_id: bootstrap.default_branch.id,
         branch_grants: bootstrap.branch_grants,
         subscription: bootstrap.subscription,
-        entitlements: { physical_assets_max: 1000, frontdesk_seats_max: 10 },
+        entitlements: { physical_assets_max: 300, frontdesk_seats_max: 3 },
       },
       requestId: "req-actor",
     });
@@ -152,9 +152,9 @@ describe("OnboardingPlan", () => {
     renderPlan();
 
     const dialog = await screen.findByRole("dialog", { name: "Start your 14-day trial?" });
-    expect(dialog).toHaveTextContent("₱300 a month");
-    expect(dialog).toHaveTextContent("Up to 125 garments");
-    expect(dialog).toHaveTextContent("For the shop owner only");
+    expect(dialog).toHaveTextContent("₱299 a month");
+    expect(dialog).toHaveTextContent("Up to 300 active garments");
+    expect(dialog).toHaveTextContent("Up to 3 Front Desk staff");
     expect(screen.queryByRole("radio")).toBeNull();
     expect(api.startOnboardingTrial).not.toHaveBeenCalled();
   });

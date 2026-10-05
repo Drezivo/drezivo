@@ -9,6 +9,7 @@ import { logger } from '../shared/logger.js';
 export interface OutboxRow {
   id: string;
   tenant_id: string;
+  dedupe_key: string;
   event_type: string;
   payload: Record<string, unknown>;
   attempts: number;
@@ -115,7 +116,7 @@ export class WorkerRunner {
          SET status = 'leased', lease_token = $2, lease_until = now() + make_interval(secs => $3)
          FROM due
          WHERE o.id = due.id
-         RETURNING o.id, o.tenant_id, o.event_type, o.payload, o.attempts, o.max_attempts`,
+         RETURNING o.id, o.tenant_id, o.dedupe_key, o.event_type, o.payload, o.attempts, o.max_attempts`,
         [limit, leaseToken, this.leaseSeconds, eventTypes ?? null],
       );
       await client.query('COMMIT');

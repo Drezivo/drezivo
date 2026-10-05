@@ -17,7 +17,11 @@ export default defineConfig({
     // timing out mid-query leaves the DB operation alive and can deadlock the teardown reset.
     testTimeout: integrationRun ? 60_000 : 10_000,
     hookTimeout: integrationRun ? 60_000 : 20_000,
-    include: ['src/**/__tests__/**/*.test.ts', 'tests/integration/**/*.test.ts'],
+    include: [
+      'src/**/__tests__/**/*.test.ts',
+      'tests/unit/**/*.test.ts',
+      'tests/integration/**/*.test.ts',
+    ],
     setupFiles: ['./src/__tests__/setup-env.ts'],
   },
 });

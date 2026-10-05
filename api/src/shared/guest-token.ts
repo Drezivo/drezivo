@@ -1,10 +1,15 @@
+import { createHash } from 'node:crypto';
+
 import { keyedDigest } from './protected-recipient.js';
 
 /**
- * The guest capability for one reservation. It is derived from the reservation id with a server
- * key instead of being random, so an idempotent retry and the confirmation email can hand back the
- * same token without the raw token ever being stored (only its SHA-256 hash is). Revocation stays
- * per `guest_access_token` row.
+ * A deterministic per-reservation capability permits safe idempotent replay. The raw value is
+ * delivered only in a reservation-scoped HttpOnly cookie; the database stores only its hash.
  */
 export const guestTokenFor = (reservationId: string): string =>
   keyedDigest('guest-access-token', reservationId).toString('base64url');
+
+export const guestTokenHash = (token: string): string => createHash('sha256').update(token, 'utf8').digest('hex');
+
+export const guestAccessExpiresAt = (dueAt: Date | string): Date =>
+  new Date(new Date(dueAt).getTime() + 30 * 86_400_000);

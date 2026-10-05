@@ -10,12 +10,12 @@ import { durationLabel, formatMinor } from '@/lib/storefront-format';
 import { BookingDrawer } from './booking/booking-drawer';
 import { useStorePreview } from './preview-context';
 
-type Tab = 'details' | 'measurements' | 'rental';
+type Tab = 'measurements' | 'rental';
 
 export function ItemView({ store, item }: { store: PublicStorefront; item: ItemDetail }) {
   const [imageIndex, setImageIndex] = useState(0);
   const [variantId, setVariantId] = useState(item.variants.length === 1 ? (item.variants[0]?.variant_id ?? null) : null);
-  const [tab, setTab] = useState<Tab>('details');
+  const [tab, setTab] = useState<Tab>('measurements');
   const [booking, setBooking] = useState(false);
   const variant = item.variants.find((entry) => entry.variant_id === variantId) ?? null;
   const shown = variant ?? item.variants[0];
@@ -23,6 +23,7 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
   // booking_open is false while the shop's subscription is view-only: the page stays browsable.
   const canBook = store.payment_methods.length > 0 && !preview && store.booking_open;
   const image = item.image_urls[imageIndex] ?? item.image_urls[0];
+  const description = item.description?.trim();
 
   return (
     <>
@@ -55,6 +56,7 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
             <p className="text-sm text-sf-muted">{[item.category, item.subcategory].filter(Boolean).join(' · ')}</p>
           ) : null}
           <h1 className="mt-1 font-sf-display text-4xl font-light leading-tight sm:text-5xl">{item.name}</h1>
+          {description ? <p className="mt-3 whitespace-pre-line text-sm leading-6 text-sf-muted">{description}</p> : null}
           {shown ? (
             <p className="mt-4 text-xl">
               <span className="tabular-nums">{formatMinor(shown.rental_price_minor)}</span>
@@ -98,7 +100,6 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
             <div role="tablist" aria-label="Item information" className="flex gap-6 border-b border-sf-line text-sm">
               {(
                 [
-                  ['details', 'Details'],
                   ['measurements', 'Measurements'],
                   ['rental', 'Rental info'],
                 ] as Array<[Tab, string]>
@@ -109,7 +110,6 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
               ))}
             </div>
             <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="py-5 text-sm leading-7">
-              {tab === 'details' ? <p className="whitespace-pre-line text-sf-muted">{item.description ?? 'Ask the shop for more details about this piece.'}</p> : null}
               {tab === 'measurements' ? <Measurements item={item} variantId={variantId} /> : null}
               {tab === 'rental' && store.policy.format === 'images' ? (
                 <p className="text-sf-muted">

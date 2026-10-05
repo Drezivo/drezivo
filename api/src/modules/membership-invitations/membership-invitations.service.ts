@@ -1,16 +1,19 @@
 import {
   membershipInvitation,
   membershipInvitationId,
+  ownerMembershipInvitation,
   type CreateMembershipInvitationRequest,
   type MembershipInvitation,
+  type OwnerMembershipInvitation,
   type PaginationRequest,
 } from '@drezivo/contracts';
 import type { PoolClient } from 'pg';
 
 import { withTenantTransaction } from '../../db/client.js';
 import { assertFrontDeskSeatCapacity } from '../entitlements/entitlements.service.js';
+import { assertTenantOwnerMembership } from '../tenancy/tenancy.service.js';
 import {
-  ForbiddenError,
+  DependencyUnavailableError,
   IdempotencyKeyReusedError,
   NotFoundError,
   StateConflictError,
@@ -18,25 +21,29 @@ import {
   isAppError,
 } from '../../shared/errors.js';
 import { canonicalRequestHash } from '../../shared/idempotency.js';
-import { digestRecipientEmail, encryptRecipientEmail } from '../../shared/protected-recipient.js';
+import {
+  decryptRecipientEmail,
+  digestRecipientEmail,
+  encryptRecipientEmail,
+} from '../../shared/protected-recipient.js';
 import {
   claimTenantIdempotency,
   finalizeTenantIdempotency,
 } from '../../shared/tenant-idempotency.js';
 import {
-  assertOwnerMembership,
   assertTenantInvitationWritesAllowed,
   expirePendingInvitations,
-  findPendingInvitationByDigest,
+  findInvitationByDigest,
   insertInvitation,
   insertInvitationOutbox,
   insertInvitationRevokeOutbox,
-  listSafeInvitations,
+  listOwnerInvitations,
   lockInvitation,
   lockInvitationTenant,
   revokeInvitation,
   toSafeInvitation,
   updateInvitationForResend,
+  type OwnerInvitationRow,
   type SafeInvitationRow,
 } from './membership-invitations.repository.js';
 
@@ -71,10 +78,25 @@ export async function createMembershipInvitation(
   return runCommand(input, CREATE_OPERATION, input.request, async (client) => {
     const digest = digestRecipientEmail(input.request.email);
     await expirePendingInvitations(client, input.tenantId);
-    const existing = await findPendingInvitationByDigest(client, input.tenantId, digest);
-    if (existing) return toSafeInvitation(existing);
+    const existing = await findInvitationByDigest(client, input.tenantId, digest);
+    if (existing?.status === 'pending') return toSafeInvitation(existing);
+    if (existing?.status === 'accepted') {
+      throw new StateConflictError('This invitation has already been accepted.');
+    }
 
     await assertFrontDeskSeatCapacity(client, input.tenantId, 1);
+    if (existing) {
+      const reopened = await updateInvitationForResend(client, input.tenantId, existing.id);
+      if (!reopened) throw new StateConflictError('Invitation cannot be resent.');
+      await insertInvitationOutbox(client, {
+        tenantId: input.tenantId,
+        invitationId: reopened.id,
+        dispatchVersion: reopened.dispatch_version,
+        operation: 'resend',
+      });
+      return toSafeInvitation(reopened);
+    }
+
     const created = await insertInvitation(client, {
       tenantId: input.tenantId,
       digest,
@@ -137,14 +159,14 @@ export async function cancelMembershipInvitation(
 export async function listMembershipInvitations(
   input: { tenantId: string; membershipId: string; principalId: string } & PaginationRequest,
 ): Promise<{
-  items: MembershipInvitation[];
+  items: OwnerMembershipInvitation[];
   page_meta: { next_cursor: string | null; has_more: boolean };
 }> {
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
-    await requireOwner(client, input);
+    await assertTenantOwnerMembership(client, input);
     await expirePendingInvitations(client, input.tenantId);
     const cursor = decodeCursor(input.cursor);
-    const rows = await listSafeInvitations(client, {
+    const rows = await listOwnerInvitations(client, {
       tenantId: input.tenantId,
       ...(cursor ? { cursorCreatedAt: cursor.createdAt, cursorId: cursor.id } : {}),
       limit: input.limit,
@@ -153,7 +175,7 @@ export async function listMembershipInvitations(
     const pageRows = rows.slice(0, input.limit);
     const last = pageRows.at(-1);
     return {
-      items: pageRows.map(toContractInvitation),
+      items: pageRows.map(toOwnerContractInvitation),
       page_meta: {
         has_more: hasMore,
         next_cursor: hasMore && last ? encodeCursor(last) : null,
@@ -170,7 +192,7 @@ async function runCommand(
 ): Promise<InvitationCommandResponse> {
   const payloadHash = canonicalRequestHash(request);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
-    await requireOwner(client, input);
+    await assertTenantOwnerMembership(client, input);
     if (!(await assertTenantInvitationWritesAllowed(client, input.tenantId))) {
       throw new StateConflictError('Workspace invitation state is unavailable.');
     }
@@ -227,18 +249,25 @@ async function runCommand(
   });
 }
 
-async function requireOwner(
-  client: PoolClient,
-  input: { tenantId: string; membershipId: string; principalId: string },
-): Promise<void> {
-  if (!(await assertOwnerMembership(client, input))) {
-    throw new ForbiddenError('Only the tenant owner can manage invitations.');
-  }
-}
-
 function toContractInvitation(row: SafeInvitationRow): MembershipInvitation {
   return membershipInvitation.parse({
     id: row.id,
+    status: row.status,
+    expires_at: row.expires_at.toISOString(),
+    created_at: row.created_at.toISOString(),
+  });
+}
+
+function toOwnerContractInvitation(row: OwnerInvitationRow): OwnerMembershipInvitation {
+  let email: string;
+  try {
+    email = decryptRecipientEmail(row.recipient_email_ciphertext);
+  } catch {
+    throw new DependencyUnavailableError('Stored invitation details are temporarily unavailable.');
+  }
+  return ownerMembershipInvitation.parse({
+    id: row.id,
+    email,
     status: row.status,
     expires_at: row.expires_at.toISOString(),
     created_at: row.created_at.toISOString(),

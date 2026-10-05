@@ -38,6 +38,7 @@ function createProvider() {
   };
   const users = {
     getUser: vi.fn(),
+    getUserList: vi.fn(),
   };
   return {
     provider: { organizations, users } as unknown as ClerkProviderClient,
@@ -95,6 +96,27 @@ describe('Clerk server adapter', () => {
     await expect(adapter.getUserVerificationState('user_123')).resolves.toEqual({
       primaryEmailVerified: false,
     });
+  });
+
+  it('loads a bounded set of owner-visible member profiles in one provider request', async () => {
+    const { provider, users } = createProvider();
+    users.getUserList.mockResolvedValue({
+      data: [
+        {
+          id: 'user_123',
+          firstName: 'Riley',
+          lastName: 'Owner',
+          primaryEmailAddressId: 'email_primary',
+          emailAddresses: [{ id: 'email_primary', emailAddress: 'owner@example.test' }],
+        },
+      ],
+    });
+    const adapter = createClerkServerAdapter(provider);
+
+    await expect(adapter.getUserProfiles(['user_123'])).resolves.toEqual([
+      { userId: 'user_123', name: 'Riley Owner', email: 'owner@example.test' },
+    ]);
+    expect(users.getUserList).toHaveBeenCalledWith({ userId: ['user_123'], limit: 1 });
   });
 
   it('creates an organization through the provider boundary and returns a safe projection', async () => {
@@ -293,8 +315,15 @@ describe('Clerk server adapter', () => {
       id: 'inv_123',
       emailAddress: 'frontdesk@example.com',
     });
-    expect(await adapter.findInvitationsByInvitationId('org_123', marker.invitationId)).toHaveLength(1);
-    expect((await adapter.findInvitationByDispatchMarker('org_123', marker)) as unknown as Record<string, unknown>).not.toHaveProperty('privateMetadata');
+    expect(
+      await adapter.findInvitationsByInvitationId('org_123', marker.invitationId),
+    ).toHaveLength(1);
+    expect(
+      (await adapter.findInvitationByDispatchMarker('org_123', marker)) as unknown as Record<
+        string,
+        unknown
+      >,
+    ).not.toHaveProperty('privateMetadata');
   });
 
   it('supports membership create, update, and delete through one typed boundary', async () => {
@@ -330,7 +359,9 @@ describe('Clerk server adapter', () => {
     const { provider, organizations } = createProvider();
     const adapter = createClerkServerAdapter(provider);
 
-    organizations.deleteOrganization.mockResolvedValueOnce(organization).mockRejectedValueOnce({ status: 404 });
+    organizations.deleteOrganization
+      .mockResolvedValueOnce(organization)
+      .mockRejectedValueOnce({ status: 404 });
 
     await expect(adapter.deleteOrganizationIfPresent('org_123')).resolves.toBe(true);
     await expect(adapter.deleteOrganizationIfPresent('org_123')).resolves.toBe(false);

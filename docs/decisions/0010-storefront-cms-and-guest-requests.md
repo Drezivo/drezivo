@@ -4,6 +4,11 @@
 **Date:** 29 September 2026
 **Owners:** product + API + web owners
 
+> **Superseded in part by [ADR 0012](0012-storefront-guest-email-free-bookings.md), accepted 5 October 2026.**
+> The historical email-verification, bearer capability, and guest lifecycle-email decisions below no
+> longer describe current behavior. Public fitting requests also no longer verify email. The CMS,
+> storefront transaction, and fitting-capacity decisions remain in force.
+
 ## Context
 
 The public storefront (`/s/<slug>`) was a static demo, and its API routes answered 501. Owners had
@@ -19,7 +24,11 @@ settings, and online fitting requests in one delivery.
    `@drezivo/contracts` (`storefront/cms.ts`) validates the whole document strictly on every
    write:
    - text is plain and bounded;
-   - social profiles are handles, so the server builds every public URL;
+   - owners may enter a social handle or canonical HTTPS profile URL; the contract validates the
+     platform host and profile path, then stores a normalized platform reference so the server
+     builds every public URL from a fixed host. Facebook accepts page names and direct numeric
+     Page URLs (`profile.php?id=<id>`), storing the latter as the validated page reference
+     `profile.php?id=<id>`; share links are not accepted;
    - images are accepted `storefront_asset` file ids from the same workspace;
    - the theme is one of four contrast-checked palettes.
 2. **Rental policies stay immutable versions** in `policy_snapshot`. Every save appends the next

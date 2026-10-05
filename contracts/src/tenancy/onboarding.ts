@@ -10,7 +10,7 @@ import {
 import { moneyAmount } from '../common/money';
 import { isoInstant } from '../common/time';
 import { paginatedResponse } from '../common/pagination';
-import { branch, branchGrant, membership, tenant } from './tenant';
+import { branch, branchGrant, membership, membershipRole, tenant } from './tenant';
 
 /** Global pre-tenant lifecycle, owned by Drezivo rather than Clerk. */
 export const onboardingStatus = z.enum(['incomplete', 'abandoned', 'payment_pending', 'provisioned']);
@@ -39,12 +39,7 @@ export const clerkWebhookEventType = z.enum([
 export type ClerkWebhookEventType = z.infer<typeof clerkWebhookEventType>;
 
 const organizationName = z.string().trim().min(1).max(160);
-export const onboardingAbandonReasonCode = z.enum([
-  'not_now',
-  'wrong_details',
-  'payment_concern',
-  'other',
-]);
+export const onboardingAbandonReasonCode = z.enum(['not_now', 'wrong_details', 'payment_concern', 'other']);
 export type OnboardingAbandonReasonCode = z.infer<typeof onboardingAbandonReasonCode>;
 const safeReason = z.string().trim().min(1).max(500);
 const safeReference = z.string().trim().min(1).max(200);
@@ -77,8 +72,31 @@ export const membershipInvitation = z.object({
 });
 export type MembershipInvitation = z.infer<typeof membershipInvitation>;
 
-export const membershipInvitationList = paginatedResponse(membershipInvitation);
+/** Owner-only invitation row; recipient identity is intentionally absent from command responses. */
+export const ownerMembershipInvitation = membershipInvitation.extend({
+  email: z.string().trim().email().max(320),
+});
+export type OwnerMembershipInvitation = z.infer<typeof ownerMembershipInvitation>;
+
+export const membershipInvitationList = paginatedResponse(ownerMembershipInvitation);
 export type MembershipInvitationList = z.infer<typeof membershipInvitationList>;
+
+export const tenantMember = z.object({
+  id: membershipId,
+  name: z.string().trim().min(1).max(200).nullable(),
+  email: z.string().trim().email().max(320).nullable(),
+  role: membershipRole,
+});
+export type TenantMember = z.infer<typeof tenantMember>;
+
+export const memberRosterResponse = z.object({
+  members: z.array(tenantMember),
+  frontdesk_seats: z.object({
+    used: z.number().int().nonnegative(),
+    max: z.number().int().nonnegative(),
+  }),
+});
+export type MemberRosterResponse = z.infer<typeof memberRosterResponse>;
 
 export const subscriptionSummary = z.object({
   id: subscriptionId,
@@ -124,9 +142,7 @@ export type CreateOwnerOnboardingRequest = z.infer<typeof createOwnerOnboardingR
 export const resumeOwnerOnboardingRequest = z.object({}).strict();
 export type ResumeOwnerOnboardingRequest = z.infer<typeof resumeOwnerOnboardingRequest>;
 
-export const abandonOwnerOnboardingRequest = z
-  .object({ reason_code: onboardingAbandonReasonCode })
-  .strict();
+export const abandonOwnerOnboardingRequest = z.object({ reason_code: onboardingAbandonReasonCode }).strict();
 export type AbandonOwnerOnboardingRequest = z.infer<typeof abandonOwnerOnboardingRequest>;
 
 export const chooseOnboardingPlanRequest = z.object({ plan_code: planCode }).strict();

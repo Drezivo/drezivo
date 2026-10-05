@@ -14,8 +14,10 @@ process.env.S3_BUCKET_PUBLIC = 'public';
 process.env.S3_ACCESS_KEY_ID = 'test';
 process.env.S3_SECRET_ACCESS_KEY = 'test';
 
-const { createMembershipInvitationDispatchHandler } = await import('../membership-invitations.dispatcher.js');
-const { clerkInvitationDispatchSource } = await import('../../../integrations/clerk/clerk.adapter.js');
+const { createMembershipInvitationDispatchHandler } =
+  await import('../membership-invitations.dispatcher.js');
+const { clerkInvitationDispatchSource } =
+  await import('../../../integrations/clerk/clerk.adapter.js');
 
 const invitationId = '11111111-1111-4111-8111-111111111111';
 const tenantId = '22222222-2222-4222-8222-222222222222';
@@ -46,7 +48,9 @@ function createHarness(options?: { status?: 'pending' | 'revoked'; version?: num
     return { rows: [] };
   });
   const client = { query } as unknown as PoolClient;
-  const runTenantTransaction = vi.fn(async (_tenantId: string, _key: string, fn: (c: PoolClient) => Promise<unknown>) => fn(client));
+  const runTenantTransaction = vi.fn(
+    async (_tenantId: string, _key: string, fn: (c: PoolClient) => Promise<unknown>) => fn(client),
+  );
   const clerk = {
     findInvitationByDispatchMarker: vi.fn().mockResolvedValue(null),
     findInvitationsByInvitationId: vi.fn().mockResolvedValue([]),
@@ -65,6 +69,7 @@ function createHarness(options?: { status?: 'pending' | 'revoked'; version?: num
     clerk: clerk as never,
     decryptEmail: vi.fn().mockReturnValue('frontdesk@example.com'),
     runTenantTransaction: runTenantTransaction as never,
+    staffAppUrl: 'http://localhost:3000',
   });
   return { handler, clerk, query };
 }
@@ -75,6 +80,7 @@ describe('membership invitation dispatch worker', () => {
     await handler({
       id: 'outbox-1',
       tenant_id: tenantId,
+      dedupe_key: 'invitation:dispatch:1',
       event_type: 'clerk.invitation.dispatch_requested',
       payload: { invitation_id: invitationId, dispatch_version: 1, operation: 'create' },
       attempts: 0,
@@ -86,6 +92,7 @@ describe('membership invitation dispatch worker', () => {
       emailAddress: 'frontdesk@example.com',
       role: 'org:member',
       expiresInDays: 7,
+      redirectUrl: `http://localhost:3000/accept-invitation/${invitationId}?organization_id=org_123`,
       dispatchMarker: {
         source: clerkInvitationDispatchSource,
         invitationId,
@@ -104,6 +111,7 @@ describe('membership invitation dispatch worker', () => {
     await stale.handler({
       id: 'outbox-2',
       tenant_id: tenantId,
+      dedupe_key: 'invitation:dispatch:2',
       event_type: 'clerk.invitation.dispatch_requested',
       payload: { invitation_id: invitationId, dispatch_version: 1, operation: 'resend' },
       attempts: 0,
@@ -116,6 +124,7 @@ describe('membership invitation dispatch worker', () => {
     await cancelled.handler({
       id: 'outbox-3',
       tenant_id: tenantId,
+      dedupe_key: 'invitation:dispatch:3',
       event_type: 'clerk.invitation.dispatch_requested',
       payload: { invitation_id: invitationId, dispatch_version: 1, operation: 'create' },
       attempts: 0,
@@ -140,6 +149,7 @@ describe('membership invitation dispatch worker', () => {
     await handler({
       id: 'outbox-4',
       tenant_id: tenantId,
+      dedupe_key: 'invitation:dispatch:4',
       event_type: 'clerk.invitation.dispatch_requested',
       payload: { invitation_id: invitationId, dispatch_version: 2, operation: 'resend' },
       attempts: 0,

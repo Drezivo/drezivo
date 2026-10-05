@@ -5,7 +5,7 @@ export interface PublicPlan {
   readonly code: string;
   readonly name: string;
   readonly tagline: string;
-  /** Pesos with centavos, e.g. "300.00". */
+  /** Pesos with centavos, e.g. "299.00". */
   readonly price: string;
   readonly interval: 'month';
   readonly trialDays: number;
@@ -33,7 +33,7 @@ export function getPublicPlans(): readonly PublicPlan[] {
   }));
 }
 
-/** "₱300" for whole pesos, "₱300.50" otherwise. */
+/** Formats whole pesos without centavos and preserves non-zero centavos. */
 export function formatPlanPrice(price: string): string {
   const value = Number(price);
   return `₱${value.toLocaleString('en-PH', { minimumFractionDigits: Number.isInteger(value) ? 0 : 2, maximumFractionDigits: 2 })}`;

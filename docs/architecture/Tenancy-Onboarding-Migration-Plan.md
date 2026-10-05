@@ -11,17 +11,17 @@ migrations and service behavior are owned by their corresponding TBF tasks.
 
 ## Scope and ownership
 
-| Record                                                                     | Scope             | Access and RLS boundary                                                                                                                                            |
-| -------------------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `account`                                                                  | Global            | The authenticated Clerk subject reads only its own row through transaction-local `app.principal_id`. No profile mirror.                                            |
-| `organization_onboarding`                                                  | Global pre-tenant | The creator reads only its own record. Operators use separately authorized, audited paths.                                                                         |
-| `onboarding_payment_verification`                                          | Global pre-tenant | Owner receives a safe status projection only. Operator payment evidence is not broadly readable.                                                                   |
-| `owner_onboarding_attempt`                                                 | Global pre-tenant | Account-locked single-flight provider state. Exact signed marker repair may update only the matching attempt.                                                     |
-| `bootstrap_idempotency_record`                                             | Global pre-tenant | Scoped to the authenticated account and operation. It never reuses tenant-scoped idempotency.                                                                      |
-| `global_audit_event`                                                       | Global pre-tenant | Append-only account/operator/system history. Owner reads are account-scoped; operator/system reads require explicit context and filters.                           |
-| `webhook_inbox`                                                            | Global pre-tenant | Exact-raw verified provider-event dedupe. API inserts only through a duplicate-safe function; worker reads/transitions rows and neither runtime role deletes them. |
-| `membership_invitation`                                                    | Tenant-owned      | Standard tenant RLS plus local Owner authorization. Recipient email is AES-GCM encrypted and keyed-deduped; protected material never appears in ordinary logs or list projections.                                   |
-| `membership`, `subscription`, `subscription_event`, `subscription_payment` | Tenant-owned      | Existing tenant RLS applies. New lifecycle behavior is gated in services, not inferred from Clerk claims.                                                          |
+| Record                                                                     | Scope             | Access and RLS boundary                                                                                                                                                            |
+| -------------------------------------------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `account`                                                                  | Global            | The authenticated Clerk subject reads only its own row through transaction-local `app.principal_id`. No profile mirror.                                                            |
+| `organization_onboarding`                                                  | Global pre-tenant | The creator reads only its own record. Operators use separately authorized, audited paths.                                                                                         |
+| `onboarding_payment_verification`                                          | Global pre-tenant | Owner receives a safe status projection only. Operator payment evidence is not broadly readable.                                                                                   |
+| `owner_onboarding_attempt`                                                 | Global pre-tenant | Account-locked single-flight provider state. Exact signed marker repair may update only the matching attempt.                                                                      |
+| `bootstrap_idempotency_record`                                             | Global pre-tenant | Scoped to the authenticated account and operation. It never reuses tenant-scoped idempotency.                                                                                      |
+| `global_audit_event`                                                       | Global pre-tenant | Append-only account/operator/system history. Owner reads are account-scoped; operator/system reads require explicit context and filters.                                           |
+| `webhook_inbox`                                                            | Global pre-tenant | Exact-raw verified provider-event dedupe. API inserts only through a duplicate-safe function; worker reads/transitions rows and neither runtime role deletes them.                 |
+| `membership_invitation`                                                    | Tenant-owned      | Standard tenant RLS plus local Owner authorization. Recipient email is AES-GCM encrypted and keyed-deduped; protected material never appears in ordinary logs or list projections. |
+| `membership`, `subscription`, `subscription_event`, `subscription_payment` | Tenant-owned      | Existing tenant RLS applies. New lifecycle behavior is gated in services, not inferred from Clerk claims.                                                                          |
 
 TBF-031 adds the actor/workspace resolution boundary after bootstrap. Migration
 `0017_actor_workspace_resolution.sql` adds an index on `membership.clerk_user_id` and a narrow
@@ -104,8 +104,10 @@ replay-safe, and the bootstrap transaction creates the tenant graph atomically.
 Migration `0016_tenant_bootstrap.sql` originally seeded version-1 Starter, Professional, and Business
 rows; `0053_update_v1_entitlements_and_trial_policy.sql` set their historical 125/300/1,000
 physical-asset and 0/2/10 Front Desk-seat limits. The current pilot offer is one Standard plan:
-`0063_pilot_billing.sql` keeps `starter` v1 active at 30,000 PHP minor units/month, sets its limits
-to 1,000 assets and 10 Front Desk seats, and deactivates Professional and Business v1. It moves
+`0063_pilot_billing.sql` originally kept `starter` v1 active at 30,000 PHP minor units/month, initially setting
+its limits to 1,000 assets and 10 Front Desk seats, and deactivates Professional and Business v1.
+Migration `0071_starter_plan_limits.sql` lowers the current limits to 300 active physical clothing
+items and 3 Front Desk seats under [ADR 0013](../decisions/0013-starter-plan-capacity.md). It moves
 existing subscriptions to `starter` while recording prior plan ids in `subscription_event`, and
 normalizes expired/restricted billing states for the derived pilot access model. The old rows remain
 for audit history. The winning database transaction creates the tenant, `Main Branch`, Owner
@@ -151,6 +153,15 @@ local identity before creating its replacement. Cancellation revokes the locally
 provider invitation or searches all matching markers when correlation was not persisted yet;
 revoked, expired, accepted, and missing provider rows are terminal safe no-ops.
 
+Each create/resend invitation also receives a redirect URL built from the validated `STAFF_APP_URL`
+and its local invitation UUID, with the Clerk organization ID as a non-authoritative activation
+hint. Clerk adds the one-time invitation ticket and status to that callback. The configured URL is
+per environment (loopback HTTP only for local development; HTTPS origin for staging/production)
+and must be allowed by the matching Clerk instance. The ticket is consumed only by the Drezivo
+callback; it is kept in browser memory, stripped from the address bar, and never sent to the API,
+stored, or logged by application code. Do not set a global Account Portal fallback as a substitute
+for this link-scoped flow.
+
 The worker locks the tenant invitation, verifies pending status and dispatch version, resolves the
 Clerk organization from the tenant row, and decrypts recipient email only inside the worker. A
 conditional local update persists provider correlation; if cancellation or a newer dispatch wins
@@ -173,6 +184,19 @@ provider membership visibility is delayed; membership webhook events alone never
 Invalid, foreign, expired, revoked, consumed, or Owner-role cases remain generic safe failures.
 PostgreSQL concurrency, RLS, provider-ordering, and rollback evidence is required before this
 task is marked complete.
+
+The Drezivo invitation callback consumes only the invitation ID encoded in that link, completes
+Clerk ticket sign-in/sign-up (including required verification or MFA), activates the target
+organization, then retries the existing claim endpoint until local access is confirmed or a
+terminal safe error is returned. Ordinary sign-in never accepts pending invitations. If the claim
+is delayed, the invitee remains on a retryable access-finalization screen and cannot fall through
+to owner onboarding. A successful claim leads directly to the only accessible workspace or to a
+role-labeled workspace chooser when the user has multiple memberships. The same API-backed chooser
+and validated switcher are available after sign-in and from the dashboard. Owner and Front Desk
+roles belong to individual workspaces; Front Desk users inherit the tenant's current subscription
+and trial restrictions and do not receive a personal trial. Independent sign-up still follows the
+existing one-owned-business and lifetime-trial eligibility rules. No new tenant data or database
+migration is introduced by this callback/workspace-selection behavior.
 
 The catalogue sizing-mode boundary is recorded in forward-only migration `0055_product_sizing_modes.sql`.
 It adds `product.sizing_mode` and makes `product_variant.size_label` nullable so a product can use

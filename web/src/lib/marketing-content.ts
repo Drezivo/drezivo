@@ -72,16 +72,16 @@ export const MARKETING_TRIAL_DAYS = 14;
 
 /**
  * One plan during the pilot (internal code `starter`, sold as Standard). The API owns the real price,
- * limits, and trial length; keep this copy in step with billing.constants / migration 0063.
+ * limits, and trial length; keep this copy in step with the current billing policy / migrations.
  */
 export const MARKETING_PLANS: readonly MarketingPlan[] = [
   {
     name: 'Standard',
-    price: '300.00',
+    price: '299.00',
     blurb: 'Everything you need to run your rental shop, with a 14-day free trial.',
     features: [
-      'Up to 125 active garments',
-      'For the shop owner only',
+      'Up to 300 active garments',
+      'Up to 3 Front Desk staff',
       'Online storefront with bookings and fittings',
       'Reservations, calendar & availability',
       'Customers, payments, returns & exports',
@@ -119,7 +119,7 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
       },
       {
         question: 'How much does Drezivo cost?',
-        answer: `One plan, Standard, at ₱300 a month after the ${MARKETING_TRIAL_DAYS}-day free trial. It includes up to 125 active physical garments for the shop owner only. Asset limits are based on active physical garments, not the number of styles in your catalogue.`,
+        answer: `One plan, Standard, at ₱299 a month after the ${MARKETING_TRIAL_DAYS}-day free trial. It includes up to 300 active physical garments and 3 Front Desk staff. Asset limits are based on active physical garments, not the number of styles in your catalogue.`,
       },
       {
         question: 'What happens if I do not renew after the trial or a paid month?',
@@ -179,7 +179,7 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
       {
         question: 'Can staff access everything in my account?',
         answer:
-          'The Standard plan is for the shop owner only and does not include staff accounts. Staff access may be offered in a future plan or release, but it is not part of the current Standard plan.',
+          'The Standard plan allows up to 3 Front Desk staff accounts. Staff access is role-limited; only the shop owner can manage owner-only settings and actions.',
       },
       {
         question: 'How is customer and business data protected?',

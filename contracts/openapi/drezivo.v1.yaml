@@ -208,6 +208,11 @@ components:
                       - "null"
                     minLength: 1
                     maxLength: 80
+                  primary_image_url:
+                    type:
+                      - string
+                      - "null"
+                    format: uri
                 required:
                   - variant_id
                   - product_name
@@ -430,6 +435,11 @@ components:
                             - "null"
                           minLength: 1
                           maxLength: 80
+                        primary_image_url:
+                          type:
+                            - string
+                            - "null"
+                          format: uri
                       required:
                         - variant_id
                         - product_name
@@ -585,7 +595,7 @@ components:
           type: array
           items:
             type: string
-            enum: &a45
+            enum: &a46
               - monday
               - tuesday
               - wednesday
@@ -846,11 +856,16 @@ components:
               created_at:
                 type: string
                 format: date-time
+              email:
+                type: string
+                maxLength: 320
+                format: email
             required:
               - id
               - status
               - expires_at
               - created_at
+              - email
         page_meta:
           type: object
           properties:
@@ -867,6 +882,54 @@ components:
       required:
         - items
         - page_meta
+    MemberRosterResponse:
+      type: object
+      properties:
+        members:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type:
+                  - string
+                  - "null"
+                minLength: 1
+                maxLength: 200
+              email:
+                type:
+                  - string
+                  - "null"
+                maxLength: 320
+                format: email
+              role:
+                type: string
+                enum: &a11
+                  - owner
+                  - frontdesk
+            required:
+              - id
+              - name
+              - email
+              - role
+        frontdesk_seats:
+          type: object
+          properties:
+            used:
+              type: integer
+              minimum: 0
+            max:
+              type: integer
+              minimum: 0
+          required:
+            - used
+            - max
+      required:
+        - members
+        - frontdesk_seats
     SubscriptionSummary:
       type: object
       properties:
@@ -989,7 +1052,7 @@ components:
               minLength: 1
             status:
               type: string
-              enum: &a11
+              enum: &a12
                 - active
                 - restricted
                 - cancelled
@@ -1051,9 +1114,7 @@ components:
               format: uuid
             role:
               type: string
-              enum: &a12
-                - owner
-                - frontdesk
+              enum: *a11
             status:
               type: string
               enum: &a13
@@ -1151,7 +1212,7 @@ components:
               minLength: 1
             status:
               type: string
-              enum: *a11
+              enum: *a12
             currency:
               type: string
               pattern: ^[A-Z]{3}$
@@ -1181,7 +1242,7 @@ components:
               format: uuid
             role:
               type: string
-              enum: *a12
+              enum: *a11
             status:
               type: string
               enum: *a13
@@ -1363,7 +1424,7 @@ components:
               minLength: 1
             status:
               type: string
-              enum: *a11
+              enum: *a12
             currency:
               type: string
               pattern: ^[A-Z]{3}$
@@ -1391,7 +1452,7 @@ components:
           maxLength: 200
         role:
           type: string
-          enum: *a12
+          enum: *a11
         membership_updated_at:
           type: string
           format: date-time
@@ -1422,7 +1483,7 @@ components:
                     minLength: 1
                   status:
                     type: string
-                    enum: *a11
+                    enum: *a12
                   currency:
                     type: string
                     pattern: ^[A-Z]{3}$
@@ -1450,7 +1511,7 @@ components:
                 maxLength: 200
               role:
                 type: string
-                enum: *a12
+                enum: *a11
               membership_updated_at:
                 type: string
                 format: date-time
@@ -1826,6 +1887,12 @@ components:
           type: string
           maxLength: 2000
           default: ""
+        subcategory:
+          type:
+            - string
+            - "null"
+          minLength: 1
+          maxLength: 120
         category_id:
           type: string
           format: uuid
@@ -2287,6 +2354,12 @@ components:
         description:
           type: string
           maxLength: 2000
+        subcategory:
+          type:
+            - string
+            - "null"
+          minLength: 1
+          maxLength: 120
         category:
           type:
             - object
@@ -3632,7 +3705,7 @@ paths:
                             minLength: 1
                           status:
                             type: string
-                            enum: *a11
+                            enum: *a12
                           currency:
                             type: string
                             pattern: ^[A-Z]{3}$
@@ -3689,7 +3762,7 @@ paths:
                             format: uuid
                           role:
                             type: string
-                            enum: *a12
+                            enum: *a11
                           status:
                             type: string
                             enum: *a13
@@ -4067,7 +4140,7 @@ paths:
                                   minLength: 1
                                 status:
                                   type: string
-                                  enum: *a11
+                                  enum: *a12
                                 currency:
                                   type: string
                                   pattern: ^[A-Z]{3}$
@@ -4095,7 +4168,7 @@ paths:
                               maxLength: 200
                             role:
                               type: string
-                              enum: *a12
+                              enum: *a11
                             membership_updated_at:
                               type: string
                               format: date-time
@@ -4213,7 +4286,7 @@ paths:
                             minLength: 1
                           status:
                             type: string
-                            enum: *a11
+                            enum: *a12
                           currency:
                             type: string
                             pattern: ^[A-Z]{3}$
@@ -4243,7 +4316,7 @@ paths:
                             format: uuid
                           role:
                             type: string
-                            enum: *a12
+                            enum: *a11
                           status:
                             type: string
                             enum: *a13
@@ -4758,6 +4831,165 @@ paths:
                   - success
                   - error
                   - request_id
+  /members:
+    get:
+      tags:
+        - membership-invitations
+      summary: List active tenant members and Front Desk seat usage for the Owner.
+      responses:
+        "200":
+          description: Active Owner and Front Desk members with Clerk identity and
+            reserved seat usage.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      members:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              format: uuid
+                            name:
+                              type:
+                                - string
+                                - "null"
+                              minLength: 1
+                              maxLength: 200
+                            email:
+                              type:
+                                - string
+                                - "null"
+                              maxLength: 320
+                              format: email
+                            role:
+                              type: string
+                              enum: *a11
+                          required:
+                            - id
+                            - name
+                            - email
+                            - role
+                      frontdesk_seats:
+                        type: object
+                        properties:
+                          used:
+                            type: integer
+                            minimum: 0
+                          max:
+                            type: integer
+                            minimum: 0
+                        required:
+                          - used
+                          - max
+                    required:
+                      - members
+                      - frontdesk_seats
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Only the active Owner can view tenant members.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "503":
+          description: The identity provider is temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
   /membership-invitations:
     post:
       tags:
@@ -4958,7 +5190,7 @@ paths:
     get:
       tags:
         - membership-invitations
-      summary: List safe Front Desk invitation state for the active tenant.
+      summary: List Front Desk invitations for the active tenant Owner.
       parameters:
         - schema:
             type: string
@@ -4976,7 +5208,8 @@ paths:
           in: query
       responses:
         "200":
-          description: Safe invitation projections without recipient or provider data.
+          description: Owner-only invitation details, including each recipient email and
+            no provider data.
           content:
             application/json:
               schema:
@@ -5006,11 +5239,16 @@ paths:
                             created_at:
                               type: string
                               format: date-time
+                            email:
+                              type: string
+                              maxLength: 320
+                              format: email
                           required:
                             - id
                             - status
                             - expires_at
                             - created_at
+                            - email
                       page_meta:
                         type: object
                         properties:
@@ -5659,7 +5897,7 @@ paths:
                             minLength: 1
                           status:
                             type: string
-                            enum: *a11
+                            enum: *a12
                           currency:
                             type: string
                             pattern: ^[A-Z]{3}$
@@ -5689,7 +5927,7 @@ paths:
                             format: uuid
                           role:
                             type: string
-                            enum: *a12
+                            enum: *a11
                           status:
                             type: string
                             enum: *a13
@@ -7088,7 +7326,7 @@ paths:
                           - "null"
                       theme:
                         type: string
-                        enum: &a46
+                        enum: &a47
                           - ivory
                           - sage
                           - blush
@@ -7262,6 +7500,12 @@ paths:
                               type:
                                 - string
                                 - "null"
+                            subcategory:
+                              type:
+                                - string
+                                - "null"
+                              minLength: 1
+                              maxLength: 120
                             image_url:
                               type:
                                 - string
@@ -7309,6 +7553,12 @@ paths:
                               type:
                                 - string
                                 - "null"
+                            subcategory:
+                              type:
+                                - string
+                                - "null"
+                              minLength: 1
+                              maxLength: 120
                             image_url:
                               type:
                                 - string
@@ -7581,6 +7831,13 @@ paths:
         - schema:
             type: string
             minLength: 1
+            maxLength: 120
+          required: false
+          name: subcategory
+          in: query
+        - schema:
+            type: string
+            minLength: 1
             maxLength: 40
           required: false
           name: size
@@ -7642,6 +7899,12 @@ paths:
                               type:
                                 - string
                                 - "null"
+                            subcategory:
+                              type:
+                                - string
+                                - "null"
+                              minLength: 1
+                              maxLength: 120
                             image_url:
                               type:
                                 - string
@@ -7686,6 +7949,13 @@ paths:
                         items:
                           type: string
                         maxItems: 60
+                      subcategories:
+                        type: array
+                        items:
+                          type: string
+                          minLength: 1
+                          maxLength: 120
+                        maxItems: 1000
                     required:
                       - items
                       - total
@@ -7747,6 +8017,12 @@ paths:
                         type:
                           - string
                           - "null"
+                      subcategory:
+                        type:
+                          - string
+                          - "null"
+                        minLength: 1
+                        maxLength: 120
                       image_urls:
                         type: array
                         items:
@@ -7975,6 +8251,8 @@ paths:
                                 - reserved
                                 - fitting
                                 - unavailable
+                            closed:
+                              type: boolean
                           required:
                             - date
                             - state
@@ -8017,9 +8295,10 @@ paths:
             schema:
               type: object
               properties:
-                verification_token:
+                turnstile_token:
                   type: string
-                  pattern: ^[A-Za-z0-9_-]{43}$
+                  minLength: 1
+                  maxLength: 2048
                 email:
                   type: string
                   maxLength: 254
@@ -8081,7 +8360,6 @@ paths:
                   type: string
                   format: uuid
               required:
-                - verification_token
                 - email
                 - customer
                 - variant_id
@@ -8092,7 +8370,13 @@ paths:
               additionalProperties: false
       responses:
         "201":
-          description: Hold created; the guest token is returned once.
+          description: Hold created. A reservation-scoped HttpOnly cookie is set for
+            API-host access; the capability is not included in JSON.
+          headers:
+            Set-Cookie:
+              description: Host-only HttpOnly cookie scoped to this reservation API path.
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -8208,16 +8492,12 @@ paths:
                           - money
                           - payment_instructions
                         additionalProperties: false
-                      guest_token:
-                        type: string
-                        pattern: ^[A-Za-z0-9_-]{43}$
-                      guest_token_expires_at:
+                      access_expires_at:
                         type: string
                         format: date-time
                     required:
                       - reservation
-                      - guest_token
-                      - guest_token_expires_at
+                      - access_expires_at
                     additionalProperties: false
                   request_id:
                     type: string
@@ -8226,9 +8506,8 @@ paths:
                   - success
                   - data
                   - request_id
-        "401":
-          description: The email verification is missing, expired, or for a different
-            address.
+        "403":
+          description: The Turnstile submission check failed.
           content:
             application/json:
               schema:
@@ -10649,6 +10928,767 @@ paths:
                   - request_id
         "422":
           description: The sizing mode request is invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /catalogue/import/capabilities:
+    get:
+      tags:
+        - catalogue
+      summary: What this deployment offers for batch import (photo reading, batch size).
+      responses:
+        "200":
+          description: Batch import capabilities.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      photo_extraction:
+                        type: boolean
+                      max_batch_items:
+                        type: integer
+                        exclusiveMinimum: 0
+                    required:
+                      - photo_extraction
+                      - max_batch_items
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+  /catalogue/import/uploads:
+    post:
+      tags:
+        - catalogue
+      summary: Authorize up to 25 catalogue photo uploads.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      idempotency_key:
+                        type: string
+                        minLength: 8
+                        maxLength: 255
+                        pattern: ^[A-Za-z0-9_-]+$
+                      content_type:
+                        type: string
+                        enum: &a45
+                          - image/jpeg
+                          - image/png
+                          - image/webp
+                          - application/pdf
+                      byte_size:
+                        type: integer
+                        exclusiveMinimum: 0
+                        maximum: 10485760
+                      sha256:
+                        type: string
+                        pattern: ^[A-Za-z0-9+/]{43}=$
+                    required:
+                      - idempotency_key
+                      - content_type
+                      - byte_size
+                      - sha256
+                    additionalProperties: false
+                  minItems: 1
+                  maxItems: 25
+              required:
+                - items
+              additionalProperties: false
+      responses:
+        "200":
+          description: Every row with the status and envelope its single-item command
+            returned. Retrying a row with the same key replays it.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      results:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            idempotency_key:
+                              type: string
+                              minLength: 8
+                              maxLength: 255
+                              pattern: ^[A-Za-z0-9_-]+$
+                            status:
+                              type: integer
+                              minimum: 100
+                              maximum: 599
+                            body: {}
+                          required:
+                            - idempotency_key
+                            - status
+                    required:
+                      - results
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "422":
+          description: The batch shape is invalid (empty, over 25 rows, or repeated keys).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "429":
+          description: Batch rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /catalogue/import/uploads/finalize:
+    post:
+      tags:
+        - catalogue
+      summary: Finalize up to 25 uploaded catalogue photos.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      idempotency_key:
+                        type: string
+                        minLength: 8
+                        maxLength: 255
+                        pattern: ^[A-Za-z0-9_-]+$
+                      file_id:
+                        type: string
+                        format: uuid
+                    required:
+                      - idempotency_key
+                      - file_id
+                    additionalProperties: false
+                  minItems: 1
+                  maxItems: 25
+              required:
+                - items
+              additionalProperties: false
+      responses:
+        "200":
+          description: Every row with the status and envelope its single-item command
+            returned. Retrying a row with the same key replays it.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      results:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            idempotency_key:
+                              type: string
+                              minLength: 8
+                              maxLength: 255
+                              pattern: ^[A-Za-z0-9_-]+$
+                            status:
+                              type: integer
+                              minimum: 100
+                              maximum: 599
+                            body: {}
+                          required:
+                            - idempotency_key
+                            - status
+                    required:
+                      - results
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "422":
+          description: The batch shape is invalid (empty, over 25 rows, or repeated keys).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "429":
+          description: Batch rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /catalogue/import/clothing:
+    post:
+      tags:
+        - catalogue
+      summary: Create up to 25 clothing products, one idempotency key per row.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      idempotency_key:
+                        type: string
+                        minLength: 8
+                        maxLength: 255
+                        pattern: ^[A-Za-z0-9_-]+$
+                      request:
+                        type: object
+                        additionalProperties: {}
+                    required:
+                      - idempotency_key
+                      - request
+                    additionalProperties: false
+                  minItems: 1
+                  maxItems: 25
+              required:
+                - items
+              additionalProperties: false
+      responses:
+        "200":
+          description: Every row with the status and envelope its single-item command
+            returned. Retrying a row with the same key replays it.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      results:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            idempotency_key:
+                              type: string
+                              minLength: 8
+                              maxLength: 255
+                              pattern: ^[A-Za-z0-9_-]+$
+                            status:
+                              type: integer
+                              minimum: 100
+                              maximum: 599
+                            body: {}
+                          required:
+                            - idempotency_key
+                            - status
+                    required:
+                      - results
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "422":
+          description: The batch shape is invalid (empty, over 25 rows, or repeated keys).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "429":
+          description: Batch rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+  /catalogue/import/extract:
+    post:
+      tags:
+        - catalogue
+      summary: Read garment details printed on one accepted catalogue photo
+        (suggestions for review).
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                file_id:
+                  type: string
+                  format: uuid
+              required:
+                - file_id
+              additionalProperties: false
+      responses:
+        "200":
+          description: Suggested fields; any field the photo does not show is null.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      fields:
+                        type: object
+                        properties:
+                          name:
+                            type:
+                              - string
+                              - "null"
+                            minLength: 1
+                            maxLength: 200
+                          rental_price_minor:
+                            type:
+                              - string
+                              - "null"
+                            pattern: ^-?(0|[1-9]\d*)$
+                          size_label:
+                            type:
+                              - string
+                              - "null"
+                            minLength: 1
+                            maxLength: 40
+                          free_size:
+                            type: boolean
+                          measurement_unit:
+                            type:
+                              - string
+                              - "null"
+                            enum: *a21
+                          measurements:
+                            type: object
+                            additionalProperties:
+                              type: number
+                              minimum: 0
+                              maximum: 10000
+                          color_label:
+                            type:
+                              - string
+                              - "null"
+                            minLength: 1
+                            maxLength: 80
+                        required:
+                          - name
+                          - rental_price_minor
+                          - size_label
+                          - free_size
+                          - measurement_unit
+                          - measurements
+                          - color_label
+                    required:
+                      - fields
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "404":
+          description: The photo is not an accepted catalogue image of this shop.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "429":
+          description: The photo reader is rate limited; retry after Retry-After seconds.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "503":
+          description: Photo reading is not set up or the provider is unavailable.
           content:
             application/json:
               schema:
@@ -14239,6 +15279,11 @@ paths:
                                           - "null"
                                         minLength: 1
                                         maxLength: 80
+                                      primary_image_url:
+                                        type:
+                                          - string
+                                          - "null"
+                                        format: uri
                                     required:
                                       - variant_id
                                       - product_name
@@ -14652,6 +15697,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -15050,6 +16100,11 @@ paths:
                                     - "null"
                                   minLength: 1
                                   maxLength: 80
+                                primary_image_url:
+                                  type:
+                                    - string
+                                    - "null"
+                                  format: uri
                               required:
                                 - variant_id
                                 - product_name
@@ -15586,6 +16641,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -16023,6 +17083,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -16491,6 +17556,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -16954,6 +18024,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -17421,6 +18496,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -17888,6 +18968,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -18350,6 +19435,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -18812,6 +19902,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -19277,6 +20372,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -19742,6 +20842,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -20227,6 +21332,11 @@ paths:
                                         - "null"
                                       minLength: 1
                                       maxLength: 80
+                                    primary_image_url:
+                                      type:
+                                        - string
+                                        - "null"
+                                      format: uri
                                   required:
                                     - variant_id
                                     - product_name
@@ -20922,9 +22032,18 @@ paths:
           required: true
           name: id
           in: path
+        - schema:
+            type: string
+            minLength: 1
+            description: The reservation-scoped HttpOnly cookie set by the hold endpoint.
+          required: true
+          description: The reservation-scoped HttpOnly cookie set by the hold endpoint.
+          name: cookie
+          in: header
       responses:
         "200":
-          description: Reservation view scoped to the presented capability token.
+          description: Reservation view authorized by the reservation-scoped HttpOnly
+            cookie. The capability is never placed in a URL or response body.
           content:
             application/json:
               schema:
@@ -21356,6 +22475,14 @@ paths:
           required: true
           name: Idempotency-Key
           in: header
+        - schema:
+            type: string
+            minLength: 1
+            description: The reservation-scoped HttpOnly cookie set by the hold endpoint.
+          required: true
+          description: The reservation-scoped HttpOnly cookie set by the hold endpoint.
+          name: cookie
+          in: header
       requestBody:
         content:
           application/json:
@@ -21712,11 +22839,7 @@ paths:
                     - payment_method_material
                 content_type:
                   type: string
-                  enum:
-                    - image/jpeg
-                    - image/png
-                    - image/webp
-                    - application/pdf
+                  enum: *a45
                 byte_size:
                   type: integer
                   exclusiveMinimum: 0
@@ -21852,7 +22975,7 @@ paths:
                         type: array
                         items:
                           type: string
-                          enum: *a45
+                          enum: *a46
                         maxItems: 7
                       branch_id:
                         type: string
@@ -21959,7 +23082,7 @@ paths:
                   type: array
                   items:
                     type: string
-                    enum: *a45
+                    enum: *a46
                   maxItems: 7
                 version:
                   type: integer
@@ -21995,7 +23118,7 @@ paths:
                         type: array
                         items:
                           type: string
-                          enum: *a45
+                          enum: *a46
                         maxItems: 7
                       branch_id:
                         type: string
@@ -23067,7 +24190,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: &a47
+                        enum: &a48
                           - draft
                           - published
                           - suspended
@@ -23118,7 +24241,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a46
+                                enum: *a47
                             required:
                               - display_name
                               - tagline
@@ -23134,7 +24257,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -23155,7 +24277,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^[A-Za-z0-9.-]{1,80}$
                               tiktok:
                                 type:
                                   - string
@@ -23355,7 +24476,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: &a48
+                                enum: &a49
                                   - text
                                   - images
                                 default: text
@@ -23383,7 +24504,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: &a49 []
+                                default: &a50 []
                               delivery:
                                 type: object
                                 properties:
@@ -23420,7 +24541,7 @@ paths:
                             additionalProperties:
                               type: string
                               format: uri
-                            default: &a50 {}
+                            default: &a51 {}
                         required:
                           - version
                           - effective_at
@@ -23608,7 +24729,7 @@ paths:
                           format: uuid
                         theme:
                           type: string
-                          enum: *a46
+                          enum: *a47
                       required:
                         - display_name
                         - tagline
@@ -23624,7 +24745,6 @@ paths:
                           type:
                             - string
                             - "null"
-                          pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                         email:
                           type:
                             - string
@@ -23645,7 +24765,6 @@ paths:
                           type:
                             - string
                             - "null"
-                          pattern: ^[A-Za-z0-9.-]{1,80}$
                         tiktok:
                           type:
                             - string
@@ -23824,7 +24943,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a47
+                        enum: *a48
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -23872,7 +24991,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a46
+                                enum: *a47
                             required:
                               - display_name
                               - tagline
@@ -23888,7 +25007,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -23909,7 +25027,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^[A-Za-z0-9.-]{1,80}$
                               tiktok:
                                 type:
                                   - string
@@ -24109,7 +25226,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: *a48
+                                enum: *a49
                                 default: text
                               rental:
                                 type: string
@@ -24135,7 +25252,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: *a49
+                                default: *a50
                               delivery:
                                 type: object
                                 properties:
@@ -24172,7 +25289,7 @@ paths:
                             additionalProperties:
                               type: string
                               format: uri
-                            default: *a50
+                            default: *a51
                         required:
                           - version
                           - effective_at
@@ -24485,7 +25602,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a47
+                        enum: *a48
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -24533,7 +25650,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a46
+                                enum: *a47
                             required:
                               - display_name
                               - tagline
@@ -24549,7 +25666,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -24570,7 +25686,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^[A-Za-z0-9.-]{1,80}$
                               tiktok:
                                 type:
                                   - string
@@ -24770,7 +25885,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: *a48
+                                enum: *a49
                                 default: text
                               rental:
                                 type: string
@@ -24796,7 +25911,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: *a49
+                                default: *a50
                               delivery:
                                 type: object
                                 properties:
@@ -24833,7 +25948,7 @@ paths:
                             additionalProperties:
                               type: string
                               format: uri
-                            default: *a50
+                            default: *a51
                         required:
                           - version
                           - effective_at
@@ -25011,7 +26126,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a47
+                        enum: *a48
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -25059,7 +26174,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a46
+                                enum: *a47
                             required:
                               - display_name
                               - tagline
@@ -25075,7 +26190,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -25096,7 +26210,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^[A-Za-z0-9.-]{1,80}$
                               tiktok:
                                 type:
                                   - string
@@ -25296,7 +26409,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: *a48
+                                enum: *a49
                                 default: text
                               rental:
                                 type: string
@@ -25322,7 +26435,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: *a49
+                                default: *a50
                               delivery:
                                 type: object
                                 properties:
@@ -25359,7 +26472,7 @@ paths:
                             additionalProperties:
                               type: string
                               format: uri
-                            default: *a50
+                            default: *a51
                         required:
                           - version
                           - effective_at
@@ -25537,7 +26650,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a47
+                        enum: *a48
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -25585,7 +26698,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a46
+                                enum: *a47
                             required:
                               - display_name
                               - tagline
@@ -25601,7 +26714,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -25622,7 +26734,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^[A-Za-z0-9.-]{1,80}$
                               tiktok:
                                 type:
                                   - string
@@ -25822,7 +26933,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: *a48
+                                enum: *a49
                                 default: text
                               rental:
                                 type: string
@@ -25848,7 +26959,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: *a49
+                                default: *a50
                               delivery:
                                 type: object
                                 properties:
@@ -25885,7 +26996,7 @@ paths:
                             additionalProperties:
                               type: string
                               format: uri
-                            default: *a50
+                            default: *a51
                         required:
                           - version
                           - effective_at
@@ -26045,7 +27156,7 @@ paths:
                   properties:
                     format:
                       type: string
-                      enum: *a48
+                      enum: *a49
                       default: text
                     rental:
                       type: string
@@ -26071,7 +27182,7 @@ paths:
                         type: string
                         format: uuid
                       maxItems: 6
-                      default: *a49
+                      default: *a50
                     delivery:
                       type: object
                       properties:
@@ -26127,7 +27238,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a47
+                        enum: *a48
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -26175,7 +27286,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a46
+                                enum: *a47
                             required:
                               - display_name
                               - tagline
@@ -26191,7 +27302,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                               email:
                                 type:
                                   - string
@@ -26212,7 +27322,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^[A-Za-z0-9.-]{1,80}$
                               tiktok:
                                 type:
                                   - string
@@ -26412,7 +27521,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: *a48
+                                enum: *a49
                                 default: text
                               rental:
                                 type: string
@@ -26438,7 +27547,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: *a49
+                                default: *a50
                               delivery:
                                 type: object
                                 properties:
@@ -26475,7 +27584,7 @@ paths:
                             additionalProperties:
                               type: string
                               format: uri
-                            default: *a50
+                            default: *a51
                         required:
                           - version
                           - effective_at
@@ -26642,7 +27751,6 @@ paths:
                         type:
                           - string
                           - "null"
-                        pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                       business_address:
                         type:
                           - string
@@ -26798,7 +27906,6 @@ paths:
                   type:
                     - string
                     - "null"
-                  pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                 business_address:
                   type:
                     - string
@@ -26844,7 +27951,6 @@ paths:
                         type:
                           - string
                           - "null"
-                        pattern: ^\+?[0-9][0-9 ()-]{6,19}$
                       business_address:
                         type:
                           - string
@@ -27357,311 +28463,6 @@ paths:
                   - success
                   - error
                   - request_id
-  /public/stores/{slug}/verifications:
-    post:
-      tags:
-        - guest
-      summary: Send a 6-digit email code. The answer never reveals whether a code was
-        sent.
-      parameters:
-        - schema:
-            type: string
-            minLength: 1
-          required: true
-          name: slug
-          in: path
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                email:
-                  type: string
-                  maxLength: 254
-                  format: email
-                turnstile_token:
-                  type: string
-                  minLength: 1
-                  maxLength: 2048
-              required:
-                - email
-              additionalProperties: false
-      responses:
-        "200":
-          description: Success.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - true
-                  data:
-                    type: object
-                    properties:
-                      accepted:
-                        type: boolean
-                        enum:
-                          - true
-                      code_length:
-                        type: number
-                        enum:
-                          - 6
-                      expires_in_seconds:
-                        type: integer
-                        exclusiveMinimum: 0
-                    required:
-                      - accepted
-                      - code_length
-                      - expires_in_seconds
-                    additionalProperties: false
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - data
-                  - request_id
-        "409":
-          description: A newer version exists or an identical request is in progress.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-        "422":
-          description: Validation failed.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-  /public/stores/{slug}/verifications/confirm:
-    post:
-      tags:
-        - guest
-      summary: Exchange a valid code for a short-lived verification token.
-      parameters:
-        - schema:
-            type: string
-            minLength: 1
-          required: true
-          name: slug
-          in: path
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                email:
-                  type: string
-                  maxLength: 254
-                  format: email
-                code:
-                  type: string
-                  pattern: ^\d{6}$
-              required:
-                - email
-                - code
-              additionalProperties: false
-      responses:
-        "200":
-          description: Success.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - true
-                  data:
-                    type: object
-                    properties:
-                      verification_token:
-                        type: string
-                        pattern: ^[A-Za-z0-9_-]{43}$
-                      expires_at:
-                        type: string
-                        format: date-time
-                    required:
-                      - verification_token
-                      - expires_at
-                    additionalProperties: false
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - data
-                  - request_id
-        "409":
-          description: A newer version exists or an identical request is in progress.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
-        "422":
-          description: Validation failed.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - false
-                  error:
-                    type: object
-                    properties:
-                      code:
-                        type: string
-                        enum: *a26
-                      message:
-                        type: string
-                        minLength: 1
-                      fields:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            message:
-                              type: string
-                              minLength: 1
-                          required:
-                            - field
-                            - message
-                    required:
-                      - code
-                      - message
-                  request_id:
-                    type: string
-                    minLength: 1
-                required:
-                  - success
-                  - error
-                  - request_id
   /public/stores/{slug}/fitting-slots:
     get:
       tags:
@@ -27827,7 +28628,8 @@ paths:
     post:
       tags:
         - guest
-      summary: Verified guest requests a fitting; it starts pending for staff review.
+      summary: Guest requests a fitting without email verification; Turnstile protects
+        submission and it starts pending for staff review.
       parameters:
         - schema:
             type: string
@@ -27848,9 +28650,10 @@ paths:
             schema:
               type: object
               properties:
-                verification_token:
+                turnstile_token:
                   type: string
-                  pattern: ^[A-Za-z0-9_-]{43}$
+                  minLength: 1
+                  maxLength: 2048
                 email:
                   type: string
                   maxLength: 254
@@ -27901,7 +28704,6 @@ paths:
                     - "null"
                   maxLength: 500
               required:
-                - verification_token
                 - email
                 - customer
                 - start_at
@@ -27909,7 +28711,7 @@ paths:
                 - note
               additionalProperties: false
       responses:
-        "200":
+        "201":
           description: Success.
           content:
             application/json:
@@ -27954,6 +28756,50 @@ paths:
                 required:
                   - success
                   - data
+                  - request_id
+        "403":
+          description: The Turnstile submission check failed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
                   - request_id
         "409":
           description: A newer version exists or an identical request is in progress.
@@ -28047,7 +28893,8 @@ paths:
     post:
       tags:
         - guest
-      summary: Authorize one receipt upload for the guest reservation.
+      summary: Authorize one receipt upload using the reservation-scoped HttpOnly
+        cookie.
       parameters:
         - schema:
             type: string
@@ -28057,9 +28904,11 @@ paths:
           in: path
         - schema:
             type: string
-            pattern: ^Bearer [A-Za-z0-9_-]{43}$
+            minLength: 1
+            description: The reservation-scoped HttpOnly cookie set by the hold endpoint.
           required: true
-          name: authorization
+          description: The reservation-scoped HttpOnly cookie set by the hold endpoint.
+          name: cookie
           in: header
       requestBody:
         content:
@@ -28272,7 +29121,7 @@ paths:
                             minLength: 1
                           status:
                             type: string
-                            enum: *a11
+                            enum: *a12
                           currency:
                             type: string
                             pattern: ^[A-Z]{3}$
@@ -28329,7 +29178,7 @@ paths:
                             format: uuid
                           role:
                             type: string
-                            enum: *a12
+                            enum: *a11
                           status:
                             type: string
                             enum: *a13
@@ -28711,7 +29560,7 @@ paths:
                               pattern: ^[A-Z]{3}$
                             status:
                               type: string
-                              enum: &a51
+                              enum: &a52
                                 - pending
                                 - verified
                                 - failed
@@ -28895,7 +29744,7 @@ paths:
                             pattern: ^[A-Z]{3}$
                           status:
                             type: string
-                            enum: *a51
+                            enum: *a52
                           reference:
                             type: string
                             minLength: 1

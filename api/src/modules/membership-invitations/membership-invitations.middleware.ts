@@ -10,12 +10,14 @@ import {
   membershipInvitationParams,
   paginationRequest,
   resendMembershipInvitationRequest,
+  type PaginationRequest,
 } from './membership-invitations.schemas.js';
 
 declare module 'express-serve-static-core' {
   interface Request {
     membershipInvitationIdempotencyKey?: string;
     membershipInvitationClaimIdempotencyKey?: string;
+    membershipInvitationPagination?: PaginationRequest;
   }
 }
 
@@ -111,6 +113,8 @@ export const validateMembershipInvitationPagination: RequestHandler = (req, _res
     next(new ValidationError('Pagination is invalid.'));
     return;
   }
-  req.query = parsed.data as unknown as typeof req.query;
+  // Express 5 exposes req.query through a getter with no setter. Keep the validated value on a
+  // dedicated request field rather than assigning back to req.query (which throws in strict mode).
+  req.membershipInvitationPagination = parsed.data;
   next();
 };

@@ -45,7 +45,7 @@ describe('actor and workspace contracts', () => {
           trial_ends_at: tenant.updated_at,
           grace_ends_at: null,
         },
-        entitlements: { physical_assets_max: 1000, frontdesk_seats_max: 10 },
+        entitlements: { physical_assets_max: 300, frontdesk_seats_max: 3 },
         access: {
           level: 'full',
           reason: 'trial',

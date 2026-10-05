@@ -62,10 +62,12 @@ export function StorefrontContentPage() {
             </div>
             <ImageField
               label="Hero photo"
-              hint="Portrait or wide, at least 1600 px. Falls back to your cover photo."
+              hint="Portrait or wide, at least 1600 px."
               aspect="aspect-[4/3]"
               fileId={draft.hero.image_file_id}
               savedUrl={settings.media.hero_image_url}
+              fallbackUrl={settings.media.cover_url}
+              fallbackLabel="Using cover photo"
               onChange={(id) => content.update({ hero: { ...draft.hero, image_file_id: id } })}
             />
           </div>

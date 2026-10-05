@@ -27,15 +27,14 @@ type LaunchPhase = "idle" | "bootstrapping" | "resolving" | "context-error";
 
 /**
  * Display copy for the only plan (internal plan code `starter`, shown as Standard). It must match
- * the public offer on the marketing site (web/src/lib/marketing-content.ts). During pilot testing
- * the API's entitlements stay higher (1,000 garments, 10 staff) until Final Production; that is a
- * backend allowance, never the advertised plan.
+ * the public offer on the marketing site (web/src/lib/marketing-content.ts). The server remains
+ * authoritative for these quotas.
  */
 const STANDARD_PLAN = {
   name: "Standard",
-  monthlyPrice: "₱300",
-  assets: "Up to 125 garments",
-  seats: "For the shop owner only",
+  monthlyPrice: "₱299",
+  assets: "Up to 300 active garments",
+  seats: "Up to 3 Front Desk staff",
 } as const;
 
 /**

@@ -30,7 +30,7 @@ What each former worker job does now:
 
 | Job | During the pilot |
 | --- | --- |
-| Emails: verification codes, booking received, approved, rejected and cancelled, fittings, owner alerts, payment approved and rejected | Sent by the embedded worker within about a second, with retries |
+| Emails: business/owner reservation and fitting notices, staff invitations, operator billing notices | Sent by the embedded worker within about a second, with retries. Guest customers receive no verification, receipt, reservation, fitting, or lifecycle email. |
 | Releasing expired holds | Embedded worker. New bookings also release expired holds themselves, and staff cannot close a live hold (next section) |
 | Staff invitations, Clerk webhook retries, abandoned sign-up cleanup | Embedded worker |
 | Trial and subscription ending | No job needed. Access is worked out on every request from the subscription dates (next sections) |
@@ -49,22 +49,36 @@ finish the customer details and payment. While the hold is live:
 This lives in `app/src/lib/pending-hold.ts` and
 `app/src/components/reservations/pending-hold-guard.tsx`.
 
-## Customer emails always send
+## Storefront guest email behavior
 
-The owner's email toggles (Settings → Notifications) are hidden during the pilot, and the API
-ignores saved toggles (`NOTIFICATION_PREFERENCES_ENFORCED = false`). Customers always get their
-booking emails, and owner alerts go to the business email in Settings → Business information.
+Guest storefront reservations and fitting requests require an email as contact information, but do
+not verify that address and do not send customer-directed mail. After a reservation receipt is
+submitted, the storefront shows a private proof page, asks the customer to screenshot it, and guards
+navigation with a confirmation. The API-host-only, reservation-path-scoped HttpOnly cookie—not the
+reservation ID or reference—authorizes that page and receipt workflow. There is no email recovery
+link. The shop can contact the guest independently using the information provided.
+
+Owner/business notification preferences remain independent: during the pilot, the owner's email
+toggles are hidden and the API ignores saved toggles (`NOTIFICATION_PREFERENCES_ENFORCED = false`).
+Business notices go to the business email in Settings → Business information. Migration
+`0070_storefront_guest_no_email.sql` removes queued customer-directed verification and reservation/
+fitting lifecycle email rows while preserving business-directed rows. Stop old API and worker
+processes before applying that migration so an in-flight older worker cannot deliver a queued guest
+message; deploy the updated API/worker/web release together before accepting storefront traffic.
 
 ## Subscription: one plan, trial, and manual payment
 
-- **One plan, Standard:** ₱300 a month, up to 1,000 active physical assets and 10 Front Desk seats.
-  Internally the plan code stays `starter`; migration `0063_pilot_billing.sql` deactivates the
-  former Professional and Business rows while preserving them for history.
+- **One plan, Standard:** ₱299 a month, up to 300 active physical clothing items and 3 Front Desk
+  seats. Internally the plan code stays `starter`; migration `0063_pilot_billing.sql` deactivates
+  the former Professional and Business rows while preserving them for history, and
+  `0071_starter_plan_limits.sql` sets the current quotas. Applying the lower limits does not remove
+  existing items or members; check usage and advise businesses above the cap that new additions are
+  blocked until usage drops below it. See [ADR 0013](../decisions/0013-starter-plan-capacity.md).
 - **Sign-up:** an owner signs up (for example with Google), names the business, confirms **"Start
   your 14-day trial?"**, and lands on the dashboard. There is no plan choice and no billing page.
 - **Paying:** the owner opens **Subscribe** from the banner or prompt.
   1. They pick one of Drezivo's payment methods, which shows its QR code, account name and number.
-  2. They pay ₱300, then send the reference number and a screenshot or PDF of the receipt.
+  2. They pay ₱299, then send the reference number and a screenshot or PDF of the receipt.
   3. An operator checks it in the operator console and approves or rejects it. The owner is emailed
      either way.
   4. On approval, the next paid month starts from the approval date or from the old end date,
@@ -96,10 +110,9 @@ Never commit these values. They live in each host's settings.
 - `EMBEDDED_WORKER=true`
 - `WORKER_DATABASE_URL`: the Supabase session pooler address for the `drezivo_worker` user,
   ending in `?sslmode=require`. It must differ from `DATABASE_URL`.
-- `TURNSTILE_SECRET_KEY`: from Cloudflare, see below. Without it the storefront's robot check is
-  skipped.
+- `TURNSTILE_SECRET_KEY`: from Cloudflare, see below. Required in staging and production; local
+  development can omit it and will log that challenges are skipped.
 - `EMAIL_PROVIDER=resend`, `EMAIL_FROM`, and `RESEND_API_KEY`
-- `STOREFRONT_PUBLIC_ORIGIN=https://drezivo.shop`
 - `CORS_ALLOWED_ORIGINS=https://drezivo.shop,https://partners.drezivo.shop`
 - `OPERATOR_PROOF_LINK_SECRET`: at least 32 random characters, the same value as on the operator
   API. Without it, operators cannot open proofs of payment.
@@ -130,8 +143,8 @@ Never commit these values. They live in each host's settings.
    site key in the web app and the secret key in the API.
 3. **Clerk:** Configure → Attack protection → turn on Bot sign-up protection (CAPTCHA "Smart").
    Also add `partners.drezivo.shop` to the domains and allowed origins.
-4. **Resend:** verify the `drezivo.shop` domain so emails reach every renter, not only the account
-   owner.
+4. **Resend:** verify the sender domain for business/owner and operational notices. Storefront
+   guests do not receive email from reservation or fitting flows.
 5. **Operator console:** add Drezivo's payment methods (up to 10: GCash, Maya, bank) with their QR
    images.
 

@@ -8,6 +8,7 @@ const baseEnvironment: NodeJS.ProcessEnv = {
   CLERK_SECRET_KEY: 'test-secret',
   CLERK_PUBLISHABLE_KEY: 'test-public',
   CLERK_WEBHOOK_SIGNING_SECRET: 'test-webhook',
+  STAFF_APP_URL: 'https://staff.example.test',
   CORS_ALLOWED_ORIGINS: 'https://staff.example.test',
   INVITATION_EMAIL_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64url'),
   INVITATION_EMAIL_DIGEST_KEY: Buffer.alloc(32, 2).toString('base64url'),
@@ -16,6 +17,7 @@ const baseEnvironment: NodeJS.ProcessEnv = {
   OBJECT_STORAGE_BUCKET_PRIVATE: 'private-files',
   OBJECT_STORAGE_ACCESS_KEY_ID: 'test-access',
   OBJECT_STORAGE_SECRET_ACCESS_KEY: 'test-secret',
+  TURNSTILE_SECRET_KEY: 'synthetic-turnstile-secret',
 };
 
 describe('object-storage configuration', () => {
@@ -27,6 +29,14 @@ describe('object-storage configuration', () => {
     expect(parsed.OBJECT_STORAGE_BUCKET_PUBLIC).toBeUndefined();
     expect(parsed.OBJECT_STORAGE_FORCE_PATH_STYLE).toBe(false);
     expect(parsed.OBJECT_STORAGE_UPLOADS_ENABLED).toBe(false);
+  });
+
+  it('requires the bot challenge secret in staging and production', () => {
+    const withoutTurnstile = { ...baseEnvironment };
+    delete withoutTurnstile.TURNSTILE_SECRET_KEY;
+    expect(() => parseConfig(withoutTurnstile)).toThrow(
+      'Staging and production storefront guest submissions require TURNSTILE_SECRET_KEY.',
+    );
   });
 
   it('rejects an AWS endpoint for production storage', () => {
@@ -167,6 +177,49 @@ describe('object-storage configuration', () => {
     });
 
     expect(parsed.OBJECT_STORAGE_UPLOADS_ENABLED).toBe(false);
+  });
+});
+
+describe('staff application URL configuration', () => {
+  it('defaults development invitation callbacks to the local staff app', () => {
+    const parsed = parseConfig({
+      ...baseEnvironment,
+      NODE_ENV: 'development',
+      STAFF_APP_URL: undefined,
+      OBJECT_STORAGE_ENDPOINT: 'http://127.0.0.1:9000',
+      OBJECT_STORAGE_REGION: 'us-east-1',
+      OBJECT_STORAGE_FORCE_PATH_STYLE: 'true',
+    });
+
+    expect(parsed.STAFF_APP_URL).toBe('http://localhost:3000');
+  });
+
+  it('requires a trusted HTTPS origin for deployed environments', () => {
+    expect(() => parseConfig({ ...baseEnvironment, STAFF_APP_URL: undefined })).toThrow(
+      'Staging and production require STAFF_APP_URL.',
+    );
+    expect(() =>
+      parseConfig({ ...baseEnvironment, STAFF_APP_URL: 'http://staff.example.test' }),
+    ).toThrow(
+      'Staging and production STAFF_APP_URL must be an HTTPS origin without a path or credentials.',
+    );
+    expect(() =>
+      parseConfig({ ...baseEnvironment, STAFF_APP_URL: 'https://staff.example.test/other' }),
+    ).toThrow(
+      'Staging and production STAFF_APP_URL must be an HTTPS origin without a path or credentials.',
+    );
+  });
+
+  it('rejects non-loopback HTTP callback origins in development', () => {
+    expect(() =>
+      parseConfig({
+        ...baseEnvironment,
+        NODE_ENV: 'development',
+        STAFF_APP_URL: 'http://staff.example.test',
+      }),
+    ).toThrow(
+      'STAFF_APP_URL must be an HTTPS origin or a loopback HTTP origin without a path or credentials.',
+    );
   });
 });
 

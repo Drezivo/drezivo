@@ -6,24 +6,22 @@ import { useEffect, useRef, useState } from "react";
 
 import { AuthBrand } from "@/components/auth/auth-brand";
 import { DrezivoApiError } from "@/lib/drezivo-api";
-import { resolveStaffLanding } from "@/lib/resolve-staff-landing";
+import { invitationStateOf, resolveStaffLanding } from "@/lib/resolve-staff-landing";
 import { WORKSPACE_HOME } from "@/lib/workspace-routes";
 
-type ResolveState =
-  | { kind: "resolving" }
-  | { kind: "error"; error: DrezivoApiError };
+type ResolveState = { kind: "resolving" } | { kind: "error"; error: DrezivoApiError };
 
 const RESOLVE_TIMEOUT_MS = 20_000;
 
 export function PostAuthResolver() {
   const { getToken, isLoaded, isSignedIn, orgId } = useAuth();
-  const { setActive } = useClerk();
+  const { setActive, user } = useClerk();
   const router = useRouter();
   const [state, setState] = useState<ResolveState>({ kind: "resolving" });
   // Clerk updates orgId and getToken while it finishes sign-in and while setActive runs. Read them
   // through refs so those updates do not start a second, overlapping resolution.
-  const latest = useRef({ getToken, orgId, setActive });
-  latest.current = { getToken, orgId, setActive };
+  const latest = useRef({ getToken, orgId, setActive, user });
+  latest.current = { getToken, orgId, setActive, user };
   const started = useRef(false);
 
   useEffect(() => {
@@ -38,18 +36,53 @@ export function PostAuthResolver() {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(
-        () => reject(new DrezivoApiError("Opening your workspace took too long. Please try again.", { status: 504 })),
+        () =>
+          reject(
+            new DrezivoApiError("Opening your workspace took too long. Please try again.", {
+              status: 504,
+            })
+          ),
         RESOLVE_TIMEOUT_MS
       );
     });
-    const { getToken: token, orgId: activeOrganizationId, setActive: activate } = latest.current;
+    const {
+      getToken: token,
+      orgId: activeOrganizationId,
+      setActive: activate,
+      user: signedInUser,
+    } = latest.current;
 
-    Promise.race([resolveStaffLanding({ activeOrganizationId, getToken: token, setActive: activate }), timeout])
+    Promise.race([
+      resolveStaffLanding({
+        activeOrganizationId,
+        getToken: token,
+        setActive: (params) => activate({ ...params, navigate: async () => undefined }),
+        invitations: invitationStateOf(signedInUser),
+        requireWorkspaceChoice: true,
+      }),
+      timeout,
+    ])
       .then((resolution) => {
         // A full navigation, not router.replace: Clerk refreshes the router right after sign-in, and
         // that refresh cancelled the soft navigation, leaving this spinner up until a manual reload.
         // replace() also keeps this page out of history, so Back does not return to it.
-        window.location.replace(resolution.kind === "workspace" ? WORKSPACE_HOME : "/onboarding");
+        if (resolution.kind === "invitation-required") {
+          setState({
+            kind: "error",
+            error: new DrezivoApiError(
+              "This account has a pending team invitation. Open the invitation link from your email to join that workspace.",
+              { status: 409 }
+            ),
+          });
+          return;
+        }
+        const destination =
+          resolution.kind === "workspace"
+            ? WORKSPACE_HOME
+            : resolution.kind === "workspaces"
+              ? "/workspaces/select"
+              : "/onboarding";
+        window.location.replace(destination);
       })
       .catch((error: unknown) => setState({ kind: "error", error: toDrezivoApiError(error) }))
       .finally(() => clearTimeout(timer));
