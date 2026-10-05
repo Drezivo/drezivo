@@ -70,6 +70,13 @@ import {
   createOwnerOnboardingRequest,
   onboardingActorContext,
   organizationOnboarding,
+  createMembershipInvitationRequest,
+  membershipInvitation,
+  membershipInvitationList,
+  memberRosterResponse,
+  paginationRequest,
+  resendMembershipInvitationRequest,
+  cancelMembershipInvitationRequest,
   paymentMethodSettingsItem,
   branchBusinessHours,
   branchClosureCreateRequest,
@@ -210,6 +217,11 @@ import {
   type CreateOwnerOnboardingRequest,
   type OnboardingActorContext,
   type OrganizationOnboarding,
+  type CreateMembershipInvitationRequest,
+  type MembershipInvitation,
+  type MembershipInvitationList,
+  type MemberRosterResponse,
+  type PaginationRequest,
   type PaymentMethodSettingsItem,
   type BranchBusinessHours,
   type BranchClosureCreateRequest,
@@ -386,6 +398,54 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "GET",
         path: "/api/v1/actor-context",
         responseSchema: apiEnvelope(actorContext),
+      }),
+    getMemberRoster: () =>
+      request<MemberRosterResponse>({
+        getToken,
+        method: "GET",
+        path: "/api/v1/members",
+        responseSchema: apiEnvelope(memberRosterResponse),
+      }),
+    getMembershipInvitations: (input: PaginationRequest) => {
+      const query = paginationRequest.parse(input);
+      const searchParams = new URLSearchParams({ limit: String(query.limit) });
+      if (query.cursor) searchParams.set("cursor", query.cursor);
+      return request<MembershipInvitationList>({
+        getToken,
+        method: "GET",
+        path: `/api/v1/membership-invitations?${searchParams.toString()}`,
+        responseSchema: apiEnvelope(membershipInvitationList),
+      });
+    },
+    createMembershipInvitation: (
+      input: CreateMembershipInvitationRequest,
+      idempotencyKey: string
+    ) =>
+      request<MembershipInvitation>({
+        getToken,
+        body: createMembershipInvitationRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: "/api/v1/membership-invitations",
+        responseSchema: apiEnvelope(membershipInvitation),
+      }),
+    resendMembershipInvitation: (invitationId: string, idempotencyKey: string) =>
+      request<MembershipInvitation>({
+        getToken,
+        body: resendMembershipInvitationRequest.parse({}),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/membership-invitations/${encodeURIComponent(invitationId)}/resend`,
+        responseSchema: apiEnvelope(membershipInvitation),
+      }),
+    cancelMembershipInvitation: (invitationId: string, idempotencyKey: string) =>
+      request<MembershipInvitation>({
+        getToken,
+        body: cancelMembershipInvitationRequest.parse({}),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/membership-invitations/${encodeURIComponent(invitationId)}/cancel`,
+        responseSchema: apiEnvelope(membershipInvitation),
       }),
     getOperationalCalendar: (input: OperationalCalendarQuery) => {
       const query = operationalCalendarQuery.parse(input);

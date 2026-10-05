@@ -37,6 +37,11 @@ export interface PlanCapacityCheckResult {
   frontdeskSeats: QuotaCheckResult;
 }
 
+export interface FrontdeskSeatUsage {
+  used: number;
+  max: number;
+}
+
 /** Resolve a selected v1 plan without opening a transaction or hiding malformed seed data. */
 export async function resolvePlanEntitlements(
   client: PoolClient,
@@ -99,6 +104,18 @@ export async function assertFrontDeskSeatCapacity(
   return ensureCapacity('frontdesk_seats', current, additional, entitlements.frontdeskSeatsMax);
 }
 
+/** Read the seat quota using the same count and entitlement source as invitation writes. */
+export async function getFrontdeskSeatUsage(
+  client: PoolClient,
+  tenantId: string,
+): Promise<FrontdeskSeatUsage> {
+  const entitlements = await resolveTenantEntitlements(client, tenantId);
+  return {
+    used: await countReservedFrontdeskSeats(client, tenantId),
+    max: entitlements.frontdeskSeatsMax,
+  };
+}
+
 /**
  * Compares current usage with a target plan while the caller owns the tenant lock. This is used
  * for trial plan changes; it intentionally performs no write so the billing transaction can
@@ -113,7 +130,12 @@ export async function assertPlanCapacity(
   const currentFrontdesk = await countReservedFrontdeskSeats(client, tenantId);
   return {
     physicalAssets: ensureCapacity('physical_assets', currentAssets, 0, target.physicalAssetsMax),
-    frontdeskSeats: ensureCapacity('frontdesk_seats', currentFrontdesk, 0, target.frontdeskSeatsMax),
+    frontdeskSeats: ensureCapacity(
+      'frontdesk_seats',
+      currentFrontdesk,
+      0,
+      target.frontdeskSeatsMax,
+    ),
   };
 }
 

@@ -58,8 +58,15 @@ export interface ClerkUserVerificationState {
   primaryEmailVerified: boolean;
 }
 
+export interface ClerkUserProfile {
+  userId: string;
+  name: string | null;
+  email: string | null;
+}
+
 export interface ClerkServerAdapter {
   getUserVerificationState(userId: string): Promise<ClerkUserVerificationState>;
+  getUserProfiles(userIds: string[]): Promise<ClerkUserProfile[]>;
   createOrganization(input: CreateClerkOrganizationInput): Promise<ClerkOrganization>;
   getOrganization(organizationId: string): Promise<ClerkOrganization>;
   deleteOrganizationIfPresent(organizationId: string): Promise<boolean>;
@@ -97,7 +104,7 @@ export interface ClerkServerAdapter {
  * importing or mocking Clerk throughout the application.
  */
 export type ClerkProviderClient = {
-  users: Pick<ClerkClient['users'], 'getUser'>;
+  users: Pick<ClerkClient['users'], 'getUser' | 'getUserList'>;
   organizations: Pick<
     ClerkClient['organizations'],
     | 'createOrganization'
@@ -257,14 +264,12 @@ function readDispatchMarker(value: unknown): ClerkInvitationDispatchMarker | nul
     dispatch_version?: unknown;
     operation?: unknown;
   };
-  const result = dispatchMarkerSchema.safeParse(
-    {
-      source: raw.source,
-      invitationId: raw.invitation_id,
-      dispatchVersion: raw.dispatch_version,
-      operation: raw.operation,
-    },
-  );
+  const result = dispatchMarkerSchema.safeParse({
+    source: raw.source,
+    invitationId: raw.invitation_id,
+    dispatchVersion: raw.dispatch_version,
+    operation: raw.operation,
+  });
   return result.success ? result.data : null;
 }
 
@@ -312,7 +317,9 @@ async function providerCall<T>(
 async function listProviderInvitations(
   client: ClerkProviderClient,
   organizationId: string,
-): Promise<Awaited<ReturnType<ClerkProviderClient['organizations']['getOrganizationInvitationList']>>['data']> {
+): Promise<
+  Awaited<ReturnType<ClerkProviderClient['organizations']['getOrganizationInvitationList']>>['data']
+> {
   const rows: Awaited<
     ReturnType<ClerkProviderClient['organizations']['getOrganizationInvitationList']>
   >['data'][number][] = [];
@@ -365,6 +372,38 @@ export function createClerkServerAdapter(
         return {
           primaryEmailVerified: primary?.verification?.status === 'verified',
         };
+      });
+    },
+
+    async getUserProfiles(userIds) {
+      const parsed = parseInput(z.array(providerId).max(500), userIds, 'Clerk user IDs');
+      const requestedIds = [...new Set(parsed)];
+      if (requestedIds.length === 0) return [];
+      return providerCall(async () => {
+        const response = await client.users.getUserList({
+          userId: requestedIds,
+          limit: requestedIds.length,
+        });
+        if (!response || !Array.isArray(response.data)) {
+          throw new DependencyUnavailableError('Clerk returned an invalid user response.');
+        }
+        const requested = new Set(requestedIds);
+        return response.data
+          .filter((user) => requested.has(user.id))
+          .map((user) => {
+            const primaryEmail = user.primaryEmailAddressId
+              ? user.emailAddresses.find((email) => email.id === user.primaryEmailAddressId)
+              : undefined;
+            const name = [user.firstName, user.lastName]
+              .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+              .join(' ')
+              .trim();
+            return {
+              userId: user.id,
+              name: name || null,
+              email: primaryEmail?.emailAddress ?? null,
+            };
+          });
       });
     },
 
@@ -501,7 +540,9 @@ export function createClerkServerAdapter(
       return providerCall(async () => {
         const invitations = await listProviderInvitations(client, parsed.organizationId);
         return invitations
-          .filter((invitation) => readDispatchMarker(invitation)?.invitationId === parsed.invitationId)
+          .filter(
+            (invitation) => readDispatchMarker(invitation)?.invitationId === parsed.invitationId,
+          )
           .map((invitation) => mapInvitation(invitation));
       });
     },
@@ -540,12 +581,11 @@ export function createClerkServerAdapter(
       try {
         return await providerCall(
           async () => {
-            const params: Parameters<
-              typeof client.organizations.revokeOrganizationInvitation
-            >[0] = {
-              organizationId: parsed.organizationId,
-              invitationId: parsed.invitationId,
-            };
+            const params: Parameters<typeof client.organizations.revokeOrganizationInvitation>[0] =
+              {
+                organizationId: parsed.organizationId,
+                invitationId: parsed.invitationId,
+              };
             if (parsed.requestingUserId !== undefined)
               params.requestingUserId = parsed.requestingUserId;
             return mapInvitation(await client.organizations.revokeOrganizationInvitation(params));

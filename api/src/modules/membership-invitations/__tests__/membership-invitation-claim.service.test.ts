@@ -10,6 +10,7 @@ import {
 function provider(overrides: Partial<ClerkServerAdapter> = {}): ClerkServerAdapter {
   return {
     getUserVerificationState: vi.fn(),
+    getUserProfiles: vi.fn(),
     createOrganization: vi.fn(),
     getOrganization: vi.fn(),
     deleteOrganizationIfPresent: vi.fn(),

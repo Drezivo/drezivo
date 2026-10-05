@@ -17,6 +17,7 @@ import { tenancyRouter } from './modules/tenancy/tenancy.routes.js';
 import { billingRouter } from './modules/billing/billing.routes.js';
 import { catalogueRouter } from './modules/catalogue/catalogue.routes.js';
 import { membershipInvitationsRouter } from './modules/membership-invitations/membership-invitations.routes.js';
+import { membersRouter } from './modules/members/members.routes.js';
 import { paymentMethodsRouter } from './modules/payment-methods/payment-methods.routes.js';
 import { filesRouter } from './modules/files/files.routes.js';
 import { fittingsRouter } from './modules/fittings/fittings.routes.js';
@@ -24,7 +25,10 @@ import { operationsRouter } from './modules/operations/operations.routes.js';
 import { paymentsRouter } from './modules/payments/payments.routes.js';
 import { customersRouter } from './modules/customers/customers.routes.js';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes.js';
-import { createInternalOperatorRouter, type InternalOperatorRouteOptions } from './modules/internal-operator/index.js';
+import {
+  createInternalOperatorRouter,
+  type InternalOperatorRouteOptions,
+} from './modules/internal-operator/index.js';
 import { logger } from './shared/logger.js';
 import { sendError } from './shared/response.js';
 import { ValidationError } from './shared/errors.js';
@@ -161,6 +165,7 @@ export function createApp(options: AppOptions = {}): Express {
   v1.use(paymentsRouter);
   v1.use(customersRouter);
   v1.use(membershipInvitationsRouter);
+  v1.use(membersRouter);
   app.use('/api/v1', v1);
 
   app.use(errorHandler);

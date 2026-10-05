@@ -18,7 +18,7 @@ vi.mock("@/lib/drezivo-api", () => ({
   },
 }));
 
-const { resolveStaffLanding } = await import("@/lib/resolve-staff-landing");
+const { invitationStateOf, resolveStaffLanding } = await import("@/lib/resolve-staff-landing");
 
 const workspaceA = {
   clerk_org_id: "org_a",
@@ -106,5 +106,79 @@ describe("resolveStaffLanding", () => {
     await expect(
       resolveStaffLanding({ activeOrganizationId: null, getToken, setActive })
     ).rejects.toThrow(/no accessible workspace membership/i);
+  });
+
+  describe("invited front-desk members", () => {
+    const empty = { data: { items: [], page_meta: { next_cursor: null, has_more: false } } };
+    const withWorkspaceB = { data: { items: [workspaceB], page_meta: { next_cursor: null, has_more: false } } };
+
+    it("accepts a pending invitation and waits for the claim instead of opening onboarding", async () => {
+      const accept = vi.fn().mockResolvedValue(undefined);
+      api.getWorkspaces.mockResolvedValueOnce(empty).mockResolvedValueOnce(empty).mockResolvedValue(withWorkspaceB);
+      api.getActorContext.mockResolvedValue({ data: { tenant: { id: workspaceB.tenant.id } } });
+
+      const result = await resolveStaffLanding({
+        activeOrganizationId: null,
+        getToken,
+        setActive,
+        invitations: { loadPending: async () => [{ accept }], isInvitedMember: false },
+        waitMs: 0,
+      });
+
+      expect(accept).toHaveBeenCalledTimes(1);
+      expect(result).toMatchObject({ kind: "workspace", workspace: workspaceB });
+      expect(setActive).toHaveBeenCalledWith({ organization: "org_b" });
+      expect(api.getCurrentOnboarding).not.toHaveBeenCalled();
+    });
+
+    it("fails with a retryable message, never onboarding, when the claim has not landed yet", async () => {
+      api.getWorkspaces.mockResolvedValue(empty);
+
+      await expect(
+        resolveStaffLanding({
+          activeOrganizationId: "org_b",
+          getToken,
+          setActive,
+          invitations: { loadPending: async () => [], isInvitedMember: true },
+          waitMs: 0,
+        })
+      ).rejects.toThrow(/invitation is still being set up/i);
+
+      expect(api.getCurrentOnboarding).not.toHaveBeenCalled();
+      expect(setActive).not.toHaveBeenCalled();
+    });
+
+    it("still sends an owner with no invitation to onboarding", async () => {
+      api.getWorkspaces.mockResolvedValue(empty);
+      api.getCurrentOnboarding.mockResolvedValue({
+        data: { onboarding: null, has_current_owned_tenant: false, has_consumed_lifetime_trial: false },
+      });
+
+      await expect(
+        resolveStaffLanding({
+          activeOrganizationId: null,
+          getToken,
+          setActive,
+          invitations: { loadPending: async () => [], isInvitedMember: false },
+          waitMs: 0,
+        })
+      ).resolves.toEqual({ kind: "onboarding" });
+      expect(api.getWorkspaces).toHaveBeenCalledTimes(1);
+    });
+
+    it("reads Clerk's user: pending invitations, and plain-member organization roles only", async () => {
+      const accept = vi.fn();
+      const user = {
+        organizationMemberships: [{ role: "org:admin" }],
+        getOrganizationInvitations: vi.fn().mockResolvedValue({ data: [{ accept }] }),
+      };
+
+      const state = invitationStateOf(user);
+      expect(state?.isInvitedMember).toBe(false);
+      await expect(state?.loadPending()).resolves.toEqual([{ accept }]);
+      expect(user.getOrganizationInvitations).toHaveBeenCalledWith({ status: "pending" });
+      expect(invitationStateOf({ ...user, organizationMemberships: [{ role: "org:member" }] })?.isInvitedMember).toBe(true);
+      expect(invitationStateOf(null)).toBeUndefined();
+    });
   });
 });

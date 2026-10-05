@@ -9,10 +9,7 @@ import {
   resendMembershipInvitation,
 } from './membership-invitations.service.js';
 import { claimMembershipInvitation } from './membership-invitation-claim.service.js';
-import type {
-  CreateMembershipInvitationRequest,
-  PaginationRequest,
-} from './membership-invitations.schemas.js';
+import type { CreateMembershipInvitationRequest } from './membership-invitations.schemas.js';
 
 export async function createMembershipInvitationController(
   req: Request,
@@ -33,7 +30,8 @@ export async function listMembershipInvitationsController(
   res: Response,
 ): Promise<void> {
   const context = requireContext(req);
-  const page = req.query as unknown as PaginationRequest;
+  const page = req.membershipInvitationPagination;
+  if (!page) throw new ValidationError('Pagination is invalid.');
   const result = await listMembershipInvitations({ ...context, ...page });
   sendSuccess(req, res, result);
 }
