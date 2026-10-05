@@ -173,12 +173,15 @@ export async function extractClothingPhoto(
         model: settings.model,
         temperature: 0,
         max_tokens: 400,
+        // One user message, no system role: some providers (e.g. Gemma models on the Gemini API)
+        // reject system instructions, and every OpenAI-compatible endpoint accepts this shape.
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
           {
             role: 'user',
             content: [
-              { type: 'text', text: USER_PROMPT },
+              { type: 'text', text: `${SYSTEM_PROMPT}
+
+${USER_PROMPT}` },
               { type: 'image_url', image_url: { url: dataUrl } },
             ],
           },
