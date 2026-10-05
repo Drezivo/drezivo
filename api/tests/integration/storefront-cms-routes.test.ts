@@ -114,6 +114,24 @@ describe('storefront CMS and settings HTTP boundary', async () => {
     });
   });
 
+  it('persists and reloads a normalized numeric Facebook Page reference', async () => {
+    const ws = await createStorefrontWorkspace('routes-facebook-id');
+    clerk.getAuth.mockReturnValue({ userId: ws.owner.principalId, orgId: ws.clerkOrgId });
+    const app = createApp();
+    const document = defaultStorefrontDocument('A');
+    document.contact.facebook = 'https://www.facebook.com/profile.php?id=615940716454514';
+
+    const saved = await request(app)
+      .patch('/api/v1/storefront')
+      .set('Idempotency-Key', 'routes-facebook-id-save')
+      .send({ version: 1, document });
+    expect(saved.status).toBe(200);
+    expect(dataOf<StorefrontSettings>(saved).document.contact.facebook).toBe('profile.php?id=615940716454514');
+
+    const reloaded = await request(app).get('/api/v1/storefront');
+    expect(dataOf<StorefrontSettings>(reloaded).document.contact.facebook).toBe('profile.php?id=615940716454514');
+  });
+
   it('forbids front desk writes while allowing reads', async () => {
     const ws = await createStorefrontWorkspace('routes-desk');
     clerk.getAuth.mockReturnValue({ userId: ws.frontDesk.principalId, orgId: ws.clerkOrgId });

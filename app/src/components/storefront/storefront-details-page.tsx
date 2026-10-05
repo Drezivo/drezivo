@@ -88,7 +88,7 @@ export function StorefrontDetailsPage() {
               <Field label="Instagram" hint="Paste a profile URL or enter the handle." error={err("contact.instagram")}>
                 {(props) => <Input {...props} value={c.instagram ?? ""} placeholder="https://www.instagram.com/yourshop/" onChange={(e) => contact.update({ instagram: orNull(e.target.value) })} />}
               </Field>
-              <Field label="Facebook page" hint="Paste a page URL or enter the page name." error={err("contact.facebook")}>
+              <Field label="Facebook page" hint="Paste its direct Page URL or enter the page name." error={err("contact.facebook")}>
                 {(props) => <Input {...props} value={c.facebook ?? ""} placeholder="https://www.facebook.com/yourshop/" onChange={(e) => contact.update({ facebook: orNull(e.target.value) })} />}
               </Field>
               <Field label="TikTok" hint="Paste a profile URL or enter the handle." error={err("contact.tiktok")}>

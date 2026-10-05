@@ -24,7 +24,7 @@ export function SocialLinks({ settings, className }: { settings: StorefrontSetti
   const { instagram, facebook, tiktok } = settings.document.contact;
   const links = [
     instagram ? { label: `Instagram @${instagram}`, href: `https://www.instagram.com/${instagram}/`, Icon: Instagram } : null,
-    facebook ? { label: `Facebook ${facebook}`, href: `https://www.facebook.com/${facebook}`, Icon: Facebook } : null,
+    facebook ? { label: "Facebook page", href: `https://www.facebook.com/${facebook}`, Icon: Facebook } : null,
     tiktok ? { label: `TikTok @${tiktok}`, href: `https://www.tiktok.com/@${tiktok}`, Icon: TikTokIcon } : null,
   ].filter((link): link is NonNullable<typeof link> => link !== null);
   if (links.length === 0) return <span className="text-sm text-dashboard-muted">No social links yet</span>;

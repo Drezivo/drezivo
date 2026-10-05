@@ -25,8 +25,10 @@ settings, and online fitting requests in one delivery.
    write:
    - text is plain and bounded;
    - owners may enter a social handle or canonical HTTPS profile URL; the contract validates the
-     platform host and profile path, then stores only the normalized handle so the server builds
-     every public URL from a fixed host;
+     platform host and profile path, then stores a normalized platform reference so the server
+     builds every public URL from a fixed host. Facebook accepts page names and direct numeric
+     Page URLs (`profile.php?id=<id>`), storing the latter as the validated page reference
+     `profile.php?id=<id>`; share links are not accepted;
    - images are accepted `storefront_asset` file ids from the same workspace;
    - the theme is one of four contrast-checked palettes.
 2. **Rental policies stay immutable versions** in `policy_snapshot`. Every save appends the next

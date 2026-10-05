@@ -222,7 +222,12 @@ function contactForEditing(contact: StorefrontContact): StorefrontContact {
   return {
     ...contact,
     instagram: contact.instagram ? `https://www.instagram.com/${contact.instagram}/` : null,
-    facebook: contact.facebook ? `https://www.facebook.com/${contact.facebook}/` : null,
+    facebook: contact.facebook ? facebookPageUrl(contact.facebook) : null,
     tiktok: contact.tiktok ? `https://www.tiktok.com/@${contact.tiktok}` : null,
   };
+}
+
+function facebookPageUrl(reference: string): string {
+  const suffix = reference.startsWith("profile.php?id=") ? reference : `${reference}/`;
+  return `https://www.facebook.com/${suffix}`;
 }

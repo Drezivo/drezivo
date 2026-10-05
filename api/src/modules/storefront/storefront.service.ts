@@ -297,9 +297,13 @@ function publicContact(document: StorefrontDocument): PublicStorefront['contact'
     email: contact.email,
     address: contact.address,
     instagram_url: contact.instagram ? `https://www.instagram.com/${contact.instagram}/` : null,
-    facebook_url: contact.facebook ? `https://www.facebook.com/${contact.facebook}` : null,
+    facebook_url: contact.facebook ? facebookPageUrl(contact.facebook) : null,
     tiktok_url: contact.tiktok ? `https://www.tiktok.com/@${contact.tiktok}` : null,
   };
+}
+
+function facebookPageUrl(reference: string): string {
+  return `https://www.facebook.com/${reference}`;
 }
 
 function toMeasurement(variant: ItemVariantRow, guideUrl: string | null): PublicMeasurement {
