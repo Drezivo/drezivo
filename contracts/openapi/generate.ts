@@ -42,6 +42,13 @@ import {
   contractVersion,
   createMembershipInvitationRequest,
   createClothingRequest,
+  batchCreateClothingRequest,
+  batchResponse,
+  batchUploadAuthorizationRequest,
+  batchUploadFinalizeRequest,
+  catalogueImportCapabilities,
+  clothingPhotoExtractRequest,
+  clothingPhotoExtractResponse,
   changeClothingSizingModeRequest,
   changeClothingSizingModeResponse,
   createOwnerOnboardingRequest,
@@ -808,6 +815,59 @@ registry.registerPath({
     },
     409: jsonError('A sizing mode transition conflicts with the current product state.'),
     422: jsonError('The sizing mode request is invalid.'),
+  },
+});
+
+// ---- catalogue batch import ------------------------------------------
+registry.registerPath({
+  method: 'get',
+  path: '/catalogue/import/capabilities',
+  tags: ['catalogue'],
+  summary: 'What this deployment offers for batch import (photo reading, batch size).',
+  responses: {
+    200: {
+      description: 'Batch import capabilities.',
+      content: { 'application/json': { schema: successEnvelope(catalogueImportCapabilities) } },
+    },
+  },
+});
+
+for (const [path, schema, summary] of [
+  ['/catalogue/import/uploads', batchUploadAuthorizationRequest, 'Authorize up to 25 catalogue photo uploads.'],
+  ['/catalogue/import/uploads/finalize', batchUploadFinalizeRequest, 'Finalize up to 25 uploaded catalogue photos.'],
+  ['/catalogue/import/clothing', batchCreateClothingRequest, 'Create up to 25 clothing products, one idempotency key per row.'],
+] as const) {
+  registry.registerPath({
+    method: 'post',
+    path,
+    tags: ['catalogue'],
+    summary,
+    request: { body: { content: { 'application/json': { schema } } } },
+    responses: {
+      200: {
+        description: 'Every row with the status and envelope its single-item command returned. Retrying a row with the same key replays it.',
+        content: { 'application/json': { schema: successEnvelope(batchResponse) } },
+      },
+      422: jsonError('The batch shape is invalid (empty, over 25 rows, or repeated keys).'),
+      429: jsonError('Batch rate limit exceeded.'),
+    },
+  });
+}
+
+registry.registerPath({
+  method: 'post',
+  path: '/catalogue/import/extract',
+  tags: ['catalogue'],
+  summary: 'Read garment details printed on one accepted catalogue photo (suggestions for review).',
+  request: { body: { content: { 'application/json': { schema: clothingPhotoExtractRequest } } } },
+  responses: {
+    200: {
+      description: 'Suggested fields; any field the photo does not show is null.',
+      content: { 'application/json': { schema: successEnvelope(clothingPhotoExtractResponse) } },
+    },
+    404: jsonError('The photo is not an accepted catalogue image of this shop.'),
+    429: jsonError('The photo reader is rate limited; retry after Retry-After seconds.'),
+    503: jsonError('Photo reading is not set up or the provider is unavailable.'),
   },
 });
 

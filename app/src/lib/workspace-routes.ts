@@ -16,6 +16,7 @@ const ROUTE_LABELS: Record<string, string> = {
   "/calendar/availability": "Availability",
   "/inventory": "Clothing",
   "/inventory/new": "Add clothing",
+  "/inventory/import": "Batch add",
   "/inventory/categories": "Categories",
   "/customers": "Customers",
   "/fittings": "Fittings",
