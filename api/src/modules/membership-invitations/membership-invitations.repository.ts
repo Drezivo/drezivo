@@ -74,7 +74,7 @@ export async function expirePendingInvitations(
   );
 }
 
-export async function findPendingInvitationByDigest(
+export async function findInvitationByDigest(
   client: PoolClient,
   tenantId: string,
   digest: string,
@@ -83,7 +83,7 @@ export async function findPendingInvitationByDigest(
     `SELECT id, tenant_id, recipient_email_digest, recipient_email_ciphertext, status,
             expires_at, clerk_invitation_id, business_key, dispatch_version, created_at, updated_at
        FROM membership_invitation
-      WHERE tenant_id = $1 AND recipient_email_digest = $2 AND status = 'pending'
+      WHERE tenant_id = $1 AND recipient_email_digest = $2
       FOR UPDATE`,
     [tenantId, digest],
   );

@@ -31,11 +31,11 @@ feedback, as a deliberate, time-boxed exception to the rule above. How it works 
 
 Production domains:
 
-| Service | Domain |
-| --- | --- |
-| `web` (marketing and storefronts) | `drezivo.shop`, with storefronts at `drezivo.shop/s/<store-address>` |
-| `app` (business app) | `partners.drezivo.shop` |
-| Operator console (separate repositories) | `operator.drezivo.shop` |
+| Service                                  | Domain                                                               |
+| ---------------------------------------- | -------------------------------------------------------------------- |
+| `web` (marketing and storefronts)        | `drezivo.shop`, with storefronts at `drezivo.shop/s/<store-address>` |
+| `app` (business app)                     | `partners.drezivo.shop`                                              |
+| Operator console (separate repositories) | `operator.drezivo.shop`                                              |
 
 DECISION NEEDED: name the specific hosting accounts/projects for each environment (Vercel
 team/project per environment, container host project per environment, Supabase project/environment
@@ -116,6 +116,10 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   issuer, expiry, audience/authorized-party) per TRD §3.
 - `CLERK_WEBHOOK_SIGNING_SECRET` — verifies the signature on Clerk's membership-change webhooks
   before they enter the signed, deduplicated webhook inbox (TRD §3, "Membership freshness").
+- `STAFF_APP_URL` — trusted staff-app origin used to send new and resent Clerk invitations back to
+  `/accept-invitation/{localInvitationId}`. Set it to `http://localhost:3000` locally and the exact
+  HTTPS staff-app origin in staging and production. Add that origin to the matching Clerk instance's
+  allowed redirect URLs; do not derive invitation redirects from request `Origin` or `Host` headers.
 - `CORS_ALLOWED_ORIGINS` — required comma-separated exact browser origins. Development uses
   `http://localhost:3000`; production must use an explicit deployment-managed allowlist. Wildcards,
   paths, credentials, and empty entries are rejected at startup. Credentialed requests are enabled

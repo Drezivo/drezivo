@@ -25,7 +25,9 @@ the [MinIO Compose example](https://github.com/minio/minio/blob/master/docs/orch
 
 1. Install Docker Desktop or another Docker engine that provides Docker Compose.
 2. Fill the credential entries in the ignored `api/.env` file. `MINIO_ROOT_PASSWORD` and the
-   local object-storage secret must use the same MinIO value; use a unique local value. Configure
+   local object-storage secret must use the same MinIO value; use a unique local value. Set
+   `STAFF_APP_URL=http://localhost:3000` so invitation links return to the local acceptance flow.
+   Configure
    `OBJECT_STORAGE_ENDPOINT=http://127.0.0.1:9000`, `OBJECT_STORAGE_REGION=us-east-1`, and
    `OBJECT_STORAGE_FORCE_PATH_STYLE=true` for MinIO. Production instead uses an explicit Cloudflare
    R2 endpoint with region `auto` and virtual-hosted addressing. Copy your Clerk development-instance values there as well. Generate separate

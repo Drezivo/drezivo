@@ -77,18 +77,18 @@ The browser never receives a database connection string or unrestricted object-s
 
 ## 2. Domain boundaries and ownership
 
-| Module             | Owns                                                                            | Key dependency                                             |
-| ------------------ | ------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Tenancy/access     | Create-only owner onboarding, tenant bootstrap, local membership, branch grants | Clerk identity and narrowly reconciled organization events |
-| Catalogue/assets   | Styles, variants, reusable measurement-guide references, physical assets, readiness | File metadata/accepted guide bytes and branch ownership  |
-| Availability       | Authoritative planned asset intervals                                           | Reservations, maintenance; later fittings/transfers        |
-| Reservations       | Quote snapshots, state transitions, pickup/return policy                        | Availability and operational finance                       |
-| Finance            | Verified collections, charges, allocations, refunds, deposit liability          | Immutable sources and actor authorization                  |
-| Storefront         | Published content, policies, public projections                                 | Catalogue, pricing, availability                           |
-| Files              | Upload sessions, scanning, immutable accepted objects, retention                | `ObjectStorage` → Cloudflare R2 / local MinIO              |
-| Platform billing   | Drezivo subscription and entitlements                                           | Separate operator/provider records                         |
-| Notifications/jobs | Outbox, leases, reminders and delivery outcomes                                 | Domain events                                              |
-| Operator/audit     | Support grants, incident actions, recovery records                              | Explicit privileged access                                 |
+| Module             | Owns                                                                                | Key dependency                                             |
+| ------------------ | ----------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Tenancy/access     | Create-only owner onboarding, tenant bootstrap, local membership, branch grants     | Clerk identity and narrowly reconciled organization events |
+| Catalogue/assets   | Styles, variants, reusable measurement-guide references, physical assets, readiness | File metadata/accepted guide bytes and branch ownership    |
+| Availability       | Authoritative planned asset intervals                                               | Reservations, maintenance; later fittings/transfers        |
+| Reservations       | Quote snapshots, state transitions, pickup/return policy                            | Availability and operational finance                       |
+| Finance            | Verified collections, charges, allocations, refunds, deposit liability              | Immutable sources and actor authorization                  |
+| Storefront         | Published content, policies, public projections                                     | Catalogue, pricing, availability                           |
+| Files              | Upload sessions, scanning, immutable accepted objects, retention                    | `ObjectStorage` → Cloudflare R2 / local MinIO              |
+| Platform billing   | Drezivo subscription and entitlements                                               | Separate operator/provider records                         |
+| Notifications/jobs | Outbox, leases, reminders and delivery outcomes                                     | Domain events                                              |
+| Operator/audit     | Support grants, incident actions, recovery records                                  | Explicit privileged access                                 |
 
 Modules call domain services, not another module's private database helpers. All mutations capable of changing capacity or money use a shared transaction context. Reporting reads cannot rewrite transactional facts.
 
@@ -101,13 +101,13 @@ workspace boundaries. The former independent checkouts are retained as historica
 One root pull request can update a contract, API, client, and documentation together, while each
 workspace still has a clear owner and deploy artifact.
 
-| Workspace    | Owns                                                                            | Must never contain                                                      |
-| ------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `contracts/` | Zod schemas, OpenAPI, error envelopes, money and idempotency types              | Database access, provider credentials, or authorization decisions       |
-| `api/`       | Domain modules, Clerk verification, authorization, database, migrations, worker | Presentation logic or duplicate contract types                          |
-| `app/`       | Staff dashboard and authenticated workflows                                     | Direct database access, authoritative roles, or client money decisions  |
-| `web/`       | Marketing, public storefront, and guest booking                                 | Staff-only data, private records, or server authorization logic         |
-| `docs/`      | PRD, TRD, data model, ADRs, research, legal drafts, and runbooks                | Runtime business behavior and secrets                                   |
+| Workspace    | Owns                                                                            | Must never contain                                                     |
+| ------------ | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `contracts/` | Zod schemas, OpenAPI, error envelopes, money and idempotency types              | Database access, provider credentials, or authorization decisions      |
+| `api/`       | Domain modules, Clerk verification, authorization, database, migrations, worker | Presentation logic or duplicate contract types                         |
+| `app/`       | Staff dashboard and authenticated workflows                                     | Direct database access, authoritative roles, or client money decisions |
+| `web/`       | Marketing, public storefront, and guest booking                                 | Staff-only data, private records, or server authorization logic        |
+| `docs/`      | PRD, TRD, data model, ADRs, research, legal drafts, and runbooks                | Runtime business behavior and secrets                                  |
 
 The root `package.json` declares these workspaces and the root `package-lock.json` is the only
 install lockfile used for release. The dependency direction remains `contracts` → `api` →
@@ -141,6 +141,10 @@ the complete change before a release tag.
 6. Use explicit tenant predicates and same-tenant foreign keys as well as RLS. Give the runtime role no ownership, DDL, `BYPASSRLS`, or blanket administrative grant.
 
 Clerk supplies identity and organization context, but Drezivo authorizes current local membership, role, branch grant, tenant lifecycle, and entitlement. The backend creates the Clerk organization for a verified owner candidate; a signed organization-created event may repair a missing incomplete record but never starts a tenant or trial. Drezivo accepts only organization, organization-invitation, and organization-membership events for reconciliation, never Clerk user-profile synchronization. An external Clerk organization deletion immediately restricts the mapped tenant and public intake while records remain available for operator recovery.
+
+**Invitation acceptance and workspace selection.** Every dispatched or resent Front Desk invitation uses a trusted, environment-specific staff-app origin and a Drezivo callback containing only the local invitation ID and Clerk organization hint. Clerk appends its one-time `__clerk_ticket` and flow status. The app captures the ticket in memory, removes it from the address bar immediately, suppresses caching/referrers on the callback, and uses Clerk's ticket sign-in/sign-up flow, including required verification and MFA. It then calls the existing authenticated, idempotent claim endpoint for exactly that invitation. The API remains authoritative for current user, tenant, accepted Clerk invitation, provider dispatch marker, local state, and active membership; a webhook/client race must remain duplicate-safe. A signed-in user with an unrelated active session cannot claim the ticket. Pending invitations are never auto-accepted during ordinary sign-in, and an invited user with a delayed claim cannot fall through to Owner onboarding. Temporary claim failures stay on a retryable finalization screen; business data is not rendered until API membership and actor context are confirmed.
+
+Workspace discovery (`GET /api/v1/workspaces`) is the only source for the chooser and dashboard switcher. A single accessible workspace opens directly; multiple active memberships require an explicit selection at sign-in. Before activation, the app re-reads the API projection, activates only an accessible Clerk organization, then verifies the resulting actor context tenant and role before navigating or rendering data. Owner and Front Desk are per-workspace roles, so one person may hold either role in different businesses. Front Desk access and trial/billing restrictions are tenant-derived; it never creates a personal tenant or trial. Normal independent sign-up without an invitation preserves the existing Owner onboarding and one-lifetime-trial rules. Clerk must allow the configured Drezivo callback origin for each environment; production/staging callback origins are HTTPS and local development uses the staff app's loopback origin.
 
 Clerk's docs warn that background requests in different organization tabs should use the appropriate token explicitly. Include a cross-tab organization-switch test. Clerk's Express authentication middleware recognizes credentials; the application must enforce API authorization. [Clerk Organizations](https://clerk.com/docs/guides/organizations/overview), [Clerk Express SDK](https://clerk.com/docs/reference/express/overview).
 
@@ -196,29 +200,29 @@ Use `/api/v1` for the first API major version. Product V2 branches do not requir
 
 **The contract is owned by the `contracts/` workspace (§2.1), not by `api/`.** Two version numbers exist and they mean different things: `/api/v1` is the wire-level major version and changes only when the contract breaks incompatibly; `@drezivo/contracts@x.y.z` is the package version and moves on every additive change, so a consumer can state exactly which shapes it was built against. `api` implements the contract and does not define it; `app` and `web` consume it and define nothing. The OpenAPI document is generated from the Zod schemas and committed, and CI fails if regenerating it produces a diff — a stale committed document would otherwise describe an API that no longer exists. Restrict content types, body size, pagination and filters; reject unknown enum values and disallowed fields. Use opaque IDs and ISO timestamps. Serialize monetary minor units as decimal strings so JavaScript number limits cannot silently corrupt amounts.
 
-| Endpoint family                      | Representative operation       | Authority / duplicate protection                                                |
-| ------------------------------------ | ------------------------------ | ------------------------------------------------------------------------------- |
-| `/public/stores/{slug}`              | GET catalogue/policies         | Published projection, bounded public response                                   |
-| `/public/stores/{slug}/availability` | GET variant/date availability  | No customer details; short-lived answer, never a guarantee                      |
-| `/public/stores/{slug}/holds`        | POST checkout intent           | Turnstile + per-IP limit + idempotency; database capacity claim; sets scoped API-host cookie |
-| `/public/stores/{slug}/fittings`     | POST fitting request           | Turnstile + per-IP limit + idempotency; no email verification or guest email   |
-| `/guest/reservations/{id}/receipts`  | POST evidence attachment       | Reservation-path-scoped HttpOnly cookie; immutable uploaded object; idempotency |
-| `/guest/reservations/{id}`           | GET own summary                | Reservation-path-scoped HttpOnly cookie, `no-store`                             |
-| `/reservations/availability-calendar` | GET staff variant/day preview | Membership + reservation permission; branch-local bounded advisory projection, never a guarantee |
-| `/calendar/availability`             | GET staff physical-asset timeline | Verified staff + tenant context + `reservations.manage`; branch-timezone asset lanes with Reserved/Rented/Unavailable bars and Pickup/Return boundary labels |
-| `/reservations/availability-check`   | GET staff exact-time preview  | Membership + reservation permission; exact buffered interval and server pricing, still non-binding |
-| `/reservations`                      | POST staff/walk-in request     | Membership; same quote/hold logic as storefront                                 |
-| `/reservations/{id}/confirm`         | POST merchant confirmation     | Financial capability, state/version checks, idempotency                         |
-| `/reservations/{id}/reschedule`      | POST new interval              | Capability, fresh quote, atomic allocation replacement                          |
-| `/reservations/{id}/pickup`          | POST physical handover         | Capability, current custody/readiness, conditional transition                   |
-| `/reservations/{id}/return`          | POST actual return             | Capability, duplicate-safe custody event and inspection workflow                |
-| `/refunds`                           | POST refund instruction/record | Owner capability, locked residual amount, immutable reversal record             |
-| `/uploads`                           | POST upload authorization      | Tenant/capability scope, size/type budget and idempotency                       |
-| `/onboarding`                        | POST owner organization start  | Verified Clerk user; API-created organization; account-scoped idempotency       |
-| `/onboarding/current`                | GET owner onboarding state     | Safe pre-tenant projection; account scope; rate limited                         |
-| `/onboarding/{onboardingId}/abandon` | POST abandon owner setup       | Account scope; conditional transition; account-scoped idempotency               |
-| `/exports`                           | POST export job                | Authorized scope, durable job and expiring download                             |
-| `/webhooks/{provider}`               | POST provider event            | Exact raw bytes, signature verification, replay checks and event inbox          |
+| Endpoint family                       | Representative operation          | Authority / duplicate protection                                                                                                                             |
+| ------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/public/stores/{slug}`               | GET catalogue/policies            | Published projection, bounded public response                                                                                                                |
+| `/public/stores/{slug}/availability`  | GET variant/date availability     | No customer details; short-lived answer, never a guarantee                                                                                                   |
+| `/public/stores/{slug}/holds`         | POST checkout intent              | Turnstile + per-IP limit + idempotency; database capacity claim; sets scoped API-host cookie                                                                 |
+| `/public/stores/{slug}/fittings`      | POST fitting request              | Turnstile + per-IP limit + idempotency; no email verification or guest email                                                                                 |
+| `/guest/reservations/{id}/receipts`   | POST evidence attachment          | Reservation-path-scoped HttpOnly cookie; immutable uploaded object; idempotency                                                                              |
+| `/guest/reservations/{id}`            | GET own summary                   | Reservation-path-scoped HttpOnly cookie, `no-store`                                                                                                          |
+| `/reservations/availability-calendar` | GET staff variant/day preview     | Membership + reservation permission; branch-local bounded advisory projection, never a guarantee                                                             |
+| `/calendar/availability`              | GET staff physical-asset timeline | Verified staff + tenant context + `reservations.manage`; branch-timezone asset lanes with Reserved/Rented/Unavailable bars and Pickup/Return boundary labels |
+| `/reservations/availability-check`    | GET staff exact-time preview      | Membership + reservation permission; exact buffered interval and server pricing, still non-binding                                                           |
+| `/reservations`                       | POST staff/walk-in request        | Membership; same quote/hold logic as storefront                                                                                                              |
+| `/reservations/{id}/confirm`          | POST merchant confirmation        | Financial capability, state/version checks, idempotency                                                                                                      |
+| `/reservations/{id}/reschedule`       | POST new interval                 | Capability, fresh quote, atomic allocation replacement                                                                                                       |
+| `/reservations/{id}/pickup`           | POST physical handover            | Capability, current custody/readiness, conditional transition                                                                                                |
+| `/reservations/{id}/return`           | POST actual return                | Capability, duplicate-safe custody event and inspection workflow                                                                                             |
+| `/refunds`                            | POST refund instruction/record    | Owner capability, locked residual amount, immutable reversal record                                                                                          |
+| `/uploads`                            | POST upload authorization         | Tenant/capability scope, size/type budget and idempotency                                                                                                    |
+| `/onboarding`                         | POST owner organization start     | Verified Clerk user; API-created organization; account-scoped idempotency                                                                                    |
+| `/onboarding/current`                 | GET owner onboarding state        | Safe pre-tenant projection; account scope; rate limited                                                                                                      |
+| `/onboarding/{onboardingId}/abandon`  | POST abandon owner setup          | Account scope; conditional transition; account-scoped idempotency                                                                                            |
+| `/exports`                            | POST export job                   | Authorized scope, durable job and expiring download                                                                                                          |
+| `/webhooks/{provider}`                | POST provider event               | Exact raw bytes, signature verification, replay checks and event inbox                                                                                       |
 
 Every implemented route needs a permission policy even when public access is the intended policy. Preserve exact webhook bytes before JSON parsing. Use provider-supported signature algorithms, replay windows and constant-time secret comparison where applicable.
 
@@ -356,7 +360,7 @@ Measure before adding read replicas, Redis, partitions or services. Candidate tr
 | Release | Technical increment                                                                                             | Migration / operational gate                                                                                                 |
 | ------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | V1      | Shared tenant schema, default branch, physical assets, guarded single-garment checkout, basic staff permissions | Isolation, duplicate safety, capacity and restore tests; pilot outcome gate                                                  |
-| V1.1    | Multi-line interface and fitting appointments with hidden branch capacity slots                                  | Atomic capacity/garment claims, state/timing guards, branch schedule integrity and garment availability                       |
+| V1.1    | Multi-line interface and fitting appointments with hidden branch capacity slots                                 | Atomic capacity/garment claims, state/timing guards, branch schedule integrity and garment availability                      |
 | V2      | Branch transfers and permissions                                                                                | Backfill default ownership; transfer dispatch/receive, in-transit state, delayed/lost transfer and unauthorized branch tests |
 | V3      | Enterprise governance, negotiated SSO/integrations, possible dedicated isolation                                | Documented customer need, threat review, recovery drills, operational staffing and cost model                                |
 

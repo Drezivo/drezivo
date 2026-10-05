@@ -14,8 +14,10 @@ process.env.S3_BUCKET_PUBLIC = 'public';
 process.env.S3_ACCESS_KEY_ID = 'test';
 process.env.S3_SECRET_ACCESS_KEY = 'test';
 
-const { createMembershipInvitationDispatchHandler } = await import('../membership-invitations.dispatcher.js');
-const { clerkInvitationDispatchSource } = await import('../../../integrations/clerk/clerk.adapter.js');
+const { createMembershipInvitationDispatchHandler } =
+  await import('../membership-invitations.dispatcher.js');
+const { clerkInvitationDispatchSource } =
+  await import('../../../integrations/clerk/clerk.adapter.js');
 
 const invitationId = '11111111-1111-4111-8111-111111111111';
 const tenantId = '22222222-2222-4222-8222-222222222222';
@@ -46,7 +48,9 @@ function createHarness(options?: { status?: 'pending' | 'revoked'; version?: num
     return { rows: [] };
   });
   const client = { query } as unknown as PoolClient;
-  const runTenantTransaction = vi.fn(async (_tenantId: string, _key: string, fn: (c: PoolClient) => Promise<unknown>) => fn(client));
+  const runTenantTransaction = vi.fn(
+    async (_tenantId: string, _key: string, fn: (c: PoolClient) => Promise<unknown>) => fn(client),
+  );
   const clerk = {
     findInvitationByDispatchMarker: vi.fn().mockResolvedValue(null),
     findInvitationsByInvitationId: vi.fn().mockResolvedValue([]),
@@ -65,6 +69,7 @@ function createHarness(options?: { status?: 'pending' | 'revoked'; version?: num
     clerk: clerk as never,
     decryptEmail: vi.fn().mockReturnValue('frontdesk@example.com'),
     runTenantTransaction: runTenantTransaction as never,
+    staffAppUrl: 'http://localhost:3000',
   });
   return { handler, clerk, query };
 }
@@ -87,6 +92,7 @@ describe('membership invitation dispatch worker', () => {
       emailAddress: 'frontdesk@example.com',
       role: 'org:member',
       expiresInDays: 7,
+      redirectUrl: `http://localhost:3000/accept-invitation/${invitationId}?organization_id=org_123`,
       dispatchMarker: {
         source: clerkInvitationDispatchSource,
         invitationId,

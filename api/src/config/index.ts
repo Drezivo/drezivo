@@ -20,6 +20,7 @@ export const envSchema = z
     CLERK_SECRET_KEY: z.string().min(1, 'CLERK_SECRET_KEY is required'),
     CLERK_PUBLISHABLE_KEY: z.string().min(1, 'CLERK_PUBLISHABLE_KEY is required'),
     CLERK_WEBHOOK_SIGNING_SECRET: z.string().min(1, 'CLERK_WEBHOOK_SIGNING_SECRET is required'),
+    STAFF_APP_URL: z.string().url('STAFF_APP_URL must be an absolute URL').optional(),
 
     CORS_ALLOWED_ORIGINS: z
       .string()
@@ -64,7 +65,10 @@ export const envSchema = z
     // WORKER_DATABASE_URL is then required and must be the drezivo_worker connection, never the
     // API's drezivo_app DATABASE_URL. Reverse by setting false and deploying the dedicated worker.
     EMBEDDED_WORKER: strictBooleanEnv('EMBEDDED_WORKER').default(false),
-    WORKER_DATABASE_URL: z.string().url('WORKER_DATABASE_URL must be a valid postgres connection string').optional(),
+    WORKER_DATABASE_URL: z
+      .string()
+      .url('WORKER_DATABASE_URL must be a valid postgres connection string')
+      .optional(),
 
     IDEMPOTENCY_RETENTION_DAYS: z.coerce.number().int().min(1).default(7),
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
@@ -85,9 +89,58 @@ export const envSchema = z
     TURNSTILE_SECRET_KEY: z.string().min(1).max(200).optional(),
     // Shared with the operator API: signs 5-minute links that open a business's proof of payment
     // (modules/billing/operator-proof-link.ts). Unset = proof links are off.
-    OPERATOR_PROOF_LINK_SECRET: z.string().min(32, 'OPERATOR_PROOF_LINK_SECRET must be at least 32 characters').max(200).optional(),
+    OPERATOR_PROOF_LINK_SECRET: z
+      .string()
+      .min(32, 'OPERATOR_PROOF_LINK_SECRET must be at least 32 characters')
+      .max(200)
+      .optional(),
   })
   .superRefine((env, ctx) => {
+    if (env.NODE_ENV === 'staging' || env.NODE_ENV === 'production') {
+      if (!env.STAFF_APP_URL) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['STAFF_APP_URL'],
+          message: 'Staging and production require STAFF_APP_URL.',
+        });
+      } else {
+        const staffAppUrl = new URL(env.STAFF_APP_URL);
+        if (
+          staffAppUrl.protocol !== 'https:' ||
+          staffAppUrl.pathname !== '/' ||
+          staffAppUrl.search ||
+          staffAppUrl.hash ||
+          staffAppUrl.username ||
+          staffAppUrl.password
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['STAFF_APP_URL'],
+            message:
+              'Staging and production STAFF_APP_URL must be an HTTPS origin without a path or credentials.',
+          });
+        }
+      }
+    } else if (env.STAFF_APP_URL) {
+      const staffAppUrl = new URL(env.STAFF_APP_URL);
+      const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(staffAppUrl.hostname);
+      if (
+        (staffAppUrl.protocol !== 'https:' && !(staffAppUrl.protocol === 'http:' && loopback)) ||
+        staffAppUrl.pathname !== '/' ||
+        staffAppUrl.search ||
+        staffAppUrl.hash ||
+        staffAppUrl.username ||
+        staffAppUrl.password
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['STAFF_APP_URL'],
+          message:
+            'STAFF_APP_URL must be an HTTPS origin or a loopback HTTP origin without a path or credentials.',
+        });
+      }
+    }
+
     if (env.EMAIL_PROVIDER === 'resend' && (!env.RESEND_API_KEY || !env.EMAIL_FROM)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -95,7 +148,10 @@ export const envSchema = z
         message: 'resend needs RESEND_API_KEY and EMAIL_FROM',
       });
     }
-    if (env.EMAIL_PROVIDER === 'file' && (env.NODE_ENV === 'production' || !env.EMAIL_FILE_SINK_DIR)) {
+    if (
+      env.EMAIL_PROVIDER === 'file' &&
+      (env.NODE_ENV === 'production' || !env.EMAIL_FILE_SINK_DIR)
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['EMAIL_PROVIDER'],
@@ -123,7 +179,8 @@ export const envSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['WORKER_DATABASE_URL'],
-          message: 'WORKER_DATABASE_URL must differ from DATABASE_URL (the worker uses its own role)',
+          message:
+            'WORKER_DATABASE_URL must differ from DATABASE_URL (the worker uses its own role)',
         });
       }
     }
@@ -134,7 +191,8 @@ export const envSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['TURNSTILE_SECRET_KEY'],
-        message: 'Staging and production storefront guest submissions require TURNSTILE_SECRET_KEY.',
+        message:
+          'Staging and production storefront guest submissions require TURNSTILE_SECRET_KEY.',
       });
     }
 
@@ -167,6 +225,7 @@ export const envSchema = z
   })
   .transform((env) => ({
     ...env,
+    STAFF_APP_URL: env.STAFF_APP_URL ?? 'http://localhost:3000',
     OBJECT_STORAGE_UPLOADS_ENABLED:
       env.OBJECT_STORAGE_UPLOADS_ENABLED ?? env.NODE_ENV !== 'production',
   }));
@@ -181,7 +240,10 @@ function base64Key(name: string): z.ZodType<string> {
   return z
     .string()
     .min(1, `${name} is required`)
-    .refine((value) => Buffer.from(value, 'base64url').length === 32, `${name} must decode to 32 bytes`);
+    .refine(
+      (value) => Buffer.from(value, 'base64url').length === 32,
+      `${name} must decode to 32 bytes`,
+    );
 }
 
 function loadConfig(): Config {
@@ -218,7 +280,8 @@ function withObjectStorageCompatibility(environment: NodeJS.ProcessEnv): NodeJS.
 
   // Legacy S3 variables remain accepted only for loopback MinIO in development/test so existing
   // local workflows keep working while production moves to explicit R2 configuration.
-  if (next.NODE_ENV === 'production' || next.NODE_ENV === 'staging' || !next.S3_ENDPOINT) return next;
+  if (next.NODE_ENV === 'production' || next.NODE_ENV === 'staging' || !next.S3_ENDPOINT)
+    return next;
 
   try {
     const endpoint = new URL(next.S3_ENDPOINT);

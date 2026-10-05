@@ -199,6 +199,109 @@ describe('TBF-040 membership invitations', async () => {
     expect(statuses.rows.map((row) => row.status)).toEqual(['expired', 'pending']);
   });
 
+  it('reuses a revoked or expired recipient row when creating another invitation', async () => {
+    const context = await createOwnerContext('user_tbf040_reinvite');
+    const first = await createMembershipInvitation({
+      ...context,
+      requestId: 'req-tbf040-reinvite-1',
+      idempotencyKey: 'reinvite-create-1',
+      request: { email: 'again@example.com' },
+    });
+    const invitationId = String((first.body.data as { id: string }).id);
+
+    await cancelMembershipInvitation({
+      ...context,
+      requestId: 'req-tbf040-reinvite-cancel',
+      idempotencyKey: 'reinvite-cancel',
+      invitationId,
+    });
+
+    const afterRevocation = await createMembershipInvitation({
+      ...context,
+      requestId: 'req-tbf040-reinvite-2',
+      idempotencyKey: 'reinvite-create-2',
+      request: { email: 'again@example.com' },
+    });
+    expect(afterRevocation.body.data).toMatchObject({ id: invitationId, status: 'pending' });
+
+    await withTenantTransaction(context.tenantId, context.principalId, (client) =>
+      client.query(
+        `UPDATE membership_invitation
+            SET created_at = now() - interval '2 seconds',
+                expires_at = now() - interval '1 second'
+          WHERE id = $1`,
+        [invitationId],
+      ),
+    );
+
+    const afterExpiry = await createMembershipInvitation({
+      ...context,
+      requestId: 'req-tbf040-reinvite-3',
+      idempotencyKey: 'reinvite-create-3',
+      request: { email: 'again@example.com' },
+    });
+    expect(afterExpiry.body.data).toMatchObject({ id: invitationId, status: 'pending' });
+
+    const persisted = await withTenantTransaction(context.tenantId, context.principalId, (client) =>
+      client.query<{
+        count: number;
+        dispatch_version: number;
+        status: string;
+        outbox_count: number;
+      }>(
+        `SELECT
+           (SELECT count(*)::int FROM membership_invitation WHERE tenant_id = $1) AS count,
+           (SELECT dispatch_version FROM membership_invitation WHERE id = $2) AS dispatch_version,
+           (SELECT status::text FROM membership_invitation WHERE id = $2) AS status,
+           (SELECT count(*)::int FROM outbox_event WHERE tenant_id = $1) AS outbox_count`,
+        [context.tenantId, invitationId],
+      ),
+    );
+    expect(persisted.rows[0]).toEqual({
+      count: 1,
+      dispatch_version: 3,
+      status: 'pending',
+      outbox_count: 4,
+    });
+  });
+
+  it('returns a state conflict rather than reinserting an accepted recipient', async () => {
+    const context = await createOwnerContext('user_tbf040_reinvite_accepted');
+    const first = await createMembershipInvitation({
+      ...context,
+      requestId: 'req-tbf040-reinvite-accepted-1',
+      idempotencyKey: 'reinvite-accepted-create-1',
+      request: { email: 'accepted@example.com' },
+    });
+    const invitationId = String((first.body.data as { id: string }).id);
+
+    await withTenantTransaction(context.tenantId, context.principalId, (client) =>
+      client.query(`UPDATE membership_invitation SET status = 'accepted' WHERE id = $1`, [
+        invitationId,
+      ]),
+    );
+
+    const duplicate = await createMembershipInvitation({
+      ...context,
+      requestId: 'req-tbf040-reinvite-accepted-2',
+      idempotencyKey: 'reinvite-accepted-create-2',
+      request: { email: 'accepted@example.com' },
+    });
+    expect(duplicate.status).toBe(409);
+    expect(duplicate.body).toMatchObject({
+      success: false,
+      error: { code: 'STATE_CONFLICT' },
+    });
+
+    const count = await withTenantTransaction(context.tenantId, context.principalId, (client) =>
+      client.query<{ count: number }>(
+        `SELECT count(*)::int AS count FROM membership_invitation WHERE tenant_id = $1`,
+        [context.tenantId],
+      ),
+    );
+    expect(count.rows[0]?.count).toBe(1);
+  });
+
   it('returns only safe fields from the owner list and denies Front Desk callers', async () => {
     const context = await createOwnerContext('user_tbf040_list_owner');
     await createMembershipInvitation({
