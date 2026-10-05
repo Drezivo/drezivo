@@ -1,11 +1,10 @@
-import { Bodoni_Moda, Jost } from 'next/font/google';
 import Image from 'next/image';
 import Link from 'next/link';
+import '@fontsource-variable/bodoni-moda/opsz.css';
+import '@fontsource-variable/bodoni-moda/opsz-italic.css';
+import '@fontsource-variable/jost/wght.css';
 
 import { NotFoundBackButton } from '@/components/ui/not-found-back-button';
-
-const display = Bodoni_Moda({ subsets: ['latin'], axes: ['opsz'], style: ['normal', 'italic'], variable: '--font-nf-display', display: 'swap' });
-const body = Jost({ subsets: ['latin'], weight: ['400', '500'], variable: '--font-nf-body', display: 'swap' });
 
 /**
  * The one 404 for the landing site and every storefront. It is deliberately generic: it is also
@@ -18,7 +17,7 @@ const body = Jost({ subsets: ['latin'], weight: ['400', '500'], variable: '--fon
 export default function NotFound() {
   return (
     <main
-      className={`${display.variable} ${body.variable} relative flex min-h-svh flex-col items-center justify-center overflow-hidden bg-atelier-paper px-6 py-16 text-center text-atelier-ink`}
+      className="relative flex min-h-svh flex-col items-center justify-center overflow-hidden bg-atelier-paper px-6 py-16 text-center text-atelier-ink"
       style={{ fontFamily: 'var(--font-nf-body), ui-sans-serif, system-ui, sans-serif' }}
     >
       <span

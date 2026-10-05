@@ -100,19 +100,16 @@ describe('storefront owner preview', async () => {
     expect((await request(app).get(`/api/v1/public/stores/${ws.slug}`).set(HEADER, 'v1.garbage')).status).toBe(404);
   });
 
-  it('does not open guest verification or holds on a draft store', async () => {
+  it('does not expose the removed guest verification endpoint', async () => {
     const ws = await createStorefrontWorkspace('preview-writes');
     const link = await previewFor(ws);
     const app = createApp();
 
-    await request(app)
+    const removed = await request(app)
       .post(`/api/v1/public/stores/${ws.slug}/verifications`)
       .set(HEADER, link.token)
       .send({ email: 'renter@example.com' });
-    const rows = await admin.query<{ n: number }>(`SELECT count(*)::int AS n FROM guest_email_verification WHERE tenant_id = $1`, [ws.tenantId]);
-    expect(rows.rows[0]?.n).toBe(0);
-    const holds = await admin.query<{ n: number }>(`SELECT count(*)::int AS n FROM reservation WHERE tenant_id = $1`, [ws.tenantId]);
-    expect(holds.rows[0]?.n).toBe(0);
+    expect(removed.status).toBe(404);
   });
 
   it('keeps ordinary public reads cacheable and marked to vary on the preview header', async () => {

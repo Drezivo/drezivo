@@ -18,6 +18,8 @@ export function ImageField({
   hint,
   fileId,
   savedUrl,
+  fallbackUrl = null,
+  fallbackLabel,
   aspect = "aspect-[16/9]",
   purpose = "storefront_asset",
   fit = "cover",
@@ -28,6 +30,10 @@ export function ImageField({
   hint: string;
   fileId: FileObjectId | null;
   savedUrl: string | null;
+  /** A display-only image used when this field has no selected file. */
+  fallbackUrl?: string | null;
+  /** Visible explanation for a display-only fallback, such as "Using cover photo". */
+  fallbackLabel?: string;
   aspect?: string;
   purpose?: ImageUploadPurpose;
   /** `contain` shows the whole image, for charts such as a measurement guide. */
@@ -67,7 +73,8 @@ export function ImageField({
     }
   }
 
-  const preview = localUrl ?? (fileId ? savedUrl : null);
+  const usingFallback = !localUrl && !fileId && fallbackUrl !== null;
+  const preview = localUrl ?? (fileId ? savedUrl : fallbackUrl);
 
   return (
     // `relative` keeps the visually hidden file input inside this box; otherwise focusing it scrolls the whole app shell.
@@ -101,13 +108,16 @@ export function ImageField({
         }}
       />
       <div className="mt-2 flex items-center justify-between gap-2">
-        <p className="text-xs text-dashboard-muted">{hint}</p>
+        <p className="text-xs text-dashboard-muted">
+          {usingFallback && fallbackLabel ? <span className="mr-2 font-medium">{fallbackLabel}</span> : null}
+          {hint}
+        </p>
         {preview && !uploading ? (
           <span className="flex shrink-0 gap-1">
             <label htmlFor={inputId} className="cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-dashboard-accent hover:bg-dashboard-active">
               Replace
             </label>
-            {removable ? (
+            {removable && !usingFallback ? (
               <button
                 type="button"
                 onClick={() => {

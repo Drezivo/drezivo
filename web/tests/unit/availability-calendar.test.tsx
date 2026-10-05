@@ -18,7 +18,7 @@ vi.mock('@/lib/storefront-api', () => ({
   }),
 }));
 
-import { AvailabilityCalendar, type DateRange } from '@/components/store/booking/availability-calendar';
+import { AvailabilityCalendar, type DateRange, type DateRangeNotice } from '@/components/store/booking/availability-calendar';
 
 function renderCalendar(minDays: number) {
   const onChange = vi.fn();
@@ -79,7 +79,7 @@ describe('storefront Date from / Date to fields', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Date to' }));
     await pickInPopover(/October 16/);
 
-    expect(onChange).toHaveBeenLastCalledWith(null, 'Oct 14 is not available in that range. Choose other dates.');
+    expect(onChange).toHaveBeenLastCalledWith(null, { reason: 'other', message: 'Oct 14 is not available in that range. Choose other dates.' });
   });
 
   it('does not offer a closed day as pickup or return, but lets a rental run across one', async () => {
@@ -125,9 +125,20 @@ describe('storefront Date from / Date to fields', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /October 5/ })[0]!);
     fireEvent.click(screen.getAllByRole('button', { name: /October 6/ })[0]!);
 
-    expect(onChange).toHaveBeenLastCalledWith(
-      null,
-      'This piece rents for at least 3 days, counting the pickup date as Day 1. Choose a later return date.',
-    );
+    expect(onChange).toHaveBeenLastCalledWith(null, {
+      reason: 'other',
+      message: 'This piece rents for at least 3 days, counting the pickup date as Day 1. Choose a later return date.',
+    } satisfies DateRangeNotice);
+  });
+
+  it('marks an over-limit date range with the max-rental reason', async () => {
+    const onChange = renderCalendar(1);
+
+    await waitFor(() => expect((screen.getAllByRole('button', { name: /October 5/ })[0] as HTMLButtonElement | undefined)?.disabled).toBe(false));
+    fireEvent.click(screen.getAllByRole('button', { name: /October 5/ })[0]!);
+    await waitFor(() => expect((screen.getAllByRole('button', { name: /October 20/ })[0] as HTMLButtonElement | undefined)?.disabled).toBe(false));
+    fireEvent.click(screen.getAllByRole('button', { name: /October 20/ })[0]!);
+
+    expect(onChange).toHaveBeenLastCalledWith(null, { reason: 'max_rental_days', message: 'The longest rental is 14 days.' });
   });
 });

@@ -1,11 +1,4 @@
-/**
- * Guest booking from a published storefront: email verification, reservation request, payment
- * receipt, and fitting request. No customer account is required.
- *
- * A verification token proves control of one email address for one store for a short time.
- * A guest access token (returned once, stored only as a hash) lets that guest act on the one
- * reservation it was minted for. Neither token is ever placed in a URL query or local storage.
- */
+/** Guest booking from a published storefront. Guests do not need accounts or email verification. */
 import { z } from 'zod';
 
 import { customerSocialMedia } from '../common/customer';
@@ -16,30 +9,7 @@ import { fulfillmentMethod, reservationState } from '../reservations';
 import { paymentInstructions } from '../reservations/hold';
 
 const guestEmail = z.string().trim().toLowerCase().email().max(254);
-const opaqueToken = z.string().regex(/^[A-Za-z0-9_-]{43}$/, 'token is malformed');
-
-/** POST /public/stores/{slug}/verifications. The answer is identical whether or not a code was sent. */
-/** `turnstile_token` is required whenever the API has a Cloudflare Turnstile secret configured. */
-export const startGuestVerificationRequest = z
-  .object({ email: guestEmail, turnstile_token: z.string().trim().min(1).max(2_048).optional() })
-  .strict();
-export type StartGuestVerificationRequest = z.infer<typeof startGuestVerificationRequest>;
-
-export const startGuestVerificationResponse = z
-  .object({ accepted: z.literal(true), code_length: z.literal(6), expires_in_seconds: z.number().int().positive() })
-  .strict();
-export type StartGuestVerificationResponse = z.infer<typeof startGuestVerificationResponse>;
-
-/** POST /public/stores/{slug}/verifications/confirm. */
-export const confirmGuestVerificationRequest = z
-  .object({ email: guestEmail, code: z.string().regex(/^\d{6}$/, 'enter the 6-digit code') })
-  .strict();
-export type ConfirmGuestVerificationRequest = z.infer<typeof confirmGuestVerificationRequest>;
-
-export const confirmGuestVerificationResponse = z
-  .object({ verification_token: opaqueToken, expires_at: isoInstant })
-  .strict();
-export type ConfirmGuestVerificationResponse = z.infer<typeof confirmGuestVerificationResponse>;
+const turnstileToken = z.string().trim().min(1).max(2_048).optional();
 
 export const guestCustomer = z
   .object({
@@ -51,10 +21,10 @@ export const guestCustomer = z
   .strict();
 export type GuestCustomer = z.infer<typeof guestCustomer>;
 
-/** POST /public/stores/{slug}/reservations. Send an `Idempotency-Key` header. */
+/** POST /public/stores/{slug}/holds. Send an `Idempotency-Key` header. */
 export const guestReservationRequest = z
   .object({
-    verification_token: opaqueToken,
+    turnstile_token: turnstileToken,
     email: guestEmail,
     customer: guestCustomer,
     variant_id: productVariantId,
@@ -91,11 +61,11 @@ export const guestReservationView = z
   .strict();
 export type GuestReservationView = z.infer<typeof guestReservationView>;
 
+/** The capability is delivered only as an HttpOnly cookie, never in this JSON response. */
 export const guestReservationCreated = z
   .object({
     reservation: guestReservationView,
-    guest_token: opaqueToken,
-    guest_token_expires_at: isoInstant,
+    access_expires_at: isoInstant,
   })
   .strict();
 export type GuestReservationCreated = z.infer<typeof guestReservationCreated>;
@@ -120,14 +90,14 @@ export const guestReceiptUploadResponse = z
   .strict();
 export type GuestReceiptUploadResponse = z.infer<typeof guestReceiptUploadResponse>;
 
-/** POST /guest/reservations/{id}/receipt. Send an `Idempotency-Key` header. */
+/** POST /guest/reservations/{id}/receipts. Send an `Idempotency-Key` header. */
 export const guestReceiptSubmitRequest = z.object({ file_id: fileObjectId }).strict();
 export type GuestReceiptSubmitRequest = z.infer<typeof guestReceiptSubmitRequest>;
 
 /** POST /public/stores/{slug}/fittings. Send an `Idempotency-Key` header. */
 export const guestFittingRequest = z
   .object({
-    verification_token: opaqueToken,
+    turnstile_token: turnstileToken,
     email: guestEmail,
     customer: guestCustomer.omit({ address: true }).extend({ address: z.string().trim().min(5).max(500).nullable() }),
     start_at: isoInstant,

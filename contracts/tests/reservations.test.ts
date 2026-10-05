@@ -261,7 +261,6 @@ describe('reservation contracts', () => {
 
   it('keeps guest checkout stricter than staff intake and rejects unknown authority fields', () => {
     const guestRequest = {
-      verification_token: 'a'.repeat(43),
       email: 'Guest@Example.test',
       customer: { full_name: 'Guest Renter', phone: null, address: '123 Test Street', social_handle: null },
       variant_id: baseStaffCreate.variant_id,
@@ -275,7 +274,8 @@ describe('reservation contracts', () => {
     expect(parsed.success && parsed.data.email).toBe('guest@example.test');
 
     expect(guestReservationRequest.safeParse({ ...guestRequest, email: undefined }).success).toBe(false);
-    expect(guestReservationRequest.safeParse({ ...guestRequest, verification_token: 'short' }).success).toBe(false);
+    expect(guestReservationRequest.safeParse({ ...guestRequest, turnstile_token: 'challenge-token' }).success).toBe(true);
+    expect(guestReservationRequest.safeParse({ ...guestRequest, verification_token: 'a'.repeat(43) }).success).toBe(false);
     expect(
       guestReservationRequest.safeParse({ ...guestRequest, allocation_id: '00000000-0000-4000-8000-000000000011' })
         .success,

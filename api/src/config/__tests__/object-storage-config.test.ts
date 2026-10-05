@@ -16,6 +16,7 @@ const baseEnvironment: NodeJS.ProcessEnv = {
   OBJECT_STORAGE_BUCKET_PRIVATE: 'private-files',
   OBJECT_STORAGE_ACCESS_KEY_ID: 'test-access',
   OBJECT_STORAGE_SECRET_ACCESS_KEY: 'test-secret',
+  TURNSTILE_SECRET_KEY: 'synthetic-turnstile-secret',
 };
 
 describe('object-storage configuration', () => {
@@ -27,6 +28,12 @@ describe('object-storage configuration', () => {
     expect(parsed.OBJECT_STORAGE_BUCKET_PUBLIC).toBeUndefined();
     expect(parsed.OBJECT_STORAGE_FORCE_PATH_STYLE).toBe(false);
     expect(parsed.OBJECT_STORAGE_UPLOADS_ENABLED).toBe(false);
+  });
+
+  it('requires the bot challenge secret in staging and production', () => {
+    const withoutTurnstile = { ...baseEnvironment };
+    delete withoutTurnstile.TURNSTILE_SECRET_KEY;
+    expect(() => parseConfig(withoutTurnstile)).toThrow('Staging and production storefront guest submissions require TURNSTILE_SECRET_KEY.');
   });
 
   it('rejects an AWS endpoint for production storage', () => {

@@ -73,23 +73,14 @@ export const envSchema = z
     EMAIL_FROM: z.string().min(3).max(200).optional(),
     RESEND_API_KEY: z.string().min(10).optional(),
     EMAIL_FILE_SINK_DIR: z.string().min(1).optional(),
-    STOREFRONT_PUBLIC_ORIGIN: z.string().url().optional(),
-    GUEST_VERIFICATION_MODE: z.enum(['email', 'dev_accept_any']).default('email'),
-    // Cloudflare Turnstile secret for storefront "Send code". Unset (local development) skips the
-    // check with one startup warning; set, a missing or rejected token is refused.
+    // Cloudflare Turnstile secret for storefront guest submissions. Unset (local development)
+    // skips the check with one startup warning; when set, missing or rejected tokens are refused.
     TURNSTILE_SECRET_KEY: z.string().min(1).max(200).optional(),
     // Shared with the operator API: signs 5-minute links that open a business's proof of payment
     // (modules/billing/operator-proof-link.ts). Unset = proof links are off.
     OPERATOR_PROOF_LINK_SECRET: z.string().min(32, 'OPERATOR_PROOF_LINK_SECRET must be at least 32 characters').max(200).optional(),
   })
   .superRefine((env, ctx) => {
-    if (env.GUEST_VERIFICATION_MODE === 'dev_accept_any' && env.NODE_ENV === 'production') {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['GUEST_VERIFICATION_MODE'],
-        message: 'dev_accept_any is for development only',
-      });
-    }
     if (env.EMAIL_PROVIDER === 'resend' && (!env.RESEND_API_KEY || !env.EMAIL_FROM)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -122,6 +113,14 @@ export const envSchema = z
     }
 
     if (!['staging', 'production'].includes(env.NODE_ENV)) return;
+
+    if (!env.TURNSTILE_SECRET_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['TURNSTILE_SECRET_KEY'],
+        message: 'Staging and production storefront guest submissions require TURNSTILE_SECRET_KEY.',
+      });
+    }
 
     const endpoint = new URL(env.OBJECT_STORAGE_ENDPOINT);
     if (

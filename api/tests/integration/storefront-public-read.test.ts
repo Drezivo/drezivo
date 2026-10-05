@@ -66,6 +66,8 @@ describe('public storefront read API', async () => {
     const document = defaultStorefrontDocument('Luna Gown Rentals');
     document.contact.email = 'hello@luna.test';
     document.contact.instagram = 'luna.gowns';
+    document.contact.facebook = 'luna-rentals';
+    document.contact.tiktok = 'luna.gowns';
     document.content.featured_product_ids = [productId.parse(ws.productId)];
     tweak(document);
     expect((await cms.updateDocument(ws.owner, `${label}-doc`, { version: 1, document })).status).toBe(200);
@@ -87,7 +89,12 @@ describe('public storefront read API', async () => {
     const store = dataOf<PublicStorefront>(response);
     expect(store).toMatchObject({
       name: 'Luna Gown Rentals',
-      contact: { email: 'hello@luna.test', instagram_url: 'https://www.instagram.com/luna.gowns/' },
+      contact: {
+        email: 'hello@luna.test',
+        instagram_url: 'https://www.instagram.com/luna.gowns/',
+        facebook_url: 'https://www.facebook.com/luna-rentals',
+        tiktok_url: 'https://www.tiktok.com/@luna.gowns',
+      },
       fulfillment: { pickup: true, delivery: true, delivery_fee_minor: '15000' },
       policy: { version: 2, rental: rules.rental },
       fitting: { enabled: false },
@@ -314,5 +321,18 @@ describe('public storefront read API', async () => {
     const store = await request(app).get(`/api/v1/public/stores/${ws.slug}`);
     expect(dataOf<PublicStorefront>(store).fitting).toEqual({ enabled: true, duration_minutes: 60, fee_minor: '50000' });
     expect(dataOf<PublicStorefront>(store).content.sections.fitting).toBe(true);
+  });
+
+  it('builds the public link for a numeric Facebook Page URL', async () => {
+    const pageId = '615940716454514';
+    const ws = await publishedWorkspace('pub-facebook-id', (document) => {
+      document.contact.facebook = `https://www.facebook.com/profile.php?id=${pageId}`;
+    });
+
+    const response = await request(createApp()).get(`/api/v1/public/stores/${ws.slug}`);
+    expect(response.status).toBe(200);
+    expect(dataOf<PublicStorefront>(response).contact.facebook_url).toBe(
+      `https://www.facebook.com/profile.php?id=${pageId}`,
+    );
   });
 });

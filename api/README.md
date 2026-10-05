@@ -120,8 +120,25 @@ npm run test            # Unit tests (integration tests excluded)
 npm run test:integration
 npm run db:generate     # Generate reviewed SQL migrations
 npm run db:studio       # Open Drizzle Studio
+npm run seed:clothing:local -- --storefront-slug <slug>  # Preview only
+npm run seed:clothing:local -- --storefront-slug <slug> --apply  # Create missing local drafts
 npm start               # Run the compiled server
 npm run start:worker    # Run the compiled worker
+```
+
+The clothing seeder is development-only: it requires `NODE_ENV=development` and the loopback
+Compose `drezivo` admin connection to the local `drezivo` database. It previews without writing by
+default, and `--apply` creates up to 20 synthetic draft styles using the normal catalogue service.
+Existing `LOCAL-SEED-*` style codes are skipped on reruns. Each style receives one size and its
+normal initial inventory piece; no photos are generated or uploaded, so attach images later in the
+app. The selected storefront must belong to an active workspace/branch with clothing-management
+access, and the default active categories must exist. The API's normal physical-asset quota still
+applies.
+
+From the repository root, add `--workspace @drezivo/api` before the argument separator:
+
+```powershell
+npm run seed:clothing:local --workspace @drezivo/api -- --storefront-slug <slug> --apply
 ```
 
 ## Environment and production
@@ -142,4 +159,3 @@ comma-separated list of exact browser origins; set `http://localhost:3000` for l
 ## License
 
 This repository is proprietary Drezivo software. Use is limited to the permission in [LICENSE.md](LICENSE.md); third-party dependencies retain their own licenses.
-

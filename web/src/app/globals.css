@@ -114,6 +114,16 @@
   --radius-lg: 1rem;
 }
 
+:root {
+  --font-bodoni: 'Bodoni Moda Variable';
+  --font-atelier-jost: 'Jost Variable';
+  --font-atelier-hand: 'Caveat Variable';
+  --font-newsreader: 'Newsreader Variable';
+  --font-jost: 'Jost Variable';
+  --font-nf-display: 'Bodoni Moda Variable';
+  --font-nf-body: 'Jost Variable';
+}
+
 @media (prefers-color-scheme: dark) {
   @theme {
     --color-background: #14181a;

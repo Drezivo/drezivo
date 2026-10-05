@@ -85,14 +85,14 @@ export function StorefrontDetailsPage() {
               <Field label="Shop address" className="sm:col-span-2" error={err("contact.address")}>
                 {(props) => <Textarea {...props} rows={2} value={c.address ?? ""} maxLength={300} onChange={(e) => contact.update({ address: orNull(e.target.value) })} />}
               </Field>
-              <Field label="Instagram" hint="Handle only, without the link." error={err("contact.instagram")}>
-                {(props) => <Input {...props} value={c.instagram ?? ""} placeholder="@yourshop" onChange={(e) => contact.update({ instagram: orNull(e.target.value) })} />}
+              <Field label="Instagram" hint="Paste a profile URL or enter the handle." error={err("contact.instagram")}>
+                {(props) => <Input {...props} value={c.instagram ?? ""} placeholder="https://www.instagram.com/yourshop/" onChange={(e) => contact.update({ instagram: orNull(e.target.value) })} />}
               </Field>
-              <Field label="Facebook page" hint="The part after facebook.com/." error={err("contact.facebook")}>
-                {(props) => <Input {...props} value={c.facebook ?? ""} placeholder="yourshop" onChange={(e) => contact.update({ facebook: orNull(e.target.value) })} />}
+              <Field label="Facebook page" hint="Paste its direct Page URL or enter the page name." error={err("contact.facebook")}>
+                {(props) => <Input {...props} value={c.facebook ?? ""} placeholder="https://www.facebook.com/yourshop/" onChange={(e) => contact.update({ facebook: orNull(e.target.value) })} />}
               </Field>
-              <Field label="TikTok" error={err("contact.tiktok")}>
-                {(props) => <Input {...props} value={c.tiktok ?? ""} placeholder="@yourshop" onChange={(e) => contact.update({ tiktok: orNull(e.target.value) })} />}
+              <Field label="TikTok" hint="Paste a profile URL or enter the handle." error={err("contact.tiktok")}>
+                {(props) => <Input {...props} value={c.tiktok ?? ""} placeholder="https://www.tiktok.com/@yourshop" onChange={(e) => contact.update({ tiktok: orNull(e.target.value) })} />}
               </Field>
             </div>
           </Section>
