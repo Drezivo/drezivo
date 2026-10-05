@@ -102,6 +102,8 @@ describe('extractClothingPhoto', () => {
     const body = JSON.parse(init.body as string) as { model: string; messages: unknown };
     expect(body.model).toBe('test/vision');
     expect(JSON.stringify(body.messages)).toContain('data:image/jpeg;base64,AQID');
+    // A single user turn: Gemma models on the Gemini API refuse a separate system message.
+    expect((body.messages as Array<{ role: string }>).map((message) => message.role)).toEqual(['user']);
   });
 
   it('refuses photos that are not accepted catalogue images of this shop', async () => {
