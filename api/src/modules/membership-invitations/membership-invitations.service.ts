@@ -33,7 +33,7 @@ import {
 import {
   assertTenantInvitationWritesAllowed,
   expirePendingInvitations,
-  findPendingInvitationByDigest,
+  findInvitationByDigest,
   insertInvitation,
   insertInvitationOutbox,
   insertInvitationRevokeOutbox,
@@ -78,10 +78,25 @@ export async function createMembershipInvitation(
   return runCommand(input, CREATE_OPERATION, input.request, async (client) => {
     const digest = digestRecipientEmail(input.request.email);
     await expirePendingInvitations(client, input.tenantId);
-    const existing = await findPendingInvitationByDigest(client, input.tenantId, digest);
-    if (existing) return toSafeInvitation(existing);
+    const existing = await findInvitationByDigest(client, input.tenantId, digest);
+    if (existing?.status === 'pending') return toSafeInvitation(existing);
+    if (existing?.status === 'accepted') {
+      throw new StateConflictError('This invitation has already been accepted.');
+    }
 
     await assertFrontDeskSeatCapacity(client, input.tenantId, 1);
+    if (existing) {
+      const reopened = await updateInvitationForResend(client, input.tenantId, existing.id);
+      if (!reopened) throw new StateConflictError('Invitation cannot be resent.');
+      await insertInvitationOutbox(client, {
+        tenantId: input.tenantId,
+        invitationId: reopened.id,
+        dispatchVersion: reopened.dispatch_version,
+        operation: 'resend',
+      });
+      return toSafeInvitation(reopened);
+    }
+
     const created = await insertInvitation(client, {
       tenantId: input.tenantId,
       digest,
