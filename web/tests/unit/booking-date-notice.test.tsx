@@ -7,14 +7,14 @@ describe('booking date notice', () => {
   it('keeps the max-rental warning and adds configured social links with the configured limit', () => {
     render(
       <BookingDateNotice
-        notice={{ reason: 'max_rental_days', message: 'The longest rental is 7 days.' }}
+        notice={{ reason: 'max_rental_days', message: 'The longest rental allowed is 7 days.' }}
         maxDays={7}
         facebookUrl="https://www.facebook.com/rental-shop"
         instagramUrl="https://www.instagram.com/rental-shop/"
       />,
     );
 
-    expect(screen.getByRole('alert').textContent).toBe('The longest rental is 7 days.');
+    expect(screen.getByRole('alert').textContent).toBe('The longest rental allowed is 7 days.');
     expect(screen.getByRole('link', { name: 'Facebook' }).getAttribute('href')).toBe(
       'https://www.facebook.com/rental-shop',
     );
@@ -34,7 +34,7 @@ describe('booking date notice', () => {
   it('shows only the social channel configured by the storefront', () => {
     render(
       <BookingDateNotice
-        notice={{ reason: 'max_rental_days', message: 'The longest rental is 5 days.' }}
+        notice={{ reason: 'max_rental_days', message: 'The longest rental allowed is 5 days.' }}
         maxDays={5}
         facebookUrl={null}
         instagramUrl="https://www.instagram.com/rental-shop/"
@@ -56,7 +56,7 @@ describe('booking date notice', () => {
   it('does not show the social prompt when no channels are configured or the notice is unrelated', () => {
     const { rerender } = render(
       <BookingDateNotice
-        notice={{ reason: 'max_rental_days', message: 'The longest rental is 7 days.' }}
+        notice={{ reason: 'max_rental_days', message: 'The longest rental allowed is 7 days.' }}
         maxDays={7}
         facebookUrl={null}
         instagramUrl={null}

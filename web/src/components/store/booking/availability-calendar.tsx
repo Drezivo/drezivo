@@ -320,7 +320,7 @@ export function AvailabilityCalendar({
     if (end <= start || length < minDays) {
       return { reason: 'other', message: `This piece rents for at least ${Math.max(minDays, 2)} days, counting the pickup date as Day 1. Choose a later return date.` };
     }
-    if (length > maxDays) return { reason: 'max_rental_days', message: `The longest rental is ${maxDays} day${maxDays === 1 ? '' : 's'}.` };
+    if (length > maxDays) return { reason: 'max_rental_days', message: `The longest rental allowed is ${maxDays} day${maxDays === 1 ? '' : 's'}.` };
     for (const handover of [start, end]) {
       if (isClosed(handover)) {
         return { reason: 'other', message: `The shop is closed on ${formatDay(handover, { weekday: 'long', month: 'short', day: 'numeric' })}. Choose another ${handover === start ? 'pickup' : 'return'} date.` };

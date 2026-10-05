@@ -94,7 +94,7 @@ export function assertCheckoutRules(
   }
   const rentalDays = (Date.parse(`${due.date}T00:00:00Z`) - Date.parse(`${pickup.date}T00:00:00Z`)) / DAY_MS + 1;
   if (rentalDays > rules.max_rental_days) {
-    throw new ValidationError(`Rentals can be at most ${rules.max_rental_days} days.`);
+    throw new ValidationError(`The longest rental allowed is ${rules.max_rental_days} day${rules.max_rental_days === 1 ? '' : 's'}.`);
   }
 
   const today = localParts(now, timeZone).date;
