@@ -139,6 +139,6 @@ describe('storefront Date from / Date to fields', () => {
     await waitFor(() => expect((screen.getAllByRole('button', { name: /October 20/ })[0] as HTMLButtonElement | undefined)?.disabled).toBe(false));
     fireEvent.click(screen.getAllByRole('button', { name: /October 20/ })[0]!);
 
-    expect(onChange).toHaveBeenLastCalledWith(null, { reason: 'max_rental_days', message: 'The longest rental is 14 days.' });
+    expect(onChange).toHaveBeenLastCalledWith(null, { reason: 'max_rental_days', message: 'The longest rental allowed is 14 days.' });
   });
 });
