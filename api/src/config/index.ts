@@ -73,6 +73,13 @@ export const envSchema = z
     EMAIL_FROM: z.string().min(3).max(200).optional(),
     RESEND_API_KEY: z.string().min(10).optional(),
     EMAIL_FILE_SINK_DIR: z.string().min(1).optional(),
+    // Batch import: an OpenAI-compatible vision endpoint that reads garment details printed on
+    // catalogue photos (OpenRouter https://openrouter.ai/api/v1, NVIDIA Build
+    // https://integrate.api.nvidia.com/v1, or any compatible provider). All three unset = off.
+    CATALOGUE_VISION_BASE_URL: z.string().url().optional(),
+    CATALOGUE_VISION_MODEL: z.string().trim().min(1).max(200).optional(),
+    CATALOGUE_VISION_API_KEY: z.string().min(10).max(500).optional(),
+    CATALOGUE_VISION_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(45_000),
     // Cloudflare Turnstile secret for storefront guest submissions. Unset (local development)
     // skips the check with one startup warning; when set, missing or rejected tokens are refused.
     TURNSTILE_SECRET_KEY: z.string().min(1).max(200).optional(),
@@ -93,6 +100,15 @@ export const envSchema = z
         code: z.ZodIssueCode.custom,
         path: ['EMAIL_PROVIDER'],
         message: 'file email is for development only and needs EMAIL_FILE_SINK_DIR',
+      });
+    }
+
+    const visionSettings = [env.CATALOGUE_VISION_BASE_URL, env.CATALOGUE_VISION_MODEL, env.CATALOGUE_VISION_API_KEY];
+    if (visionSettings.some(Boolean) && !visionSettings.every(Boolean)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['CATALOGUE_VISION_BASE_URL'],
+        message: 'photo extraction needs CATALOGUE_VISION_BASE_URL, CATALOGUE_VISION_MODEL and CATALOGUE_VISION_API_KEY together',
       });
     }
 
