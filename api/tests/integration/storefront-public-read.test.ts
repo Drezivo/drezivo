@@ -322,4 +322,17 @@ describe('public storefront read API', async () => {
     expect(dataOf<PublicStorefront>(store).fitting).toEqual({ enabled: true, duration_minutes: 60, fee_minor: '50000' });
     expect(dataOf<PublicStorefront>(store).content.sections.fitting).toBe(true);
   });
+
+  it('builds the public link for a numeric Facebook Page URL', async () => {
+    const pageId = '615940716454514';
+    const ws = await publishedWorkspace('pub-facebook-id', (document) => {
+      document.contact.facebook = `https://www.facebook.com/profile.php?id=${pageId}`;
+    });
+
+    const response = await request(createApp()).get(`/api/v1/public/stores/${ws.slug}`);
+    expect(response.status).toBe(200);
+    expect(dataOf<PublicStorefront>(response).contact.facebook_url).toBe(
+      `https://www.facebook.com/profile.php?id=${pageId}`,
+    );
+  });
 });

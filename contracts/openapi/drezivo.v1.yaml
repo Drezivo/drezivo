@@ -23304,7 +23304,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^[A-Za-z0-9.-]{1,80}$
                               tiktok:
                                 type:
                                   - string
@@ -23793,7 +23792,6 @@ paths:
                           type:
                             - string
                             - "null"
-                          pattern: ^[A-Za-z0-9.-]{1,80}$
                         tiktok:
                           type:
                             - string
@@ -24056,7 +24054,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^[A-Za-z0-9.-]{1,80}$
                               tiktok:
                                 type:
                                   - string
@@ -24716,7 +24713,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^[A-Za-z0-9.-]{1,80}$
                               tiktok:
                                 type:
                                   - string
@@ -25241,7 +25237,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^[A-Za-z0-9.-]{1,80}$
                               tiktok:
                                 type:
                                   - string
@@ -25766,7 +25761,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^[A-Za-z0-9.-]{1,80}$
                               tiktok:
                                 type:
                                   - string
@@ -26355,7 +26349,6 @@ paths:
                                 type:
                                   - string
                                   - "null"
-                                pattern: ^[A-Za-z0-9.-]{1,80}$
                               tiktok:
                                 type:
                                   - string

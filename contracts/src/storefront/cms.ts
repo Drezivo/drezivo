@@ -2,9 +2,9 @@
  * Storefront CMS — the owner-edited content behind `/s/<slug>`.
  *
  * Everything the owner can type is plain, bounded text. Markup is never stored or rendered, and
- * social profile input is normalized to handles so the public URL is always built by the server
- * from a fixed host, and unrelated links cannot be stored. Images are referenced by accepted
- * `storefront_asset` file ids from the same workspace, never by arbitrary URLs.
+ * social profile input is normalized to platform references so the public URL is always built by
+ * the server from a fixed host, and unrelated links cannot be stored. Images are referenced by
+ * accepted `storefront_asset` file ids from the same workspace, never by arbitrary URLs.
  */
 import { z } from 'zod';
 
@@ -45,12 +45,15 @@ export const socialHandle = z
 export const facebookPage = z
   .string()
   .trim()
-  .regex(/^[A-Za-z0-9.-]{1,80}$/, 'use the page name from facebook.com/<name>');
+  .regex(
+    /^(?:[A-Za-z0-9.-]{1,80}|profile\.php\?id=\d{1,32})$/,
+    'use the page name or a numeric Facebook Page URL',
+  );
 
 function socialProfileInput(
   platform: string,
   hosts: readonly string[],
-  profileFromPath: (path: string) => string | null,
+  profileFromUrl: (url: URL, rawPath: string, value: string) => string | null,
   handleSchema: z.ZodType<string>,
 ) {
   return z
@@ -69,8 +72,7 @@ function socialProfileInput(
 
       const rawAuthority = value.match(/^https:\/\/([^/?#]+)/i)?.[1] ?? '';
       const rawPath = value.match(/^https:\/\/[^/?#]+([^?#]*)/i)?.[1] ?? '';
-      const pathMatch = rawPath.match(/^\/([^/]+)\/?$/);
-      const profile = pathMatch ? profileFromPath(pathMatch[1]!) : null;
+      const profile = profileFromUrl(url, rawPath, value);
       const isSupportedUrl =
         /^https:\/\//i.test(value) &&
         hosts.includes(url.hostname) &&
@@ -78,7 +80,6 @@ function socialProfileInput(
         url.port === '' &&
         url.username === '' &&
         url.password === '' &&
-        !value.includes('?') &&
         !value.includes('#') &&
         url.pathname === rawPath &&
         profile !== null;
@@ -96,19 +97,44 @@ function socialProfileInput(
 const instagramProfile = socialProfileInput(
   'Instagram',
   ['instagram.com', 'www.instagram.com'],
-  (path) => (path.startsWith('@') ? null : path),
+  (url, rawPath, value) => {
+    if (url.search !== '' || url.hash !== '' || value.includes('?')) return null;
+    const pathMatch = rawPath.match(/^\/([^/]+)\/?$/);
+    return pathMatch && !pathMatch[1]!.startsWith('@') ? pathMatch[1]! : null;
+  },
   socialHandle,
 );
 const facebookProfile = socialProfileInput(
   'Facebook',
   ['facebook.com', 'www.facebook.com'],
-  (path) => path,
+  (url, rawPath, value) => {
+    const pagePath = rawPath.match(/^\/([^/]+)\/?$/);
+    if (pagePath && url.search === '' && url.hash === '' && !value.includes('?')) {
+      return pagePath[1]!.toLowerCase() === 'profile.php' ? null : pagePath[1]!;
+    }
+
+    if (
+      /^\/profile\.php\/?$/i.test(rawPath) &&
+      /^\?id=\d{1,32}$/.test(url.search) &&
+      !value.includes('#') &&
+      url.hash === ''
+    ) {
+      return `profile.php${url.search}`;
+    }
+
+    return null;
+  },
   facebookPage,
 );
 const tiktokProfile = socialProfileInput(
   'TikTok',
   ['tiktok.com', 'www.tiktok.com'],
-  (path) => (path.startsWith('@') ? path.slice(1) : null),
+  (url, rawPath, value) => {
+    if (url.search !== '' || url.hash !== '' || value.includes('?')) return null;
+    const pathMatch = rawPath.match(/^\/([^/]+)\/?$/);
+    const profile = pathMatch?.[1];
+    return profile?.startsWith('@') ? profile.slice(1) : null;
+  },
   socialHandle,
 );
 

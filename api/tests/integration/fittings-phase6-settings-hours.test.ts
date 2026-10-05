@@ -269,8 +269,8 @@ describe('fitting scalar settings configuration', async () => {
 
   it('rejects a capacity reduction below accepted simultaneous fitting demand', async () => {
     const seed = await seedTenant('capacity', { capacity: 2 });
-    await createPreference(seed, '2026-10-05T02:00:00.000Z');
-    await createPreference(seed, '2026-10-05T02:00:00.000Z');
+    await createPreference(seed, '2099-01-05T02:00:00.000Z');
+    await createPreference(seed, '2099-01-05T02:00:00.000Z');
 
     const result = await updateFittingSettingsCommand(ownerContext(seed), {
       version: 1,
@@ -296,8 +296,8 @@ describe('fitting scalar settings configuration', async () => {
 
   it('can reduce capacity after accepted demand is released', async () => {
     const seed = await seedTenant('capacity-release', { capacity: 2 });
-    const first = await createPreference(seed, '2026-10-05T02:00:00.000Z');
-    await createPreference(seed, '2026-10-05T02:00:00.000Z');
+    const first = await createPreference(seed, '2099-01-05T02:00:00.000Z');
+    await createPreference(seed, '2099-01-05T02:00:00.000Z');
     const cancelled = await cancelFittingCommand(
       { ...ownerContext(seed), fittingId: first.id },
       { version: first.version, reason: 'Customer cancelled.' },

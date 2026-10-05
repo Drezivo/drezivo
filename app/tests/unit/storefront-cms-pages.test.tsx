@@ -111,6 +111,30 @@ describe("storefront CMS pages", () => {
     expect(screen.getByRole("button", { name: /save changes/i })).toBeDisabled();
   });
 
+  it("displays a saved numeric Facebook Page reference as its canonical URL", async () => {
+    const document = defaultStorefrontDocument("Luna Gown Rentals");
+    api.getStorefront.mockResolvedValue({
+      data: settings({
+        document: {
+          ...document,
+          contact: { ...document.contact, facebook: "profile.php?id=615940716454514" },
+        },
+      }),
+      requestId: "r",
+    });
+
+    render(
+      <StorefrontEditorProvider>
+        <StorefrontDetailsPage />
+      </StorefrontEditorProvider>,
+    );
+
+    expect(await screen.findByLabelText("Facebook page")).toHaveValue(
+      "https://www.facebook.com/profile.php?id=615940716454514",
+    );
+    expect(screen.getByRole("button", { name: /save changes/i })).toBeDisabled();
+  });
+
   it("normalizes pasted social URLs on save and keeps their canonical URLs visible", async () => {
     const document = defaultStorefrontDocument("Luna Gown Rentals");
     const savedDocument = {
@@ -142,6 +166,34 @@ describe("storefront CMS pages", () => {
       expect(instagram).toHaveValue("https://www.instagram.com/luna.gowns/");
       expect(facebook).toHaveValue("https://www.facebook.com/luna-rentals/");
       expect(tiktok).toHaveValue("https://www.tiktok.com/@luna.gowns");
+    });
+  });
+
+  it("saves a pasted numeric Facebook Page URL and keeps it visible", async () => {
+    const document = defaultStorefrontDocument("Luna Gown Rentals");
+    const savedDocument = {
+      ...document,
+      contact: { ...document.contact, facebook: "profile.php?id=615940716454514" },
+    };
+    api.updateStorefront.mockResolvedValue({ data: settings({ version: 4, document: savedDocument }) });
+
+    render(
+      <StorefrontEditorProvider>
+        <StorefrontDetailsPage />
+      </StorefrontEditorProvider>,
+    );
+
+    const facebook = await screen.findByLabelText("Facebook page");
+    fireEvent.change(facebook, { target: { value: "https://facebook.com/profile.php?id=615940716454514" } });
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => expect(api.updateStorefront).toHaveBeenCalledTimes(1));
+    expect(api.updateStorefront.mock.calls[0]?.[0]).toMatchObject({
+      document: { contact: { facebook: "profile.php?id=615940716454514" } },
+    });
+    expect(await screen.findByText("Saved")).toBeVisible();
+    await waitFor(() => {
+      expect(facebook).toHaveValue("https://www.facebook.com/profile.php?id=615940716454514");
     });
   });
 

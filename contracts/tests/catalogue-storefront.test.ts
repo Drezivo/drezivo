@@ -106,7 +106,7 @@ describe('storefront CMS contract', () => {
     expect(storefrontDocument.safeParse(multi).success).toBe(true);
   });
 
-  it('accepts social handles and canonical profile URLs, storing normalized handles', () => {
+  it('accepts social handles and canonical profile URLs, storing normalized references', () => {
     const withHandle = { ...valid, contact: { ...valid.contact, instagram: '@luna.gowns' } };
     expect(storefrontDocument.parse(withHandle).contact.instagram).toBe('luna.gowns');
 
@@ -126,12 +126,28 @@ describe('storefront CMS contract', () => {
     });
   });
 
+  it('normalizes a numeric Facebook Page URL to its validated page reference', () => {
+    const withNumericPage = {
+      ...valid,
+      contact: { ...valid.contact, facebook: 'https://www.facebook.com/profile.php?id=615940716454514' },
+    };
+
+    expect(storefrontDocument.parse(withNumericPage).contact.facebook).toBe('profile.php?id=615940716454514');
+  });
+
   it.each([
     ['a wrong-platform host', { ...valid.contact, instagram: 'https://facebook.com/luna' }],
     ['a non-HTTPS URL', { ...valid.contact, instagram: 'http://instagram.com/luna' }],
     ['an Instagram URL with an explicit port', { ...valid.contact, instagram: 'https://instagram.com:443/luna' }],
     ['an Instagram share path', { ...valid.contact, instagram: 'https://instagram.com/share/luna' }],
     ['a Facebook URL with a query', { ...valid.contact, facebook: 'https://facebook.com/luna?ref=profile' }],
+    ['a Facebook share URL', { ...valid.contact, facebook: 'https://facebook.com/share/abc123/' }],
+    ['a Facebook URL on an unrelated host', { ...valid.contact, facebook: 'https://example.com/luna' }],
+    ['a non-HTTPS Facebook URL', { ...valid.contact, facebook: 'http://facebook.com/luna' }],
+    ['a Facebook numeric URL with a non-numeric id', { ...valid.contact, facebook: 'https://facebook.com/profile.php?id=drezivo' }],
+    ['a Facebook numeric URL with an extra query parameter', { ...valid.contact, facebook: 'https://facebook.com/profile.php?id=615940716454514&ref=profile' }],
+    ['a Facebook numeric URL with duplicate ids', { ...valid.contact, facebook: 'https://facebook.com/profile.php?id=123&id=456' }],
+    ['a Facebook numeric URL with an empty query', { ...valid.contact, facebook: 'https://facebook.com/profile.php?id=615940716454514?' }],
     ['a TikTok URL without the profile marker', { ...valid.contact, tiktok: 'https://tiktok.com/luna' }],
     ['an unrelated URL', { ...valid.contact, instagram: 'https://example.com/luna' }],
     ['a script URL', { ...valid.contact, instagram: 'javascript:alert(1)' }],
