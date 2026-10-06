@@ -1,9 +1,10 @@
 # Continuous integration baseline
 
-**Status:** backend-only verification and container delivery are enabled; the full monorepo gate
-remains deferred until the application scaffold has a green local gate.
+**Status:** backend-only verification, container delivery, and a protected main-branch database
+migration pipeline are enabled in the workflow. The full monorepo gate remains deferred until the
+application scaffold has a green local gate.
 
-The root `.github/workflows/ci.yml` currently scopes automatic checks to `contracts` and `api`,
+The root `.github/workflows/ci.yml` scopes automatic checks to `contracts` and `api`,
 because the backend is the requested delivery boundary. It installs from the root lockfile,
 builds the shared contracts package, runs API type-checking, linting, unit tests, real-PostgreSQL
 integration tests, and the API build. It also builds the backend container on pull requests and
@@ -13,9 +14,13 @@ worker entrypoints in one image.
 The secrets job also runs the standalone Gitleaks CLI in a read-only container mount, so it does
 not require the commercial Gitleaks Action license or an additional repository secret.
 
-This workflow does not deploy to a runtime host. The container host is still a documented decision
-point, and production deployment requires the environment-specific approval, migration plan,
-readiness checks, rollback plan, and operator ownership described in the deployment runbook.
+The workflow does not deploy to a runtime host. For migration-file changes merged to `main`, it
+waits for backend checks and the container build, applies the migrations to the `preview` GitHub
+environment, then waits for the configured owner approval before the `production` environment job.
+Production stays blocked until its live schema and Drezivo migration ledger have been manually
+reconciled. See [`migrations.md`](migrations.md) for required environment secrets and setup gates.
+Runtime deployment remains separate and requires the readiness checks, rollback plan, and operator
+ownership described in [`deploy.md`](deploy.md).
 
 ## Full-gate enablement
 
