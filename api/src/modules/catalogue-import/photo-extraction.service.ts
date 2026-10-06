@@ -11,6 +11,7 @@ import { objectStorage } from '../../integrations/storage/s3-compatible-object-s
 import {
   DependencyUnavailableError,
   NotFoundError,
+  PhotoReaderConfigurationError,
   RateLimitedError,
 } from '../../shared/errors.js';
 import { logger } from '../../shared/logger.js';
@@ -145,7 +146,8 @@ export function parseModelReply(text: string): ExtractedClothingFields {
 }
 
 function geminiNativeGemmaEndpoint(settings: VisionSettings): string | null {
-  if (!/^gemma-4-/i.test(settings.model)) return null;
+  const [model, ...fallbacks] = settings.model.split(',').map((value) => value.trim()).filter(Boolean);
+  if (!model || fallbacks.length > 0 || !/^gemma-4-/i.test(model)) return null;
 
   let baseUrl: URL;
   try {
@@ -156,7 +158,27 @@ function geminiNativeGemmaEndpoint(settings: VisionSettings): string | null {
   if (baseUrl.hostname !== 'generativelanguage.googleapis.com') return null;
 
   const apiPath = baseUrl.pathname.replace(/\/openai\/?$/i, '').replace(/\/$/, '');
-  return `${baseUrl.origin}${apiPath}/models/${encodeURIComponent(settings.model)}:generateContent`;
+  return `${baseUrl.origin}${apiPath}/models/${encodeURIComponent(model)}:generateContent`;
+}
+
+function openRouterSettings(settings: VisionSettings): { models: string[]; headers: Record<string, string> } | null {
+  let baseUrl: URL;
+  try {
+    baseUrl = new URL(settings.baseUrl);
+  } catch {
+    return null;
+  }
+  if (baseUrl.hostname !== 'openrouter.ai') return null;
+
+  const models = settings.model.split(',').map((value) => value.trim()).filter(Boolean);
+  if (models.length === 0) return null;
+  return {
+    models,
+    headers: {
+      'HTTP-Referer': 'https://drezivo.shop',
+      'X-Title': 'Drezivo',
+    },
+  };
 }
 
 function openAiCompatibleContent(payload: unknown): string | null {
@@ -192,7 +214,7 @@ export async function extractClothingPhoto(
   dependencies: ExtractDependencies = {},
 ): Promise<ExtractedClothingFields> {
   const settings = dependencies.settings === undefined ? visionSettings() : dependencies.settings;
-  if (!settings) throw new DependencyUnavailableError('Reading details from photos is not set up.');
+  if (!settings) throw new PhotoReaderConfigurationError('Reading details from photos is not set up.');
   const storage = dependencies.storage ?? objectStorage;
   const fetchImpl = dependencies.fetchImpl ?? fetch;
 
@@ -219,6 +241,7 @@ export async function extractClothingPhoto(
   const base64 = bytes.toString('base64');
   const dataUrl = `data:${file.mime_type};base64,${base64}`;
   const nativeGemmaEndpoint = geminiNativeGemmaEndpoint(settings);
+  const openRouter = openRouterSettings(settings);
 
   let response: Response;
   try {
@@ -242,9 +265,15 @@ export async function extractClothingPhoto(
         })
       : await fetchImpl(`${settings.baseUrl}/chat/completions`, {
           method: 'POST',
-          headers: { authorization: `Bearer ${settings.apiKey}`, 'content-type': 'application/json' },
+          headers: {
+            authorization: `Bearer ${settings.apiKey}`,
+            'content-type': 'application/json',
+            ...(openRouter?.headers ?? {}),
+          },
           body: JSON.stringify({
-            model: settings.model,
+            ...(openRouter && openRouter.models.length > 1
+              ? { models: openRouter.models, provider: { allow_fallbacks: true } }
+              : { model: openRouter?.models[0] ?? settings.model }),
             temperature: 0,
             max_tokens: 400,
             messages: [
@@ -276,17 +305,22 @@ export async function extractClothingPhoto(
       {
         status: response.status,
         model: settings.model,
-        transport: nativeGemmaEndpoint ? 'gemini-native' : 'openai-compatible',
+        transport: nativeGemmaEndpoint ? 'gemini-native' : openRouter ? 'openrouter' : 'openai-compatible',
       },
       'catalogue photo extraction failed',
     );
     if (response.status === 401 || response.status === 403) {
-      throw new DependencyUnavailableError('The photo reader credentials were rejected. Check its API key.');
+      throw new PhotoReaderConfigurationError('The photo reader credentials were rejected. Check its API key.');
     }
     if ([400, 404, 415, 422].includes(response.status)) {
-      throw new DependencyUnavailableError('The configured photo model rejected the image request. Check the model setting.');
+      throw new PhotoReaderConfigurationError('The configured photo model rejected the image request. Check the model setting.');
     }
-    throw new DependencyUnavailableError('The photo reader is unavailable right now.');
+    if (response.status >= 500) {
+      throw new DependencyUnavailableError(
+        `The photo reader provider returned HTTP ${response.status}. Try again in a moment or check the staging provider logs.`,
+      );
+    }
+    throw new DependencyUnavailableError(`The photo reader request failed with HTTP ${response.status}.`);
   }
 
   const payload = await response.json().catch(() => null);

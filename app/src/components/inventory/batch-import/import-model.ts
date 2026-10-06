@@ -193,6 +193,32 @@ export function pesosToMinor(value: string): string | null {
 
 export type RowProblem = { field: keyof ImportRow | "photo"; message: string };
 
+/**
+ * Empty fields worth drawing the owner's attention to after a successful photo scan.
+ * Required fields still render as validation errors in the UI; this list is for the softer
+ * "the photo did not give us this" treatment.
+ */
+export function scanReviewFields(row: ImportRow): Set<keyof ImportRow> {
+  if (!row.read) return new Set();
+  const fields = new Set<keyof ImportRow>();
+  if (!row.name.trim()) fields.add("name");
+  if (!row.category.trim()) fields.add("category");
+  if (!row.subcategory.trim()) fields.add("subcategory");
+  if (!row.price.trim()) fields.add("price");
+  if (row.freeSize) {
+    if (!row.fitRange.trim()) fields.add("fitRange");
+  } else if (!row.sizeLabel.trim()) {
+    fields.add("sizeLabel");
+  }
+  if (!row.color.trim()) fields.add("color");
+  if (row.measurementMode === "custom") {
+    for (const field of MEASUREMENT_FIELDS) {
+      if (!row[field].trim()) fields.add(field);
+    }
+  }
+  return fields;
+}
+
 /** What blocks this row from being created, in the order the owner should fix it. */
 export function rowProblems(row: ImportRow, defaults: ImportDefaults, defaultGuideId: string | null = null): RowProblem[] {
   const problems: RowProblem[] = [];

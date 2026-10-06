@@ -15,14 +15,15 @@ import { newKey, type ImportDefaults, type ImportRow, sameCategory, toCreateRequ
 
 type Api = ReturnType<typeof createDrezivoApiClient>;
 export type RowUpdate = (id: string, patch: Partial<ImportRow>) => void;
+export type UploadProgress = (done: number, total: number) => void;
 
 /** Direct-to-storage PUTs and SHA-256 hashing run a few at a time so a phone stays responsive. */
 const FILE_CONCURRENCY = 4;
-const READ_RETRIES = 3;
+const READ_RETRIES = 2;
 const RATE_LIMIT_WAIT_MS = 20_000;
 const TRANSIENT_WAIT_MS = 3_000;
-/** Keep sustained photo reads below the strict free-provider limits instead of bursting into 429s. */
-const READ_INTERVAL_MS = 2_100;
+/** Keep sustained photo reads below OpenRouter's free-tier 20 requests/minute ceiling. */
+const READ_INTERVAL_MS = 3_200;
 /** A throttled batch is retried as-is: every row keeps its key, so finished rows only replay. */
 const BATCH_ATTEMPTS = 5;
 
@@ -90,9 +91,24 @@ async function sha256Base64(file: File): Promise<string> {
  * Uploads every row's photo that is not stored yet: authorize 25 at a time, PUT straight to
  * storage, then finalize 25 at a time. Returns the rows' new file ids by row id.
  */
-export async function uploadPhotos(api: Api, rows: ImportRow[], update: RowUpdate, wait: Wait = sleep): Promise<Map<string, string>> {
+export async function uploadPhotos(
+  api: Api,
+  rows: ImportRow[],
+  update: RowUpdate,
+  wait: Wait = sleep,
+  onProgress?: UploadProgress
+): Promise<Map<string, string>> {
   const uploaded = new Map<string, string>();
   const pending = rows.flatMap((row) => (row.photo && !row.fileId ? [{ row, photo: row.photo }] : []));
+  let completed = 0;
+  const finished = new Set<string>();
+  const markFinished = (row: ImportRow) => {
+    if (finished.has(row.id)) return;
+    finished.add(row.id);
+    completed += 1;
+    onProgress?.(completed, pending.length);
+  };
+  onProgress?.(0, pending.length);
   for (const entries of chunk(pending)) {
     const group = entries.map((entry) => entry.row);
     group.forEach((row) => update(row.id, { status: "uploading", message: null }));
@@ -124,6 +140,7 @@ export async function uploadPhotos(api: Api, rows: ImportRow[], update: RowUpdat
       const authorization = successData(result, uploadAuthorizationResponse);
       if (!authorization) {
         update(row.id, { status: "error", message: rowMessage(result, "The photo could not be prepared for upload.") });
+        markFinished(row);
         return;
       }
       try {
@@ -131,6 +148,7 @@ export async function uploadPhotos(api: Api, rows: ImportRow[], update: RowUpdat
         put.push({ row, fileId: authorization.file_id });
       } catch (error) {
         update(row.id, { status: "error", message: error instanceof Error ? error.message : "The photo upload did not finish." });
+        markFinished(row);
       }
     });
     if (put.length === 0) continue;
@@ -155,6 +173,7 @@ export async function uploadPhotos(api: Api, rows: ImportRow[], update: RowUpdat
       } else {
         update(row.id, { status: "error", message: rowMessage(result, "The photo was not accepted.") });
       }
+      markFinished(row);
     }
   }
   return uploaded;
@@ -168,12 +187,14 @@ export async function readPhotos(
   api: Api,
   rows: Array<{ id: string; fileId: string }>,
   onRead: (id: string, fields: ExtractedClothingFields | null, message: string | null) => void,
-  wait: Wait = sleep
+  wait: Wait = sleep,
+  onStart?: (id: string, index: number, total: number) => void
 ): Promise<void> {
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
     if (!row) continue;
     if (index > 0) await wait(READ_INTERVAL_MS);
+    onStart?.(row.id, index, rows.length);
     for (let attempt = 1; attempt <= READ_RETRIES; attempt += 1) {
       try {
         const result = await api.extractClothingPhoto(row.fileId);

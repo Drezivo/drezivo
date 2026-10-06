@@ -78,8 +78,8 @@ export const envSchema = z
     RESEND_API_KEY: z.string().min(10).optional(),
     EMAIL_FILE_SINK_DIR: z.string().min(1).optional(),
     // Batch import: an OpenAI-compatible vision endpoint that reads garment details printed on
-    // catalogue photos (OpenRouter https://openrouter.ai/api/v1, NVIDIA Build
-    // https://integrate.api.nvidia.com/v1, or any compatible provider). All three unset = off.
+    // catalogue photos. For a zero-cost staging setup use OpenRouter
+    // https://openrouter.ai/api/v1 + inclusionai/ling-3.0-flash-vl:free. All three unset = off.
     CATALOGUE_VISION_BASE_URL: z.string().url().optional(),
     CATALOGUE_VISION_MODEL: z.string().trim().min(1).max(200).optional(),
     CATALOGUE_VISION_API_KEY: z.string().min(10).max(500).optional(),

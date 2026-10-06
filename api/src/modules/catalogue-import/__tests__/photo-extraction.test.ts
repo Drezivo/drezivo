@@ -20,6 +20,12 @@ const gemmaSettings = {
   apiKey: 'test-google-key',
   timeoutMs: 5_000,
 };
+const openRouterSettings = {
+  baseUrl: 'https://openrouter.ai/api/v1',
+  model: 'inclusionai/ling-3.0-flash-vl:free,openrouter/free',
+  apiKey: 'sk-or-test-key',
+  timeoutMs: 5_000,
+};
 const storage = {
   authorizeUpload: vi.fn(),
   inspectUploadedObject: vi.fn(),
@@ -193,6 +199,39 @@ describe('extractClothingPhoto', () => {
     expect(JSON.stringify(body.contents)).toContain('"inline_data":{"mime_type":"image/jpeg","data":"AQID"}');
   });
 
+  it('uses OpenRouter provider failover and model fallbacks for multimodal extraction', async () => {
+    const fetchImpl = vi.fn((url: string) =>
+      Promise.resolve(
+        url.startsWith('https://storage.test')
+          ? new Response(new Uint8Array([1, 2, 3]))
+          : reply('{"name":"Mira","rental_price":650,"measurements":{},"free_size":false}'),
+      ),
+    );
+
+    const fields = await extractClothingPhoto(input, {
+      settings: openRouterSettings,
+      storage,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(fields).toMatchObject({ name: 'Mira', rental_price_minor: '65000' });
+    const [url, init] = fetchImpl.mock.calls[1] as unknown as [string, RequestInit];
+    expect(url).toBe('https://openrouter.ai/api/v1/chat/completions');
+    expect(init.headers).toMatchObject({
+      authorization: 'Bearer sk-or-test-key',
+      'HTTP-Referer': 'https://drezivo.shop',
+      'X-Title': 'Drezivo',
+    });
+    const body = JSON.parse(init.body as string) as {
+      models: string[];
+      provider: { allow_fallbacks: boolean };
+      messages: unknown;
+    };
+    expect(body.models).toEqual(['inclusionai/ling-3.0-flash-vl:free', 'openrouter/free']);
+    expect(body.provider).toEqual({ allow_fallbacks: true });
+    expect(JSON.stringify(body.messages)).toContain('data:image/jpeg;base64,AQID');
+  });
+
   it('accepts the full catalogue upload size range instead of refusing 8-10 MB photos', async () => {
     file.row = { ...file.row, byte_size: String(9 * 1024 * 1024) };
     const fetchImpl = vi.fn((url: string) =>
@@ -244,10 +283,14 @@ describe('extractClothingPhoto', () => {
     });
 
     const down = vi.fn().mockResolvedValueOnce(photo()).mockResolvedValueOnce(reply('', 500));
-    await expect(extractClothingPhoto(input, { settings, storage, fetchImpl: down })).rejects.toMatchObject({ status: 503 });
+    await expect(extractClothingPhoto(input, { settings, storage, fetchImpl: down })).rejects.toMatchObject({
+      status: 503,
+      message: 'The photo reader provider returned HTTP 500. Try again in a moment or check the staging provider logs.',
+    });
 
     await expect(extractClothingPhoto(input, { settings: null, storage, fetchImpl: vi.fn() })).rejects.toMatchObject({
       status: 503,
+      code: 'PHOTO_READER_CONFIGURATION',
     });
   });
 
@@ -260,6 +303,7 @@ describe('extractClothingPhoto', () => {
       extractClothingPhoto(input, { settings, storage, fetchImpl }),
     ).rejects.toMatchObject({
       status: 503,
+      code: 'PHOTO_READER_CONFIGURATION',
       message: 'The configured photo model rejected the image request. Check the model setting.',
     });
   });
