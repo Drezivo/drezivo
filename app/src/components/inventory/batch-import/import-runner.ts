@@ -18,10 +18,11 @@ export type RowUpdate = (id: string, patch: Partial<ImportRow>) => void;
 
 /** Direct-to-storage PUTs and SHA-256 hashing run a few at a time so a phone stays responsive. */
 const FILE_CONCURRENCY = 4;
-/** Photo reading goes one call per photo; three in flight stays under the free tiers' limits. */
-const READ_CONCURRENCY = 3;
 const READ_RETRIES = 3;
 const RATE_LIMIT_WAIT_MS = 20_000;
+const TRANSIENT_WAIT_MS = 3_000;
+/** Keep sustained photo reads below the strict free-provider limits instead of bursting into 429s. */
+const READ_INTERVAL_MS = 2_100;
 /** A throttled batch is retried as-is: every row keeps its key, so finished rows only replay. */
 const BATCH_ATTEMPTS = 5;
 
@@ -169,22 +170,35 @@ export async function readPhotos(
   onRead: (id: string, fields: ExtractedClothingFields | null, message: string | null) => void,
   wait: Wait = sleep
 ): Promise<void> {
-  await eachLimited(rows, READ_CONCURRENCY, async (row) => {
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index];
+    if (!row) continue;
+    if (index > 0) await wait(READ_INTERVAL_MS);
     for (let attempt = 1; attempt <= READ_RETRIES; attempt += 1) {
       try {
         const result = await api.extractClothingPhoto(row.fileId);
         onRead(row.id, result.data.fields, null);
-        return;
+        break;
       } catch (error) {
-        if (error instanceof DrezivoApiError && error.status === 429 && attempt < READ_RETRIES) {
-          await wait(RATE_LIMIT_WAIT_MS);
-          continue;
+        if (error instanceof DrezivoApiError && attempt < READ_RETRIES) {
+          if (error.status === 429) {
+            await wait(RATE_LIMIT_WAIT_MS);
+            continue;
+          }
+          if (error.status === 503) {
+            await wait(TRANSIENT_WAIT_MS);
+            continue;
+          }
         }
-        onRead(row.id, null, "Could not read this photo. Fill it in by hand.");
-        return;
+        onRead(
+          row.id,
+          null,
+          error instanceof DrezivoApiError ? error.message : "Could not read this photo. Fill it in by hand."
+        );
+        break;
       }
     }
-  });
+  }
 }
 
 /** Finds or creates each category the rows use; names match case-insensitively. */
@@ -213,6 +227,7 @@ export async function createRows(
   rows: ImportRow[],
   defaults: ImportDefaults,
   categoryIds: Map<string, string>,
+  defaultGuideId: string | null,
   activate: boolean,
   update: RowUpdate,
   wait: Wait = sleep
@@ -227,7 +242,13 @@ export async function createRows(
             api.createImportClothing({
               items: group.map((row) => ({
                 idempotency_key: row.createKey,
-                request: toCreateRequest(row, defaults, categoryIds.get(row.category.trim().toLocaleLowerCase()) ?? "", activate),
+                request: toCreateRequest(
+                  row,
+                  defaults,
+                  categoryIds.get(row.category.trim().toLocaleLowerCase()) ?? "",
+                  activate,
+                  defaultGuideId
+                ),
               })),
             }),
           wait

@@ -1,4 +1,5 @@
 import {
+  MAX_UPLOAD_BYTES,
   extractedClothingFields,
   type ExtractedClothingFields,
 } from '@drezivo/contracts';
@@ -15,8 +16,6 @@ import {
 import { logger } from '../../shared/logger.js';
 import { readFileObject } from '../files/files.repository.js';
 
-/** Photos above this are not sent to the model; catalogue cards are far smaller. */
-const MAX_EXTRACT_BYTES = 8 * 1024 * 1024;
 const READ_URL_TTL_SECONDS = 120;
 const DEFAULT_RETRY_AFTER_SECONDS = 20;
 
@@ -127,6 +126,43 @@ export function parseModelReply(text: string): ExtractedClothingFields {
   return parsed.success ? parsed.data : EMPTY_EXTRACTION;
 }
 
+function geminiNativeGemmaEndpoint(settings: VisionSettings): string | null {
+  if (!/^gemma-4-/i.test(settings.model)) return null;
+
+  let baseUrl: URL;
+  try {
+    baseUrl = new URL(settings.baseUrl);
+  } catch {
+    return null;
+  }
+  if (baseUrl.hostname !== 'generativelanguage.googleapis.com') return null;
+
+  const apiPath = baseUrl.pathname.replace(/\/openai\/?$/i, '').replace(/\/$/, '');
+  return `${baseUrl.origin}${apiPath}/models/${encodeURIComponent(settings.model)}:generateContent`;
+}
+
+function openAiCompatibleContent(payload: unknown): string | null {
+  const content = (payload as { choices?: Array<{ message?: { content?: unknown } }> } | null)
+    ?.choices?.[0]?.message?.content;
+  return typeof content === 'string' && content.trim() ? content : null;
+}
+
+function nativeGeminiContent(payload: unknown): string | null {
+  const parts = (
+    payload as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: unknown; thought?: unknown }> } }>;
+    } | null
+  )?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return null;
+
+  const content = parts
+    .filter((part) => part.thought !== true && typeof part.text === 'string')
+    .map((part) => part.text as string)
+    .join('\n')
+    .trim();
+  return content || null;
+}
+
 export interface ExtractDependencies {
   storage?: ObjectStorage;
   fetchImpl?: typeof fetch;
@@ -149,7 +185,7 @@ export async function extractClothingPhoto(
     !file ||
     file.purpose !== 'catalogue_image' ||
     file.lifecycle_status !== 'accepted' ||
-    Number(file.byte_size) > MAX_EXTRACT_BYTES
+    Number(file.byte_size) > MAX_UPLOAD_BYTES
   ) {
     throw new NotFoundError('The photo could not be found.');
   }
@@ -162,33 +198,49 @@ export async function extractClothingPhoto(
   const image = await fetchImpl(read.readUrl, { signal: AbortSignal.timeout(settings.timeoutMs) }).catch(() => null);
   if (!image?.ok) throw new DependencyUnavailableError('The photo could not be read. Try again.');
   const bytes = Buffer.from(await image.arrayBuffer());
-  const dataUrl = `data:${file.mime_type};base64,${bytes.toString('base64')}`;
+  const base64 = bytes.toString('base64');
+  const dataUrl = `data:${file.mime_type};base64,${base64}`;
+  const nativeGemmaEndpoint = geminiNativeGemmaEndpoint(settings);
 
   let response: Response;
   try {
-    response = await fetchImpl(`${settings.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${settings.apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: settings.model,
-        temperature: 0,
-        max_tokens: 400,
-        // One user message, no system role: some providers (e.g. Gemma models on the Gemini API)
-        // reject system instructions, and every OpenAI-compatible endpoint accepts this shape.
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: `${SYSTEM_PROMPT}
-
-${USER_PROMPT}` },
-              { type: 'image_url', image_url: { url: dataUrl } },
+    response = nativeGemmaEndpoint
+      ? await fetchImpl(nativeGemmaEndpoint, {
+          method: 'POST',
+          headers: { 'x-goog-api-key': settings.apiKey, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: 'user',
+                parts: [
+                  { text: `${SYSTEM_PROMPT}\n\n${USER_PROMPT}` },
+                  { inline_data: { mime_type: file.mime_type, data: base64 } },
+                ],
+              },
             ],
-          },
-        ],
-      }),
-      signal: AbortSignal.timeout(settings.timeoutMs),
-    });
+            generationConfig: { temperature: 0, maxOutputTokens: 400 },
+          }),
+          signal: AbortSignal.timeout(settings.timeoutMs),
+        })
+      : await fetchImpl(`${settings.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${settings.apiKey}`, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            model: settings.model,
+            temperature: 0,
+            max_tokens: 400,
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: `${SYSTEM_PROMPT}\n\n${USER_PROMPT}` },
+                  { type: 'image_url', image_url: { url: dataUrl } },
+                ],
+              },
+            ],
+          }),
+          signal: AbortSignal.timeout(settings.timeoutMs),
+        });
   } catch {
     throw new DependencyUnavailableError('The photo reader did not answer in time. Try again.');
   }
@@ -202,13 +254,25 @@ ${USER_PROMPT}` },
   }
   if (!response.ok) {
     // Status only: the provider body can echo request details and never belongs in logs.
-    logger.warn({ status: response.status, model: settings.model }, 'catalogue photo extraction failed');
+    logger.warn(
+      {
+        status: response.status,
+        model: settings.model,
+        transport: nativeGemmaEndpoint ? 'gemini-native' : 'openai-compatible',
+      },
+      'catalogue photo extraction failed',
+    );
+    if (response.status === 401 || response.status === 403) {
+      throw new DependencyUnavailableError('The photo reader credentials were rejected. Check its API key.');
+    }
+    if ([400, 404, 415, 422].includes(response.status)) {
+      throw new DependencyUnavailableError('The configured photo model rejected the image request. Check the model setting.');
+    }
     throw new DependencyUnavailableError('The photo reader is unavailable right now.');
   }
 
-  const payload = (await response.json().catch(() => null)) as
-    | { choices?: Array<{ message?: { content?: unknown } }> }
-    | null;
-  const content = payload?.choices?.[0]?.message?.content;
-  return typeof content === 'string' ? parseModelReply(content) : EMPTY_EXTRACTION;
+  const payload = await response.json().catch(() => null);
+  const content = nativeGemmaEndpoint ? nativeGeminiContent(payload) : openAiCompatibleContent(payload);
+  if (!content) throw new DependencyUnavailableError('The photo reader returned an unreadable response. Try again.');
+  return parseModelReply(content);
 }

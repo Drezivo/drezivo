@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import type { CatalogueImportCapabilities, ExtractedClothingFields } from "@drezivo/contracts";
+import type { CatalogueImportCapabilities, ExtractedClothingFields, MeasurementGuide } from "@drezivo/contracts";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   CheckCircle2,
@@ -56,6 +56,8 @@ export function BatchImportPage() {
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [defaults, setDefaults] = useState<ImportDefaults>(DEFAULT_IMPORT_DEFAULTS);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [defaultGuide, setDefaultGuide] = useState<MeasurementGuide | null>(null);
+  const [guideLoading, setGuideLoading] = useState(true);
   const [capabilities, setCapabilities] = useState<CatalogueImportCapabilities | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -79,6 +81,10 @@ export function BatchImportPage() {
       (result) => setCapabilities(result.data),
       () => setCapabilities({ photo_extraction: false, max_batch_items: 25 })
     );
+    void api.getDefaultMeasurementGuide().then(
+      (result) => setDefaultGuide(result.data.guide),
+      () => setDefaultGuide(null)
+    ).finally(() => setGuideLoading(false));
   }, [api]);
 
   useEffect(() => {
@@ -86,7 +92,10 @@ export function BatchImportPage() {
   }, [workspaceKey]);
 
   const pendingRows = rows.filter((row) => row.status !== "created");
-  const problems = useMemo(() => new Map(rows.map((row) => [row.id, rowProblems(row, defaults)])), [rows, defaults]);
+  const problems = useMemo(
+    () => new Map(rows.map((row) => [row.id, rowProblems(row, defaults, defaultGuide?.id ?? null)])),
+    [rows, defaults, defaultGuide]
+  );
   const readyRows = pendingRows.filter((row) => (problems.get(row.id) ?? []).length === 0);
   const unreadRows = rows.filter((row) => row.photo && !row.read && row.status !== "created");
 
@@ -208,7 +217,7 @@ export function BatchImportPage() {
         const fileId = row.fileId ?? uploaded.get(row.id) ?? null;
         return row.photo && !fileId ? [] : [{ ...row, fileId }];
       });
-      const created = await createRows(api, creatable, defaults, categoryIds, publish, updateRow);
+      const created = await createRows(api, creatable, defaults, categoryIds, defaultGuide?.id ?? null, publish, updateRow);
       const refreshed = await api.getCatalogueCategories().catch(() => null);
       if (refreshed) setCategories(refreshed.data.items.filter((category) => category.status === "active").map(({ id, name }) => ({ id, name })));
       setAddedCount((count) => count + created);
@@ -396,6 +405,8 @@ export function BatchImportPage() {
               row={row}
               defaults={defaults}
               categoryNames={categoryNames}
+              defaultGuide={defaultGuide}
+              guideLoading={guideLoading}
               problems={problems.get(row.id) ?? []}
               disabled={working || row.status === "created"}
               onChange={(patch) => editRow(row.id, patch)}
@@ -407,6 +418,10 @@ export function BatchImportPage() {
           {categoryNames.map((name) => (
             <option key={name} value={name} />
           ))}
+        </datalist>
+        <datalist id="batch-subcategories">
+          <option value="LONG" />
+          <option value="MINI" />
         </datalist>
       </div>
 
@@ -582,6 +597,8 @@ function RowEditor({
   row,
   defaults,
   categoryNames,
+  defaultGuide,
+  guideLoading,
   problems,
   disabled,
   onChange,
@@ -591,6 +608,8 @@ function RowEditor({
   row: ImportRow;
   defaults: ImportDefaults;
   categoryNames: string[];
+  defaultGuide: MeasurementGuide | null;
+  guideLoading: boolean;
   problems: Array<{ field: string; message: string }>;
   disabled: boolean;
   onChange: (patch: Partial<ImportRow>) => void;
@@ -623,6 +642,17 @@ function RowEditor({
               onChange={(event) => onChange({ category: event.target.value })}
             />
           </Field>
+          <Field label="Subcategory" className="col-span-2 lg:col-span-2">
+            <Input
+              list="batch-subcategories"
+              value={row.subcategory}
+              maxLength={120}
+              disabled={disabled}
+              className={inputClass("subcategory")}
+              placeholder="None, LONG, MINI or custom"
+              onChange={(event) => onChange({ subcategory: event.target.value })}
+            />
+          </Field>
           <Field label="Rental price (₱)">
             <Input inputMode="decimal" value={row.price} disabled={disabled} className={inputClass("price")} onChange={(event) => onChange({ price: event.target.value })} />
           </Field>
@@ -631,10 +661,16 @@ function RowEditor({
           </Field>
           <Field label="Size" className="col-span-2 lg:col-span-2">
             <div className="flex items-center gap-2">
-              <label className="flex shrink-0 items-center gap-1.5 text-sm text-dashboard-navy">
-                <input type="checkbox" className="h-4 w-4 accent-dashboard-accent" checked={row.freeSize} disabled={disabled} onChange={(event) => onChange({ freeSize: event.target.checked })} />
-                Free size
-              </label>
+              <select
+                aria-label={`Sizing mode for ${label}`}
+                className="h-ws-control shrink-0 rounded-md border border-dashboard-border bg-dashboard-surface px-2 text-ws-input text-dashboard-navy"
+                value={row.freeSize ? "free_size" : "sized"}
+                disabled={disabled}
+                onChange={(event) => onChange({ freeSize: event.target.value === "free_size" })}
+              >
+                <option value="sized">Sized</option>
+                <option value="free_size">Free size</option>
+              </select>
               {row.freeSize ? (
                 <Input value={row.fitNote} placeholder="Fit note, e.g. Fits Small to XL" disabled={disabled} onChange={(event) => onChange({ fitNote: event.target.value })} />
               ) : (
@@ -644,29 +680,54 @@ function RowEditor({
           </Field>
           <fieldset className="col-span-2 min-w-0 lg:col-span-3">
             <legend className="mb-1 text-xs font-medium text-dashboard-muted">Measurements</legend>
-            <div className="grid grid-cols-5 gap-1.5">
-              {MEASUREMENT_FIELDS.map((field) => (
-                <Input
-                  key={field}
-                  aria-label={`${field} (${row.unit})`}
-                  placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
-                  inputMode="decimal"
-                  value={row[field]}
+            <div className="space-y-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <select
+                  aria-label={`Measurement mode for ${label}`}
+                  className={cn(
+                    "h-ws-control min-w-40 rounded-md border border-dashboard-border bg-dashboard-surface px-2 text-ws-input text-dashboard-navy",
+                    inputClass("measurementMode")
+                  )}
+                  value={row.measurementMode}
                   disabled={disabled}
-                  className={cn("px-2", inputClass(field))}
-                  onChange={(event) => onChange({ [field]: event.target.value })}
-                />
-              ))}
-              <select
-                aria-label="Measurement unit"
-                className="h-ws-control rounded-md border border-dashboard-border bg-dashboard-surface px-1.5 text-ws-input text-dashboard-navy"
-                value={row.unit}
-                disabled={disabled}
-                onChange={(event) => onChange({ unit: event.target.value as ImportRow["unit"] })}
-              >
-                <option value="in">in</option>
-                <option value="cm">cm</option>
-              </select>
+                  onChange={(event) => onChange({ measurementMode: event.target.value as ImportRow["measurementMode"] })}
+                >
+                  <option value="default_guide" disabled={!defaultGuide && !guideLoading}>Default guide</option>
+                  <option value="custom">Custom measurements</option>
+                  <option value="none">No measurements</option>
+                </select>
+                {row.measurementMode === "default_guide" ? (
+                  <span className="truncate text-xs text-dashboard-muted">
+                    {guideLoading ? "Loading guide…" : defaultGuide?.name ?? "No default guide set"}
+                  </span>
+                ) : null}
+              </div>
+              {row.measurementMode === "custom" ? (
+                <div className="grid grid-cols-5 gap-1.5">
+                  {MEASUREMENT_FIELDS.map((field) => (
+                    <Input
+                      key={field}
+                      aria-label={`${field} (${row.unit})`}
+                      placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
+                      inputMode="decimal"
+                      value={row[field]}
+                      disabled={disabled}
+                      className={cn("px-2", inputClass(field))}
+                      onChange={(event) => onChange({ [field]: event.target.value })}
+                    />
+                  ))}
+                  <select
+                    aria-label="Measurement unit"
+                    className="h-ws-control rounded-md border border-dashboard-border bg-dashboard-surface px-1.5 text-ws-input text-dashboard-navy"
+                    value={row.unit}
+                    disabled={disabled}
+                    onChange={(event) => onChange({ unit: event.target.value as ImportRow["unit"] })}
+                  >
+                    <option value="in">in</option>
+                    <option value="cm">cm</option>
+                  </select>
+                </div>
+              ) : null}
             </div>
           </fieldset>
           <Field label="Color">

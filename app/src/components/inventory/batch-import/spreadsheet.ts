@@ -8,9 +8,11 @@ export const TEMPLATE_COLUMNS = [
   "Photo file",
   "Name",
   "Category",
+  "Subcategory",
   "Size",
   "Fit note",
   "Color",
+  "Measurement mode",
   "Unit",
   "Bust",
   "Waist",
@@ -28,11 +30,15 @@ const HEADER_ALIASES: Record<string, keyof SheetRecord> = {
   name: "name",
   dressname: "name",
   category: "category",
+  subcategory: "subcategory",
+  subcategorylabel: "subcategory",
   size: "size",
   fitnote: "fitNote",
   note: "fitNote",
   color: "color",
   colour: "color",
+  measurementmode: "measurementMode",
+  measurements: "measurementMode",
   unit: "unit",
   bust: "bust",
   chest: "bust",
@@ -52,9 +58,11 @@ type SheetRecord = {
   photo: string;
   name: string;
   category: string;
+  subcategory: string;
   size: string;
   fitNote: string;
   color: string;
+  measurementMode: string;
   unit: string;
   bust: string;
   waist: string;
@@ -142,14 +150,28 @@ export function rowsFromSheet(table: string[][], photos: File[], defaults: Impor
     if (photoName && !photo) unmatchedPhotos.push(record.photo ?? "");
     if (photo) photosByName.delete(photoName);
     const unit = record.unit?.toLowerCase().startsWith("c") ? "cm" : record.unit?.toLowerCase().startsWith("i") ? "in" : defaults.unit;
+    const hasMeasurements = [record.bust, record.waist, record.hips, record.length].some((value) => Boolean(value?.trim()));
+    const requestedMeasurementMode = record.measurementMode?.trim().toLowerCase() ?? "";
+    const measurementMode =
+      /^(none|no|no measurements?)$/.test(requestedMeasurementMode)
+        ? "none"
+        : /^(custom|custom measurements?)$/.test(requestedMeasurementMode)
+          ? "custom"
+          : /^(default|default guide|guide)$/.test(requestedMeasurementMode)
+            ? "default_guide"
+            : hasMeasurements
+              ? "custom"
+              : "default_guide";
     return emptyRow(defaults, {
       photo,
       name: record.name ?? "",
       category: record.category ?? "",
+      subcategory: record.subcategory ?? "",
       freeSize,
       sizeLabel: freeSize ? "" : size,
       fitNote: record.fitNote ?? "",
       color: record.color ?? "",
+      measurementMode,
       unit,
       bust: record.bust ?? "",
       waist: record.waist ?? "",
@@ -164,6 +186,22 @@ export function rowsFromSheet(table: string[][], photos: File[], defaults: Impor
 
 /** A ready-to-fill CSV that Excel, Google Sheets and Numbers all open. */
 export function templateCsv(): string {
-  const example = ["mirabelle.jpg", "Mirabelle", "Evening Dresses", "Free size", "", "Blush pink", "in", "30", "24", "", "22", "500", "500"];
+  const example = [
+    "mirabelle.jpg",
+    "Mirabelle",
+    "Evening Dresses",
+    "LONG",
+    "Free size",
+    "",
+    "Blush pink",
+    "Custom",
+    "in",
+    "30",
+    "24",
+    "",
+    "22",
+    "500",
+    "500",
+  ];
   return `${TEMPLATE_COLUMNS.join(",")}\r\n${example.join(",")}\r\n`;
 }

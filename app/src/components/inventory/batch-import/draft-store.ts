@@ -56,7 +56,28 @@ export function saveBatch(workspaceKey: string, defaults: ImportDefaults, rows: 
 
 export function loadBatch(workspaceKey: string): Promise<SavedBatch | null> {
   return run<SavedBatch | undefined>("readonly", (store) => store.get(workspaceKey) as IDBRequest<SavedBatch | undefined>).then(
-    (batch) => (batch && Array.isArray(batch.rows) ? batch : null)
+    (batch) => {
+      if (!batch || !Array.isArray(batch.rows)) return null;
+      return {
+        ...batch,
+        rows: batch.rows.map((row) => {
+          const legacy = row as ImportRow & { subcategory?: unknown; measurementMode?: unknown };
+          const hasMeasurements = [legacy.bust, legacy.waist, legacy.hips, legacy.length].some(
+            (value) => typeof value === "string" && value.trim() !== ""
+          );
+          return {
+            ...legacy,
+            subcategory: typeof legacy.subcategory === "string" ? legacy.subcategory : "",
+            measurementMode:
+              legacy.measurementMode === "default_guide" || legacy.measurementMode === "custom" || legacy.measurementMode === "none"
+                ? legacy.measurementMode
+                : hasMeasurements
+                  ? "custom"
+                  : "default_guide",
+          };
+        }),
+      };
+    }
   );
 }
 

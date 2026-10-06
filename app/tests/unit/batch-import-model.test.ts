@@ -15,6 +15,7 @@ import { parseCsv, rowsFromSheet, templateCsv } from "@/components/inventory/bat
 const defaults = DEFAULT_IMPORT_DEFAULTS;
 const CATEGORY_ID = "11111111-1111-4111-8111-111111111111";
 const FILE_ID = "22222222-2222-4222-8222-222222222222";
+const GUIDE_ID = "33333333-3333-4333-8333-333333333333";
 
 function photo(name: string, path = "", type = "image/jpeg", size = 1000): File {
   const file = new File([new Uint8Array(size)], name, { type });
@@ -51,7 +52,17 @@ describe("applyExtraction", () => {
       measurements: { Bust: 30, Waist: 24, Length: 22 },
       color_label: "Blush pink",
     });
-    expect(next).toMatchObject({ name: "Mirabelle", price: "450", bust: "30", waist: "24", length: "22", hips: "", unit: "in", read: true });
+    expect(next).toMatchObject({
+      name: "Mirabelle",
+      price: "450",
+      bust: "30",
+      waist: "24",
+      length: "22",
+      hips: "",
+      unit: "in",
+      measurementMode: "custom",
+      read: true,
+    });
   });
 
   it("turns a wedding-gown free-size range into a fit note", () => {
@@ -70,18 +81,23 @@ describe("applyExtraction", () => {
 
 describe("validation and the create request", () => {
   it("lists what blocks a row", () => {
-    const problems = rowProblems(emptyRow(defaults, { freeSize: false, bust: "thirty" }), defaults).map((problem) => problem.field);
-    expect(problems).toEqual(["name", "category", "sizeLabel", "price", "bust"]);
+    const problems = rowProblems(
+      emptyRow(defaults, { freeSize: false, measurementMode: "custom", bust: "thirty" }),
+      defaults
+    ).map((problem) => problem.field);
+    expect(problems).toEqual(["name", "category", "sizeLabel", "price", "bust", "measurementMode"]);
   });
 
   it("builds the same create request the single form sends", () => {
     const row = emptyRow(defaults, {
       name: " Lisette ",
       category: "Evening Dresses",
+      subcategory: " LONG ",
       price: "₱800",
       bust: "30",
       waist: "26",
       length: "60",
+      measurementMode: "custom",
       color: "Black",
       fileId: FILE_ID,
     });
@@ -89,6 +105,7 @@ describe("validation and the create request", () => {
     expect(toCreateRequest(row, defaults, CATEGORY_ID, false)).toEqual({
       name: "Lisette",
       description: "",
+      subcategory: "LONG",
       category_id: CATEGORY_ID,
       color_label: "Black",
       image_file_ids: [FILE_ID],
@@ -107,11 +124,29 @@ describe("validation and the create request", () => {
     });
   });
 
-  it("never publishes a row without a photo, and uses no measurements when none are given", () => {
+  it("never publishes a row without a photo, and reuses the default guide like single-item add", () => {
     const row = emptyRow(defaults, { name: "A", category: "C", price: "1" });
-    const request = toCreateRequest(row, defaults, CATEGORY_ID, true);
+    const request = toCreateRequest(row, defaults, CATEGORY_ID, true, GUIDE_ID);
     expect(request.activate).toBe(false);
-    expect(request.sizes[0]).toMatchObject({ measurement_mode: "none", measurements: {} });
+    expect(request.sizes[0]).toMatchObject({
+      measurement_mode: "default_guide",
+      measurement_guide_id: GUIDE_ID,
+      measurements: {},
+    });
+  });
+
+  it("supports an explicit no-measurements row without a default guide", () => {
+    const row = emptyRow(defaults, {
+      name: "A",
+      category: "C",
+      price: "1",
+      measurementMode: "none",
+    });
+    expect(rowProblems(row, defaults)).toEqual([]);
+    expect(toCreateRequest(row, defaults, CATEGORY_ID, false).sizes[0]).toMatchObject({
+      measurement_mode: "none",
+      measurements: {},
+    });
   });
 
   it("parses peso amounts the way owners type them", () => {
@@ -138,10 +173,24 @@ describe("spreadsheet import", () => {
 
   it("matches photos by file name and reads loose headers", () => {
     const mirabelle = photo("Mirabelle.JPG");
-    const table = parseCsv("Photo,Dress name,Category,Size,Bust,Rental fee,Mystery\nmirabelle.jpg,Mirabelle,Evening,M,30,500,x\nmissing.jpg,Other,Evening,FS,,800,y\n");
+    const table = parseCsv(
+      "Photo,Dress name,Category,Subcategory,Size,Measurement mode,Bust,Rental fee,Mystery\n" +
+        "mirabelle.jpg,Mirabelle,Evening,MINI,M,Custom,30,500,x\n" +
+        "missing.jpg,Other,Evening,,FS,No measurements,,800,y\n"
+    );
     const { rows, unmatchedPhotos, ignoredColumns } = rowsFromSheet(table, [mirabelle], defaults);
-    expect(rows[0]).toMatchObject({ photo: mirabelle, name: "Mirabelle", category: "Evening", freeSize: false, sizeLabel: "M", bust: "30", price: "500" });
-    expect(rows[1]).toMatchObject({ photo: null, freeSize: true, sizeLabel: "" });
+    expect(rows[0]).toMatchObject({
+      photo: mirabelle,
+      name: "Mirabelle",
+      category: "Evening",
+      subcategory: "MINI",
+      freeSize: false,
+      sizeLabel: "M",
+      measurementMode: "custom",
+      bust: "30",
+      price: "500",
+    });
+    expect(rows[1]).toMatchObject({ photo: null, freeSize: true, sizeLabel: "", measurementMode: "none" });
     expect(unmatchedPhotos).toEqual(["missing.jpg"]);
     expect(ignoredColumns).toEqual(["Mystery"]);
   });

@@ -14,6 +14,12 @@ vi.mock('../../files/files.repository.js', () => ({
 const { EMPTY_EXTRACTION, extractClothingPhoto, parseModelReply } = await import('../photo-extraction.service.js');
 
 const settings = { baseUrl: 'https://vision.test/v1', model: 'test/vision', apiKey: 'sk-test-0000000000', timeoutMs: 5_000 };
+const gemmaSettings = {
+  baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+  model: 'gemma-4-31b-it',
+  apiKey: 'test-google-key',
+  timeoutMs: 5_000,
+};
 const storage = {
   authorizeUpload: vi.fn(),
   inspectUploadedObject: vi.fn(),
@@ -106,6 +112,82 @@ describe('extractClothingPhoto', () => {
     expect((body.messages as Array<{ role: string }>).map((message) => message.role)).toEqual(['user']);
   });
 
+  it('uses Google native generateContent for Gemma 4 image requests', async () => {
+    const fetchImpl = vi.fn((url: string) =>
+      Promise.resolve(
+        url.startsWith('https://storage.test')
+          ? new Response(new Uint8Array([1, 2, 3]))
+          : new Response(
+              JSON.stringify({
+                candidates: [
+                  {
+                    content: {
+                      parts: [
+                        {
+                          text: '{"name":"Astrid","rental_price":1000,"size":"Small-XL","free_size":true,"unit":null,"measurements":{},"color":"White"}',
+                        },
+                      ],
+                    },
+                  },
+                ],
+              }),
+            ),
+      ),
+    );
+
+    const fields = await extractClothingPhoto(input, {
+      settings: gemmaSettings,
+      storage,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(fields).toMatchObject({
+      name: 'Astrid',
+      rental_price_minor: '100000',
+      size_label: 'Small-XL',
+      free_size: true,
+    });
+    const [url, init] = fetchImpl.mock.calls[1] as unknown as [string, RequestInit];
+    expect(url).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemma-4-31b-it:generateContent',
+    );
+    expect((init.headers as Record<string, string>)['x-goog-api-key']).toBe('test-google-key');
+    const body = JSON.parse(init.body as string) as { contents: unknown };
+    expect(JSON.stringify(body.contents)).toContain('"inline_data":{"mime_type":"image/jpeg","data":"AQID"}');
+  });
+
+  it('accepts the full catalogue upload size range instead of refusing 8-10 MB photos', async () => {
+    file.row = { ...file.row, byte_size: String(9 * 1024 * 1024) };
+    const fetchImpl = vi.fn((url: string) =>
+      Promise.resolve(
+        url.startsWith('https://storage.test')
+          ? new Response(new Uint8Array([1]))
+          : reply('{"name":"Large card","rental_price":500,"measurements":{},"free_size":false}'),
+      ),
+    );
+
+    await expect(
+      extractClothingPhoto(input, { settings, storage, fetchImpl: fetchImpl as unknown as typeof fetch }),
+    ).resolves.toMatchObject({ name: 'Large card' });
+  });
+
+  it('fails visibly when the provider returns no usable text instead of silently filling nothing', async () => {
+    const fetchImpl = vi.fn((url: string) =>
+      Promise.resolve(
+        url.startsWith('https://storage.test')
+          ? new Response(new Uint8Array([1]))
+          : new Response(JSON.stringify({ choices: [{ message: {} }] })),
+      ),
+    );
+
+    await expect(
+      extractClothingPhoto(input, { settings, storage, fetchImpl: fetchImpl as unknown as typeof fetch }),
+    ).rejects.toMatchObject({
+      status: 503,
+      message: 'The photo reader returned an unreadable response. Try again.',
+    });
+  });
+
   it('refuses photos that are not accepted catalogue images of this shop', async () => {
     const accepted = file.row;
     for (const row of [null, { ...accepted, purpose: 'payment_receipt' }, { ...accepted, lifecycle_status: 'pending_upload' }]) {
@@ -129,6 +211,19 @@ describe('extractClothingPhoto', () => {
 
     await expect(extractClothingPhoto(input, { settings: null, storage, fetchImpl: vi.fn() })).rejects.toMatchObject({
       status: 503,
+    });
+  });
+
+  it('returns a useful error when the configured model rejects an image request', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(new Uint8Array([1])))
+      .mockResolvedValueOnce(reply('', 400));
+
+    await expect(
+      extractClothingPhoto(input, { settings, storage, fetchImpl }),
+    ).rejects.toMatchObject({
+      status: 503,
+      message: 'The configured photo model rejected the image request. Check the model setting.',
     });
   });
 });

@@ -1,4 +1,9 @@
-import type { CreateClothingRequest, ExtractedClothingFields } from "@drezivo/contracts";
+import {
+  createClothingRequest,
+  type CreateClothingRequest,
+  type ExtractedClothingFields,
+  type MeasurementMode,
+} from "@drezivo/contracts";
 
 /**
  * One garment in a batch import. Every editable value is kept as the text the owner typed, so a
@@ -19,12 +24,16 @@ export type ImportRow = {
   createKey: string;
   name: string;
   category: string;
+  /** Optional style-level label. LONG/MINI are common presets; any trimmed custom value is valid. */
+  subcategory: string;
   color: string;
   /** Free size when true; otherwise `sizeLabel` is the one size this piece comes in. */
   freeSize: boolean;
   sizeLabel: string;
   /** Free-text fit note shown in the description, e.g. "Fits Small to XL". */
   fitNote: string;
+  /** Same measurement behavior as the single Add Clothing form. */
+  measurementMode: MeasurementMode;
   unit: "in" | "cm";
   bust: string;
   waist: string;
@@ -76,10 +85,12 @@ export function emptyRow(defaults: ImportDefaults, patch: Partial<ImportRow> = {
     createKey: newKey("create"),
     name: "",
     category: "",
+    subcategory: "",
     color: "",
     freeSize: true,
     sizeLabel: "",
     fitNote: "",
+    measurementMode: "default_guide",
     unit: defaults.unit,
     bust: "",
     waist: "",
@@ -140,6 +151,7 @@ export function applyExtraction(row: ImportRow, fields: ExtractedClothingFields)
     freeSize: fields.size_label && !fields.free_size ? false : row.freeSize,
     sizeLabel: fields.free_size ? row.sizeLabel : fill(row.sizeLabel, fields.size_label),
     fitNote: fields.free_size ? fill(row.fitNote, fields.size_label ? `Fits ${fields.size_label}` : null) : row.fitNote,
+    measurementMode: hasMeasurements ? "custom" : row.measurementMode,
     unit: hasMeasurements && fields.measurement_unit ? fields.measurement_unit : row.unit,
     bust: measure("bust", row.bust),
     waist: measure("waist", row.waist),
@@ -174,19 +186,31 @@ function measurementValue(value: string): number | null | "invalid" {
 export type RowProblem = { field: keyof ImportRow | "photo"; message: string };
 
 /** What blocks this row from being created, in the order the owner should fix it. */
-export function rowProblems(row: ImportRow, defaults: ImportDefaults): RowProblem[] {
+export function rowProblems(row: ImportRow, defaults: ImportDefaults, defaultGuideId: string | null = null): RowProblem[] {
   const problems: RowProblem[] = [];
   if (!row.name.trim()) problems.push({ field: "name", message: "Add a name." });
   if (row.name.trim().length > 200) problems.push({ field: "name", message: "Name is too long." });
   if (!row.category.trim()) problems.push({ field: "category", message: "Choose a category." });
   else if (row.category.trim().length > 120) problems.push({ field: "category", message: "Category name is too long." });
+  if (row.subcategory.trim().length > 120) problems.push({ field: "subcategory", message: "Subcategory is too long." });
   if (!row.freeSize && !row.sizeLabel.trim()) problems.push({ field: "sizeLabel", message: "Add a size or mark it Free size." });
+  if (row.measurementMode === "default_guide" && !defaultGuideId) {
+    problems.push({ field: "measurementMode", message: "Choose Custom/No measurements, or set a default measurement guide." });
+  }
   if (pesosToMinor(row.price) === null) problems.push({ field: "price", message: "Add the rental price." });
   if (pesosToMinor(row.deposit.trim() || defaults.deposit) === null) {
     problems.push({ field: "deposit", message: "Deposit must be a peso amount." });
   }
-  for (const field of MEASUREMENT_FIELDS) {
-    if (measurementValue(row[field]) === "invalid") problems.push({ field, message: `${capitalize(field)} must be a number.` });
+  if (row.measurementMode === "custom") {
+    let hasMeasurement = false;
+    for (const field of MEASUREMENT_FIELDS) {
+      const value = measurementValue(row[field]);
+      if (value === "invalid") problems.push({ field, message: `${capitalize(field)} must be a number.` });
+      if (typeof value === "number") hasMeasurement = true;
+    }
+    if (!hasMeasurement) {
+      problems.push({ field: "measurementMode", message: "Add at least one custom measurement." });
+    }
   }
   return problems;
 }
@@ -196,13 +220,20 @@ function capitalize(value: string): string {
 }
 
 /** Converts a valid row into the same request the single Add Clothing form sends. */
-export function toCreateRequest(row: ImportRow, defaults: ImportDefaults, categoryId: string, activate: boolean): CreateClothingRequest {
+export function toCreateRequest(
+  row: ImportRow,
+  defaults: ImportDefaults,
+  categoryId: string,
+  activate: boolean,
+  defaultGuideId: string | null = null
+): CreateClothingRequest {
   const measurements: Record<string, number> = {};
-  for (const field of MEASUREMENT_FIELDS) {
-    const value = measurementValue(row[field]);
-    if (typeof value === "number") measurements[field] = value;
+  if (row.measurementMode === "custom") {
+    for (const field of MEASUREMENT_FIELDS) {
+      const value = measurementValue(row[field]);
+      if (typeof value === "number") measurements[field] = value;
+    }
   }
-  const hasMeasurements = Object.keys(measurements).length > 0;
   const deposit = pesosToMinor(row.deposit.trim() || defaults.deposit) ?? "0";
   const common = {
     rental_price_minor: pesosToMinor(row.price) ?? "0",
@@ -211,9 +242,10 @@ export function toCreateRequest(row: ImportRow, defaults: ImportDefaults, catego
     prep_minutes: 0 as const,
     turnaround_minutes: Math.min(Math.max(Number(defaults.recoveryDays) || 0, 0), 14) * 24 * 60,
   };
-  return {
+  return createClothingRequest.parse({
     name: row.name.trim(),
     description: row.fitNote.trim(),
+    subcategory: row.subcategory.trim() || null,
     category_id: categoryId as CreateClothingRequest["category_id"],
     color_label: row.color.trim() || null,
     image_file_ids: row.fileId ? [row.fileId as CreateClothingRequest["image_file_ids"][number]] : [],
@@ -221,7 +253,8 @@ export function toCreateRequest(row: ImportRow, defaults: ImportDefaults, catego
     sizes: [
       {
         size_label: row.freeSize ? null : row.sizeLabel.trim(),
-        measurement_mode: hasMeasurements ? "custom" : "none",
+        measurement_mode: row.measurementMode,
+        ...(row.measurementMode === "default_guide" ? { measurement_guide_id: defaultGuideId } : {}),
         measurement_unit: row.unit,
         measurements,
       },
@@ -231,7 +264,7 @@ export function toCreateRequest(row: ImportRow, defaults: ImportDefaults, catego
         ? { mode: "fixed_duration", included_days: Math.min(Math.max(Number(defaults.includedDays) || 1, 1), 30), ...common }
         : { mode: "daily", ...common },
     activate: activate && row.fileId !== null,
-  };
+  });
 }
 
 /** A row's content changed after a failed attempt: that is a new intent and gets new keys. */
