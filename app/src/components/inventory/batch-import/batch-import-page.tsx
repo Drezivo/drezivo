@@ -4,12 +4,12 @@ import { useAuth } from "@clerk/nextjs";
 import type { CatalogueImportCapabilities, ExtractedClothingFields, MeasurementGuide } from "@drezivo/contracts";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
+  AlertTriangle,
   CheckCircle2,
   Download,
   FileSpreadsheet,
   FolderOpen,
   ImagePlus,
-  Loader2,
   Plus,
   ScanText,
   Trash2,
@@ -42,11 +42,23 @@ import { readSpreadsheet, rowsFromSheet, templateCsv } from "./spreadsheet";
 type Phase = "idle" | "uploading" | "reading" | "saving";
 type Category = { id: string; name: string };
 type Notice = { tone: "success" | "error" | "info"; text: string };
+type ActionFeedback = {
+  tone: "success" | "warning" | "error";
+  title: string;
+  message: string;
+  detail?: string | null;
+};
 type PhotoProgress = {
   stage: "uploading" | "reading";
-  done: number;
+  processed: number;
   total: number;
+  outcome: "working" | "success" | "error";
 };
+
+const PHOTO_PROGRESS_PHRASES = {
+  uploading: ["Preparing photos", "Securing uploads", "Getting images ready"],
+  reading: ["Reading visible details", "Checking size and measurements", "Looking for color and price", "Matching clothing fields"],
+} as const;
 
 const PHASE_LABEL: Record<Exclude<Phase, "idle">, string> = {
   uploading: "Uploading photos…",
@@ -66,8 +78,8 @@ export function BatchImportPage() {
   const [guideLoading, setGuideLoading] = useState(true);
   const [capabilities, setCapabilities] = useState<CatalogueImportCapabilities | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [photoProgress, setPhotoProgress] = useState<PhotoProgress | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<ActionFeedback | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [savedDraft, setSavedDraft] = useState<SavedBatch | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -168,19 +180,29 @@ export function BatchImportPage() {
     busy.current = true;
     setPhase(next);
     setNotice(null);
+    setActionFeedback(null);
     try {
       await work();
     } catch (error) {
+      const message =
+        error instanceof DrezivoApiError || error instanceof Error
+          ? error.message
+          : "Something went wrong. Your rows are still here; try again.";
       setNotice({
         tone: "error",
-        text: error instanceof DrezivoApiError || error instanceof Error ? error.message : "Something went wrong. Your rows are still here; try again.",
+        text: message,
+      });
+      setActionFeedback({
+        tone: "error",
+        title: next === "reading" ? "Photo reading stopped" : "Action could not finish",
+        message: next === "reading" ? "Drezivo could not finish reading this batch." : "Drezivo could not finish this action.",
+        detail: message,
       });
       // Rows caught mid-step go back to editable, keeping their keys so a retry replays.
       setRows((current) => current.map((row) => (["uploading", "reading", "saving"].includes(row.status) ? { ...row, status: "draft" } : row)));
     } finally {
       busy.current = false;
       setPhase("idle");
-      setProgress(null);
       setPhotoProgress(null);
     }
   };
@@ -190,39 +212,94 @@ export function BatchImportPage() {
       const targets = rows.filter((row) => row.photo && !row.read && row.status !== "created");
       const pendingUploads = targets.filter((row) => row.photo && !row.fileId).length;
       if (pendingUploads > 0) {
-        setPhotoProgress({ stage: "uploading", done: 0, total: pendingUploads });
+        setPhotoProgress({ stage: "uploading", processed: 0, total: pendingUploads, outcome: "working" });
       }
       const uploaded = await uploadPhotos(api, targets, updateRow, undefined, (done, total) => {
-        if (total > 0) setPhotoProgress({ stage: "uploading", done, total });
+        if (total > 0) setPhotoProgress({ stage: "uploading", processed: done, total, outcome: "working" });
       });
       const readable = targets.flatMap((row) => {
         const fileId = row.fileId ?? uploaded.get(row.id);
         return fileId ? [{ ...row, fileId }] : [];
       });
       let done = 0;
-      setProgress({ done, total: readable.length });
-      if (readable.length > 0) setPhotoProgress({ stage: "reading", done, total: readable.length });
+      let successfulReads = 0;
+      let failedReads = 0;
+      let firstFailure: string | null = null;
+      if (readable.length > 0) {
+        setPhotoProgress({ stage: "reading", processed: 0, total: readable.length, outcome: "working" });
+      }
       readable.forEach((row) => updateRow(row.id, { status: "reading" }));
       await readPhotos(
         api,
         readable.map((row) => ({ id: row.id, fileId: row.fileId })),
         (id, fields: ExtractedClothingFields | null, message) => {
           done += 1;
-          setProgress({ done, total: readable.length });
-          setPhotoProgress({ stage: "reading", done, total: readable.length });
+          if (fields) successfulReads += 1;
+          else {
+            failedReads += 1;
+            if (!firstFailure && message) firstFailure = message;
+          }
+          setPhotoProgress({
+            stage: "reading",
+            processed: done,
+            total: readable.length,
+            outcome: fields ? "success" : "error",
+          });
           setRows((current) =>
             current.map((row) =>
-              row.id !== id ? row : fields ? { ...applyExtraction(row, fields), status: "draft" } : { ...row, read: true, status: "draft", message }
+              row.id !== id
+                ? row
+                : fields
+                  ? { ...applyExtraction(row, fields), status: "draft", message: null }
+                  : { ...row, read: false, status: "draft", message }
             )
           );
-        }
+        },
+        undefined,
+        () => {
+          setPhotoProgress({
+            stage: "reading",
+            processed: done,
+            total: readable.length,
+            outcome: "working",
+          });
+        },
       );
       setDirty(true);
-      setNotice(
-        readable.length > 0
-          ? { tone: "info", text: "Details filled in from the photos. Check each row before adding: names and prices are suggestions." }
-          : { tone: "error", text: "No photos could be prepared for reading. Check the rows marked in red and try again." }
-      );
+      if (readable.length === 0) {
+        setActionFeedback({
+          tone: "error",
+          title: "No photos were read",
+          message: "The photos could not be prepared for the reader.",
+          detail: "Check the rows marked in red, then retry.",
+        });
+      } else if (successfulReads === 0) {
+        setActionFeedback({
+          tone: "error",
+          title: "Couldn’t read these photos",
+          message: "No clothing details were filled in. The photos are still available to retry.",
+          detail: firstFailure,
+        });
+      } else if (failedReads > 0) {
+        setActionFeedback({
+          tone: "warning",
+          title: "Finished with some issues",
+          message:
+            successfulReads +
+            " of " +
+            readable.length +
+            " photos were filled in. " +
+            failedReads +
+            " can be retried.",
+          detail: firstFailure,
+        });
+      } else {
+        setActionFeedback({
+          tone: "success",
+          title: "Photos ready",
+          message: "All " + successfulReads + " photos were read. Review the filled details before adding them.",
+        });
+      }
     });
 
   const addToClothing = () =>
@@ -250,6 +327,36 @@ export function BatchImportPage() {
             ? `${created} added to your clothing${publish ? "" : " as drafts"}.${left > 0 ? ` ${left} still need attention below.` : ""}`
             : "Nothing was added. Check the rows marked in red.",
       });
+      setActionFeedback(
+        created === 0
+          ? {
+              tone: "error",
+              title: "Nothing was added",
+              message: "The batch could not be added to Clothing.",
+              detail: "Check the rows marked in red, fix the issues, then try again.",
+            }
+          : left > 0
+            ? {
+                tone: "warning",
+                title: "Added with some issues",
+                message:
+                  created +
+                  " item" +
+                  (created === 1 ? " was" : "s were") +
+                  " added. " +
+                  left +
+                  " still need attention.",
+              }
+            : {
+                tone: "success",
+                title: "Added to Clothing",
+                message:
+                  created +
+                  " item" +
+                  (created === 1 ? " was" : "s were") +
+                  (publish ? " added and published." : " added as drafts."),
+              }
+      );
       if (left === 0) {
         setDirty(false);
         await clearBatch(workspaceKey).catch(() => undefined);
@@ -450,11 +557,7 @@ export function BatchImportPage() {
           <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-dashboard-muted" aria-live="polite">
               {working ? (
-                <span className="inline-flex items-center gap-2 text-dashboard-navy">
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  {PHASE_LABEL[phase as Exclude<Phase, "idle">]}
-                  {progress ? ` ${progress.done} of ${progress.total}` : ""}
-                </span>
+                <span className="text-dashboard-navy">{PHASE_LABEL[phase as Exclude<Phase, "idle">]}</span>
               ) : dirty ? (
                 "Not saved yet"
               ) : (
@@ -505,90 +608,128 @@ export function BatchImportPage() {
         </Dialog.Portal>
       </Dialog.Root>
       <PhotoProgressDialog progress={photoProgress} />
+      <ActionFeedbackDialog feedback={actionFeedback} onClose={() => setActionFeedback(null)} />
     </div>
   );
 }
 
+function ActionFeedbackDialog({
+  feedback,
+  onClose,
+}: {
+  feedback: ActionFeedback | null;
+  onClose: () => void;
+}) {
+  const success = feedback?.tone === "success";
+  const warning = feedback?.tone === "warning";
+  return (
+    <Dialog.Root open={feedback !== null} onOpenChange={(open: boolean) => !open && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[72] bg-black/55 backdrop-blur-[2px]" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-[73] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-dashboard-border bg-dashboard-surface p-6 shadow-2xl focus:outline-none">
+          <div
+            className={cn(
+              "mx-auto flex h-11 w-11 items-center justify-center rounded-full",
+              success && "bg-success-500/10 text-success-500",
+              warning && "bg-warning-500/10 text-warning-500",
+              !success && !warning && "bg-dashboard-danger/10 text-dashboard-danger"
+            )}
+          >
+            {success ? (
+              <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+            ) : (
+              <AlertTriangle className="h-5 w-5" aria-hidden="true" />
+            )}
+          </div>
+          <Dialog.Title className="mt-4 text-center text-lg font-semibold text-dashboard-navy">
+            {feedback?.title}
+          </Dialog.Title>
+          <Dialog.Description className="mt-2 text-center text-sm leading-6 text-dashboard-muted">
+            {feedback?.message}
+          </Dialog.Description>
+          {feedback?.detail ? (
+            <p className="mt-3 rounded-lg bg-dashboard-active/45 px-3 py-2 text-center text-xs leading-5 text-dashboard-muted">
+              {feedback.detail}
+            </p>
+          ) : null}
+          <Button type="button" className="mt-5 w-full" onClick={onClose}>
+            {success ? "Review items" : "Back to batch"}
+          </Button>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
 function PhotoProgressDialog({ progress }: { progress: PhotoProgress | null }) {
-  const percent = progress?.total ? Math.min(100, Math.round((progress.done / progress.total) * 100)) : 0;
-  const uploading = progress?.stage === "uploading";
-  const title = uploading ? "Preparing your photos" : "Reading clothing details";
-  const activeLabel = uploading ? "Uploading photos…" : "Reading details from photos…";
-  const countLabel = progress
-    ? progress.done +
-      " of " +
-      progress.total +
-      " " +
-      (progress.total === 1 ? "photo" : "photos") +
-      " " +
-      (uploading ? "prepared" : "read")
-    : "";
+  const [phraseIndex, setPhraseIndex] = useState(0);
+  const percent = progress?.total ? Math.min(100, Math.round((progress.processed / progress.total) * 100)) : 0;
+  const stage = progress?.stage ?? "reading";
+  const outcome = progress?.outcome;
+  const isOpen = progress !== null;
+  const phrases = PHOTO_PROGRESS_PHRASES[stage];
+
+  useEffect(() => {
+    setPhraseIndex(0);
+    if (!isOpen || outcome === "error") return;
+    const timer = window.setInterval(() => {
+      setPhraseIndex((current) => (current + 1) % phrases.length);
+    }, 1_900);
+    return () => window.clearInterval(timer);
+  }, [isOpen, outcome, stage, phrases.length]);
+
+  const activeLabel =
+    outcome === "error"
+      ? "That photo could not be read — moving on"
+      : phrases[phraseIndex % phrases.length] ?? phrases[0];
 
   return (
-    <Dialog.Root open={progress !== null}>
+    <Dialog.Root open={isOpen}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[70] bg-black/65 backdrop-blur-[2px]" />
         <Dialog.Content
           aria-describedby="batch-photo-progress-description"
           onEscapeKeyDown={(event: Event) => event.preventDefault()}
           onPointerDownOutside={(event: Event) => event.preventDefault()}
-          className="fixed left-1/2 top-1/2 z-[71] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-dashboard-border bg-dashboard-surface px-6 py-7 text-center shadow-2xl focus:outline-none sm:px-8 sm:py-8"
+          className="fixed left-1/2 top-1/2 z-[71] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-dashboard-border bg-dashboard-surface px-7 py-8 text-center shadow-2xl focus:outline-none"
         >
-          <div className="relative mx-auto mb-5 flex h-24 w-24 items-center justify-center">
-            <div className="absolute inset-0 rounded-full border border-dashboard-accent/20" />
-            <div
-              className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-r-dashboard-accent/45 border-t-dashboard-accent"
-              style={{ animationDuration: "1.35s" }}
-              aria-hidden="true"
-            />
-            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-dashboard-border bg-dashboard-active/70 shadow-sm">
-              <Image
-                src="/brand/drezivo-mark.png"
-                alt=""
-                width={497}
-                height={600}
-                priority
-                className="h-12 w-auto animate-pulse object-contain"
-              />
-            </div>
-          </div>
-
-          <Dialog.Title className="text-xl font-semibold text-dashboard-navy">{title}</Dialog.Title>
-          <Dialog.Description
-            id="batch-photo-progress-description"
-            className="mx-auto mt-2 max-w-sm text-sm leading-6 text-dashboard-muted"
-          >
-            {uploading
-              ? "Drezivo is securely preparing each image before the photo reader starts."
-              : "Drezivo is extracting the clothing name, size, measurements, color, and rental price from each image."}
+          <Dialog.Title className="sr-only">Processing clothing photos</Dialog.Title>
+          <Dialog.Description id="batch-photo-progress-description" className="sr-only">
+            Photos are being prepared and read. Progress reflects photos processed, including any photo the reader could not interpret.
           </Dialog.Description>
 
-          <div className="mt-6 rounded-xl border border-dashboard-border bg-dashboard-active/35 p-4">
-            <div className="flex items-center justify-center gap-2 text-sm font-medium text-dashboard-navy" aria-live="polite">
-              <Loader2 className="h-4 w-4 animate-spin text-dashboard-accent" aria-hidden="true" />
-              <span>{activeLabel}</span>
-            </div>
-            <div className="mt-3 flex items-center justify-between gap-3 text-xs text-dashboard-muted">
-              <span>{countLabel}</span>
-              <span className="tabular-nums">{percent}%</span>
-            </div>
-            <div
-              className="mt-2 h-2 overflow-hidden rounded-full bg-dashboard-surface"
-              role="progressbar"
-              aria-label={activeLabel}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={percent}
-            >
-              <div
-                className="h-full rounded-full bg-dashboard-accent transition-[width] duration-300 ease-out"
-                style={{ width: String(percent) + "%" }}
-              />
-            </div>
+          <div className="mx-auto flex h-12 items-center justify-center">
+            <Image
+              src="/brand/drezivo-mark.png"
+              alt=""
+              width={497}
+              height={600}
+              priority
+              className="h-10 w-auto animate-pulse object-contain"
+            />
           </div>
 
-          <p className="mt-4 text-xs leading-5 text-dashboard-muted">
-            Keep this page open while the current batch is being processed.
+          <div className="mt-5 min-h-7" aria-live="polite">
+            <span key={activeLabel} className="batch-loading-copy inline-block text-base font-medium text-dashboard-navy">
+              {activeLabel}
+            </span>
+          </div>
+
+          <div
+            className="mt-5 h-1 overflow-hidden rounded-full bg-dashboard-active"
+            role="progressbar"
+            aria-label="Photo processing progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={percent}
+          >
+            <div
+              className="h-full rounded-full bg-dashboard-accent transition-[width] duration-300 ease-out"
+              style={{ width: String(percent) + "%" }}
+            />
+          </div>
+          <p className="mt-2 text-right text-[0.68rem] tabular-nums text-dashboard-muted">
+            {progress ? progress.processed + " / " + progress.total : ""}
           </p>
         </Dialog.Content>
       </Dialog.Portal>

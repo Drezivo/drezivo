@@ -64,6 +64,7 @@ export const errorCode = z.enum([
   // 501 — the route is part of the contract but this api build has not implemented it yet
   'NOT_IMPLEMENTED',
   // 503 — an upstream dependency (DB, S3, email, payment rail) is unavailable
+  'PHOTO_READER_CONFIGURATION',
   'DEPENDENCY_UNAVAILABLE',
   // 500 — unexpected failure with no safe, more specific code to report
   'INTERNAL_ERROR',

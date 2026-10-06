@@ -124,11 +124,13 @@ describe("batch import runner", () => {
       .mockRejectedValue(new DrezivoApiError("down", { status: 503 }));
     const wait = vi.fn().mockResolvedValue(undefined);
     const onRead = vi.fn();
+    const onStart = vi.fn();
 
-    await readPhotos(client as never, [{ id: "a", fileId: FILE_ID }], onRead, wait);
+    await readPhotos(client as never, [{ id: "a", fileId: FILE_ID }], onRead, wait, onStart);
     await readPhotos(client as never, [{ id: "b", fileId: FILE_ID }], onRead, wait);
 
     expect(wait).toHaveBeenCalledTimes(3);
+    expect(onStart).toHaveBeenCalledWith("a", 0, 1);
     expect(onRead).toHaveBeenCalledWith("a", { name: "Mira" }, null);
     expect(onRead).toHaveBeenCalledWith("b", null, "down");
   });

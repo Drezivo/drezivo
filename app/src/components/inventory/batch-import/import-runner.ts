@@ -187,12 +187,14 @@ export async function readPhotos(
   api: Api,
   rows: Array<{ id: string; fileId: string }>,
   onRead: (id: string, fields: ExtractedClothingFields | null, message: string | null) => void,
-  wait: Wait = sleep
+  wait: Wait = sleep,
+  onStart?: (id: string, index: number, total: number) => void
 ): Promise<void> {
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
     if (!row) continue;
     if (index > 0) await wait(READ_INTERVAL_MS);
+    onStart?.(row.id, index, rows.length);
     for (let attempt = 1; attempt <= READ_RETRIES; attempt += 1) {
       try {
         const result = await api.extractClothingPhoto(row.fileId);
