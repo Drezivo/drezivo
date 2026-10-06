@@ -19,11 +19,11 @@ export type UploadProgress = (done: number, total: number) => void;
 
 /** Direct-to-storage PUTs and SHA-256 hashing run a few at a time so a phone stays responsive. */
 const FILE_CONCURRENCY = 4;
-const READ_RETRIES = 3;
+const READ_RETRIES = 2;
 const RATE_LIMIT_WAIT_MS = 20_000;
 const TRANSIENT_WAIT_MS = 3_000;
-/** Keep sustained photo reads below the strict free-provider limits instead of bursting into 429s. */
-const READ_INTERVAL_MS = 2_100;
+/** Keep sustained photo reads below OpenRouter's free-tier 20 requests/minute ceiling. */
+const READ_INTERVAL_MS = 3_200;
 /** A throttled batch is retried as-is: every row keeps its key, so finished rows only replay. */
 const BATCH_ATTEMPTS = 5;
 

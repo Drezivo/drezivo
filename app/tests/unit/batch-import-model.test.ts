@@ -8,6 +8,7 @@ import {
   pesosToMinor,
   rowProblems,
   rowsFromPhotos,
+  scanReviewFields,
   toCreateRequest,
 } from "@/components/inventory/batch-import/import-model";
 import { parseCsv, rowsFromSheet, templateCsv } from "@/components/inventory/batch-import/spreadsheet";
@@ -76,6 +77,19 @@ describe("applyExtraction", () => {
       color_label: "White",
     });
     expect(next).toMatchObject({ freeSize: true, sizeLabel: "", fitNote: "Fits Small-XL", price: "1000" });
+  });
+
+  it("marks only the scan gaps that still need manual review", () => {
+    const next = applyExtraction(emptyRow(defaults, { category: "Gowns" }), {
+      name: "Ariel",
+      rental_price_minor: "80000",
+      size_label: null,
+      free_size: true,
+      measurement_unit: "in",
+      measurements: { Bust: 32, Waist: 26, Length: 64 },
+      color_label: "Maroon",
+    });
+    expect([...scanReviewFields(next)]).toEqual(["subcategory", "fitNote", "hips"]);
   });
 });
 

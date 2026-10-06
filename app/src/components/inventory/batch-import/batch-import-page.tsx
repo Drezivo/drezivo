@@ -32,6 +32,7 @@ import {
   emptyRow,
   rowProblems,
   rowsFromPhotos,
+  scanReviewFields,
   type ImportDefaults,
   type ImportRow,
 } from "./import-model";
@@ -59,6 +60,7 @@ const PHOTO_PROGRESS_PHRASES = {
   uploading: ["Preparing photos", "Securing uploads", "Getting images ready"],
   reading: ["Reading visible details", "Checking size and measurements", "Looking for color and price", "Matching clothing fields"],
 } as const;
+const FREE_AI_SCAN_LIMIT = 15;
 
 const PHASE_LABEL: Record<Exclude<Phase, "idle">, string> = {
   uploading: "Uploading photos…",
@@ -209,7 +211,9 @@ export function BatchImportPage() {
 
   const readDetails = () =>
     runPhase("reading", async () => {
-      const targets = rows.filter((row) => row.photo && !row.read && row.status !== "created");
+      const allTargets = rows.filter((row) => row.photo && !row.read && row.status !== "created");
+      const targets = allTargets.slice(0, FREE_AI_SCAN_LIMIT);
+      const remainingQueued = Math.max(0, allTargets.length - targets.length);
       const pendingUploads = targets.filter((row) => row.photo && !row.fileId).length;
       if (pendingUploads > 0) {
         setPhotoProgress({ stage: "uploading", processed: 0, total: pendingUploads, outcome: "working" });
@@ -277,7 +281,9 @@ export function BatchImportPage() {
         setActionFeedback({
           tone: "error",
           title: "Couldn’t read these photos",
-          message: "No clothing details were filled in. The photos are still available to retry.",
+          message:
+            "No clothing details were filled in. The photos are still available to retry." +
+            (remainingQueued > 0 ? " " + remainingQueued + " more remain queued." : ""),
           detail: firstFailure,
         });
       } else if (failedReads > 0) {
@@ -289,15 +295,20 @@ export function BatchImportPage() {
             " of " +
             readable.length +
             " photos were filled in. " +
-            failedReads +
-            " can be retried.",
+                    failedReads +
+                    " can be retried." +
+                    (remainingQueued > 0 ? " " + remainingQueued + " more remain queued." : ""),
           detail: firstFailure,
         });
       } else {
         setActionFeedback({
           tone: "success",
           title: "Photos ready",
-          message: "All " + successfulReads + " photos were read. Review the filled details before adding them.",
+          message:
+            "All " +
+            successfulReads +
+            " photos were read." +
+            (remainingQueued > 0 ? " " + remainingQueued + " more remain queued for the next scan." : " Review the filled details before adding them."),
         });
       }
     });
@@ -516,7 +527,10 @@ export function BatchImportPage() {
             </p>
             {capabilities?.photo_extraction && unreadRows.length > 0 ? (
               <Button type="button" variant="secondary" disabled={working} onClick={() => void readDetails()}>
-                <ScanText className="h-4 w-4" aria-hidden="true" /> Read details from {unreadRows.length} photo{unreadRows.length === 1 ? "" : "s"}
+                <ScanText className="h-4 w-4" aria-hidden="true" />{" "}
+                {unreadRows.length > FREE_AI_SCAN_LIMIT
+                  ? `Read next ${FREE_AI_SCAN_LIMIT} of ${unreadRows.length} photos`
+                  : `Read details from ${unreadRows.length} photo${unreadRows.length === 1 ? "" : "s"}`}
               </Button>
             ) : null}
           </div>
@@ -531,7 +545,6 @@ export function BatchImportPage() {
               index={index}
               row={row}
               defaults={defaults}
-              categoryNames={categoryNames}
               defaultGuide={defaultGuide}
               guideLoading={guideLoading}
               problems={problems.get(row.id) ?? []}
@@ -845,7 +858,6 @@ function RowEditor({
   index,
   row,
   defaults,
-  categoryNames,
   defaultGuide,
   guideLoading,
   problems,
@@ -856,7 +868,6 @@ function RowEditor({
   index: number;
   row: ImportRow;
   defaults: ImportDefaults;
-  categoryNames: string[];
   defaultGuide: MeasurementGuide | null;
   guideLoading: boolean;
   problems: Array<{ field: string; message: string }>;
@@ -866,7 +877,17 @@ function RowEditor({
 }) {
   const invalid = (field: string) => problems.some((problem) => problem.field === field);
   const label = row.name.trim() || `Item ${index + 1}`;
-  const inputClass = (field: string) => cn(invalid(field) && "border-dashboard-danger/60");
+  const reviewFields = scanReviewFields(row);
+  const needsScanReview = (field: keyof ImportRow) => reviewFields.has(field);
+  const inputClass = (field: keyof ImportRow) =>
+    cn(
+      invalid(field) && "border-dashboard-danger/60",
+      !invalid(field) &&
+        needsScanReview(field) &&
+        "border-warning-500/70 bg-warning-500/5 ring-1 ring-warning-500/10"
+    );
+  const reviewTitle = (field: keyof ImportRow) =>
+    needsScanReview(field) && !invalid(field) ? "Photo scan did not fill this field. Review it manually." : undefined;
   return (
     <li
       className={cn(
@@ -879,7 +900,13 @@ function RowEditor({
         <RowThumb photo={row.photo} />
         <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-2 lg:grid-cols-6">
           <Field label="Name" className="col-span-2 lg:col-span-2">
-            <Input value={row.name} disabled={disabled} className={inputClass("name")} onChange={(event) => onChange({ name: event.target.value })} />
+            <Input
+              value={row.name}
+              disabled={disabled}
+              className={inputClass("name")}
+              title={reviewTitle("name")}
+              onChange={(event) => onChange({ name: event.target.value })}
+            />
           </Field>
           <Field label="Category" className="col-span-2 lg:col-span-2">
             <Input
@@ -887,7 +914,8 @@ function RowEditor({
               value={row.category}
               disabled={disabled}
               className={inputClass("category")}
-              placeholder={categoryNames[0] ?? "Category"}
+              title={reviewTitle("category")}
+              placeholder="Choose or type a category"
               onChange={(event) => onChange({ category: event.target.value })}
             />
           </Field>
@@ -898,12 +926,20 @@ function RowEditor({
               maxLength={120}
               disabled={disabled}
               className={inputClass("subcategory")}
+              title={reviewTitle("subcategory")}
               placeholder="None, LONG, MINI or custom"
               onChange={(event) => onChange({ subcategory: event.target.value })}
             />
           </Field>
           <Field label="Rental price (₱)">
-            <Input inputMode="decimal" value={row.price} disabled={disabled} className={inputClass("price")} onChange={(event) => onChange({ price: event.target.value })} />
+            <Input
+              inputMode="decimal"
+              value={row.price}
+              disabled={disabled}
+              className={inputClass("price")}
+              title={reviewTitle("price")}
+              onChange={(event) => onChange({ price: event.target.value })}
+            />
           </Field>
           <Field label="Deposit (₱)">
             <Input inputMode="decimal" value={row.deposit} placeholder={defaults.deposit} disabled={disabled} className={inputClass("deposit")} onChange={(event) => onChange({ deposit: event.target.value })} />
@@ -921,9 +957,23 @@ function RowEditor({
                 <option value="free_size">Free size</option>
               </select>
               {row.freeSize ? (
-                <Input value={row.fitNote} placeholder="Fit note, e.g. Fits Small to XL" disabled={disabled} onChange={(event) => onChange({ fitNote: event.target.value })} />
+                <Input
+                  value={row.fitNote}
+                  placeholder="Fit note, e.g. Fits Small to XL"
+                  disabled={disabled}
+                  className={inputClass("fitNote")}
+                  title={reviewTitle("fitNote")}
+                  onChange={(event) => onChange({ fitNote: event.target.value })}
+                />
               ) : (
-                <Input value={row.sizeLabel} placeholder="e.g. M" disabled={disabled} className={inputClass("sizeLabel")} onChange={(event) => onChange({ sizeLabel: event.target.value })} />
+                <Input
+                  value={row.sizeLabel}
+                  placeholder="e.g. M"
+                  disabled={disabled}
+                  className={inputClass("sizeLabel")}
+                  title={reviewTitle("sizeLabel")}
+                  onChange={(event) => onChange({ sizeLabel: event.target.value })}
+                />
               )}
             </div>
           </Field>
@@ -962,6 +1012,7 @@ function RowEditor({
                       value={row[field]}
                       disabled={disabled}
                       className={cn("px-2", inputClass(field))}
+                      title={reviewTitle(field)}
                       onChange={(event) => onChange({ [field]: event.target.value })}
                     />
                   ))}
@@ -980,7 +1031,13 @@ function RowEditor({
             </div>
           </fieldset>
           <Field label="Color">
-            <Input value={row.color} disabled={disabled} onChange={(event) => onChange({ color: event.target.value })} />
+            <Input
+              value={row.color}
+              disabled={disabled}
+              className={inputClass("color")}
+              title={reviewTitle("color")}
+              onChange={(event) => onChange({ color: event.target.value })}
+            />
           </Field>
         </div>
         <Button type="button" variant="ghost" size="icon" aria-label={`Remove ${label}`} disabled={disabled} onClick={onRemove} className="shrink-0">

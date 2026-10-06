@@ -22,7 +22,7 @@ const gemmaSettings = {
 };
 const openRouterSettings = {
   baseUrl: 'https://openrouter.ai/api/v1',
-  model: 'google/gemini-3.1-flash-lite,google/gemma-4-31b-it',
+  model: 'inclusionai/ling-3.0-flash-vl:free,openrouter/free',
   apiKey: 'sk-or-test-key',
   timeoutMs: 5_000,
 };
@@ -190,7 +190,7 @@ describe('extractClothingPhoto', () => {
       provider: { allow_fallbacks: boolean };
       messages: unknown;
     };
-    expect(body.models).toEqual(['google/gemini-3.1-flash-lite', 'google/gemma-4-31b-it']);
+    expect(body.models).toEqual(['inclusionai/ling-3.0-flash-vl:free', 'openrouter/free']);
     expect(body.provider).toEqual({ allow_fallbacks: true });
     expect(JSON.stringify(body.messages)).toContain('data:image/jpeg;base64,AQID');
   });

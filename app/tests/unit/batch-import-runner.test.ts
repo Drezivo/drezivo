@@ -129,7 +129,7 @@ describe("batch import runner", () => {
     await readPhotos(client as never, [{ id: "a", fileId: FILE_ID }], onRead, wait, onStart);
     await readPhotos(client as never, [{ id: "b", fileId: FILE_ID }], onRead, wait);
 
-    expect(wait).toHaveBeenCalledTimes(3);
+    expect(wait).toHaveBeenCalledTimes(2);
     expect(onStart).toHaveBeenCalledWith("a", 0, 1);
     expect(onRead).toHaveBeenCalledWith("a", { name: "Mira" }, null);
     expect(onRead).toHaveBeenCalledWith("b", null, "down");
