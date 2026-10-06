@@ -61,13 +61,25 @@ export function loadBatch(workspaceKey: string): Promise<SavedBatch | null> {
       return {
         ...batch,
         rows: batch.rows.map((row) => {
-          const legacy = row as ImportRow & { subcategory?: unknown; measurementMode?: unknown };
-          const hasMeasurements = [legacy.bust, legacy.waist, legacy.hips, legacy.length].some(
+          const legacy = row as ImportRow & { subcategory?: unknown; measurementMode?: unknown; fitNote?: unknown; measurementKinds?: unknown };
+          const hasMeasurements = [legacy.bust, legacy.waist, legacy.length].some(
             (value) => typeof value === "string" && value.trim() !== ""
           );
           return {
             ...legacy,
             subcategory: typeof legacy.subcategory === "string" ? legacy.subcategory : "",
+            fitRange: typeof legacy.fitRange === "string" ? legacy.fitRange : "",
+            description: typeof legacy.description === "string"
+              ? legacy.description
+              : typeof legacy.fitNote === "string" ? legacy.fitNote : "",
+            bust: typeof legacy.bust === "string" ? legacy.bust : "",
+            waist: typeof legacy.waist === "string" ? legacy.waist : "",
+            length: typeof legacy.length === "string" ? legacy.length : "",
+            measurementKinds: legacy.measurementKinds && typeof legacy.measurementKinds === "object"
+              ? legacy.measurementKinds as ImportRow["measurementKinds"]
+              : { bust: "exact", waist: "exact", length: "exact" },
+            measurementConflicts: Array.isArray(legacy.measurementConflicts) ? legacy.measurementConflicts : [],
+            conflictingFitNotes: legacy.conflictingFitNotes && typeof legacy.conflictingFitNotes === "object" ? legacy.conflictingFitNotes : {},
             measurementMode:
               legacy.measurementMode === "default_guide" || legacy.measurementMode === "custom" || legacy.measurementMode === "none"
                 ? legacy.measurementMode

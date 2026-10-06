@@ -353,17 +353,16 @@ Available sizes:
 S / M / L
 ```
 
-If measurement information is provided by the business, display the selected variant's configured source clearly. A variant may reference the business's reusable measurement-guide image, provide custom structured measurements, or intentionally provide no measurement information.
+If measurement information is provided by the business, display the selected variant's configured source clearly. A variant may reference the business's reusable measurement-guide image, provide custom exact measurements or fit notes, or intentionally provide no measurement information. A null-size variant is labeled “Flexible fit,” not “Free size”; show an explicit wearer-size range only when the business supplied one. “FS” alone does not imply a size range.
 
 Potential custom measurements:
 
 - Bust
 - Waist
-- Hips
 - Length
 - Other relevant measurements
 
-Do not duplicate the same business measurement-guide image for every product or size. Render the referenced guide when `measurement_mode = default_guide`; render structured values for `custom`; omit the section for `none`. Measurements are particularly important for rental clothing because customers need to determine whether an item is likely to fit.
+Do not duplicate the same business measurement-guide image for every product or size. Render the referenced guide when `measurement_mode = default_guide`; render exact values and fit notes for `custom`; omit the section for `none`. New forms do not offer Hips. Historical Hips values remain visible as legacy read-only data and are never converted to Length. Measurements are particularly important for rental clothing because customers need to determine whether an item is likely to fit.
 
 ---
 

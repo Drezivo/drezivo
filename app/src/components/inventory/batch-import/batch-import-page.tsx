@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DrezivoApiError, createDrezivoApiClient } from "@/lib/drezivo-api";
+import { inferMeasurementKind } from "@/lib/measurement-input";
 import { cn } from "@/lib/utils";
 
 import { clearBatch, loadBatch, saveBatch, type SavedBatch } from "./draft-store";
@@ -29,10 +30,12 @@ import {
   applyExtraction,
   editedRow,
   emptyRow,
+  resolveMeasurementConflict,
   rowProblems,
   rowsFromPhotos,
   type ImportDefaults,
   type ImportRow,
+  type MeasurementField,
 } from "./import-model";
 import { createRows, ensureCategories, readPhotos, uploadPhotos } from "./import-runner";
 import { LeaveGuard } from "./leave-guard";
@@ -618,6 +621,8 @@ function RowEditor({
   const invalid = (field: string) => problems.some((problem) => problem.field === field);
   const label = row.name.trim() || `Item ${index + 1}`;
   const inputClass = (field: string) => cn(invalid(field) && "border-dashboard-danger/60");
+  const chooseMeasurementKind = (field: MeasurementField, kind: "exact" | "fit_note") =>
+    onChange(resolveMeasurementConflict(row, field, kind));
   return (
     <li
       className={cn(
@@ -668,15 +673,26 @@ function RowEditor({
                 disabled={disabled}
                 onChange={(event) => onChange({ freeSize: event.target.value === "free_size" })}
               >
-                <option value="sized">Sized</option>
-                <option value="free_size">Free size</option>
+                <option value="sized">Labeled size</option>
+                <option value="free_size">Flexible fit</option>
               </select>
               {row.freeSize ? (
-                <Input value={row.fitNote} placeholder="Fit note, e.g. Fits Small to XL" disabled={disabled} onChange={(event) => onChange({ fitNote: event.target.value })} />
+                <Input aria-label={`Fits sizes for ${label}`} value={row.fitRange} placeholder="Fits sizes, e.g. Small–XL" maxLength={120} disabled={disabled} onChange={(event) => onChange({ fitRange: event.target.value })} />
               ) : (
                 <Input value={row.sizeLabel} placeholder="e.g. M" disabled={disabled} className={inputClass("sizeLabel")} onChange={(event) => onChange({ sizeLabel: event.target.value })} />
               )}
             </div>
+          </Field>
+          <Field label="Description" className="col-span-2 lg:col-span-3">
+            <Input
+              aria-label={`Description for ${label}`}
+              value={row.description}
+              maxLength={2_000}
+              disabled={disabled}
+              className={inputClass("description")}
+              placeholder="Optional product description"
+              onChange={(event) => onChange({ description: event.target.value })}
+            />
           </Field>
           <fieldset className="col-span-2 min-w-0 lg:col-span-3">
             <legend className="mb-1 text-xs font-medium text-dashboard-muted">Measurements</legend>
@@ -703,18 +719,51 @@ function RowEditor({
                 ) : null}
               </div>
               {row.measurementMode === "custom" ? (
-                <div className="grid grid-cols-5 gap-1.5">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {MEASUREMENT_FIELDS.map((field) => (
-                    <Input
-                      key={field}
-                      aria-label={`${field} (${row.unit})`}
-                      placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
-                      inputMode="decimal"
-                      value={row[field]}
-                      disabled={disabled}
-                      className={cn("px-2", inputClass(field))}
-                      onChange={(event) => onChange({ [field]: event.target.value })}
-                    />
+                    <div key={field} className="space-y-1">
+                      {row.measurementConflicts.includes(field) ? (
+                        <div className="space-y-1.5 rounded-md border border-dashboard-danger/40 bg-dashboard-danger/5 p-2">
+                          <p className="text-[0.65rem] leading-4 text-dashboard-danger">Both values were imported. Choose which one to keep.</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="h-8 px-2 text-xs"
+                              disabled={disabled}
+                              aria-label={`Use ${field} measurement ${row[field]} ${row.unit}`}
+                              onClick={() => chooseMeasurementKind(field, "exact")}
+                            >
+                              Use {row[field]} {row.unit}
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="h-8 px-2 text-xs"
+                              disabled={disabled}
+                              aria-label={`Use ${field} fit note ${row.conflictingFitNotes[field]}`}
+                              onClick={() => chooseMeasurementKind(field, "fit_note")}
+                            >
+                              Use note: {row.conflictingFitNotes[field]}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Input
+                          aria-label={`${field} measurement or fit note`}
+                          placeholder={`${field[0]!.toUpperCase()}${field.slice(1)}: 36 or Flexible fit`}
+                          inputMode="text"
+                          maxLength={120}
+                          value={row[field]}
+                          disabled={disabled}
+                          className={cn("px-2", inputClass(field))}
+                          onChange={(event) => onChange({
+                            [field]: event.target.value,
+                            measurementKinds: { ...row.measurementKinds, [field]: inferMeasurementKind(event.target.value) },
+                          })}
+                        />
+                      )}
+                    </div>
                   ))}
                   <select
                     aria-label="Measurement unit"

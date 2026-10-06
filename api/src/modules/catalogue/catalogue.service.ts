@@ -382,6 +382,7 @@ export async function getCatalogueClothingDetail(
         measurement_guide_id: variant.measurement_guide_id,
         measurement_unit: variant.measurement_unit,
         measurements: variant.measurements,
+        fit_range: variant.fit_range,
         rental_price_minor: variant.rental_price_minor.toString(),
         security_deposit_minor: variant.security_deposit_minor.toString(),
         currency: variant.currency,
@@ -1138,6 +1139,10 @@ export async function updateClothingVariant(input: CommandContext & {
       );
       if (!current) throw new NotFoundError('The clothing variant could not be found.');
       const requestedSize = request.size_label !== undefined ? request.size_label : current.size_label;
+      const requestedFitRange = request.fit_range !== undefined ? request.fit_range : current.fit_range;
+      if (requestedSize !== null && requestedFitRange != null) {
+        throw new ValidationError('Fit range is only supported for a flexible-fit variant.');
+      }
       if (product.sizing_mode === 'free_size' && requestedSize !== null) {
         throw new StateConflictError('Switch this clothing item to sized mode before assigning a real size.');
       }
@@ -1183,6 +1188,7 @@ export async function updateClothingVariant(input: CommandContext & {
         measurement_guide_id: updated.measurement_guide_id,
         measurement_unit: updated.measurement_unit,
         measurements: updated.measurements,
+        fit_range: updated.fit_range,
         rental_price_minor: updated.rental_price_minor.toString(),
         security_deposit_minor: updated.security_deposit_minor.toString(),
         currency: updated.currency,
@@ -1449,7 +1455,7 @@ export async function createClothingVariant(input: CommandContext & {
       const data = createClothingVariantResponse.parse({ variant: {
         id: row.id, sku: row.sku, size_label: row.size_label, color_label: row.color_label,
         measurement_mode: row.measurement_mode, measurement_guide_id: row.measurement_guide_id,
-        measurement_unit: row.measurement_unit, measurements: row.measurements,
+        measurement_unit: row.measurement_unit, measurements: row.measurements, fit_range: row.fit_range,
         rental_price_minor: row.rental_price_minor.toString(), security_deposit_minor: row.security_deposit_minor.toString(), currency: row.currency,
         pricing_mode: row.pricing_mode, included_duration_minutes: row.included_duration_minutes,
         extra_day_price_minor: row.extra_day_price_minor.toString(), prep_minutes: row.prep_minutes, turnaround_minutes: row.turnaround_minutes,

@@ -295,6 +295,8 @@ export async function createHeldReservation(
     variantId: input.quote.variant_id,
     lineNameSnapshot: input.quote.line_snapshot.name,
     measurementsSnapshot: input.quote.line_snapshot.measurements,
+    fitRangeSnapshot: input.quote.line_snapshot.fit_range,
+    measurementUnitSnapshot: input.quote.line_snapshot.measurement_unit,
     pricingSnapshot: {
       rental_minor: input.quote.price_snapshot.rental_total_minor,
       deposit_minor: input.quote.price_snapshot.security_required_minor,

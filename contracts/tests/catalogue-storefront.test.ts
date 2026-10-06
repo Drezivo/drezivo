@@ -47,6 +47,37 @@ describe('catalogue storefront contract', () => {
     expect(itemDetail.safeParse({ ...base, image_urls: imageUrls }).success).toBe(false);
   });
 
+  it('returns flexible-fit ranges and custom fit notes in public product details', () => {
+    const result = itemDetail.safeParse({
+      product_id: productId,
+      name: 'Yasmin',
+      description: null,
+      category: 'Gowns',
+      image_urls: [],
+      variants: [{
+        variant_id: '00000000-0000-4000-8000-000000000002',
+        size_label: null,
+        fit_range: 'Small–XL',
+        color_label: null,
+        rental_price_minor: '80000',
+        security_deposit_minor: '0',
+        pricing_mode: 'daily',
+        included_duration_minutes: 1440,
+        extra_day_price_minor: '0',
+        measurement: {
+          mode: 'custom',
+          unit: 'in',
+          values: [
+            { label: 'Bust', value: 'Flexible fit' },
+            { label: 'Waist', value: '28 in' },
+            { label: 'Length', value: '61 in' },
+          ],
+        },
+      }],
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('bounds catalogue paging and rejects unknown filters', () => {
     expect(catalogueQuery.parse({})).toMatchObject({ page: 1, page_size: 24, sort: 'featured' });
     expect(catalogueQuery.safeParse({ page_size: '49' }).success).toBe(false);

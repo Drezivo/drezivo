@@ -40,6 +40,7 @@ describe('parseModelReply', () => {
       name: 'Mirabelle',
       rental_price_minor: '50000',
       size_label: null,
+      fit_range: null,
       free_size: false,
       measurement_unit: 'in',
       measurements: { Bust: 30, Waist: 24, Length: 22 },
@@ -47,17 +48,49 @@ describe('parseModelReply', () => {
     });
   });
 
-  it('reads a wedding-gown card with a free-size range and a price written as text', () => {
+  it('reads Yasmin’s explicit Small–XL flexible-fit range and a price written as text', () => {
     const fields = parseModelReply(
-      '{"name":"Astrid","rental_price":"P1,000","size":"Small-XL","free_size":true,"unit":null,"measurements":{},"color":"White"}',
+      '{"name":"Yasmin","rental_price":"P800","size":null,"free_size":true,"fit_range":"Small–XL","unit":null,"measurements":{},"color":"White"}',
     );
     expect(fields).toMatchObject({
-      name: 'Astrid',
-      rental_price_minor: '100000',
-      size_label: 'Small-XL',
+      name: 'Yasmin',
+      rental_price_minor: '80000',
+      size_label: null,
       free_size: true,
+      fit_range: 'Small–XL',
       measurement_unit: null,
     });
+  });
+
+  it('reads Hailey’s flexible-fit dimension note and exact waist and length without inferring a range', () => {
+    const fields = parseModelReply(
+      '{"name":"Hailey","rental_price":800,"size":null,"free_size":true,"fit_range":null,"unit":"in","measurements":{"Bust":{"type":"fit_note","text":"Flexible fit"},"Waist":28,"Length":61},"color":"White"}',
+    );
+    expect(fields).toMatchObject({
+      name: 'Hailey',
+      size_label: null,
+      free_size: true,
+      fit_range: null,
+      measurement_unit: 'in',
+      measurements: {
+        Bust: { type: 'fit_note', text: 'Flexible fit' },
+        Waist: 28,
+        Length: 61,
+      },
+    });
+  });
+
+  it('does not infer a range from FS alone and normalizes dimension FS to Flexible fit', () => {
+    const fields = parseModelReply(
+      '{"size":null,"free_size":true,"unit":"in","measurements":{"Bust":"FS","Waist":28,"Length":61}}',
+    );
+    expect(fields.fit_range).toBeNull();
+    expect(fields.measurements).toEqual({
+      Bust: { type: 'fit_note', text: 'Flexible fit' },
+      Waist: 28,
+      Length: 61,
+    });
+    expect(fields.measurement_unit).toBe('in');
   });
 
   it('drops anything malformed instead of trusting it', () => {
@@ -65,7 +98,10 @@ describe('parseModelReply', () => {
     expect(parseModelReply('{broken')).toEqual(EMPTY_EXTRACTION);
     expect(
       parseModelReply('{"name": 12, "rental_price": -5, "measurements": {"Bust": "thirty", "Waist": 1e9}, "unit": "ft"}'),
-    ).toEqual(EMPTY_EXTRACTION);
+    ).toMatchObject({
+      ...EMPTY_EXTRACTION,
+      measurements: { Bust: { type: 'fit_note', text: 'thirty' } },
+    });
   });
 
   it('keeps the unit only when a measurement survived', () => {
@@ -144,8 +180,9 @@ describe('extractClothingPhoto', () => {
     expect(fields).toMatchObject({
       name: 'Astrid',
       rental_price_minor: '100000',
-      size_label: 'Small-XL',
+      size_label: null,
       free_size: true,
+      fit_range: 'Small-XL',
     });
     const [url, init] = fetchImpl.mock.calls[1] as unknown as [string, RequestInit];
     expect(url).toBe(

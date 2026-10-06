@@ -103,6 +103,7 @@ export async function resolveReservationCatalogueQuoteSelection(
       measurement_guide_id: row.measurement_guide_id,
       measurement_unit: row.measurement_unit,
       measurements: row.measurements,
+      fit_range: row.fit_range,
       rental_price_minor: String(row.rental_price_minor),
       security_deposit_minor: String(row.security_deposit_minor),
       currency: row.currency,

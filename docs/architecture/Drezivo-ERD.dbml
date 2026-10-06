@@ -272,6 +272,7 @@ Table product_variant {
   product_id uuid [not null]
   sku varchar(80) [not null]
   size_label varchar(40)
+  fit_range text
   color_label varchar(80) [not null]
   measurements jsonb [not null]
   measurement_unit varchar(8) [not null]
@@ -291,7 +292,7 @@ Table product_variant {
     (tenant_id, id) [pk]
     (tenant_id, sku) [unique]
   }
-  Note: 'V1. NULL size_label is the canonical Free size representation. A free_size product has exactly one active null-size variant; sized products require non-null labels. Archived variants preserve prior modes. Measurement mode is default_guide/custom/none; pricing mode is fixed_duration/daily.'
+  Note: 'V1. NULL size_label is the canonical flexible-fit variant representation; free_size products have one active null-size variant. fit_range is optional explicit wearer-size text for null-size variants. New standard dimensions are Bust, Waist, Length; measurements JSON values are exact numbers or bounded fit-note objects. Historical Hips values remain unchanged/read-only and are never renamed to Length. Archived variants preserve prior modes.'
 }
 
 Table physical_asset {
@@ -457,6 +458,8 @@ Table reservation_line {
   line_number integer [not null]
   name_snapshot varchar(200) [not null]
   measurements_snapshot jsonb [not null]
+  fit_range_snapshot text
+  measurement_unit_snapshot varchar(8)
   pricing_snapshot jsonb [not null]
   rental_minor bigint [not null]
   deposit_minor bigint [not null]
@@ -466,7 +469,7 @@ Table reservation_line {
     (tenant_id, id) [pk]
     (tenant_id, reservation_id, line_number) [unique]
   }
-  Note: 'V1. One serialized garment per line. One line in V1 UI. No quantity greater than one; allocation assigns the physical asset.'
+  Note: 'V1. Snapshots the exact offered measurements, optional flexible-fit range, and unit. Legacy rows may have null range/unit. One serialized garment per line; allocation assigns the physical asset.'
 }
 
 Table maintenance_work_order {

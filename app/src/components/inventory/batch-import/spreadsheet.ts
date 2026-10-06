@@ -10,14 +10,17 @@ export const TEMPLATE_COLUMNS = [
   "Category",
   "Subcategory",
   "Size",
-  "Fit note",
+  "Fits sizes",
+  "Description",
   "Color",
   "Measurement mode",
   "Unit",
   "Bust",
+  "Bust fit note",
   "Waist",
-  "Hips",
+  "Waist fit note",
   "Length",
+  "Length fit note",
   "Rental price",
   "Deposit",
 ] as const;
@@ -33,8 +36,11 @@ const HEADER_ALIASES: Record<string, keyof SheetRecord> = {
   subcategory: "subcategory",
   subcategorylabel: "subcategory",
   size: "size",
-  fitnote: "fitNote",
-  note: "fitNote",
+  fitsizes: "fitRange",
+  fitssizes: "fitRange",
+  fitrange: "fitRange",
+  fitnote: "fitRange",
+  description: "description",
   color: "color",
   colour: "color",
   measurementmode: "measurementMode",
@@ -42,10 +48,11 @@ const HEADER_ALIASES: Record<string, keyof SheetRecord> = {
   unit: "unit",
   bust: "bust",
   chest: "bust",
+  bustfitnote: "bustFitNote",
   waist: "waist",
-  hips: "hips",
-  hip: "hips",
+  waistfitnote: "waistFitNote",
   length: "length",
+  lengthfitnote: "lengthFitNote",
   rentalprice: "price",
   price: "price",
   rentalfee: "price",
@@ -60,14 +67,17 @@ type SheetRecord = {
   category: string;
   subcategory: string;
   size: string;
-  fitNote: string;
+  fitRange: string;
+  description: string;
   color: string;
   measurementMode: string;
   unit: string;
   bust: string;
+  bustFitNote: string;
   waist: string;
-  hips: string;
+  waistFitNote: string;
   length: string;
+  lengthFitNote: string;
   price: string;
   deposit: string;
 };
@@ -144,13 +154,13 @@ export function rowsFromSheet(table: string[][], photos: File[], defaults: Impor
       if (key) record[key] = (cells[index] ?? "").trim();
     });
     const size = record.size ?? "";
-    const freeSize = size === "" || /^(fs|free\s*size|freesize|one\s*size)$/i.test(size);
+    const freeSize = size === "" || /^(fs|free\s*size|freesize|one\s*size|flexible\s*fit)$/i.test(size);
     const photoName = record.photo?.toLowerCase() ?? "";
     const photo = photoName ? (photosByName.get(photoName) ?? null) : null;
     if (photoName && !photo) unmatchedPhotos.push(record.photo ?? "");
     if (photo) photosByName.delete(photoName);
     const unit = record.unit?.toLowerCase().startsWith("c") ? "cm" : record.unit?.toLowerCase().startsWith("i") ? "in" : defaults.unit;
-    const hasMeasurements = [record.bust, record.waist, record.hips, record.length].some((value) => Boolean(value?.trim()));
+    const hasMeasurements = [record.bust, record.bustFitNote, record.waist, record.waistFitNote, record.length, record.lengthFitNote].some((value) => Boolean(value?.trim()));
     const requestedMeasurementMode = record.measurementMode?.trim().toLowerCase() ?? "";
     const measurementMode =
       /^(none|no|no measurements?)$/.test(requestedMeasurementMode)
@@ -169,14 +179,29 @@ export function rowsFromSheet(table: string[][], photos: File[], defaults: Impor
       subcategory: record.subcategory ?? "",
       freeSize,
       sizeLabel: freeSize ? "" : size,
-      fitNote: record.fitNote ?? "",
+      fitRange: record.fitRange ?? "",
+      description: record.description ?? "",
       color: record.color ?? "",
       measurementMode,
       unit,
-      bust: record.bust ?? "",
-      waist: record.waist ?? "",
-      hips: record.hips ?? "",
-      length: record.length ?? "",
+      bust: record.bust?.trim() ? record.bust : record.bustFitNote ?? "",
+      waist: record.waist?.trim() ? record.waist : record.waistFitNote ?? "",
+      length: record.length?.trim() ? record.length : record.lengthFitNote ?? "",
+      measurementKinds: {
+        bust: record.bustFitNote?.trim() && !record.bust?.trim() ? "fit_note" : "exact",
+        waist: record.waistFitNote?.trim() && !record.waist?.trim() ? "fit_note" : "exact",
+        length: record.lengthFitNote?.trim() && !record.length?.trim() ? "fit_note" : "exact",
+      },
+      measurementConflicts: ([
+        ["bust", record.bust, record.bustFitNote],
+        ["waist", record.waist, record.waistFitNote],
+        ["length", record.length, record.lengthFitNote],
+      ] as const).filter(([, exact, note]) => Boolean(exact?.trim() && note?.trim())).map(([field]) => field),
+      conflictingFitNotes: {
+        ...(record.bust?.trim() && record.bustFitNote?.trim() ? { bust: record.bustFitNote } : {}),
+        ...(record.waist?.trim() && record.waistFitNote?.trim() ? { waist: record.waistFitNote } : {}),
+        ...(record.length?.trim() && record.lengthFitNote?.trim() ? { length: record.lengthFitNote } : {}),
+      },
       price: record.price ?? "",
       deposit: record.deposit ?? "",
     });
@@ -191,15 +216,18 @@ export function templateCsv(): string {
     "Mirabelle",
     "Evening Dresses",
     "LONG",
-    "Free size",
+    "Flexible fit",
+    "Small-XL",
     "",
     "Blush pink",
     "Custom",
     "in",
-    "30",
+    "",
+    "",
     "24",
     "",
-    "22",
+    "61",
+    "",
     "500",
     "500",
   ];

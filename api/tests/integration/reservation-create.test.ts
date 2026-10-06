@@ -221,6 +221,57 @@ describe('RSV-021/022 staff reservation creation', async () => {
     expect(persisted.idempotency).toEqual({ status: 'succeeded', response_code: 201 });
   });
 
+  it('snapshots flexible fit range, fit notes, exact measurements, and unit on a reservation line', async () => {
+    const seed = await seedWorkspace('org_rsv021_flexible_snapshot', 'user_rsv021_flexible_snapshot', ['reservations.manage']);
+    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      await client.query(
+        `UPDATE product SET sizing_mode = 'free_size' WHERE tenant_id = $1 AND id = (
+           SELECT product_id FROM product_variant WHERE tenant_id = $1 AND id = $2
+         )`,
+        [seed.tenantId, seed.variantId],
+      );
+      await client.query(
+        `UPDATE product_variant
+            SET size_label = NULL,
+                fit_range = 'Small–XL',
+                measurement_unit = 'in',
+                measurements = '{"bust":{"type":"fit_note","text":"Flexible fit"},"waist":28,"length":61}'::jsonb
+          WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, seed.variantId],
+      );
+    });
+
+    const response = await createStaffReservation(
+      commandContext(seed, 'req-rsv021-flexible-snapshot', 'idem-rsv021-flexible-snapshot'),
+      createRequest(seed),
+    );
+    expect(response.status).toBe(201);
+    const reservationId = successReservationId(response.body);
+    const line = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{
+        measurements_snapshot: Record<string, unknown>;
+        fit_range_snapshot: string | null;
+        measurement_unit_snapshot: string | null;
+      }>(
+        `SELECT measurements_snapshot, fit_range_snapshot, measurement_unit_snapshot
+           FROM reservation_line
+          WHERE tenant_id = $1 AND reservation_id = $2`,
+        [seed.tenantId, reservationId],
+      );
+      return requireRow(result.rows, 'flexible-fit reservation line');
+    });
+
+    expect(line).toEqual({
+      measurements_snapshot: {
+        bust: { type: 'fit_note', text: 'Flexible fit' },
+        waist: 28,
+        length: 61,
+      },
+      fit_range_snapshot: 'Small–XL',
+      measurement_unit_snapshot: 'in',
+    });
+  });
+
   it('acquires an idempotent walk-in hold before customer entry without fabricating a customer row', async () => {
     const seed = await seedWorkspace('org_rsv023_fast_hold', 'user_rsv023_fast_hold', ['reservations.manage']);
     const requestBody = createFastHoldRequest(seed);

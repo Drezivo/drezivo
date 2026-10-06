@@ -261,6 +261,52 @@ describe('catalogue staff contract', () => {
     ).toBe(true);
   });
 
+  it('projects flexible-fit ranges and fit-note dimensions while preserving legacy Hips data', () => {
+    const result = clothingDetail.safeParse({
+      product_id: ids.product,
+      code: 'FLEX-001',
+      name: 'Hailey',
+      description: '',
+      category: null,
+      status: 'draft',
+      sizing_mode: 'free_size',
+      images: [],
+      variants: [{
+        id: ids.variant,
+        sku: 'FLEX-001-FS',
+        size_label: null,
+        color_label: null,
+        measurement_mode: 'custom',
+        measurement_guide_id: null,
+        measurement_unit: 'in',
+        measurements: {
+          bust: { type: 'fit_note', text: 'Flexible fit' },
+          waist: 28,
+          length: 61,
+          hips: 36,
+        },
+        fit_range: null,
+        rental_price_minor: '30000',
+        security_deposit_minor: '0',
+        currency: 'PHP',
+        pricing_mode: 'daily',
+        included_duration_minutes: 1440,
+        extra_day_price_minor: '30000',
+        prep_minutes: 0,
+        turnaround_minutes: 0,
+        status: 'draft',
+        assets: [],
+        created_at: instant,
+        updated_at: instant,
+      }],
+      upcoming_allocations: [],
+      has_more_upcoming_allocations: false,
+      created_at: instant,
+      updated_at: instant,
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('rejects client-supplied tenant, branch, entitlement and availability authority on create', () => {
     const request = {
       name: 'Emerald Gown',

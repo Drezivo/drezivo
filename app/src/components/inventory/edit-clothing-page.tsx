@@ -29,6 +29,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 
@@ -57,6 +58,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { uploadAuthorizedFile } from "@/lib/authorized-file-upload";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { inferMeasurementKind, parseMeasurementInput, type MeasurementKind } from "@/lib/measurement-input";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
 
@@ -73,6 +75,7 @@ type PhotoStatus = "ready" | "uploading" | "uploaded" | "error";
 type SubcategorySelection = "none" | "LONG" | "MINI" | "custom";
 type PhotoFileId = ClothingDetail["images"][number]["file_id"];
 type MeasurementGuideId = ClothingVariantDetail["measurement_guide_id"];
+type MeasurementValue = ClothingVariantDetail["measurements"][string];
 
 type VariantDraft = {
   id: string;
@@ -84,7 +87,10 @@ type VariantDraft = {
   measurementMode: MeasurementMode;
   measurementGuideId: MeasurementGuideId;
   measurementUnit: MeasurementUnit;
+  fitRange: string;
   measurements: Record<string, string>;
+  measurementKinds: Record<string, MeasurementKind>;
+  legacyHips: Record<string, MeasurementValue>;
   pricingMode: PricingMode;
   rentalPrice: string;
   securityDeposit: string;
@@ -752,7 +758,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
             <SectionCard
               icon={Ruler}
               title="Variants, Measurements & Pricing"
-              description="Edit each existing variant independently, or migrate the clothing between Sized and Free size."
+              description="Edit each existing variant independently, or switch between one flexible-fit variant and multiple labeled sizes."
               action={
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <Button
@@ -779,10 +785,10 @@ export function EditClothingPage({ productId }: { productId: string }) {
             >
               <div className="flex flex-col gap-2 rounded-lg border border-dashboard-border bg-dashboard-active/25 px-3 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-dashboard-muted">Current sizing mode</span>
-                <span className="font-semibold text-dashboard-accent">{currentSizingMode === "free_size" ? "Free size" : "Sized"}</span>
+                <span className="font-semibold text-dashboard-accent">{currentSizingMode === "free_size" ? "One flexible-fit variant" : "Multiple labeled sizes"}</span>
               </div>
               {currentSizingMode === "free_size" ? (
-                <p className="text-xs text-dashboard-muted">Free size products use one active null-size variant. Switch to Sized before adding separate size variants.</p>
+                <p className="text-xs text-dashboard-muted">A flexible-fit variant may suit multiple wearer sizes. It is still one variant and does not describe how many physical pieces you own.</p>
               ) : null}
               <div className="space-y-3">
                 {editableVariants.length > 0 ? (
@@ -835,7 +841,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
                       key={variant.id}
                       className="rounded-lg border border-dashboard-border bg-dashboard-active px-2.5 py-1.5 text-xs font-semibold text-dashboard-accent"
                     >
-                      {variant.sizeLabel ?? "Free size"} · {variant.sku}
+                      {variant.sizeLabel ?? "Flexible fit"} · {variant.sku}
                     </span>
                   ))}
                 </div>
@@ -935,7 +941,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
         onCompleted={async (data) => {
           await load();
           setSaveNotice(
-            `Sizing mode changed to ${data.sizing_mode === "free_size" ? "Free size" : "Sized"} (${data.active_variant_count} active variant${data.active_variant_count === 1 ? "" : "s"}; ${data.archived_variant_count} archived).`
+            `Sizing mode changed to ${data.sizing_mode === "free_size" ? "one flexible-fit variant" : "multiple labeled sizes"} (${data.active_variant_count} active variant${data.active_variant_count === 1 ? "" : "s"}; ${data.archived_variant_count} archived).`
           );
         }}
         onOpenChange={setSizingModeOpen}
@@ -1004,7 +1010,8 @@ function AddVariantDialog({
   const [color, setColor] = useState("");
   const [measurementMode, setMeasurementMode] = useState<MeasurementMode>("none");
   const [measurementUnit, setMeasurementUnit] = useState<MeasurementUnit>("cm");
-  const [measurements, setMeasurements] = useState<Record<string, string>>({ bust: "", waist: "", hips: "" });
+  const [measurements, setMeasurements] = useState<Record<string, string>>({ bust: "", waist: "", length: "" });
+  const [measurementKinds, setMeasurementKinds] = useState<Record<string, MeasurementKind>>({ bust: "exact", waist: "exact", length: "exact" });
   const [pricingMode, setPricingMode] = useState<PricingMode>("fixed_duration");
   const [rentalPrice, setRentalPrice] = useState("");
   const [securityDeposit, setSecurityDeposit] = useState("0");
@@ -1018,7 +1025,8 @@ function AddVariantDialog({
     setColor("");
     setMeasurementMode("none");
     setMeasurementUnit("cm");
-    setMeasurements({ bust: "", waist: "", hips: "" });
+    setMeasurements({ bust: "", waist: "", length: "" });
+    setMeasurementKinds({ bust: "exact", waist: "exact", length: "exact" });
     setPricingMode("fixed_duration");
     setRentalPrice("");
     setSecurityDeposit("0");
@@ -1049,7 +1057,10 @@ function AddVariantDialog({
         measurementMode,
         measurementGuideId: measurementMode === "default_guide" ? defaultGuide?.id ?? null : null,
         measurementUnit,
+        fitRange: "",
         measurements,
+        measurementKinds,
+        legacyHips: {},
         pricingMode,
         rentalPrice,
         securityDeposit,
@@ -1066,6 +1077,7 @@ function AddVariantDialog({
         measurement_guide_id: measurement.measurement_guide_id,
         measurement_unit: measurement.measurement_unit,
         measurements: measurement.measurements,
+        fit_range: null,
         pricing: buildPricingInput(draft),
       };
       const result = await submitGuard.submit((idempotencyKey) =>
@@ -1141,9 +1153,20 @@ function AddVariantDialog({
                       </div>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-3">
-                      {["bust", "waist", "hips"].map((key) => (
+                      {["bust", "waist", "length"].map((key) => (
                         <Field key={key} label={key[0]!.toUpperCase() + key.slice(1)}>
-                          <Input aria-label={`New Variant ${key}`} inputMode="decimal" value={measurements[key] ?? ""} onChange={(event) => setMeasurements((current) => ({ ...current, [key]: event.target.value }))} />
+                          <Input
+                            aria-label={`New Variant ${key}`}
+                            inputMode="text"
+                            maxLength={120}
+                            value={measurements[key] ?? ""}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              setMeasurements((current) => ({ ...current, [key]: value }));
+                              setMeasurementKinds((current) => ({ ...current, [key]: inferMeasurementKind(value) }));
+                            }}
+                            placeholder="e.g. 36 or Flexible fit"
+                          />
                         </Field>
                       ))}
                     </div>
@@ -1218,7 +1241,7 @@ function VariantEditor({
   variant: VariantDraft;
 }) {
   const measurementKeys = useMemo(() => {
-    const keys = new Set(["bust", "waist", "hips", ...Object.keys(variant.measurements)]);
+    const keys = new Set(["bust", "waist", "length", ...Object.keys(variant.measurements).filter((key) => !isLegacyHipsKey(key))]);
     return [...keys];
   }, [variant.measurements]);
   const guideLabel =
@@ -1227,6 +1250,83 @@ function VariantEditor({
       : variant.measurementGuideId
         ? "Existing reusable guide"
         : defaultGuide?.name ?? "No default guide";
+  const measurementSourceSelector = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          aria-label="Measurement Source"
+          disabled={disabled}
+          className="w-full justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
+        >
+          {measurementModeLabel(variant.measurementMode)}
+          <ChevronDown className="h-4 w-4 text-dashboard-muted" aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-52">
+        <DropdownMenuItem
+          disabled={!variant.measurementGuideId && !defaultGuide}
+          onSelect={() =>
+            onChange({
+              measurementMode: "default_guide",
+              measurementGuideId: variant.measurementGuideId ?? defaultGuide?.id ?? null,
+              measurements: {},
+            })
+          }
+        >
+          Reusable guide
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() =>
+            onChange({
+              measurementMode: "custom",
+              measurementGuideId: null,
+              measurements:
+                Object.keys(variant.measurements).length > 0
+                  ? variant.measurements
+                  : { bust: "", waist: "", length: "" },
+            })
+          }
+        >
+          Custom measurements
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() => onChange({ measurementMode: "none", measurementGuideId: null, measurements: {} })}
+        >
+          No measurements
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+  const measurementUnitSelector = (
+    <div className="flex overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-surface">
+      {(["cm", "in"] as const).map((unit) => (
+        <button
+          key={unit}
+          type="button"
+          disabled={disabled}
+          aria-pressed={variant.measurementUnit === unit}
+          onClick={() => onChange({ measurementUnit: unit })}
+          className={cn(
+            "min-h-6 px-3 text-[0.68rem] font-medium uppercase",
+            variant.measurementUnit === unit
+              ? "bg-dashboard-active text-dashboard-accent"
+              : "text-dashboard-muted hover:bg-dashboard-active"
+          )}
+        >
+          {unit}
+        </button>
+      ))}
+    </div>
+  );
+  const legacyHipsSummary = Object.keys(variant.legacyHips).length > 0 ? (
+    <div className="mt-3 rounded-md border border-dashboard-border bg-dashboard-surface/70 px-3 py-2 text-xs text-dashboard-muted">
+      <span className="font-medium text-dashboard-navy">Legacy Hips (read-only): </span>
+      {Object.entries(variant.legacyHips).map(([key, value]) => `${labelize(key)}: ${typeof value === "number" ? `${value} ${variant.measurementUnit}` : value.text}`).join(" · ")}
+      <span className="ml-1">This saved value is preserved when other measurements are edited.</span>
+    </div>
+  ) : null;
 
   return (
     <div className="overflow-hidden rounded-xl border border-dashboard-border bg-dashboard-surface">
@@ -1246,10 +1346,10 @@ function VariantEditor({
 
       <div className="space-y-5 p-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Size Label" required={variant.sizeLabel !== null}>
+          <Field label={variant.sizeLabel === null ? "Variant" : "Size Label"} required={variant.sizeLabel !== null}>
             <Input
               aria-label={`${variant.sku} Size Label`}
-              value={variant.sizeLabel ?? "Free size"}
+              value={variant.sizeLabel ?? "Flexible fit"}
               disabled={disabled || variant.sizeLabel === null}
               onChange={(event) => onChange({ sizeLabel: event.target.value })}
             />
@@ -1265,115 +1365,73 @@ function VariantEditor({
           </Field>
         </div>
 
-        <div className="rounded-lg border border-dashboard-border bg-dashboard-active/25 p-4">
-          <div className="grid gap-4 lg:grid-cols-[14rem_minmax(0,1fr)]">
-            <Field label="Measurement Source">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    disabled={disabled}
-                    className="w-full justify-between border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
-                  >
-                    {measurementModeLabel(variant.measurementMode)}
-                    <ChevronDown className="h-4 w-4 text-dashboard-muted" aria-hidden="true" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-52">
-                  <DropdownMenuItem
-                    disabled={!variant.measurementGuideId && !defaultGuide}
-                    onSelect={() =>
-                      onChange({
-                        measurementMode: "default_guide",
-                        measurementGuideId: variant.measurementGuideId ?? defaultGuide?.id ?? null,
-                        measurements: {},
-                      })
-                    }
-                  >
-                    Reusable guide
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={() =>
-                      onChange({
-                        measurementMode: "custom",
-                        measurementGuideId: null,
-                        measurements:
-                          Object.keys(variant.measurements).length > 0
-                            ? variant.measurements
-                            : { bust: "", waist: "", hips: "" },
-                      })
-                    }
-                  >
-                    Custom measurements
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={() =>
-                      onChange({ measurementMode: "none", measurementGuideId: null, measurements: {} })
-                    }
-                  >
-                    No measurements
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </Field>
+        {variant.sizeLabel === null ? (
+          <Field label="Fits sizes (optional)">
+            <Input
+              aria-label={`${variant.sku} Fits sizes`}
+              value={variant.fitRange}
+              maxLength={120}
+              disabled={disabled}
+              onChange={(event) => onChange({ fitRange: event.target.value })}
+              placeholder="e.g. Small–XL"
+            />
+          </Field>
+        ) : null}
 
-            {variant.measurementMode === "default_guide" ? (
-              <div className="rounded-lg border border-dashboard-border bg-dashboard-surface px-3 py-3 text-xs text-dashboard-muted">
-                <p className="font-medium text-dashboard-navy">{guideLabel}</p>
-                <p className="mt-1">This variant keeps a stable guide reference unless you explicitly change its source.</p>
-              </div>
-            ) : variant.measurementMode === "custom" ? (
-              <div>
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-dashboard-muted">Custom measurements</span>
-                  <div className="flex overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-surface">
-                    {(["cm", "in"] as const).map((unit) => (
-                      <button
-                        key={unit}
-                        type="button"
-                        disabled={disabled}
-                        aria-pressed={variant.measurementUnit === unit}
-                        onClick={() => onChange({ measurementUnit: unit })}
-                        className={cn(
-                          "min-h-8 px-3 text-[0.68rem] font-medium uppercase",
-                          variant.measurementUnit === unit
-                            ? "bg-dashboard-active text-dashboard-accent"
-                            : "text-dashboard-muted hover:bg-dashboard-active"
-                        )}
-                      >
-                        {unit}
-                      </button>
-                    ))}
+        <div className="rounded-lg border border-dashboard-border bg-dashboard-active/25 p-4">
+          {variant.measurementMode === "custom" ? (
+            <div
+              className="grid grid-cols-1 gap-x-3 gap-y-1 lg:grid-cols-[14rem_repeat(var(--measurement-count),minmax(0,1fr))] lg:items-end"
+              style={{ "--measurement-count": measurementKeys.length } as CSSProperties}
+            >
+              <span className="text-xs font-medium text-dashboard-muted">Measurement Source</span>
+              {measurementKeys.map((key) => (
+                <div key={`${key}-label`} className={key === "length" ? "flex items-end justify-between gap-2" : undefined}>
+                  <label className="hidden text-xs font-medium text-dashboard-muted lg:block" htmlFor={`${variant.id}-${key}-measurement`}>{labelize(key)}</label>
+                  {key === "length" ? measurementUnitSelector : null}
+                </div>
+              ))}
+              <div>{measurementSourceSelector}</div>
+              {measurementKeys.map((key) => (
+                <div key={key}>
+                  <label className="mb-1.5 block text-xs font-medium text-dashboard-muted lg:hidden" htmlFor={`${variant.id}-${key}-measurement`}>{labelize(key)}</label>
+                  <div className="relative">
+                    <Input
+                      id={`${variant.id}-${key}-measurement`}
+                      aria-label={`${variant.sku} ${key}`}
+                      inputMode="text"
+                      value={variant.measurements[key] ?? ""}
+                      maxLength={120}
+                      disabled={disabled}
+                      placeholder={`${labelize(key)} (e.g. 36 or Flexible fit)`}
+                      onChange={(event) => onChange({
+                        measurements: { ...variant.measurements, [key]: event.target.value },
+                        measurementKinds: { ...variant.measurementKinds, [key]: inferMeasurementKind(event.target.value) },
+                      })}
+                      className={(variant.measurementKinds[key] ?? "exact") === "exact" ? "pr-10" : undefined}
+                    />
+                    {(variant.measurementKinds[key] ?? "exact") === "exact" ? (
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[0.65rem] uppercase text-dashboard-muted">{variant.measurementUnit}</span>
+                    ) : null}
                   </div>
                 </div>
-                <div className="grid gap-2 sm:grid-cols-3">
-                  {measurementKeys.map((key) => (
-                    <div key={key} className="relative">
-                      <Input
-                        aria-label={`${variant.sku} ${key}`}
-                        inputMode="decimal"
-                        value={variant.measurements[key] ?? ""}
-                        disabled={disabled}
-                        placeholder={labelize(key)}
-                        onChange={(event) =>
-                          onChange({
-                            measurements: { ...variant.measurements, [key]: event.target.value },
-                          })
-                        }
-                        className="pr-10"
-                      />
-                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[0.65rem] uppercase text-dashboard-muted">
-                        {variant.measurementUnit}
-                      </span>
-                    </div>
-                  ))}
+              ))}
+              {legacyHipsSummary ? <div className="lg:col-span-full">{legacyHipsSummary}</div> : null}
+            </div>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-[14rem_minmax(0,1fr)]">
+              <Field label="Measurement Source">{measurementSourceSelector}</Field>
+              {variant.measurementMode === "default_guide" ? (
+                <div className="rounded-lg border border-dashboard-border bg-dashboard-surface px-3 py-3 text-xs text-dashboard-muted">
+                  <p className="font-medium text-dashboard-navy">{guideLabel}</p>
+                  <p className="mt-1">This variant keeps a stable guide reference unless you explicitly change its source.</p>
                 </div>
-              </div>
-            ) : (
-              <p className="self-center text-xs text-dashboard-muted">No measurement data is attached to this variant.</p>
-            )}
-          </div>
+              ) : (
+                <p className="self-center text-xs text-dashboard-muted">No measurement data is attached to this variant.</p>
+              )}
+              {legacyHipsSummary ? <div className="lg:col-span-full">{legacyHipsSummary}</div> : null}
+            </div>
+          )}
         </div>
 
         <div>
@@ -1811,6 +1869,9 @@ function buildVariantPatch(
     if (!sizeLabel) throw new Error(`Enter a size label for ${initial.sku}.`);
     if (sizeLabel !== initial.size_label) patch.size_label = sizeLabel;
   }
+  if (initial.fit_range !== (draft.fitRange.trim() || null)) {
+    patch.fit_range = draft.fitRange.trim() || null;
+  }
 
   const color = draft.color.trim() || null;
   if (color !== initial.color_label) patch.color_label = color;
@@ -1858,10 +1919,11 @@ function buildMeasurementPatch(
   const measurements = Object.fromEntries(
     Object.entries(draft.measurements)
       .filter(([, value]) => value.trim() !== "")
-      .map(([key, value]) => [key, parseMeasurement(value, `${draft.sku} ${key}`)])
+      .map(([key, value]) => [key, parseMeasurementInput(value, `${draft.sku} ${key}`, draft.measurementKinds[key] ?? "exact", true)])
   );
+  for (const [key, value] of Object.entries(draft.legacyHips)) measurements[key] = value;
   if (Object.keys(measurements).length === 0) {
-    throw new Error(`Enter at least one custom measurement for ${draft.sku}.`);
+    throw new Error(`Enter at least one custom measurement or fit note for ${draft.sku}.`);
   }
   return {
     measurement_mode: "custom",
@@ -1904,6 +1966,9 @@ function variantPricingFromDetail(variant: ClothingVariantDetail): ClothingPrici
 }
 
 function variantToDraft(variant: ClothingVariantDetail): VariantDraft {
+  const entries = Object.entries(variant.measurements);
+  const legacyHips = Object.fromEntries(entries.filter(([key]) => isLegacyHipsKey(key)));
+  const editableEntries = entries.filter(([key]) => !isLegacyHipsKey(key));
   return {
     id: variant.id,
     sku: variant.sku,
@@ -1914,9 +1979,12 @@ function variantToDraft(variant: ClothingVariantDetail): VariantDraft {
     measurementMode: variant.measurement_mode,
     measurementGuideId: variant.measurement_guide_id,
     measurementUnit: variant.measurement_unit,
+    fitRange: variant.fit_range ?? "",
     measurements: Object.fromEntries(
-      Object.entries(variant.measurements).map(([key, value]) => [key, String(value)])
+      editableEntries.map(([key, value]) => [key, typeof value === "number" ? String(value) : value.text])
     ),
+    measurementKinds: Object.fromEntries(editableEntries.map(([key, value]) => [key, typeof value === "number" ? "exact" : "fit_note"])),
+    legacyHips,
     pricingMode: variant.pricing_mode,
     rentalPrice: minorToPesos(variant.rental_price_minor),
     securityDeposit: minorToPesos(variant.security_deposit_minor),
@@ -1924,6 +1992,10 @@ function variantToDraft(variant: ClothingVariantDetail): VariantDraft {
     extraDayPrice: minorToPesos(variant.extra_day_price_minor),
     recoveryHours: formatDecimal(variant.turnaround_minutes / 60),
   };
+}
+
+function isLegacyHipsKey(key: string): boolean {
+  return key.trim().replace(/[_\s]+/g, " ").toLocaleLowerCase() === "hips";
 }
 
 function photosHaveChanged(initial: ClothingDetail, current: EditablePhoto[]): boolean {
@@ -1982,12 +2054,6 @@ function hoursToMinutes(value: string, label: string): number {
     throw new Error(`${label} must be a valid non-negative number of hours.`);
   }
   return minutes;
-}
-
-function parseMeasurement(value: string, label: string): number {
-  const parsed = Number(value.trim());
-  if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`${label} must be greater than zero.`);
-  return parsed;
 }
 
 function minorToPesos(value: string): string {

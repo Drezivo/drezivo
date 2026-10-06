@@ -18,7 +18,8 @@ export interface ReservationCatalogueQuoteSelectionRow {
   measurement_mode: 'default_guide' | 'custom' | 'none';
   measurement_guide_id: string | null;
   measurement_unit: 'cm' | 'in';
-  measurements: Record<string, number>;
+  measurements: Record<string, number | { type: 'fit_note'; text: string }>;
+  fit_range: string | null;
   rental_price_minor: string | number;
   security_deposit_minor: string | number;
   currency: string;
@@ -141,6 +142,7 @@ export async function readReservationCatalogueQuoteSelection(
        pv.measurement_guide_id,
        pv.measurement_unit,
        pv.measurements,
+       pv.fit_range,
        pv.rental_price_minor,
        pv.security_deposit_minor,
        pv.currency,

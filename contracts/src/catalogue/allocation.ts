@@ -11,9 +11,10 @@ import { currencyCode, nonNegativeMoneyString } from '../common/money';
 import { instantInterval } from '../common/time';
 import {
   cataloguePricingMode,
-  measurementMap,
   measurementMode,
   measurementUnit,
+  variantFitRange,
+  variantMeasurementMap,
 } from './admin';
 
 /**
@@ -49,7 +50,8 @@ export const reservationCatalogueQuoteSelection = reservationCatalogueSelection
         measurement_mode: measurementMode,
         measurement_guide_id: measurementGuideId.nullable(),
         measurement_unit: measurementUnit,
-        measurements: measurementMap,
+        measurements: variantMeasurementMap,
+        fit_range: variantFitRange.nullable().optional(),
         rental_price_minor: nonNegativeMoneyString,
         security_deposit_minor: nonNegativeMoneyString,
         currency: currencyCode,

@@ -40,6 +40,7 @@ describe("rowsFromPhotos", () => {
   });
 });
 
+
 describe("applyExtraction", () => {
   it("fills empty cells from an evening-dress card and keeps what the owner typed", () => {
     const row = emptyRow(defaults, { price: "450" });
@@ -58,24 +59,50 @@ describe("applyExtraction", () => {
       bust: "30",
       waist: "24",
       length: "22",
-      hips: "",
       unit: "in",
       measurementMode: "custom",
       read: true,
     });
   });
 
-  it("turns a wedding-gown free-size range into a fit note", () => {
+  it("keeps an explicitly printed flexible-fit range separate from description", () => {
     const next = applyExtraction(emptyRow(defaults), {
-      name: "Astrid",
+      name: "Yasmin",
       rental_price_minor: "100000",
-      size_label: "Small-XL",
+      size_label: null,
+      fit_range: "Small-XL",
       free_size: true,
       measurement_unit: null,
       measurements: {},
       color_label: "White",
     });
-    expect(next).toMatchObject({ freeSize: true, sizeLabel: "", fitNote: "Fits Small-XL", price: "1000" });
+    expect(next).toMatchObject({ freeSize: true, sizeLabel: "", fitRange: "Small-XL", description: "", price: "1000" });
+  });
+
+  it("keeps an FS bust note, waist, and length without inferring a size range", () => {
+    const next = applyExtraction(emptyRow(defaults), {
+      name: "Hailey",
+      rental_price_minor: "80000",
+      size_label: null,
+      fit_range: null,
+      free_size: true,
+      measurement_unit: "in",
+      measurements: {
+        Bust: { type: "fit_note", text: "Flexible fit" },
+        Waist: 28,
+        Length: 61,
+      },
+      color_label: "White",
+    });
+    expect(next).toMatchObject({
+      freeSize: true,
+      fitRange: "",
+      description: "",
+      bust: "Flexible fit",
+      waist: "28",
+      length: "61",
+      measurementKinds: { bust: "fit_note", waist: "exact", length: "exact" },
+    });
   });
 });
 
@@ -85,7 +112,7 @@ describe("validation and the create request", () => {
       emptyRow(defaults, { freeSize: false, measurementMode: "custom", bust: "thirty" }),
       defaults
     ).map((problem) => problem.field);
-    expect(problems).toEqual(["name", "category", "sizeLabel", "price", "bust", "measurementMode"]);
+    expect(problems).toEqual(["name", "category", "sizeLabel", "price"]);
   });
 
   it("builds the same create request the single form sends", () => {
@@ -110,7 +137,7 @@ describe("validation and the create request", () => {
       color_label: "Black",
       image_file_ids: [FILE_ID],
       sizing_mode: "free_size",
-      sizes: [{ size_label: null, measurement_mode: "custom", measurement_unit: "in", measurements: { bust: 30, waist: 26, length: 60 } }],
+      sizes: [{ size_label: null, fit_range: null, measurement_mode: "custom", measurement_unit: "in", measurements: { bust: 30, waist: 26, length: 60 } }],
       pricing: {
         mode: "fixed_duration",
         included_days: 3,
@@ -121,6 +148,36 @@ describe("validation and the create request", () => {
         turnaround_minutes: 1440,
       },
       activate: false,
+    });
+  });
+
+  it("keeps fit range and description separate and sends dimension-specific fit notes", () => {
+    const row = emptyRow(defaults, {
+      name: "Hailey",
+      category: "Wedding Gowns",
+      price: "800",
+      freeSize: true,
+      fitRange: "Small-XL",
+      description: "Polka-dot gown",
+      measurementMode: "custom",
+      bust: "Flexible fit",
+      waist: "28",
+      length: "61",
+      measurementKinds: { bust: "fit_note", waist: "exact", length: "exact" },
+    });
+    expect(toCreateRequest(row, defaults, CATEGORY_ID, false)).toMatchObject({
+      description: "Polka-dot gown",
+      sizes: [{
+        size_label: null,
+        fit_range: "Small-XL",
+        measurement_mode: "custom",
+        measurement_unit: "in",
+        measurements: {
+          bust: { type: "fit_note", text: "Flexible fit" },
+          waist: 28,
+          length: 61,
+        },
+      }],
     });
   });
 
@@ -193,6 +250,26 @@ describe("spreadsheet import", () => {
     expect(rows[1]).toMatchObject({ photo: null, freeSize: true, sizeLabel: "", measurementMode: "none" });
     expect(unmatchedPhotos).toEqual(["missing.jpg"]);
     expect(ignoredColumns).toEqual(["Mystery"]);
+  });
+
+  it("imports fits-size range, description, and exact or fit-note dimensions as separate fields", () => {
+    const table = parseCsv(
+      "Name,Category,Size,Fits sizes,Description,Measurement mode,Unit,Bust,Waist,Length,Length fit note,Hips\n" +
+        "Yasmin,Wedding Gowns,FS,Small-XL,Soft tulle gown,Custom,in,,28,61,,36\n"
+    );
+    const { rows, ignoredColumns } = rowsFromSheet(table, [], defaults);
+    expect(rows[0]).toMatchObject({
+      freeSize: true,
+      fitRange: "Small-XL",
+      description: "Soft tulle gown",
+      waist: "28",
+      length: "61",
+    });
+    expect(rows[0]?.bust).toBe("");
+    expect(ignoredColumns).toEqual(["Hips"]);
+    expect(templateCsv()).not.toMatch(/(^|,)Hips(,|\r?\n)/i);
+    expect(templateCsv()).toContain("Bust fit note");
+    expect(templateCsv()).toContain("Description");
   });
 
   it("ships a template whose own example row imports cleanly", () => {

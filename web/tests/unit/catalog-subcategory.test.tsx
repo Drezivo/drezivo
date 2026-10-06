@@ -95,6 +95,62 @@ describe('storefront product subcategories', () => {
     expect(screen.queryByRole('tab', { name: 'Rental info' })).not.toBeNull();
   });
 
+  it('shows a flexible-fit range and fit notes alongside exact custom measurements', () => {
+    render(
+      <PreviewProvider preview={false}>
+        <ItemView
+          store={store}
+          item={{
+            ...item,
+            variants: [{
+              ...item.variants[0]!,
+              fit_range: 'Small–XL',
+              measurement: {
+                mode: 'custom',
+                unit: 'in',
+                values: [
+                  { label: 'Bust', value: 'Flexible fit' },
+                  { label: 'Waist', value: '28 in' },
+                  { label: 'Length', value: '61 in' },
+                ],
+              },
+            }],
+          }}
+        />
+      </PreviewProvider>,
+    );
+
+    expect(screen.getByText('Fits Small–XL')).toBeTruthy();
+    expect(screen.getByText('Flexible fit')).toBeTruthy();
+    expect(screen.getByText('28 in')).toBeTruthy();
+    expect(screen.getByText('61 in')).toBeTruthy();
+    expect(screen.getByText('Approximate garment measurements.')).toBeTruthy();
+  });
+
+  it('does not call a note-only custom measurement approximate numeric dimensions', () => {
+    render(
+      <PreviewProvider preview={false}>
+        <ItemView
+          store={store}
+          item={{
+            ...item,
+            variants: [{
+              ...item.variants[0]!,
+              measurement: {
+                mode: 'custom',
+                unit: 'in',
+                values: [{ label: 'Bust', value: 'Flexible fit' }],
+              },
+            }],
+          }}
+        />
+      </PreviewProvider>,
+    );
+
+    expect(screen.getByText('Flexible fit')).toBeTruthy();
+    expect(screen.queryByText('Approximate garment measurements.')).toBeNull();
+  });
+
   it.each([
     ['null', null],
     ['empty', ''],

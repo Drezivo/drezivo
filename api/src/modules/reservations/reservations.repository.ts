@@ -126,6 +126,8 @@ export interface ReservationDetailLineRow {
   line_number: number;
   name_snapshot: string;
   measurements_snapshot: unknown;
+  fit_range_snapshot: string | null;
+  measurement_unit_snapshot: 'cm' | 'in' | null;
   rental_minor: string | number;
   deposit_minor: string | number;
   currency: string;
@@ -512,6 +514,8 @@ export async function readReservationDetailModel(
        rl.line_number,
        rl.name_snapshot,
        rl.measurements_snapshot,
+       rl.fit_range_snapshot,
+       rl.measurement_unit_snapshot,
        rl.rental_minor,
        rl.deposit_minor,
        rl.currency
