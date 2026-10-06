@@ -57,6 +57,7 @@ const store = {
   payment_methods: [],
   booking_open: false,
   fitting: { enabled: false },
+  policy: { format: 'text', rental: '', deposit: '', cancellation: '', damage: '' },
 } as unknown as PublicStorefront;
 
 describe('storefront product subcategories', () => {
@@ -95,7 +96,7 @@ describe('storefront product subcategories', () => {
     expect(screen.queryByRole('tab', { name: 'Rental info' })).not.toBeNull();
   });
 
-  it('shows a flexible-fit range and fit notes alongside exact custom measurements', () => {
+  it('shows a flexible-fit range in Measurements alongside fit notes and exact dimensions', () => {
     render(
       <PreviewProvider preview={false}>
         <ItemView
@@ -120,11 +121,33 @@ describe('storefront product subcategories', () => {
       </PreviewProvider>,
     );
 
-    expect(screen.getByText('Fits Small–XL')).toBeTruthy();
+    const fitRange = screen.getByText('Fits Small–XL');
+    expect(fitRange.closest('[role="tabpanel"]')?.id).toBe('panel-measurements');
     expect(screen.getByText('Flexible fit')).toBeTruthy();
     expect(screen.getByText('28 in')).toBeTruthy();
     expect(screen.getByText('61 in')).toBeTruthy();
     expect(screen.getByText('Approximate garment measurements.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Rental info' }));
+    expect(screen.queryByText('Fits Small–XL')).toBeNull();
+  });
+
+  it.each([
+    ['default guide', { mode: 'default_guide' as const, guide_image_url: null }],
+    ['no measurements', { mode: 'none' as const }],
+  ])('shows a flexible-fit range for a %s variant', (_label, measurement) => {
+    render(
+      <PreviewProvider preview={false}>
+        <ItemView
+          store={store}
+          item={{
+            ...item,
+            variants: [{ ...item.variants[0]!, fit_range: 'Small–XL', measurement }],
+          }}
+        />
+      </PreviewProvider>,
+    );
+
+    expect(screen.getByText('Fits Small–XL').closest('[role="tabpanel"]')?.id).toBe('panel-measurements');
   });
 
   it('does not call a note-only custom measurement approximate numeric dimensions', () => {

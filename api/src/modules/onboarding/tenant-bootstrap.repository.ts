@@ -248,7 +248,7 @@ export async function createTenantBootstrapGraph(
          true,
          'Asia/Manila',
          '{}'::jsonb,
-         '{"opens_local":"08:00","closes_local":"20:00","closed_weekdays":["sunday"]}'::jsonb,
+         '{"opens_local":"08:00","closes_local":"20:00","closed_weekdays":[]}'::jsonb,
          'active'
        )`,
       [branchId, tenantId],

@@ -113,8 +113,9 @@ normalizes expired/restricted billing states for the derived pilot access model.
 for audit history. The winning database transaction creates the tenant, `Main Branch`, Owner
 membership/grant, draft storefront, Standard trial subscription, `trial_started` event, both audit
 records, and a `tenant.bootstrapped` outbox event, then finalizes the safe response. `Main Branch` starts with canonical Business Hours
-`08:00–20:00` and Sunday closed in `branch.operating_hours`; this is a safe bootstrap default, not
-a fitting-specific schedule. A no-op worker handler acknowledges that event
+`08:00–20:00` every day of the week in `branch.operating_hours`; the forward migration changes only
+the column default, so existing branch schedules remain unchanged. This is a safe bootstrap default,
+not a fitting-specific schedule. A no-op worker handler acknowledges that event
 until later consumers are introduced.
 
 TBF-032 adds `0018_entitlement_runtime_privileges.sql` as the forward-only plan-data boundary.

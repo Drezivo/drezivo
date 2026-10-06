@@ -37,9 +37,24 @@ describe("rowsFromPhotos", () => {
     expect(rows.map((row) => row.category)).toEqual(["", "Wedding Gowns"]);
     expect(skipped).toEqual(["notes.pdf", "huge.jpg"]);
     expect(new Set(rows.flatMap((row) => [row.uploadKey, row.finalizeKey, row.createKey])).size).toBe(6);
+    expect(rows[0]?.measurementMode).toBe("custom");
   });
 });
 
+describe("measurement mode defaults", () => {
+  it("starts new rows with custom measurements and preserves explicit spreadsheet modes", () => {
+    expect(emptyRow(defaults).measurementMode).toBe("custom");
+
+    const { rows } = rowsFromSheet(
+      parseCsv(
+        "Name,Category,Measurement mode\nNew default,Evening,\nUse guide,Evening,Default guide\nNo measurements,Evening,None\n"
+      ),
+      [],
+      defaults
+    );
+    expect(rows.map((row) => row.measurementMode)).toEqual(["custom", "default_guide", "none"]);
+  });
+});
 
 describe("applyExtraction", () => {
   it("fills empty cells from an evening-dress card and keeps what the owner typed", () => {
@@ -182,7 +197,7 @@ describe("validation and the create request", () => {
   });
 
   it("never publishes a row without a photo, and reuses the default guide like single-item add", () => {
-    const row = emptyRow(defaults, { name: "A", category: "C", price: "1" });
+    const row = emptyRow(defaults, { name: "A", category: "C", price: "1", measurementMode: "default_guide" });
     const request = toCreateRequest(row, defaults, CATEGORY_ID, true, GUIDE_ID);
     expect(request.activate).toBe(false);
     expect(request.sizes[0]).toMatchObject({

@@ -631,13 +631,13 @@ function RowEditor({
       )}
       aria-label={label}
     >
-      <div className="flex gap-3 sm:gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
         <RowThumb photo={row.photo} />
-        <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-2 lg:grid-cols-6">
-          <Field label="Name" className="col-span-2 lg:col-span-2">
+        <div className="grid min-w-0 flex-1 grid-cols-1 gap-x-3 gap-y-3 sm:grid-cols-6 lg:grid-cols-12">
+          <Field label="Name" className="sm:col-span-2 lg:col-span-4">
             <Input value={row.name} disabled={disabled} className={inputClass("name")} onChange={(event) => onChange({ name: event.target.value })} />
           </Field>
-          <Field label="Category" className="col-span-2 lg:col-span-2">
+          <Field label="Category" className="sm:col-span-2 lg:col-span-4">
             <Input
               list="batch-categories"
               value={row.category}
@@ -647,7 +647,7 @@ function RowEditor({
               onChange={(event) => onChange({ category: event.target.value })}
             />
           </Field>
-          <Field label="Subcategory" className="col-span-2 lg:col-span-2">
+          <Field label="Subcategory" className="sm:col-span-2 lg:col-span-4">
             <Input
               list="batch-subcategories"
               value={row.subcategory}
@@ -658,13 +658,13 @@ function RowEditor({
               onChange={(event) => onChange({ subcategory: event.target.value })}
             />
           </Field>
-          <Field label="Rental price (₱)">
+          <Field label="Rental price (₱)" className="sm:col-span-3 lg:col-span-3">
             <Input inputMode="decimal" value={row.price} disabled={disabled} className={inputClass("price")} onChange={(event) => onChange({ price: event.target.value })} />
           </Field>
-          <Field label="Deposit (₱)">
+          <Field label="Deposit (₱)" className="sm:col-span-3 lg:col-span-3">
             <Input inputMode="decimal" value={row.deposit} placeholder={defaults.deposit} disabled={disabled} className={inputClass("deposit")} onChange={(event) => onChange({ deposit: event.target.value })} />
           </Field>
-          <Field label="Size" className="col-span-2 lg:col-span-2">
+          <Field label="Size" className="sm:col-span-6 lg:col-span-6">
             <div className="flex items-center gap-2">
               <select
                 aria-label={`Sizing mode for ${label}`}
@@ -683,7 +683,7 @@ function RowEditor({
               )}
             </div>
           </Field>
-          <Field label="Description" className="col-span-2 lg:col-span-3">
+          <Field label="Description" className="sm:col-span-3 lg:col-span-6">
             <Input
               aria-label={`Description for ${label}`}
               value={row.description}
@@ -694,14 +694,17 @@ function RowEditor({
               onChange={(event) => onChange({ description: event.target.value })}
             />
           </Field>
-          <fieldset className="col-span-2 min-w-0 lg:col-span-3">
+          <Field label="Color" className="sm:col-span-3 lg:col-span-6">
+            <Input value={row.color} disabled={disabled} onChange={(event) => onChange({ color: event.target.value })} />
+          </Field>
+          <fieldset className="min-w-0 sm:col-span-6 lg:col-span-12">
             <legend className="mb-1 text-xs font-medium text-dashboard-muted">Measurements</legend>
             <div className="space-y-2">
-              <div className="flex min-w-0 items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <select
                   aria-label={`Measurement mode for ${label}`}
                   className={cn(
-                    "h-ws-control min-w-40 rounded-md border border-dashboard-border bg-dashboard-surface px-2 text-ws-input text-dashboard-navy",
+                    "h-ws-control min-w-40 max-w-full rounded-md border border-dashboard-border bg-dashboard-surface px-2 text-ws-input text-dashboard-navy",
                     inputClass("measurementMode")
                   )}
                   value={row.measurementMode}
@@ -719,7 +722,7 @@ function RowEditor({
                 ) : null}
               </div>
               {row.measurementMode === "custom" ? (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   {MEASUREMENT_FIELDS.map((field) => (
                     <div key={field} className="space-y-1">
                       {row.measurementConflicts.includes(field) ? (
@@ -779,9 +782,6 @@ function RowEditor({
               ) : null}
             </div>
           </fieldset>
-          <Field label="Color">
-            <Input value={row.color} disabled={disabled} onChange={(event) => onChange({ color: event.target.value })} />
-          </Field>
         </div>
         <Button type="button" variant="ghost" size="icon" aria-label={`Remove ${label}`} disabled={disabled} onClick={onRemove} className="shrink-0">
           <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -797,4 +797,3 @@ function RowEditor({
     </li>
   );
 }
-

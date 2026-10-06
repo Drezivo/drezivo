@@ -180,7 +180,7 @@ describe('TBF-030 tenant bootstrap', async () => {
       operating_hours: {
         opens_local: '08:00',
         closes_local: '20:00',
-        closed_weekdays: ['sunday'],
+        closed_weekdays: [],
       },
       operating_hours_version: '1',
     });

@@ -62,9 +62,6 @@ export function loadBatch(workspaceKey: string): Promise<SavedBatch | null> {
         ...batch,
         rows: batch.rows.map((row) => {
           const legacy = row as ImportRow & { subcategory?: unknown; measurementMode?: unknown; fitNote?: unknown; measurementKinds?: unknown };
-          const hasMeasurements = [legacy.bust, legacy.waist, legacy.length].some(
-            (value) => typeof value === "string" && value.trim() !== ""
-          );
           return {
             ...legacy,
             subcategory: typeof legacy.subcategory === "string" ? legacy.subcategory : "",
@@ -83,9 +80,7 @@ export function loadBatch(workspaceKey: string): Promise<SavedBatch | null> {
             measurementMode:
               legacy.measurementMode === "default_guide" || legacy.measurementMode === "custom" || legacy.measurementMode === "none"
                 ? legacy.measurementMode
-                : hasMeasurements
-                  ? "custom"
-                  : "default_guide",
+                : "custom",
           };
         }),
       };

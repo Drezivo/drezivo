@@ -160,7 +160,6 @@ export function rowsFromSheet(table: string[][], photos: File[], defaults: Impor
     if (photoName && !photo) unmatchedPhotos.push(record.photo ?? "");
     if (photo) photosByName.delete(photoName);
     const unit = record.unit?.toLowerCase().startsWith("c") ? "cm" : record.unit?.toLowerCase().startsWith("i") ? "in" : defaults.unit;
-    const hasMeasurements = [record.bust, record.bustFitNote, record.waist, record.waistFitNote, record.length, record.lengthFitNote].some((value) => Boolean(value?.trim()));
     const requestedMeasurementMode = record.measurementMode?.trim().toLowerCase() ?? "";
     const measurementMode =
       /^(none|no|no measurements?)$/.test(requestedMeasurementMode)
@@ -169,9 +168,7 @@ export function rowsFromSheet(table: string[][], photos: File[], defaults: Impor
           ? "custom"
           : /^(default|default guide|guide)$/.test(requestedMeasurementMode)
             ? "default_guide"
-            : hasMeasurements
-              ? "custom"
-              : "default_guide";
+            : "custom";
     return emptyRow(defaults, {
       photo,
       name: record.name ?? "",

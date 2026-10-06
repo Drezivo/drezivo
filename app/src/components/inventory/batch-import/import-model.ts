@@ -97,7 +97,7 @@ export function emptyRow(defaults: ImportDefaults, patch: Partial<ImportRow> = {
     sizeLabel: "",
     fitRange: "",
     description: "",
-    measurementMode: "default_guide",
+    measurementMode: "custom",
     unit: defaults.unit,
     bust: "",
     waist: "",
