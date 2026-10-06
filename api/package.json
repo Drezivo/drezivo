@@ -20,6 +20,7 @@
     "test:integration": "vitest run --no-file-parallelism tests/integration",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
+    "db:migrate:status": "tsx scripts/migrate.ts --status",
     "seed:clothing:local": "tsx scripts/seed-local-clothing.ts",
     "db:studio": "drizzle-kit studio",
     "prepare": "husky"

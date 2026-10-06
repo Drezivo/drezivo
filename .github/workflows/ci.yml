@@ -21,7 +21,9 @@ on:
 
 concurrency:
   group: backend-${{ github.ref }}
-  cancel-in-progress: true
+  # A main run may be waiting on or applying a production migration. Let it finish before
+  # another main run starts; other refs keep the existing replaceable-CI behavior.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -110,6 +112,160 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build server and worker image
         run: docker build --file api/Dockerfile --tag drezivo-api:${{ github.sha }} .
+
+  migration-scope:
+    name: detect main-branch migration run
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.scope.outputs.run }}
+    steps:
+      - name: Check out the triggering commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Select migration runs
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ ! "$BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The push event does not include a usable previous commit; refusing to infer migration changes."
+            exit 1
+          fi
+          git cat-file -e "${BEFORE_SHA}^{commit}"
+
+          changed_files="$(git diff --name-only "$BEFORE_SHA" "$GITHUB_SHA" -- api/src/db/migrations/)"
+          migration_files="$(printf '%s\n' "$changed_files" | grep -E '^api/src/db/migrations/[0-9]{4}_.*\.sql$' || true)"
+          if [[ -n "$migration_files" ]]; then
+            echo "Migration files changed on main:"
+            printf '%s\n' "$migration_files"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  preview-migrations:
+    name: apply migrations to preview
+    if: needs.migration-scope.outputs.run == 'true'
+    needs: [backend, container, secrets, migration-scope]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: preview
+    env:
+      NODE_ENV: staging
+      DATABASE_URL_DIRECT: ${{ secrets.MIGRATION_DATABASE_URL_DIRECT }}
+    steps:
+      - name: Check out the triggering commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Reject a stale main commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --quiet
+          main_head="$(git rev-parse FETCH_HEAD)"
+          if [[ "$main_head" != "$GITHUB_SHA" ]]; then
+            echo "::error::This migration run is stale. The checked-out commit is no longer the main branch head."
+            exit 1
+          fi
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --include=dev
+      - name: Report preview migration status
+        run: npm run db:migrate:status --workspace @drezivo/api
+      - name: Reject a stale main commit before applying
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --quiet
+          main_head="$(git rev-parse FETCH_HEAD)"
+          if [[ "$main_head" != "$GITHUB_SHA" ]]; then
+            echo "::error::This migration run became stale before application."
+            exit 1
+          fi
+      - name: Apply preview migrations
+        run: npm run db:migrate --workspace @drezivo/api
+      - name: Verify preview migration status
+        run: npm run db:migrate:status --workspace @drezivo/api
+
+  production-migrations:
+    name: apply migrations to production
+    if: needs.migration-scope.outputs.run == 'true'
+    needs: [backend, container, secrets, migration-scope, preview-migrations]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      NODE_ENV: production
+      DATABASE_URL_DIRECT: ${{ secrets.MIGRATION_DATABASE_URL_DIRECT }}
+      MIGRATION_PRODUCTION_RECONCILED: ${{ vars.MIGRATION_PRODUCTION_RECONCILED }}
+    steps:
+      - name: Check out the triggering commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Reject a stale main commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --quiet
+          main_head="$(git rev-parse FETCH_HEAD)"
+          if [[ "$main_head" != "$GITHUB_SHA" ]]; then
+            echo "::error::This migration run is stale. The checked-out commit is no longer the main branch head."
+            exit 1
+          fi
+      - name: Require production baseline reconciliation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$MIGRATION_PRODUCTION_RECONCILED" != "true" ]]; then
+            echo "::error::Production migration is blocked until the live schema and Drezivo migration ledger have been reconciled."
+            exit 1
+          fi
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --include=dev
+      - name: Report production migration status
+        run: npm run db:migrate:status --workspace @drezivo/api
+      - name: Reject a stale main commit before applying
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --quiet
+          main_head="$(git rev-parse FETCH_HEAD)"
+          if [[ "$main_head" != "$GITHUB_SHA" ]]; then
+            echo "::error::This migration run became stale before application."
+            exit 1
+          fi
+      - name: Apply production migrations
+        run: npm run db:migrate --workspace @drezivo/api
+      - name: Verify production migration status
+        run: npm run db:migrate:status --workspace @drezivo/api
 
   publish:
     name: publish versioned backend image
