@@ -268,7 +268,12 @@ export async function extractClothingPhoto(
     if ([400, 404, 415, 422].includes(response.status)) {
       throw new DependencyUnavailableError('The configured photo model rejected the image request. Check the model setting.');
     }
-    throw new DependencyUnavailableError('The photo reader is unavailable right now.');
+    if (response.status >= 500) {
+      throw new DependencyUnavailableError(
+        `The photo reader provider returned HTTP ${response.status}. Try again in a moment or check the staging provider logs.`,
+      );
+    }
+    throw new DependencyUnavailableError(`The photo reader request failed with HTTP ${response.status}.`);
   }
 
   const payload = await response.json().catch(() => null);

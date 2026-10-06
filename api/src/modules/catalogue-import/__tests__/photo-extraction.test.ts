@@ -207,7 +207,10 @@ describe('extractClothingPhoto', () => {
     });
 
     const down = vi.fn().mockResolvedValueOnce(photo()).mockResolvedValueOnce(reply('', 500));
-    await expect(extractClothingPhoto(input, { settings, storage, fetchImpl: down })).rejects.toMatchObject({ status: 503 });
+    await expect(extractClothingPhoto(input, { settings, storage, fetchImpl: down })).rejects.toMatchObject({
+      status: 503,
+      message: 'The photo reader provider returned HTTP 500. Try again in a moment or check the staging provider logs.',
+    });
 
     await expect(extractClothingPhoto(input, { settings: null, storage, fetchImpl: vi.fn() })).rejects.toMatchObject({
       status: 503,

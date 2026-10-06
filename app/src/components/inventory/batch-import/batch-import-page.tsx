@@ -14,6 +14,7 @@ import {
   ScanText,
   Trash2,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -41,6 +42,11 @@ import { readSpreadsheet, rowsFromSheet, templateCsv } from "./spreadsheet";
 type Phase = "idle" | "uploading" | "reading" | "saving";
 type Category = { id: string; name: string };
 type Notice = { tone: "success" | "error" | "info"; text: string };
+type PhotoProgress = {
+  stage: "uploading" | "reading";
+  done: number;
+  total: number;
+};
 
 const PHASE_LABEL: Record<Exclude<Phase, "idle">, string> = {
   uploading: "Uploading photos…",
@@ -61,6 +67,7 @@ export function BatchImportPage() {
   const [capabilities, setCapabilities] = useState<CatalogueImportCapabilities | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [photoProgress, setPhotoProgress] = useState<PhotoProgress | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [savedDraft, setSavedDraft] = useState<SavedBatch | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -174,19 +181,27 @@ export function BatchImportPage() {
       busy.current = false;
       setPhase("idle");
       setProgress(null);
+      setPhotoProgress(null);
     }
   };
 
   const readDetails = () =>
     runPhase("reading", async () => {
       const targets = rows.filter((row) => row.photo && !row.read && row.status !== "created");
-      const uploaded = await uploadPhotos(api, targets, updateRow);
+      const pendingUploads = targets.filter((row) => row.photo && !row.fileId).length;
+      if (pendingUploads > 0) {
+        setPhotoProgress({ stage: "uploading", done: 0, total: pendingUploads });
+      }
+      const uploaded = await uploadPhotos(api, targets, updateRow, undefined, (done, total) => {
+        if (total > 0) setPhotoProgress({ stage: "uploading", done, total });
+      });
       const readable = targets.flatMap((row) => {
         const fileId = row.fileId ?? uploaded.get(row.id);
         return fileId ? [{ ...row, fileId }] : [];
       });
       let done = 0;
       setProgress({ done, total: readable.length });
+      if (readable.length > 0) setPhotoProgress({ stage: "reading", done, total: readable.length });
       readable.forEach((row) => updateRow(row.id, { status: "reading" }));
       await readPhotos(
         api,
@@ -194,6 +209,7 @@ export function BatchImportPage() {
         (id, fields: ExtractedClothingFields | null, message) => {
           done += 1;
           setProgress({ done, total: readable.length });
+          setPhotoProgress({ stage: "reading", done, total: readable.length });
           setRows((current) =>
             current.map((row) =>
               row.id !== id ? row : fields ? { ...applyExtraction(row, fields), status: "draft" } : { ...row, read: true, status: "draft", message }
@@ -202,7 +218,11 @@ export function BatchImportPage() {
         }
       );
       setDirty(true);
-      setNotice({ tone: "info", text: "Details filled in from the photos. Check each row before adding: names and prices are suggestions." });
+      setNotice(
+        readable.length > 0
+          ? { tone: "info", text: "Details filled in from the photos. Check each row before adding: names and prices are suggestions." }
+          : { tone: "error", text: "No photos could be prepared for reading. Check the rows marked in red and try again." }
+      );
     });
 
   const addToClothing = () =>
@@ -484,7 +504,95 @@ export function BatchImportPage() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+      <PhotoProgressDialog progress={photoProgress} />
     </div>
+  );
+}
+
+function PhotoProgressDialog({ progress }: { progress: PhotoProgress | null }) {
+  const percent = progress?.total ? Math.min(100, Math.round((progress.done / progress.total) * 100)) : 0;
+  const uploading = progress?.stage === "uploading";
+  const title = uploading ? "Preparing your photos" : "Reading clothing details";
+  const activeLabel = uploading ? "Uploading photos…" : "Reading details from photos…";
+  const countLabel = progress
+    ? progress.done +
+      " of " +
+      progress.total +
+      " " +
+      (progress.total === 1 ? "photo" : "photos") +
+      " " +
+      (uploading ? "prepared" : "read")
+    : "";
+
+  return (
+    <Dialog.Root open={progress !== null}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[70] bg-black/65 backdrop-blur-[2px]" />
+        <Dialog.Content
+          aria-describedby="batch-photo-progress-description"
+          onEscapeKeyDown={(event: Event) => event.preventDefault()}
+          onPointerDownOutside={(event: Event) => event.preventDefault()}
+          className="fixed left-1/2 top-1/2 z-[71] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-dashboard-border bg-dashboard-surface px-6 py-7 text-center shadow-2xl focus:outline-none sm:px-8 sm:py-8"
+        >
+          <div className="relative mx-auto mb-5 flex h-24 w-24 items-center justify-center">
+            <div className="absolute inset-0 rounded-full border border-dashboard-accent/20" />
+            <div
+              className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-r-dashboard-accent/45 border-t-dashboard-accent"
+              style={{ animationDuration: "1.35s" }}
+              aria-hidden="true"
+            />
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-dashboard-border bg-dashboard-active/70 shadow-sm">
+              <Image
+                src="/brand/drezivo-mark.png"
+                alt=""
+                width={497}
+                height={600}
+                priority
+                className="h-12 w-auto animate-pulse object-contain"
+              />
+            </div>
+          </div>
+
+          <Dialog.Title className="text-xl font-semibold text-dashboard-navy">{title}</Dialog.Title>
+          <Dialog.Description
+            id="batch-photo-progress-description"
+            className="mx-auto mt-2 max-w-sm text-sm leading-6 text-dashboard-muted"
+          >
+            {uploading
+              ? "Drezivo is securely preparing each image before the photo reader starts."
+              : "Drezivo is extracting the clothing name, size, measurements, color, and rental price from each image."}
+          </Dialog.Description>
+
+          <div className="mt-6 rounded-xl border border-dashboard-border bg-dashboard-active/35 p-4">
+            <div className="flex items-center justify-center gap-2 text-sm font-medium text-dashboard-navy" aria-live="polite">
+              <Loader2 className="h-4 w-4 animate-spin text-dashboard-accent" aria-hidden="true" />
+              <span>{activeLabel}</span>
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-3 text-xs text-dashboard-muted">
+              <span>{countLabel}</span>
+              <span className="tabular-nums">{percent}%</span>
+            </div>
+            <div
+              className="mt-2 h-2 overflow-hidden rounded-full bg-dashboard-surface"
+              role="progressbar"
+              aria-label={activeLabel}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={percent}
+            >
+              <div
+                className="h-full rounded-full bg-dashboard-accent transition-[width] duration-300 ease-out"
+                style={{ width: String(percent) + "%" }}
+              />
+            </div>
+          </div>
+
+          <p className="mt-4 text-xs leading-5 text-dashboard-muted">
+            Keep this page open while the current batch is being processed.
+          </p>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

@@ -59,13 +59,15 @@ describe("batch import runner", () => {
       },
     });
     const update = vi.fn();
+    const progress = vi.fn();
 
-    const uploaded = await uploadPhotos(client as never, [row], update);
+    const uploaded = await uploadPhotos(client as never, [row], update, undefined, progress);
 
     expect(uploaded.get(row.id)).toBe(FILE_ID);
     expect(client.authorizeImportUploads.mock.calls[0]?.[0].items[0]).toMatchObject({ idempotency_key: row.uploadKey, content_type: "image/jpeg", byte_size: 2 });
     expect(client.finalizeImportUploads.mock.calls[0]?.[0]).toEqual({ items: [{ idempotency_key: row.finalizeKey, file_id: FILE_ID }] });
     expect(update).toHaveBeenLastCalledWith(row.id, { status: "draft", fileId: FILE_ID, message: null });
+    expect(progress.mock.calls).toEqual([[0, 1], [1, 1]]);
   });
 
   it("marks a row whose photo was refused and does not finalize it", async () => {
