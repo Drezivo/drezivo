@@ -14,12 +14,14 @@ export class MigrationHistoryError extends Error {
 
 /**
  * Confirms that applied migrations are a contiguous prefix of the checked-in, filename-ordered
- * history. `null` means the ledger table does not exist; an empty array means it exists but is
- * empty, which is valid for a newly provisioned database.
+ * history. A bounded hotfix run may fill exactly its named gap when newer files were already
+ * applied; every other gap still fails closed. `null` means the ledger table does not exist;
+ * an empty array means it exists but is empty, which is valid for a new database.
  */
 export function inspectMigrationHistory(
   migrationFiles: readonly string[],
   appliedFiles: readonly string[] | null,
+  allowedBackfillFile?: string,
 ): MigrationHistoryStatus {
   if (appliedFiles === null) {
     throw new MigrationHistoryError(
@@ -46,7 +48,15 @@ export function inspectMigrationHistory(
     firstPendingIndex === -1
       ? []
       : orderedFiles.slice(firstPendingIndex).filter((file) => appliedSet.has(file));
-  if (laterAppliedFiles.length > 0) {
+  const lastAppliedIndex = orderedFiles.reduce(
+    (last, file, index) => (appliedSet.has(file) ? index : last),
+    -1,
+  );
+  const singleAllowedBackfillGap =
+    firstPendingIndex !== -1 &&
+    orderedFiles[firstPendingIndex] === allowedBackfillFile &&
+    orderedFiles.slice(firstPendingIndex + 1, lastAppliedIndex + 1).every((file) => appliedSet.has(file));
+  if (laterAppliedFiles.length > 0 && !singleAllowedBackfillGap) {
     throw new MigrationHistoryError(
       `The migration ledger has a history gap: ${orderedFiles[firstPendingIndex]} is pending, ` +
         `but later migrations are recorded as applied (${laterAppliedFiles.join(', ')}).`,
@@ -55,8 +65,6 @@ export function inspectMigrationHistory(
 
   return {
     appliedFiles: orderedFiles.filter((file) => appliedSet.has(file)),
-    pendingFiles: orderedFiles.slice(
-      firstPendingIndex === -1 ? orderedFiles.length : firstPendingIndex,
-    ),
+    pendingFiles: orderedFiles.filter((file) => !appliedSet.has(file)),
   };
 }

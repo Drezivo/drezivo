@@ -145,6 +145,14 @@ Check status locally with:
 npm run db:migrate:status --workspace @drezivo/api
 ```
 
+For an isolated additive hotfix that must stop before unrelated later files, use
+`npm run db:migrate --workspace @drezivo/api -- --through <exact-filename.sql>` with
+`DATABASE_URL_DIRECT`. This includes the named file and earlier pending files only. It can fill
+exactly the named gap if an environment already applied later migrations; any other ledger gap
+still fails. After the hotfix, check the full ledger again. Before merging such a hotfix to `main`,
+account for the normal protected workflow: it will attempt to apply every remaining migration
+after its checks and preview job pass, subject to production environment approval.
+
 Each file and its `public.schema_migrations` row commit in one transaction. This protects migration
 history consistency, not data from an incorrect migration; fixes still use forward migrations.
 

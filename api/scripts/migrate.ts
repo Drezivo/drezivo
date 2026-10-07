@@ -23,10 +23,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, '..', 'src', 'db', 'migrations');
 
 async function main(): Promise<void> {
-  const statusOnly = process.argv.slice(2).length === 1 && process.argv[2] === '--status';
-  if (process.argv.slice(2).length > 0 && !statusOnly) {
-    throw new Error('The only supported argument is --status.');
+  const args = process.argv.slice(2);
+  const statusOnly = args.length === 1 && args[0] === '--status';
+  const bounded = args.length === 2 && args[0] === '--through';
+  if (args.length !== 0 && !statusOnly && !bounded) {
+    throw new Error('Usage: npm run db:migrate -- [--status | --through <migration-filename.sql>]');
   }
+  const through = bounded ? (args[1] ?? null) : null;
 
   const isRemoteEnvironment =
     process.env.NODE_ENV === 'staging' || process.env.NODE_ENV === 'production';
@@ -40,9 +43,16 @@ async function main(): Promise<void> {
         : 'DATABASE_URL_DIRECT or DATABASE_URL is required to run migrations.',
     );
   }
+  if (isRemoteEnvironment && new URL(databaseUrl).hostname.endsWith('.pooler.supabase.com')) {
+    throw new Error('DATABASE_URL_DIRECT points to a Supabase pooler; use the project direct endpoint.');
+  }
 
   const entries = await readdir(MIGRATIONS_DIR);
-  const files = entries.filter((name) => /^\d{4}_.*\.sql$/.test(name)).sort();
+  const allFiles = entries.filter((name) => /^\d{4}_.*\.sql$/.test(name)).sort();
+  if (through !== null && !allFiles.includes(through)) {
+    throw new Error(`Unknown migration filename: ${through}`);
+  }
+  const files = allFiles;
 
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
@@ -76,6 +86,7 @@ async function main(): Promise<void> {
     const status = inspectMigrationHistory(
       files,
       applied.map((row) => row.filename),
+      through ?? undefined,
     );
 
     if (statusOnly) {
@@ -91,7 +102,10 @@ async function main(): Promise<void> {
       return;
     }
 
-    for (const file of status.pendingFiles) {
+    const pendingToApply = through === null
+      ? status.pendingFiles
+      : status.pendingFiles.filter((file) => file <= through);
+    for (const file of pendingToApply) {
       const sql = await readFile(path.join(MIGRATIONS_DIR, file), 'utf8');
       console.log(`Applying ${file} ...`);
 
@@ -116,12 +130,15 @@ async function main(): Promise<void> {
       files,
       refreshedApplied.map((row) => row.filename),
     );
-    if (refreshedStatus.pendingFiles.length > 0) {
+    const remainingWithinBound = through === null
+      ? refreshedStatus.pendingFiles
+      : refreshedStatus.pendingFiles.filter((file) => file <= through);
+    if (remainingWithinBound.length > 0) {
       throw new Error(
-        `Migration run finished with pending files: ${refreshedStatus.pendingFiles.join(', ')}`,
+        `Migration run finished with pending files: ${remainingWithinBound.join(', ')}`,
       );
     }
-    console.log('Migrations up to date.');
+    console.log(through === null ? 'Migrations up to date.' : `Migrations applied through ${through}.`);
   } finally {
     await client.end();
   }

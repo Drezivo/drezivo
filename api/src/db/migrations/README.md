@@ -48,8 +48,10 @@ history is separate and must not be used to decide which Drezivo files are pendi
 
 Use `npm run db:migrate:status` for a read-only report of pending files. It refuses to report a
 status when the Drezivo ledger is missing, contains filenames absent from this checkout, or has a
-gap where a later migration is recorded as applied after an earlier one is pending. The apply
-command performs the same history validation before running anything. It commits each migration
+gap where a later migration is recorded as applied after an earlier one is pending. A bounded
+`--through` run permits exactly the named migration as a single backfill gap, then restores
+contiguous history. The apply command otherwise performs the same history validation before
+running anything. It commits each migration
 and its ledger row in one transaction; earlier successful files remain recorded if a later file
 fails.
 
@@ -59,6 +61,15 @@ initialized. Staging and production never create a missing ledger and require
 only that direct migration URL. Run migrations deliberately, never as automatic schema sync on API
 startup (TRD §9). `src/server.ts` and `src/worker.ts` assume the schema already matches the applied
 migrations; they do not attempt to reconcile it.
+
+For an isolated additive hotfix that must not advance later pending migrations, run
+`npm run db:migrate -- --through <exact-filename.sql>` from `api/`. This applies every
+unapplied migration whose filename sorts up to and including the named file, and rejects
+unknown filenames. It requires a direct connection in staging and production, rejects known
+Supabase pooler hosts, and fails on any other ledger gap. Inspect the target's
+`schema_migrations` ledger first. A migration added
+earlier than files already applied in a different environment must be independent of them;
+the 0070 invitation webhook resolver is additive and independent of the 0071+ changes.
 
 ## Supabase grants and RLS
 

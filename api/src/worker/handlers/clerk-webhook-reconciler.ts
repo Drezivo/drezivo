@@ -5,7 +5,7 @@ import { withSystemTenantResolutionTransaction } from '../../db/client.js';
 import { DependencyUnavailableError, NotFoundError, StateConflictError } from '../../shared/errors.js';
 import { claimReceivedClerkWebhookRows, markClerkWebhookProcessed } from '../../modules/webhooks/webhook-inbox.repository.js';
 import { claimMembershipInvitationInTransaction, InvitationClaimDeferredError } from '../../modules/membership-invitations/membership-invitation-claim.service.js';
-import { findClaimTenant } from '../../modules/membership-invitations/membership-invitation-claim.repository.js';
+import { findWebhookClaimInvitation } from '../../modules/membership-invitations/membership-invitation-claim.repository.js';
 
 const acceptedPayload = z.object({
   organization_id: z.string().trim().min(1),
@@ -34,22 +34,22 @@ export async function reconcileNextClerkWebhook(): Promise<boolean> {
       return true;
     }
 
-    const tenant = await findClaimTenant(
+    const claim = await findWebhookClaimInvitation(
       client,
       payload.data.organization_id,
       payload.data.invitation_id,
     );
-    if (!tenant) {
+    if (!claim) {
       await markClerkWebhookProcessed(client, row.id, 'processed');
       return true;
     }
 
-    await context.setTenantContext(tenant.id);
+    await context.setTenantContext(claim.tenant.id);
     try {
       await claimMembershipInvitationInTransaction({
         context,
-        tenant,
-        invitationId: payload.data.invitation_id,
+        tenant: claim.tenant,
+        invitationId: claim.invitationId,
         clerkUserId: payload.data.user_id,
         clerkOrgId: payload.data.organization_id,
         requestId: row.provider_event_id,
