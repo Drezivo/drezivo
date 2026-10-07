@@ -29,10 +29,20 @@ async function main(): Promise<void> {
   }
   const through = args[1] ?? null;
 
-  const databaseUrl = process.env.DATABASE_URL_DIRECT ?? process.env.DATABASE_URL;
+  const isRemoteEnvironment =
+    process.env.NODE_ENV === 'staging' || process.env.NODE_ENV === 'production';
+  const databaseUrl = isRemoteEnvironment
+    ? process.env.DATABASE_URL_DIRECT
+    : (process.env.DATABASE_URL_DIRECT ?? process.env.DATABASE_URL);
   if (!databaseUrl) {
-    console.error('DATABASE_URL_DIRECT or DATABASE_URL is required to run migrations.');
-    process.exit(1);
+    throw new Error(
+      isRemoteEnvironment
+        ? 'DATABASE_URL_DIRECT is required for staging and production migrations.'
+        : 'DATABASE_URL_DIRECT or DATABASE_URL is required to run migrations.',
+    );
+  }
+  if (isRemoteEnvironment && new URL(databaseUrl).hostname.endsWith('.pooler.supabase.com')) {
+    throw new Error('DATABASE_URL_DIRECT points to a Supabase pooler; use the project direct endpoint.');
   }
 
   const entries = await readdir(MIGRATIONS_DIR);

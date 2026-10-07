@@ -49,7 +49,8 @@ already matches the applied migrations; they do not attempt to reconcile it.
 For an isolated additive hotfix that must not advance later pending migrations, run
 `npm run db:migrate -- --through <exact-filename.sql>` from `api/`. This applies every
 unapplied migration whose filename sorts up to and including the named file, and rejects
-unknown filenames. Inspect the target's `schema_migrations` ledger first. A migration added
+unknown filenames. Staging and production require `DATABASE_URL_DIRECT` and reject known
+Supabase pooler hosts. Inspect the target's `schema_migrations` ledger first. A migration added
 earlier than files already applied in a different environment must be independent of them;
 the 0070 invitation webhook resolver is additive and independent of the 0071+ changes.
 
