@@ -4,14 +4,43 @@
 remains deferred until the application scaffold has a green local gate.
 
 The root `.github/workflows/ci.yml` currently scopes automatic checks to `contracts` and `api`,
-because the backend is the requested delivery boundary. It installs from the root lockfile,
-builds the shared contracts package, runs API type-checking, linting, unit tests, real-PostgreSQL
-integration tests, and the API build. It also builds the backend container on pull requests and
-`main` pushes. Version tags publish that image to GitHub Container Registry with the server and
-worker entrypoints in one image.
+because the backend is the requested delivery boundary. It installs from the root lockfile and
+uses the shared backend validation command for contracts build/lint/tests plus API type-check,
+lint, unit tests, PostgreSQL integration tests, and build. It also builds the backend container on
+pull requests and `main` pushes. Version tags publish that image to GitHub Container Registry with
+the server and worker entrypoints in one image.
 
 The secrets job also runs the standalone Gitleaks CLI in a read-only container mount, so it does
 not require the commercial Gitleaks Action license or an additional repository secret.
+
+## Backend pre-PR validation
+
+Run the fast local backend preflight from the repository root before shipping backend changes:
+
+```bash
+npm run validate:backend:local
+```
+
+This builds, lints, and tests contracts, then type-checks, lints, unit-tests, and builds the API.
+It does not run PostgreSQL integration tests or build the container image, so it is not a full CI
+pass. The full backend validation sequence is `npm run validate:backend:ci`; it also runs the
+integration suite and requires `TEST_DATABASE_URL` to point to a disposable localhost database
+whose name contains `test`.
+
+Before opening a new PR for paths that trigger the backend workflow (`api/**`, `contracts/**`,
+`.github/scripts/**`, root package manifests, or `.github/workflows/ci.yml`), push the approved branch,
+dispatch the existing workflow against that branch, and wait for its exact commit to pass:
+
+```bash
+gh workflow run ci.yml --ref <branch>
+gh run list --workflow ci.yml --branch <branch> --event workflow_dispatch --commit <sha> --limit 1 --json databaseId,status,conclusion,url
+gh run watch <run-id> --exit-status --compact
+```
+
+The dispatched workflow runs PostgreSQL integration tests and the separate container build. Do not
+open the PR if the run fails, is cancelled, or cannot be verified. The normal pull-request workflow
+still runs after creation and remains the authoritative check. For an existing PR, push the update
+and wait for its normal checks rather than dispatching another run.
 
 This workflow does not deploy to a runtime host. The container host is still a documented decision
 point, and production deployment requires the environment-specific approval, migration plan,

@@ -8,7 +8,7 @@ metadata:
 # Ship
 
 Take finished work and get it onto GitHub as a reviewable pull request:
-**branch → commit → checks → checkpoint → push → PR.**
+**branch → commit → local checks → checkpoint → push → remote checks → PR.**
 
 Derive the branch name, commit message, checks, and PR body from the actual diff rather than from memory. Preserve the user's authorization boundaries: committing is local, while pushing and opening a pull request are outward-facing operations that require a final approval checkpoint.
 
@@ -49,9 +49,15 @@ Use a conventional commit whose type and scope match the change. The subject sho
 
 On Windows, write multi-line commit messages to a temporary file and use `git commit -F <path>` to avoid shell-quoting errors. Verify the committed message with `git log -1 --format=%B`.
 
-## Step 4 — Run the checks CI will run
+## Step 4 — Run the local preflight
 
-Read the CI configuration and run the equivalent checks for the workspaces touched by the diff, typically the relevant lint, typecheck, build, and test commands.
+For changes that match the backend workflow paths (`api/**`, `contracts/**`, `.github/scripts/**`, root package manifests, or `.github/workflows/ci.yml`), run this command from the repository root:
+
+```bash
+npm run validate:backend:local
+```
+
+It builds, lints, and tests contracts, then type-checks, lints, unit-tests, and builds the API. It does not run PostgreSQL integration tests or build the container image. Its success is only a local preflight, not full CI verification. For other changes, run the equivalent checks for the affected workspaces.
 
 - If checks pass, record them and continue.
 - If a check fails, fix it before shipping unless the failure clearly predates the change; report such a blocker explicitly.
@@ -71,16 +77,49 @@ Before any push or pull-request creation, show the user:
 
 Ask for approval. This is the only required stop before external publication. Treat approval as applying only to the reviewed commit and diff; if the diff materially changes afterward, return to this checkpoint.
 
-## Step 6 — Push and open the PR
+## Step 6 — Push, verify remote checks, and open the PR
 
-After approval, push the branch without force-pushing and open the PR:
+After approval, push the branch without force-pushing:
 
 ```bash
 git push -u origin <branch>
+```
+
+For a new backend PR, record the pushed commit SHA and look for an existing manual run for that exact branch and commit:
+
+```bash
+git rev-parse HEAD
+gh run list --workflow ci.yml --branch <branch> --event workflow_dispatch --commit <sha> --limit 1 --json databaseId,status,conclusion,url
+```
+
+If a matching run is already in progress, wait for it. If it passed, continue. If it failed or was cancelled, stop and report it; do not silently retry the same commit. If no run exists, dispatch the existing workflow:
+
+```bash
+gh workflow run ci.yml --ref <branch>
+```
+
+Find the new run for the exact branch and commit, then wait for it to finish:
+
+```bash
+gh run list --workflow ci.yml --branch <branch> --event workflow_dispatch --commit <sha> --limit 1 --json databaseId,status,conclusion,url
+gh run watch <run-id> --exit-status --compact
+```
+
+Open a new PR only after that run succeeds; it includes the PostgreSQL-backed API checks and the separate container build. If dispatch fails, the run fails or is cancelled, or its result cannot be verified, stop before creating the PR and report the run or blocker. The pull-request workflow still runs again and remains authoritative.
+
+After the backend workflow passes, open the PR:
+
+```bash
 gh pr create --base <base> --head <branch> --title "<title>" --body-file <path>
 ```
 
-Use the commit subject as the PR title when there is one commit. Match the repository's PR template and always format the PR body with these five sections:
+If a PR already exists for the branch, do not dispatch a duplicate run or create another PR. Push the update and wait for the existing PR checks:
+
+```bash
+gh pr checks <number> --watch --fail-fast
+```
+
+For changes outside the backend workflow paths, use the normal PR checks for the affected workspaces and create the PR after the approval checkpoint. Use the commit subject as the PR title when there is one. Match the repository's PR template and always format the PR body with these five sections:
 
 ### ## Summary
 

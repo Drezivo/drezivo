@@ -5,4 +5,4 @@ and its ownership boundary `contracts -> api -> app/web`; `docs` owns specificat
 Do not duplicate business authority in Next.js. Do not claim scaffold code is production-ready.
 Keep tenant scope, authorization, money, availability, idempotency, and durable side effects under
 the API/database rules described by the current TRD. Update the `docs` workspace for architecture
-decisions and synchronize `.codex` after changing `.claude`.
+decisions and synchronize `.codex` after changing `.codex`.
