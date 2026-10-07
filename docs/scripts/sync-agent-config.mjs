@@ -5,11 +5,11 @@ const root = path.resolve(import.meta.dirname, '..', '..');
 const check = process.argv.includes('--check');
 const workspaces = process.argv.slice(2).filter((arg) => arg !== '--check');
 const names = workspaces.length ? workspaces : ['api', 'app', 'web', 'docs', 'contracts'];
-const allowed = new Set(['api', 'app', 'web', 'docs', 'contracts']);
-if (names.some((name) => !allowed.has(name))) throw new Error(`workspace must be one of: ${[...allowed].join(', ')}`);
+const allowed = new Set(['root', 'api', 'app', 'web', 'docs', 'contracts']);
+if (names.some((name) => !allowed.has(name))) throw new Error(`target must be one of: ${[...allowed].join(', ')}`);
 let drift = false;
 for (const name of names) {
-  const repo = path.resolve(root, name);
+  const repo = name === 'root' ? root : path.resolve(root, name);
   const source = path.join(repo, '.claude');
   const target = path.join(repo, '.codex');
   if (!fs.existsSync(source)) { console.warn(`skip ${name}: no .claude`); continue; }
