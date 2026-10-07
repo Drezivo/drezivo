@@ -119,6 +119,7 @@ npm run lint            # ESLint
 npm run test            # Unit tests (integration tests excluded)
 npm run test:integration
 npm run db:generate     # Generate reviewed SQL migrations
+npm run db:migrate:status # Read pending migrations and validate the Drezivo ledger without writes
 npm run db:studio       # Open Drizzle Studio
 npm run seed:clothing:local -- --storefront-slug <slug>  # Preview only
 npm run seed:clothing:local -- --storefront-slug <slug> --apply  # Create missing local drafts

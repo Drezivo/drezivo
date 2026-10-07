@@ -1,11 +1,13 @@
 # Migrations
 
-Plain numbered `.sql` files, applied in order by `npm run db:migrate` (`scripts/migrate.ts`).
+Plain numbered `.sql` files, applied in filename order by `npm run db:migrate`
+(`scripts/migrate.ts`). The full filename is the migration identity; repeated numeric prefixes are
+valid and do not replace filename ordering.
 This directory — not the Drizzle schema in `src/db/schema/` — is the authoritative source of
 truth for the database, because several invariants this product depends on (GiST exclusion
 constraints, row-level security, cross-table CHECK-equivalents via constraint triggers) are not
 expressible through Drizzle's schema DSL. `drizzle-kit generate` (`npm run db:generate`) is a
-starting point for a new migration's *table/column* shape, reviewed and hand-finished before it
+starting point for a new migration's _table/column_ shape, reviewed and hand-finished before it
 ships — never applied directly to a real database. See TRD §9 and Data-Model §10 for the
 invariants this rule exists to protect.
 
@@ -41,10 +43,22 @@ and there is no way to detect that divergence until it causes a production incid
 
 ## Local / CI application
 
-Migrations run once, deliberately, through `npm run db:migrate` against a `DATABASE_URL` you
-control — never as automatic schema sync on API startup (TRD §9: "Never run schema
-synchronization on each API startup"). `src/server.ts` and `src/worker.ts` assume the schema
-already matches the applied migrations; they do not attempt to reconcile it.
+`public.schema_migrations` is the Drezivo runner's authoritative history. Supabase CLI migration
+history is separate and must not be used to decide which Drezivo files are pending.
+
+Use `npm run db:migrate:status` for a read-only report of pending files. It refuses to report a
+status when the Drezivo ledger is missing, contains filenames absent from this checkout, or has a
+gap where a later migration is recorded as applied after an earlier one is pending. The apply
+command performs the same history validation before running anything. It commits each migration
+and its ledger row in one transaction; earlier successful files remain recorded if a later file
+fails.
+
+Local development and tests may bootstrap a missing ledger so a disposable fresh database can be
+initialized. Staging and production never create a missing ledger and require
+`DATABASE_URL_DIRECT`; they do not fall back to a runtime `DATABASE_URL`. The CI workflow supplies
+only that direct migration URL. Run migrations deliberately, never as automatic schema sync on API
+startup (TRD §9). `src/server.ts` and `src/worker.ts` assume the schema already matches the applied
+migrations; they do not attempt to reconcile it.
 
 For an isolated additive hotfix that must not advance later pending migrations, run
 `npm run db:migrate -- --through <exact-filename.sql>` from `api/`. This applies every

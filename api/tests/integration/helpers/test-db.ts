@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 import { Client } from 'pg';
 
+import { inspectMigrationHistory } from '../../../scripts/migration-history.js';
+
 /**
  * Integration-test database harness (TBF-010's promised evidence — and the seed of the shared
  * harness every later TBF task inherits).
@@ -93,12 +95,12 @@ export async function migrateTestDatabase(adminUrl: string): Promise<void> {
     const { rows: applied } = await client.query<{ filename: string }>(
       'SELECT filename FROM schema_migrations',
     );
-    const appliedSet = new Set(applied.map((row) => row.filename));
+    const status = inspectMigrationHistory(
+      files,
+      applied.map((row) => row.filename),
+    );
 
-    for (const file of files) {
-      if (appliedSet.has(file)) {
-        continue;
-      }
+    for (const file of status.pendingFiles) {
       const sql = await readFile(path.join(MIGRATIONS_DIR, file), 'utf8');
       await client.query('BEGIN');
       try {
@@ -140,7 +142,9 @@ export async function ensureWorkerRoleLogin(adminUrl: string): Promise<void> {
   const client = new Client({ connectionString: adminUrl });
   await client.connect();
   try {
-    await client.query(`ALTER ROLE ${WORKER_ROLE} WITH LOGIN PASSWORD '${WORKER_ROLE_TEST_PASSWORD}'`);
+    await client.query(
+      `ALTER ROLE ${WORKER_ROLE} WITH LOGIN PASSWORD '${WORKER_ROLE_TEST_PASSWORD}'`,
+    );
   } finally {
     await client.end();
   }
