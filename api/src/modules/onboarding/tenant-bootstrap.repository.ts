@@ -4,6 +4,7 @@ import {
   STOREFRONT_SLUG_MAX_LENGTH,
   storefrontSlug,
   type PermissionCode,
+  type PlanCode,
 } from '@drezivo/contracts';
 import type { PoolClient } from 'pg';
 
@@ -32,7 +33,7 @@ export interface BootstrapOnboardingRow {
 
 interface PlanRow {
   id: string;
-  code: 'starter' | 'professional' | 'business';
+  code: PlanCode;
 }
 
 interface TenantRow {
@@ -65,7 +66,7 @@ interface MembershipRow {
 
 interface SubscriptionRow {
   id: string;
-  plan_code: 'starter' | 'professional' | 'business';
+  plan_code: PlanCode;
   status: 'trialing';
   trial_ends_at: Date;
   grace_ends_at: null;
@@ -94,7 +95,7 @@ export interface TenantBootstrapResponse {
   branch_grants: Array<{ branch_id: string; permission_codes: PermissionCode[] }>;
   subscription: {
     id: string;
-    plan_code: 'starter' | 'professional' | 'business';
+    plan_code: PlanCode;
     status: 'trialing';
     trial_ends_at: string;
     grace_ends_at: null;
@@ -107,7 +108,7 @@ export interface BootstrapGraphInput {
   onboardingId: string;
   clerkOrgId: string;
   organizationName: string;
-  planCode: 'starter' | 'professional' | 'business';
+  planCode: PlanCode;
   requestId: string;
 }
 
@@ -176,10 +177,9 @@ export async function createTenantBootstrapGraph(
 
   // Serialize the provider-organization uniqueness check across accounts as well as within one
   // account. This turns a concurrent UNIQUE violation into the typed state conflict below.
-  await client.query(
-    "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-    [`clerk-org:${input.clerkOrgId}`],
-  );
+  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+    `clerk-org:${input.clerkOrgId}`,
+  ]);
   // The Clerk organization is globally unique on tenant. Resolve the collision before the
   // insert so an unrelated existing tenant becomes a typed state conflict, not a raw 23505.
   const availableTenantOrganization = await client.query<{ available: boolean }>(
@@ -309,7 +309,14 @@ export async function createTenantBootstrapGraph(
          (id, tenant_id, subscription_id, prior_plan_id, next_plan_id,
           event_type, effective_at, business_key)
        VALUES ($1, $2, $3, NULL, $4, 'trial_started', $5, $6)`,
-      [subscriptionEventId, tenantId, subscriptionId, plan.id, now, `tenant-bootstrap:${input.onboardingId}`],
+      [
+        subscriptionEventId,
+        tenantId,
+        subscriptionId,
+        plan.id,
+        now,
+        `tenant-bootstrap:${input.onboardingId}`,
+      ],
     );
     await client.query(
       `INSERT INTO outbox_event
@@ -328,10 +335,23 @@ export async function createTenantBootstrapGraph(
           redacted_summary, request_id, occurred_at, outcome)
        VALUES ($1, $2, 'staff', $3, 'tenant.bootstrap.completed', 'tenant', $4,
                $5::jsonb, $6, now(), 'succeeded')`,
-      [auditId, tenantId, input.principalId, tenantId, JSON.stringify({ source: 'owner_onboarding' }), input.requestId],
+      [
+        auditId,
+        tenantId,
+        input.principalId,
+        tenantId,
+        JSON.stringify({ source: 'owner_onboarding' }),
+        input.requestId,
+      ],
     );
 
-    const response = await readBootstrapProjection(client, tenantId, branchId, membershipId, subscriptionId);
+    const response = await readBootstrapProjection(
+      client,
+      tenantId,
+      branchId,
+      membershipId,
+      subscriptionId,
+    );
     return { kind: 'created', response, tenantId };
   } finally {
     await context.clearTenantContext();
@@ -354,7 +374,8 @@ export async function appendBootstrapGlobalAudit(
     accountId: input.accountId,
     actorKind: 'account',
     actorKey: input.principalId,
-    action: input.outcome === 'succeeded' ? 'tenant.bootstrap.completed' : 'tenant.bootstrap.rejected',
+    action:
+      input.outcome === 'succeeded' ? 'tenant.bootstrap.completed' : 'tenant.bootstrap.rejected',
     entityType: 'organization_onboarding',
     entityId: input.onboardingId,
     outcome: input.outcome,
@@ -390,7 +411,10 @@ async function readBootstrapProjection(
      FROM membership WHERE id = $1 AND tenant_id = $2`,
     [membershipId, tenantId],
   );
-  const grantsResult = await client.query<{ branch_id: string; permission_codes: PermissionCode[] }>(
+  const grantsResult = await client.query<{
+    branch_id: string;
+    permission_codes: PermissionCode[];
+  }>(
     `SELECT branch_id, permission_codes
      FROM branch_membership WHERE membership_id = $1 AND tenant_id = $2`,
     [membershipId, tenantId],

@@ -1,9 +1,36 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import PricingPage from '@/app/(marketing)/pricing/page';
 import TermsPage from '@/app/(marketing)/terms/page';
 import { MARKETING_FAQ_GROUPS } from '@/lib/marketing-content';
+
+const planApi = vi.hoisted(() => ({ getPublicPlanCatalog: vi.fn() }));
+vi.mock('@/lib/storefront-api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/storefront-api')>()),
+  getPublicPlanCatalog: planApi.getPublicPlanCatalog,
+}));
+
+const planCatalog = {
+  plans: [
+    {
+      code: 'starter' as const,
+      name: 'Starter' as const,
+      monthly_price_minor: 14900,
+      currency: 'PHP' as const,
+      trial_days: 14,
+      limits: { active_garments: 125, frontdesk_seats: 0 },
+    },
+    {
+      code: 'standard' as const,
+      name: 'Standard' as const,
+      monthly_price_minor: 29900,
+      currency: 'PHP' as const,
+      trial_days: 14,
+      limits: { active_garments: 300, frontdesk_seats: 3 },
+    },
+  ],
+};
 
 function answerFor(question: string): string {
   const faq = MARKETING_FAQ_GROUPS.flatMap((group) => group.faqs).find(
@@ -14,21 +41,31 @@ function answerFor(question: string): string {
 }
 
 describe('marketing FAQ, pricing, and terms', () => {
-  it('shows the current Standard offer in the pricing section', () => {
+  beforeEach(() => {
+    planApi.getPublicPlanCatalog.mockReset().mockResolvedValue(planCatalog);
+  });
+
+  it('shows both catalog-backed offers in the pricing section', async () => {
     render(<PricingPage />);
 
+    await screen.findByText('Starter');
     const pricing = screen.getByRole('heading', { level: 1 }).closest('#pricing');
     expect(pricing).not.toBeNull();
     const pricingText = pricing?.textContent ?? '';
+    expect(pricingText).toContain('₱149');
+    expect(pricingText).toContain('Up to 125 active garments');
     expect(pricingText).toContain('Standard');
     expect(pricingText).toContain('₱299');
     expect(pricingText).toContain('Up to 300 active garments');
     expect(pricingText).toContain('Up to 3 Front Desk staff');
+    const starterCard = screen.getByText('Starter').closest('li');
+    expect(starterCard?.textContent).not.toContain('Front Desk');
   });
 
-  it('moves billing-detail explanations to the FAQ instead of the pricing page', () => {
+  it('moves billing-detail explanations to the FAQ instead of the pricing page', async () => {
     render(<PricingPage />);
 
+    await screen.findByText('Starter');
     expect(screen.queryByText('How billing works')).toBeNull();
     expect(answerFor('Do I need a credit card to start?')).toContain(
       'GCash, Maya, or bank-transfer',
@@ -51,7 +88,7 @@ describe('marketing FAQ, pricing, and terms', () => {
 
     expect(answer).toContain('up to 3 Front Desk staff accounts');
     expect(answer).toContain('role-limited');
-    expect(answerFor('How much does Drezivo cost?')).toContain('up to 300 active physical garments');
+    expect(answerFor('How much does Drezivo cost?')).toContain('up to 300 active garments');
   });
 
   it('keeps the terms aligned with the current pilot subscription lifecycle', () => {

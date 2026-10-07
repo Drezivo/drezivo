@@ -1,3 +1,5 @@
+import type { PlanCode } from '@drezivo/contracts';
+
 import { createClerkServerAdapter } from '../../integrations/clerk/clerk.adapter.js';
 import {
   DependencyUnavailableError,
@@ -12,12 +14,10 @@ import { type FailureEnvelope, type SuccessEnvelope } from '../../shared/respons
 import { ensureAccount, getAccountByClerkUserId } from '../accounts/account.repository.js';
 import {
   getCurrentOwnerOnboarding,
+  getOwnerOnboarding,
   type CreateOrResumeOnboardingResult,
 } from './onboarding.repository.js';
-import {
-  claimBootstrapRecord,
-  withOnboardingTransaction,
-} from './onboarding.persistence.js';
+import { claimBootstrapRecord, withOnboardingTransaction } from './onboarding.persistence.js';
 import { toPublicOnboarding, type OwnerOnboardingContextDTO } from './onboarding.dto.js';
 import type {
   AbandonOwnerOnboardingInput as AbandonOwnerOnboardingRequestInput,
@@ -75,6 +75,15 @@ export async function getCurrentOwnerOnboardingContext(
     has_current_owned_tenant: Boolean(account?.currentOwnedTenantId),
     has_consumed_lifetime_trial: Boolean(account?.trialConsumedAt),
   };
+}
+
+/** Read only the selected plan for the authenticated owner-facing legacy start-trial command. */
+export async function getSelectedOnboardingPlanCode(input: {
+  onboardingId: string;
+  principalId: string;
+}): Promise<PlanCode | null> {
+  const onboarding = await getOwnerOnboarding(input.onboardingId, input.principalId);
+  return onboarding?.selectedPlanCode ?? null;
 }
 
 export async function startOwnerOnboarding(
@@ -195,7 +204,9 @@ export async function startOwnerOnboarding(
     return { status: 200, body };
   }
 
-  let organization: Awaited<ReturnType<ReturnType<typeof createClerkServerAdapter>['createOrganization']>>;
+  let organization: Awaited<
+    ReturnType<ReturnType<typeof createClerkServerAdapter>['createOrganization']>
+  >;
   try {
     organization = await createClerkServerAdapter().createOrganization({
       name: input.request.organization_name,

@@ -24,7 +24,8 @@ vi.mock('../integrations/clerk/clerk.adapter.js', () => ({
 }));
 
 vi.mock('../modules/onboarding/onboarding.service.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../modules/onboarding/onboarding.service.js')>();
+  const actual =
+    await importOriginal<typeof import('../modules/onboarding/onboarding.service.js')>();
   return { ...actual, selectOnboardingPlan: mocks.selectOnboardingPlan };
 });
 
@@ -59,7 +60,7 @@ describe('onboarding plan-selection HTTP boundary', () => {
           clerk_org_id: 'org_plan',
           organization_name: 'Luna Rentals',
           status: 'incomplete',
-          selected_plan_code: 'professional',
+          selected_plan_code: 'standard',
           is_trial_eligible: true,
           created_at: '2026-09-19T00:00:00.000Z',
           updated_at: '2026-09-19T00:00:00.000Z',
@@ -75,16 +76,19 @@ describe('onboarding plan-selection HTTP boundary', () => {
       .post(`/api/v1/onboarding/${onboardingId}/plan`)
       .set('content-type', 'application/json')
       .set('Idempotency-Key', idempotencyKey)
-      .send({ plan_code: 'professional' });
+      .send({ plan_code: 'standard' });
 
     expect(response.status).toBe(200);
     expect(mocks.selectOnboardingPlan).toHaveBeenCalledTimes(1);
-    const call = mocks.selectOnboardingPlan.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
+    const call = mocks.selectOnboardingPlan.mock.calls[0]?.[0] as unknown as Record<
+      string,
+      unknown
+    >;
     expect(call).toMatchObject({
       principalId: 'user_plan',
       idempotencyKey,
       onboardingId,
-      request: { plan_code: 'professional' },
+      request: { plan_code: 'standard' },
     });
     expect(call.requestId).toEqual(expect.any(String));
   });

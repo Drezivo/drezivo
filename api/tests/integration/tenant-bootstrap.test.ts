@@ -27,12 +27,13 @@ process.env.S3_ACCESS_KEY_ID ??= 'test';
 process.env.S3_SECRET_ACCESS_KEY ??= 'test';
 
 describe('TBF-030 tenant bootstrap', async () => {
-  const { closePool, withGlobalTransaction, withTenantTransaction } = await import('../../src/db/client.js');
+  const { closePool, withGlobalTransaction, withTenantTransaction } =
+    await import('../../src/db/client.js');
   const { ensureAccount } = await import('../../src/modules/accounts/account.repository.js');
-  const { chooseOnboardingPlan, createOrResumeOnboarding } = await import(
-    '../../src/modules/onboarding/onboarding.repository.js'
-  );
-  const { runTenantBootstrap } = await import('../../src/modules/onboarding/tenant-bootstrap.persistence.js');
+  const { chooseOnboardingPlan, createOrResumeOnboarding } =
+    await import('../../src/modules/onboarding/onboarding.repository.js');
+  const { runTenantBootstrap } =
+    await import('../../src/modules/onboarding/tenant-bootstrap.persistence.js');
   const { canonicalRequestHash } = await import('../../src/shared/idempotency.js');
 
   beforeAll(async () => {
@@ -51,11 +52,16 @@ describe('TBF-030 tenant bootstrap', async () => {
   it('creates one complete tenant graph and starts a fourteen-day trial', async () => {
     const principalId = 'user_tbf030_success';
     const account = await ensureAccount(principalId);
-    const onboarding = await createOrResumeOnboarding(account.id, 'org_tbf030_success', principalId, {
-      organizationName: 'Luna Gowns',
-    });
+    const onboarding = await createOrResumeOnboarding(
+      account.id,
+      'org_tbf030_success',
+      principalId,
+      {
+        organizationName: 'Luna Gowns',
+      },
+    );
     if (onboarding.kind !== 'created') throw new Error('expected onboarding creation');
-    const selected = await chooseOnboardingPlan(onboarding.onboarding.id, 'starter', principalId);
+    const selected = await chooseOnboardingPlan(onboarding.onboarding.id, 'standard', principalId);
     if (selected.kind !== 'updated') throw new Error('expected plan selection');
 
     const result = await runTenantBootstrap({
@@ -73,18 +79,21 @@ describe('TBF-030 tenant bootstrap', async () => {
       tenant: { name: 'Luna Gowns', slug: 'luna-gowns', currency: 'PHP', timezone: 'Asia/Manila' },
       default_branch: { name: 'Main Branch', code: 'main', is_default: true },
       membership: { role: 'owner', status: 'active' },
-      subscription: { plan_code: 'starter', status: 'trialing' },
+      subscription: { plan_code: 'standard', status: 'trialing' },
     });
     expect(result.body.data.branch_grants[0]?.permission_codes).toHaveLength(15);
 
     const state = await withGlobalTransaction(principalId, async (client) => {
-      const accountRow = await client.query<{ trial_consumed_at: Date | null; current_owned_tenant_id: string | null }>(
-        'SELECT trial_consumed_at, current_owned_tenant_id FROM account',
-      );
-      const onboardingRow = await client.query<{ status: string; provisioned_tenant_id: string | null }>(
-        'SELECT status, provisioned_tenant_id FROM organization_onboarding WHERE id = $1',
-        [onboarding.onboarding.id],
-      );
+      const accountRow = await client.query<{
+        trial_consumed_at: Date | null;
+        current_owned_tenant_id: string | null;
+      }>('SELECT trial_consumed_at, current_owned_tenant_id FROM account');
+      const onboardingRow = await client.query<{
+        status: string;
+        provisioned_tenant_id: string | null;
+      }>('SELECT status, provisioned_tenant_id FROM organization_onboarding WHERE id = $1', [
+        onboarding.onboarding.id,
+      ]);
       return {
         account: accountRow.rows[0],
         onboarding: onboardingRow.rows[0],
@@ -92,65 +101,83 @@ describe('TBF-030 tenant bootstrap', async () => {
     });
     expect(state.account?.current_owned_tenant_id).toBe(result.body.data.tenant.id);
     expect(state.account?.trial_consumed_at).toBeInstanceOf(Date);
-    expect(state.onboarding).toEqual({ status: 'provisioned', provisioned_tenant_id: result.body.data.tenant.id });
-    const tenantState = await withTenantTransaction(result.body.data.tenant.id, principalId, async (client) => {
-      const subscription = await client.query<{ current_period_start: Date; current_period_end: Date; trial_ends_at: Date }>(
-        'SELECT current_period_start, current_period_end, trial_ends_at FROM subscription',
-      );
-      const outbox = await client.query<{ event_type: string }>('SELECT event_type FROM outbox_event');
-      const categories = await client.query<{ name: string; status: string; display_order: number }>(
-        `SELECT name, status, display_order
+    expect(state.onboarding).toEqual({
+      status: 'provisioned',
+      provisioned_tenant_id: result.body.data.tenant.id,
+    });
+    const tenantState = await withTenantTransaction(
+      result.body.data.tenant.id,
+      principalId,
+      async (client) => {
+        const subscription = await client.query<{
+          current_period_start: Date;
+          current_period_end: Date;
+          trial_ends_at: Date;
+        }>('SELECT current_period_start, current_period_end, trial_ends_at FROM subscription');
+        const outbox = await client.query<{ event_type: string }>(
+          'SELECT event_type FROM outbox_event',
+        );
+        const categories = await client.query<{
+          name: string;
+          status: string;
+          display_order: number;
+        }>(
+          `SELECT name, status, display_order
            FROM category
           ORDER BY display_order ASC, name ASC`,
-      );
-      const policy = await client.query<{
-        version: number;
-        rental_rules: Record<string, unknown>;
-        deposit_rules: Record<string, unknown>;
-        cancellation_rules: Record<string, unknown>;
-        delivery_rules: Record<string, unknown>;
-        privacy_notice: string;
-      }>(
-        `SELECT version, rental_rules, deposit_rules, cancellation_rules, delivery_rules, privacy_notice
+        );
+        const policy = await client.query<{
+          version: number;
+          rental_rules: Record<string, unknown>;
+          deposit_rules: Record<string, unknown>;
+          cancellation_rules: Record<string, unknown>;
+          delivery_rules: Record<string, unknown>;
+          privacy_notice: string;
+        }>(
+          `SELECT version, rental_rules, deposit_rules, cancellation_rules, delivery_rules, privacy_notice
            FROM policy_snapshot
           ORDER BY version ASC
           LIMIT 1`,
-      );
-      const fittingSettings = await client.query<{
-        enabled: boolean;
-        capacity: number;
-        duration_minutes: number;
-        fee_minor: string;
-        currency: string;
-        version: number;
-      }>(
-        `SELECT enabled, capacity, duration_minutes, fee_minor::text, currency, version::integer AS version
+        );
+        const fittingSettings = await client.query<{
+          enabled: boolean;
+          capacity: number;
+          duration_minutes: number;
+          fee_minor: string;
+          currency: string;
+          version: number;
+        }>(
+          `SELECT enabled, capacity, duration_minutes, fee_minor::text, currency, version::integer AS version
            FROM fitting_settings
           LIMIT 1`,
-      );
-      const businessHours = await client.query<{
-        operating_hours: Record<string, unknown>;
-        operating_hours_version: string;
-      }>(
-        `SELECT operating_hours, operating_hours_version::text
+        );
+        const businessHours = await client.query<{
+          operating_hours: Record<string, unknown>;
+          operating_hours_version: string;
+        }>(
+          `SELECT operating_hours, operating_hours_version::text
            FROM branch
           WHERE is_default
           LIMIT 1`,
-      );
-      return {
-        subscription: subscription.rows[0],
-        outbox: outbox.rows[0],
-        categories: categories.rows,
-        policy: policy.rows[0],
-        fittingSettings: fittingSettings.rows[0],
-        businessHours: businessHours.rows[0],
-      };
-    });
-    if (!tenantState.subscription) throw new Error('expected subscription');
-    expect(tenantState.subscription.current_period_end.getTime() - tenantState.subscription.current_period_start.getTime()).toBe(
-      14 * 24 * 60 * 60 * 1000,
+        );
+        return {
+          subscription: subscription.rows[0],
+          outbox: outbox.rows[0],
+          categories: categories.rows,
+          policy: policy.rows[0],
+          fittingSettings: fittingSettings.rows[0],
+          businessHours: businessHours.rows[0],
+        };
+      },
     );
-    expect(tenantState.subscription.trial_ends_at.getTime()).toBe(tenantState.subscription.current_period_end.getTime());
+    if (!tenantState.subscription) throw new Error('expected subscription');
+    expect(
+      tenantState.subscription.current_period_end.getTime() -
+        tenantState.subscription.current_period_start.getTime(),
+    ).toBe(14 * 24 * 60 * 60 * 1000);
+    expect(tenantState.subscription.trial_ends_at.getTime()).toBe(
+      tenantState.subscription.current_period_end.getTime(),
+    );
     expect(tenantState.outbox).toEqual({ event_type: 'tenant.bootstrapped' });
     expect(tenantState.categories).toEqual([
       { name: 'Gowns', status: 'active', display_order: 10 },
@@ -186,14 +213,65 @@ describe('TBF-030 tenant bootstrap', async () => {
     });
   });
 
+  it('starts the trial with Starter after the owner explicitly selects it', async () => {
+    const principalId = 'user_tbf030_starter_bootstrap';
+    const account = await ensureAccount(principalId);
+    const onboarding = await createOrResumeOnboarding(
+      account.id,
+      'org_tbf030_starter_bootstrap',
+      principalId,
+      {
+        organizationName: 'Starter Studio',
+      },
+    );
+    if (onboarding.kind !== 'created') throw new Error('expected onboarding creation');
+    const selected = await chooseOnboardingPlan(onboarding.onboarding.id, 'starter', principalId);
+    if (selected.kind !== 'updated') throw new Error('expected Starter plan selection');
+
+    const result = await runTenantBootstrap({
+      principalId,
+      clerkOrgId: 'org_tbf030_starter_bootstrap',
+      onboardingId: onboarding.onboarding.id,
+      idempotencyKey: 'bootstrap-starter-001',
+      payloadHash: canonicalRequestHash({ onboarding_id: onboarding.onboarding.id, body: {} }),
+      requestId: 'req-tbf030-starter-bootstrap',
+    });
+
+    expect(result.kind).toBe('success');
+    if (result.kind !== 'success') throw new Error('expected Starter bootstrap success');
+    expect(result.body.data.subscription.plan_code).toBe('starter');
+    const entitlements = await withTenantTransaction(
+      result.body.data.tenant.id,
+      principalId,
+      async (client) =>
+        client.query<{ capability: string; limit_value: number }>(
+          `SELECT e.capability, e.limit_value
+           FROM subscription s
+           JOIN plan_entitlement e ON e.plan_id = s.plan_id
+          WHERE s.tenant_id = $1
+          ORDER BY e.capability`,
+          [result.body.data.tenant.id],
+        ),
+    );
+    expect(entitlements.rows).toEqual([
+      { capability: 'frontdesk_seats.max', limit_value: 0 },
+      { capability: 'physical_assets.max', limit_value: 125 },
+    ]);
+  });
+
   it('replays one committed graph for concurrent same-key requests', async () => {
     const principalId = 'user_tbf030_concurrent';
     const account = await ensureAccount(principalId);
-    const onboarding = await createOrResumeOnboarding(account.id, 'org_tbf030_concurrent', principalId, {
-      organizationName: 'Concurrent Studio',
-    });
+    const onboarding = await createOrResumeOnboarding(
+      account.id,
+      'org_tbf030_concurrent',
+      principalId,
+      {
+        organizationName: 'Concurrent Studio',
+      },
+    );
     if (onboarding.kind !== 'created') throw new Error('expected onboarding creation');
-    await chooseOnboardingPlan(onboarding.onboarding.id, 'starter', principalId);
+    await chooseOnboardingPlan(onboarding.onboarding.id, 'standard', principalId);
     const input = {
       principalId,
       clerkOrgId: 'org_tbf030_concurrent',
@@ -208,11 +286,21 @@ describe('TBF-030 tenant bootstrap', async () => {
     const tenantId = results.find((result) => result.kind === 'success')?.body.data.tenant.id;
     if (!tenantId) throw new Error('expected successful bootstrap');
     const counts = await withTenantTransaction(tenantId, principalId, async (client) => {
-      const tenant = await client.query<{ count: number }>('SELECT count(*)::int AS count FROM tenant');
-      const memberships = await client.query<{ count: number }>('SELECT count(*)::int AS count FROM membership');
-      const subscriptions = await client.query<{ count: number }>('SELECT count(*)::int AS count FROM subscription');
-      const categories = await client.query<{ count: number }>('SELECT count(*)::int AS count FROM category');
-      const paymentMethods = await client.query<{ count: number }>('SELECT count(*)::int AS count FROM payment_method');
+      const tenant = await client.query<{ count: number }>(
+        'SELECT count(*)::int AS count FROM tenant',
+      );
+      const memberships = await client.query<{ count: number }>(
+        'SELECT count(*)::int AS count FROM membership',
+      );
+      const subscriptions = await client.query<{ count: number }>(
+        'SELECT count(*)::int AS count FROM subscription',
+      );
+      const categories = await client.query<{ count: number }>(
+        'SELECT count(*)::int AS count FROM category',
+      );
+      const paymentMethods = await client.query<{ count: number }>(
+        'SELECT count(*)::int AS count FROM payment_method',
+      );
       return {
         tenants: tenant.rows[0]?.count ?? -1,
         memberships: memberships.rows[0]?.count ?? -1,
@@ -221,15 +309,25 @@ describe('TBF-030 tenant bootstrap', async () => {
         paymentMethods: paymentMethods.rows[0]?.count ?? -1,
       };
     });
-    expect(counts).toEqual({ tenants: 1, memberships: 1, subscriptions: 1, categories: 6, paymentMethods: 2 });
+    expect(counts).toEqual({
+      tenants: 1,
+      memberships: 1,
+      subscriptions: 1,
+      categories: 6,
+      paymentMethods: 2,
+    });
   });
 
   it('rejects a mismatched organization without creating tenant effects', async () => {
     const principalId = 'user_tbf030_mismatch';
     const account = await ensureAccount(principalId);
-    const onboarding = await createOrResumeOnboarding(account.id, 'org_tbf030_expected', principalId);
+    const onboarding = await createOrResumeOnboarding(
+      account.id,
+      'org_tbf030_expected',
+      principalId,
+    );
     if (onboarding.kind !== 'created') throw new Error('expected onboarding creation');
-    await chooseOnboardingPlan(onboarding.onboarding.id, 'starter', principalId);
+    await chooseOnboardingPlan(onboarding.onboarding.id, 'standard', principalId);
 
     const result = await runTenantBootstrap({
       principalId,
@@ -241,7 +339,9 @@ describe('TBF-030 tenant bootstrap', async () => {
     });
     expect(result).toMatchObject({ kind: 'rejected', status: 404 });
     const count = await withGlobalTransaction(principalId, async (client) => {
-      const tenants = await client.query<{ count: number }>('SELECT count(*)::int AS count FROM tenant');
+      const tenants = await client.query<{ count: number }>(
+        'SELECT count(*)::int AS count FROM tenant',
+      );
       return tenants.rows[0]?.count ?? -1;
     });
     expect(count).toBe(0);
@@ -263,8 +363,9 @@ describe('TBF-030 tenant bootstrap', async () => {
         principalId,
         { organizationName: testCase.organizationName },
       );
-      if (onboarding.kind !== 'created') throw new Error(`expected ${testCase.key} onboarding creation`);
-      await chooseOnboardingPlan(onboarding.onboarding.id, 'starter', principalId);
+      if (onboarding.kind !== 'created')
+        throw new Error(`expected ${testCase.key} onboarding creation`);
+      await chooseOnboardingPlan(onboarding.onboarding.id, 'standard', principalId);
 
       const result = await runTenantBootstrap({
         principalId,
@@ -294,7 +395,7 @@ describe('TBF-030 tenant bootstrap', async () => {
       { organizationName: 'Shared Studio' },
     );
     if (firstOnboarding.kind !== 'created') throw new Error('expected first onboarding creation');
-    await chooseOnboardingPlan(firstOnboarding.onboarding.id, 'starter', firstPrincipal);
+    await chooseOnboardingPlan(firstOnboarding.onboarding.id, 'standard', firstPrincipal);
     const first = await runTenantBootstrap({
       principalId: firstPrincipal,
       clerkOrgId: 'org_tbf030_slug_first',
@@ -316,13 +417,16 @@ describe('TBF-030 tenant bootstrap', async () => {
       { organizationName: 'Shared Studio' },
     );
     if (secondOnboarding.kind !== 'created') throw new Error('expected second onboarding creation');
-    await chooseOnboardingPlan(secondOnboarding.onboarding.id, 'starter', secondPrincipal);
+    await chooseOnboardingPlan(secondOnboarding.onboarding.id, 'standard', secondPrincipal);
     const second = await runTenantBootstrap({
       principalId: secondPrincipal,
       clerkOrgId: 'org_tbf030_slug_second',
       onboardingId: secondOnboarding.onboarding.id,
       idempotencyKey: 'bootstrap-slug-second-001',
-      payloadHash: canonicalRequestHash({ onboarding_id: secondOnboarding.onboarding.id, body: {} }),
+      payloadHash: canonicalRequestHash({
+        onboarding_id: secondOnboarding.onboarding.id,
+        body: {},
+      }),
       requestId: 'req-tbf030-slug-second',
     });
     expect(second.kind).toBe('success');

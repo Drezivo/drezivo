@@ -14,7 +14,9 @@ const clerk = vi.hoisted(() => ({
 const api = vi.hoisted(() => ({
   getActorContext: vi.fn(),
   getCurrentOnboarding: vi.fn(),
+  getPublicPlanCatalog: vi.fn(),
   getWorkspaces: vi.fn(),
+  selectOnboardingPlan: vi.fn(),
   startOnboardingTrial: vi.fn(),
 }));
 
@@ -82,7 +84,7 @@ const bootstrap = {
   branch_grants: [{ branch_id: "branch_123", permission_codes: ["assets.manage"] }],
   subscription: {
     id: "subscription_123",
-    plan_code: "starter" as const,
+    plan_code: "standard" as const,
     status: "trialing" as const,
     trial_ends_at: "2026-09-26T00:00:00.000Z",
     grace_ends_at: null,
@@ -122,7 +124,37 @@ describe("OnboardingPlan", () => {
     clerk.getToken.mockResolvedValue("clerk-token");
     clerk.setActive.mockResolvedValue(undefined);
     mockCurrent();
-    Object.defineProperty(window, "location", { configurable: true, value: { ...originalLocation, replace: locationReplace } });
+    api.getPublicPlanCatalog.mockResolvedValue({
+      data: {
+        plans: [
+          {
+            code: "starter",
+            name: "Starter",
+            monthly_price_minor: 14900,
+            currency: "PHP",
+            trial_days: 14,
+            limits: { active_garments: 125, frontdesk_seats: 0 },
+          },
+          {
+            code: "standard",
+            name: "Standard",
+            monthly_price_minor: 29900,
+            currency: "PHP",
+            trial_days: 14,
+            limits: { active_garments: 300, frontdesk_seats: 3 },
+          },
+        ],
+      },
+      requestId: "req-plans",
+    });
+    api.selectOnboardingPlan.mockImplementation(async (_id, requestBody) => ({
+      data: { ...onboarding, selected_plan_code: requestBody.plan_code },
+      requestId: "req-select-plan",
+    }));
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...originalLocation, replace: locationReplace },
+    });
   });
 
   afterEach(() => {
@@ -148,20 +180,57 @@ describe("OnboardingPlan", () => {
     });
   }
 
-  it("asks to start the trial on arrival and shows the one Standard plan, with no plan to choose", async () => {
+  async function choosePlan(code: "starter" | "standard" = "standard") {
+    await screen.findByRole("radiogroup", { name: "Subscription plan" });
+    fireEvent.click(
+      screen.getByRole("radio", { name: new RegExp(code === "starter" ? "Starter" : "Standard") })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    return screen.findByRole("dialog", { name: "Start your 14-day trial?" });
+  }
+
+  it("requires a plan choice, persists it, and shows the server-provided Standard details", async () => {
     renderPlan();
 
-    const dialog = await screen.findByRole("dialog", { name: "Start your 14-day trial?" });
+    const continueButton = await screen.findByRole("button", { name: "Continue" });
+    expect(continueButton).toBeDisabled();
+    const dialog = await choosePlan("standard");
     expect(dialog).toHaveTextContent("₱299 a month");
     expect(dialog).toHaveTextContent("Up to 300 active garments");
     expect(dialog).toHaveTextContent("Up to 3 Front Desk staff");
-    expect(screen.queryByRole("radio")).toBeNull();
+    expect(api.selectOnboardingPlan).toHaveBeenCalledWith(
+      onboarding.id,
+      { plan_code: "standard" },
+      expect.any(String)
+    );
     expect(api.startOnboardingTrial).not.toHaveBeenCalled();
+  });
+
+  it("shows Starter limits without advertising Front Desk and saves the Starter choice", async () => {
+    renderPlan();
+
+    await screen.findByRole("radiogroup", { name: "Subscription plan" });
+    const starter = screen.getByRole("radio", { name: /Starter/ });
+    expect(starter).toHaveTextContent("₱149");
+    expect(starter).toHaveTextContent("125 active garments");
+    expect(starter).not.toHaveTextContent("Front Desk");
+    fireEvent.click(starter);
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Start your 14-day trial?" });
+    expect(dialog).toHaveTextContent("₱149 a month");
+    expect(dialog).toHaveTextContent("Up to 125 active garments");
+    expect(dialog).not.toHaveTextContent("Front Desk");
+    expect(api.selectOnboardingPlan).toHaveBeenCalledWith(
+      onboarding.id,
+      { plan_code: "starter" },
+      expect.any(String)
+    );
   });
 
   it("closes on Not yet without starting anything, and the trial button reopens it", async () => {
     renderPlan();
-    await screen.findByRole("dialog", { name: "Start your 14-day trial?" });
+    await choosePlan();
 
     fireEvent.click(screen.getByRole("button", { name: "Not yet" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -177,7 +246,7 @@ describe("OnboardingPlan", () => {
     mockWorkspaceHandoff();
 
     renderPlan();
-    await screen.findByRole("dialog", { name: "Start your 14-day trial?" });
+    await choosePlan();
     const confirm = screen.getByRole("button", { name: "Start 14-day trial" });
     fireEvent.click(confirm);
     fireEvent.click(confirm);
@@ -195,13 +264,15 @@ describe("OnboardingPlan", () => {
     mockWorkspaceHandoff();
 
     renderPlan();
-    await screen.findByRole("dialog", { name: "Start your 14-day trial?" });
+    await choosePlan();
     fireEvent.click(screen.getByRole("button", { name: "Start 14-day trial" }));
     await screen.findByRole("alert");
     fireEvent.click(screen.getByRole("button", { name: "Start 14-day trial" }));
 
     await waitFor(() => expect(api.startOnboardingTrial).toHaveBeenCalledTimes(2));
-    expect(api.startOnboardingTrial.mock.calls[0]?.[1]).toBe(api.startOnboardingTrial.mock.calls[1]?.[1]);
+    expect(api.startOnboardingTrial.mock.calls[0]?.[1]).toBe(
+      api.startOnboardingTrial.mock.calls[1]?.[1]
+    );
   });
 
   it("retries only workspace loading after the trial has started", async () => {
@@ -210,10 +281,12 @@ describe("OnboardingPlan", () => {
     api.getWorkspaces.mockRejectedValueOnce(new Error("temporary workspace read failure"));
 
     renderPlan();
-    await screen.findByRole("dialog", { name: "Start your 14-day trial?" });
+    await choosePlan();
     fireEvent.click(screen.getByRole("button", { name: "Start 14-day trial" }));
 
-    expect(await screen.findByRole("heading", { name: "Your workspace was created" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Your workspace was created" })
+    ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Try loading workspace again" }));
 
     await waitFor(() => expect(locationReplace).toHaveBeenCalledWith("/calendar"));
@@ -226,5 +299,17 @@ describe("OnboardingPlan", () => {
     renderPlan();
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/onboarding"));
     expect(api.startOnboardingTrial).not.toHaveBeenCalled();
+  });
+
+  it("shows a retryable catalog error and loads plans again on request", async () => {
+    api.getPublicPlanCatalog.mockRejectedValueOnce(new Error("catalog unavailable"));
+    renderPlan();
+
+    expect(
+      await screen.findByRole("heading", { name: "We could not load the plans" })
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("radiogroup", { name: "Subscription plan" })).toBeVisible();
+    expect(api.getPublicPlanCatalog).toHaveBeenCalledTimes(2);
   });
 });

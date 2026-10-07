@@ -1215,7 +1215,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
       );
 
       const plan = await client.query<{ id: string }>(
-        `SELECT id FROM plan WHERE code = 'starter' AND version = 1 AND active = true LIMIT 1`,
+        `SELECT id FROM plan WHERE code = 'standard' AND version = 1 AND active = true LIMIT 1`,
       );
       const planId = requireRow(plan.rows, 'starter plan').id;
       await client.query(
