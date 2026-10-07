@@ -62,7 +62,7 @@ const detail = {
       measurement_mode: "custom" as const,
       measurement_guide_id: null,
       measurement_unit: "cm" as const,
-      measurements: { bust: 90, waist: 72 },
+      measurements: { bust: { type: "fit_note", text: "Flexible fit" }, waist: 72, length: 61, hips: 96 },
       rental_price_minor: "150000",
       security_deposit_minor: "50000",
       currency: "PHP",
@@ -181,6 +181,7 @@ describe("ClothingDetailsPage", () => {
     expect(screen.getByText("AST-GWN-001-M-01")).toBeVisible();
     expect(screen.getByText("Needs Cleaning")).toBeVisible();
     expect(screen.getByText("Confirmed reservation")).toBeVisible();
+    expect(screen.getByText(/Bust: Flexible fit · Waist: 72 cm · Length: 61 cm · Hips \(legacy, read-only\): 96 cm/)).toBeVisible();
   });
 
   it("renders signed product images, switches gallery photos, and falls back when an image fails", async () => {

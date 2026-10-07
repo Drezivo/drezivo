@@ -22,6 +22,7 @@ import {
   reservationMoneySnapshot,
 } from './reservation';
 import { reservationState } from './state';
+import { variantFitRange, variantMeasurementMap } from '../catalogue/admin';
 
 export const reservationLinePriceSnapshot = z
   .object({
@@ -48,7 +49,9 @@ export const reservationLineDetail = z
     current_asset_readiness: physicalAssetReadiness.nullable(),
     line_number: z.number().int().positive(),
     name_snapshot: z.string().trim().min(1).max(300),
-    measurements_snapshot: z.record(z.string(), z.number().finite().nonnegative()),
+    measurements_snapshot: variantMeasurementMap,
+    fit_range_snapshot: variantFitRange.nullable().optional(),
+    measurement_unit_snapshot: z.enum(['cm', 'in']).nullable().optional(),
     pricing_snapshot: reservationLinePriceSnapshot,
   })
   .strict();

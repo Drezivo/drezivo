@@ -72,14 +72,13 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
                 {item.variants.map((entry) => (
                   <label key={entry.variant_id} className={`flex h-11 min-w-14 cursor-pointer items-center justify-center border px-4 text-sm has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-sf-accent ${variantId === entry.variant_id ? 'border-sf-ink bg-sf-ink text-sf-bg' : 'border-sf-line hover:border-sf-ink'}`}>
                     <input type="radio" name="size" className="sr-only" checked={variantId === entry.variant_id} onChange={() => setVariantId(entry.variant_id)} />
-                    {entry.size_label ?? 'One size'}
+                    {entry.size_label ?? 'Flexible fit'}
                   </label>
                 ))}
               </div>
               {variant?.color_label ? <p className="mt-3 text-sm text-sf-muted">Color: {variant.color_label}</p> : null}
             </fieldset>
           ) : null}
-
           <button type="button" className="sf-button sf-button-primary mt-8 w-full" disabled={!variant || !canBook} onClick={() => setBooking(true)}>
             {!variant ? 'Choose a size' : 'Choose rental dates'}
           </button>
@@ -148,18 +147,33 @@ function Measurements({ item, variantId }: { item: ItemDetail; variantId: string
   const variant = item.variants.find((entry) => entry.variant_id === variantId) ?? item.variants[0];
   if (!variant) return null;
   const { measurement } = variant;
-  if (measurement.mode === 'none') return <p className="text-sf-muted">No measurements listed. Ask the shop, or request a fitting.</p>;
-  if (measurement.mode === 'default_guide') {
-    return measurement.guide_image_url ? (
-      // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-      <img src={measurement.guide_image_url} alt="Size guide" className="w-full border border-sf-line" loading="lazy" />
-    ) : (
-      <p className="text-sf-muted">This piece follows the shop&apos;s standard size guide.</p>
+  const fitRange = variant.fit_range ? <p className="mb-4 text-sf-muted">Fits {variant.fit_range}</p> : null;
+  if (measurement.mode === 'none') {
+    return (
+      <>
+        {fitRange}
+        <p className="text-sf-muted">No measurements listed. Ask the shop, or request a fitting.</p>
+      </>
     );
   }
+  if (measurement.mode === 'default_guide') {
+    return (
+      <>
+        {fitRange}
+        {measurement.guide_image_url ? (
+          // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
+          <img src={measurement.guide_image_url} alt="Size guide" className="w-full border border-sf-line" loading="lazy" />
+        ) : (
+          <p className="text-sf-muted">This piece follows the shop&apos;s standard size guide.</p>
+        )}
+      </>
+    );
+  }
+  const hasExactMeasurements = measurement.values.some((value) => /^\d+(?:\.\d+)?\s?(?:cm|in)$/i.test(value.value.trim()));
   return (
     <>
       {!variantId && item.variants.length > 1 ? <p className="mb-3 text-sf-muted">Showing size {variant.size_label}. Choose a size to see its measurements.</p> : null}
+      {fitRange}
       <dl className="divide-y divide-sf-line border-y border-sf-line">
         {measurement.values.map((value) => (
           <div key={value.label} className="flex justify-between py-2">
@@ -168,7 +182,7 @@ function Measurements({ item, variantId }: { item: ItemDetail; variantId: string
           </div>
         ))}
       </dl>
-      <p className="mt-2 text-xs text-sf-muted">Approximate garment measurements.</p>
+      {hasExactMeasurements ? <p className="mt-2 text-xs text-sf-muted">Approximate garment measurements.</p> : null}
     </>
   );
 }

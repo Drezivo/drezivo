@@ -121,7 +121,7 @@ describe('CLT-030 product and variant edit commands', async () => {
         measurement_mode: 'default_guide',
         measurement_guide_id: seed.secondGuideId,
         measurement_unit: 'cm',
-        measurements: {},
+        measurements: { hips: 96 },
         rental_price_minor: '25000',
         security_deposit_minor: '9000',
         pricing_mode: 'fixed_duration',
@@ -139,6 +139,7 @@ describe('CLT-030 product and variant edit commands', async () => {
     expect(state.variant).toMatchObject({
       measurement_guide_id: seed.secondGuideId,
       measurement_mode: 'default_guide',
+      measurements: { hips: 96 },
       rental_price_minor: 25000,
       security_deposit_minor: 9000,
       pricing_mode: 'fixed_duration',
@@ -416,7 +417,7 @@ describe('CLT-030 product and variant edit commands', async () => {
             measurement_mode, measurement_guide_id, rental_price_minor, security_deposit_minor,
             currency, pricing_mode, included_duration_minutes, extra_day_price_minor, prep_minutes,
             turnaround_minutes, status, created_at, updated_at)
-         VALUES ($1, $2, 'EDIT-001-M', 'M', 'Emerald', '{}'::jsonb, 'cm', 'default_guide', $3,
+         VALUES ($1, $2, 'EDIT-001-M', 'M', 'Emerald', '{"hips":96}'::jsonb, 'cm', 'default_guide', $3,
                  10000, 5000, 'PHP', 'daily', 1440, 10000, 0, 1440, 'active', now(), now())
          RETURNING id, updated_at`,
         [tenant.id, productRow.id, firstGuide.id],
@@ -536,6 +537,7 @@ describe('CLT-030 product and variant edit commands', async () => {
         color_label: string | null;
         measurement_mode: string;
         measurement_guide_id: string | null;
+        measurements: Record<string, unknown>;
         rental_price_minor: number;
         security_deposit_minor: number;
         pricing_mode: string;
@@ -544,7 +546,7 @@ describe('CLT-030 product and variant edit commands', async () => {
         prep_minutes: number;
         turnaround_minutes: number;
       }>(
-        `SELECT color_label, measurement_mode, measurement_guide_id, rental_price_minor,
+        `SELECT color_label, measurement_mode, measurement_guide_id, measurements, rental_price_minor,
                 security_deposit_minor, pricing_mode, included_duration_minutes,
                 extra_day_price_minor, prep_minutes, turnaround_minutes
            FROM product_variant

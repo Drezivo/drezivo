@@ -140,6 +140,44 @@ describe('CLT-020 Add Clothing transactional service', async () => {
     });
   });
 
+  it('persists flexible-fit range and fit notes without conflating them with exact measurements', async () => {
+    const seed = await seedCommandTenant('org_clt020_flexible_fit', 'user_clt020_flexible_fit');
+    const response = await createClothing({
+      ...seed.context,
+      requestId: 'req-clt020-flexible-fit',
+      idempotencyKey: 'clt020-flexible-fit',
+      request: makeRequest(seed.categoryId, {
+        code: 'YASMIN-001',
+        sizes: [{
+          size_label: null,
+          measurement_mode: 'custom',
+          measurement_unit: 'in',
+          fit_range: 'Small–XL',
+          measurements: {
+            bust: { type: 'fit_note', text: 'Flexible fit' },
+            waist: 28,
+            length: 61,
+          },
+        }],
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const state = await readCreatedGraph(seed.tenantId, 'user_clt020_flexible_fit', 'YASMIN-001');
+    expect(state.variants).toHaveLength(1);
+    expect(state.variants[0]).toMatchObject({
+      size_label: null,
+      fit_range: 'Small–XL',
+      measurement_mode: 'custom',
+      measurement_unit: 'in',
+      measurements: {
+        bust: { type: 'fit_note', text: 'Flexible fit' },
+        waist: 28,
+        length: 61,
+      },
+    });
+  });
+
   it('replays the same intent sequentially without creating a second catalogue graph', async () => {
     const seed = await seedCommandTenant('org_clt020_sequential', 'user_clt020_sequential');
     const request = makeRequest(seed.categoryId, { code: 'SEQ-001' });
@@ -696,7 +734,9 @@ describe('CLT-020 Add Clothing transactional service', async () => {
             color_label: string | null;
             measurement_mode: string;
             measurement_guide_id: string | null;
-            measurements: Record<string, number>;
+            measurements: Record<string, unknown>;
+            fit_range: string | null;
+            measurement_unit: string;
             rental_price_minor: number;
             security_deposit_minor: number;
             currency: string;
@@ -704,6 +744,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
             included_duration_minutes: number;
           }>(
             `SELECT id, size_label, color_label, measurement_mode, measurement_guide_id, measurements,
+                    fit_range, measurement_unit,
                     rental_price_minor, security_deposit_minor, currency, extra_day_price_minor,
                     included_duration_minutes
                FROM product_variant

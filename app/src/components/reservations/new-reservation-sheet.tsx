@@ -332,7 +332,7 @@ export function NewReservationSheet({
             setSelectedVariantId(freeSizeVariant.id);
           } else {
             setSelectedVariantId("");
-            setVariantSelectionError("This free-size clothing item is not configured correctly.");
+            setVariantSelectionError("This flexible-fit clothing item is not configured correctly.");
           }
         } else {
           setSelectedVariantId("");
@@ -929,7 +929,7 @@ export function NewReservationSheet({
                 </p>
                 {productDetail.sizing_mode === "free_size" ? (
                   <div className="mt-3 rounded-lg border border-dashboard-border bg-dashboard-active/40 p-3 text-sm">
-                    <p className="font-medium text-dashboard-navy">Free size</p>
+                    <p className="font-medium text-dashboard-navy">Flexible fit</p>
                     <p className="mt-1 text-xs text-dashboard-muted">This clothing item has one rentable size.</p>
                   </div>
                 ) : (

@@ -16,6 +16,23 @@ export const measurementMap = z.record(
 );
 export type MeasurementMap = z.infer<typeof measurementMap>;
 
+export const variantMeasurementValue = z.union([
+  z.number().finite().nonnegative().max(10_000),
+  z.object({ type: z.literal('fit_note'), text: z.string().trim().min(1).max(120) }).strict(),
+]);
+export type VariantMeasurementValue = z.infer<typeof variantMeasurementValue>;
+
+export const variantMeasurementMap = z.record(
+  z.string().trim().min(1).max(80),
+  variantMeasurementValue,
+);
+export type VariantMeasurementMap = z.infer<typeof variantMeasurementMap>;
+
+export const variantFitRange = z.preprocess(
+  (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+  z.string().trim().min(1).max(120).nullable(),
+);
+
 export const measurementGuideStatus = z.enum(['active', 'archived']);
 export type MeasurementGuideStatus = z.infer<typeof measurementGuideStatus>;
 
@@ -144,7 +161,8 @@ export const clothingSizeInput = z
     measurement_mode: measurementMode,
     measurement_guide_id: measurementGuideId.nullable().optional(),
     measurement_unit: measurementUnit.default('cm'),
-    measurements: measurementMap.default({}),
+    measurements: variantMeasurementMap.default({}),
+    fit_range: variantFitRange.optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -190,6 +208,13 @@ export const clothingSizeInput = z
         code: z.ZodIssueCode.custom,
         path: ['measurement_mode'],
         message: 'None measurement mode cannot reference a guide or structured measurements.',
+      });
+    }
+    if (Object.values(value.measurements).some((measurement) => typeof measurement === 'object') && value.measurement_mode !== 'custom') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['measurement_mode'],
+        message: 'Fit notes require custom measurement mode.',
       });
     }
   });
@@ -272,6 +297,13 @@ export const createClothingRequest = z
         code: z.ZodIssueCode.custom,
         path: ['sizes'],
         message: 'Sized products cannot contain a Free size variant.',
+      });
+    }
+    if (requestedMode === 'sized' && value.sizes.some((size) => size.fit_range != null)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['sizes'],
+        message: 'Fit range is only supported for a flexible-fit variant.',
       });
     }
 

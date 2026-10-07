@@ -1041,7 +1041,7 @@ function StepGarments({
                     const selected = selections.find(
                       (selection) => selection.variantId === variant.id
                     );
-                    const label = [variant.size_label ?? "Free size", variant.color_label]
+                    const label = [variant.size_label ?? "Flexible fit", variant.color_label]
                       .filter(Boolean)
                       .join(" · ");
                     return (
@@ -1051,13 +1051,13 @@ function StepGarments({
                       >
                         <div className="flex items-center justify-between gap-3">
                           <p className="min-w-0 truncate font-medium text-dashboard-navy">
-                            {label || "Free size"}
+                            {label || "Flexible fit"}
                           </p>
                           {!selected ? (
                             <Button
                               type="button"
                               size="sm"
-                              onClick={() => onToggleVariant(variant.id, productDetail.name, label || "Free size")}
+                              onClick={() => onToggleVariant(variant.id, productDetail.name, label || "Flexible fit")}
                             >
                               Add
                             </Button>
@@ -1067,7 +1067,7 @@ function StepGarments({
                           <div
                             className="mt-3 grid grid-cols-[1fr_1fr_auto] gap-2"
                             role="group"
-                            aria-label={`Garment mode for ${productDetail.name} ${label || "Free size"}`}
+                            aria-label={`Garment mode for ${productDetail.name} ${label || "Flexible fit"}`}
                           >
                             {(["preference", "guaranteed"] as const).map((mode) => (
                               <button
@@ -1089,7 +1089,7 @@ function StepGarments({
                               type="button"
                               variant="secondary"
                               size="sm"
-                              onClick={() => onToggleVariant(variant.id, productDetail.name, label || "Free size")}
+                              onClick={() => onToggleVariant(variant.id, productDetail.name, label || "Flexible fit")}
                             >
                               Remove
                             </Button>

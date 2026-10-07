@@ -85,8 +85,8 @@ describe("batch import runner", () => {
 
   it("creates rows and reports each one's outcome", async () => {
     const client = api();
-    const good = emptyRow(DEFAULT_IMPORT_DEFAULTS, { name: "A", category: "Gowns", price: "500" });
-    const bad = emptyRow(DEFAULT_IMPORT_DEFAULTS, { name: "B", category: "Gowns", price: "500" });
+    const good = emptyRow(DEFAULT_IMPORT_DEFAULTS, { name: "A", category: "Gowns", price: "500", measurementMode: "none" });
+    const bad = emptyRow(DEFAULT_IMPORT_DEFAULTS, { name: "B", category: "Gowns", price: "500", measurementMode: "none" });
     client.createImportClothing.mockResolvedValue({
       data: {
         results: [
@@ -137,7 +137,7 @@ describe("batch import runner", () => {
 
   it("waits out a throttled batch and resends it with the same row keys", async () => {
     const client = api();
-    const row = emptyRow(DEFAULT_IMPORT_DEFAULTS, { name: "A", category: "Gowns", price: "500" });
+    const row = emptyRow(DEFAULT_IMPORT_DEFAULTS, { name: "A", category: "Gowns", price: "500", measurementMode: "none" });
     client.createImportClothing
       .mockRejectedValueOnce(new DrezivoApiError("Too many requests.", { status: 429 }))
       .mockResolvedValueOnce({

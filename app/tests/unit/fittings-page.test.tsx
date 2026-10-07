@@ -388,7 +388,7 @@ describe("FittingsPage production cutover", () => {
     expect(screen.queryByText("@realcustomer")).not.toBeInTheDocument();
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("Guaranteed garment")).toBeVisible();
-    expect(within(dialog).getByText("Free size · Emerald")).toBeVisible();
+    expect(within(dialog).getByText("Flexible fit · Emerald")).toBeVisible();
     expect(within(dialog).getByRole("img", { name: "Emerald Evening Gown catalogue photo" })).toHaveAttribute(
       "src",
       "https://cdn.example.test/emerald-gown.webp"

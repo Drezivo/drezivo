@@ -66,7 +66,7 @@ export function LeaveGuard({
     <Dialog.Root open={target !== null} onOpenChange={(open: boolean) => !open && !saving && setTarget(null)}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/55" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-dashboard-border bg-dashboard-surface p-5 shadow-xl focus:outline-none sm:p-6">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 rounded-xl border border-dashboard-border bg-dashboard-surface p-5 shadow-xl focus:outline-none sm:p-6">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-dashboard-active text-dashboard-accent">
               <AlertTriangle className="h-5 w-5" aria-hidden="true" />
@@ -79,14 +79,14 @@ export function LeaveGuard({
               </Dialog.Description>
             </div>
           </div>
-          <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="ghost" disabled={saving} onClick={() => setTarget(null)}>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+            <Button type="button" variant="ghost" disabled={saving} onClick={() => setTarget(null)} className="w-full whitespace-nowrap sm:w-auto">
               Keep editing
             </Button>
-            <Button type="button" variant="secondary" disabled={saving} onClick={() => target && leave(target)}>
+            <Button type="button" variant="secondary" disabled={saving} onClick={() => target && leave(target)} className="w-full whitespace-nowrap sm:w-auto">
               Leave without saving
             </Button>
-            <Button type="button" disabled={saving} onClick={() => void saveAndLeave()}>
+            <Button type="button" disabled={saving} onClick={() => void saveAndLeave()} className="w-full whitespace-nowrap sm:w-auto">
               {saving ? "Saving…" : "Save for later & leave"}
             </Button>
           </div>

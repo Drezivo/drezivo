@@ -1940,10 +1940,31 @@ components:
               measurements:
                 type: object
                 additionalProperties:
-                  type: number
-                  minimum: 0
-                  maximum: 10000
+                  anyOf:
+                    - type: number
+                      minimum: 0
+                      maximum: 10000
+                    - type: object
+                      properties:
+                        type:
+                          type: string
+                          enum:
+                            - fit_note
+                        text:
+                          type: string
+                          minLength: 1
+                          maxLength: 120
+                      required:
+                        - type
+                        - text
+                      additionalProperties: false
                 default: {}
+              fit_range:
+                type:
+                  - string
+                  - "null"
+                minLength: 1
+                maxLength: 120
             required:
               - size_label
               - measurement_mode
@@ -2074,10 +2095,31 @@ components:
               measurements:
                 type: object
                 additionalProperties:
-                  type: number
-                  minimum: 0
-                  maximum: 10000
+                  anyOf:
+                    - type: number
+                      minimum: 0
+                      maximum: 10000
+                    - type: object
+                      properties:
+                        type:
+                          type: string
+                          enum:
+                            - fit_note
+                        text:
+                          type: string
+                          minLength: 1
+                          maxLength: 120
+                      required:
+                        - type
+                        - text
+                      additionalProperties: false
                 default: &a22 {}
+              fit_range:
+                type:
+                  - string
+                  - "null"
+                minLength: 1
+                maxLength: 120
               pricing:
                 oneOf:
                   - type: object
@@ -2187,10 +2229,31 @@ components:
             measurements:
               type: object
               additionalProperties:
-                type: number
-                minimum: 0
-                maximum: 10000
+                anyOf:
+                  - type: number
+                    minimum: 0
+                    maximum: 10000
+                  - type: object
+                    properties:
+                      type:
+                        type: string
+                        enum:
+                          - fit_note
+                      text:
+                        type: string
+                        minLength: 1
+                        maxLength: 120
+                    required:
+                      - type
+                      - text
+                    additionalProperties: false
               default: *a22
+            fit_range:
+              type:
+                - string
+                - "null"
+              minLength: 1
+              maxLength: 120
             pricing:
               oneOf:
                 - type: object
@@ -2443,9 +2506,30 @@ components:
               measurements:
                 type: object
                 additionalProperties:
-                  type: number
-                  minimum: 0
-                  maximum: 10000
+                  anyOf:
+                    - type: number
+                      minimum: 0
+                      maximum: 10000
+                    - type: object
+                      properties:
+                        type:
+                          type: string
+                          enum:
+                            - fit_note
+                        text:
+                          type: string
+                          minLength: 1
+                          maxLength: 120
+                      required:
+                        - type
+                        - text
+                      additionalProperties: false
+              fit_range:
+                type:
+                  - string
+                  - "null"
+                minLength: 1
+                maxLength: 120
               rental_price_minor:
                 type: string
                 pattern: ^-?(0|[1-9]\d*)$
@@ -8041,6 +8125,12 @@ paths:
                               type:
                                 - string
                                 - "null"
+                            fit_range:
+                              type:
+                                - string
+                                - "null"
+                              minLength: 1
+                              maxLength: 120
                             color_label:
                               type:
                                 - string
@@ -10645,10 +10735,31 @@ paths:
                       measurements:
                         type: object
                         additionalProperties:
-                          type: number
-                          minimum: 0
-                          maximum: 10000
+                          anyOf:
+                            - type: number
+                              minimum: 0
+                              maximum: 10000
+                            - type: object
+                              properties:
+                                type:
+                                  type: string
+                                  enum:
+                                    - fit_note
+                                text:
+                                  type: string
+                                  minLength: 1
+                                  maxLength: 120
+                              required:
+                                - type
+                                - text
+                              additionalProperties: false
                         default: *a22
+                      fit_range:
+                        type:
+                          - string
+                          - "null"
+                        minLength: 1
+                        maxLength: 120
                       pricing:
                         oneOf:
                           - type: object
@@ -10758,10 +10869,31 @@ paths:
                     measurements:
                       type: object
                       additionalProperties:
-                        type: number
-                        minimum: 0
-                        maximum: 10000
+                        anyOf:
+                          - type: number
+                            minimum: 0
+                            maximum: 10000
+                          - type: object
+                            properties:
+                              type:
+                                type: string
+                                enum:
+                                  - fit_note
+                              text:
+                                type: string
+                                minLength: 1
+                                maxLength: 120
+                            required:
+                              - type
+                              - text
+                            additionalProperties: false
                       default: *a22
+                    fit_range:
+                      type:
+                        - string
+                        - "null"
+                      minLength: 1
+                      maxLength: 120
                     pricing:
                       oneOf:
                         - type: object
@@ -11563,6 +11695,12 @@ paths:
                               - "null"
                             minLength: 1
                             maxLength: 40
+                          fit_range:
+                            type:
+                              - string
+                              - "null"
+                            minLength: 1
+                            maxLength: 120
                           free_size:
                             type: boolean
                           measurement_unit:
@@ -11573,9 +11711,24 @@ paths:
                           measurements:
                             type: object
                             additionalProperties:
-                              type: number
-                              minimum: 0
-                              maximum: 10000
+                              anyOf:
+                                - type: number
+                                  minimum: 0
+                                  maximum: 10000
+                                - type: object
+                                  properties:
+                                    type:
+                                      type: string
+                                      enum:
+                                        - fit_note
+                                    text:
+                                      type: string
+                                      minLength: 1
+                                      maxLength: 120
+                                  required:
+                                    - type
+                                    - text
+                                  additionalProperties: false
                           color_label:
                             type:
                               - string

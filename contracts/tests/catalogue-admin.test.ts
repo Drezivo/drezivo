@@ -56,9 +56,50 @@ describe('catalogue admin contract', () => {
         size_label: 'M',
         measurement_mode: 'custom',
         measurement_unit: 'in',
-        measurements: { bust: 34, waist: 28, hips: 36 },
+        measurements: { bust: 34, waist: 28, length: 61 },
       }).success,
     ).toBe(true);
+  });
+
+  it('accepts flexible-fit ranges and exact or fit-note Bust, Waist, and Length values', () => {
+    const yasmin = clothingSizeInput.parse({
+      size_label: null,
+      measurement_mode: 'none',
+      fit_range: 'Small–XL',
+    });
+    expect(yasmin.fit_range).toBe('Small–XL');
+
+    const hailey = clothingSizeInput.parse({
+      size_label: null,
+      measurement_mode: 'custom',
+      measurement_unit: 'in',
+      measurements: {
+        bust: { type: 'fit_note', text: 'Flexible fit' },
+        waist: 28,
+        length: 61,
+      },
+    });
+    expect(hailey.measurements).toEqual({
+      bust: { type: 'fit_note', text: 'Flexible fit' },
+      waist: 28,
+      length: 61,
+    });
+    expect(clothingSizeInput.parse({ size_label: null, measurement_mode: 'none', fit_range: '   ' }).fit_range).toBeNull();
+    expect(clothingSizeInput.safeParse({
+      size_label: null,
+      measurement_mode: 'default_guide',
+      measurement_guide_id: measurementGuideId,
+      measurements: { bust: { type: 'fit_note', text: 'Flexible fit' } },
+    }).success).toBe(false);
+  });
+
+  it('continues to accept legacy Hips measurements without treating them as Length', () => {
+    expect(clothingSizeInput.parse({
+      size_label: 'M',
+      measurement_mode: 'custom',
+      measurement_unit: 'in',
+      measurements: { hips: 36, length: 61 },
+    }).measurements).toEqual({ hips: 36, length: 61 });
   });
 
   it('models the V1 aggregate create command and rejects duplicate sizes', () => {

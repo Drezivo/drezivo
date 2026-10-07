@@ -165,7 +165,7 @@ describe('Catalogue batch import routes', async () => {
       .post('/api/v1/catalogue/import/extract')
       .send({ file_id: await seedAcceptedImage(seed, 'caps-photo') });
     expect(extract.status).toBe(503);
-    expectSafeError(extract.body, 'DEPENDENCY_UNAVAILABLE');
+    expectSafeError(extract.body, 'PHOTO_READER_CONFIGURATION');
   });
 
   function useClerk(seed: { principalId: string; clerkOrgId: string }) {

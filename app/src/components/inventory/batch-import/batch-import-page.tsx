@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DrezivoApiError, createDrezivoApiClient } from "@/lib/drezivo-api";
+import { inferMeasurementKind } from "@/lib/measurement-input";
 import { cn } from "@/lib/utils";
 
 import { clearBatch, loadBatch, saveBatch, type SavedBatch } from "./draft-store";
@@ -30,11 +31,13 @@ import {
   applyExtraction,
   editedRow,
   emptyRow,
+  resolveMeasurementConflict,
   rowProblems,
   rowsFromPhotos,
   scanReviewFields,
   type ImportDefaults,
   type ImportRow,
+  type MeasurementField,
 } from "./import-model";
 import { createRows, ensureCategories, readPhotos, uploadPhotos } from "./import-runner";
 import { LeaveGuard } from "./leave-guard";
@@ -882,12 +885,12 @@ function RowEditor({
   const inputClass = (field: keyof ImportRow) =>
     cn(
       invalid(field) && "border-dashboard-danger/60",
-      !invalid(field) &&
-        needsScanReview(field) &&
-        "border-warning-500/70 bg-warning-500/5 ring-1 ring-warning-500/10"
+      !invalid(field) && needsScanReview(field) && "border-warning-500/70 bg-warning-500/5 ring-1 ring-warning-500/10"
     );
   const reviewTitle = (field: keyof ImportRow) =>
     needsScanReview(field) && !invalid(field) ? "Photo scan did not fill this field. Review it manually." : undefined;
+  const chooseMeasurementKind = (field: MeasurementField, kind: "exact" | "fit_note") =>
+    onChange(resolveMeasurementConflict(row, field, kind));
   return (
     <li
       className={cn(
@@ -896,10 +899,10 @@ function RowEditor({
       )}
       aria-label={label}
     >
-      <div className="flex gap-3 sm:gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
         <RowThumb photo={row.photo} />
-        <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-2 lg:grid-cols-6">
-          <Field label="Name" className="col-span-2 lg:col-span-2">
+        <div className="grid min-w-0 flex-1 grid-cols-1 gap-x-3 gap-y-3 sm:grid-cols-6 lg:grid-cols-12">
+          <Field label="Name" className="sm:col-span-2 lg:col-span-4">
             <Input
               value={row.name}
               disabled={disabled}
@@ -908,7 +911,7 @@ function RowEditor({
               onChange={(event) => onChange({ name: event.target.value })}
             />
           </Field>
-          <Field label="Category" className="col-span-2 lg:col-span-2">
+          <Field label="Category" className="sm:col-span-2 lg:col-span-4">
             <Input
               list="batch-categories"
               value={row.category}
@@ -919,7 +922,7 @@ function RowEditor({
               onChange={(event) => onChange({ category: event.target.value })}
             />
           </Field>
-          <Field label="Subcategory" className="col-span-2 lg:col-span-2">
+          <Field label="Subcategory" className="sm:col-span-2 lg:col-span-4">
             <Input
               list="batch-subcategories"
               value={row.subcategory}
@@ -931,7 +934,7 @@ function RowEditor({
               onChange={(event) => onChange({ subcategory: event.target.value })}
             />
           </Field>
-          <Field label="Rental price (₱)">
+          <Field label="Rental price (₱)" className="sm:col-span-3 lg:col-span-3">
             <Input
               inputMode="decimal"
               value={row.price}
@@ -941,10 +944,10 @@ function RowEditor({
               onChange={(event) => onChange({ price: event.target.value })}
             />
           </Field>
-          <Field label="Deposit (₱)">
+          <Field label="Deposit (₱)" className="sm:col-span-3 lg:col-span-3">
             <Input inputMode="decimal" value={row.deposit} placeholder={defaults.deposit} disabled={disabled} className={inputClass("deposit")} onChange={(event) => onChange({ deposit: event.target.value })} />
           </Field>
-          <Field label="Size" className="col-span-2 lg:col-span-2">
+          <Field label="Size" className="sm:col-span-6 lg:col-span-6">
             <div className="flex items-center gap-2">
               <select
                 aria-label={`Sizing mode for ${label}`}
@@ -953,17 +956,19 @@ function RowEditor({
                 disabled={disabled}
                 onChange={(event) => onChange({ freeSize: event.target.value === "free_size" })}
               >
-                <option value="sized">Sized</option>
-                <option value="free_size">Free size</option>
+                <option value="sized">Labeled size</option>
+                <option value="free_size">Flexible fit</option>
               </select>
               {row.freeSize ? (
                 <Input
-                  value={row.fitNote}
-                  placeholder="Fit note, e.g. Fits Small to XL"
+                  aria-label={`Fits sizes for ${label}`}
+                  value={row.fitRange}
+                  placeholder="Fits sizes, e.g. Small–XL"
+                  maxLength={120}
                   disabled={disabled}
-                  className={inputClass("fitNote")}
-                  title={reviewTitle("fitNote")}
-                  onChange={(event) => onChange({ fitNote: event.target.value })}
+                  className={inputClass("fitRange")}
+                  title={reviewTitle("fitRange")}
+                  onChange={(event) => onChange({ fitRange: event.target.value })}
                 />
               ) : (
                 <Input
@@ -977,14 +982,28 @@ function RowEditor({
               )}
             </div>
           </Field>
-          <fieldset className="col-span-2 min-w-0 lg:col-span-3">
+          <Field label="Description" className="sm:col-span-3 lg:col-span-6">
+            <Input
+              aria-label={`Description for ${label}`}
+              value={row.description}
+              maxLength={2_000}
+              disabled={disabled}
+              className={inputClass("description")}
+              placeholder="Optional product description"
+              onChange={(event) => onChange({ description: event.target.value })}
+            />
+          </Field>
+          <Field label="Color" className="sm:col-span-3 lg:col-span-6">
+            <Input value={row.color} disabled={disabled} onChange={(event) => onChange({ color: event.target.value })} />
+          </Field>
+          <fieldset className="min-w-0 sm:col-span-6 lg:col-span-12">
             <legend className="mb-1 text-xs font-medium text-dashboard-muted">Measurements</legend>
             <div className="space-y-2">
-              <div className="flex min-w-0 items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <select
                   aria-label={`Measurement mode for ${label}`}
                   className={cn(
-                    "h-ws-control min-w-40 rounded-md border border-dashboard-border bg-dashboard-surface px-2 text-ws-input text-dashboard-navy",
+                    "h-ws-control min-w-40 max-w-full rounded-md border border-dashboard-border bg-dashboard-surface px-2 text-ws-input text-dashboard-navy",
                     inputClass("measurementMode")
                   )}
                   value={row.measurementMode}
@@ -1002,19 +1021,52 @@ function RowEditor({
                 ) : null}
               </div>
               {row.measurementMode === "custom" ? (
-                <div className="grid grid-cols-5 gap-1.5">
+                <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   {MEASUREMENT_FIELDS.map((field) => (
-                    <Input
-                      key={field}
-                      aria-label={`${field} (${row.unit})`}
-                      placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
-                      inputMode="decimal"
-                      value={row[field]}
-                      disabled={disabled}
-                      className={cn("px-2", inputClass(field))}
-                      title={reviewTitle(field)}
-                      onChange={(event) => onChange({ [field]: event.target.value })}
-                    />
+                    <div key={field} className="space-y-1">
+                      {row.measurementConflicts.includes(field) ? (
+                        <div className="space-y-1.5 rounded-md border border-dashboard-danger/40 bg-dashboard-danger/5 p-2">
+                          <p className="text-[0.65rem] leading-4 text-dashboard-danger">Both values were imported. Choose which one to keep.</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="h-8 px-2 text-xs"
+                              disabled={disabled}
+                              aria-label={`Use ${field} measurement ${row[field]} ${row.unit}`}
+                              onClick={() => chooseMeasurementKind(field, "exact")}
+                            >
+                              Use {row[field]} {row.unit}
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="h-8 px-2 text-xs"
+                              disabled={disabled}
+                              aria-label={`Use ${field} fit note ${row.conflictingFitNotes[field]}`}
+                              onClick={() => chooseMeasurementKind(field, "fit_note")}
+                            >
+                              Use note: {row.conflictingFitNotes[field]}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Input
+                          aria-label={`${field} measurement or fit note`}
+                          placeholder={`${field[0]!.toUpperCase()}${field.slice(1)}: 36 or Flexible fit`}
+                          inputMode="text"
+                          maxLength={120}
+                          value={row[field]}
+                          disabled={disabled}
+                          className={cn("px-2", inputClass(field))}
+                          title={reviewTitle(field)}
+                          onChange={(event) => onChange({
+                            [field]: event.target.value,
+                            measurementKinds: { ...row.measurementKinds, [field]: inferMeasurementKind(event.target.value) },
+                          })}
+                        />
+                      )}
+                    </div>
                   ))}
                   <select
                     aria-label="Measurement unit"
@@ -1030,15 +1082,6 @@ function RowEditor({
               ) : null}
             </div>
           </fieldset>
-          <Field label="Color">
-            <Input
-              value={row.color}
-              disabled={disabled}
-              className={inputClass("color")}
-              title={reviewTitle("color")}
-              onChange={(event) => onChange({ color: event.target.value })}
-            />
-          </Field>
         </div>
         <Button type="button" variant="ghost" size="icon" aria-label={`Remove ${label}`} disabled={disabled} onClick={onRemove} className="shrink-0">
           <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -1054,4 +1097,3 @@ function RowEditor({
     </li>
   );
 }
-

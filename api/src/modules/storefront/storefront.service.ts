@@ -195,6 +195,7 @@ export class PublicStorefrontService {
         variants: found.variants.map((variant) => ({
           variant_id: variant.variant_id,
           size_label: variant.size_label,
+          fit_range: variant.fit_range,
           color_label: variant.color_label,
           rental_price_minor: variant.rental_price_minor,
           security_deposit_minor: variant.security_deposit_minor,
@@ -310,13 +311,22 @@ function toMeasurement(variant: ItemVariantRow, guideUrl: string | null): Public
   if (variant.measurement_mode === 'default_guide') return { mode: 'default_guide', guide_image_url: guideUrl };
   if (variant.measurement_mode !== 'custom') return { mode: 'none' };
   const values = Object.entries(variant.measurements)
-    .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]))
+    .filter((entry): entry is [string, number | { type: 'fit_note'; text: string }] =>
+      (typeof entry[1] === 'number' && Number.isFinite(entry[1])) ||
+      isFitNote(entry[1]),
+    )
     .slice(0, 20)
     .map(([key, value]) => ({
       label: key.replace(/_/g, ' ').replace(/^\w/, (char) => char.toUpperCase()),
-      value: `${value} ${variant.measurement_unit}`,
+      value: typeof value === 'number' ? `${value} ${variant.measurement_unit}` : value.text,
     }));
   return values.length > 0 ? { mode: 'custom', unit: variant.measurement_unit, values } : { mode: 'none' };
+}
+
+function isFitNote(value: unknown): value is { type: 'fit_note'; text: string } {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as { type?: unknown; text?: unknown };
+  return candidate.type === 'fit_note' && typeof candidate.text === 'string';
 }
 
 /** Calendar date (YYYY-MM-DD) of an instant in a timezone. */
