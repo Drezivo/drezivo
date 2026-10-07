@@ -23,6 +23,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, '..', 'src', 'db', 'migrations');
 
 async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  if (args.length !== 0 && (args.length !== 2 || args[0] !== '--through')) {
+    throw new Error('Usage: npm run db:migrate -- [--through <migration-filename.sql>]');
+  }
+  const through = args[1] ?? null;
+
   const databaseUrl = process.env.DATABASE_URL_DIRECT ?? process.env.DATABASE_URL;
   if (!databaseUrl) {
     console.error('DATABASE_URL_DIRECT or DATABASE_URL is required to run migrations.');
@@ -30,7 +36,11 @@ async function main(): Promise<void> {
   }
 
   const entries = await readdir(MIGRATIONS_DIR);
-  const files = entries.filter((name) => /^\d{4}_.*\.sql$/.test(name)).sort();
+  const allFiles = entries.filter((name) => /^\d{4}_.*\.sql$/.test(name)).sort();
+  if (through !== null && !allFiles.includes(through)) {
+    throw new Error(`Unknown migration filename: ${through}`);
+  }
+  const files = through === null ? allFiles : allFiles.filter((name) => name <= through);
 
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();

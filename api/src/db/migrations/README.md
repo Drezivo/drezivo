@@ -46,6 +46,13 @@ control — never as automatic schema sync on API startup (TRD §9: "Never run s
 synchronization on each API startup"). `src/server.ts` and `src/worker.ts` assume the schema
 already matches the applied migrations; they do not attempt to reconcile it.
 
+For an isolated additive hotfix that must not advance later pending migrations, run
+`npm run db:migrate -- --through <exact-filename.sql>` from `api/`. This applies every
+unapplied migration whose filename sorts up to and including the named file, and rejects
+unknown filenames. Inspect the target's `schema_migrations` ledger first. A migration added
+earlier than files already applied in a different environment must be independent of them;
+the 0070 invitation webhook resolver is additive and independent of the 0071+ changes.
+
 ## Supabase grants and RLS
 
 All Drezivo tables in the exposed `public` schema must have both protection layers: runtime
