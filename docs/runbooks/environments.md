@@ -56,6 +56,16 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 - `DATABASE_URL_DIRECT` — the privileged direct Supabase PostgreSQL connection used first by
   migration, backup, restore, and administrative tooling. It must never be supplied to the API or
   worker runtime. Local Compose uses its direct loopback PostgreSQL endpoint for both variables.
+- `MIGRATION_DATABASE_URL_DIRECT` — GitHub Actions environment secret for the migration-only
+  direct Supabase connection. Store a value in each of the `staging`, `preview`, and `production`
+  environments; the workflow maps it to `DATABASE_URL_DIRECT` only inside the migration job and
+  never provides `DATABASE_URL`. `staging` may intentionally target the same preview database as
+  `preview`; the jobs are serialized. Use the actual direct endpoint from Supabase Connect, not a
+  Supavisor pooler URL. See [`migrations.md`](migrations.md) for the IPv4 add-on and approval setup.
+- `MIGRATION_PRODUCTION_RECONCILED` — GitHub `production` environment variable, not a database
+  credential. Leave it unset until an operator has manually compared the live production schema
+  with `public.schema_migrations`; set it to `true` only after reconciliation. The workflow fails
+  closed while it is unset.
 - `TEST_DATABASE_URL` — test-only; the integration suite (`api` `npm run test:integration`)
   connects exclusively through this, never `DATABASE_URL`. The harness refuses any value that is
   not localhost or whose database name does not contain "test", because tests truncate their

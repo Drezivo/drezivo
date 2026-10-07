@@ -96,6 +96,63 @@ worst leaves the schema in a state neither the old nor the new application code 
 See `docs/runbooks/rollback.md` for what rollback _can_ and cannot undo across the whole system,
 not just migrations.
 
+## Protected migration pipeline
+
+The root `.github/workflows/ci.yml` applies Drezivo migration files to remote databases after the
+backend checks and container build pass. It uses `npm run db:migrate`, not Supabase CLI migration
+history. The Drezivo `public.schema_migrations` table is authoritative; Supabase's own CLI history
+is a separate ledger.
+
+For an automatic run, a migration-file change must reach `staging` or `main`. A push to `staging`
+runs the protected staging migration job. A push to `main` runs the preview and production sequence.
+A manual workflow dispatch from either branch also runs that branch's migration job. Pull requests
+and other branches never receive migration secrets. Staging and preview jobs share a non-cancelling
+concurrency group because they may target the same preview database. Each database job refuses to
+continue if its commit is no longer the current branch head.
+
+The sequence is:
+
+1. Backend tests and the container build pass.
+2. On `staging`, the `staging` environment reports the Drezivo migration status, applies pending
+   files, then verifies that none remain. Staging must contain only synthetic or anonymized data.
+3. On `main`, the `preview` environment performs the same status, apply, and verification sequence.
+4. The `production` job starts only after preview succeeds. GitHub pauses it for the required
+   repository-owner approval configured on the `production` environment.
+5. After approval, the job checks that the live schema/ledger baseline was manually reconciled,
+   reports status, applies pending files in filename order, and verifies the final status.
+
+Configure three GitHub Actions environments, `staging`, `preview`, and `production`, with branch
+restrictions matching their job: `staging` for `staging`, and `preview`/`production` for `main`.
+Add a separate `MIGRATION_DATABASE_URL_DIRECT` environment secret to each, using the actual
+Supabase direct endpoint and a migration-only role. The staging secret may point to the same
+preview database used by the `preview` job, but both jobs must retain the shared non-cancelling
+concurrency group. The production environment also requires the repository owner as reviewer;
+leave **Prevent self-review** disabled so the owner can approve their own run. Environment secrets
+are available only after the configured protection rules pass. A named environment without its
+reviewer and branch rules is not an approval gate.
+
+The GitHub-hosted runner is IPv4-only. Configure Supabase's IPv4 add-on and copy the direct
+connection URL from the project Connect dialog; do not use a Supavisor session-pooler URL, even
+when it uses port 5432. Supabase direct connections use IPv6 by default and become reachable over
+IPv4 with the add-on ([connection guidance](https://supabase.com/docs/guides/database/connecting-to-postgres)).
+
+Before enabling production migrations, rotate any previously exposed database password, confirm
+the API and worker use restricted runtime roles, and manually compare the production schema with
+the Drezivo ledger. Only after that comparison should the production environment variable
+`MIGRATION_PRODUCTION_RECONCILED` be set to `true`. The workflow will fail closed if it is absent.
+Never mark old migrations applied automatically to make the check pass. Investigate unknown ledger
+entries or gaps and reconcile them through a reviewed, explicit procedure first.
+
+The runner treats missing ledgers, unknown filenames, and gaps as errors before applying any file.
+Check status locally with:
+
+```bash
+npm run db:migrate:status --workspace @drezivo/api
+```
+
+Each file and its `public.schema_migrations` row commit in one transaction. This protects migration
+history consistency, not data from an incorrect migration; fixes still use forward migrations.
+
 ## Supabase-specific operational notes
 
 - **Use the direct endpoint for migrations.** `DATABASE_URL_DIRECT` authenticates the migration

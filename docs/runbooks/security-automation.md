@@ -1,28 +1,30 @@
 # GitHub security automation
 
-**Status:** deferred until the repository plan and credentials support the selected checks.
+**Status:** backend secret hygiene and Gitleaks scanning run in the root CI workflow. Dependency
+review configuration remains separate and must be verified before it is treated as a required
+check.
 
-## Why the workflow was removed
+## Repository visibility and current checks
 
-The previous pull-request workflow failed for repository configuration reasons on every run:
+The owner confirmed that `Drezivo/drezivo` is public on 6 October 2026. Earlier guidance that called
+it private and attributed the workflow failure to private-repository licensing is stale.
 
-- Gitleaks Action v3 requires a `GITLEAKS_LICENSE` secret for organization repositories.
-- Dependency Review requires the dependency graph and GitHub Advanced Security, which are not
-  enabled for this private repository.
+The root `.github/workflows/ci.yml` runs a standalone Gitleaks CLI in a read-only container mount
+and rejects tracked `.env` files. It does not use the commercial Gitleaks Action or require its
+license. Dependency Review is not part of that workflow; verify the dependency graph and the
+repository's current GitHub plan before enabling it.
 
-These failures do not indicate a detected secret or a vulnerable pull request. Keeping the jobs
-active would make a red check mean configuration failure instead of a security result.
+GitHub documents deployment environments, environment secrets, and required reviewers for public
+repositories in its [environment guidance](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
+The migration pipeline's environment setup is documented in [`migrations.md`](migrations.md).
 
-## Re-enable gate
+## Dependency Review enablement gate
 
-1. Confirm the organization plan supports private-repository rulesets, dependency review, and the
-   selected secret-scanning approach.
+1. Confirm the current repository settings and plan support each additional check being considered.
 2. Enable the dependency graph and GitHub Advanced Security where required.
-3. Purchase or otherwise obtain the Gitleaks license, then store it as the repository or
-   organization secret `GITLEAKS_LICENSE`. Never commit the license value.
-4. Test the workflow on a branch containing a known safe fixture and a separate controlled test
-   secret. Confirm both outcomes before requiring the checks in `main` protection.
-5. Add only checks that pass on a clean pull request. Record the workflow name and required check
+3. Add Dependency Review only after its repository prerequisites are enabled; test it on a clean
+   pull request and a controlled vulnerable dependency fixture.
+4. Add only checks that pass on a clean pull request. Record the workflow name and required check
    context in [`github-ruleset.md`](github-ruleset.md).
 
 Until this gate is complete, use local dependency review and secret scanning during development,

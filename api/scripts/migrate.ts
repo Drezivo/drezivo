@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { Client } from 'pg';
 
+import { inspectMigrationHistory } from './migration-history.js';
 import '../src/config/load-env.js';
 
 /**
@@ -24,10 +25,11 @@ const MIGRATIONS_DIR = path.join(__dirname, '..', 'src', 'db', 'migrations');
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  if (args.length !== 0 && (args.length !== 2 || args[0] !== '--through')) {
-    throw new Error('Usage: npm run db:migrate -- [--through <migration-filename.sql>]');
+  const statusOnly = args.length === 1 && args[0] === '--status';
+  const through = args.length === 2 && args[0] === '--through' && args[1] ? args[1] : null;
+  if (args.length > 0 && !statusOnly && through === null) {
+    throw new Error('Usage: npm run db:migrate -- [--status | --through <migration-filename.sql>]');
   }
-  const through = args[1] ?? null;
 
   const isRemoteEnvironment =
     process.env.NODE_ENV === 'staging' || process.env.NODE_ENV === 'production';
@@ -42,7 +44,9 @@ async function main(): Promise<void> {
     );
   }
   if (isRemoteEnvironment && new URL(databaseUrl).hostname.endsWith('.pooler.supabase.com')) {
-    throw new Error('DATABASE_URL_DIRECT points to a Supabase pooler; use the project direct endpoint.');
+    throw new Error(
+      'DATABASE_URL_DIRECT points to a Supabase pooler; use the project direct endpoint.',
+    );
   }
 
   const entries = await readdir(MIGRATIONS_DIR);
@@ -50,36 +54,60 @@ async function main(): Promise<void> {
   if (through !== null && !allFiles.includes(through)) {
     throw new Error(`Unknown migration filename: ${through}`);
   }
-  const files = through === null ? allFiles : allFiles.filter((name) => name <= through);
+  const selectedFiles = through === null ? allFiles : allFiles.filter((name) => name <= through);
 
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
 
   try {
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS schema_migrations (
-        filename text PRIMARY KEY,
-        applied_at timestamptz NOT NULL DEFAULT now()
-      )
-    `);
+    const { rows: ledgerRows } = await client.query<{ ledger_exists: boolean }>(
+      "SELECT to_regclass('public.schema_migrations') IS NOT NULL AS ledger_exists",
+    );
+    const ledgerExists = ledgerRows[0]?.ledger_exists === true;
+
+    if (!ledgerExists && (statusOnly || isRemoteEnvironment)) {
+      inspectMigrationHistory(allFiles, null);
+    }
+
+    if (!ledgerExists) {
+      await client.query(`
+        CREATE TABLE public.schema_migrations (
+          filename text PRIMARY KEY,
+          applied_at timestamptz NOT NULL DEFAULT now()
+        )
+      `);
+    }
 
     const { rows: applied } = await client.query<{ filename: string }>(
-      'SELECT filename FROM schema_migrations',
+      'SELECT filename FROM public.schema_migrations ORDER BY filename',
     );
-    const appliedSet = new Set(applied.map((row) => row.filename));
+    const status = inspectMigrationHistory(
+      allFiles,
+      applied.map((row) => row.filename),
+    );
 
-    for (const file of files) {
-      if (appliedSet.has(file)) {
-        continue;
+    if (statusOnly) {
+      console.log(`Applied ${status.appliedFiles.length} of ${allFiles.length} migrations.`);
+      if (status.pendingFiles.length === 0) {
+        console.log('No pending migrations.');
+      } else {
+        console.log('Pending migrations:');
+        for (const file of status.pendingFiles) {
+          console.log(`- ${file}`);
+        }
       }
+      return;
+    }
 
+    const pendingFiles = status.pendingFiles.filter((file) => selectedFiles.includes(file));
+    for (const file of pendingFiles) {
       const sql = await readFile(path.join(MIGRATIONS_DIR, file), 'utf8');
       console.log(`Applying ${file} ...`);
 
       await client.query('BEGIN');
       try {
         await client.query(sql);
-        await client.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
+        await client.query('INSERT INTO public.schema_migrations (filename) VALUES ($1)', [file]);
         await client.query('COMMIT');
       } catch (error) {
         await client.query('ROLLBACK');
@@ -90,6 +118,19 @@ async function main(): Promise<void> {
       }
     }
 
+    const { rows: refreshedApplied } = await client.query<{ filename: string }>(
+      'SELECT filename FROM public.schema_migrations ORDER BY filename',
+    );
+    const refreshedStatus = inspectMigrationHistory(
+      allFiles,
+      refreshedApplied.map((row) => row.filename),
+    );
+    const remainingPending = refreshedStatus.pendingFiles.filter((file) =>
+      selectedFiles.includes(file),
+    );
+    if (remainingPending.length > 0) {
+      throw new Error(`Migration run finished with pending files: ${remainingPending.join(', ')}`);
+    }
     console.log('Migrations up to date.');
   } finally {
     await client.end();

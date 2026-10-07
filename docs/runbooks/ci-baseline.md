@@ -1,14 +1,15 @@
 # Continuous integration baseline
 
-**Status:** backend-only verification and container delivery are enabled; the full monorepo gate
-remains deferred until the application scaffold has a green local gate.
+**Status:** backend-only verification, container delivery, and protected migration runs are
+enabled; the full monorepo gate remains deferred until the application scaffold has a green local
+gate.
 
 The root `.github/workflows/ci.yml` currently scopes automatic checks to `contracts` and `api`,
 because the backend is the requested delivery boundary. It installs from the root lockfile and
 uses the shared backend validation command for contracts build/lint/tests plus API type-check,
 lint, unit tests, PostgreSQL integration tests, and build. It also builds the backend container on
-pull requests and `main` pushes. Version tags publish that image to GitHub Container Registry with
-the server and worker entrypoints in one image.
+pull requests and `main`/`staging` pushes. Version tags publish that image to GitHub Container
+Registry with the server and worker entrypoints in one image.
 
 The secrets job also runs the standalone Gitleaks CLI in a read-only container mount, so it does
 not require the commercial Gitleaks Action license or an additional repository secret.
@@ -45,6 +46,20 @@ and wait for its normal checks rather than dispatching another run.
 This workflow does not deploy to a runtime host. The container host is still a documented decision
 point, and production deployment requires the environment-specific approval, migration plan,
 readiness checks, rollback plan, and operator ownership described in the deployment runbook.
+
+## Protected migration runs
+
+Migration files are applied only after backend checks and the container build pass. A push to
+`staging` runs the protected staging migration job, which uses the `staging` GitHub environment and
+its direct `MIGRATION_DATABASE_URL_DIRECT` secret. A push to `main` runs the existing preview job,
+then the approved production job. Staging and preview jobs share a non-cancelling concurrency group
+because they may point at the same preview database.
+
+Both jobs check the Drezivo `schema_migrations` ledger, reject gaps or unknown files, apply pending
+files through `npm run db:migrate`, and verify that no files remain pending. The staging job refuses
+to continue if its commit is no longer the current `staging` branch head. Configure the `staging`
+environment with the staging database direct URL and restrict it to the `staging` branch. Pull
+requests never receive migration secrets.
 
 ## Full-gate enablement
 
