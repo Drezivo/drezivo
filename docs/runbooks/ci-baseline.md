@@ -51,15 +51,18 @@ readiness checks, rollback plan, and operator ownership described in the deploym
 
 Migration files are applied only after backend checks and the container build pass. A push to
 `staging` runs the protected staging migration job, which uses the `staging` GitHub environment and
-its direct `MIGRATION_DATABASE_URL_DIRECT` secret. A push to `main` runs the existing preview job,
+its `MIGRATION_DATABASE_URL` secret. A push to `main` runs the existing preview job,
 then the approved production job. Staging and preview jobs share a non-cancelling concurrency group
 because they may point at the same preview database.
 
 Both jobs check the Drezivo `schema_migrations` ledger, reject gaps or unknown files, apply pending
-files through `npm run db:migrate`, and verify that no files remain pending. The staging job refuses
-to continue if its commit is no longer the current `staging` branch head. Configure the `staging`
-environment with the staging database direct URL and restrict it to the `staging` branch. Pull
-requests never receive migration secrets.
+files through `npm run db:migrate`, and verify that no files remain pending. The migration secret
+may contain the direct URL or shared Session-pooler URL; the latter is the IPv4-compatible choice
+for GitHub-hosted runners. Manual dispatch defaults to status-only; choose apply explicitly after
+reviewing pending files. Pushes that change migrations keep the existing apply behavior. The
+staging job refuses to continue if its commit is no longer the current `staging` branch head.
+Configure the `staging` environment with the intended database URL and restrict it to the `staging`
+branch. Pull requests never receive migration secrets.
 
 ## Full-gate enablement
 

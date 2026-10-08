@@ -55,18 +55,20 @@ fails.
 
 Local development and tests may bootstrap a missing ledger so a disposable fresh database can be
 initialized. Staging and production never create a missing ledger and require
-`DATABASE_URL_DIRECT`; they do not fall back to a runtime `DATABASE_URL`. The CI workflow supplies
-only that direct migration URL. Run migrations deliberately, never as automatic schema sync on API
-startup (TRD §9). `src/server.ts` and `src/worker.ts` assume the schema already matches the applied
-migrations; they do not attempt to reconcile it.
+`DATABASE_URL_MIGRATION`; they do not fall back to a runtime `DATABASE_URL`. Remote URLs must be a
+Supabase direct connection on port 5432 or the shared Session pooler on port 5432. The Session
+pooler is the IPv4-compatible option for GitHub-hosted runners; transaction pooling on port 6543 is
+rejected. Run migrations deliberately, never as automatic schema sync on API startup (TRD §9).
+`src/server.ts` and `src/worker.ts` assume the schema already matches the applied migrations; they
+do not attempt to reconcile it.
 
 For an isolated additive hotfix that must not advance later pending migrations, run
 `npm run db:migrate -- --through <exact-filename.sql>` from `api/`. This applies every
 unapplied migration whose filename sorts up to and including the named file, and rejects
-unknown filenames. Staging and production require `DATABASE_URL_DIRECT` and reject known
-Supabase pooler hosts. Inspect the target's `schema_migrations` ledger first. A migration added
-earlier than files already applied in a different environment must be independent of them;
-the 0070 invitation webhook resolver is additive and independent of the 0071+ changes.
+unknown filenames. Remote migrations reject Supavisor transaction-pooler URLs. Inspect the
+target's `schema_migrations` ledger first. A migration added earlier than files already applied
+in a different environment must be independent of them; the 0070 invitation webhook resolver is
+additive and independent of the 0071+ changes.
 
 ## Supabase grants and RLS
 

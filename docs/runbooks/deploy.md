@@ -26,8 +26,9 @@ is not a benchmark." Do not assume Singapore is confirmed without that measureme
 
 The API and worker deploy as ordinary PostgreSQL clients. They do not use Supabase Auth, Storage,
 Realtime, REST, GraphQL, or service-role keys. Before the first application deploy, apply migrations
-through `DATABASE_URL_DIRECT`, assign deployment-managed passwords to `drezivo_app` and
-`drezivo_worker`, and verify each process connects with only its own restricted role.
+through `DATABASE_URL_MIGRATION` (a direct or shared Session-pooler connection), assign
+deployment-managed passwords to `drezivo_app` and `drezivo_worker`, and verify each process connects
+with only its own restricted role.
 
 ## Before every deploy
 
