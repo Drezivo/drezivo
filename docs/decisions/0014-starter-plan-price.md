@@ -1,6 +1,7 @@
 # 0014. Standard plan price
 
-**Status:** Accepted
+**Status:** Superseded for current owner-directed pricing by [ADR 0015](0015-subscription-price-points.md);
+retained as the record of the shipped Standard price change.
 **Date:** 6 October 2026
 **Owners:** Product owner
 

@@ -107,7 +107,9 @@ physical-asset and 0/2/10 Front Desk-seat limits. The current pilot offer is one
 `0063_pilot_billing.sql` originally kept `starter` v1 active at 30,000 PHP minor units/month, initially setting
 its limits to 1,000 assets and 10 Front Desk seats, and deactivates Professional and Business v1.
 Migration `0071_starter_plan_limits.sql` lowers the current limits to 300 active physical clothing
-items and 3 Front Desk seats under [ADR 0013](../decisions/0013-starter-plan-capacity.md). It moves
+items and 3 Front Desk seats under [ADR 0013](../decisions/0013-starter-plan-capacity.md). The owner-directed
+PHP 149/PHP 299 monthly price points are recorded in [ADR 0015](../decisions/0015-subscription-price-points.md);
+this migration plan describes the currently supported Standard plan at PHP 299 only. It moves
 existing subscriptions to `starter` while recording prior plan ids in `subscription_event`, and
 normalizes expired/restricted billing states for the derived pilot access model. The old rows remain
 for audit history. The winning database transaction creates the tenant, `Main Branch`, Owner

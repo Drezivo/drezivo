@@ -1,6 +1,6 @@
 # Drezivo Product Requirements Document
 
-**Version:** 2.3 · **Status:** V1 product definition with approved V1.1 fitting boundary · **Updated:** 5 October 2026
+**Version:** 2.3 · **Status:** V1 product definition with approved V1.1 fitting boundary · **Updated:** 8 October 2026
 
 ## 1. Product decision and release contract
 
@@ -16,7 +16,7 @@ This is incremental, not feature-complete interpretation of every supplied scree
 | V2                 | Branches, branch permissions, transfers and custody                                                                                                                                                                                                | Separate migration/security gate              |
 | V3 conditional     | Enterprise governance, SSO, advanced audit/reporting                                                                                                                                                                                               | Demand/readiness gate                         |
 
-Verified public sign-up creates a minimal Drezivo account, not a tenant. The backend then creates one Clerk organization and one local incomplete onboarding for the owner candidate. Tenant, default branch, Owner membership, draft storefront, and subscription exist only after idempotent bootstrap. Tenant-owned records carry tenant scope; operational records also carry the relevant branch. Platform plan definitions are global. The current pilot has one customer-facing plan, **Standard**, at ₱299/month, backed by internal plan code `starter` v1. It includes up to 300 active physical clothing items and 3 Front Desk seats. The former Starter/Professional/Business offer is superseded for the pilot by [ADR 0011](../decisions/0011-single-standard-pilot-plan.md), with the current price in [ADR 0014](../decisions/0014-starter-plan-price.md) and quotas in [ADR 0013](../decisions/0013-starter-plan-capacity.md); market willingness to pay, retention, and unit economics remain unmeasured.
+Verified public sign-up creates a minimal Drezivo account, not a tenant. The backend then creates one Clerk organization and one local incomplete onboarding for the owner candidate. Tenant, default branch, Owner membership, draft storefront, and subscription exist only after idempotent bootstrap. Tenant-owned records carry tenant scope; operational records also carry the relevant branch. Platform plan definitions are global. The owner-directed monthly subscription price points are ₱149 and ₱299 (see [ADR 0015](../decisions/0015-subscription-price-points.md)); plan names and differentiated inclusions are not yet defined. The current app/API/database still support one customer-facing plan, **Standard**, at ₱299/month, backed by internal plan code `starter` v1, with up to 300 active physical clothing items and 3 Front Desk seats. The former Starter/Professional/Business offer is superseded for the pilot by [ADR 0011](../decisions/0011-single-standard-pilot-plan.md); [ADR 0014](../decisions/0014-starter-plan-price.md) records the currently implemented price and [ADR 0013](../decisions/0013-starter-plan-capacity.md) the quotas. Market willingness to pay, retention, and unit economics remain unmeasured.
 
 ## 2. Boundaries and users
 
@@ -94,7 +94,12 @@ Collect minimum name/contact/booking data. A customer address supports fulfillme
 
 ## 6. Pricing, entitlements, notifications, operator admin, billing
 
-### Current pilot offer
+### Owner-directed pricing and current implementation
+
+The owner has set two monthly price points: **₱149** and **₱299**. This direction does not yet
+specify plan names, feature differences, or separate entitlements. Do not infer those details.
+
+The current billing implementation still exposes and charges only Standard at ₱299:
 
 | Offer detail                       | Standard                                               |
 | ---------------------------------- | ------------------------------------------------------ |
@@ -108,9 +113,9 @@ Collect minimum name/contact/booking data. A customer address supports fulfillme
 | Branches and transfers             | Not available; V2 only                                 |
 | Advanced reporting and governance  | Not promised; future decision                          |
 
-Standard is the only sellable plan during the pilot. Onboarding does not offer tier selection or self-service plan changes. Asset quota counts active physical assets, not styles. The server checks limits during creation, activation, and CSV import; a limit failure never deletes records. Front Desk seats count active memberships and unexpired pending invitations; the Owner is not counted. Reliability, roles, privacy, exports, and safe financial handling are not premium gates. Additional plans require a new owner decision and versioned entitlement/pricing changes.
+In the current implementation, Standard is the only selectable and chargeable plan. Onboarding has no tier selector or self-service plan changes. The ₱149 price is not yet mapped to a plan and must not be represented as purchasable until its plan definition, entitlements, onboarding/payment flow, and versioned database changes are implemented. Asset quota counts active physical assets, not styles. The server checks limits during creation, activation, and CSV import; a limit failure never deletes records. Front Desk seats count active memberships and unexpired pending invitations; the Owner is not counted. Reliability, roles, privacy, exports, and safe financial handling are not premium gates.
 
-Pricing copy must show ₱299 per month and the Standard inclusions. Do not carry “Most Popular,” unlimited assets, dedicated support, payment integrations, or feature promises from outdated screenshots without separate approval and an implemented entitlement. Revenue and willingness-to-pay remain hypotheses to measure through the pilot.
+Pricing materials must identify both owner-directed price points without inventing names or features. Until billing supports a selectable ₱149 offer, purchase flows must clearly reflect that only Standard at ₱299 is available. Do not carry “Most Popular,” unlimited assets, dedicated support, payment integrations, or feature promises from outdated screenshots without separate approval and an implemented entitlement. Revenue and willingness-to-pay remain hypotheses to measure through the pilot.
 
 Notification outbox states are queued, sending, sent, failed with bounded retry. UI says queued until provider acknowledgment; no SMS promise.
 
@@ -139,6 +144,10 @@ V1.1 requires evidence fittings/capacity/multi-item/no-show/late/partial returns
 See [Drezivo-Market-Research.md](Drezivo-Market-Research.md) for evidence limits and findings. Screenshots are visual references, not authority; they do not require wishlist, cart, reviews, delivery APIs, or parity. Directional references: [Booqable](https://booqable.com/pricing/), [Goodshuffle](https://help.goodshuffle.com/en/articles/1643596-understanding-item-availability-and-conflicts), [Rentman](https://rentman.io/product-updates/managing-multiple-equipment-locations).
 
 ## 11. Implementation acceptance details
+
+FR3 pricing documentation must record both owner-directed monthly price points, ₱149 and ₱299,
+without inventing plan names or inclusions. Until a ₱149 plan is defined and implemented, purchase
+surfaces and billing records show only the supported Standard plan at ₱299/month.
 
 | Requirement                         | Concrete acceptance example                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

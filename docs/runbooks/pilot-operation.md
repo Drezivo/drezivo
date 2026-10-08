@@ -68,8 +68,11 @@ message; deploy the updated API/worker/web release together before accepting sto
 
 ## Subscription: one plan, trial, and manual payment
 
-- **One plan, Standard:** ₱299 a month, up to 300 active physical clothing items and 3 Front Desk
-  seats. Internally the plan code stays `starter`; migration `0063_pilot_billing.sql` deactivates
+- **Current supported plan, Standard:** ₱299 a month, up to 300 active physical clothing items and
+  3 Front Desk seats. The owner has directed monthly price points of ₱149 and ₱299 (ADR 0015), but
+  ₱149 has no defined or supported plan yet. Do not collect ₱149; current sign-up and billing
+  support only Standard at ₱299. Internally the plan code stays `starter`; migration
+  `0063_pilot_billing.sql` deactivates
   the former Professional and Business rows while preserving them for history, and
   `0071_starter_plan_limits.sql` sets the current quotas. Applying the lower limits does not remove
   existing items or members; check usage and advise businesses above the cap that new additions are
@@ -78,7 +81,8 @@ message; deploy the updated API/worker/web release together before accepting sto
   your 14-day trial?"**, and lands on the dashboard. There is no plan choice and no billing page.
 - **Paying:** the owner opens **Subscribe** from the banner or prompt.
   1. They pick one of Drezivo's payment methods, which shows its QR code, account name and number.
-  2. They pay ₱299, then send the reference number and a screenshot or PDF of the receipt.
+  2. They pay the currently supported ₱299 Standard price, then send the reference number and a
+     screenshot or PDF of the receipt.
   3. An operator checks it in the operator console and approves or rejects it. The owner is emailed
      either way.
   4. On approval, the next paid month starts from the approval date or from the old end date,
