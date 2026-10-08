@@ -50,6 +50,34 @@ test.describe('marketing landing page', () => {
     }
   });
 
+  test('shows both subscription plans in the pricing section', async ({ page }) => {
+    for (const route of ['/', '/pricing']) {
+      await page.goto(route);
+
+      const pricing = page.locator('#pricing');
+      const cards = pricing.locator('[data-at-item]');
+      await expect(cards).toHaveCount(2);
+      await expect(cards.nth(0)).toContainText('Starter');
+      await expect(cards.nth(0)).toContainText('₱149');
+      await expect(cards.nth(0)).toContainText('Up to 125 active garments');
+      await expect(cards.nth(0)).toContainText('Owner-only access');
+      await expect(cards.nth(0)).not.toHaveClass(/bg-atelier-night/);
+      await expect(cards.nth(1)).toContainText('Standard');
+      await expect(cards.nth(1)).toContainText('₱299');
+      await expect(cards.nth(1)).toContainText('Up to 300 active garments');
+      await expect(cards.nth(1)).toContainText('Up to 3 Front Desk staff');
+      await expect(cards.nth(1)).toHaveClass(/bg-atelier-night/);
+      await pricing.scrollIntoViewIfNeeded();
+
+      const starterCta = cards.nth(0).locator('a');
+      const standardCta = cards.nth(1).locator('a');
+      const starterHref = await starterCta.getAttribute('href');
+      const standardHref = await standardCta.getAttribute('href');
+      expect(starterHref).toMatch(/\/sign-up$/);
+      expect(standardHref).toBe(starterHref);
+    }
+  });
+
   test('renders a spread problem image with six floating labels on desktop', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
