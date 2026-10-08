@@ -576,7 +576,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
       );
       return { branchId, categoryId: requireRow(category.rows, 'category').id };
     });
-    await createSubscription(tenant.id, principalId, 'starter');
+    await createSubscription(tenant.id, principalId, 'standard');
     return {
       tenantId: tenant.id,
       branchId: setup.branchId,
@@ -596,7 +596,7 @@ describe('CLT-020 Add Clothing transactional service', async () => {
   async function createSubscription(
     tenantId: string,
     principalId: string,
-    code: 'starter',
+    code: 'standard',
   ) {
     await withTenantTransaction(tenantId, principalId, async (client) => {
       const plan = await client.query<{ id: string }>(

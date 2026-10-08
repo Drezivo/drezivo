@@ -15,6 +15,7 @@ import { clerkWebhookRouter } from './modules/webhooks/clerk.routes.js';
 import { onboardingRouter } from './modules/onboarding/onboarding.routes.js';
 import { tenancyRouter } from './modules/tenancy/tenancy.routes.js';
 import { billingRouter } from './modules/billing/billing.routes.js';
+import { planCatalogRouter } from './modules/billing/plans.routes.js';
 import { catalogueRouter } from './modules/catalogue/catalogue.routes.js';
 import { catalogueImportRouter } from './modules/catalogue-import/catalogue-import.routes.js';
 import { membershipInvitationsRouter } from './modules/membership-invitations/membership-invitations.routes.js';
@@ -157,6 +158,7 @@ export function createApp(options: AppOptions = {}): Express {
   v1.use(onboardingRouter);
   v1.use(tenancyRouter);
   v1.use(billingRouter);
+  v1.use(planCatalogRouter);
   v1.use(catalogueRouter);
   v1.use(catalogueImportRouter);
   v1.use(filesRouter);

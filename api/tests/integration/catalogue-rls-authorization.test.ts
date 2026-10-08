@@ -356,7 +356,7 @@ describe('CLT-060 catalogue RLS and authorization', async () => {
       );
 
       const plan = await client.query<{ id: string }>(
-        `SELECT id FROM plan WHERE code = 'starter' AND version = 1 AND active = true LIMIT 1`,
+        `SELECT id FROM plan WHERE code = 'standard' AND version = 1 AND active = true LIMIT 1`,
       );
       const planId = requireId(plan.rows[0]?.id, 'starter plan');
       await client.query(

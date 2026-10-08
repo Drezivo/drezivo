@@ -1,14 +1,19 @@
-/**
- * The only sellable plan during the pilot: "Standard", stored under the internal code `starter`
- * (the operator API accepts only starter|professional|business). Migrations 0063 and 0071 set these
- * current caps and deactivated `professional` and `business`. Limit tests derive their seed counts
- * from here so a future cap change is one edit.
- */
+/** Standard remains the legacy customer tier at its existing 299 PHP/month identity and limits. */
 export const STANDARD_PLAN = {
-  code: 'starter',
+  code: 'standard',
   version: 1,
   monthlyMinor: 29900,
   currency: 'PHP',
   physicalAssetsMax: 300,
   frontdeskSeatsMax: 3,
+} as const;
+
+/** Lower-cost owner-only tier. */
+export const STARTER_PLAN = {
+  code: 'starter',
+  version: 1,
+  monthlyMinor: 14900,
+  currency: 'PHP',
+  physicalAssetsMax: 125,
+  frontdeskSeatsMax: 0,
 } as const;

@@ -5,6 +5,7 @@ import { ValidationError } from '../../shared/errors.js';
 import {
   abandonOwnerOnboarding,
   getCurrentOwnerOnboardingContext,
+  getSelectedOnboardingPlanCode,
   selectOnboardingPlan,
   startOwnerOnboarding,
 } from './onboarding.service.js';
@@ -79,8 +80,9 @@ export async function bootstrapTenantController(req: Request, res: Response): Pr
 }
 
 /**
- * POST /onboarding/:id/start-trial — the single onboarding step now that there is one plan
- * (Standard, internal code `starter`): select it, then create the workspace with its 14-day trial.
+ * POST /onboarding/:id/start-trial — legacy combined start command.
+ * New clients persist an explicit choice first. Older clients that skip plan selection default to
+ * Standard; already-selected plans are preserved so the API remains authoritative.
  * Each step is the existing idempotent command with a key derived from this request's key, so a
  * retry or double-click replays both steps instead of acting twice.
  */
@@ -88,18 +90,21 @@ export async function startTrialController(req: Request, res: Response): Promise
   const principalId = readPrincipalId(req);
   const idempotencyKey = readIdempotencyKey(req);
   const onboardingId = readOnboardingId(req);
-  const plan = await selectOnboardingPlan({
-    principalId,
-    requestId: req.requestId,
-    idempotencyKey: `${idempotencyKey}:plan`,
-    onboardingId,
-    request: { plan_code: 'starter' },
-  });
-  // A trial already used by this account leaves the onboarding waiting for payment; report that as is.
-  const planData = (plan.body as { data?: { status?: string } }).data;
-  if (plan.status >= 400 || planData?.status !== 'incomplete') {
-    res.status(plan.status).json(plan.body);
-    return;
+  const selectedPlanCode = await getSelectedOnboardingPlanCode({ onboardingId, principalId });
+  if (!selectedPlanCode) {
+    const plan = await selectOnboardingPlan({
+      principalId,
+      requestId: req.requestId,
+      idempotencyKey: `${idempotencyKey}:plan`,
+      onboardingId,
+      request: { plan_code: 'standard' },
+    });
+    // A trial already used by this account leaves onboarding waiting for payment; report as-is.
+    const planData = (plan.body as { data?: { status?: string } }).data;
+    if (plan.status >= 400 || planData?.status !== 'incomplete') {
+      res.status(plan.status).json(plan.body);
+      return;
+    }
   }
   const result = await bootstrapOwnerTenantCommand({
     principalId,

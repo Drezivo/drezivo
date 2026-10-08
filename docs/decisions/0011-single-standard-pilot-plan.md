@@ -1,6 +1,6 @@
 # 0011. One Standard plan during the pilot
 
-**Status:** Accepted
+**Status:** Superseded by [ADR 0015](0015-starter-and-standard-plans.md); retained as historical context
 **Date:** 1 October 2026
 **Owners:** Product owner
 

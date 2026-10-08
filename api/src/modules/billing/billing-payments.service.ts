@@ -57,7 +57,10 @@ export interface BillingActor {
 }
 
 /** Access for a tenant on the caller's tenant-scoped transaction; null when it has no subscription. */
-export async function readTenantAccess(client: PoolClient, tenantId: string): Promise<SubscriptionAccess | null> {
+export async function readTenantAccess(
+  client: PoolClient,
+  tenantId: string,
+): Promise<SubscriptionAccess | null> {
   const row = await readAccessRow(client, tenantId);
   return row ? accessOf(row, row.now) : null;
 }
@@ -74,7 +77,7 @@ export function getBillingOverview(actor: BillingActor): Promise<BillingOverview
     return billingOverview.parse({
       plan: {
         code: entitlements.planCode,
-        name: 'Standard',
+        name: entitlements.planCode === 'starter' ? 'Starter' : 'Standard',
         monthly_minor: String(subscription.monthly_minor),
         currency: subscription.currency,
         physical_assets_max: entitlements.physicalAssetsMax,
@@ -112,7 +115,8 @@ export function submitSubscriptionPayment(
   idempotencyKey: string,
   request: SubmitSubscriptionPaymentRequest,
 ): Promise<CommandResult<SubmitSubscriptionPaymentResponse>> {
-  if (actor.role !== 'owner') throw new ForbiddenError('Only the workspace owner can pay for the subscription.');
+  if (actor.role !== 'owner')
+    throw new ForbiddenError('Only the workspace owner can pay for the subscription.');
   return withTenantTransaction(actor.tenantId, actor.principalId, (client) =>
     runIdempotentCommand(
       client,
@@ -127,7 +131,8 @@ export function submitSubscriptionPayment(
       async () => {
         const subscription = await readBillingSubscription(client, actor.tenantId, true);
         if (!subscription) throw new StateConflictError('Workspace subscription is unavailable.');
-        if (subscription.status === 'cancelled') throw new StateConflictError('This subscription is closed.');
+        if (subscription.status === 'cancelled')
+          throw new StateConflictError('This subscription is closed.');
         if (subscription.pending_payment) {
           throw new PaymentAlreadyPendingError('A payment is already waiting for review.');
         }
@@ -178,9 +183,15 @@ export function submitSubscriptionPayment(
 }
 
 /** QR image of one of Drezivo's active payment methods, with its type re-checked before serving. */
-export async function readPlatformQr(actor: BillingActor, methodId: string): Promise<{ bytes: Buffer; contentType: string }> {
-  const qr = await withTenantTransaction(actor.tenantId, actor.principalId, (client) => readActivePlatformQr(client, methodId));
-  if (!qr || !matchesImageSignature(qr.qr_image, qr.qr_mime)) throw new NotFoundError('This QR code is not available.');
+export async function readPlatformQr(
+  actor: BillingActor,
+  methodId: string,
+): Promise<{ bytes: Buffer; contentType: string }> {
+  const qr = await withTenantTransaction(actor.tenantId, actor.principalId, (client) =>
+    readActivePlatformQr(client, methodId),
+  );
+  if (!qr || !matchesImageSignature(qr.qr_image, qr.qr_mime))
+    throw new NotFoundError('This QR code is not available.');
   return { bytes: qr.qr_image, contentType: qr.qr_mime };
 }
 
@@ -200,7 +211,11 @@ export async function signPaymentProofUrl(
     versionId: file.version_id,
     expiresInSeconds: PROOF_URL_TTL_SECONDS,
   });
-  return { url: read.readUrl, expires_at: read.expiresAt.toISOString(), content_type: file.mime_type };
+  return {
+    url: read.readUrl,
+    expires_at: read.expiresAt.toISOString(),
+    content_type: file.mime_type,
+  };
 }
 
 function toPaymentView(row: SubscriptionPaymentRow): SubscriptionPaymentView {
@@ -227,8 +242,15 @@ function isPendingUniqueViolation(error: unknown): boolean {
 }
 
 function matchesImageSignature(bytes: Buffer, mime: string): boolean {
-  if (mime === 'image/png') return bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  if (mime === 'image/png')
+    return bytes
+      .subarray(0, 8)
+      .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
   if (mime === 'image/jpeg') return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-  if (mime === 'image/webp') return bytes.subarray(0, 4).toString('latin1') === 'RIFF' && bytes.subarray(8, 12).toString('latin1') === 'WEBP';
+  if (mime === 'image/webp')
+    return (
+      bytes.subarray(0, 4).toString('latin1') === 'RIFF' &&
+      bytes.subarray(8, 12).toString('latin1') === 'WEBP'
+    );
   return false;
 }

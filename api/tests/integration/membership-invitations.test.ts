@@ -32,7 +32,8 @@ describe('TBF-040 membership invitations', async () => {
     listMembershipInvitations,
     resendMembershipInvitation,
   } = await import('../../src/modules/membership-invitations/membership-invitations.service.js');
-  const { createTestMembership, createTestTenant, testKey } = await import('./helpers/factories.js');
+  const { createTestMembership, createTestTenant, testKey } =
+    await import('./helpers/factories.js');
 
   beforeAll(async () => {
     await migrateTestDatabase(adminUrl);
@@ -79,11 +80,38 @@ describe('TBF-040 membership invitations', async () => {
     expect(rows.rows[0]).toEqual({ count: 1, outbox_count: 1 });
   });
 
+  it('blocks Front Desk invitations for a Starter workspace at the API boundary', async () => {
+    const context = await createOwnerContext('user_tbf040_starter_no_seats', 'starter');
+
+    const result = await createMembershipInvitation({
+      ...context,
+      requestId: 'req-tbf040-starter-no-seats',
+      idempotencyKey: 'starter-no-seats',
+      request: { email: 'staff@example.com' },
+    });
+
+    expect(result.status).toBe(409);
+    expect(result.body).toMatchObject({ success: false, error: { code: 'CAPACITY_CONFLICT' } });
+    const counts = await withTenantTransaction(context.tenantId, context.principalId, (client) =>
+      client.query<{ invitations: number; outbox: number }>(
+        `SELECT
+           (SELECT count(*)::int FROM membership_invitation WHERE tenant_id = $1) AS invitations,
+           (SELECT count(*)::int FROM outbox_event WHERE tenant_id = $1) AS outbox`,
+        [context.tenantId],
+      ),
+    );
+    expect(counts.rows[0]).toEqual({ invitations: 0, outbox: 0 });
+  });
+
   it('reserves a Front Desk seat, releases it on cancellation, and preserves the row on resend', async () => {
     const context = await createOwnerContext('user_tbf040_capacity');
     // Leave exactly two seats free: two invitations fit, the third is over the Standard cap.
     for (let index = 0; index < STANDARD_PLAN.frontdeskSeatsMax - 2; index += 1) {
-      await createTestMembership(context.tenantId, `user_tbf040_capacity_member_${index}`, 'frontdesk');
+      await createTestMembership(
+        context.tenantId,
+        `user_tbf040_capacity_member_${index}`,
+        'frontdesk',
+      );
     }
     const first = await createMembershipInvitation({
       ...context,
@@ -333,15 +361,19 @@ describe('TBF-040 membership invitations', async () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
-  async function createOwnerContext(principalId: string) {
+  async function createOwnerContext(
+    principalId: string,
+    planCode: 'starter' | 'standard' = 'standard',
+  ) {
     const tenant = await createTestTenant({ clerkOrgId: `org_${principalId}` });
     const membershipId = await createTestMembership(tenant.id, principalId, 'owner');
     await withTenantTransaction(tenant.id, principalId, async (client) => {
       const plan = await client.query<{ id: string }>(
-        `SELECT id FROM plan WHERE code = 'starter' AND version = 1 AND active = true`,
+        `SELECT id FROM plan WHERE code = $1 AND version = 1 AND active = true`,
+        [planCode],
       );
       const planId = plan.rows[0]?.id;
-      if (!planId) throw new Error('Standard plan seed is missing.');
+      if (!planId) throw new Error(`${planCode} plan seed is missing.`);
       await client.query(
         `INSERT INTO subscription (tenant_id, plan_id, status, current_period_start, current_period_end)
          VALUES ($1, $2, 'trialing', now(), now() + interval '14 days')`,
