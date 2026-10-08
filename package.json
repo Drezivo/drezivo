@@ -14,7 +14,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
-    "test:backend-validation": "node --test .github/scripts/validate-backend.test.mjs",
+    "test:backend-validation": "node .github/scripts/validate-backend.test.mjs && node .github/scripts/migration-action.test.mjs",
     "validate:backend:local": "node .github/scripts/validate-backend.mjs local",
     "validate:backend:ci": "node .github/scripts/validate-backend.mjs ci",
     "check:docs": "npm run lint:md --workspace @drezivo/docs && npm run lint:links --workspace @drezivo/docs",

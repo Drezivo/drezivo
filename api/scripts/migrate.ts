@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { Client } from 'pg';
 
+import { resolveMigrationDatabaseUrl } from './migration-connection.js';
 import {
   assertInvitationResolverIsNotAlreadyInstalled,
   inspectMigrationHistory,
@@ -21,9 +22,9 @@ import '../src/config/load-env.js';
  * migrations/README.md the hand-written files in this directory are the source of truth here
  * (GiST exclusion constraints and RLS policies are outside what drizzle-kit can generate).
  *
- * Uses a direct (non-pooled) connection, per TRD §9. Supabase recommends its direct endpoint for
- * migrations and other single-session administrative work; runtime pooler settings must not
- * weaken the guarantees required by a DDL-heavy migration run.
+ * Uses one PostgreSQL session for each migration. Supabase direct connections remain preferred;
+ * the shared Session pooler is supported for IPv4-only migration runners. Transaction pooling is
+ * rejected because migrations rely on one stable PostgreSQL session.
  */
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -39,21 +40,12 @@ async function main(): Promise<void> {
 
   const isRemoteEnvironment =
     process.env.NODE_ENV === 'staging' || process.env.NODE_ENV === 'production';
-  const databaseUrl = isRemoteEnvironment
-    ? process.env.DATABASE_URL_DIRECT
-    : (process.env.DATABASE_URL_DIRECT ?? process.env.DATABASE_URL);
-  if (!databaseUrl) {
-    throw new Error(
-      isRemoteEnvironment
-        ? 'DATABASE_URL_DIRECT is required for staging and production migrations.'
-        : 'DATABASE_URL_DIRECT or DATABASE_URL is required to run migrations.',
-    );
-  }
-  if (isRemoteEnvironment && new URL(databaseUrl).hostname.endsWith('.pooler.supabase.com')) {
-    throw new Error(
-      'DATABASE_URL_DIRECT points to a Supabase pooler; use the project direct endpoint.',
-    );
-  }
+  const databaseUrl = resolveMigrationDatabaseUrl({
+    isRemoteEnvironment,
+    migrationUrl: process.env.DATABASE_URL_MIGRATION,
+    directUrl: process.env.DATABASE_URL_DIRECT,
+    databaseUrl: process.env.DATABASE_URL,
+  });
 
   const entries = await readdir(MIGRATIONS_DIR);
   const allFiles = entries.filter((name) => /^\d{4}_.*\.sql$/.test(name)).sort();
