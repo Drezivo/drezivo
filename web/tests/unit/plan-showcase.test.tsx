@@ -98,7 +98,10 @@ describe('public plans', () => {
       {
         name: 'Starter',
         price: '149.00',
-        features: expect.arrayContaining(['Up to 125 active garments']),
+        features: expect.arrayContaining([
+          'Up to 125 active garments',
+          'Owner-only access (no Front Desk accounts)',
+        ]),
         highlighted: false,
       },
       {
@@ -108,7 +111,7 @@ describe('public plans', () => {
         highlighted: true,
       },
     ]);
-    expect(plans[0]?.features.some((feature) => feature.includes('Front Desk'))).toBe(false);
+    expect(plans[0]?.features.filter((feature) => feature.includes('Front Desk staff'))).toEqual([]);
   });
 
   it('caps the number of catalog entries to the layout capacity', () => {

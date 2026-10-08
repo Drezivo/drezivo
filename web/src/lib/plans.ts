@@ -20,7 +20,9 @@ export const MAX_PUBLIC_PLANS = 4;
 export function toPublicPlans(catalog: PublicPlanCatalogResponse): readonly PublicPlan[] {
   return catalog.plans.slice(0, MAX_PUBLIC_PLANS).map((plan) => {
     const features = [`Up to ${plan.limits.active_garments} active garments`];
-    if (plan.limits.frontdesk_seats > 0) {
+    if (plan.code === 'starter') {
+      features.push('Owner-only access (no Front Desk accounts)');
+    } else if (plan.limits.frontdesk_seats > 0) {
       features.push(`Up to ${plan.limits.frontdesk_seats} Front Desk staff`);
     }
     features.push(

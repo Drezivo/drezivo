@@ -54,12 +54,13 @@ describe('marketing FAQ, pricing, and terms', () => {
     const pricingText = pricing?.textContent ?? '';
     expect(pricingText).toContain('₱149');
     expect(pricingText).toContain('Up to 125 active garments');
+    expect(pricingText).toContain('Owner-only access (no Front Desk accounts)');
     expect(pricingText).toContain('Standard');
     expect(pricingText).toContain('₱299');
     expect(pricingText).toContain('Up to 300 active garments');
     expect(pricingText).toContain('Up to 3 Front Desk staff');
     const starterCard = screen.getByText('Starter').closest('li');
-    expect(starterCard?.textContent).not.toContain('Front Desk');
+    expect(starterCard?.textContent).not.toContain('Front Desk staff');
   });
 
   it('moves billing-detail explanations to the FAQ instead of the pricing page', async () => {
@@ -83,12 +84,19 @@ describe('marketing FAQ, pricing, and terms', () => {
     expect(answer).toContain('does not automatically issue a refund');
   });
 
-  it('describes the current Standard staff allowance and quotas', () => {
+  it('describes both plan access levels, prices, and quotas', () => {
     const answer = answerFor('Can staff access everything in my account?');
 
+    expect(answer).toContain('Starter is for the shop owner only');
+    expect(answer).toContain('does not include Front Desk accounts');
     expect(answer).toContain('up to 3 Front Desk staff accounts');
     expect(answer).toContain('role-limited');
-    expect(answerFor('How much does Drezivo cost?')).toContain('up to 300 active garments');
+    const pricingAnswer = answerFor('How much does Drezivo cost?');
+    expect(pricingAnswer).toContain('Starter is ₱149 a month');
+    expect(pricingAnswer).toContain('up to 125 active garments');
+    expect(pricingAnswer).toContain('Standard is ₱299 a month');
+    expect(pricingAnswer).toContain('up to 300 active garments');
+    expect(pricingAnswer).toContain('same core features');
   });
 
   it('keeps the terms aligned with the current pilot subscription lifecycle', () => {
