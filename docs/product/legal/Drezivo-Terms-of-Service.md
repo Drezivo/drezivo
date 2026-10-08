@@ -58,10 +58,12 @@ Drezivo’s responsibility for its own unlawful acts or negligence.
 
 ## 4. Plans, prices, and payment
 
-The current pilot offers one Standard plan at **₱299 per month**, with up to 300 active physical
-clothing items and 3 Front Desk seats. An eligible new account receives a fourteen-day trial. After the
-trial, the business pays through a listed Drezivo payment method and submits a reference and receipt
-for operator review. Prices, inclusions, tax treatment, billing period, payment method, renewal, and
+The current plans are **Starter at ₱149 per month**, with up to 125 active physical clothing items and
+no Front Desk seats, and **Standard at ₱299 per month**, with up to 300 active physical clothing items
+and 3 Front Desk seats. Both plans include the same core product features, and an eligible new
+account may receive the fourteen-day trial, subject to lifetime eligibility. After the trial, the
+business pays through a listed Drezivo payment method and submits a reference and receipt for
+operator review. Prices, inclusions, tax treatment, billing period, payment method, renewal, and
 cancellation terms must be shown before purchase. Drezivo must not charge a customer for an
 unselected plan or add-on. This remains a counsel-review draft.
 
