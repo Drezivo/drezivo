@@ -91,7 +91,7 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
       },
       {
         question: 'How much does Drezivo cost?',
-        answer: `Choose Starter at ₱149 a month with up to 125 active garments, or Standard at ₱299 a month with up to 300 active garments and 3 Front Desk staff. Both plans include a ${MARKETING_TRIAL_DAYS}-day free trial. Asset limits are based on active physical garments, not the number of styles in your catalogue.`,
+        answer: `Starter is ₱149 a month for up to 125 active garments and owner-only access (no Front Desk accounts). Standard is ₱299 a month for up to 300 active garments and up to 3 Front Desk staff. Both plans include the same core features and a ${MARKETING_TRIAL_DAYS}-day free trial. Asset limits count active physical garments, not styles in your catalogue.`,
       },
       {
         question: 'What happens if I do not renew after the trial or a paid month?',
@@ -151,7 +151,7 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
       {
         question: 'Can staff access everything in my account?',
         answer:
-          'Standard allows up to 3 Front Desk staff accounts. Starter is designed for owner-operated shops without Front Desk seats. Staff access is role-limited; only the shop owner can manage owner-only settings and actions.',
+          'Starter is for the shop owner only and does not include Front Desk accounts. Standard allows up to 3 Front Desk staff accounts. Staff access is role-limited; only the shop owner can manage owner-only settings and actions.',
       },
       {
         question: 'How is customer and business data protected?',
