@@ -1,7 +1,7 @@
 # Drezivo — Market Research and Product Review
 
 **Research date:** 15 September 2026  
-**Current pilot offer (updated 6 October 2026):** one Standard plan at PHP 299/month, with up to 300 active physical clothing items and 3 Front Desk seats; internal plan code `starter`. ADR 0014 and migration `0072_starter_plan_price.sql` set the current price. The 15 September 2026 review documented a three-tier offer that is no longer sellable. Market willingness to pay and contribution margins remain unmeasured.
+**Current subscription offer (updated 9 October 2026):** Starter is PHP 149/month for up to 125 active physical clothing items and no Front Desk seats; Standard is PHP 299/month for up to 300 active physical clothing items and 3 Front Desk seats. Both use the same core product and a fourteen-day trial subject to lifetime eligibility. ADR 0015 and migration `0075_starter_standard_plan_tiers.sql` define the current catalog. Market willingness to pay and contribution margins remain unmeasured.
 **Scope:** desk research for a Philippine clothing-rental operations SaaS. This is evidence for a product decision, not proof of product–market fit. No merchant interviews, paid experiments, competitor trials, or production benchmarks were conducted.
 
 ## 1. Recommendation
@@ -75,7 +75,7 @@ The archive preserves the original PRD. The following observations concern that 
 |---|---|---|
 | Uploaded evidence can appear as payment | Original FR-21 and Storefront/(7) Confirmation Details.png display Paid while reservation remains pending | Show proof submitted / awaiting verification. Only merchant verification creates a settled payment. |
 | Hold semantics conflict | Original FR-22 only blocks dates after confirmation but also calls a pending item soft-held | Acquire an exclusive expiring hold before displaying payment instructions; confirmation retains the same allocation atomically. |
-| Price sources disagree | On 15 September, PRD listed PHP 300 / 499 / 1,299 while the pricing screenshot showed PHP 999 / 1,999 / 3,999 | The former three-tier offer is historical. The 1 October pilot decision was one Standard plan at PHP 300/month; ADR 0014 later updates it to PHP 299/month. |
+| Price sources disagree | Earlier PRD and screenshots documented different multi-tier offers | The old offers are historical. ADRs 0011 and 0014 recorded the single-Standard pilot; the current Starter/Standard offers and limits are defined by ADR 0015 and migration `0075_starter_standard_plan_tiers.sql`. Market willingness to pay remains unmeasured. |
 | Current status mixes different concepts | Inventory form offers Available and calendar blocks; calendar displays future rentals and cleaning | Separate actual readiness/custody from availability for a requested interval. |
 | Payment examples imply integrations | Original Payments section includes Card/PayPal and customer copy mentions SMS | V1 lists only configured manual methods and email. Do not imply integrations. |
 | Staff benefit precedes permissions | The historical Business plan offered staff, but original v1 had only an owner role | The current Standard offer includes up to 3 Front Desk seats; server-side membership permissions remain required. |
@@ -106,7 +106,7 @@ These are recommended gates, not calendar commitments. If interviews show fittin
 
 ## 6. Pricing and unit economics
 
-The current pilot sells one **Standard** plan for PHP 299/month, internally represented by `starter` v1. It includes up to 300 active physical clothing items and 3 Front Desk seats. The prior Starter/Professional/Business offer has been superseded by [ADR 0011](../decisions/0011-single-standard-pilot-plan.md); [ADR 0014](../decisions/0014-starter-plan-price.md) sets the current price and [ADR 0013](../decisions/0013-starter-plan-capacity.md) sets the current quotas. This owner decision does not measure willingness to pay or unit economics. Do not advertise “Most Popular,” unlimited assets, dedicated support, or unreleased features. Reliability, access control, usable export, and prevention of duplicate bookings are not premium gates.
+The current catalog has **Starter** at PHP 149/month (up to 125 active physical clothing items and no Front Desk seats) and **Standard** at PHP 299/month (up to 300 active physical clothing items and 3 Front Desk seats). Both share core product features and the fourteen-day trial, subject to lifetime eligibility. [ADR 0015](../decisions/0015-starter-and-standard-plans.md) and migration `0075_starter_standard_plan_tiers.sql` define the active offers; the old Professional/Business rows remain historical. This owner decision does not measure willingness to pay or unit economics. Do not advertise “Most Popular,” unlimited assets, dedicated support, or unreleased features. Reliability, access control, usable export, and prevention of duplicate bookings are not premium gates.
 
 Booqable's public page separates base plans, billing cadence, and add-ons. Exact checkout currency, regional taxation, billing terms, and add-on totals must be verified when making a purchasing comparison. Drezivo should present its own all-in cost clearly rather than compare an ambiguous foreign headline price against a PHP plan. [Booqable pricing](https://booqable.com/pricing/).
 
@@ -120,7 +120,7 @@ Build a per-tenant contribution model:
 
 Then separately subtract engineering, fixed operations, acquisition costs, and taxes to model company viability. Refundable renter deposits are not Drezivo revenue. Merchant rental collections are not Drezivo subscription revenue.
 
-**Illustration only:** PHP 499 net receipts minus PHP 120 technical costs minus PHP 150 support = PHP 229 contribution before fixed costs. The inputs are invented sensitivity values, not vendor quotes or forecasts. At PHP 300 with the same costs, contribution is PHP 30. This illustrates why very low pricing needs real support and usage measurements.
+**Illustration only:** PHP 499 net receipts minus PHP 120 technical costs minus PHP 150 support = PHP 229 contribution before fixed costs. The inputs are invented sensitivity values, not vendor quotes or forecasts. At PHP 149 with the same costs, contribution would be negative PHP 121; at PHP 299 it would be PHP 29. This illustrates why the current prices need real support and usage measurements.
 
 Use bounded asset, storage, seat, and branch allowances with a documented overage process. Count physical active assets, not only styles. Downgrade must not delete records or prevent returns/refunds for already accepted rentals.
 
@@ -154,4 +154,4 @@ Report sample sizes and distributions, including failed onboarding and churn. Re
 
 No paywalled market-size reports were treated as facts; no unsupported CAGR is included. Vendor documentation can change. Sources were reviewed on the date above; historical reports retain their historical year. No conclusion here establishes tax-invoice compliance, security certification, merchant acquiring eligibility, or a vendor SLA for Drezivo.
 
-Decisions still requiring business validation: Standard's allowances and support margin at PHP 299/month; whether fittings must move into V1; maximum manual review window and opening-hours treatment; merchant legal/policy templates; retention periods; hosting region and paid service plans; renter-payment integration provider; enterprise isolation/SSO requirements. Any future tiers or price changes remain undecided until pilot evidence and a new owner decision.
+Decisions still requiring business validation: support margin at both current prices; whether fittings must move into V1; maximum manual review window and opening-hours treatment; merchant legal/policy templates; retention periods; hosting region and paid service plans; renter-payment integration provider; enterprise isolation/SSO requirements. Future price or entitlement changes require new owner decisions and reviewed migrations.

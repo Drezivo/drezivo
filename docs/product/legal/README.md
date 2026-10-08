@@ -30,8 +30,9 @@ jurisdiction: Philippines
 
 - [Data Retention and Deletion Standard](Drezivo-Data-Retention-and-Deletion-Standard.md): the
   approval process and operational requirements for an actual retention schedule.
-- [Root security foundation](../../../SECURITY-FOUNDATION.md): design baseline for authentication,
-  tenant isolation, logging, incident response, and delivery gates.
+- [Security foundation template](../../../SECURITY-FOUNDATION.template.md): public design baseline
+  for authentication, tenant isolation, logging, incident response, and delivery gates. The private
+  operating guide is intentionally ignored and must not be committed.
 - [Security incident runbook](../../runbooks/security-incident.md): immediate response when a
   credential is exposed.
 - [General incident runbook](../../runbooks/incident.md): operational response and communication.
