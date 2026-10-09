@@ -1,7 +1,11 @@
 import type { PoolClient } from 'pg';
 import { describe, expect, it, vi } from 'vitest';
 
-import { DeferredOutboxError, PermanentOutboxError, type OutboxRow } from '../../../worker/runner.js';
+import {
+  DeferredOutboxError,
+  PermanentOutboxError,
+  type OutboxRow,
+} from '../../../worker/runner.js';
 import { createFileObjectCleanupHandler } from '../file-object-cleanup.js';
 
 const tenantId = '00000000-0000-4000-8000-000000000002';
@@ -21,8 +25,19 @@ function row(payload: Record<string, unknown> = { file_id: fileId }): OutboxRow 
 }
 
 function cleanupClient(): { client: PoolClient; query: ReturnType<typeof vi.fn> } {
-  const query = vi.fn()
-    .mockResolvedValueOnce({ rows: [{ storage_key: storageKey, lifecycle_status: 'accepted', legal_hold: false, retention_seconds: 0 }], rowCount: 1 })
+  const query = vi
+    .fn()
+    .mockResolvedValueOnce({
+      rows: [
+        {
+          storage_key: storageKey,
+          lifecycle_status: 'accepted',
+          legal_hold: false,
+          retention_seconds: 0,
+        },
+      ],
+      rowCount: 1,
+    })
     .mockResolvedValueOnce({ rows: [{ has_references: false }], rowCount: 1 })
     .mockResolvedValueOnce({ rows: [{ storage_key: storageKey }], rowCount: 1 })
     .mockResolvedValueOnce({ rows: [], rowCount: 1 });
@@ -33,7 +48,11 @@ describe('file object cleanup handler', () => {
   it('deletes the object between the committed barrier and tombstone transactions', async () => {
     const { client, query } = cleanupClient();
     let transactionCalls = 0;
-    const transaction = async <T>(_tenantId: string, _systemKey: string, callback: (client: PoolClient) => Promise<T>): Promise<T> => {
+    const transaction = async <T>(
+      _tenantId: string,
+      _systemKey: string,
+      callback: (client: PoolClient) => Promise<T>,
+    ): Promise<T> => {
       transactionCalls += 1;
       return callback(client);
     };
@@ -55,7 +74,11 @@ describe('file object cleanup handler', () => {
 
     const { client, query } = cleanupClient();
     let transactionCalls = 0;
-    const transaction = async <T>(_tenantId: string, _systemKey: string, callback: (client: PoolClient) => Promise<T>): Promise<T> => {
+    const transaction = async <T>(
+      _tenantId: string,
+      _systemKey: string,
+      callback: (client: PoolClient) => Promise<T>,
+    ): Promise<T> => {
       transactionCalls += 1;
       return callback(client);
     };
@@ -63,7 +86,65 @@ describe('file object cleanup handler', () => {
     const handle = createFileObjectCleanupHandler({ deleteObject }, transaction);
     await expect(handle(row())).rejects.toThrow('Object storage deletion failed.');
     expect(transactionCalls).toBe(1);
-    expect(query.mock.calls.some(([statement]) => String(statement).includes("lifecycle_status = 'deleted'"))).toBe(false);
+    expect(
+      query.mock.calls.some(([statement]) =>
+        String(statement).includes("lifecycle_status = 'deleted'"),
+      ),
+    ).toBe(false);
+  });
+
+  it('retries an idempotent storage deletion after the object was deleted but the tombstone failed', async () => {
+    let lifecycleStatus: 'accepted' | 'deletion_pending' | 'deleted' = 'accepted';
+    let tombstoneAttempts = 0;
+    const query = vi.fn((statement: string) => {
+      if (statement.includes('SELECT storage_key, lifecycle_status')) {
+        return {
+          rows: [
+            {
+              storage_key: storageKey,
+              lifecycle_status: lifecycleStatus,
+              legal_hold: false,
+              retention_seconds: 0,
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      if (statement.includes('file_object_has_references')) {
+        return { rows: [{ has_references: false }], rowCount: 1 };
+      }
+      if (statement.includes("SET lifecycle_status = 'deletion_pending'")) {
+        lifecycleStatus = 'deletion_pending';
+        return { rows: [{ storage_key: storageKey }], rowCount: 1 };
+      }
+      if (statement.includes("SET lifecycle_status = 'deleted'")) {
+        tombstoneAttempts += 1;
+        if (tombstoneAttempts === 1) throw new Error('database connection interrupted');
+        lifecycleStatus = 'deleted';
+        return { rows: [], rowCount: 1 };
+      }
+      throw new Error('unexpected cleanup query');
+    });
+    const client = { query } as unknown as PoolClient;
+    const transaction = <T>(
+      _tenantId: string,
+      _systemKey: string,
+      callback: (client: PoolClient) => Promise<T>,
+    ): Promise<T> => callback(client);
+    const deleteObject = vi.fn().mockResolvedValue(undefined);
+    const handle = createFileObjectCleanupHandler({ deleteObject }, transaction);
+
+    await expect(handle(row())).rejects.toThrow('database connection interrupted');
+    expect(lifecycleStatus).toBe('deletion_pending');
+
+    await handle(row());
+    expect(lifecycleStatus).toBe('deleted');
+    expect(deleteObject).toHaveBeenCalledTimes(2);
+    expect(deleteObject).toHaveBeenNthCalledWith(1, storageKey);
+    expect(deleteObject).toHaveBeenNthCalledWith(2, storageKey);
+
+    await handle(row());
+    expect(deleteObject).toHaveBeenCalledTimes(2);
   });
 
   it('rejects malformed event payloads before database or storage access', async () => {
@@ -71,7 +152,9 @@ describe('file object cleanup handler', () => {
     const deleteObject = vi.fn();
     const handle = createFileObjectCleanupHandler({ deleteObject }, transaction);
 
-    await expect(handle(row({ file_id: '../storage-key' }))).rejects.toBeInstanceOf(PermanentOutboxError);
+    await expect(handle(row({ file_id: '../storage-key' }))).rejects.toBeInstanceOf(
+      PermanentOutboxError,
+    );
     expect(transaction).not.toHaveBeenCalled();
     expect(deleteObject).not.toHaveBeenCalled();
   });

@@ -74,21 +74,25 @@ Keep these protected or versioned references intact:
 
 ### 3. Test all three replacement flows
 
-- [ ] Clothing image replacement queues only displaced, unreferenced IDs and preserves any image ID retained in the new set.
-- [ ] Storefront document replacement covers logo, cover, hero, and about independently; unchanged or still-referenced media is not deleted.
-- [ ] Payment-method replacement covers QR and material references, including switching presentation modes; historical/financial evidence is not swept up.
-- [ ] For each endpoint, a business transaction rollback leaves old references and creates no cleanup work; a committed replacement remains successful when storage deletion fails.
-- [ ] Test files shared by two current records, referenced by another tenant, referenced by a policy snapshot, or attached to a measurement guide. Each must remain available until all references are removed.
-- [ ] Test legal hold, future retention, retention expiry, and safe retry after a worker crash before deletion, after R2 deletion, and before the tombstone update.
-- [ ] Test concurrent replacement/reference attachment versus cleanup; exactly one safe outcome wins, and no live reference can point to an object already deleted.
-- [ ] Test duplicate outbox delivery, missing-object idempotency, bounded retries, and Operations alerting after dead-letter.
+- [x] API integration coverage verifies clothing image replacement queues only displaced IDs and preserves an image retained in the new ordered set.
+- [x] API integration coverage verifies logo, cover, hero, and about media independently, including an unchanged cover and reuse of one new file across two slots.
+- [x] API integration coverage replaces payment QR and instruction files, then switches to details mode and confirms that clearing material does not enqueue a replacement cleanup.
+- [x] The successful endpoint tests observe committed references and durable cleanup candidates; worker unit tests verify storage failure leaves the file untombstoned and a post-delete tombstone failure safely retries the same key.
+- [x] Worker-role database integration coverage defers deletion while a file is shared across storefront fields, referenced by another tenant's storefront and policy history, or attached to a measurement guide; deletion is prepared only after all references are removed.
+- [x] Unit coverage verifies legal holds and future retention defer cleanup without entering `deletion_pending`.
+- [x] A PostgreSQL lock-race integration test makes an attachment transaction acquire the accepted-file share lock before cleanup; the new reference wins and cleanup defers.
+- [x] Unit coverage verifies missing-object deletion is idempotent, deferred work does not consume a retry attempt, and storage errors are sanitized.
+- [ ] Inject a post-enqueue business-transaction failure for each endpoint and verify that old references remain and no cleanup event commits.
+- [ ] Exercise retention expiry and the worker crash window after the deletion barrier commits but before the R2 delete call.
+- [ ] Verify historical financial evidence references (reservation receipts and subscription-payment proofs) explicitly in the worker-role integration suite.
+- [ ] Confirm the configured Operations alert fires after dead-letter; structured worker logging is covered, but notification routing is not verified.
 - [ ] Verify deletion against local MinIO and non-production R2, including all applicable versions/derivatives. Do not use production objects for destructive tests.
-- [ ] Assert logs and stored worker errors contain no storage keys, signed URLs, credentials, or image data.
+- [x] Unit coverage verifies storage failure diagnostics do not contain the storage key; staging logs and stored dead-letter diagnostics still need review.
 
 ### 4. Roll out safely
 
-- [ ] Inventory the in-scope current references and confirm the worker supports the cleanup event before enabling enqueueing from any endpoint.
-- [ ] Roll out worker-handler support first (it is dormant until producers enqueue this event), apply `0075_file_object_cleanup.sql`, and only then deploy/enable API replacement producers. This prevents an older worker from dead-lettering a new event type and prevents code from relying on a missing lifecycle state/function.
+- [ ] Inventory the in-scope current references and confirm every worker instance supports the cleanup event before enabling enqueueing from any endpoint.
+- [ ] Use an explicit producer rollout gate: deploy worker and API support with enqueueing disabled, apply `0075_file_object_cleanup.sql`, verify worker/database readiness, then enable API producers. This prevents an older worker from dead-lettering a new event type and prevents code from relying on a missing lifecycle state/function.
 - [ ] Exercise replacement, retry, retention, legal-hold, and dead-letter alert paths in staging before enabling in production.
 - [ ] Document the operator procedure for inspecting, retrying, or holding a cleanup job without exposing object keys or deleting a referenced object.
 - [ ] Record evidence for each endpoint and each safety test above. A passing unit/build check alone does not establish that the R2 object and applicable versions were deleted.
