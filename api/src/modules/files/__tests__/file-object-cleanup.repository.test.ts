@@ -1,7 +1,21 @@
 import type { PoolClient } from 'pg';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({ config: { FILE_OBJECT_CLEANUP_ENABLED: true } }));
+vi.mock('../../../config/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../config/index.js')>();
+  Object.defineProperty(actual.config, 'FILE_OBJECT_CLEANUP_ENABLED', {
+    configurable: true,
+    get: () => mocks.config.FILE_OBJECT_CLEANUP_ENABLED,
+  });
+  return actual;
+});
+vi.mock('../../../shared/logger.js', () => ({
+  logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn(), trace: vi.fn(), warn: vi.fn() },
+}));
 
 import { DeferredOutboxError } from '../../../worker/runner.js';
+import { DependencyUnavailableError } from '../../../shared/errors.js';
 import {
   enqueueReplacedFileObjectCleanup,
   enqueueReplacedFileObjectSetCleanup,
@@ -22,6 +36,25 @@ function clientFor(...results: Array<{ rows: unknown[]; rowCount?: number | null
 }
 
 describe('file object cleanup repository', () => {
+  afterEach(() => {
+    mocks.config.FILE_OBJECT_CLEANUP_ENABLED = true;
+  });
+
+  it('refuses a displaced-file replacement while the producer rollout gate is off', async () => {
+    mocks.config.FILE_OBJECT_CLEANUP_ENABLED = false;
+    const { client, query } = clientFor();
+
+    await expect(
+      enqueueReplacedFileObjectCleanup(
+        client,
+        tenantId,
+        fileId,
+        '00000000-0000-4000-8000-000000000003',
+      ),
+    ).rejects.toBeInstanceOf(DependencyUnavailableError);
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it('queues a displaced file but not unchanged or clear-only fields', async () => {
     const { client, query } = clientFor({ rows: [], rowCount: 1 });
 

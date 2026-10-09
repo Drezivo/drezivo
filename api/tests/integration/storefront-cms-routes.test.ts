@@ -27,6 +27,7 @@ process.env.FILE_OBJECT_CLEANUP_ENABLED = 'true';
 process.env.DATABASE_URL = buildAppRoleDatabaseUrl(adminUrl);
 
 describe('storefront CMS and settings HTTP boundary', async () => {
+  const { config } = await import('../../src/config/index.js');
   const { createApp } = await import('../../src/app.js');
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
   const { createStorefrontAsset, createStorefrontWorkspace } =
@@ -235,6 +236,57 @@ describe('storefront CMS and settings HTTP boundary', async () => {
     );
     expect(cleanupCandidates).toEqual([previous.about, previous.hero, previous.logo].sort());
     expect(cleanupCandidates).not.toContain(previous.cover);
+  });
+
+  it('keeps the storefront document unchanged while the cleanup producer gate is off', async () => {
+    const ws = await createStorefrontWorkspace('routes-cleanup-gate');
+    clerk.getAuth.mockReturnValue({ userId: ws.owner.principalId, orgId: ws.clerkOrgId });
+    const app = createApp();
+    const previous = fileObjectId.parse(
+      await createStorefrontAsset(ws.tenantId, ws.owner.principalId, 'cleanup-gate-logo-old'),
+    );
+    const replacement = fileObjectId.parse(
+      await createStorefrontAsset(ws.tenantId, ws.owner.principalId, 'cleanup-gate-logo-new'),
+    );
+    const initialDocument = defaultStorefrontDocument('A');
+    initialDocument.branding.logo_file_id = previous;
+    const initial = await request(app)
+      .patch('/api/v1/storefront')
+      .set('Idempotency-Key', 'routes-cleanup-gate-initial')
+      .send({ version: 1, document: initialDocument });
+    expect(initial.status).toBe(200);
+
+    const replacementDocument = {
+      ...initialDocument,
+      branding: { ...initialDocument.branding, logo_file_id: replacement },
+    };
+    config.FILE_OBJECT_CLEANUP_ENABLED = false;
+    let rejected: request.Response;
+    try {
+      rejected = await request(app)
+        .patch('/api/v1/storefront')
+        .set('Idempotency-Key', 'routes-cleanup-gate-replace')
+        .send({ version: 2, document: replacementDocument });
+    } finally {
+      config.FILE_OBJECT_CLEANUP_ENABLED = true;
+    }
+
+    expect(rejected.status).toBe(503);
+    const current = await request(app).get('/api/v1/storefront');
+    expect(dataOf<StorefrontSettings>(current).document.branding.logo_file_id).toBe(previous);
+    const cleanupCount = await withTenantTransaction(
+      ws.tenantId,
+      ws.owner.principalId,
+      async (client) => {
+        const result = await client.query<{ count: string }>(
+          `SELECT count(*)::text AS count FROM outbox_event
+          WHERE tenant_id = $1 AND event_type = 'file.object_cleanup.requested'`,
+          [ws.tenantId],
+        );
+        return Number(result.rows[0]?.count ?? 0);
+      },
+    );
+    expect(cleanupCount).toBe(0);
   });
 
   it('forbids front desk writes while allowing reads', async () => {

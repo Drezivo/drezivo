@@ -10,7 +10,7 @@ tags: [drezivo, operations, storage, r2, checklist]
 
 # R2 Image Replacement Cleanup Checklist
 
-**Status:** In progress. Sections 0 and 1 have code changes in the current checkout; the migration is not applied and cleanup is not enabled in any deployed environment. Staging/storage and Operations-alert verification remain open.
+**Status:** In progress. Sections 0–3 have implementation and test coverage in the current branch; the migration is not applied and the producer gate defaults off in staging/production. Staging/R2 and Operations-alert verification remain open.
 
 ## Goal and agreed behavior
 
@@ -22,11 +22,11 @@ Objects use unique, create-only storage keys. Replacement means upload a new obj
 
 The 2026-10-09 re-scan confirmed these three replacement routes. Search reviewed API route registrations and file replacement call sites; no additional replacement endpoint was found.
 
-| Replacement endpoint | Current reference being replaced | Source |
-| --- | --- | --- |
-| `PUT /api/v1/catalogue/clothing/:productId/images` | The clothing item's current `product_image` set, including its cover image. | [catalogue.routes.ts](../../../api/src/modules/catalogue/catalogue.routes.ts), [catalogue.service.ts](../../../api/src/modules/catalogue/catalogue.service.ts) |
-| `PATCH /api/v1/storefront` | Storefront document media references: logo, cover, hero, and about images. | [storefront-cms.routes.ts](../../../api/src/modules/storefront-cms/storefront-cms.routes.ts), [storefront-cms.service.ts](../../../api/src/modules/storefront-cms/storefront-cms.service.ts) |
-| `PATCH /api/v1/payment-methods/:paymentMethodId` | The current QR image and presentation-material file; material may be an image or PDF. | [payment-methods.routes.ts](../../../api/src/modules/payment-methods/payment-methods.routes.ts), [payment-methods.service.ts](../../../api/src/modules/payment-methods/payment-methods.service.ts) |
+| Replacement endpoint                               | Current reference being replaced                                                      | Source                                                                                                                                                                                             |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PUT /api/v1/catalogue/clothing/:productId/images` | The clothing item's current `product_image` set, including its cover image.           | [catalogue.routes.ts](../../../api/src/modules/catalogue/catalogue.routes.ts), [catalogue.service.ts](../../../api/src/modules/catalogue/catalogue.service.ts)                                     |
+| `PATCH /api/v1/storefront`                         | Storefront document media references: logo, cover, hero, and about images.            | [storefront-cms.routes.ts](../../../api/src/modules/storefront-cms/storefront-cms.routes.ts), [storefront-cms.service.ts](../../../api/src/modules/storefront-cms/storefront-cms.service.ts)       |
+| `PATCH /api/v1/payment-methods/:paymentMethodId`   | The current QR image and presentation-material file; material may be an image or PDF. | [payment-methods.routes.ts](../../../api/src/modules/payment-methods/payment-methods.routes.ts), [payment-methods.service.ts](../../../api/src/modules/payment-methods/payment-methods.service.ts) |
 
 This checklist covers old objects displaced by replacement uploads only. Remove-only or clear-only actions are out of scope. New upload authorization/finalization, clothing creation/import, guide creation/default changes, and immutable financial evidence are not replacement targets.
 
@@ -91,10 +91,14 @@ Keep these protected or versioned references intact:
 
 ### 4. Roll out safely
 
-- [ ] Inventory the in-scope current references and confirm every worker instance supports the cleanup event before enabling enqueueing from any endpoint.
-- [ ] Use an explicit producer rollout gate: deploy worker and API support with enqueueing disabled, apply `0075_file_object_cleanup.sql`, verify worker/database readiness, then enable API producers. This prevents an older worker from dead-lettering a new event type and prevents code from relying on a missing lifecycle state/function.
+- [x] Add explicit producer rollout gate `FILE_OBJECT_CLEANUP_ENABLED`. Local/test defaults on; staging/production default off. While off, an in-scope replacement that would displace an object fails with a retryable 503 inside the business transaction, so the old reference remains and no cleanup event is lost.
+- [x] API configuration/producer tests cover local/staging defaults, explicit enablement, strict boolean parsing, and rejection of a displaced-file replacement while the gate is off. The retryable 503 rolls back the idempotency claim so the request can be retried after enablement.
+- [ ] Deploy the handler-capable API/worker build with the producer gate off; confirm every older worker instance has stopped before enabling producers. In the pilot, the worker is embedded in the API, so verify all API replicas are on the compatible build.
+- [ ] Apply `0075_file_object_cleanup.sql` through the protected migration workflow. Verify migration status is clean and the schema function/permissions are present before enabling the producer gate.
+- [ ] Enable `FILE_OBJECT_CLEANUP_ENABLED=true` only after the schema and every worker are ready. Then run the staging replacement/retry/reference/retention/hold smoke tests in [the rollout runbook](../../runbooks/file-object-cleanup.md).
 - [ ] Exercise replacement, retry, retention, legal-hold, and dead-letter alert paths in staging before enabling in production.
-- [ ] Document the operator procedure for inspecting, retrying, or holding a cleanup job without exposing object keys or deleting a referenced object.
+- [x] Document the operator procedure for inspecting, retrying, or holding a cleanup job without exposing object keys or deleting a referenced object.
+- [ ] Configure and demonstrate Operations alert routing for cleanup events moved to dead-letter; structured worker logging exists, but notification routing is not verified.
 - [ ] Record evidence for each endpoint and each safety test above. A passing unit/build check alone does not establish that the R2 object and applicable versions were deleted.
 
 ## Related notes and sources
@@ -102,6 +106,7 @@ Keep these protected or versioned references intact:
 - [[00-Home/Drezivo Home]]
 - [[05-Operations/API Security Review 2026-10-07]]
 - [Accepted R2 storage decision](../../decisions/0010-cloudflare-r2-object-storage.md)
+- [Replacement cleanup rollout and operations runbook](../../runbooks/file-object-cleanup.md)
 - [File-object schema](../../../api/src/db/schema/files.ts)
 - [Object-storage interface](../../../api/src/integrations/storage/object-storage.ts)
 - [R2 object deletion](https://developers.cloudflare.com/r2/objects/delete-objects/)

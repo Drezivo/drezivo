@@ -27,6 +27,7 @@ process.env.S3_SECRET_ACCESS_KEY ??= 'test';
 
 describe('payment method settings', async () => {
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
+  const { config } = await import('../../src/config/index.js');
   const { updatePaymentMethodSettings, getPaymentMethodSettings } =
     await import('../../src/modules/payment-methods/payment-methods.service.js');
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
@@ -283,6 +284,62 @@ describe('payment method settings', async () => {
     );
     expect(clearedState.method).toEqual({ material_file_id: null, version: 3 });
     expect(clearedState.cleanupCandidates).toEqual([previousMaterial, previousQr].sort());
+  });
+
+  it('keeps payment-method references unchanged while the cleanup producer gate is off', async () => {
+    const context = await seed();
+    const previousQr = await createPaymentFile(
+      context,
+      'storefront_asset',
+      'image/png',
+      'gate-previous-qr',
+    );
+    const replacementQr = await createPaymentFile(
+      context,
+      'storefront_asset',
+      'image/png',
+      'gate-replacement-qr',
+    );
+    await withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+      await client.query(
+        `UPDATE payment_method SET qr_file_id = $3, version = 1 WHERE tenant_id = $1 AND id = $2`,
+        [context.tenantId, context.paymentMethodId, previousQr],
+      );
+    });
+
+    config.FILE_OBJECT_CLEANUP_ENABLED = false;
+    let rejected: Awaited<ReturnType<typeof updatePaymentMethodSettings>>;
+    try {
+      rejected = await updatePaymentMethodSettings({
+        ...context,
+        permissionCodes: [...context.permissionCodes],
+        requestId: 'req-payment-settings-cleanup-gate',
+        idempotencyKey: 'payment-settings-cleanup-gate',
+        paymentMethodId: context.paymentMethodId,
+        request: { ...request(), qr_file_id: replacementQr },
+      });
+    } finally {
+      config.FILE_OBJECT_CLEANUP_ENABLED = true;
+    }
+
+    expect(rejected.status).toBe(503);
+    const state = await withTenantTransaction(
+      context.tenantId,
+      context.principalId,
+      async (client) => {
+        const method = await client.query<{ qr_file_id: string | null; version: number }>(
+          `SELECT qr_file_id, version FROM payment_method WHERE tenant_id = $1 AND id = $2`,
+          [context.tenantId, context.paymentMethodId],
+        );
+        const cleanup = await client.query<{ count: string }>(
+          `SELECT count(*)::text AS count FROM outbox_event
+          WHERE tenant_id = $1 AND event_type = 'file.object_cleanup.requested'`,
+          [context.tenantId],
+        );
+        return { method: method.rows[0], cleanupCount: Number(cleanup.rows[0]?.count ?? 0) };
+      },
+    );
+    expect(state).toEqual({ method: { qr_file_id: previousQr, version: 1 }, cleanupCount: 0 });
   });
 
   it('replays sequential duplicate updates without a second business effect', async () => {

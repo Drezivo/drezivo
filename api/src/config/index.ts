@@ -61,6 +61,9 @@ export const envSchema = z
     WORKER_MODE: z.enum(['continuous', 'drain']).default('continuous'),
     WORKER_DRAIN_SCOPE: z.enum(['all', 'fast']).default('all'),
     WORKER_DRAIN_BUDGET_MS: z.coerce.number().int().min(1000).max(3_300_000).default(600_000),
+    // Replacement-cleanup outbox producers stay off in staging/production until the compatible
+    // worker and migration are confirmed. Local/test workflows can exercise the full path by default.
+    FILE_OBJECT_CLEANUP_ENABLED: strictBooleanEnv('FILE_OBJECT_CLEANUP_ENABLED').optional(),
     // Pilot hosting: run the worker as a supervised child of the API process (src/worker/embedded.ts).
     // WORKER_DATABASE_URL is then required and must be the drezivo_worker connection, never the
     // API's drezivo_app DATABASE_URL. Reverse by setting false and deploying the dedicated worker.
@@ -226,6 +229,8 @@ export const envSchema = z
   .transform((env) => ({
     ...env,
     STAFF_APP_URL: env.STAFF_APP_URL ?? 'http://localhost:3000',
+    FILE_OBJECT_CLEANUP_ENABLED:
+      env.FILE_OBJECT_CLEANUP_ENABLED ?? !['staging', 'production'].includes(env.NODE_ENV),
     OBJECT_STORAGE_UPLOADS_ENABLED:
       env.OBJECT_STORAGE_UPLOADS_ENABLED ?? env.NODE_ENV !== 'production',
   }));

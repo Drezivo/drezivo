@@ -1,5 +1,7 @@
 import type { PoolClient } from 'pg';
 
+import { config } from '../../config/index.js';
+import { DependencyUnavailableError } from '../../shared/errors.js';
 import { PermanentOutboxError, DeferredOutboxError } from '../../worker/runner.js';
 
 export interface FileObjectCleanupTarget {
@@ -21,6 +23,7 @@ export async function enqueueReplacedFileObjectCleanup(
   replacementFileId: string | null,
 ): Promise<void> {
   if (!previousFileId || !replacementFileId || previousFileId === replacementFileId) return;
+  assertFileObjectCleanupProducerEnabled([previousFileId]);
   await enqueueFileObjectCleanupCandidates(client, tenantId, [previousFileId]);
 }
 
@@ -31,13 +34,26 @@ export async function enqueueReplacedFileObjectSetCleanup(
   previousFileIds: readonly string[],
   replacementFileIds: readonly string[],
 ): Promise<void> {
+  const candidates = replacedFileObjectSetCleanupCandidates(previousFileIds, replacementFileIds);
+  await enqueueFileObjectCleanupCandidates(client, tenantId, candidates);
+}
+
+/** Computes exactly the displaced old objects that a replacement would enqueue. */
+export function replacedFileObjectSetCleanupCandidates(
+  previousFileIds: readonly string[],
+  replacementFileIds: readonly string[],
+): string[] {
   const previous = new Set(previousFileIds);
   const replacement = new Set(replacementFileIds);
-  if (![...replacement].some((fileId) => !previous.has(fileId))) return;
-  await enqueueFileObjectCleanupCandidates(
-    client,
-    tenantId,
-    [...previous].filter((fileId) => !replacement.has(fileId)),
+  if (![...replacement].some((fileId) => !previous.has(fileId))) return [];
+  return [...previous].filter((fileId) => !replacement.has(fileId));
+}
+
+/** Called before business writes on command paths without an effect savepoint. */
+export function assertFileObjectCleanupProducerEnabled(fileIds: readonly string[]): void {
+  if (fileIds.length === 0 || config.FILE_OBJECT_CLEANUP_ENABLED) return;
+  throw new DependencyUnavailableError(
+    'File replacement is temporarily unavailable during maintenance. Please try again shortly.',
   );
 }
 
@@ -46,6 +62,9 @@ async function enqueueFileObjectCleanupCandidates(
   tenantId: string,
   fileIds: readonly string[],
 ): Promise<void> {
+  if (fileIds.length === 0) return;
+  assertFileObjectCleanupProducerEnabled(fileIds);
+
   for (const fileId of fileIds) {
     await client.query(
       `INSERT INTO outbox_event (tenant_id, dedupe_key, event_type, payload)

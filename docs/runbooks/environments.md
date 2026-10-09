@@ -150,6 +150,13 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 - `OBJECT_STORAGE_FORCE_PATH_STYLE` — `false` for R2; `true` for loopback MinIO.
 - `OBJECT_STORAGE_UPLOADS_ENABLED` — production cutover gate for issuing new upload URLs. If omitted
   in production it defaults to `false`; outside production it defaults to `true`.
+- `FILE_OBJECT_CLEANUP_ENABLED` — producer gate for enqueueing cleanup when a replacement displaces
+  an accepted file. Local development/test defaults to `true`; staging and production default to
+  `false`. When disabled, a replacement that would enqueue cleanup returns a retryable 503 before
+  changing business references; the whole command transaction, including its idempotency claim,
+  rolls back. The old reference stays in place and no cleanup event is lost. Enable only after the
+  migration and every worker's compatible handler are verified. This gate does not pause worker
+  consumption of already-queued events.
 - Legacy `AWS_REGION`/`S3_*` variables are accepted only for loopback MinIO compatibility in local
   development/test. They cannot select AWS or any other remote provider in staging/production.
 - `EMAIL_PROVIDER_*` — sender verification credentials for the email adapter (TRD §1 recommends

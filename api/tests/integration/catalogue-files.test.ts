@@ -99,6 +99,7 @@ class FakeStorage {
 
 describe('CLT-022 clothing file attachment flow', async () => {
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
+  const { config } = await import('../../src/config/index.js');
   const { authorizeUpload, finalizeUpload } =
     await import('../../src/modules/files/files.service.js');
   const { getDefaultMeasurementGuide, replaceClothingImages } =
@@ -635,6 +636,53 @@ describe('CLT-022 clothing file attachment flow', async () => {
       },
     );
     expect(cleanupCandidates).toEqual([displaced]);
+  });
+
+  it('keeps the old clothing image set when the cleanup producer gate is off', async () => {
+    const seed = await seedTenant('org_clt022_cleanup_gate', 'user_clt022_cleanup_gate');
+    const productId = await seedProduct(seed, 'IMG-CLEANUP-GATE');
+    const previous = await seedAcceptedImage(seed, 'cleanup-gate-previous', SHA_A);
+    const replacement = await seedAcceptedImage(seed, 'cleanup-gate-replacement', SHA_B);
+    const initial = await replaceClothingImages({
+      ...seed.catalogueContext,
+      productId,
+      requestId: 'req-clt022-cleanup-gate-initial',
+      idempotencyKey: 'clt022-cleanup-gate-initial',
+      request: replaceClothingImagesRequest.parse({ file_ids: [previous] }),
+    });
+    expect(initial.status).toBe(200);
+
+    config.FILE_OBJECT_CLEANUP_ENABLED = false;
+    let rejected: Awaited<ReturnType<typeof replaceClothingImages>>;
+    try {
+      rejected = await replaceClothingImages({
+        ...seed.catalogueContext,
+        productId,
+        requestId: 'req-clt022-cleanup-gate-replace',
+        idempotencyKey: 'clt022-cleanup-gate-replace',
+        request: replaceClothingImagesRequest.parse({ file_ids: [replacement] }),
+      });
+    } finally {
+      config.FILE_OBJECT_CLEANUP_ENABLED = true;
+    }
+
+    expect(rejected.status).toBe(503);
+    expect(await readProductImages(seed, productId)).toEqual([
+      { file_id: previous, display_order: 0 },
+    ]);
+    const cleanupCandidates = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const result = await client.query<{ count: string }>(
+          `SELECT count(*)::text AS count FROM outbox_event
+          WHERE tenant_id = $1 AND event_type = 'file.object_cleanup.requested'`,
+          [seed.tenantId],
+        );
+        return Number(result.rows[0]?.count ?? 0);
+      },
+    );
+    expect(cleanupCandidates).toBe(0);
   });
 
   it('rejects duplicate, pending, and foreign photo references without altering the existing photo set', async () => {

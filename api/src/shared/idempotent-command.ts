@@ -1,6 +1,11 @@
 import type { PoolClient } from 'pg';
 
-import { IdempotencyKeyReusedError, StateConflictError, isAppError } from './errors.js';
+import {
+  DependencyUnavailableError,
+  IdempotencyKeyReusedError,
+  StateConflictError,
+  isAppError,
+} from './errors.js';
 import { canonicalRequestHash } from './idempotency.js';
 import type { FailureEnvelope, SuccessEnvelope } from './response.js';
 import { claimTenantIdempotency, finalizeTenantIdempotency } from './tenant-idempotency.js';
@@ -62,6 +67,7 @@ export async function runIdempotentCommand<T>(
     await client.query(`RELEASE SAVEPOINT ${SAVEPOINT}`);
     result = { status: successStatus, body: { success: true, data, request_id: scope.requestId } };
   } catch (error) {
+    if (error instanceof DependencyUnavailableError) throw error;
     if (!isAppError(error)) throw error;
     await client.query(`ROLLBACK TO SAVEPOINT ${SAVEPOINT}`);
     result = {
