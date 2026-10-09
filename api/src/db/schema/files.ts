@@ -28,6 +28,7 @@ export const fileLifecycleEnum = pgEnum('file_lifecycle_status', [
   'scanning',
   'accepted',
   'rejected',
+  'deletion_pending',
   'deleted',
 ]);
 export const filePurposeEnum = pgEnum('file_purpose', [

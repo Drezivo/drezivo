@@ -89,7 +89,9 @@ export async function findAcceptedStorefrontAssets(client: PoolClient, tenantId:
     `SELECT id FROM file_object
       WHERE tenant_id = $1 AND id = ANY($2::uuid[])
         AND purpose = 'storefront_asset' AND lifecycle_status = 'accepted'
-        AND mime_type IN ('image/jpeg', 'image/png', 'image/webp')`,
+        AND mime_type IN ('image/jpeg', 'image/png', 'image/webp')
+      ORDER BY id ASC
+      FOR SHARE`,
     [tenantId, fileIds],
   );
   return new Set(result.rows.map((row) => row.id));
