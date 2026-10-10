@@ -3,8 +3,8 @@ title: R2 Image Replacement Cleanup Checklist
 type: implementation-checklist
 status: in-progress
 owner: Drezivo team
-source: "Owner request; API route/reference re-scan and cleanup implementation, 2026-10-09"
-updated: 2026-10-09
+source: "Owner request; API route/reference re-scan, cleanup implementation, and migration ordering review, 2026-10-10"
+updated: 2026-10-10
 tags: [drezivo, operations, storage, r2, checklist]
 ---
 
@@ -50,7 +50,8 @@ Keep these protected or versioned references intact:
 - [x] Re-scan all API route registrations and image/file replacement call sites; confirmed the three routes above are complete and recorded no additions.
 - [x] Map relational and JSON references to `file_object`, including product images, measurement guides, payment-method QR/material files, reservation and subscription evidence, import/export artifacts, storefront document media, and versioned policy image lists. The cleanup candidate's own job row is not treated as a live business reference to itself; no other active outbox payload carrying separate file artifacts was found.
 - [x] Confirm the implementation targets the recorded accepted source object: R2 metadata has no provider version ID and no API-generated derivatives were found. Public/custom-domain cache behavior and deployed bucket configuration remain staging checks; do not claim those checks are complete yet.
-- [x] Review the [`file_object` lifecycle](../../../api/src/db/schema/files.ts) and `ObjectStorage` interface. Added `deletion_pending` through forward migration `0075_file_object_cleanup.sql`, with API/worker rollout dependent on applying the migration first. Migration has not been run.
+- [x] Review the [`file_object` lifecycle](../../../api/src/db/schema/files.ts) and `ObjectStorage` interface. Added `deletion_pending` through forward migration `0076_file_object_cleanup.sql`, with API/worker rollout dependent on applying the migration first. Migration has not been run.
+- [x] Align the cleanup migration after staging's existing `0075_starter_standard_plan_tiers.sql`; the cleanup migration is `0076_file_object_cleanup.sql` so migration history remains ordered.
 
 ### 1. Make replacement and cleanup durable
 
@@ -94,7 +95,7 @@ Keep these protected or versioned references intact:
 - [x] Add explicit producer rollout gate `FILE_OBJECT_CLEANUP_ENABLED`. Local/test defaults on; staging/production default off. While off, an in-scope replacement that would displace an object fails with a retryable 503 inside the business transaction, so the old reference remains and no cleanup event is lost.
 - [x] API configuration/producer tests cover local/staging defaults, explicit enablement, strict boolean parsing, and rejection of a displaced-file replacement while the gate is off. The retryable 503 rolls back the idempotency claim so the request can be retried after enablement.
 - [ ] Deploy the handler-capable API/worker build with the producer gate off; confirm every older worker instance has stopped before enabling producers. In the pilot, the worker is embedded in the API, so verify all API replicas are on the compatible build.
-- [ ] Apply `0075_file_object_cleanup.sql` through the protected migration workflow. Verify migration status is clean and the schema function/permissions are present before enabling the producer gate.
+- [ ] Apply `0076_file_object_cleanup.sql` through the protected migration workflow. Verify migration status is clean and the schema function/permissions are present before enabling the producer gate.
 - [ ] Enable `FILE_OBJECT_CLEANUP_ENABLED=true` only after the schema and every worker are ready. Then run the staging replacement/retry/reference/retention/hold smoke tests in [the rollout runbook](../../runbooks/file-object-cleanup.md).
 - [ ] Exercise replacement, retry, retention, legal-hold, and dead-letter alert paths in staging before enabling in production.
 - [x] Document the operator procedure for inspecting, retrying, or holding a cleanup job without exposing object keys or deleting a referenced object.

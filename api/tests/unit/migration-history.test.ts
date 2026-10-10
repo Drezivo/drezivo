@@ -1,3 +1,4 @@
+import { readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -58,6 +59,23 @@ describe('migration history inspection', () => {
     expect(inspectMigrationHistory(migrationFiles, ['0001_first.sql'])).toEqual({
       appliedFiles: ['0001_first.sql'],
       pendingFiles: ['0002_second.sql', '0003_third.sql'],
+    });
+  });
+
+  it('keeps file cleanup after staging migration 0075 in the applied history', () => {
+    const migrationFilesOnDisk = readdirSync(new URL('../../src/db/migrations/', import.meta.url))
+      .filter((fileName) => /^\d{4}_.*\.sql$/.test(fileName))
+      .sort();
+    const planMigrationIndex = migrationFilesOnDisk.indexOf('0075_starter_standard_plan_tiers.sql');
+    const cleanupMigrationIndex = migrationFilesOnDisk.indexOf('0076_file_object_cleanup.sql');
+
+    expect(planMigrationIndex).toBeGreaterThanOrEqual(0);
+    expect(cleanupMigrationIndex).toBeGreaterThan(planMigrationIndex);
+    const appliedFiles = migrationFilesOnDisk.slice(0, cleanupMigrationIndex);
+
+    expect(inspectMigrationHistory(migrationFilesOnDisk, appliedFiles)).toEqual({
+      appliedFiles,
+      pendingFiles: ['0076_file_object_cleanup.sql'],
     });
   });
 

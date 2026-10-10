@@ -19,7 +19,7 @@ leak an untracked object. Local development/test defaults on. Staging and produc
 and must be explicitly enabled after readiness checks.
 
 1. **Confirm the release and target.** The release commit must include migration
-   `0075_file_object_cleanup.sql`, the file cleanup worker handler, and producer gate
+   `0076_file_object_cleanup.sql`, the file cleanup worker handler, and producer gate
    `FILE_OBJECT_CLEANUP_ENABLED`. Confirm the target is staging and that its R2 credentials point
    only to the non-production private bucket. Do not use real customer files.
 2. **Deploy compatible worker code while producers are off.** Set
@@ -30,7 +30,7 @@ and must be explicitly enabled after readiness checks.
    then deploy the API release with producers still off. The handler remains active while the
    producer gate is off.
 3. **Apply the migration only through the protected workflow.** Merge/push the reviewed release to
-   `staging` and confirm the staging migration job applied `0075_file_object_cleanup.sql` and its
+   `staging` and confirm the staging migration job applied `0076_file_object_cleanup.sql` and its
    final migration-status check is clean. Follow [`migrations.md`](migrations.md); do not mark the
    file applied manually, edit the ledger, or run schema changes from application startup. The new
    code is safe before the migration only while producers remain off and no cleanup event is
@@ -171,7 +171,7 @@ SELECT id, tenant_id, event_type, status, attempts, max_attempts,
    If the worker is unsafe, stop worker consumption (for the embedded pilot, set
    `EMBEDDED_WORKER=false` and restart; for a separate worker, pause that service). Do not start an
    older worker that lacks the cleanup handler while any cleanup event remains unresolved.
-3. Do not roll back migration `0075` or manually delete/tombstone a file. Keep the compatible code
+3. Do not roll back migration `0076` or manually delete/tombstone a file. Keep the compatible code
    and schema in place, investigate the sanitized error and staging reproduction, then fix forward.
 4. Before any rollback to code without the handler, prove there are no `pending`, `leased`, or
    `dead` cleanup events. If unresolved events exist, keep the compatible worker available or keep
