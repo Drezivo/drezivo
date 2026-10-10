@@ -314,7 +314,7 @@ export function AdditionalGarments({
       ) : (
         <Button type="button" size="sm" variant="secondary" disabled={disabled || full} onClick={() => setPicking(true)}>
           <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-          {full ? `Up to ${MAX_GARMENTS_PER_BOOKING} pieces per booking` : "Add another dress"}
+          {full ? `Up to ${MAX_GARMENTS_PER_BOOKING} items per booking` : "Add another item"}
         </Button>
       )}
     </div>

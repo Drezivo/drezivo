@@ -6,6 +6,7 @@ import {
   branchId,
   customerId,
   fileObjectId,
+  paymentId,
   physicalAssetId,
   productId,
   productVariantId,
@@ -14,7 +15,7 @@ import {
   storefrontId,
 } from '../common/ids';
 import { currencyCode, moneyString } from '../common/money';
-import { paymentEvidenceStatus } from '../finance/payment-status';
+import { paymentEvidenceStatus, paymentStatus } from '../finance/payment-status';
 import { ianaTimezone, isoDate, isoInstant } from '../common/time';
 import { reservationPaymentProjection } from './list';
 import {
@@ -72,6 +73,20 @@ export const reservationDeliverySnapshot = z
   .strict();
 export type ReservationDeliverySnapshot = z.infer<typeof reservationDeliverySnapshot>;
 
+/**
+ * Money owed on top of the first payment after an edit raised the total once the renter had paid.
+ * Staff collect it at the counter and record it; pickup waits until every balance is collected.
+ */
+export const reservationBalancePayment = z
+  .object({
+    id: paymentId,
+    amount_minor: moneyString,
+    status: paymentStatus,
+    verified_at: isoInstant.nullable(),
+  })
+  .strict();
+export type ReservationBalancePayment = z.infer<typeof reservationBalancePayment>;
+
 export const reservationDetailCustomerProjection = z
   .object({
     customer_id: customerId.nullable(),
@@ -108,6 +123,8 @@ export const reservationDetail = z
     delivery_snapshot: reservationDeliverySnapshot,
     price_snapshot: reservationMoneySnapshot,
     payment: reservationPaymentProjection.nullable(),
+    /** Balances added by edits, oldest first. Optional so the API and app can deploy in either order. */
+    balance_payments: z.array(reservationBalancePayment).max(50).optional(),
     /**
      * Where the booking came from: `online` for a renter's storefront booking (they upload a payment
      * receipt for the owner to verify), `walk_in` for one staff created at the counter (staff log

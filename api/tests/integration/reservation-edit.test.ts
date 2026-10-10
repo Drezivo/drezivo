@@ -71,7 +71,15 @@ interface Booking {
 describe('reservation edit (PATCH /reservations/:id)', async () => {
   const { createApp } = await import('../../src/app.js');
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
-  const { confirmReservation, createStaffReservation, editReservation, pickupReservation, submitReservation } = await import(
+  const {
+    collectReservationBalance,
+    confirmReservation,
+    createStaffReservation,
+    editReservation,
+    getReservationDetail,
+    pickupReservation,
+    submitReservation,
+  } = await import(
     '../../src/modules/reservations/reservations.service.js'
   );
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
@@ -167,19 +175,63 @@ describe('reservation edit (PATCH /reservations/:id)', async () => {
     expect(await reservationState(seed, booking.id)).toEqual(before);
   });
 
-  it('asks staff to accept a lower total once the renter has paid, keeps the paid amount, and refuses a higher total', async () => {
-    const seed = await seedWorkspace('org_edit_paid', 'user_edit_paid');
-    const booking = await confirmBooking(seed, await createBooking(seed, 'paid'));
+  it('turns a higher total on a paid booking into a balance that pickup waits for until staff collect it', async () => {
+    const seed = await seedWorkspace('org_edit_balance', 'user_edit_balance');
+    const booking = await confirmBooking(seed, await createBooking(seed, 'balance'));
+    const longer = { version: booking.version, requested_interval: { start: booking.start, end: addHours(booking.end, 24) } };
 
-    // Pickup needs the paid amount to cover the total and there is no top-up flow, so a raise is refused.
-    const raised = await editReservation(context(seed, 'edit-paid-raise'), booking.id, {
+    const unconfirmed = await editReservation(context(seed, 'edit-balance-unconfirmed'), booking.id, longer);
+    expect(unconfirmed.body).toMatchObject({ success: false, error: { code: 'PRICE_CHANGE_NOT_ACCEPTED' } });
+
+    const raised = await editReservation(context(seed, 'edit-balance-raise'), booking.id, { ...longer, accept_price_change: true });
+    expect(raised.body).toMatchObject({ success: true, data: { price_changed: true, previous_due_now_minor: '265000' } });
+    const detail = await getReservationDetail(context(seed, 'edit-balance-detail'), booking.id);
+    // One more rental day at ₱400; the first payment stays as recorded.
+    expect(detail.payment).toMatchObject({ amount_minor: '265000', status: 'paid' });
+    expect(detail.balance_payments).toEqual([expect.objectContaining({ amount_minor: '40000', status: 'pending', verified_at: null })]);
+
+    const blocked = await pickupReservation(context(seed, 'edit-balance-pickup-blocked'), booking.id, { version: booking.version + 1 });
+    expect(blocked.body).toMatchObject({ success: false, error: { code: 'PAYMENT_PREREQUISITE_FAILED' } });
+
+    const balanceId = detail.balance_payments?.[0]?.id as string;
+    const wrongAmount = await collectReservationBalance(context(seed, 'edit-balance-wrong'), booking.id, balanceId, { verified_amount_minor: '30000' });
+    expect(wrongAmount.body).toMatchObject({ success: false, error: { code: 'PAYMENT_PREREQUISITE_FAILED' } });
+    const [collected, again] = await Promise.all([
+      collectReservationBalance(context(seed, 'edit-balance-collect'), booking.id, balanceId, { verified_amount_minor: '40000' }),
+      collectReservationBalance(context(seed, 'edit-balance-collect'), booking.id, balanceId, { verified_amount_minor: '40000' }),
+    ]);
+    expect(collected.body).toMatchObject({ success: true });
+    expect(again.body).toEqual(collected.body);
+
+    const picked = await pickupReservation(context(seed, 'edit-balance-pickup'), booking.id, { version: booking.version + 1 });
+    expect(picked.body).toMatchObject({ success: true, data: { reservation: { status: 'picked_up' } } });
+  });
+
+  it('closes an open balance when a later edit brings the total back down', async () => {
+    const seed = await seedWorkspace('org_edit_close', 'user_edit_close');
+    const booking = await confirmBooking(seed, await createBooking(seed, 'close'));
+    await editReservation(context(seed, 'edit-close-up'), booking.id, {
       version: booking.version,
       requested_interval: { start: booking.start, end: addHours(booking.end, 24) },
       accept_price_change: true,
     });
-    expect(raised.status).toBe(409);
-    expect(raised.body).toMatchObject({ success: false, error: { code: 'STATE_CONFLICT' } });
-    expect((await reservationState(seed, booking.id)).due_now_minor).toBe(265000);
+
+    const back = await editReservation(context(seed, 'edit-close-down'), booking.id, {
+      version: booking.version + 1,
+      requested_interval: { start: booking.start, end: booking.end },
+      accept_price_change: true,
+    });
+
+    expect(back.body).toMatchObject({ success: true });
+    const detail = await getReservationDetail(context(seed, 'edit-close-detail'), booking.id);
+    expect(detail.balance_payments).toEqual([expect.objectContaining({ amount_minor: '40000', status: 'failed' })]);
+    const picked = await pickupReservation(context(seed, 'edit-close-pickup'), booking.id, { version: booking.version + 2 });
+    expect(picked.body).toMatchObject({ success: true });
+  });
+
+  it('asks staff to accept a lower total once the renter has paid and keeps the paid amount', async () => {
+    const seed = await seedWorkspace('org_edit_paid', 'user_edit_paid');
+    const booking = await confirmBooking(seed, await createBooking(seed, 'paid'));
 
     const refused = await editReservation(context(seed, 'edit-paid-refused'), booking.id, {
       version: booking.version,

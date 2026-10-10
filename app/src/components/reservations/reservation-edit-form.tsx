@@ -1,7 +1,8 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { useMemo, useState } from "react";
+import { X } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 
 import type { ReservationDetail, ReservationEditRequestInput } from "@drezivo/contracts";
 
@@ -14,6 +15,8 @@ import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
 import { localDateTimeParts, zonedLocalDateTimeToInstant } from "@/lib/zoned-time";
+
+import { AdditionalGarments, type AdditionalGarment } from "./additional-garments";
 
 type Fulfillment = "pickup" | "delivery";
 
@@ -64,7 +67,20 @@ export function ReservationEditForm({
     setProblem(null);
   };
 
-  const built = buildEditBody(original, values, timeZone, Boolean(customer));
+  const [removedLineIds, setRemovedLineIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [addedItems, setAddedItems] = useState<AdditionalGarment[]>([]);
+  const updateAddedItems = useCallback((update: (current: AdditionalGarment[]) => AdditionalGarment[]) => {
+    setAddedItems(update);
+    setPriceChange(null);
+    setProblem(null);
+  }, []);
+  const checkInterval = intervalOf(values, timeZone);
+
+  const built = buildEditBody(original, values, timeZone, Boolean(customer), {
+    lines: detail.lines.map((line) => ({ id: line.id, variantId: line.variant_id })),
+    removedLineIds,
+    added: addedItems,
+  });
   const hasChanges = built.ok && Object.keys(built.body).length > 0;
 
   const save = async (acceptPriceChange: boolean) => {
@@ -182,6 +198,47 @@ export function ReservationEditForm({
         </div>
       </div>
 
+      <div className="mt-4">
+        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-dashboard-muted">Items on this booking</p>
+        <ul className="space-y-2">
+          {detail.lines
+            .filter((line) => !removedLineIds.has(line.id))
+            .map((line) => (
+              <li key={line.id} className="flex items-center justify-between gap-3 rounded-lg border border-dashboard-border px-3 py-2 text-sm">
+                <span className="min-w-0 truncate text-dashboard-navy">
+                  {line.name_snapshot}
+                  {line.variant.size_label ? ` · ${line.variant.size_label}` : ""}
+                </span>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  aria-label={`Remove ${line.name_snapshot} from this booking`}
+                  onClick={() => {
+                    setRemovedLineIds((current) => new Set([...current, line.id]));
+                    setPriceChange(null);
+                    setProblem(null);
+                  }}
+                  className="rounded-md p-1 text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy disabled:opacity-50"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+        </ul>
+        {removedLineIds.size > 0 ? (
+          <button
+            type="button"
+            className="mt-2 text-xs font-medium text-dashboard-accent underline-offset-4 hover:underline"
+            onClick={() => setRemovedLineIds(new Set())}
+          >
+            Undo removals
+          </button>
+        ) : null}
+        <div className="mt-3">
+          <AdditionalGarments disabled={disabled} garments={addedItems} onChange={updateAddedItems} requestedInterval={checkInterval} />
+        </div>
+      </div>
+
       {problem ? (
         <div role="alert" className="mt-3 rounded-lg bg-dashboard-danger/10 px-3 py-2 text-sm text-dashboard-danger">
           {problem}
@@ -236,14 +293,39 @@ type EditValues = {
 
 type EditBody = Omit<ReservationEditRequestInput, "version" | "accept_price_change">;
 
+type EditItems = {
+  lines: Array<{ id: string; variantId: string }>;
+  removedLineIds: ReadonlySet<string>;
+  added: ReadonlyArray<Pick<AdditionalGarment, "name" | "variantId">>;
+};
+
+/** The booking's dates as instants for availability checks, or null while they are incomplete. */
+function intervalOf(values: EditValues, timeZone: string): { start: string; end: string } | null {
+  const start = zonedLocalDateTimeToInstant(`${values.pickupDate}T${values.pickupTime}`, timeZone);
+  const end = zonedLocalDateTimeToInstant(`${values.dueDate}T${values.dueTime}`, timeZone);
+  return start && end && end > start ? { start: start.toISOString(), end: end.toISOString() } : null;
+}
+
 /** The changed fields as an API body, or the first problem staff need to fix. */
 export function buildEditBody(
   original: EditValues,
   values: EditValues,
   timeZone: string,
-  hasCustomer: boolean
+  hasCustomer: boolean,
+  items?: EditItems
 ): { ok: true; body: EditBody } | { ok: false; problem: string } {
   const body: EditBody = {};
+
+  if (items && (items.removedLineIds.size > 0 || items.added.length > 0)) {
+    const missingSize = items.added.find((item) => !item.variantId);
+    if (missingSize) return { ok: false, problem: `Choose a size for ${missingSize.name}.` };
+    const garments = [
+      ...items.lines.filter((line) => !items.removedLineIds.has(line.id)).map((line) => ({ line_id: line.id, variant_id: line.variantId })),
+      ...items.added.map((item) => ({ variant_id: item.variantId })),
+    ];
+    if (garments.length === 0) return { ok: false, problem: "Keep at least one item, or cancel the booking instead." };
+    body.garments = garments as EditBody["garments"];
+  }
 
   if (hasCustomer) {
     const customerChanged =

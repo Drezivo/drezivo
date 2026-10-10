@@ -8,6 +8,7 @@ import {
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
+import { lockReservationBalancePayments, type ReservationBalancePaymentRow } from './reservations.balance.repository.js';
 import {
   AssetUnavailableError,
   AssetUnreadyError,
@@ -116,6 +117,7 @@ export async function pickupReservationByStaff(
             paymentId: payment.payment_id,
           })
         : null;
+      const balances = await lockReservationBalancePayments(client, { tenantId: context.tenantId, reservationId });
       const allocations = await lockReservationAllocationsForReview(client, {
         tenantId: context.tenantId,
         branchId: context.branchId,
@@ -148,7 +150,7 @@ export async function pickupReservationByStaff(
         handovers.push(allocation);
       }
       assertPickupPolicyPrerequisites(reservation);
-      assertPickupPaymentPrerequisites(reservation, payment, receipt, verification);
+      assertPickupPaymentPrerequisites(reservation, payment, receipt, verification, balances);
 
       await client.query(`SAVEPOINT ${PICKUP_SAVEPOINT}`);
       savepointOpen = true;
@@ -310,16 +312,24 @@ function assertPickupPaymentPrerequisites(
   payment: LockedReservationPaymentRow | null,
   receipt: LockedReservationReceiptRow | null,
   verification: ReservationVerificationRow | null,
+  balances: ReservationBalancePaymentRow[],
 ): void {
   if (reservation.due_now_minor === 0) return;
   if (!payment) {
     throw new PaymentPrerequisiteFailedError('Reservation payment intent is missing.');
   }
+  if (balances.some((balance) => balance.status === 'pending')) {
+    throw new PaymentPrerequisiteFailedError('Collect the balance added by the last edit before pickup.');
+  }
+  // The first payment plus balances collected after edits must cover what is due now.
+  const collectedBalances = balances
+    .filter((balance) => balance.status === 'paid' && balance.verified_at !== null)
+    .reduce((sum, balance) => sum + Number(balance.amount_minor), 0);
   if (
     payment.status !== 'paid' ||
     payment.verified_at === null ||
     payment.currency !== reservation.currency ||
-    payment.amount_minor < reservation.due_now_minor
+    Number(payment.amount_minor) + collectedBalances < reservation.due_now_minor
   ) {
     throw new PaymentPrerequisiteFailedError('Verified merchant collection is required before pickup.');
   }
@@ -327,7 +337,7 @@ function assertPickupPaymentPrerequisites(
     !verification ||
     verification.decision !== 'verified' ||
     verification.verified_amount_minor === null ||
-    verification.verified_amount_minor < reservation.due_now_minor
+    verification.verified_amount_minor < payment.amount_minor
   ) {
     throw new PaymentPrerequisiteFailedError('A verified merchant decision is required before pickup.');
   }

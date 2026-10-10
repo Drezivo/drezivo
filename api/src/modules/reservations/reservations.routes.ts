@@ -12,6 +12,7 @@ import { readStaffReservationHold } from './reservations.hold-resume.service.js'
 import {
   attachReservationPaymentReceiptController,
   cancelReservationController,
+  collectReservationBalanceController,
   editReservationController,
   completeStaffReservationController,
   confirmReservationController,
@@ -37,8 +38,10 @@ import {
   requireReservationManagePermission,
   validateReservationCancel,
   validateReservationConfirm,
+  validateReservationBalanceCollect,
   validateReservationEdit,
   validateReservationId,
+  validateReservationPaymentId,
   validateReservationPaymentReceiptAttach,
   validateReservationPaymentVerify,
   validateReservationListQuery,
@@ -159,6 +162,20 @@ reservationsRouter.post(
   validateReservationCancel,
   requireReservationIdempotencyKey,
   cancelReservationController,
+);
+
+reservationsRouter.post(
+  '/reservations/:reservationId/balance-payments/:paymentId/collect',
+  requireStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireTenantAction('settlement'),
+  requireMerchantReservationReviewPermission,
+  validateReservationId,
+  validateReservationPaymentId,
+  validateReservationBalanceCollect,
+  requireReservationIdempotencyKey,
+  collectReservationBalanceController,
 );
 
 reservationsRouter.patch(

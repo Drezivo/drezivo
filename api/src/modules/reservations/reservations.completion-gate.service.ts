@@ -12,6 +12,7 @@ import {
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
+import { lockReservationBalancePayments } from './reservations.balance.repository.js';
 import {
   AssetUnavailableError,
   AssetUnreadyError,
@@ -113,7 +114,11 @@ export async function inspectReturnedReservationByStaff(
         reservationId,
       });
       // The readiness staff record applies to every garment returned on this booking.
-      const inspected = requireReturnedAllocations(context, allocations);
+      const returnedAllocations = requireReturnedAllocations(context, allocations);
+      const inspected = request.reservation_line_id
+        ? returnedAllocations.filter((allocation) => allocation.reservation_line_id === request.reservation_line_id)
+        : returnedAllocations;
+      if (inspected.length === 0) throw new NotFoundError('That item is not on this reservation.');
       const maintenance = new Map<string, number>();
       for (const allocation of inspected) {
         const open = await lockOpenAssetMaintenance(client, {
@@ -296,6 +301,10 @@ export async function completeReturnedReservationByStaff(
         paymentId: payment?.payment_id ?? null,
       });
       assertSettlementComplete(reservation, payment?.status ?? null, settlement);
+      const balances = await lockReservationBalancePayments(client, { tenantId: context.tenantId, reservationId });
+      if (balances.some((balance) => balance.status === 'pending')) {
+        throw new PaymentPrerequisiteFailedError('A balance added by an edit is still open and must be collected before completion.');
+      }
 
       await client.query(`SAVEPOINT ${COMPLETE_SAVEPOINT}`);
       savepointOpen = true;

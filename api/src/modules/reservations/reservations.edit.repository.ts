@@ -127,6 +127,7 @@ export async function applyReservationEdit(
     deliverySnapshot: Record<string, unknown>;
     priceSnapshot: Record<string, unknown>;
     rentalTotalMinor: number;
+    securityRequiredMinor: number;
     dueNowMinor: number;
   },
 ): Promise<number | null> {
@@ -140,6 +141,7 @@ export async function applyReservationEdit(
             price_snapshot = $10::jsonb,
             rental_total_minor = $11,
             due_now_minor = $12,
+            security_required_minor = $13,
             version = version + 1
       WHERE tenant_id = $1
         AND branch_id = $2
@@ -160,6 +162,7 @@ export async function applyReservationEdit(
       JSON.stringify(input.priceSnapshot),
       input.rentalTotalMinor,
       input.dueNowMinor,
+      input.securityRequiredMinor,
     ],
   );
   return result.rows[0]?.version ?? null;
@@ -180,4 +183,59 @@ export async function updatePendingReservationPaymentAmount(
     [input.tenantId, input.paymentId, input.amountMinor],
   );
   return result.rowCount === 1;
+}
+
+/** Lines a late-return alert refers to; removing them would erase that record. */
+export async function readLinesWithDisruptions(
+  client: PoolClient,
+  input: { tenantId: string; lineIds: string[] },
+): Promise<string[]> {
+  if (input.lineIds.length === 0) return [];
+  const result = await client.query<{ reservation_line_id: string }>(
+    `SELECT DISTINCT reservation_line_id FROM disruption
+      WHERE tenant_id = $1 AND reservation_line_id = ANY($2::uuid[])`,
+    [input.tenantId, input.lineIds],
+  );
+  return result.rows.map((row) => row.reservation_line_id);
+}
+
+/**
+ * Removes garments before handover: their allocations and lines. Only called for reservations that
+ * were never picked up and for lines no disruption refers to, so nothing else points at them.
+ */
+export async function deleteReservationLinesForEdit(
+  client: PoolClient,
+  input: { tenantId: string; reservationId: string; lineIds: string[] },
+): Promise<number> {
+  if (input.lineIds.length === 0) return 0;
+  await client.query(`DELETE FROM asset_allocation WHERE tenant_id = $1 AND reservation_line_id = ANY($2::uuid[])`, [
+    input.tenantId,
+    input.lineIds,
+  ]);
+  const removed = await client.query(
+    `DELETE FROM reservation_line WHERE tenant_id = $1 AND reservation_id = $2::uuid AND id = ANY($3::uuid[])`,
+    [input.tenantId, input.reservationId, input.lineIds],
+  );
+  return removed.rowCount ?? 0;
+}
+
+/**
+ * Numbers the lines 1..n in the given order. Lines first move to a negative range so the unique
+ * (reservation, line number) key never sees two lines with the same number mid-update.
+ */
+export async function renumberReservationLines(
+  client: PoolClient,
+  input: { tenantId: string; reservationId: string; orderedLineIds: string[] },
+): Promise<void> {
+  await client.query(
+    `UPDATE reservation_line SET line_number = -line_number WHERE tenant_id = $1 AND reservation_id = $2::uuid`,
+    [input.tenantId, input.reservationId],
+  );
+  await client.query(
+    `UPDATE reservation_line rl
+        SET line_number = ordered.position
+       FROM unnest($3::uuid[]) WITH ORDINALITY AS ordered(id, position)
+      WHERE rl.tenant_id = $1 AND rl.reservation_id = $2::uuid AND rl.id = ordered.id`,
+    [input.tenantId, input.reservationId, input.orderedLineIds],
+  );
 }

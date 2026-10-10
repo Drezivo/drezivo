@@ -23,6 +23,8 @@ import {
   removeClothingVariantRequest,
   restoreClothingRequest,
   restoreClothingResponse,
+  reservationBalanceCollectRequest,
+  reservationBalanceCollectResponse,
   reservationCancelRequest,
   reservationCancelResponse,
   reservationEditRequest,
@@ -175,6 +177,8 @@ import {
   type RemoveClothingVariantRequest,
   type RestoreClothingRequest,
   type RestoreClothingResponse,
+  type ReservationBalanceCollectRequest,
+  type ReservationBalanceCollectResponse,
   type ReservationCancelRequest,
   type ReservationCancelResponse,
   type ReservationEditRequestInput,
@@ -883,6 +887,20 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "POST",
         path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/complete-booking`,
         responseSchema: apiEnvelope(staffReservationCompleteResponse),
+      }),
+    collectReservationBalance: (
+      reservationId: string,
+      paymentId: string,
+      input: ReservationBalanceCollectRequest,
+      idempotencyKey: string
+    ) =>
+      request<ReservationBalanceCollectResponse>({
+        getToken,
+        body: reservationBalanceCollectRequest.parse(input),
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/balance-payments/${encodeURIComponent(paymentId)}/collect`,
+        responseSchema: apiEnvelope(reservationBalanceCollectResponse),
       }),
     editReservation: (
       reservationId: string,

@@ -426,7 +426,7 @@ describe("NewReservationSheet", () => {
     await fillDatesAndSelectProduct();
     await waitFor(() => expect(screen.getByRole("button", { name: "Reserve" })).not.toBeDisabled());
 
-    fireEvent.click(screen.getByRole("button", { name: /add another dress/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add another item/i }));
     fireEvent.click(await screen.findByRole("button", { name: "Add Emerald Gown" }));
     const size = within(await screen.findByRole("group", { name: "Emerald Gown size" })).getByRole("button", { name: /M · Emerald/i });
     // Only one piece exists for these dates, so the same size twice cannot be reserved.
@@ -436,7 +436,7 @@ describe("NewReservationSheet", () => {
 
     api.getStaffReservationAvailabilityCheck.mockResolvedValue({ data: { ...exactResponse, available_assets: 2 }, requestId: "req-exact-2" });
     fireEvent.click(screen.getByRole("button", { name: /Remove Emerald Gown from this booking/i }));
-    fireEvent.click(screen.getByRole("button", { name: /add another dress/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add another item/i }));
     fireEvent.click(await screen.findByRole("button", { name: "Add Emerald Gown" }));
     fireEvent.click(within(await screen.findByRole("group", { name: "Emerald Gown size" })).getByRole("button", { name: /M · Emerald/i }));
     expect(await screen.findByText("2 free pieces for these dates")).toBeTruthy();
