@@ -7,6 +7,7 @@ import {
   customerId,
   fileObjectId,
   physicalAssetId,
+  productId,
   productVariantId,
   reservationId,
   reservationLineId,
@@ -38,6 +39,8 @@ export const reservationLineDetail = z
   .object({
     id: reservationLineId,
     variant_id: productVariantId,
+    /** The clothing item the variant belongs to, so staff can rebook it. Optional for deploy order. */
+    product_id: productId.optional(),
     variant: z
       .object({
         sku: z.string().trim().min(1).max(120),

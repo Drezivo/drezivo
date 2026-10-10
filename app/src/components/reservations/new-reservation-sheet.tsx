@@ -2,7 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { CalendarDays, Check, ChevronDown, FileUp, Search, Shirt, TimerReset, UserRound } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   BranchBusinessHours,
@@ -12,6 +12,7 @@ import type {
   PaymentInstructions,
   PaymentMethodId,
   PermissionCode,
+  ProductId,
   ReservationSummary,
   ProductVariantId,
   StaffReservationAvailabilityCalendarResponse,
@@ -65,6 +66,29 @@ type HoldDraft = {
   notes: string;
 };
 
+/**
+ * A finished reservation (cancelled, expired, rejected) copied into a new booking: same clothing,
+ * customer, pickup or delivery and payment method, and the same dates while they are still ahead.
+ * Nothing is reserved until staff press Reserve, which re-checks availability as usual.
+ */
+export type ReservationRebookSource = {
+  referenceCode: string;
+  productId: ProductId;
+  variantId: ProductVariantId;
+  pickupAt: string;
+  dueAt: string;
+  eventDate: string | null;
+  fulfillmentMethod: "pickup" | "delivery";
+  paymentMethodId: PaymentMethodId | null;
+  customer: {
+    customerId: CustomerId | null;
+    fullName: string;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+  } | null;
+};
+
 export function NewReservationSheet({
   open,
   onOpenChange,
@@ -73,9 +97,12 @@ export function NewReservationSheet({
   permissionCodes,
   timeZone,
   resumeReservationId = null,
+  rebookFrom = null,
 }: {
   /** Reopen an existing live hold by id (after navigating away or refreshing). */
   resumeReservationId?: string | null;
+  /** Start a new booking pre-filled from a finished reservation (Continue). */
+  rebookFrom?: ReservationRebookSource | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onReservationChanged: (reservationId: string) => void;
@@ -119,7 +146,11 @@ export function NewReservationSheet({
   const [businessHours, setBusinessHours] = useState<BranchBusinessHours | null>(null);
   const [productsLoading, setProductsLoading] = useState(false);
   const [availabilityReloadVersion, setAvailabilityReloadVersion] = useState(0);
-  const [selectedProduct, setSelectedProduct] = useState<ClothingListItem | null>(null);
+  // Only the product id is needed; a rebook knows the id but not the full list item.
+  const [selectedProduct, setSelectedProduct] = useState<Pick<ClothingListItem, "product_id"> | null>(null);
+  // The size to select once a pre-filled product's detail loads, and which rebook was applied.
+  const pendingVariantIdRef = useRef<ProductVariantId | null>(null);
+  const appliedRebookRef = useRef<string | null>(null);
   const [productDetail, setProductDetail] = useState<ClothingDetail | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<ProductVariantId | "">("");
   const [variantSelectionError, setVariantSelectionError] = useState<string | null>(null);
@@ -335,8 +366,14 @@ export function NewReservationSheet({
             setVariantSelectionError("This flexible-fit clothing item is not configured correctly.");
           }
         } else {
-          setSelectedVariantId("");
+          const pending = pendingVariantIdRef.current;
+          const match = pending
+            ? result.data.variants.find((variant) => variant.id === pending && variant.status === "active")
+            : undefined;
+          setSelectedVariantId(match ? match.id : "");
+          if (pending && !match) setVariantSelectionError("The size from the original reservation is no longer available. Choose a size.");
         }
+        pendingVariantIdRef.current = null;
       })
       .catch((error) => {
         if (!cancelled) setNotice({ tone: "attention", text: toMessage(error) });
@@ -475,7 +512,50 @@ export function NewReservationSheet({
     }
   }, [holdExpired, step]);
 
+  useEffect(() => {
+    if (!open || !rebookFrom || step !== "select" || appliedRebookRef.current === rebookFrom.referenceCode) return;
+    appliedRebookRef.current = rebookFrom.referenceCode;
+    pendingVariantIdRef.current = rebookFrom.variantId;
+    setSelectedProduct({ product_id: rebookFrom.productId });
+
+    const pickup = localDateTimeParts(new Date(rebookFrom.pickupAt), timeZone);
+    const due = localDateTimeParts(new Date(rebookFrom.dueAt), timeZone);
+    const datesAhead = pickup.date >= todayInTimeZone(timeZone);
+    if (datesAhead) {
+      setPickupDate(pickup.date);
+      setPickupTime(pickup.time);
+      setDueDate(due.date);
+      setDueTime(due.time);
+      setCalendarMonth(parseCalendarDate(pickup.date) ?? new Date());
+      if (rebookFrom.eventDate) setEventDate(rebookFrom.eventDate);
+    }
+    setFulfillmentMethod(rebookFrom.fulfillmentMethod);
+    if (rebookFrom.paymentMethodId) setPaymentMethodId(rebookFrom.paymentMethodId);
+
+    const customer = rebookFrom.customer;
+    if (customer?.customerId) {
+      // The customer step searches by name; the original customer is pre-selected in the results.
+      setCustomerMode("existing");
+      setCustomerSearch(customer.fullName);
+      setSelectedCustomerId(customer.customerId);
+    } else if (customer) {
+      setCustomerMode("new");
+      setFullName(customer.fullName);
+      setPhone(customer.phone ?? "");
+      setEmail(customer.email ?? "");
+      setAddress(customer.address ?? "");
+    }
+    setNotice({
+      tone: "info",
+      text: datesAhead
+        ? `Copied from ${rebookFrom.referenceCode}. Check that the dates are still free, then reserve.`
+        : `Copied from ${rebookFrom.referenceCode}. Its dates have passed, so choose new dates.`,
+    });
+  }, [open, rebookFrom, step, timeZone]);
+
   const reset = () => {
+    appliedRebookRef.current = null;
+    pendingVariantIdRef.current = null;
     reserveGuard.resetIntent();
     completeGuard.resetIntent();
     cancelGuard.resetIntent();

@@ -6,6 +6,7 @@ import {
   Clock3,
   CreditCard,
   PackageCheck,
+  RotateCcw,
   Shirt,
   Truck,
   UserRound,
@@ -22,6 +23,8 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import type { DrezivoApiError } from "@/lib/drezivo-api";
 import { displaySizeLabel } from "@/lib/catalogue-display";
 import { cn } from "@/lib/utils";
+
+import type { ReservationRebookSource } from "./new-reservation-sheet";
 
 import {
   ReservationMutationActions,
@@ -41,6 +44,7 @@ export function ReservationDetailsSheet({
   error,
   isLoading,
   onOpenChange,
+  onContinue,
   onMutationSuccess,
   onRefreshRequired,
   onRetry,
@@ -48,6 +52,8 @@ export function ReservationDetailsSheet({
   reservationId,
   timeZone,
 }: {
+  /** Start a new booking copied from this one; shown on cancelled, expired and rejected reservations. */
+  onContinue?: (source: ReservationRebookSource) => void;
   detail: ReservationDetail | null;
   error: DrezivoApiError | null;
   isLoading: boolean;
@@ -100,6 +106,7 @@ export function ReservationDetailsSheet({
           <ReservationDetails
             detail={detail}
             notice={notice}
+            onContinue={onContinue}
             onMutationSuccess={onMutationSuccess}
             onNotice={setNotice}
             onRefreshRequired={onRefreshRequired}
@@ -115,6 +122,7 @@ export function ReservationDetailsSheet({
 function ReservationDetails({
   detail,
   notice,
+  onContinue,
   onMutationSuccess,
   onNotice,
   onRefreshRequired,
@@ -123,6 +131,7 @@ function ReservationDetails({
 }: {
   detail: ReservationDetail;
   notice: ReservationMutationNotice | null;
+  onContinue: ((source: ReservationRebookSource) => void) | undefined;
   onMutationSuccess: () => void;
   onNotice: (notice: ReservationMutationNotice | null) => void;
   onRefreshRequired: () => void;
@@ -179,6 +188,10 @@ function ReservationDetails({
           onMutationSuccess={onMutationSuccess}
           onRefreshRequired={onRefreshRequired}
         />
+
+        {onContinue && CONTINUABLE_STATUSES.has(detail.status) && permissionCodes.includes("reservations.manage") ? (
+          <ContinueReservation detail={detail} onContinue={onContinue} />
+        ) : null}
       </header>
 
       <div className="flex flex-1 flex-col gap-3 p-4">
@@ -473,6 +486,60 @@ function ReservationDetails({
           )}
         </DetailCard>
       </div>
+    </div>
+  );
+}
+
+const CONTINUABLE_STATUSES: ReadonlySet<ReservationDetail["status"]> = new Set(["cancelled", "expired", "rejected"]);
+
+/**
+ * A finished reservation stays in history; Continue starts a new booking with the same details so
+ * staff only re-check the dates. Needs the first line's clothing item, so very old reservations
+ * without it cannot be continued.
+ */
+function ContinueReservation({
+  detail,
+  onContinue,
+}: {
+  detail: ReservationDetail;
+  onContinue: (source: ReservationRebookSource) => void;
+}) {
+  const line = detail.lines[0];
+  if (!line?.product_id) return null;
+  const productId = line.product_id;
+  const customer = detail.customer.snapshot;
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashboard-border bg-dashboard-active/40 p-3">
+      <p className="text-sm text-dashboard-muted">
+        This reservation is {detail.status === "expired" ? "expired" : detail.status}. Continue it as a new booking with the same details.
+      </p>
+      <Button
+        type="button"
+        size="sm"
+        onClick={() =>
+          onContinue({
+            referenceCode: detail.reference_code,
+            productId,
+            variantId: line.variant_id,
+            pickupAt: detail.pickup_at,
+            dueAt: detail.due_at,
+            eventDate: detail.event_date ?? null,
+            fulfillmentMethod: detail.delivery_snapshot.fulfillment_method,
+            paymentMethodId: detail.payment?.payment_method_id ?? null,
+            customer: customer
+              ? {
+                  customerId: detail.customer.customer_id,
+                  fullName: customer.full_name,
+                  phone: customer.phone,
+                  email: customer.email,
+                  address: customer.address,
+                }
+              : null,
+          })
+        }
+      >
+        <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Continue
+      </Button>
     </div>
   );
 }
