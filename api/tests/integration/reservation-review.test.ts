@@ -418,12 +418,12 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     expect(customerState.customer_snapshot).toEqual({
       full_name: 'Owner Fast Customer',
       phone: '09170000032',
-      email: null,
+      email: 'walkin@example.test',
       address: '123 Review Street, Quezon City',
     });
   });
 
-  it('requires an inline address to repair a held pre-change snapshot, then persists it atomically', async () => {
+  it('fills missing existing-customer email and address at submission without replacing saved phone', async () => {
     const seed = await seedWorkspace('org_rsv_address_legacy', 'user_rsv_address_legacy', 'cash');
     const held = await createHold(seed, 'address-legacy');
     const customer = await reservationCustomerState(seed, held.id);
@@ -432,13 +432,13 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       await client.query(
         `UPDATE reservation
-            SET customer_snapshot = customer_snapshot - 'address'
+            SET customer_snapshot = customer_snapshot - 'address' - 'email'
           WHERE tenant_id = $1 AND id = $2`,
         [seed.tenantId, held.id],
       );
       await client.query(
         `UPDATE customer
-            SET address = NULL
+            SET email = NULL, address = NULL
           WHERE tenant_id = $1 AND id = $2::uuid`,
         [seed.tenantId, customer.customer_id],
       );
@@ -455,6 +455,32 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       error: { code: 'VALIDATION_FAILED' },
     });
 
+    const conflictingPhone = await submitReservationForConfirmation(
+      reviewContext(seed, 'req-address-legacy-conflict', 'idem-address-legacy-conflict'),
+      held.id,
+      {
+        version: held.version,
+        terms_accepted: true,
+        customer: {
+          source: 'existing',
+          customer_id: customer.customer_id as CustomerId,
+          phone: '09999999999',
+          email: 'repaired-customer@example.test',
+          address: '456 Legacy Address Avenue, Quezon City',
+        },
+      },
+    );
+    expect(conflictingPhone.status).toBe(422);
+    expect((await reservationReviewState(seed, held.id)).reservation.status).toBe('held');
+    const unchangedProfile = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const profile = await client.query<{ phone: string | null; email: string | null; address: string | null }>(
+        `SELECT phone, email, address FROM customer WHERE tenant_id = $1 AND id = $2::uuid`,
+        [seed.tenantId, customer.customer_id],
+      );
+      return requireRow(profile.rows, 'unchanged customer after conflict');
+    });
+    expect(unchangedProfile).toEqual({ phone: '09170000032', email: null, address: null });
+
     const submitted = await submitReservationForConfirmation(
       reviewContext(seed, 'req-address-legacy', 'idem-address-legacy'),
       held.id,
@@ -464,6 +490,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
         customer: {
           source: 'existing',
           customer_id: customer.customer_id as CustomerId,
+          email: 'repaired-customer@example.test',
           address: '456 Legacy Address Avenue, Quezon City',
         },
       },
@@ -472,16 +499,20 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
 
     const repaired = await reservationCustomerState(seed, held.id);
     expect(repaired.customer_snapshot).toMatchObject({
+      phone: '09170000032',
+      email: 'repaired-customer@example.test',
       address: '456 Legacy Address Avenue, Quezon City',
     });
     await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const profile = await client.query<{ address: string | null }>(
-        `SELECT address FROM customer WHERE tenant_id = $1 AND id = $2::uuid`,
+      const profile = await client.query<{ phone: string | null; email: string | null; address: string | null }>(
+        `SELECT phone, email, address FROM customer WHERE tenant_id = $1 AND id = $2::uuid`,
         [seed.tenantId, customer.customer_id],
       );
-      expect(requireRow(profile.rows, 'legacy customer').address).toBe(
-        '456 Legacy Address Avenue, Quezon City',
-      );
+      expect(requireRow(profile.rows, 'legacy customer')).toEqual({
+        phone: '09170000032',
+        email: 'repaired-customer@example.test',
+        address: '456 Legacy Address Avenue, Quezon City',
+      });
     });
   });
 
@@ -744,6 +775,147 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       cash_tendered_minor: Number(tenderedMinor),
       change_due_minor: 20_000,
     });
+  });
+
+  it('saves edited existing-customer fields with the submitted reservation snapshot and rejects stale edits', async () => {
+    const seed = await seedWorkspace('org_rsv032_customer_profile_edit', 'user_rsv032_customer_profile_edit', 'cash');
+    const held = await createWalkInHold(seed, 'customer-profile-edit');
+    const customer = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ id: string; updated_at: Date }>(
+        `INSERT INTO customer (tenant_id, full_name, phone, email, address, social_media, notes)
+         VALUES ($1, 'Before Edit', '09170000090', 'before@example.test', 'Old address', '@before', 'Old note')
+         RETURNING id, updated_at`,
+        [seed.tenantId],
+      );
+      return requireRow(result.rows, 'editable customer profile');
+    });
+    const cashAmount = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ amount_minor: number }>(
+        `SELECT amount_minor FROM payment WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, held.paymentId],
+      );
+      return String(requireRow(result.rows, 'editable-profile payment').amount_minor);
+    });
+    const profileEdits = {
+      full_name: 'After Edit',
+      phone: '09170000091',
+      email: 'after@example.test',
+      address: 'New address',
+      social_media: null,
+      notes: null,
+      expected_updated_at: customer.updated_at.toISOString(),
+    };
+    const completed = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-customer-profile-edit', 'idem-rsv032-customer-profile-edit'),
+      held.id,
+      {
+        version: 1,
+        terms_accepted: true,
+        customer: { source: 'existing', customer_id: customer.id as CustomerId, profile: profileEdits },
+        cash_collection: { amount_tendered_minor: cashAmount },
+      },
+    );
+    expect(completed.status).toBe(200);
+    expect(completed.body).toMatchObject({
+      success: true,
+      data: { completion_state: 'confirmed', reservation: { status: 'confirmed' } },
+    });
+    const persisted = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{
+        full_name: string;
+        phone: string;
+        email: string;
+        address: string;
+        social_media: string | null;
+        notes: string | null;
+        customer_id: string | null;
+        customer_snapshot: Record<string, unknown>;
+      }>(
+        `SELECT c.full_name, c.phone, c.email, c.address, c.social_media, c.notes,
+                r.customer_id, r.customer_snapshot
+           FROM customer c
+           JOIN reservation r ON r.tenant_id = c.tenant_id AND r.customer_id = c.id
+          WHERE c.tenant_id = $1 AND r.id = $2`,
+        [seed.tenantId, held.id],
+      );
+      return requireRow(result.rows, 'completed profile and reservation snapshot');
+    });
+    expect(persisted).toMatchObject({
+      full_name: 'After Edit',
+      phone: '09170000091',
+      email: 'after@example.test',
+      address: 'New address',
+      social_media: null,
+      notes: null,
+      customer_id: customer.id,
+      customer_snapshot: {
+        full_name: 'After Edit',
+        phone: '09170000091',
+        email: 'after@example.test',
+        address: 'New address',
+      },
+    });
+    expect(persisted.customer_snapshot).not.toHaveProperty('social_media');
+    expect(persisted.customer_snapshot).not.toHaveProperty('notes');
+
+    const staleSeed = await seedWorkspace('org_rsv032_customer_profile_stale', 'user_rsv032_customer_profile_stale', 'cash');
+    const staleHeld = await createWalkInHold(staleSeed, 'customer-profile-stale');
+    const staleCustomer = await withTenantTransaction(staleSeed.tenantId, staleSeed.principalId, async (client) => {
+      const result = await client.query<{ id: string; updated_at: Date }>(
+        `INSERT INTO customer (tenant_id, full_name, phone, email, address)
+         VALUES ($1, 'Before Concurrent Edit', '09170000092', 'stale@example.test', 'Old address')
+         RETURNING id, updated_at`,
+        [staleSeed.tenantId],
+      );
+      return requireRow(result.rows, 'stale editable customer profile');
+    });
+    await withTenantTransaction(staleSeed.tenantId, staleSeed.principalId, async (client) => {
+      await client.query(
+        `UPDATE customer
+            SET full_name = 'Concurrent Edit',
+                updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+          WHERE tenant_id = $1 AND id = $2::uuid`,
+        [staleSeed.tenantId, staleCustomer.id],
+      );
+    });
+    const staleResult = await completeStaffReservation(
+      reviewContext(staleSeed, 'req-rsv032-customer-profile-stale', 'idem-rsv032-customer-profile-stale'),
+      staleHeld.id,
+      {
+        version: 1,
+        terms_accepted: true,
+        customer: {
+          source: 'existing',
+          customer_id: staleCustomer.id as CustomerId,
+          profile: {
+            full_name: 'Should Not Persist',
+            phone: '09170000093',
+            email: 'should-not-persist@example.test',
+            address: 'New address',
+            social_media: null,
+            notes: null,
+            expected_updated_at: staleCustomer.updated_at.toISOString(),
+          },
+        },
+      },
+    );
+    expectFailure(staleResult, 'STALE_VERSION');
+    const unchanged = await withTenantTransaction(staleSeed.tenantId, staleSeed.principalId, async (client) => {
+      const profile = await client.query<{ full_name: string; phone: string; customer_id: string | null }>(
+        `SELECT c.full_name, c.phone, r.customer_id
+           FROM customer c
+           CROSS JOIN reservation r
+          WHERE c.tenant_id = $1 AND c.id = $2::uuid AND r.tenant_id = $1 AND r.id = $3`,
+        [staleSeed.tenantId, staleCustomer.id, staleHeld.id],
+      );
+      return requireRow(profile.rows, 'unchanged stale profile and hold');
+    });
+    expect(unchanged).toMatchObject({
+      full_name: 'Concurrent Edit',
+      phone: '09170000092',
+      customer_id: null,
+    });
+    expect((await reservationReviewState(staleSeed, staleHeld.id)).reservation.status).toBe('held');
   });
 
   it('attaches and verifies manual QR evidence before confirming the reservation', async () => {
@@ -1137,6 +1309,154 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       payment_status: 'paid',
       financial_followup_required: true,
     });
+  });
+
+  it('atomically saves or links a customer while cancelling an unfinished hold and replays safely', async () => {
+    const seed = await seedWorkspace('org_rsv041_cancel_save_customer', 'user_rsv041_cancel_save_customer', 'cash');
+    const requestWithoutCustomer = {
+      ...(await createRequest(seed)),
+      customer: undefined,
+    };
+    const created = await createStaffReservation(
+      reviewContext(seed, 'req-cancel-save-customer-create', 'idem-cancel-save-customer-create'),
+      requestWithoutCustomer,
+    );
+    if (created.status !== 201 || created.body.success !== true) {
+      throw new Error('Expected an anonymous held reservation.');
+    }
+    const reservationId = created.body.data.reservation.id;
+    const cancelContext = reviewContext(seed, 'req-cancel-save-customer', 'idem-cancel-save-customer');
+    const cancelInput = {
+      version: 1,
+      customer: {
+        source: 'new' as const,
+        customer: {
+          full_name: 'Saved After Cancel',
+          phone: '09170000032',
+          email: 'saved-after-cancel@example.test',
+        },
+      },
+    };
+    const cancelled = await cancelReservation(cancelContext, reservationId, cancelInput);
+    expect(cancelled.status).toBe(200);
+    expect(cancelled.body).toMatchObject({ success: true, data: { reservation: { status: 'cancelled', version: 2 } } });
+    const replay = await cancelReservation(cancelContext, reservationId, cancelInput);
+    expect(replay).toEqual(cancelled);
+
+    const persisted = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const customerState = await client.query<{
+        status: string;
+        customer_id: string | null;
+        customer_snapshot: Record<string, unknown> | null;
+        payment_status: string | null;
+        payment_count: number;
+        receipt_count: number;
+        customer_count: number;
+      }>(
+        `SELECT r.status, r.customer_id, r.customer_snapshot,
+                p.status AS payment_status,
+                (SELECT count(*)::int FROM payment px WHERE px.tenant_id = r.tenant_id AND px.reservation_id = r.id) AS payment_count,
+                (SELECT count(*)::int FROM payment_receipt pr JOIN payment pp ON pp.tenant_id = pr.tenant_id AND pp.id = pr.payment_id
+                  WHERE pp.tenant_id = r.tenant_id AND pp.reservation_id = r.id) AS receipt_count,
+                (SELECT count(*)::int FROM customer c WHERE c.tenant_id = r.tenant_id) AS customer_count
+           FROM reservation r
+           LEFT JOIN payment p ON p.tenant_id = r.tenant_id AND p.reservation_id = r.id
+          WHERE r.tenant_id = $1 AND r.id = $2`,
+        [seed.tenantId, reservationId],
+      );
+      return requireRow(customerState.rows, 'cancelled reservation customer/payment state');
+    });
+    expect(persisted.status).toBe('cancelled');
+    expect(persisted.customer_id).toBeTruthy();
+    expect(persisted.customer_snapshot).toMatchObject({
+      full_name: 'Saved After Cancel',
+      phone: '09170000032',
+      email: 'saved-after-cancel@example.test',
+      address: null,
+    });
+    expect(persisted).toMatchObject({ payment_status: 'pending', payment_count: 1, receipt_count: 0, customer_count: 1 });
+
+    const existingSeed = await seedWorkspace('org_rsv041_cancel_link_existing', 'user_rsv041_cancel_link_existing', 'cash');
+    const existingHold = await createHold(existingSeed, 'cancel-link-existing');
+    const existingCustomer = (await reservationCustomerState(existingSeed, existingHold.id)).customer_id;
+    expect(existingCustomer).toBeTruthy();
+    await withTenantTransaction(existingSeed.tenantId, existingSeed.principalId, async (client) => {
+      await client.query(
+        `UPDATE customer SET address = NULL WHERE tenant_id = $1 AND id = $2::uuid`,
+        [existingSeed.tenantId, existingCustomer],
+      );
+    });
+    const linked = await cancelReservation(
+      reviewContext(existingSeed, 'req-cancel-link-existing', 'idem-cancel-link-existing'),
+      existingHold.id,
+      { version: 1, customer: { source: 'existing', customer_id: existingCustomer as CustomerId } },
+    );
+    expect(linked.status).toBe(200);
+    const linkedState = await reservationCustomerState(existingSeed, existingHold.id);
+    expect(linkedState.customer_id).toBe(existingCustomer);
+    expect(linkedState.customer_snapshot).toMatchObject({ address: null });
+    const existingProfileAddress = await withTenantTransaction(existingSeed.tenantId, existingSeed.principalId, async (client) => {
+      const result = await client.query<{ address: string | null }>(
+        `SELECT address FROM customer WHERE tenant_id = $1 AND id = $2::uuid`,
+        [existingSeed.tenantId, existingCustomer],
+      );
+      return requireRow(result.rows, 'linked existing customer').address;
+    });
+    expect(existingProfileAddress).toBeNull();
+  });
+
+  it('rolls back a customer insert if cancellation conflicts and rejects stale versions before saving', async () => {
+    const seed = await seedWorkspace('org_rsv041_cancel_save_rollback', 'user_rsv041_cancel_save_rollback', 'cash');
+    const attached = await createHold(seed, 'cancel-save-rollback');
+    const mismatched = await cancelReservation(
+      reviewContext(seed, 'req-cancel-save-mismatch', 'idem-cancel-save-mismatch'),
+      attached.id,
+      {
+        version: 1,
+        customer: {
+          source: 'new',
+          customer: {
+            full_name: 'Must Roll Back',
+            phone: '09170000033',
+            address: '456 Review Street, Quezon City',
+          },
+        },
+      },
+    );
+    expectFailure(mismatched, 'STATE_CONFLICT');
+    expect((await reservationReviewState(seed, attached.id)).reservation.status).toBe('held');
+    const customerCount = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ count: number }>(`SELECT count(*)::int AS count FROM customer WHERE tenant_id = $1`, [seed.tenantId]);
+      return result.rows[0]?.count ?? 0;
+    });
+    expect(customerCount).toBe(1);
+
+    const staleSeed = await seedWorkspace('org_rsv041_cancel_save_stale', 'user_rsv041_cancel_save_stale', 'cash');
+    const anonymousRequest = { ...(await createRequest(staleSeed)), customer: undefined };
+    const staleCreated = await createStaffReservation(
+      reviewContext(staleSeed, 'req-cancel-save-stale-create', 'idem-cancel-save-stale-create'),
+      anonymousRequest,
+    );
+    if (staleCreated.status !== 201 || staleCreated.body.success !== true) {
+      throw new Error('Expected an anonymous held reservation for stale-version coverage.');
+    }
+    const stale = await cancelReservation(
+      reviewContext(staleSeed, 'req-cancel-save-stale', 'idem-cancel-save-stale'),
+      staleCreated.body.data.reservation.id,
+      {
+        version: 2,
+        customer: {
+          source: 'new',
+          customer: { full_name: 'Stale Customer', phone: '09170000034', address: '789 Review Street' },
+        },
+      },
+    );
+    expectFailure(stale, 'STALE_VERSION');
+    expect((await reservationReviewState(staleSeed, staleCreated.body.data.reservation.id)).reservation.status).toBe('held');
+    expect(await withTenantTransaction(staleSeed.tenantId, staleSeed.principalId, async (client) => {
+      const result = await client.query<{ count: number }>(`SELECT count(*)::int AS count FROM customer WHERE tenant_id = $1`, [staleSeed.tenantId]);
+      return result.rows[0]?.count ?? 0;
+    })).toBe(0);
   });
 
   it('keeps staff cancellation idempotent, rejects post-pickup cancellation, and lets expiry win at the deadline', async () => {
@@ -2505,6 +2825,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       customer: {
         full_name: fullName,
         phone: '09170000032',
+        email: 'walkin@example.test',
         address: '123 Review Street, Quezon City',
       },
     };

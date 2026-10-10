@@ -38,6 +38,17 @@ function detailWith(overrides: Record<string, unknown>): ReservationDetail {
         measurements_snapshot: {},
         pricing_snapshot: { rental_minor: "550000", deposit_minor: "500000", currency: "PHP" },
       },
+      {
+        id: "00000000-0000-4000-8000-000000000108",
+        variant_id: "00000000-0000-4000-8000-000000000109",
+        product_id: "00000000-0000-4000-8000-000000000110",
+        variant: { sku: "CEL-M", size_label: "M", color_label: "Ivory", image_url: null },
+        current_asset_readiness: "ready",
+        line_number: 2,
+        name_snapshot: "Celestine Petite",
+        measurements_snapshot: {},
+        pricing_snapshot: { rental_minor: "550000", deposit_minor: "500000", currency: "PHP" },
+      },
     ],
     pickup_at: "2026-10-17T02:00:00.000Z",
     due_at: "2026-10-20T02:00:00.000Z",
@@ -80,16 +91,28 @@ function renderSheet(detail: ReservationDetail, permissionCodes: PermissionCode[
 }
 
 describe("ReservationDetailsSheet", () => {
-  it("continues a cancelled reservation as a new booking with the same details", () => {
+  it("starts a replacement reservation with every original line and the same available details", () => {
     const { onContinue } = renderSheet(detailWith({}));
 
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create new reservation from this/i }));
 
     expect(onContinue).toHaveBeenCalledTimes(1);
     expect(onContinue).toHaveBeenCalledWith({
       referenceCode: "RSV-CONT-001",
-      productId: "00000000-0000-4000-8000-000000000107",
-      variantId: "00000000-0000-4000-8000-000000000104",
+      lines: [
+        {
+          sourceLineId: "00000000-0000-4000-8000-000000000103",
+          productId: "00000000-0000-4000-8000-000000000107",
+          variantId: "00000000-0000-4000-8000-000000000104",
+          name: "Celestine",
+        },
+        {
+          sourceLineId: "00000000-0000-4000-8000-000000000108",
+          productId: "00000000-0000-4000-8000-000000000110",
+          variantId: "00000000-0000-4000-8000-000000000109",
+          name: "Celestine Petite",
+        },
+      ],
       pickupAt: "2026-10-17T02:00:00.000Z",
       dueAt: "2026-10-20T02:00:00.000Z",
       eventDate: "2026-10-18",
@@ -105,19 +128,19 @@ describe("ReservationDetailsSheet", () => {
     });
   });
 
-  it.each(["expired", "rejected"] as const)("offers Continue on %s reservations", (status) => {
+  it.each(["expired", "rejected"] as const)("offers rebooking on %s reservations", (status) => {
     renderSheet(detailWith({ status }));
-    expect(screen.getByRole("button", { name: /continue/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /create new reservation from this/i })).toBeTruthy();
   });
 
   it("does not offer Continue on live reservations", () => {
     renderSheet(detailWith({ status: "pending_confirmation" }));
-    expect(screen.queryByRole("button", { name: /continue/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /create new reservation from this/i })).toBeNull();
   });
 
   it("hides Continue without reservation management permission", () => {
     renderSheet(detailWith({}), []);
-    expect(screen.queryByRole("button", { name: /continue/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /create new reservation from this/i })).toBeNull();
   });
 
   it("shows a delivery request the shop must arrange, with the renter's address and contact actions", () => {
