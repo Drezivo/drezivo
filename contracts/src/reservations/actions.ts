@@ -184,8 +184,9 @@ export type ReservationEditCustomer = z.infer<typeof reservationEditCustomer>;
  * PATCH /reservations/:id: staff corrections before handover (held, pending confirmation, or
  * confirmed). Send only what changes. New dates are re-checked against stock and re-priced with
  * the price terms accepted at booking, and swap the booked garments in one transaction: if any
- * garment is not free, nothing changes. A total change after the renter paid or uploaded a receipt
- * needs `accept_price_change`, because the paid amount stays as recorded.
+ * garment is not free, nothing changes. Once the renter paid or uploaded a receipt, the paid amount
+ * stays as recorded: a lower total needs `accept_price_change` (staff refund the difference) and a
+ * higher total is refused, since pickup requires the paid amount to cover the total.
  */
 export const reservationEditRequest = versionedAction
   .extend({

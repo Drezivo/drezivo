@@ -159,13 +159,13 @@ describe("ReservationDetailsSheet", () => {
     expect(screen.queryByRole("button", { name: /edit details/i })).toBeNull();
   });
 
-  it("switches a paid booking to delivery after staff accept the new price, sending one request per press", async () => {
+  it("switches a paid delivery booking to pickup after staff accept the lower price, sending one request per press", async () => {
     const { DrezivoApiError } = await import("@/lib/drezivo-api");
     api.editReservation.mockReset();
     api.editReservation
       .mockRejectedValueOnce(
         new (DrezivoApiError as unknown as new (message: string, options: object) => Error)(
-          "This change makes the amount due ₱10,750.00 instead of ₱10,500.00, and the renter already paid or sent a receipt. Confirm the price change to save it.",
+          "This change lowers the amount due to ₱10,250.00 from ₱10,500.00, and the renter already paid or sent a receipt. Confirm the price change to save it, then refund the difference.",
           { code: "PRICE_CHANGE_NOT_ACCEPTED", status: 409 }
         )
       )
@@ -173,11 +173,12 @@ describe("ReservationDetailsSheet", () => {
         data: {
           price_changed: true,
           previous_due_now_minor: "1050000",
-          reservation: { price_snapshot: { due_now_minor: "1075000" } },
+          reservation: { price_snapshot: { due_now_minor: "1025000" } },
         },
       });
     const paid = detailWith({
       status: "confirmed",
+      delivery_snapshot: { fulfillment_method: "delivery", fee_minor: "25000", terms: "set_fee" },
       payment: {
         id: "00000000-0000-4000-8000-000000000105",
         payment_method_id: "00000000-0000-4000-8000-000000000106",
@@ -193,27 +194,27 @@ describe("ReservationDetailsSheet", () => {
     const { onMutationSuccess } = renderSheet(paid);
 
     fireEvent.click(screen.getByRole("button", { name: /edit details/i }));
-    fireEvent.click(screen.getByRole("radio", { name: "Delivery" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Pickup" }));
     const save = screen.getByRole("button", { name: "Save changes" });
     fireEvent.click(save);
     fireEvent.click(save);
 
     expect(await screen.findByText(/Confirm the price change to save it/)).toBeTruthy();
     expect(api.editReservation).toHaveBeenCalledTimes(1);
-    expect(api.editReservation.mock.calls[0]?.[1]).toEqual({ version: 2, fulfillment_method: "delivery" });
+    expect(api.editReservation.mock.calls[0]?.[1]).toEqual({ version: 2, fulfillment_method: "pickup" });
 
     fireEvent.click(screen.getByRole("button", { name: "Save with the new price" }));
     await waitFor(() => expect(onMutationSuccess).toHaveBeenCalledTimes(1));
-    expect(api.editReservation.mock.calls[1]?.[1]).toEqual({ version: 2, fulfillment_method: "delivery", accept_price_change: true });
+    expect(api.editReservation.mock.calls[1]?.[1]).toEqual({ version: 2, fulfillment_method: "pickup", accept_price_change: true });
     // A new intent gets a new idempotency key; the refused one is not replayed.
     expect(api.editReservation.mock.calls[1]?.[2]).not.toBe(api.editReservation.mock.calls[0]?.[2]);
   });
 
-  it("tells staff to collect the difference when the total rose after payment", () => {
+  it("tells staff to refund the difference when the total dropped after payment", () => {
     renderSheet(
       detailWith({
         status: "confirmed",
-        price_snapshot: { rental_total_minor: "550000", security_required_minor: "500000", due_now_minor: "1075000", currency: "PHP" },
+        price_snapshot: { rental_total_minor: "550000", security_required_minor: "500000", due_now_minor: "1025000", currency: "PHP" },
         payment: {
           id: "00000000-0000-4000-8000-000000000105",
           payment_method_id: "00000000-0000-4000-8000-000000000106",
@@ -227,7 +228,7 @@ describe("ReservationDetailsSheet", () => {
         },
       })
     );
-    expect(screen.getByText(/Collect .*250.* more from the renter/)).toBeTruthy();
+    expect(screen.getByText(/Refund .*250.* to the renter/)).toBeTruthy();
   });
 });
 

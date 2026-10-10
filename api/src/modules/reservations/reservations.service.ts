@@ -10,7 +10,7 @@ import {
   type PermissionCode,
   type ReservationDeliverySnapshot,
   type ReservationDetail,
-  type ReservationEditRequest,
+  type ReservationEditRequestInput,
   type ReservationPaymentReceiptsResponse,
   type ReservationListItem,
   type ReservationListQuery,
@@ -306,7 +306,7 @@ export async function completeStaffReservation(
 export async function editReservation(
   input: ReservationReadContext & { requestId: string; idempotencyKey: string },
   reservationId: string,
-  request: ReservationEditRequest,
+  request: ReservationEditRequestInput,
 ): Promise<ReservationEditCommandResponse> {
   assertReservationReviewContext(input);
   return editReservationByStaff(

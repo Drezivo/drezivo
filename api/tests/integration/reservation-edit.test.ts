@@ -167,9 +167,19 @@ describe('reservation edit (PATCH /reservations/:id)', async () => {
     expect(await reservationState(seed, booking.id)).toEqual(before);
   });
 
-  it('asks staff to accept a price change once the renter has paid, then keeps the paid amount as recorded', async () => {
+  it('asks staff to accept a lower total once the renter has paid, keeps the paid amount, and refuses a higher total', async () => {
     const seed = await seedWorkspace('org_edit_paid', 'user_edit_paid');
     const booking = await confirmBooking(seed, await createBooking(seed, 'paid'));
+
+    // Pickup needs the paid amount to cover the total and there is no top-up flow, so a raise is refused.
+    const raised = await editReservation(context(seed, 'edit-paid-raise'), booking.id, {
+      version: booking.version,
+      requested_interval: { start: booking.start, end: addHours(booking.end, 24) },
+      accept_price_change: true,
+    });
+    expect(raised.status).toBe(409);
+    expect(raised.body).toMatchObject({ success: false, error: { code: 'STATE_CONFLICT' } });
+    expect((await reservationState(seed, booking.id)).due_now_minor).toBe(265000);
 
     const refused = await editReservation(context(seed, 'edit-paid-refused'), booking.id, {
       version: booking.version,

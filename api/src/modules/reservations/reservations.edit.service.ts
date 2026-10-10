@@ -187,9 +187,16 @@ export async function editReservationByStaff(
         (payment.status !== 'pending' ||
           payment.verified_at !== null ||
           (receipt !== null && RECEIPT_COMMITS_AMOUNT.has(receipt.evidence_status)));
+      // Pickup requires the verified amount to cover the total, and there is no flow to record a
+      // top-up, so a paid booking can only keep or lower its total. Raising it needs a new booking.
+      if (moneyCommitted && dueNow > previousDueNow) {
+        throw new StateConflictError(
+          `This change raises the amount due to ${formatPeso(dueNow)}, but the renter already paid or sent a receipt for ${formatPeso(previousDueNow)}. Keep the current total, or cancel and continue it as a new booking.`,
+        );
+      }
       if (priceChanged && moneyCommitted && !request.accept_price_change) {
         throw new PriceChangeNotAcceptedError(
-          `This change makes the amount due ${formatPeso(dueNow)} instead of ${formatPeso(previousDueNow)}, and the renter already paid or sent a receipt. Confirm the price change to save it.`,
+          `This change lowers the amount due to ${formatPeso(dueNow)} from ${formatPeso(previousDueNow)}, and the renter already paid or sent a receipt. Confirm the price change to save it, then refund the difference.`,
         );
       }
       if (priceChanged && payment === null && dueNow > 0) {

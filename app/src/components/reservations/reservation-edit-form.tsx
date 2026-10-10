@@ -20,8 +20,8 @@ type Fulfillment = "pickup" | "delivery";
 /**
  * Staff corrections before pickup: customer details on this booking, event date, pickup or
  * delivery, and the rental dates. Only changed fields are sent. New dates are re-checked and
- * re-priced by the API; when the renter already paid, the API asks for the price change to be
- * accepted first and this form shows that step.
+ * re-priced by the API. Once the renter paid, the API refuses a higher total and asks for a lower
+ * one to be accepted first; this form shows that step.
  */
 export function ReservationEditForm({
   detail,
@@ -154,8 +154,12 @@ export function ReservationEditForm({
             onChange={(value) => set("eventDate", value)}
           />
         </EditField>
-        <EditField label="Pickup or delivery">
-          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Pickup or delivery">
+        {/* A group, not a <label>: a label around buttons would name the first one after itself. */}
+        <div>
+          <span id="edit-fulfillment-label" className="mb-1.5 block text-xs font-medium text-dashboard-muted">
+            Pickup or delivery
+          </span>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-labelledby="edit-fulfillment-label">
             {(["pickup", "delivery"] as const).map((method) => (
               <button
                 key={method}
@@ -175,7 +179,7 @@ export function ReservationEditForm({
               </button>
             ))}
           </div>
-        </EditField>
+        </div>
       </div>
 
       {problem ? (
@@ -186,7 +190,7 @@ export function ReservationEditForm({
       {priceChange ? (
         <div role="alert" className="mt-3 rounded-lg bg-dashboard-attention/10 px-3 py-2 text-sm text-dashboard-attention">
           <p>{priceChange}</p>
-          <p className="mt-1 text-xs">The amount already paid stays as recorded. Collect or refund the difference with the renter.</p>
+          <p className="mt-1 text-xs">The amount already paid stays as recorded. Refund the difference to the renter.</p>
         </div>
       ) : null}
 
