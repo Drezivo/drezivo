@@ -107,7 +107,7 @@ describe('TBF-031 actor and workspace resolution', async () => {
 
     await withTenantTransaction(tenant.id, input.principalId, async (client) => {
       const plan = await client.query<{ id: string }>(
-        `SELECT id FROM plan WHERE code = 'starter' AND version = 1 AND active = true LIMIT 1`,
+        `SELECT id FROM plan WHERE code = 'standard' AND version = 1 AND active = true LIMIT 1`,
       );
       const planId = plan.rows[0]?.id;
       if (!planId) throw new Error('starter plan seed is missing');

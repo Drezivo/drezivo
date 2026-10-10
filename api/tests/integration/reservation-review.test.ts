@@ -2290,7 +2290,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
         [tenant.id, branchId, membershipId, JSON.stringify(permissions)],
       );
       const plan = await client.query<{ id: string }>(
-        `SELECT id FROM plan WHERE code = 'starter' AND version = 1 AND active = true LIMIT 1`,
+        `SELECT id FROM plan WHERE code = 'standard' AND version = 1 AND active = true LIMIT 1`,
       );
       const planId = requireRow(plan.rows, 'starter plan').id;
       await client.query(

@@ -23,13 +23,11 @@ import {
   finalizeTenantIdempotency,
   lockTenantSubscription,
   readSubscriptionProjection,
-  updateSubscriptionPlan,
   updateSubscriptionToPastDue,
   updateSubscriptionToRestricted,
   type LockedSubscriptionRow,
 } from './billing.repository.js';
 import {
-  assertPlanCapacity,
   resolvePlanEntitlements as resolvePlan,
   resolveTenantEntitlements,
 } from '../entitlements/entitlements.service.js';
@@ -98,8 +96,7 @@ export async function reconcileTenantLifecycle(
           ...current,
           status: 'past_due',
           grace_ends_at: new Date(
-            current.trial_ends_at.getTime() +
-              PAST_DUE_GRACE_DURATION_DAYS * 24 * 60 * 60 * 1000,
+            current.trial_ends_at.getTime() + PAST_DUE_GRACE_DURATION_DAYS * 24 * 60 * 60 * 1000,
           ),
         };
       }
@@ -212,10 +209,14 @@ export async function changeTrialPlan(
       return { status: claim.responseCode, body: claim.safeResponse as CommandBody };
     }
     if (claim.kind === 'key_reused') {
-      throw new IdempotencyKeyReusedError('This Idempotency-Key was already used for another request.');
+      throw new IdempotencyKeyReusedError(
+        'This Idempotency-Key was already used for another request.',
+      );
     }
     if (claim.kind === 'in_progress') {
-      throw new StateConflictError('An identical request is already being processed. Retry shortly.');
+      throw new StateConflictError(
+        'An identical request is already being processed. Retry shortly.',
+      );
     }
 
     try {
@@ -234,32 +235,8 @@ export async function changeTrialPlan(
         throw new StateConflictError('Workspace entitlement state is inconsistent.');
       }
       const target = await resolvePlan(client, input.request.plan_code);
-      await assertPlanCapacity(client, input.tenantId, target);
-
       if (target.planId !== current.plan_id) {
-        const changed = await updateSubscriptionPlan(client, {
-          tenantId: input.tenantId,
-          subscriptionId: current.subscription_id,
-          planId: target.planId,
-        });
-        if (!changed) throw new StateConflictError('The subscription plan could not be changed.');
-        await appendSubscriptionEvent(client, {
-          tenantId: input.tenantId,
-          subscriptionId: current.subscription_id,
-          priorPlanId: current.plan_id,
-          nextPlanId: target.planId,
-          eventType: 'plan_changed',
-          effectiveAt: await databaseNow(client),
-          businessKey: `subscription-plan:${current.subscription_id}:${input.idempotencyKey}`,
-        });
-        await appendTenantAuditEvent(client, {
-          tenantId: input.tenantId,
-          actorKey: input.principalId,
-          action: 'subscription.plan_changed',
-          entityId: current.subscription_id,
-          redactedSummary: { prior_plan_id: current.plan_id, next_plan_id: target.planId },
-          requestId: input.requestId,
-        });
+        throw new StateConflictError('Plan selection is locked after workspace setup.');
       }
 
       const projection = await readSubscriptionProjection(client, input.tenantId);
@@ -320,7 +297,10 @@ function toSubscriptionSummary(row: {
   };
 }
 
-function successBody(requestId: string, data: SubscriptionSummary): SuccessEnvelope<SubscriptionSummary> {
+function successBody(
+  requestId: string,
+  data: SubscriptionSummary,
+): SuccessEnvelope<SubscriptionSummary> {
   return { success: true, data, request_id: requestId };
 }
 
@@ -330,11 +310,4 @@ function failureBody(
   message: string,
 ): FailureEnvelope {
   return { success: false, error: { code, message }, request_id: requestId };
-}
-
-async function databaseNow(client: PoolClient): Promise<Date> {
-  const result = await client.query<{ now: Date }>('SELECT now() AS now');
-  const now = result.rows[0]?.now;
-  if (!now) throw new StateConflictError('Database clock is unavailable.');
-  return now;
 }

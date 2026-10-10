@@ -59,6 +59,7 @@ import {
   memberRosterResponse,
   onboardingActorContext,
   onboardingStatus,
+  publicPlanCatalogResponse,
   operatorActionResponse,
   operationalCalendarQuery,
   operationalCalendarResponse,
@@ -206,6 +207,7 @@ registry.register('MembershipInvitationStatus', membershipInvitationStatus);
 registry.register('ClerkWebhookEventType', clerkWebhookEventType);
 registry.register('OrganizationOnboarding', organizationOnboarding);
 registry.register('OnboardingActorContext', onboardingActorContext);
+registry.register('PublicPlanCatalogResponse', publicPlanCatalogResponse);
 registry.register('MembershipInvitation', membershipInvitation);
 registry.register('MembershipInvitationList', membershipInvitationList);
 registry.register('MemberRosterResponse', memberRosterResponse);
@@ -248,7 +250,9 @@ const jsonError = (description: string) => ({
 const idempotencyKeyHeader = z.object({
   'Idempotency-Key': z.string().min(8).max(255),
 });
-const guestAccessCookieHeader = z.object({ cookie: z.string().min(1).describe('The reservation-scoped HttpOnly cookie set by the hold endpoint.') });
+const guestAccessCookieHeader = z.object({
+  cookie: z.string().min(1).describe('The reservation-scoped HttpOnly cookie set by the hold endpoint.'),
+});
 
 // ---- owner onboarding ----------------------------------------------------
 registry.registerPath({
@@ -315,6 +319,20 @@ registry.registerPath({
       'The onboarding is not eligible for bootstrap or a unique storefront URL could not be created.',
     ),
     429: jsonError('Owner tenant bootstrap rate limit exceeded.'),
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/plans',
+  tags: ['billing'],
+  summary: 'List the active public subscription plans and their included limits.',
+  responses: {
+    200: {
+      description: 'Current monthly plan catalog and limits.',
+      content: { 'application/json': { schema: successEnvelope(publicPlanCatalogResponse) } },
+    },
+    429: jsonError('Public plan catalog rate limit exceeded.'),
   },
 });
 
@@ -634,8 +652,14 @@ registry.registerPath({
   },
   responses: {
     201: {
-      description: 'Hold created. A reservation-scoped HttpOnly cookie is set for API-host access; the capability is not included in JSON.',
-      headers: { 'Set-Cookie': { description: 'Host-only HttpOnly cookie scoped to this reservation API path.', schema: { type: 'string' } } },
+      description:
+        'Hold created. A reservation-scoped HttpOnly cookie is set for API-host access; the capability is not included in JSON.',
+      headers: {
+        'Set-Cookie': {
+          description: 'Host-only HttpOnly cookie scoped to this reservation API path.',
+          schema: { type: 'string' },
+        },
+      },
       content: { 'application/json': { schema: successEnvelope(guestReservationCreated) } },
     },
     403: jsonError('The Turnstile submission check failed.'),
@@ -833,9 +857,21 @@ registry.registerPath({
 });
 
 for (const [path, schema, summary] of [
-  ['/catalogue/import/uploads', batchUploadAuthorizationRequest, 'Authorize up to 25 catalogue photo uploads.'],
-  ['/catalogue/import/uploads/finalize', batchUploadFinalizeRequest, 'Finalize up to 25 uploaded catalogue photos.'],
-  ['/catalogue/import/clothing', batchCreateClothingRequest, 'Create up to 25 clothing products, one idempotency key per row.'],
+  [
+    '/catalogue/import/uploads',
+    batchUploadAuthorizationRequest,
+    'Authorize up to 25 catalogue photo uploads.',
+  ],
+  [
+    '/catalogue/import/uploads/finalize',
+    batchUploadFinalizeRequest,
+    'Finalize up to 25 uploaded catalogue photos.',
+  ],
+  [
+    '/catalogue/import/clothing',
+    batchCreateClothingRequest,
+    'Create up to 25 clothing products, one idempotency key per row.',
+  ],
 ] as const) {
   registry.registerPath({
     method: 'post',
@@ -845,7 +881,8 @@ for (const [path, schema, summary] of [
     request: { body: { content: { 'application/json': { schema } } } },
     responses: {
       200: {
-        description: 'Every row with the status and envelope its single-item command returned. Retrying a row with the same key replays it.',
+        description:
+          'Every row with the status and envelope its single-item command returned. Retrying a row with the same key replays it.',
         content: { 'application/json': { schema: successEnvelope(batchResponse) } },
       },
       422: jsonError('The batch shape is invalid (empty, over 25 rows, or repeated keys).'),
@@ -1041,7 +1078,8 @@ registry.registerPath({
   method: 'get',
   path: '/dashboard/overview',
   tags: ['dashboard'],
-  summary: 'Read the active branch dashboard overview from authoritative reservations, fittings, payment evidence, and customers.',
+  summary:
+    'Read the active branch dashboard overview from authoritative reservations, fittings, payment evidence, and customers.',
   responses: {
     200: {
       description:
@@ -1355,7 +1393,8 @@ registry.registerPath({
   request: { params: z.object({ id: z.string().uuid() }), headers: guestAccessCookieHeader },
   responses: {
     200: {
-      description: 'Reservation view authorized by the reservation-scoped HttpOnly cookie. The capability is never placed in a URL or response body.',
+      description:
+        'Reservation view authorized by the reservation-scoped HttpOnly cookie. The capability is never placed in a URL or response body.',
       content: { 'application/json': { schema: successEnvelope(guestReservationView) } },
     },
     404: jsonError('Concealed: invalid, expired, or revoked capability token.'),
@@ -1578,20 +1617,125 @@ const extraPaths: Array<{
   successStatus?: 200 | 201;
   turnstileProtected?: boolean;
 }> = [
-  { method: 'get', path: '/storefront', tag: 'storefront-cms', summary: 'Storefront document, status, policy, and publish readiness.', request: {}, schema: storefrontSettings },
-  { method: 'get', path: '/storefront/preview', tag: 'storefront-cms', summary: 'Short-lived owner preview credential for the storefront, published or not.', request: {}, schema: storefrontPreviewLink },
-  { method: 'patch', path: '/storefront', tag: 'storefront-cms', summary: 'Replace the storefront document (version checked).', request: { headers: idempotencyKeyHeader, body: jsonBody(updateStorefrontRequest) }, schema: storefrontSettings },
-  { method: 'post', path: '/storefront/slug', tag: 'storefront-cms', summary: 'Change the public storefront address.', request: { headers: idempotencyKeyHeader, body: jsonBody(updateStorefrontSlugRequest) }, schema: storefrontSettings },
-  { method: 'post', path: '/storefront/publish', tag: 'storefront-cms', summary: 'Publish once readiness checks pass.', request: { headers: idempotencyKeyHeader, body: jsonBody(storefrontTransitionRequest) }, schema: storefrontSettings },
-  { method: 'post', path: '/storefront/unpublish', tag: 'storefront-cms', summary: 'Take the storefront offline.', request: { headers: idempotencyKeyHeader, body: jsonBody(storefrontTransitionRequest) }, schema: storefrontSettings },
-  { method: 'post', path: '/storefront/policies', tag: 'storefront-cms', summary: 'Publish a new immutable rental policy version.', request: { headers: idempotencyKeyHeader, body: jsonBody(publishStorefrontPolicyRequest) }, schema: storefrontSettings },
-  { method: 'get', path: '/settings/business', tag: 'settings', summary: 'Business information and fixed regional settings.', request: {}, schema: businessSettings },
-  { method: 'patch', path: '/settings/business', tag: 'settings', summary: 'Update business information (version checked).', request: { headers: idempotencyKeyHeader, body: jsonBody(updateBusinessSettingsRequest) }, schema: businessSettings },
-  { method: 'get', path: '/settings/notifications', tag: 'settings', summary: 'Email notification preferences.', request: {}, schema: notificationSettings },
-  { method: 'patch', path: '/settings/notifications', tag: 'settings', summary: 'Update email notification preferences (version checked).', request: { headers: idempotencyKeyHeader, body: jsonBody(updateNotificationSettingsRequest) }, schema: notificationSettings },
-  { method: 'get', path: '/public/stores/{slug}/fitting-slots', tag: 'guest', summary: 'Open fitting start times for one date.', request: { params: slugParams, query: fittingSlotsQuery }, schema: fittingSlotsResponse },
-  { method: 'post', path: '/public/stores/{slug}/fittings', tag: 'guest', summary: 'Guest requests a fitting without email verification; Turnstile protects submission and it starts pending for staff review.', request: { params: slugParams, headers: idempotencyKeyHeader, body: jsonBody(guestFittingRequest) }, schema: guestFittingCreated, successStatus: 201, turnstileProtected: true },
-  { method: 'post', path: '/guest/reservations/{id}/uploads', tag: 'guest', summary: 'Authorize one receipt upload using the reservation-scoped HttpOnly cookie.', request: { params: guestIdParams, headers: guestAccessCookieHeader, body: jsonBody(guestReceiptUploadRequest) }, schema: guestReceiptUploadResponse },
+  {
+    method: 'get',
+    path: '/storefront',
+    tag: 'storefront-cms',
+    summary: 'Storefront document, status, policy, and publish readiness.',
+    request: {},
+    schema: storefrontSettings,
+  },
+  {
+    method: 'get',
+    path: '/storefront/preview',
+    tag: 'storefront-cms',
+    summary: 'Short-lived owner preview credential for the storefront, published or not.',
+    request: {},
+    schema: storefrontPreviewLink,
+  },
+  {
+    method: 'patch',
+    path: '/storefront',
+    tag: 'storefront-cms',
+    summary: 'Replace the storefront document (version checked).',
+    request: { headers: idempotencyKeyHeader, body: jsonBody(updateStorefrontRequest) },
+    schema: storefrontSettings,
+  },
+  {
+    method: 'post',
+    path: '/storefront/slug',
+    tag: 'storefront-cms',
+    summary: 'Change the public storefront address.',
+    request: { headers: idempotencyKeyHeader, body: jsonBody(updateStorefrontSlugRequest) },
+    schema: storefrontSettings,
+  },
+  {
+    method: 'post',
+    path: '/storefront/publish',
+    tag: 'storefront-cms',
+    summary: 'Publish once readiness checks pass.',
+    request: { headers: idempotencyKeyHeader, body: jsonBody(storefrontTransitionRequest) },
+    schema: storefrontSettings,
+  },
+  {
+    method: 'post',
+    path: '/storefront/unpublish',
+    tag: 'storefront-cms',
+    summary: 'Take the storefront offline.',
+    request: { headers: idempotencyKeyHeader, body: jsonBody(storefrontTransitionRequest) },
+    schema: storefrontSettings,
+  },
+  {
+    method: 'post',
+    path: '/storefront/policies',
+    tag: 'storefront-cms',
+    summary: 'Publish a new immutable rental policy version.',
+    request: { headers: idempotencyKeyHeader, body: jsonBody(publishStorefrontPolicyRequest) },
+    schema: storefrontSettings,
+  },
+  {
+    method: 'get',
+    path: '/settings/business',
+    tag: 'settings',
+    summary: 'Business information and fixed regional settings.',
+    request: {},
+    schema: businessSettings,
+  },
+  {
+    method: 'patch',
+    path: '/settings/business',
+    tag: 'settings',
+    summary: 'Update business information (version checked).',
+    request: { headers: idempotencyKeyHeader, body: jsonBody(updateBusinessSettingsRequest) },
+    schema: businessSettings,
+  },
+  {
+    method: 'get',
+    path: '/settings/notifications',
+    tag: 'settings',
+    summary: 'Email notification preferences.',
+    request: {},
+    schema: notificationSettings,
+  },
+  {
+    method: 'patch',
+    path: '/settings/notifications',
+    tag: 'settings',
+    summary: 'Update email notification preferences (version checked).',
+    request: { headers: idempotencyKeyHeader, body: jsonBody(updateNotificationSettingsRequest) },
+    schema: notificationSettings,
+  },
+  {
+    method: 'get',
+    path: '/public/stores/{slug}/fitting-slots',
+    tag: 'guest',
+    summary: 'Open fitting start times for one date.',
+    request: { params: slugParams, query: fittingSlotsQuery },
+    schema: fittingSlotsResponse,
+  },
+  {
+    method: 'post',
+    path: '/public/stores/{slug}/fittings',
+    tag: 'guest',
+    summary:
+      'Guest requests a fitting without email verification; Turnstile protects submission and it starts pending for staff review.',
+    request: { params: slugParams, headers: idempotencyKeyHeader, body: jsonBody(guestFittingRequest) },
+    schema: guestFittingCreated,
+    successStatus: 201,
+    turnstileProtected: true,
+  },
+  {
+    method: 'post',
+    path: '/guest/reservations/{id}/uploads',
+    tag: 'guest',
+    summary: 'Authorize one receipt upload using the reservation-scoped HttpOnly cookie.',
+    request: {
+      params: guestIdParams,
+      headers: guestAccessCookieHeader,
+      body: jsonBody(guestReceiptUploadRequest),
+    },
+    schema: guestReceiptUploadResponse,
+  },
 ];
 for (const entry of extraPaths) {
   registry.registerPath({
@@ -1601,7 +1745,10 @@ for (const entry of extraPaths) {
     summary: entry.summary,
     request: entry.request,
     responses: {
-      [entry.successStatus ?? 200]: { description: 'Success.', content: { 'application/json': { schema: successEnvelope(entry.schema) } } },
+      [entry.successStatus ?? 200]: {
+        description: 'Success.',
+        content: { 'application/json': { schema: successEnvelope(entry.schema) } },
+      },
       ...(entry.turnstileProtected ? { 403: jsonError('The Turnstile submission check failed.') } : {}),
       409: jsonError('A newer version exists or an identical request is in progress.'),
       422: jsonError('Validation failed.'),

@@ -66,23 +66,24 @@ fitting lifecycle email rows while preserving business-directed rows. Stop old A
 processes before applying that migration so an in-flight older worker cannot deliver a queued guest
 message; deploy the updated API/worker/web release together before accepting storefront traffic.
 
-## Subscription: one plan, trial, and manual payment
+## Subscription: two plans, trial, and manual payment
 
-- **Current supported plan, Standard:** ₱299 a month, up to 300 active physical clothing items and
-  3 Front Desk seats. The owner has directed monthly price points of ₱149 and ₱299 (ADR 0015), but
-  ₱149 has no defined or supported plan yet. Do not collect ₱149; current sign-up and billing
-  support only Standard at ₱299. Internally the plan code stays `starter`; migration
-  `0063_pilot_billing.sql` deactivates
-  the former Professional and Business rows while preserving them for history, and
-  `0071_starter_plan_limits.sql` sets the current quotas. Applying the lower limits does not remove
-  existing items or members; check usage and advise businesses above the cap that new additions are
-  blocked until usage drops below it. See [ADR 0013](../decisions/0013-starter-plan-capacity.md).
-- **Sign-up:** an owner signs up (for example with Google), names the business, confirms **"Start
-  your 14-day trial?"**, and lands on the dashboard. There is no plan choice and no billing page.
+- **Starter:** ₱149 a month, up to 125 active physical clothing items and no Front Desk seats.
+- **Standard:** ₱299 a month, up to 300 active physical clothing items and 3 Front Desk seats. The
+  Owner does not consume a seat. Both plans include the same core product features and fourteen-day
+  trial, subject to lifetime eligibility. Migration `0075_starter_standard_plan_tiers.sql` keeps
+  Standard's former `starter` row identity and subscription references under the `standard` code, and
+  adds the new `starter` row. Earlier migrations `0063`, `0071`, and `0072` establish the pilot catalog
+  and Standard limits/price; the former Professional and Business rows remain historical. Applying
+  plan caps does not remove existing items or members; check usage and advise businesses above the cap
+  that new additions or invitations are blocked until usage drops below it. See [ADR 0015](../decisions/0015-starter-and-standard-plans.md).
+- **Sign-up:** an owner signs up (for example with Google), names the business, selects Starter or
+  Standard, and confirms **"Start your 14-day trial?"**. Mid-trial self-service plan changes remain
+  unavailable.
 - **Paying:** the owner opens **Subscribe** from the banner or prompt.
   1. They pick one of Drezivo's payment methods, which shows its QR code, account name and number.
-  2. They pay the currently supported ₱299 Standard price, then send the reference number and a
-     screenshot or PDF of the receipt.
+  2. They pay the selected plan's monthly price (₱149 for Starter or ₱299 for Standard), then send the
+     reference number and a screenshot or PDF of the receipt.
   3. An operator checks it in the operator console and approves or rejects it. The owner is emailed
      either way.
   4. On approval, the next paid month starts from the approval date or from the old end date,

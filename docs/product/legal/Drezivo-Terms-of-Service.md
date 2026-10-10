@@ -58,15 +58,14 @@ Drezivo’s responsibility for its own unlawful acts or negligence.
 
 ## 4. Plans, prices, and payment
 
-The owner-directed monthly subscription price points are **₱149 and ₱299**. Their plan names and
-differentiated inclusions have not yet been defined. The current app supports only Standard at
-**₱299 per month**, with up to 300 active physical clothing items and 3 Front Desk seats; it does not
-yet support a selectable ₱149 plan. An eligible new account receives a fourteen-day trial under the
-current implementation. After the trial, the business pays through a listed Drezivo payment method
-and submits a reference and receipt for operator review. Prices, inclusions, tax treatment, billing
-period, payment method, renewal, and cancellation terms must be shown before purchase. Do not
-represent the ₱149 price as purchasable until its plan is defined and supported. Drezivo must not
-charge a customer for an unselected plan or add-on. This remains a counsel-review draft.
+The current plans are **Starter at ₱149 per month**, with up to 125 active physical clothing items and
+no Front Desk seats, and **Standard at ₱299 per month**, with up to 300 active physical clothing items
+and 3 Front Desk seats. Both plans include the same core product features, and an eligible new
+account may receive the fourteen-day trial, subject to lifetime eligibility. After the trial, the
+business pays through a listed Drezivo payment method and submits a reference and receipt for
+operator review. Prices, inclusions, tax treatment, billing period, payment method, renewal, and
+cancellation terms must be shown before purchase. Drezivo must not charge a customer for an
+unselected plan or add-on. This remains a counsel-review draft.
 
 The business using Drezivo remains responsible for collecting rental fees, deposits, and other
 amounts from its customers. Drezivo is not a bank, escrow agent, payment facilitator, or insurer

@@ -13,6 +13,7 @@ import {
   onboardingStatus,
   organizationOnboarding,
   planCode,
+  publicPlanCatalogResponse,
   subscriptionStatus,
   tenantBootstrapResponse,
   transferOwnershipRequest,
@@ -25,9 +26,45 @@ describe('tenancy onboarding contracts', () => {
     }
     expect(onboardingStatus.safeParse('started').success).toBe(false);
     expect(planCode.safeParse('starter').success).toBe(true);
+    expect(planCode.safeParse('standard').success).toBe(true);
+    expect(planCode.safeParse('professional').success).toBe(false);
     expect(planCode.safeParse('enterprise').success).toBe(false);
     expect(subscriptionStatus.safeParse('restricted').success).toBe(true);
     expect(membershipInvitationStatus.safeParse('pending').success).toBe(true);
+  });
+
+  it('validates public plan prices and server-owned limits', () => {
+    const starterPlan = {
+      code: 'starter',
+      name: 'Starter',
+      monthly_price_minor: 14900,
+      currency: 'PHP',
+      trial_days: 14,
+      limits: { active_garments: 125, frontdesk_seats: 0 },
+    };
+    const catalog = {
+      plans: [
+        starterPlan,
+        {
+          code: 'standard',
+          name: 'Standard',
+          monthly_price_minor: 29900,
+          currency: 'PHP',
+          trial_days: 14,
+          limits: { active_garments: 300, frontdesk_seats: 3 },
+        },
+      ],
+    };
+    expect(publicPlanCatalogResponse.safeParse(catalog).success).toBe(true);
+    expect(
+      publicPlanCatalogResponse.safeParse({ plans: [{ ...catalog.plans[0], monthly_price_minor: 0 }] })
+        .success,
+    ).toBe(false);
+    expect(
+      publicPlanCatalogResponse.safeParse({
+        plans: [{ ...starterPlan, limits: { ...starterPlan.limits, extra: 1 } }],
+      }).success,
+    ).toBe(false);
   });
 
   it('allows only the Clerk organization event families Drezivo reconciles', () => {

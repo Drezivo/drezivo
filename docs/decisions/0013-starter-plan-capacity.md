@@ -1,6 +1,6 @@
 # 0013. Standard plan pilot capacity
 
-**Status:** Accepted
+**Status:** Superseded by [ADR 0015](0015-starter-and-standard-plans.md) for the current catalog; the Standard limits remain unchanged
 **Date:** 6 October 2026
 **Owners:** Product owner
 

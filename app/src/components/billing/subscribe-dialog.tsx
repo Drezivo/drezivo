@@ -2,29 +2,71 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { useAuth } from "@clerk/nextjs";
-import { CheckCircle2, Clock, FileText, ImageIcon, Loader2, UploadCloud, X, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock,
+  FileText,
+  ImageIcon,
+  Loader2,
+  UploadCloud,
+  X,
+  XCircle,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import type { BillingOverview, FileObjectId, PlatformPaymentMethod, SubscriptionPaymentView } from "@drezivo/contracts";
+import type {
+  BillingOverview,
+  FileObjectId,
+  PlatformPaymentMethod,
+  SubscriptionPaymentView,
+} from "@drezivo/contracts";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
-import { storefrontImageProblem, uploadStorefrontImage, type UploadIntent } from "@/lib/storefront-assets";
+import {
+  storefrontImageProblem,
+  uploadStorefrontImage,
+  type UploadIntent,
+} from "@/lib/storefront-assets";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 
 const peso = (minor: string) =>
-  new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: Number(minor) % 100 === 0 ? 0 : 2 }).format(Number(minor) / 100);
-const shortDate = (iso: string) => new Date(iso).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
+  new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    maximumFractionDigits: Number(minor) % 100 === 0 ? 0 : 2,
+  }).format(Number(minor) / 100);
+const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
 
-type Load = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; billing: BillingOverview };
+type Load =
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "ready"; billing: BillingOverview };
+
+function planDescription(billing: BillingOverview): string {
+  const staffSeats =
+    billing.plan.frontdesk_seats_max > 0
+      ? ` and ${billing.plan.frontdesk_seats_max} Front Desk staff`
+      : "";
+  return `${billing.plan.name} plan: ${peso(billing.plan.monthly_minor)} a month, up to ${billing.plan.physical_assets_max} active garments${staffSeats}.`;
+}
 
 /**
- * Pay Drezivo for one month of Standard: pick one of Drezivo's payment methods, pay by QR or
+ * Pay Drezivo for one month of the selected plan: pick a payment method, pay by QR or
  * transfer, then send the reference number and a screenshot or PDF of the receipt. An operator
  * checks it; full access returns on approval. One payment can wait for review at a time.
  */
-export function SubscribeDialog({ open, onOpenChange, onSubmitted }: { open: boolean; onOpenChange: (open: boolean) => void; onSubmitted: () => void }) {
+export function SubscribeDialog({
+  open,
+  onOpenChange,
+  onSubmitted,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmitted: () => void;
+}) {
   const { getToken } = useAuth();
   const [load, setLoad] = useState<Load>({ kind: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
@@ -39,7 +81,14 @@ export function SubscribeDialog({ open, onOpenChange, onSubmitted }: { open: boo
         if (!cancelled) setLoad({ kind: "ready", billing: result.data });
       })
       .catch((error: unknown) => {
-        if (!cancelled) setLoad({ kind: "error", message: error instanceof DrezivoApiError ? error.message : "Could not load your subscription." });
+        if (!cancelled)
+          setLoad({
+            kind: "error",
+            message:
+              error instanceof DrezivoApiError
+                ? error.message
+                : "Could not load your subscription.",
+          });
       });
     return () => {
       cancelled = true;
@@ -54,9 +103,16 @@ export function SubscribeDialog({ open, onOpenChange, onSubmitted }: { open: boo
           <div className="flex items-start justify-between gap-4">
             <div>
               <Dialog.Title className="font-display text-2xl">Subscribe to Drezivo</Dialog.Title>
-              <Dialog.Description className="mt-1 text-sm text-dashboard-muted">Standard plan: ₱299 a month, up to 300 active garments and 3 Front Desk staff.</Dialog.Description>
+              <Dialog.Description className="mt-1 text-sm text-dashboard-muted">
+                {load.kind === "ready"
+                  ? planDescription(load.billing)
+                  : "Review the current price and payment details for the plan selected for this workspace."}
+              </Dialog.Description>
             </div>
-            <Dialog.Close className="rounded-md p-1.5 text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy" aria-label="Close">
+            <Dialog.Close
+              className="rounded-md p-1.5 text-dashboard-muted hover:bg-dashboard-active hover:text-dashboard-navy"
+              aria-label="Close"
+            >
               <X className="h-5 w-5" />
             </Dialog.Close>
           </div>
@@ -70,7 +126,12 @@ export function SubscribeDialog({ open, onOpenChange, onSubmitted }: { open: boo
               <p role="alert" className="text-sm text-red-500">
                 {load.message}
               </p>
-              <Button type="button" variant="secondary" className="mt-4" onClick={() => setReloadKey((value) => value + 1)}>
+              <Button
+                type="button"
+                variant="secondary"
+                className="mt-4"
+                onClick={() => setReloadKey((value) => value + 1)}
+              >
                 Try again
               </Button>
             </div>
@@ -89,20 +150,30 @@ export function SubscribeDialog({ open, onOpenChange, onSubmitted }: { open: boo
   );
 }
 
-function SubscribeBody({ billing, onSubmitted }: { billing: BillingOverview; onSubmitted: () => void }) {
+function SubscribeBody({
+  billing,
+  onSubmitted,
+}: {
+  billing: BillingOverview;
+  onSubmitted: () => void;
+}) {
   const pending = billing.payments.find((payment) => payment.status === "pending") ?? null;
-  const lastRejected = !pending ? (billing.payments.find((payment) => payment.status !== "pending") ?? null) : null;
+  const lastRejected = !pending
+    ? (billing.payments.find((payment) => payment.status !== "pending") ?? null)
+    : null;
 
   return (
     <div className="mt-6 grid gap-6">
       {pending ? (
         <StatusNote tone="waiting" title="Payment submitted, waiting for approval">
-          Reference {pending.reference} via {pending.payment_method_label}, sent {shortDate(pending.submitted_at)}. Drezivo checks it against the transfer and
-          confirms by email.
+          Reference {pending.reference} via {pending.payment_method_label}, sent{" "}
+          {shortDate(pending.submitted_at)}. Drezivo checks it against the transfer and confirms by
+          email.
         </StatusNote>
       ) : lastRejected?.status === "failed" ? (
         <StatusNote tone="rejected" title="Your last payment was not approved">
-          {lastRejected.review_note ?? "It could not be matched to a transfer."} You can send it again below.
+          {lastRejected.review_note ?? "It could not be matched to a transfer."} You can send it
+          again below.
         </StatusNote>
       ) : null}
 
@@ -111,10 +182,14 @@ function SubscribeBody({ billing, onSubmitted }: { billing: BillingOverview; onS
           billing.payment_methods.length > 0 ? (
             <PaymentForm billing={billing} onSubmitted={onSubmitted} />
           ) : (
-            <p className="text-sm text-dashboard-muted">Payment options are being set up. Contact Drezivo support to subscribe.</p>
+            <p className="text-sm text-dashboard-muted">
+              Payment options are being set up. Contact Drezivo support to subscribe.
+            </p>
           )
         ) : (
-          <p className="text-sm text-dashboard-muted">Only the business owner can subscribe. Ask them to open this from their account.</p>
+          <p className="text-sm text-dashboard-muted">
+            Only the business owner can subscribe. Ask them to open this from their account.
+          </p>
         )
       ) : null}
 
@@ -123,7 +198,13 @@ function SubscribeBody({ billing, onSubmitted }: { billing: BillingOverview; onS
   );
 }
 
-function PaymentForm({ billing, onSubmitted }: { billing: BillingOverview; onSubmitted: () => void }) {
+function PaymentForm({
+  billing,
+  onSubmitted,
+}: {
+  billing: BillingOverview;
+  onSubmitted: () => void;
+}) {
   const { getToken } = useAuth();
   const guard = useSubmitGuard();
   const [methodId, setMethodId] = useState(billing.payment_methods[0]?.id ?? "");
@@ -153,7 +234,12 @@ function PaymentForm({ billing, onSubmitted }: { billing: BillingOverview; onSub
       if (!proofId) {
         setUploading(true);
         try {
-          proofId = await uploadStorefrontImage(proof, getToken, intentRef, "subscription_payment_proof");
+          proofId = await uploadStorefrontImage(
+            proof,
+            getToken,
+            intentRef,
+            "subscription_payment_proof"
+          );
         } finally {
           setUploading(false);
         }
@@ -163,12 +249,14 @@ function PaymentForm({ billing, onSubmitted }: { billing: BillingOverview; onSub
       const result = await guard.submit((idempotencyKey) =>
         createDrezivoApiClient(getToken).submitSubscriptionPayment(
           { payment_method_id: method.id, reference: reference.trim(), proof_file_id: fileId },
-          idempotencyKey,
-        ),
+          idempotencyKey
+        )
       );
       if (result) onSubmitted();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not send your payment. Try again.");
+      setMessage(
+        error instanceof Error ? error.message : "Could not send your payment. Try again."
+      );
     }
   }
 
@@ -193,7 +281,9 @@ function PaymentForm({ billing, onSubmitted }: { billing: BillingOverview; onSub
             </button>
           ))}
         </div>
-        {method ? <MethodDetails method={method} amount={peso(billing.plan.monthly_minor)} /> : null}
+        {method ? (
+          <MethodDetails method={method} amount={peso(billing.plan.monthly_minor)} />
+        ) : null}
       </fieldset>
 
       <fieldset className="grid gap-3">
@@ -219,7 +309,9 @@ function PaymentForm({ billing, onSubmitted }: { billing: BillingOverview; onSub
             accept="image/jpeg,image/png,image/webp,application/pdf"
             onChange={(event) => {
               const file = event.target.files?.[0] ?? null;
-              const problem = file ? storefrontImageProblem(file, "subscription_payment_proof") : null;
+              const problem = file
+                ? storefrontImageProblem(file, "subscription_payment_proof")
+                : null;
               if (problem) {
                 setMessage(problem);
                 event.target.value = "";
@@ -234,10 +326,22 @@ function PaymentForm({ billing, onSubmitted }: { billing: BillingOverview; onSub
             htmlFor="subscription-proof"
             className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-dashboard-border px-4 py-3 hover:border-dashboard-accent/60 focus-within:border-dashboard-accent"
           >
-            {proof ? proof.type === "application/pdf" ? <FileText className="h-5 w-5 text-dashboard-accent" /> : <ImageIcon className="h-5 w-5 text-dashboard-accent" /> : <UploadCloud className="h-5 w-5 text-dashboard-accent" />}
+            {proof ? (
+              proof.type === "application/pdf" ? (
+                <FileText className="h-5 w-5 text-dashboard-accent" />
+              ) : (
+                <ImageIcon className="h-5 w-5 text-dashboard-accent" />
+              )
+            ) : (
+              <UploadCloud className="h-5 w-5 text-dashboard-accent" />
+            )}
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium">{proof ? proof.name : "Attach receipt"}</span>
-              <span className="block text-xs text-dashboard-muted">Screenshot or PDF, up to 10 MB</span>
+              <span className="block truncate text-sm font-medium">
+                {proof ? proof.name : "Attach receipt"}
+              </span>
+              <span className="block text-xs text-dashboard-muted">
+                Screenshot or PDF, up to 10 MB
+              </span>
             </span>
           </label>
         </div>
@@ -287,9 +391,15 @@ function MethodDetails({ method, amount }: { method: PlatformPaymentMethod; amou
         <div className="flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-white">
           {qrUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- authorized object URL
-            <img src={qrUrl} alt={`${method.label} QR code`} className="h-full w-full object-contain" />
+            <img
+              src={qrUrl}
+              alt={`${method.label} QR code`}
+              className="h-full w-full object-contain"
+            />
           ) : qrFailed ? (
-            <span className="p-3 text-center text-xs text-neutral-600">QR could not load. Use the account details.</span>
+            <span className="p-3 text-center text-xs text-neutral-600">
+              QR could not load. Use the account details.
+            </span>
           ) : (
             <Loader2 className="h-5 w-5 animate-spin text-neutral-500" />
           )}
@@ -312,17 +422,31 @@ function MethodDetails({ method, amount }: { method: PlatformPaymentMethod; amou
             <dd className="break-all font-mono">{method.account_number}</dd>
           </div>
         ) : null}
-        {method.instructions ? <dd className="whitespace-pre-line text-dashboard-muted">{method.instructions}</dd> : null}
-        <dd className="text-xs text-dashboard-muted">Always check the account name matches before paying.</dd>
+        {method.instructions ? (
+          <dd className="whitespace-pre-line text-dashboard-muted">{method.instructions}</dd>
+        ) : null}
+        <dd className="text-xs text-dashboard-muted">
+          Always check the account name matches before paying.
+        </dd>
       </dl>
     </div>
   );
 }
 
-function StatusNote({ tone, title, children }: { tone: "waiting" | "rejected"; title: string; children: React.ReactNode }) {
+function StatusNote({
+  tone,
+  title,
+  children,
+}: {
+  tone: "waiting" | "rejected";
+  title: string;
+  children: React.ReactNode;
+}) {
   const Icon = tone === "waiting" ? Clock : XCircle;
   return (
-    <div className={`flex gap-3 rounded-xl border p-4 ${tone === "waiting" ? "border-amber-400/40 bg-amber-500/10" : "border-red-400/40 bg-red-500/10"}`}>
+    <div
+      className={`flex gap-3 rounded-xl border p-4 ${tone === "waiting" ? "border-amber-400/40 bg-amber-500/10" : "border-red-400/40 bg-red-500/10"}`}
+    >
       <Icon className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
       <div>
         <p className="text-sm font-semibold">{title}</p>
@@ -333,7 +457,11 @@ function StatusNote({ tone, title, children }: { tone: "waiting" | "rejected"; t
 }
 
 function History({ payments }: { payments: SubscriptionPaymentView[] }) {
-  const label = { pending: "Waiting for approval", verified: "Approved", failed: "Not approved" } as const;
+  const label = {
+    pending: "Waiting for approval",
+    verified: "Approved",
+    failed: "Not approved",
+  } as const;
   return (
     <section aria-labelledby="payment-history">
       <h3 id="payment-history" className="text-sm font-semibold">
@@ -341,11 +469,17 @@ function History({ payments }: { payments: SubscriptionPaymentView[] }) {
       </h3>
       <ul className="mt-2 divide-y divide-dashboard-border rounded-xl border border-dashboard-border text-sm">
         {payments.map((payment) => (
-          <li key={payment.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
+          <li
+            key={payment.id}
+            className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5"
+          >
             <span className="min-w-0">
-              {shortDate(payment.submitted_at)} · {payment.payment_method_label} · Ref {payment.reference}
+              {shortDate(payment.submitted_at)} · {payment.payment_method_label} · Ref{" "}
+              {payment.reference}
             </span>
-            <span className={`inline-flex items-center gap-1 text-xs font-medium ${payment.status === "verified" ? "text-dashboard-green-text" : payment.status === "failed" ? "text-red-500" : "text-amber-500"}`}>
+            <span
+              className={`inline-flex items-center gap-1 text-xs font-medium ${payment.status === "verified" ? "text-dashboard-green-text" : payment.status === "failed" ? "text-red-500" : "text-amber-500"}`}
+            >
               {payment.status === "verified" ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
               {label[payment.status]} · {peso(payment.amount_minor)}
             </span>

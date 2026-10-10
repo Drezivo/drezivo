@@ -12,6 +12,8 @@ export class MigrationHistoryError extends Error {
   }
 }
 
+export const OUT_OF_ORDER_SAFE_MIGRATION = '0070_webhook_invitation_resolution.sql';
+
 /**
  * Confirms that applied migrations are a contiguous prefix of the checked-in, filename-ordered
  * history. `null` means the ledger table does not exist; an empty array means it exists but is
@@ -20,6 +22,7 @@ export class MigrationHistoryError extends Error {
 export function inspectMigrationHistory(
   migrationFiles: readonly string[],
   appliedFiles: readonly string[] | null,
+  throughFile: string | null = null,
 ): MigrationHistoryStatus {
   if (appliedFiles === null) {
     throw new MigrationHistoryError(
@@ -47,8 +50,19 @@ export function inspectMigrationHistory(
       ? []
       : orderedFiles.slice(firstPendingIndex).filter((file) => appliedSet.has(file));
   if (laterAppliedFiles.length > 0) {
+    const pendingFile = orderedFiles[firstPendingIndex];
+    if (throughFile === OUT_OF_ORDER_SAFE_MIGRATION && pendingFile === throughFile) {
+      // The invitation resolver is additive and independent of later migrations. Simulate its
+      // application and require that it closes the only gap before allowing the runner to act.
+      // This keeps the exception tied to an exact, explicit --through target.
+      inspectMigrationHistory(orderedFiles, [...appliedSet, throughFile]);
+      return {
+        appliedFiles: orderedFiles.filter((file) => appliedSet.has(file)),
+        pendingFiles: orderedFiles.filter((file) => !appliedSet.has(file)),
+      };
+    }
     throw new MigrationHistoryError(
-      `The migration ledger has a history gap: ${orderedFiles[firstPendingIndex]} is pending, ` +
+      `The migration ledger has a history gap: ${pendingFile} is pending, ` +
         `but later migrations are recorded as applied (${laterAppliedFiles.join(', ')}).`,
     );
   }
@@ -59,4 +73,26 @@ export function inspectMigrationHistory(
       firstPendingIndex === -1 ? orderedFiles.length : firstPendingIndex,
     ),
   };
+}
+
+export function selectPendingMigrations(
+  status: MigrationHistoryStatus,
+  migrationFiles: readonly string[],
+  throughFile: string | null,
+): string[] {
+  const selectedFiles =
+    throughFile === null ? migrationFiles : migrationFiles.filter((file) => file <= throughFile);
+  const selectedSet = new Set(selectedFiles);
+  return status.pendingFiles.filter((file) => selectedSet.has(file));
+}
+
+export function assertInvitationResolverIsNotAlreadyInstalled(functionExists: boolean): void {
+  if (functionExists) {
+    throw new MigrationHistoryError(
+      `Migration ${OUT_OF_ORDER_SAFE_MIGRATION} is pending, but ` +
+        'public.resolve_membership_invitation_webhook(text,text) already exists. ' +
+        'Inspect the function, its grants, and the migration ledger before reconciling; ' +
+        'the migration was not applied.',
+    );
+  }
 }

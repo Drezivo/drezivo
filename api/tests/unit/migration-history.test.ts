@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { inspectMigrationHistory, MigrationHistoryError } from '../../scripts/migration-history.js';
+import {
+  assertInvitationResolverIsNotAlreadyInstalled,
+  inspectMigrationHistory,
+  MigrationHistoryError,
+  OUT_OF_ORDER_SAFE_MIGRATION,
+  selectPendingMigrations,
+} from '../../scripts/migration-history.js';
 
 const migrationFiles = ['0001_first.sql', '0002_second.sql', '0003_third.sql'];
 
@@ -14,6 +20,25 @@ describe('migration history inspection', () => {
     expect(() =>
       inspectMigrationHistory(migrationFiles, ['0001_first.sql', '0004_removed.sql']),
     ).toThrow(/files missing from this checkout: 0004_removed\.sql/);
+  });
+
+  it('still rejects unknown ledger entries when the out-of-order migration is explicitly targeted', () => {
+    const files = [
+      '0070_storefront_guest_no_email.sql',
+      OUT_OF_ORDER_SAFE_MIGRATION,
+      '0071_starter_plan_limits.sql',
+    ];
+    expect(() =>
+      inspectMigrationHistory(
+        files,
+        [
+          '0070_storefront_guest_no_email.sql',
+          '0071_starter_plan_limits.sql',
+          '0072_missing_from_checkout.sql',
+        ],
+        OUT_OF_ORDER_SAFE_MIGRATION,
+      ),
+    ).toThrow(/files missing from this checkout/);
   });
 
   it('rejects a history gap instead of applying later files around it', () => {
@@ -41,5 +66,74 @@ describe('migration history inspection', () => {
       appliedFiles: [],
       pendingFiles: migrationFiles,
     });
+  });
+
+  it('allows only the explicitly targeted invitation migration to close a single history gap', () => {
+    const files = [
+      '0070_storefront_guest_no_email.sql',
+      OUT_OF_ORDER_SAFE_MIGRATION,
+      '0071_starter_plan_limits.sql',
+      '0072_starter_plan_price.sql',
+      '0073_variant_fit_range.sql',
+      '0074_all_week_branch_hours_default.sql',
+      '0075_starter_standard_plan_tiers.sql',
+    ];
+    const applied = [
+      '0070_storefront_guest_no_email.sql',
+      '0071_starter_plan_limits.sql',
+      '0072_starter_plan_price.sql',
+      '0073_variant_fit_range.sql',
+    ];
+
+    expect(() => inspectMigrationHistory(files, applied)).toThrow(/history gap/);
+    const status = inspectMigrationHistory(files, applied, OUT_OF_ORDER_SAFE_MIGRATION);
+    expect(status).toEqual({
+      appliedFiles: applied,
+      pendingFiles: [
+        OUT_OF_ORDER_SAFE_MIGRATION,
+        '0074_all_week_branch_hours_default.sql',
+        '0075_starter_standard_plan_tiers.sql',
+      ],
+    });
+    expect(selectPendingMigrations(status, files, OUT_OF_ORDER_SAFE_MIGRATION)).toEqual([
+      OUT_OF_ORDER_SAFE_MIGRATION,
+    ]);
+    expect(() =>
+      inspectMigrationHistory(files, applied, '0075_starter_standard_plan_tiers.sql'),
+    ).toThrow(/history gap/);
+  });
+
+  it('does not allow the invitation migration to hide another gap or an earlier pending migration', () => {
+    const files = [
+      '0069_previous.sql',
+      '0070_storefront_guest_no_email.sql',
+      OUT_OF_ORDER_SAFE_MIGRATION,
+      '0071_starter_plan_limits.sql',
+      '0072_starter_plan_price.sql',
+      '0073_variant_fit_range.sql',
+    ];
+
+    expect(() =>
+      inspectMigrationHistory(
+        files,
+        ['0069_previous.sql', '0070_storefront_guest_no_email.sql', '0072_starter_plan_price.sql'],
+        OUT_OF_ORDER_SAFE_MIGRATION,
+      ),
+    ).toThrow(/history gap: 0071_starter_plan_limits\.sql is pending/);
+
+    expect(() =>
+      inspectMigrationHistory(
+        files,
+        ['0069_previous.sql', '0071_starter_plan_limits.sql', '0072_starter_plan_price.sql'],
+        OUT_OF_ORDER_SAFE_MIGRATION,
+      ),
+    ).toThrow(/history gap: 0070_storefront_guest_no_email\.sql is pending/);
+  });
+
+  it('rejects applying the invitation migration when its database function already exists', () => {
+    expect(() => assertInvitationResolverIsNotAlreadyInstalled(true)).toThrow(
+      /already exists.*migration was not applied/,
+    );
+    expect(() => assertInvitationResolverIsNotAlreadyInstalled(false)).not.toThrow();
   });
 });

@@ -67,8 +67,13 @@ For an isolated additive hotfix that must not advance later pending migrations, 
 unapplied migration whose filename sorts up to and including the named file, and rejects
 unknown filenames. Remote migrations reject Supavisor transaction-pooler URLs. Inspect the
 target's `schema_migrations` ledger first. A migration added earlier than files already applied
-in a different environment must be independent of them; the 0070 invitation webhook resolver is
-additive and independent of the 0071+ changes.
+in a different environment must be independent of them; the `0070_webhook_invitation_resolution.sql`
+migration is additive and independent of the 0071+ changes. For that migration only, an exact
+`--through 0070_webhook_invitation_resolution.sql` target may close a single ledger gap when every
+earlier migration is recorded and no other gap would remain. Ordinary full runs and status checks
+still reject gaps. The runner also refuses to apply it if its resolver function already exists;
+inspect the function, its grants, and the ledger before any manual reconciliation. Never insert a
+ledger row without successfully applying its SQL.
 
 ## Supabase grants and RLS
 
