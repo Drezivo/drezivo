@@ -100,6 +100,11 @@ export interface ReservationQuote {
   };
 }
 
+export type ReservationQuoteRequest = Pick<
+  StaffReservationCreateRequest,
+  'variant_id' | 'requested_interval' | 'event_date' | 'fulfillment_method' | 'payment_method_id'
+>;
+
 /**
  * Computes the authoritative quote inputs for a future booking transaction without claiming
  * capacity. The returned candidate set is intentionally advisory: only RSV-021 may turn one of
@@ -124,14 +129,7 @@ export async function resolveReservationQuote(
   input: {
     tenantId: string;
     branchId: string;
-    request: Pick<
-      StaffReservationCreateRequest,
-      | 'variant_id'
-      | 'requested_interval'
-      | 'event_date'
-      | 'fulfillment_method'
-      | 'payment_method_id'
-    >;
+    request: ReservationQuoteRequest;
   },
 ): Promise<ReservationQuote> {
   await assertRequestedPickupNotInPast(client, input.request.requested_interval.start);

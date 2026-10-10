@@ -218,9 +218,69 @@ describe('RSV-021/022 staff reservation creation', async () => {
         branchId: seed.branchId,
         variantId: seed.variantId,
         assetId: seed.assetId,
+        lineCount: 1,
       },
     });
     expect(persisted.idempotency).toEqual({ status: 'succeeded', response_code: 201 });
+  });
+
+  it('rebooks every line at current prices and persists no partial hold when capacity is short', async () => {
+    const seed = await seedWorkspace('org_rsv021_multi_line', 'user_rsv021_multi_line', ['reservations.manage']);
+    await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      await client.query(
+        `INSERT INTO physical_asset
+           (tenant_id, branch_id, variant_id, asset_code, lifecycle_status, readiness, custody_kind)
+         VALUES ($1, $2, $3, 'RSV021-ASSET-2', 'active', 'ready', 'at_branch')`,
+        [seed.tenantId, seed.branchId, seed.variantId],
+      );
+      await client.query(
+        `UPDATE product_variant SET rental_price_minor = 180000
+          WHERE tenant_id = $1 AND id = $2`,
+        [seed.tenantId, seed.variantId],
+      );
+    });
+
+    const multi = await createStaffReservation(
+      commandContext(seed, 'req-rsv021-multi-line', 'idem-rsv021-multi-line'),
+      { ...createFastHoldRequest(seed), lines: [{ variant_id: seed.variantId as never }, { variant_id: seed.variantId as never }] },
+    );
+    expect(multi.status).toBe(201);
+    expect(multi.body).toMatchObject({
+      success: true,
+      data: { reservation: { price_snapshot: { rental_total_minor: '440000', security_required_minor: '100000', due_now_minor: '565000' } } },
+    });
+    if (multi.body.success !== true) throw new Error('Expected multi-line reservation success.');
+    const reservationId = multi.body.data.reservation.id;
+    const persisted = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const lines = await client.query<{ rental_minor: number; deposit_minor: number; asset_id: string }>(
+        `SELECT rl.rental_minor, rl.deposit_minor, aa.asset_id
+           FROM reservation_line rl
+           JOIN asset_allocation aa ON aa.tenant_id = rl.tenant_id AND aa.reservation_line_id = rl.id
+          WHERE rl.tenant_id = $1 AND rl.reservation_id = $2 AND aa.is_blocking = true
+          ORDER BY rl.line_number`,
+        [seed.tenantId, reservationId],
+      );
+      const payment = await client.query<{ status: string; amount_minor: number }>(
+        `SELECT status, amount_minor FROM payment
+          WHERE tenant_id = $1 AND reservation_id = $2`,
+        [seed.tenantId, reservationId],
+      );
+      return { lines: lines.rows, payment: requireRow(payment.rows, 'multi-line payment') };
+    });
+    expect(persisted.lines).toHaveLength(2);
+    expect(persisted.lines.map((line) => line.rental_minor)).toEqual([220000, 220000]);
+    expect(persisted.lines.map((line) => line.deposit_minor)).toEqual([50000, 50000]);
+    expect(new Set(persisted.lines.map((line) => line.asset_id)).size).toBe(2);
+    expect(persisted.payment).toEqual({ status: 'pending', amount_minor: 565000 });
+
+    const shortSeed = await seedWorkspace('org_rsv021_multi_short', 'user_rsv021_multi_short', ['reservations.manage']);
+    const failed = await createStaffReservation(
+      commandContext(shortSeed, 'req-rsv021-multi-short', 'idem-rsv021-multi-short'),
+      { ...createFastHoldRequest(shortSeed), lines: [{ variant_id: shortSeed.variantId as never }, { variant_id: shortSeed.variantId as never }] },
+    );
+    expect(failed.status).toBe(409);
+    expect(failed.body).toMatchObject({ success: false, error: { code: 'CAPACITY_CONFLICT' } });
+    expect(await graphCounts(shortSeed)).toEqual({ reservations: 0, lines: 0, allocations: 0, customers: 0 });
   });
 
   it('snapshots flexible fit range, fit notes, exact measurements, and unit on a reservation line', async () => {

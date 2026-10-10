@@ -57,6 +57,7 @@ import {
   ForbiddenError,
   NotFoundError,
   StateConflictError,
+  ValidationError,
   TenantCancelledError,
   TenantRestrictedError,
 } from '../../shared/errors.js';
@@ -252,11 +253,24 @@ export async function getStaffReservationQuote(
   request: StaffReservationCreateRequest,
 ): Promise<ReservationQuote> {
   assertReservationBookingContext(input);
+  const firstLine = request.lines?.[0];
+  const variantId = request.lines
+    ? request.lines.length === 1 && firstLine
+      ? firstLine.variant_id
+      : null
+    : request.variant_id;
+  if (!variantId) throw new ValidationError('A single-line quote request requires exactly one rental item.');
   return withTenantTransaction(input.tenantId, input.principalId, (client) =>
     resolveReservationQuote(client, {
       tenantId: input.tenantId,
       branchId: input.branchId,
-      request,
+      request: {
+        variant_id: variantId,
+        requested_interval: request.requested_interval,
+        ...(request.event_date ? { event_date: request.event_date } : {}),
+        fulfillment_method: request.fulfillment_method,
+        payment_method_id: request.payment_method_id,
+      },
     }),
   );
 }
