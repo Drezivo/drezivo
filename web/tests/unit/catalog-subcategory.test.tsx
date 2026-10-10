@@ -105,7 +105,7 @@ describe('storefront product subcategories', () => {
             ...item,
             variants: [{
               ...item.variants[0]!,
-              fit_range: 'Small–XL',
+              fit_range: 'Fits Small–XL',
               measurement: {
                 mode: 'custom',
                 unit: 'in',
@@ -121,9 +121,12 @@ describe('storefront product subcategories', () => {
       </PreviewProvider>,
     );
 
-    const fitRange = screen.getByText('Fits Small–XL');
+    const fitRanges = screen.getAllByText('Fits Small–XL');
+    expect(fitRanges).toHaveLength(1);
+    const fitRange = fitRanges[0]!;
     expect(fitRange.closest('[role="tabpanel"]')?.id).toBe('panel-measurements');
     expect(screen.getByText('Flexible fit')).toBeTruthy();
+    expect(screen.queryByText('Fits Fits Small–XL')).toBeNull();
     expect(screen.getByText('28 in')).toBeTruthy();
     expect(screen.getByText('61 in')).toBeTruthy();
     expect(screen.getByText('Approximate garment measurements.')).toBeTruthy();

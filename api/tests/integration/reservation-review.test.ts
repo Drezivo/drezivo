@@ -130,6 +130,9 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     expect(state.reservation.terms_accepted_at).not.toBeNull();
     expect(state.reservation.submitted_at).not.toBeNull();
     expect(
+      state.reservation.pickup_at.getTime() - state.reservation.hold_acquired_at.getTime(),
+    ).toBeGreaterThan(24 * 60 * 60 * 1000);
+    expect(
       state.reservation.hold_expires_at.getTime() - state.reservation.hold_acquired_at.getTime(),
     ).toBe(24 * 60 * 60 * 1000);
     expect(state.receipt?.id).toBe(receiptId);
@@ -337,7 +340,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     );
 
     const requestBody: StaffReservationCreateRequest = {
-      ...createRequest(seed),
+      ...(await createRequest(seed)),
       fulfillment_method: 'pickup',
     };
     const created = await createStaffReservation(
@@ -2290,7 +2293,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
         [tenant.id, branchId, membershipId, JSON.stringify(permissions)],
       );
       const plan = await client.query<{ id: string }>(
-        `SELECT id FROM plan WHERE code = 'starter' AND version = 1 AND active = true LIMIT 1`,
+        `SELECT id FROM plan WHERE code = 'standard' AND version = 1 AND active = true LIMIT 1`,
       );
       const planId = requireRow(plan.rows, 'starter plan').id;
       await client.query(
@@ -2363,7 +2366,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
   }
 
   async function createWalkInHold(seed: ReviewSeed, suffix: string): Promise<HeldReservation> {
-    const requestBody = createRequest(seed);
+    const requestBody = await createRequest(seed);
     const result = await createStaffReservation(
       reviewContext(seed, `req-create-walkin-${suffix}`, `idem-create-walkin-${suffix}`),
       {
@@ -2392,7 +2395,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
   async function createHold(seed: ReviewSeed, suffix: string): Promise<HeldReservation> {
     const result = await createStaffReservation(
       reviewContext(seed, `req-create-${suffix}`, `idem-create-${suffix}`),
-      createRequest(seed),
+      await createRequest(seed),
     );
     if (result.status !== 201 || result.body.success !== true) {
       throw new Error(`Expected held reservation creation, got ${result.status}.`);
@@ -2476,7 +2479,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     const result = await createStaffReservation(
       reviewContext(seed, `req-create-${suffix}`, `idem-create-${suffix}`),
       {
-        ...createRequest(seed),
+        ...(await createRequest(seed)),
         requested_interval: { start, end },
         event_date: undefined,
       },
@@ -2507,7 +2510,25 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     };
   }
 
-  function createRequest(seed: ReviewSeed): StaffReservationCreateRequest {
+  async function createRequest(seed: ReviewSeed): Promise<StaffReservationCreateRequest> {
+    const dates = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{
+        pickup_at: Date;
+        return_at: Date;
+        event_date: string;
+      }>(
+        `WITH pickup AS (
+           SELECT date_trunc('day', statement_timestamp() AT TIME ZONE 'Asia/Manila')
+                    + interval '3 days 10 hours' AS local_at
+         )
+         SELECT local_at AT TIME ZONE 'Asia/Manila' AS pickup_at,
+                (local_at + interval '3 days') AT TIME ZONE 'Asia/Manila' AS return_at,
+                to_char(local_at + interval '1 day', 'YYYY-MM-DD') AS event_date
+           FROM pickup`,
+      );
+      return requireRow(result.rows, 'reservation request dates');
+    });
+
     return {
       customer: {
         source: 'new',
@@ -2520,10 +2541,10 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       },
       variant_id: seed.variantId as ProductVariantId,
       requested_interval: {
-        start: '2026-10-10T02:00:00.000Z',
-        end: '2026-10-13T02:00:00.000Z',
+        start: dates.pickup_at.toISOString(),
+        end: dates.return_at.toISOString(),
       },
-      event_date: '2026-10-11',
+      event_date: dates.event_date,
       fulfillment_method: 'delivery',
       payment_method_id: seed.paymentMethodId as PaymentMethodId,
     };
@@ -2631,10 +2652,12 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
         version: number;
         hold_acquired_at: Date;
         hold_expires_at: Date;
+        pickup_at: Date;
         terms_accepted_at: Date | null;
         submitted_at: Date | null;
       }>(
-        `SELECT status, version, hold_acquired_at, hold_expires_at, terms_accepted_at, submitted_at
+        `SELECT status, version, hold_acquired_at, hold_expires_at, pickup_at,
+                terms_accepted_at, submitted_at
            FROM reservation WHERE tenant_id = $1 AND id = $2`,
         [seed.tenantId, reservationId],
       );

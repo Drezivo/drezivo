@@ -322,6 +322,34 @@ describe("EditClothingPage", () => {
     });
   });
 
+  it("displays a legacy range cleanly and canonicalizes edited flexible-fit values", async () => {
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: {
+        ...detail,
+        sizing_mode: "free_size",
+        variants: [{
+          ...detail.variants[0]!,
+          sku: "GWN-023-FS",
+          size_label: null,
+          fit_range: "Fits Small to Large",
+        }],
+      },
+      requestId: "req-free-size-legacy-range",
+    });
+
+    render(<EditClothingPage productId={productId} />);
+    await screen.findByRole("heading", { name: "Edit Clothing" });
+    const fitRange = screen.getByLabelText("GWN-023-FS Fits sizes");
+    expect(fitRange).toHaveValue("Small to Large");
+    fireEvent.change(fitRange, { target: { value: "Fits Medium to XL" } });
+    fireEvent.blur(fitRange);
+    expect(fitRange).toHaveValue("Medium to XL");
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(api.updateClothingVariant).toHaveBeenCalledTimes(1));
+    expect(api.updateClothingVariant.mock.calls[0]?.[2]).toMatchObject({ fit_range: "Medium to XL" });
+  });
+
   it("clears an existing subcategory when None is selected", async () => {
     render(<EditClothingPage productId={productId} />);
     await screen.findByRole("heading", { name: "Edit Clothing" });
@@ -345,6 +373,9 @@ describe("EditClothingPage", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/Flexible fit uses one variant without a size label/i)).toBeVisible();
     expect(within(dialog).getByLabelText("Sizing transition fit range")).toBeVisible();
+    fireEvent.change(within(dialog).getByLabelText("Sizing transition fit range"), {
+      target: { value: "Fits Small to Large" },
+    });
     expect(within(dialog).queryByLabelText("Sizing transition 1 bust type")).not.toBeInTheDocument();
     expect(within(dialog).getByText(/Legacy Hips \(read-only\)/i)).toBeVisible();
     fireEvent.click(within(dialog).getByRole("button", { name: "Change sizing mode" }));
@@ -356,7 +387,7 @@ describe("EditClothingPage", () => {
         mode: "free_size",
         variant: expect.objectContaining({
           size_label: null,
-          fit_range: null,
+          fit_range: "Small to Large",
           color_label: "Emerald Green",
           measurement_mode: "custom",
           measurements: { bust: 90, waist: 72, length: 60, hips: 96 },

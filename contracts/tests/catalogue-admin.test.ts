@@ -8,6 +8,7 @@ import {
   createClothingRequest,
   filePurpose,
   measurementMode,
+  normalizeVariantFitRange,
   updateCatalogueCategoryStatusRequest,
 } from '../src';
 
@@ -91,6 +92,15 @@ describe('catalogue admin contract', () => {
       measurement_guide_id: measurementGuideId,
       measurements: { bust: { type: 'fit_note', text: 'Flexible fit' } },
     }).success).toBe(false);
+  });
+
+  it('strips a leading Fits label from flexible-fit ranges', () => {
+    expect(normalizeVariantFitRange('  Fits Small to Large  ')).toBe('Small to Large');
+    expect(normalizeVariantFitRange('fits: Small–XL')).toBe('Small–XL');
+    expect(normalizeVariantFitRange('Fits Fits Small–XL')).toBe('Small–XL');
+    expect(clothingSizeInput.parse({ size_label: null, measurement_mode: 'none', fit_range: 'Fits Small to Large' }).fit_range)
+      .toBe('Small to Large');
+    expect(clothingSizeInput.parse({ size_label: null, measurement_mode: 'none', fit_range: 'Fits' }).fit_range).toBeNull();
   });
 
   it('continues to accept legacy Hips measurements without treating them as Length', () => {

@@ -173,6 +173,9 @@ describe("AddClothingPage", () => {
     fireEvent.change(screen.getByLabelText("Clothing Name *"), {
       target: { value: "Flexible Fit Cape" },
     });
+    fireEvent.change(screen.getByLabelText("Fits sizes (optional)"), {
+      target: { value: "Fits Small to Large" },
+    });
     fireEvent.change(screen.getByLabelText("Flexible fit bust"), { target: { value: "34" } });
     expect(screen.getByText(/1 selected · 1 Total Piece/)).toBeVisible();
     expect(screen.getAllByText("Flexible fit").length).toBeGreaterThanOrEqual(1);
@@ -185,6 +188,7 @@ describe("AddClothingPage", () => {
     expect(requestBody.sizes).toHaveLength(1);
     expect(requestBody.sizes[0]).toMatchObject({
       size_label: null,
+      fit_range: "Small to Large",
       measurement_mode: "custom",
       measurements: { bust: 34 },
     });

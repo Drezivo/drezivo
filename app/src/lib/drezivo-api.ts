@@ -76,6 +76,7 @@ import {
   membershipInvitationList,
   memberRosterResponse,
   paginationRequest,
+  publicPlanCatalogResponse,
   resendMembershipInvitationRequest,
   cancelMembershipInvitationRequest,
   paymentMethodSettingsItem,
@@ -302,6 +303,7 @@ import {
   type BatchUploadFinalizeRequest,
   type CatalogueImportCapabilities,
   type ClothingPhotoExtractResponse,
+  type PublicPlanCatalogResponse,
 } from "@drezivo/contracts";
 
 type TokenGetter = () => Promise<string | null>;
@@ -330,6 +332,13 @@ export class DrezivoApiError extends Error {
 
 export function createDrezivoApiClient(getToken: TokenGetter) {
   return {
+    getPublicPlanCatalog: () =>
+      request<PublicPlanCatalogResponse>({
+        getToken,
+        method: "GET",
+        path: "/api/v1/plans",
+        responseSchema: apiEnvelope(publicPlanCatalogResponse),
+      }),
     getCurrentOnboarding: () =>
       request<OnboardingActorContext>({
         getToken,
@@ -372,7 +381,7 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         path: `/api/v1/onboarding/${encodeURIComponent(onboardingId)}/abandon`,
         responseSchema: apiEnvelope(organizationOnboarding),
       }),
-    /** Standard plan + 14-day trial + workspace bootstrap in one duplicate-safe call (replaces plan selection). */
+    /** Uses the already-persisted plan choice; legacy clients default to Standard on the API. */
     startOnboardingTrial: (onboardingId: string, idempotencyKey: string) =>
       request<TenantBootstrapResponse>({
         getToken,

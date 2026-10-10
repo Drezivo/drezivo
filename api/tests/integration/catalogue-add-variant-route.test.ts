@@ -65,7 +65,7 @@ describe('CLT-076 add variant HTTP route', async () => {
         [tenant.id, branchId, membershipId, JSON.stringify(permissions)],
       );
       const plan = await client.query<{ id: string }>(
-        `SELECT id FROM plan WHERE code = 'starter' AND version = 1 AND active = true LIMIT 1`,
+        `SELECT id FROM plan WHERE code = 'standard' AND version = 1 AND active = true LIMIT 1`,
       );
       const planId = plan.rows[0]?.id;
       if (!planId) throw new Error('Expected starter plan.');

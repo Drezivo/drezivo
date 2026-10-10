@@ -856,7 +856,7 @@ describe('CLT-022 clothing file attachment flow', async () => {
   async function createSubscription(tenantId: string, principalId: string) {
     await withTenantTransaction(tenantId, principalId, async (client) => {
       const plan = await client.query<{ id: string }>(
-        `SELECT id FROM plan WHERE code = 'starter' AND version = 1 AND active = true`,
+        `SELECT id FROM plan WHERE code = 'standard' AND version = 1 AND active = true`,
       );
       const planId = requireRow(plan.rows, 'starter plan').id;
       await client.query(

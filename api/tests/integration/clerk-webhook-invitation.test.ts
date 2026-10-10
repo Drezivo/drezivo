@@ -73,7 +73,7 @@ async function seedWebhook(status: 'pending' | 'accepted' | 'revoked' = 'pending
       `INSERT INTO subscription (tenant_id, plan_id, status, trial_ends_at,
          current_period_start, current_period_end)
        SELECT $1, id, 'trialing', now() + interval '14 days', now(), now() + interval '14 days'
-         FROM plan WHERE code = 'starter' AND version = 1`,
+         FROM plan WHERE code = 'standard' AND version = 1`,
       [tenantId],
     );
     const invitation = await admin.query<{ id: string }>(

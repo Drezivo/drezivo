@@ -48,7 +48,8 @@ Set the US$1 budget alert in step 1 so any surprise shows up in your email, not 
 ## Before you start
 
 1. **Supabase has every migration applied**, through `0060_storefront_cms_settings.sql`. Apply
-   them from the release commit: in `api/`, set `DATABASE_URL_DIRECT` and run `npm run db:migrate`.
+   them from the release commit: in `api/`, set `DATABASE_URL_MIGRATION` to the approved direct or
+   shared Session-pooler connection and run `npm run db:migrate`.
    See `docs/runbooks/migrations.md`.
 2. **The `drezivo_worker` role has a password.**
    - Generate a long random password, for example 32 characters from a password manager, and use

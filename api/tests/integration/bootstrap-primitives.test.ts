@@ -59,7 +59,7 @@ describe('TBF-012 bootstrap idempotency and global audit primitives', async () =
 
   it('replays the original response for a sequential same-key retry', async () => {
     const account = await ensureAccount('user_tbf012_replay');
-    const input = claimInput(account.id, 'onboarding.create', 'replay-key', { plan: 'starter' });
+    const input = claimInput(account.id, 'onboarding.create', 'replay-key', { plan: 'standard' });
     const claimed = await withGlobalTransaction('user_tbf012_replay', (client) =>
       claimBootstrapIdempotency(client, input),
     );
@@ -136,7 +136,7 @@ describe('TBF-012 bootstrap idempotency and global audit primitives', async () =
 
   it('rejects a changed payload under the same key and does not create a second effect', async () => {
     const account = await ensureAccount('user_tbf012_key_reuse');
-    const first = claimInput(account.id, 'onboarding.create', 'same-key', { plan: 'starter' });
+    const first = claimInput(account.id, 'onboarding.create', 'same-key', { plan: 'standard' });
     const changed = claimInput(account.id, 'onboarding.create', 'same-key', { plan: 'business' });
     const claimed = await withGlobalTransaction('user_tbf012_key_reuse', (client) =>
       claimBootstrapIdempotency(client, first),
@@ -195,7 +195,7 @@ describe('TBF-012 bootstrap idempotency and global audit primitives', async () =
 
   it('returns in-progress immediately for a committed claim not yet finalized', async () => {
     const account = await ensureAccount('user_tbf012_in_progress');
-    const input = claimInput(account.id, 'onboarding.create', 'pending-key', { plan: 'starter' });
+    const input = claimInput(account.id, 'onboarding.create', 'pending-key', { plan: 'standard' });
     const claimed = await withGlobalTransaction('user_tbf012_in_progress', (client) =>
       claimBootstrapIdempotency(client, input),
     );
@@ -217,7 +217,7 @@ describe('TBF-012 bootstrap idempotency and global audit primitives', async () =
 
   it('rolls back idempotency, business, and audit rows together', async () => {
     const account = await ensureAccount('user_tbf012_rollback');
-    const input = claimInput(account.id, 'onboarding.create', 'rollback-key', { plan: 'starter' });
+    const input = claimInput(account.id, 'onboarding.create', 'rollback-key', { plan: 'standard' });
     await expect(
       withGlobalTransaction('user_tbf012_rollback', async (client) => {
         const claim = await claimBootstrapIdempotency(client, input);
@@ -255,7 +255,7 @@ describe('TBF-012 bootstrap idempotency and global audit primitives', async () =
 
   it('enforces owner and tenant isolation for global records', async () => {
     const owner = await ensureAccount('user_tbf012_owner');
-    const input = claimInput(owner.id, 'onboarding.create', 'owner-key', { plan: 'starter' });
+    const input = claimInput(owner.id, 'onboarding.create', 'owner-key', { plan: 'standard' });
     await withGlobalTransaction('user_tbf012_owner', async (client) => {
       await claimBootstrapIdempotency(client, input);
       await appendGlobalAuditEvent(client, {
@@ -364,7 +364,7 @@ describe('TBF-012 bootstrap idempotency and global audit primitives', async () =
 
   it('rejects oversized JSON and keeps global audit immutable for the runtime role', async () => {
     const account = await ensureAccount('user_tbf012_limits');
-    const input = claimInput(account.id, 'onboarding.create', 'large-key', { plan: 'starter' });
+    const input = claimInput(account.id, 'onboarding.create', 'large-key', { plan: 'standard' });
     const claimed = await withGlobalTransaction('user_tbf012_limits', (client) =>
       claimBootstrapIdempotency(client, input),
     );

@@ -553,7 +553,7 @@ function requireOnboardingStatus(value: string): OnboardingStatus {
 }
 
 function requirePlanCode(value: string): PlanCode {
-  if (value === 'starter' || value === 'professional' || value === 'business') {
+  if (value === 'starter' || value === 'standard') {
     return value;
   }
   throw new Error(`Unexpected onboarding plan code from database: ${value}`);

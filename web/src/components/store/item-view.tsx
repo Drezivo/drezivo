@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 
-import type { ItemDetail, PublicStorefront } from '@drezivo/contracts';
+import { normalizeVariantFitRange, type ItemDetail, type PublicStorefront } from '@drezivo/contracts';
 
 import { durationLabel, formatMinor } from '@/lib/storefront-format';
 
@@ -147,7 +147,8 @@ function Measurements({ item, variantId }: { item: ItemDetail; variantId: string
   const variant = item.variants.find((entry) => entry.variant_id === variantId) ?? item.variants[0];
   if (!variant) return null;
   const { measurement } = variant;
-  const fitRange = variant.fit_range ? <p className="mb-4 text-sf-muted">Fits {variant.fit_range}</p> : null;
+  const fitRangeText = variant.fit_range ? normalizeVariantFitRange(variant.fit_range) : '';
+  const fitRange = fitRangeText ? <p className="mb-4 text-sf-muted">Fits {fitRangeText}</p> : null;
   if (measurement.mode === 'none') {
     return (
       <>

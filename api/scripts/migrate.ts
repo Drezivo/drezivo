@@ -5,7 +5,14 @@ import { fileURLToPath } from 'node:url';
 
 import { Client } from 'pg';
 
-import { inspectMigrationHistory } from './migration-history.js';
+import { resolveMigrationDatabaseUrl } from './migration-connection.js';
+import {
+  assertInvitationResolverIsNotAlreadyInstalled,
+  inspectMigrationHistory,
+  OUT_OF_ORDER_SAFE_MIGRATION,
+  selectPendingMigrations,
+} from './migration-history.js';
+import { applyMigrationTransaction } from './migration-transaction.js';
 import '../src/config/load-env.js';
 
 /**
@@ -15,9 +22,9 @@ import '../src/config/load-env.js';
  * migrations/README.md the hand-written files in this directory are the source of truth here
  * (GiST exclusion constraints and RLS policies are outside what drizzle-kit can generate).
  *
- * Uses a direct (non-pooled) connection, per TRD §9. Supabase recommends its direct endpoint for
- * migrations and other single-session administrative work; runtime pooler settings must not
- * weaken the guarantees required by a DDL-heavy migration run.
+ * Uses one PostgreSQL session for each migration. Supabase direct connections remain preferred;
+ * the shared Session pooler is supported for IPv4-only migration runners. Transaction pooling is
+ * rejected because migrations rely on one stable PostgreSQL session.
  */
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -33,29 +40,18 @@ async function main(): Promise<void> {
 
   const isRemoteEnvironment =
     process.env.NODE_ENV === 'staging' || process.env.NODE_ENV === 'production';
-  const databaseUrl = isRemoteEnvironment
-    ? process.env.DATABASE_URL_DIRECT
-    : (process.env.DATABASE_URL_DIRECT ?? process.env.DATABASE_URL);
-  if (!databaseUrl) {
-    throw new Error(
-      isRemoteEnvironment
-        ? 'DATABASE_URL_DIRECT is required for staging and production migrations.'
-        : 'DATABASE_URL_DIRECT or DATABASE_URL is required to run migrations.',
-    );
-  }
-  if (isRemoteEnvironment && new URL(databaseUrl).hostname.endsWith('.pooler.supabase.com')) {
-    throw new Error(
-      'DATABASE_URL_DIRECT points to a Supabase pooler; use the project direct endpoint.',
-    );
-  }
+  const databaseUrl = resolveMigrationDatabaseUrl({
+    isRemoteEnvironment,
+    migrationUrl: process.env.DATABASE_URL_MIGRATION,
+    directUrl: process.env.DATABASE_URL_DIRECT,
+    databaseUrl: process.env.DATABASE_URL,
+  });
 
   const entries = await readdir(MIGRATIONS_DIR);
   const allFiles = entries.filter((name) => /^\d{4}_.*\.sql$/.test(name)).sort();
   if (through !== null && !allFiles.includes(through)) {
     throw new Error(`Unknown migration filename: ${through}`);
   }
-  const selectedFiles = through === null ? allFiles : allFiles.filter((name) => name <= through);
-
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
 
@@ -84,6 +80,7 @@ async function main(): Promise<void> {
     const status = inspectMigrationHistory(
       allFiles,
       applied.map((row) => row.filename),
+      through,
     );
 
     if (statusOnly) {
@@ -99,18 +96,24 @@ async function main(): Promise<void> {
       return;
     }
 
-    const pendingFiles = status.pendingFiles.filter((file) => selectedFiles.includes(file));
+    const pendingFiles = selectPendingMigrations(status, allFiles, through);
     for (const file of pendingFiles) {
+      if (file === OUT_OF_ORDER_SAFE_MIGRATION) {
+        const { rows: preflightRows } = await client.query<{ function_exists: boolean }>(
+          `SELECT to_regprocedure('public.resolve_membership_invitation_webhook(text,text)')
+                    IS NOT NULL AS function_exists`,
+        );
+        assertInvitationResolverIsNotAlreadyInstalled(
+          preflightRows[0]?.function_exists === true,
+        );
+      }
+
       const sql = await readFile(path.join(MIGRATIONS_DIR, file), 'utf8');
       console.log(`Applying ${file} ...`);
 
-      await client.query('BEGIN');
       try {
-        await client.query(sql);
-        await client.query('INSERT INTO public.schema_migrations (filename) VALUES ($1)', [file]);
-        await client.query('COMMIT');
+        await applyMigrationTransaction(client, file, sql);
       } catch (error) {
-        await client.query('ROLLBACK');
         console.error(
           `Migration ${file} failed; rolled back. Fix forward with a new migration file, never edit this one.`,
         );
@@ -125,9 +128,7 @@ async function main(): Promise<void> {
       allFiles,
       refreshedApplied.map((row) => row.filename),
     );
-    const remainingPending = refreshedStatus.pendingFiles.filter((file) =>
-      selectedFiles.includes(file),
-    );
+    const remainingPending = selectPendingMigrations(refreshedStatus, allFiles, through);
     if (remainingPending.length > 0) {
       throw new Error(`Migration run finished with pending files: ${remainingPending.join(', ')}`);
     }

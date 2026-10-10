@@ -25,10 +25,8 @@ process.env.S3_SECRET_ACCESS_KEY ??= 'test';
 
 describe('TBF-033 subscription lifecycle and gates', async () => {
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
-  const {
-    changeTrialPlan,
-    reconcileTenantLifecycle,
-  } = await import('../../src/modules/billing/billing.service.js');
+  const { changeTrialPlan, reconcileTenantLifecycle } =
+    await import('../../src/modules/billing/billing.service.js');
   const { resolveActorContext } = await import('../../src/modules/tenancy/tenancy.repository.js');
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
 
@@ -49,7 +47,7 @@ describe('TBF-033 subscription lifecycle and gates', async () => {
     const tenant = await createTestTenant({ clerkOrgId: 'org_tbf033_trial' });
     const ownerId = 'user_tbf033_trial';
     await createTestMembership(tenant.id, ownerId, 'owner');
-    await seedSubscription(tenant.id, 'starter', "now() - interval '1 second'");
+    await seedSubscription(tenant.id, 'standard', "now() - interval '1 second'");
 
     const result = await withTenantTransaction(tenant.id, ownerId, (client) =>
       reconcileTenantLifecycle(client, tenant.id, {
@@ -74,7 +72,7 @@ describe('TBF-033 subscription lifecycle and gates', async () => {
     const tenant = await createTestTenant({ clerkOrgId: 'org_tbf033_grace' });
     const ownerId = 'user_tbf033_grace';
     await createTestMembership(tenant.id, ownerId, 'owner');
-    await seedSubscription(tenant.id, 'starter', "now() - interval '15 days'");
+    await seedSubscription(tenant.id, 'standard', "now() - interval '15 days'");
 
     const first = await withTenantTransaction(tenant.id, ownerId, (client) =>
       reconcileTenantLifecycle(client, tenant.id, {
@@ -109,7 +107,7 @@ describe('TBF-033 subscription lifecycle and gates', async () => {
     const ownerId = 'user_tbf033_context';
     const membershipId = await createTestMembership(tenant.id, ownerId, 'owner');
     await seedWorkspaceBranch(tenant.id, membershipId, ownerId);
-    await seedSubscription(tenant.id, 'starter', "now() - interval '15 days'");
+    await seedSubscription(tenant.id, 'standard', "now() - interval '15 days'");
 
     const result = await resolveActorContext({
       principalId: ownerId,
@@ -121,18 +119,22 @@ describe('TBF-033 subscription lifecycle and gates', async () => {
     if (result.kind === 'resolved') {
       expect(result.context.subscription.status).toBe('trialing');
       expect(result.context.tenant.status).toBe('active');
-      expect(result.context.access).toMatchObject({ level: 'read_only', reason: 'trial_ended', storefront_online: false });
+      expect(result.context.access).toMatchObject({
+        level: 'read_only',
+        reason: 'trial_ended',
+        storefront_online: false,
+      });
     }
     const state = await readLifecycleState(tenant.id);
     expect(state.subscription_status).toBe('trialing');
     expect(state.event_count).toBe(0);
   });
 
-  it('refuses to move a trial onto a retired plan and records no plan change', async () => {
+  it('does not allow a workspace to switch tiers after setup', async () => {
     const tenant = await createTestTenant({ clerkOrgId: 'org_tbf033_plan_change' });
     const ownerId = 'user_tbf033_plan_change';
     const membershipId = await createTestMembership(tenant.id, ownerId, 'owner');
-    await seedSubscription(tenant.id, 'starter', "now() + interval '6 days'");
+    await seedSubscription(tenant.id, 'standard', "now() + interval '6 days'");
 
     const result = await changeTrialPlan({
       tenantId: tenant.id,
@@ -140,10 +142,13 @@ describe('TBF-033 subscription lifecycle and gates', async () => {
       principalId: ownerId,
       requestId: 'req-tbf033-plan-change',
       idempotencyKey: 'tbf033-plan-change-key',
-      request: { plan_code: 'professional' },
+      request: { plan_code: 'starter' },
     });
 
-    expect(result).toMatchObject({ status: 409, body: { success: false, error: { code: 'STATE_CONFLICT' } } });
+    expect(result).toMatchObject({
+      status: 409,
+      body: { success: false, error: { code: 'STATE_CONFLICT' } },
+    });
     const events = await withTenantTransaction(tenant.id, ownerId, (client) =>
       client.query<{ count: number }>(
         `SELECT count(*)::int AS count FROM subscription_event WHERE tenant_id = $1 AND event_type = 'plan_changed'`,
@@ -157,8 +162,12 @@ describe('TBF-033 subscription lifecycle and gates', async () => {
     const tenant = await createTestTenant({ clerkOrgId: 'org_tbf033_owner_only' });
     const ownerId = 'user_tbf033_owner_only';
     await createTestMembership(tenant.id, ownerId, 'owner');
-    const frontdeskMembershipId = await createTestMembership(tenant.id, 'user_tbf033_frontdesk', 'frontdesk');
-    await seedSubscription(tenant.id, 'starter', "now() + interval '6 days'");
+    const frontdeskMembershipId = await createTestMembership(
+      tenant.id,
+      'user_tbf033_frontdesk',
+      'frontdesk',
+    );
+    await seedSubscription(tenant.id, 'standard', "now() + interval '6 days'");
 
     await expect(
       changeTrialPlan({
@@ -167,14 +176,14 @@ describe('TBF-033 subscription lifecycle and gates', async () => {
         principalId: 'user_tbf033_frontdesk',
         requestId: 'req-tbf033-owner-only',
         idempotencyKey: 'tbf033-owner-only-key',
-        request: { plan_code: 'starter' },
+        request: { plan_code: 'standard' },
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   async function seedSubscription(
     tenantId: string,
-    planCode: 'starter',
+    planCode: 'standard',
     trialEndsExpression: string,
   ): Promise<void> {
     await withTenantTransaction(tenantId, `seed:${tenantId}`, async (client) => {

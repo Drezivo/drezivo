@@ -1,5 +1,6 @@
 import {
   createClothingRequest,
+  normalizeVariantFitRange,
   type CreateClothingRequest,
   type ExtractedClothingFields,
   type MeasurementMode,
@@ -161,7 +162,7 @@ export function applyExtraction(row: ImportRow, fields: ExtractedClothingFields)
     price: fill(row.price, fields.rental_price_minor ? minorToPesos(fields.rental_price_minor) : null),
     freeSize: fields.size_label && !fields.free_size ? false : row.freeSize,
     sizeLabel: fields.free_size ? row.sizeLabel : fill(row.sizeLabel, fields.size_label),
-    fitRange: fill(row.fitRange, fields.fit_range),
+    fitRange: normalizeVariantFitRange(fill(row.fitRange, fields.fit_range)),
     measurementKinds: {
       bust: measure("bust", row.bust).kind,
       waist: measure("waist", row.waist).kind,
@@ -294,7 +295,7 @@ export function toCreateRequest(
     sizes: [
       {
         size_label: row.freeSize ? null : row.sizeLabel.trim(),
-        fit_range: row.freeSize ? row.fitRange.trim() || null : null,
+        fit_range: row.freeSize ? normalizeVariantFitRange(row.fitRange) || null : null,
         measurement_mode: row.measurementMode,
         ...(row.measurementMode === "default_guide" ? { measurement_guide_id: defaultGuideId } : {}),
         measurement_unit: row.unit,

@@ -1,6 +1,6 @@
 # 0014. Standard plan price
 
-**Status:** Accepted
+**Status:** Superseded by [ADR 0015](0015-starter-and-standard-plans.md) for plan identity and catalog structure; Standard's price remains unchanged
 **Date:** 6 October 2026
 **Owners:** Product owner
 

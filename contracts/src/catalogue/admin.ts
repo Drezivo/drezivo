@@ -28,8 +28,16 @@ export const variantMeasurementMap = z.record(
 );
 export type VariantMeasurementMap = z.infer<typeof variantMeasurementMap>;
 
+/** Removes an owner-entered presentation prefix so callers can add the label exactly once. */
+export function normalizeVariantFitRange(value: string): string {
+  return value.trim().replace(/^(?:fits(?:\s+|:\s*|$))+/i, '').trim();
+}
+
 export const variantFitRange = z.preprocess(
-  (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+  (value) => {
+    if (typeof value !== 'string') return value;
+    return normalizeVariantFitRange(value) || null;
+  },
   z.string().trim().min(1).max(120).nullable(),
 );
 

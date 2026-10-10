@@ -28,7 +28,7 @@ function canUseWebGL(): boolean {
  * the dress form into a gown and the copy changes to "From scattered to settled." The section is
  * twice the viewport tall; its inner frame is sticky, and scroll progress drives the scene.
  */
-export function AtelierHero({ signUpUrl, priceLabel, trialDays }: { signUpUrl: string; priceLabel: string; trialDays: number }) {
+export function AtelierHero({ signUpUrl, priceLabel, trialDays }: { signUpUrl: string; priceLabel: string | null; trialDays: number }) {
   const section = useRef<HTMLElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
 
@@ -146,7 +146,7 @@ export function AtelierHero({ signUpUrl, priceLabel, trialDays }: { signUpUrl: s
               </a>
             </div>
             <p data-hero-fade className="mt-5 text-at-small text-atelier-mist sm:mt-6">
-              No credit card. {priceLabel} after your trial.
+              {priceLabel ? `No credit card. ${priceLabel} after your trial.` : 'No credit card. Compare plans below.'}
             </p>
           </div>
 

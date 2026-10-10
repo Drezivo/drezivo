@@ -16,8 +16,32 @@ import { branch, branchGrant, membership, membershipRole, tenant } from './tenan
 export const onboardingStatus = z.enum(['incomplete', 'abandoned', 'payment_pending', 'provisioned']);
 export type OnboardingStatus = z.infer<typeof onboardingStatus>;
 
-export const planCode = z.enum(['starter', 'professional', 'business']);
+export const planCode = z.enum(['starter', 'standard']);
 export type PlanCode = z.infer<typeof planCode>;
+
+export const publicPlanCatalogItem = z
+  .object({
+    code: planCode,
+    name: z.enum(['Starter', 'Standard']),
+    monthly_price_minor: z.number().int().positive(),
+    currency: z.literal('PHP'),
+    trial_days: z.number().int().positive(),
+    limits: z
+      .object({
+        active_garments: z.number().int().nonnegative(),
+        frontdesk_seats: z.number().int().nonnegative(),
+      })
+      .strict(),
+  })
+  .strict();
+export type PublicPlanCatalogItem = z.infer<typeof publicPlanCatalogItem>;
+
+export const publicPlanCatalogResponse = z
+  .object({
+    plans: z.array(publicPlanCatalogItem).min(1),
+  })
+  .strict();
+export type PublicPlanCatalogResponse = z.infer<typeof publicPlanCatalogResponse>;
 
 export const subscriptionStatus = z.enum(['trialing', 'active', 'past_due', 'restricted', 'cancelled']);
 export type SubscriptionStatus = z.infer<typeof subscriptionStatus>;
