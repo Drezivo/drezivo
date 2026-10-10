@@ -125,6 +125,8 @@ export const reservationListItem = z
     status: reservationState,
     customer: reservationStaffCustomerProjection,
     line: reservationLineSummary,
+    /** How many garments the booking holds; `line` is the first. Optional for deploy order. */
+    line_count: z.number().int().positive().optional(),
     fulfillment_method: fulfillmentMethod,
     pickup_at: isoInstant,
     due_at: isoInstant,

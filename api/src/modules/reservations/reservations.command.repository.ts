@@ -18,8 +18,8 @@ export const RESERVATION_HOLD_RECLAIM_BATCH_SIZE = 100;
 
 export interface CreatedReservationGraphRow {
   reservation_id: string;
-  reservation_line_id: string;
-  allocation_id: string;
+  /** In line order, matching the input lines. */
+  reservation_line_ids: string[];
   payment_id: string | null;
   hold_expires_at: Date;
   version: number;
@@ -280,12 +280,27 @@ export async function fillReservationCustomerAddress(
   return result.rows[0]?.address ?? null;
 }
 
+/** One garment on a new booking: its snapshot, its own price, and the physical piece it holds. */
+export interface NewReservationLine {
+  reservationLineId: string;
+  allocationId: string;
+  variantId: string;
+  nameSnapshot: string;
+  measurementsSnapshot: Record<string, number | { type: 'fit_note'; text: string }>;
+  fitRangeSnapshot: string | null;
+  measurementUnitSnapshot: 'cm' | 'in';
+  pricingSnapshot: Record<string, unknown>;
+  rentalMinor: number;
+  depositMinor: number;
+  assetId: string;
+  blockedStart: string;
+  blockedEnd: string;
+}
+
 export async function createReservationGraph(
   client: PoolClient,
   input: {
     reservationId: string;
-    reservationLineId: string;
-    allocationId: string;
     paymentId: string;
     tenantId: string;
     branchId: string;
@@ -304,17 +319,10 @@ export async function createReservationGraph(
     rentalTotalMinor: number;
     securityRequiredMinor: number;
     dueNowMinor: number;
-    variantId: string;
-    lineNameSnapshot: string;
-    measurementsSnapshot: Record<string, number | { type: 'fit_note'; text: string }>;
-    fitRangeSnapshot: string | null;
-    measurementUnitSnapshot: 'cm' | 'in';
-    pricingSnapshot: Record<string, unknown>;
-    assetId: string;
-    blockedStart: string;
-    blockedEnd: string;
+    lines: NewReservationLine[];
   },
 ): Promise<CreatedReservationGraphRow> {
+  if (input.lines.length === 0) throw new Error('A reservation needs at least one line.');
   const reservation = await client.query<{
     id: string;
     hold_expires_at: Date;
@@ -371,48 +379,41 @@ export async function createReservationGraph(
     );
   }
 
-  await client.query(
-    `INSERT INTO reservation_line
-       (id, tenant_id, reservation_id, variant_id, line_number, name_snapshot,
-        measurements_snapshot, fit_range_snapshot, measurement_unit_snapshot, pricing_snapshot, rental_minor, deposit_minor, currency)
-     VALUES ($1, $2, $3, $4, 1, $5, $6::jsonb, $7, $8, $9::jsonb, $10, $11, 'PHP')`,
-    [
-      input.reservationLineId,
-      input.tenantId,
-      input.reservationId,
-      input.variantId,
-      input.lineNameSnapshot,
-      JSON.stringify(input.measurementsSnapshot),
-      input.fitRangeSnapshot,
-      input.measurementUnitSnapshot,
-      JSON.stringify(input.pricingSnapshot),
-      input.rentalTotalMinor,
-      input.securityRequiredMinor,
-    ],
-  );
-
-  await client.query(
-    `INSERT INTO asset_allocation
-       (id, tenant_id, branch_id, asset_id, reservation_line_id, kind, period, is_blocking)
-     VALUES ($1, $2, $3, $4, $5, 'reservation_hold',
-             tstzrange($6::timestamptz, $7::timestamptz, '[)'), true)`,
-    [
-      input.allocationId,
-      input.tenantId,
-      input.branchId,
-      input.assetId,
-      input.reservationLineId,
-      input.blockedStart,
-      input.blockedEnd,
-    ],
-  );
+  for (const [index, line] of input.lines.entries()) {
+    await client.query(
+      `INSERT INTO reservation_line
+         (id, tenant_id, reservation_id, variant_id, line_number, name_snapshot,
+          measurements_snapshot, fit_range_snapshot, measurement_unit_snapshot, pricing_snapshot, rental_minor, deposit_minor, currency)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10::jsonb, $11, $12, 'PHP')`,
+      [
+        line.reservationLineId,
+        input.tenantId,
+        input.reservationId,
+        line.variantId,
+        index + 1,
+        line.nameSnapshot,
+        JSON.stringify(line.measurementsSnapshot),
+        line.fitRangeSnapshot,
+        line.measurementUnitSnapshot,
+        JSON.stringify(line.pricingSnapshot),
+        line.rentalMinor,
+        line.depositMinor,
+      ],
+    );
+    await client.query(
+      `INSERT INTO asset_allocation
+         (id, tenant_id, branch_id, asset_id, reservation_line_id, kind, period, is_blocking)
+       VALUES ($1, $2, $3, $4, $5, 'reservation_hold',
+               tstzrange($6::timestamptz, $7::timestamptz, '[)'), true)`,
+      [line.allocationId, input.tenantId, input.branchId, line.assetId, line.reservationLineId, line.blockedStart, line.blockedEnd],
+    );
+  }
 
   const row = reservation.rows[0];
   if (!row) throw new Error('Reservation insert returned no row.');
   return {
     reservation_id: row.id,
-    reservation_line_id: input.reservationLineId,
-    allocation_id: input.allocationId,
+    reservation_line_ids: input.lines.map((line) => line.reservationLineId),
     payment_id: input.dueNowMinor > 0 ? input.paymentId : null,
     hold_expires_at: row.hold_expires_at,
     version: row.version,

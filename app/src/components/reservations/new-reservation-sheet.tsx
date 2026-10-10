@@ -2,7 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { CalendarDays, Check, ChevronDown, FileUp, Search, Shirt, TimerReset, UserRound } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   BranchBusinessHours,
@@ -43,6 +43,13 @@ import { useVerifiedActorContext } from "@/components/shell/dashboard-access-gat
 import { claimHoldOwner, clearPendingHold, readHoldDraft, saveHoldDraft, savePendingHold } from "@/lib/pending-hold";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { localDateTimeParts, zonedLocalDateTimeToInstant } from "@/lib/zoned-time";
+
+import {
+  AdditionalGarments,
+  additionalGarmentFrom,
+  additionalGarmentsReadiness,
+  type AdditionalGarment,
+} from "./additional-garments";
 import { cn } from "@/lib/utils";
 
 const PRODUCT_LIMIT = 5;
@@ -76,6 +83,8 @@ export type ReservationRebookSource = {
   referenceCode: string;
   productId: ProductId;
   variantId: ProductVariantId;
+  /** The booking's other garments, after the first. */
+  additionalGarments?: Array<{ productId: ProductId; variantId: ProductVariantId; name: string }>;
   pickupAt: string;
   dueAt: string;
   eventDate: string | null;
@@ -151,6 +160,16 @@ export function NewReservationSheet({
   const [selectedProduct, setSelectedProduct] = useState<Pick<ClothingListItem, "product_id"> | null>(null);
   // The size to select once a pre-filled product's detail loads, and which rebook was applied.
   const pendingVariantIdRef = useRef<ProductVariantId | null>(null);
+  const [extraGarments, setExtraGarments] = useState<AdditionalGarment[]>([]);
+  const resetReserveIntent = reserveGuard.resetIntent;
+  // Stable, so the garment list's loading effects only re-run when the list itself changes.
+  const updateExtraGarments = useCallback(
+    (update: (current: AdditionalGarment[]) => AdditionalGarment[]) => {
+      setExtraGarments(update);
+      resetReserveIntent();
+    },
+    [resetReserveIntent]
+  );
   const appliedRebookRef = useRef<string | null>(null);
   const [productDetail, setProductDetail] = useState<ClothingDetail | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<ProductVariantId | "">("");
@@ -205,6 +224,11 @@ export function NewReservationSheet({
       exactAvailability.variant_id === selectedVariant?.id &&
       exactAvailability.requested_interval.start === requestedInterval.start &&
       exactAvailability.requested_interval.end === requestedInterval.end
+  );
+  const extrasReadiness = additionalGarmentsReadiness(
+    extraGarments,
+    selectedVariantId,
+    requestedInterval ? `${requestedInterval.start}|${requestedInterval.end}` : null
   );
   const holdRemainingMs = held?.reservation.hold_expires_at
     ? new Date(held.reservation.hold_expires_at).getTime() - now
@@ -518,6 +542,7 @@ export function NewReservationSheet({
     appliedRebookRef.current = rebookFrom.referenceCode;
     pendingVariantIdRef.current = rebookFrom.variantId;
     setSelectedProduct({ product_id: rebookFrom.productId });
+    setExtraGarments((rebookFrom.additionalGarments ?? []).map(additionalGarmentFrom));
 
     const pickup = localDateTimeParts(new Date(rebookFrom.pickupAt), timeZone);
     const due = localDateTimeParts(new Date(rebookFrom.dueAt), timeZone);
@@ -557,6 +582,7 @@ export function NewReservationSheet({
   const reset = () => {
     appliedRebookRef.current = null;
     pendingVariantIdRef.current = null;
+    setExtraGarments([]);
     reserveGuard.resetIntent();
     completeGuard.resetIntent();
     cancelGuard.resetIntent();
@@ -643,11 +669,16 @@ export function NewReservationSheet({
       });
       return;
     }
+    if (!extrasReadiness.ready) {
+      setNotice({ tone: "attention", text: extrasReadiness.problem ?? "Check the other dresses before reserving." });
+      return;
+    }
 
     const result = await reserveGuard.submit((idempotencyKey) =>
       createDrezivoApiClient(getToken).createStaffReservation(
         {
           variant_id: selectedVariant.id,
+          ...(extrasReadiness.variantIds.length > 0 ? { additional_variant_ids: extrasReadiness.variantIds } : {}),
           requested_interval: requestedInterval,
           ...(eventDate ? { event_date: eventDate } : {}),
           fulfillment_method: fulfillmentMethod,
@@ -675,7 +706,10 @@ export function NewReservationSheet({
     setNow(Date.now());
     setNotice({
       tone: "success",
-      text: "Garment reserved. Finish the customer information before the hold expires.",
+      text:
+        extrasReadiness.variantIds.length > 0
+          ? `${extrasReadiness.variantIds.length + 1} garments reserved. Finish the customer information before the hold expires.`
+          : "Garment reserved. Finish the customer information before the hold expires.",
     });
     reserveGuard.resetIntent();
     onReservationChanged(result.data.reservation.id);
@@ -1196,6 +1230,26 @@ export function NewReservationSheet({
                   )}
                 </section>
 
+                <Separator />
+                <section>
+                  <SectionTitle icon={Shirt} title="Other dresses on this booking" />
+                  <p className="mt-1 text-xs text-dashboard-muted">
+                    Same pickup and return. Each dress is checked and priced on its own, and delivery is charged once.
+                  </p>
+                  <div className="mt-3">
+                    <AdditionalGarments
+                      disabled={reserveGuard.isSubmitting}
+                      garments={extraGarments}
+                      onChange={updateExtraGarments}
+                      requestedInterval={requestedInterval}
+                    />
+                  </div>
+                  {extraGarments.length > 0 && extrasReadiness.problem ? (
+                    <p className="mt-2 text-xs text-dashboard-muted" role="status">
+                      {extrasReadiness.problem}
+                    </p>
+                  ) : null}
+                </section>
               </>
             ) : null}
 
@@ -1246,6 +1300,7 @@ export function NewReservationSheet({
                   Boolean(minimumDurationIssue) ||
                   !exactAvailabilityMatchesSelection ||
                   !exactAvailability?.available ||
+                  !extrasReadiness.ready ||
                   !paymentMethodId
                 }
                 onClick={() =>

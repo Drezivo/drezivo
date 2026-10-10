@@ -102,6 +102,7 @@ describe("ReservationDetailsSheet", () => {
       referenceCode: "RSV-CONT-001",
       productId: "00000000-0000-4000-8000-000000000107",
       variantId: "00000000-0000-4000-8000-000000000104",
+      additionalGarments: [],
       pickupAt: "2026-10-17T02:00:00.000Z",
       dueAt: "2026-10-20T02:00:00.000Z",
       eventDate: "2026-10-18",
@@ -114,6 +115,28 @@ describe("ReservationDetailsSheet", () => {
         email: "bea@example.test",
         address: "12 Mabini St, Quezon City",
       },
+    });
+  });
+
+  it("continues every garment of a multi-garment booking", () => {
+    const base = detailWith({});
+    const second = {
+      ...base.lines[0],
+      id: "00000000-0000-4000-8000-000000000113",
+      variant_id: "00000000-0000-4000-8000-000000000114",
+      product_id: "00000000-0000-4000-8000-000000000117",
+      line_number: 2,
+      name_snapshot: "Amara",
+    };
+    const { onContinue } = renderSheet(detailWith({ lines: [base.lines[0], second] }));
+
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    expect(onContinue.mock.calls[0]?.[0]).toMatchObject({
+      variantId: "00000000-0000-4000-8000-000000000104",
+      additionalGarments: [
+        { productId: "00000000-0000-4000-8000-000000000117", variantId: "00000000-0000-4000-8000-000000000114", name: "Amara" },
+      ],
     });
   });
 

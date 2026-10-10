@@ -83,6 +83,9 @@ export const staffReservationIntakeResponse = z
   .strict();
 export type StaffReservationIntakeResponse = z.infer<typeof staffReservationIntakeResponse>;
 
+/** Most garments one booking can hold; each one is checked, priced, and reserved on its own. */
+export const MAX_RESERVATION_LINES = 10;
+
 /**
  * POST /reservations request body. A staff walk-in may claim the garment before
  * customer/contact entry is complete, so `customer` is optional while the
@@ -93,6 +96,11 @@ export const staffReservationCreateRequest = z
   .object({
     customer: staffReservationCustomerInput.optional(),
     variant_id: productVariantId,
+    /**
+     * More garments on the same booking, for the same dates. Each is quoted and gets its own free
+     * physical piece; the same variant may appear again when the shop has several pieces of it.
+     */
+    additional_variant_ids: z.array(productVariantId).max(MAX_RESERVATION_LINES - 1).optional(),
     requested_interval: instantInterval,
     event_date: isoDate.optional(),
     fulfillment_method: fulfillmentMethod,

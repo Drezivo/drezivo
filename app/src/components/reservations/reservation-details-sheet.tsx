@@ -568,6 +568,9 @@ function ContinueReservation({
             referenceCode: detail.reference_code,
             productId,
             variantId: line.variant_id,
+            additionalGarments: detail.lines.slice(1).flatMap((other) =>
+              other.product_id ? [{ productId: other.product_id, variantId: other.variant_id, name: other.name_snapshot }] : []
+            ),
             pickupAt: detail.pickup_at,
             dueAt: detail.due_at,
             eventDate: detail.event_date ?? null,

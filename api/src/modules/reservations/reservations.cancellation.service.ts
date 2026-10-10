@@ -191,11 +191,10 @@ function assertCancellableAllocation(
 ): void {
   const expectedKind = reservation.status === 'confirmed' ? 'reservation_confirmed' : 'reservation_hold';
   if (
-    allocations.length !== 1 ||
-    allocations[0]?.kind !== expectedKind ||
-    allocations[0].is_blocking !== true
+    allocations.length === 0 ||
+    allocations.some((allocation) => allocation.kind !== expectedKind || allocation.is_blocking !== true)
   ) {
-    throw new StateConflictError('Reservation does not have exactly one cancellable blocking allocation.');
+    throw new StateConflictError('Reservation garments are not all cancellable blocking allocations.');
   }
 }
 
@@ -227,7 +226,7 @@ async function expireInsteadOfCancel(
       tenantId: context.tenantId,
       reservationId,
     });
-    if (released !== 1) {
+    if (released < 1) {
       throw new StateConflictError('Reservation expiry could not release its allocation.');
     }
     await appendReservationAuditEvent(client, {
