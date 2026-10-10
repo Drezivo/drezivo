@@ -119,6 +119,7 @@ export interface ReservationDetailHeaderRow {
 export interface ReservationDetailLineRow {
   id: string;
   variant_id: string;
+  product_id: string;
   variant_sku: string;
   variant_size_label: string | null;
   variant_color_label: string | null;
@@ -509,6 +510,7 @@ export async function readReservationDetailModel(
     `SELECT
        rl.id,
        rl.variant_id,
+       pv.product_id,
        pv.sku AS variant_sku,
        pv.size_label AS variant_size_label,
        pv.color_label AS variant_color_label,

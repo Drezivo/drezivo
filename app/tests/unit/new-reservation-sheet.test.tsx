@@ -421,6 +421,54 @@ describe("NewReservationSheet", () => {
     });
   });
 
+  it("pre-fills Continue from a finished reservation and re-checks the copied dates", async () => {
+    renderSheet({
+      rebookFrom: {
+        referenceCode: "RSV-OLD-001",
+        productId: ids.product as never,
+        variantId: ids.variant as never,
+        pickupAt: "2027-03-12T02:00:00.000Z",
+        dueAt: "2027-03-15T02:00:00.000Z",
+        eventDate: "2027-03-13",
+        fulfillmentMethod: "delivery",
+        paymentMethodId: ids.paymentMethod as never,
+        customer: { customerId: ids.customer as never, fullName: "Bea Santiago", phone: null, email: null, address: null },
+      },
+    });
+
+    expect(await screen.findByText("Copied from RSV-OLD-001. Check that the dates are still free, then reserve.")).toBeTruthy();
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledWith(ids.product));
+    // The original size and dates are re-checked against live availability before anything is reserved.
+    await waitFor(() =>
+      expect(api.getStaffReservationAvailabilityCheck).toHaveBeenCalledWith({
+        variant_id: ids.variant,
+        pickup_at: "2027-03-12T02:00:00.000Z",
+        due_at: "2027-03-15T02:00:00.000Z",
+      })
+    );
+    expect(api.createStaffReservation).not.toHaveBeenCalled();
+  });
+
+  it("drops copied dates that have already passed and asks for new ones", async () => {
+    renderSheet({
+      rebookFrom: {
+        referenceCode: "RSV-OLD-002",
+        productId: ids.product as never,
+        variantId: ids.variant as never,
+        pickupAt: "2025-01-10T02:00:00.000Z",
+        dueAt: "2025-01-13T02:00:00.000Z",
+        eventDate: null,
+        fulfillmentMethod: "pickup",
+        paymentMethodId: null,
+        customer: null,
+      },
+    });
+
+    expect(await screen.findByText("Copied from RSV-OLD-002. Its dates have passed, so choose new dates.")).toBeTruthy();
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledWith(ids.product));
+    expect(api.getStaffReservationAvailabilityCheck).not.toHaveBeenCalled();
+  });
+
   it("shows only five recent clothing items by default and tells staff to search for more", async () => {
     const items = Array.from({ length: 6 }, (_, index) =>
       clothingListItem.parse({

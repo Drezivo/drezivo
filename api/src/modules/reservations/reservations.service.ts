@@ -610,6 +610,7 @@ export async function getReservationDetail(
     lines: model.lines.map((line, index) => ({
       id: line.id,
       variant_id: line.variant_id,
+      product_id: line.product_id,
       variant: {
         sku: line.variant_sku,
         size_label: line.variant_size_label,
