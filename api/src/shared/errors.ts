@@ -108,6 +108,12 @@ export class PaymentPrerequisiteFailedError extends AppError {
   readonly code: ErrorCode = 'PAYMENT_PREREQUISITE_FAILED';
 }
 
+/** 409 — an edit would change the amount due after payment and staff have not accepted it. */
+export class PriceChangeNotAcceptedError extends AppError {
+  readonly status = 409;
+  readonly code: ErrorCode = 'PRICE_CHANGE_NOT_ACCEPTED';
+}
+
 /** 409 — same idempotency key replayed with a different canonical request hash. */
 export class IdempotencyKeyReusedError extends AppError {
   readonly status = 409;

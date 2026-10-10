@@ -7,10 +7,10 @@ import { z } from 'zod';
 
 import { fileObjectId, paymentId, paymentReceiptId } from '../common/ids';
 import { moneyString } from '../common/money';
-import { instantInterval, isoInstant } from '../common/time';
+import { instantInterval, isoDate, isoInstant } from '../common/time';
 import { physicalAssetReadiness } from '../catalogue/staff';
 import { staffReservationCustomerInput } from './hold';
-import { reservationSummary } from './reservation';
+import { fulfillmentMethod, reservationSummary } from './reservation';
 
 const versionedAction = z
   .object({
@@ -161,6 +161,64 @@ export const reservationRescheduleResponse = z
   })
   .strict();
 export type ReservationRescheduleResponse = z.infer<typeof reservationRescheduleResponse>;
+
+/**
+ * The customer facts shown on one reservation. Editing them corrects this booking only; the shared
+ * customer profile is changed through customer management.
+ */
+export const reservationEditCustomer = z
+  .object({
+    full_name: z.string().trim().min(1).max(200),
+    phone: z.string().trim().regex(/^\d{11}$/, 'Phone number must contain exactly 11 digits.').nullable(),
+    email: z.string().trim().email().max(320).nullable(),
+    address: z.string().trim().min(1).max(500),
+  })
+  .strict()
+  .refine((value) => value.phone !== null || value.email !== null, {
+    path: ['phone'],
+    message: 'At least one customer contact method (phone or email) is required.',
+  });
+export type ReservationEditCustomer = z.infer<typeof reservationEditCustomer>;
+
+/**
+ * PATCH /reservations/:id: staff corrections before handover (held, pending confirmation, or
+ * confirmed). Send only what changes. New dates are re-checked against stock and re-priced with
+ * the price terms accepted at booking, and swap the booked garments in one transaction: if any
+ * garment is not free, nothing changes. Once the renter paid or uploaded a receipt, the paid amount
+ * stays as recorded: a lower total needs `accept_price_change` (staff refund the difference) and a
+ * higher total is refused, since pickup requires the paid amount to cover the total.
+ */
+export const reservationEditRequest = versionedAction
+  .extend({
+    customer: reservationEditCustomer.optional(),
+    event_date: isoDate.nullable().optional(),
+    fulfillment_method: fulfillmentMethod.optional(),
+    requested_interval: instantInterval.optional(),
+    accept_price_change: z.boolean().default(false),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.customer !== undefined ||
+      value.event_date !== undefined ||
+      value.fulfillment_method !== undefined ||
+      value.requested_interval !== undefined,
+    { message: 'Change at least one reservation detail.' },
+  );
+export type ReservationEditRequest = z.infer<typeof reservationEditRequest>;
+/** What a client sends: `accept_price_change` may be omitted. */
+export type ReservationEditRequestInput = z.input<typeof reservationEditRequest>;
+
+export const reservationEditResponse = z
+  .object({
+    reservation: reservationSummary,
+    /** True when the edit changed the amount due. */
+    price_changed: z.boolean(),
+    /** Amount due before this edit, so staff can see what to collect or refund. */
+    previous_due_now_minor: moneyString,
+  })
+  .strict();
+export type ReservationEditResponse = z.infer<typeof reservationEditResponse>;
 
 /** Pre-handover cancellation only; picked-up rentals must use return/settlement. */
 export const reservationCancelRequest = versionedAction.extend({

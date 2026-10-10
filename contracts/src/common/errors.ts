@@ -34,6 +34,8 @@ export const errorCode = z.enum([
   'ASSET_UNAVAILABLE',
   'ASSET_UNREADY',
   'PAYMENT_PREREQUISITE_FAILED',
+  // An edit changes the amount due after the renter paid or sent a receipt; staff must accept it.
+  'PRICE_CHANGE_NOT_ACCEPTED',
   'IDEMPOTENCY_KEY_REUSED',
   'TRIAL_CONSUMED',
   'CURRENT_OWNED_TENANT_EXISTS',

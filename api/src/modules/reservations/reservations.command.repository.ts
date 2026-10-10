@@ -27,14 +27,15 @@ export interface CreatedReservationGraphRow {
 }
 
 /**
- * Locks every V1-eligible serialized asset for the chosen variant in deterministic UUID order.
+ * Locks every V1-eligible serialized asset for the chosen variants in one deterministic UUID order,
+ * so bookings and edits touching several garments always lock in the same sequence.
  * The lock is the transaction boundary used by RSV-021; the GiST allocation insert remains the
  * final authority because maintenance or legacy writers that do not take this row lock can still
  * race us and must be rejected by the database constraint.
  */
 export async function lockEligibleReservationAssets(
   client: PoolClient,
-  input: { tenantId: string; branchId: string; variantId: string },
+  input: { tenantId: string; branchId: string; variantIds: readonly string[] },
 ): Promise<string[]> {
   const result = await client.query<{ id: string }>(
     `SELECT pa.id
@@ -50,7 +51,7 @@ export async function lockEligibleReservationAssets(
         AND c.id = p.category_id
       WHERE pa.tenant_id = $1
         AND pa.branch_id = $2
-        AND pa.variant_id = $3
+        AND pa.variant_id = ANY($3::uuid[])
         AND pa.lifecycle_status = 'active'
         AND (
           pa.readiness = 'ready'
@@ -73,7 +74,7 @@ export async function lockEligibleReservationAssets(
       ORDER BY pa.id ASC
       LIMIT 1000
       FOR UPDATE OF pa`,
-    [input.tenantId, input.branchId, input.variantId],
+    [input.tenantId, input.branchId, [...new Set(input.variantIds)]],
   );
   return result.rows.map((row) => row.id);
 }

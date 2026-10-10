@@ -334,7 +334,7 @@ function isoDateDayNumber(isoDate: string): number {
   return Date.parse(`${isoDate}T00:00:00Z`) / MS_PER_DAY;
 }
 
-function assertEventDateWithinRentalPeriod(input: {
+export function assertEventDateWithinRentalPeriod(input: {
   eventDate: string | undefined;
   requestedInterval: InstantInterval;
   timeZone: string;
@@ -366,7 +366,7 @@ function localIsoDate(instantValue: string, timeZone: string): string {
  * has not set up delivery still lets the renter ask for it: nothing is added to the total and the
  * shop is told to contact the renter to arrange it (`to_arrange`).
  */
-function resolveDelivery(
+export function resolveDelivery(
   rules: Record<string, unknown>,
   fulfillmentMethod: FulfillmentMethod,
 ): { feeMinor: bigint; terms: DeliveryTerms | null } {
