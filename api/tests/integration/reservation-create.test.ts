@@ -186,6 +186,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
     expect(persisted.reservation.delivery_snapshot).toEqual({
       fulfillment_method: 'delivery',
       fee_minor: '25000',
+      terms: 'set_fee',
     });
     expect(persisted.reservation.price_snapshot).toMatchObject({
       rental_total_minor: '190000',

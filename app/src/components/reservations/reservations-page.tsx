@@ -608,6 +608,11 @@ function ReservationTable({
                   <p className="mt-1 text-xs text-dashboard-muted md:hidden">
                     Pickup {formatDateTime(reservation.pickup_at, timeZone)}
                   </p>
+                  {reservation.fulfillment_method === "delivery" ? (
+                    <span className="mt-1 inline-flex rounded-md bg-dashboard-gold-soft px-1.5 py-0.5 text-[11px] font-medium text-dashboard-gold-text lg:hidden">
+                      Delivery
+                    </span>
+                  ) : null}
                 </div>
               </div>
             </TableCell>
@@ -618,7 +623,13 @@ function ReservationTable({
               <DateCell value={reservation.due_at} timeZone={timeZone} />
             </TableCell>
             <TableCell className="hidden align-top capitalize text-dashboard-muted lg:table-cell">
-              {reservation.fulfillment_method === "pickup" ? "Pickup" : "Delivery"}
+              {reservation.fulfillment_method === "pickup" ? (
+                "Pickup"
+              ) : (
+                <span className="inline-flex rounded-md bg-dashboard-gold-soft px-1.5 py-0.5 text-xs font-medium text-dashboard-gold-text">
+                  Delivery
+                </span>
+              )}
             </TableCell>
             <TableCell className="align-top">
               <PaymentCell reservation={reservation} />

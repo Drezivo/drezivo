@@ -8,6 +8,7 @@ import {
   reservationListResponse,
   reservationPaymentProjection,
   type PermissionCode,
+  type ReservationDeliverySnapshot,
   type ReservationDetail,
   type ReservationPaymentReceiptsResponse,
   type ReservationListItem,
@@ -748,13 +749,17 @@ function toPaymentProjection(
   });
 }
 
-function requireDeliverySnapshot(
-  row: ReservationDetailHeaderRow,
-): { fulfillment_method: 'pickup' | 'delivery' } {
+function requireDeliverySnapshot(row: ReservationDetailHeaderRow): ReservationDeliverySnapshot {
   if (!row.fulfillment_method) {
     throw new StateConflictError('Reservation delivery data is incomplete for staff display.');
   }
-  return { fulfillment_method: row.fulfillment_method };
+  // Unknown terms are dropped rather than passed through, so the wire value always parses.
+  const terms = row.delivery_terms === 'set_fee' || row.delivery_terms === 'to_arrange' ? row.delivery_terms : undefined;
+  return {
+    fulfillment_method: row.fulfillment_method,
+    ...(row.delivery_fee_minor !== null && /^\d+$/.test(row.delivery_fee_minor) ? { fee_minor: row.delivery_fee_minor } : {}),
+    ...(row.fulfillment_method === 'delivery' && terms ? { terms } : {}),
+  };
 }
 
 function toReviewContext(

@@ -52,11 +52,15 @@ export class EmailNotifications {
       pickup_at: Date;
       due_at: Date;
       timezone_snapshot: string;
-      item_name: string | null;
+      item_names: string | null;
+      fulfillment_method: string | null;
+      delivery_terms: string | null;
     }>(
       `SELECT r.reference_code, r.pickup_at, r.due_at, r.timezone_snapshot,
-              (SELECT rl.name_snapshot FROM reservation_line rl
-                WHERE rl.tenant_id = r.tenant_id AND rl.reservation_id = r.id ORDER BY rl.line_number LIMIT 1) AS item_name
+              (SELECT string_agg(rl.name_snapshot, ', ' ORDER BY rl.line_number) FROM reservation_line rl
+                WHERE rl.tenant_id = r.tenant_id AND rl.reservation_id = r.id) AS item_names,
+              r.delivery_snapshot ->> 'fulfillment_method' AS fulfillment_method,
+              r.delivery_snapshot ->> 'terms' AS delivery_terms
          FROM reservation r
         WHERE r.tenant_id = $1 AND r.id = $2`,
       [tenantId, reservationId],
@@ -64,11 +68,23 @@ export class EmailNotifications {
     const row = reservation.rows[0];
     if (!row) return;
     const when = `${formatLocal(row.pickup_at, row.timezone_snapshot)} to ${formatLocal(row.due_at, row.timezone_snapshot)}`;
-    const summary = [`Item: ${row.item_name ?? 'Rental'}`, `Dates: ${when}`, `Reference: ${row.reference_code}`];
+    const delivery = row.fulfillment_method === 'delivery';
+    const summary = [
+      `Item: ${row.item_names ?? 'Rental'}`,
+      `Dates: ${when}`,
+      `Handover: ${delivery ? 'Delivery' : 'Pickup at the shop'}`,
+      `Reference: ${row.reference_code}`,
+    ];
+    // Renter contact details stay in the app; the email only says that delivery needs arranging.
+    const deliveryNote = !delivery
+      ? []
+      : row.delivery_terms === 'to_arrange'
+        ? ['The renter asked for delivery. Contact them from the reservation in Drezivo to arrange it and any delivery fee.', '']
+        : ['The renter chose delivery. Their delivery address is on the reservation in Drezivo.', ''];
     await enqueueEmail(client, tenantId, `reservation-email:${reservationId}:new_request:business`, {
       to: workspace.businessEmail,
-      subject: `New rental request ${row.reference_code}`,
-      text: ['A customer sent a rental request with a payment receipt. Review it in Reservations.', '', ...summary].join('\n'),
+      subject: `New rental request ${row.reference_code}${delivery ? ' · Delivery requested' : ''}`,
+      text: ['A customer sent a rental request with a payment receipt. Review it in Reservations.', '', ...deliveryNote, ...summary].join('\n'),
     });
   }
 
