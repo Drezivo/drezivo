@@ -151,6 +151,11 @@ function ReservationDetails({
           >
             {RESERVATION_STATUS_LABELS[detail.status]}
           </Badge>
+          {detail.delivery_snapshot.fulfillment_method === "delivery" ? (
+            <Badge variant="outline" className="whitespace-nowrap border-dashboard-gold-text/30 bg-dashboard-gold-soft px-2 py-1 text-xs text-dashboard-gold-text">
+              Delivery requested
+            </Badge>
+          ) : null}
           {detail.booking_channel ? (
             <Badge variant="outline" className="whitespace-nowrap px-2 py-1 text-xs text-dashboard-muted">
               {detail.booking_channel === "online" ? "Online booking" : "Walk-in"}
@@ -296,6 +301,10 @@ function ReservationDetails({
             <DetailValue label="Event date" value={detail.event_date ?? "Not provided"} />
           </dl>
         </DetailCard>
+
+        {detail.delivery_snapshot.fulfillment_method === "delivery" ? (
+          <DeliveryCard detail={detail} />
+        ) : null}
 
         <DetailCard title="Price and payment" icon={CreditCard}>
           <dl className="grid gap-3 text-sm sm:grid-cols-3">
@@ -465,6 +474,65 @@ function ReservationDetails({
         </DetailCard>
       </div>
     </div>
+  );
+}
+
+/**
+ * The renter's delivery request and what staff need to act on it. When the shop has not set up
+ * delivery (`to_arrange`), nothing was charged and staff contact the renter to arrange it.
+ */
+function DeliveryCard({ detail }: { detail: ReservationDetail }) {
+  const customer = detail.customer.snapshot;
+  const { fee_minor: feeMinor, terms } = detail.delivery_snapshot;
+  const toArrange = terms === "to_arrange";
+  return (
+    <DetailCard title="Delivery" icon={Truck}>
+      <div className="w-full space-y-3 text-sm">
+        <div className="rounded-lg border border-dashboard-gold-text/25 bg-dashboard-gold-soft p-3 text-dashboard-gold-text">
+          <p className="font-medium">
+            {toArrange ? "The renter asked for delivery" : "The renter chose delivery"}
+          </p>
+          <p className="mt-1 text-xs">
+            {toArrange
+              ? "Delivery is not set up for your storefront, so no delivery fee was charged. Contact the renter to arrange the delivery and any fee."
+              : "Contact the renter to confirm the delivery time before pickup day."}
+          </p>
+        </div>
+        <dl className="grid gap-3 sm:grid-cols-2">
+          <DetailValue label="Deliver to" value={customer?.address ?? "Not recorded"} />
+          <DetailValue
+            label="Delivery fee"
+            value={
+              toArrange
+                ? "To arrange with the renter"
+                : feeMinor !== undefined
+                  ? formatMinorMoney(feeMinor, detail.price_snapshot.currency)
+                  : "Included in the total"
+            }
+          />
+        </dl>
+        {customer?.phone || customer?.email ? (
+          <div className="flex flex-wrap gap-2">
+            {customer.phone ? (
+              <a
+                href={`tel:${customer.phone}`}
+                className="inline-flex h-8 items-center rounded-md border border-dashboard-border px-3 text-xs font-medium text-dashboard-navy hover:bg-dashboard-active"
+              >
+                Call {customer.phone}
+              </a>
+            ) : null}
+            {customer.email ? (
+              <a
+                href={`mailto:${customer.email}?subject=${encodeURIComponent(`Delivery for reservation ${detail.reference_code}`)}`}
+                className="inline-flex h-8 items-center rounded-md border border-dashboard-border px-3 text-xs font-medium text-dashboard-navy hover:bg-dashboard-active"
+              >
+                Email the renter
+              </a>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </DetailCard>
   );
 }
 

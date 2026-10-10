@@ -17,6 +17,7 @@ import { paymentEvidenceStatus } from '../finance/payment-status';
 import { ianaTimezone, isoDate, isoInstant } from '../common/time';
 import { reservationPaymentProjection } from './list';
 import {
+  deliveryTerms,
   fulfillmentMethod,
   reservationCustomerSnapshot,
   reservationMoneySnapshot,
@@ -60,6 +61,10 @@ export type ReservationLineDetail = z.infer<typeof reservationLineDetail>;
 export const reservationDeliverySnapshot = z
   .object({
     fulfillment_method: fulfillmentMethod,
+    /** Delivery fee added to the booking total. Optional so the API and app can deploy in either order. */
+    fee_minor: moneyString.optional(),
+    /** Absent on pickups and on deliveries booked before delivery terms were recorded. */
+    terms: deliveryTerms.optional(),
   })
   .strict();
 export type ReservationDeliverySnapshot = z.infer<typeof reservationDeliverySnapshot>;

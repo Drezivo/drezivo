@@ -16,6 +16,14 @@ import { reservationState } from './state';
 export const fulfillmentMethod = z.enum(['pickup', 'delivery']);
 export type FulfillmentMethod = z.infer<typeof fulfillmentMethod>;
 
+/**
+ * How a delivery was agreed at booking time. `set_fee`: the shop offers delivery and its fee was
+ * added to the total. `to_arrange`: the shop has not set up delivery, so the renter asked for it
+ * and the shop contacts them to arrange it and any fee outside the booking total.
+ */
+export const deliveryTerms = z.enum(['set_fee', 'to_arrange']);
+export type DeliveryTerms = z.infer<typeof deliveryTerms>;
+
 /** Guest checkout requires email; staff-created customers use a separate schema. */
 export const customerDetails = z
   .object({

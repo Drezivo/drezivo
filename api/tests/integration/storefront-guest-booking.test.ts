@@ -93,14 +93,18 @@ describe('storefront guest booking', async () => {
     await closePool();
   });
 
-  async function liveStore(label: string, tweak: (doc: ReturnType<typeof defaultStorefrontDocument>) => void = () => undefined) {
+  async function liveStore(
+    label: string,
+    tweak: (doc: ReturnType<typeof defaultStorefrontDocument>) => void = () => undefined,
+    rules: typeof policy = policy,
+  ) {
     const ws = await createStorefrontWorkspace(label);
     const document = defaultStorefrontDocument('Luna Gown Rentals');
     document.contact.email = 'hello@luna.test';
     document.checkout.requirements.phone = 'optional';
     tweak(document);
     await cms.updateDocument(ws.owner, `${label}-doc`, { version: 1, document });
-    await cms.publishPolicy(ws.owner, `${label}-pol`, { expected_version: 1, rules: policy });
+    await cms.publishPolicy(ws.owner, `${label}-pol`, { expected_version: 1, rules });
     const published = await cms.publish(ws.owner, `${label}-pub`, 2);
     expect(published.status).toBe(200);
     // New branches close on Sundays; the rolling test dates must not depend on today's weekday.
@@ -278,6 +282,36 @@ describe('storefront guest booking', async () => {
       const { result } = await attempt('bh-none', []);
       expect(result.status).toBe(201);
     });
+  });
+
+  it('lets a renter ask for delivery when the shop has not set it up, charges no fee, and tells the owner to arrange it', async () => {
+    const ws = await liveStore('gv-deliver', undefined, { ...policy, delivery: { enabled: false, fee_minor: '0', notes: null } });
+    const business = await settingsService.getBusiness(ws.owner);
+    await settingsService.updateBusiness(ws.owner, 'biz', { version: business.version, business_name: 'Luna Gown Rentals', business_email: 'owner@luna.test', business_phone: null, business_address: null });
+
+    const created = await booking.createReservation(ws.slug, { requestId: 'd1', idempotencyKey: 'deliver-hold' }, holdRequest(ws, 'ana@example.test', { fulfillment_method: 'delivery' }));
+    expect(created.status).toBe(201);
+    if (!created.body.success) throw new Error('hold failed');
+    const { reservation } = created.body.data;
+    expect(reservation.money).toMatchObject({ delivery_total_minor: '0', due_now_minor: '430000' });
+
+    const capability = guestTokenFor(reservation.id);
+    const upload = await booking.authorizeReceiptUpload(reservation.id, capability, { content_type: 'image/png', byte_size: PNG.length, sha256: pngSha });
+    const submitted = await booking.submitReceipt(reservation.id, capability, { requestId: 'd2', idempotencyKey: 'deliver-receipt' }, upload.file_id);
+    expect(submitted.status).toBe(200);
+
+    const detail = await getReservationDetail(ws.owner, reservation.id);
+    expect(detail.delivery_snapshot).toEqual({ fulfillment_method: 'delivery', fee_minor: '0', terms: 'to_arrange' });
+
+    const emails = await admin.query<Record<string, unknown>>(`SELECT payload FROM outbox_event WHERE tenant_id = $1 AND dedupe_key LIKE 'reservation-email:%:new_request:business'`, [ws.tenantId]);
+    expect(emails.rows).toHaveLength(1);
+    const email = openSealedEmail(emails.rows[0]?.['payload'] as Record<string, unknown>);
+    expect(email.subject).toBe(`New rental request ${reservation.reference_code} · Delivery requested`);
+    expect(email.text).toContain('The renter asked for delivery. Contact them from the reservation in Drezivo to arrange it');
+    expect(email.text).toContain('Handover: Delivery');
+    // Renter contact details stay in the app, never in the owner email.
+    expect(email.text).not.toContain('09171234567');
+    expect(email.text).not.toContain('Mabini');
   });
 
   it('moves the hold to review with a receipt but emails only the business, not the guest', async () => {

@@ -87,6 +87,8 @@ export interface ReservationDetailHeaderRow {
   timezone_snapshot: string;
   event_date: string | null;
   fulfillment_method: 'pickup' | 'delivery' | null;
+  delivery_fee_minor: string | null;
+  delivery_terms: string | null;
   rental_total_minor: string | number;
   security_required_minor: string | number;
   due_now_minor: string | number;
@@ -417,6 +419,8 @@ export async function readReservationDetailModel(
        r.timezone_snapshot,
        r.event_date::text AS event_date,
        r.delivery_snapshot ->> 'fulfillment_method' AS fulfillment_method,
+       r.delivery_snapshot ->> 'fee_minor' AS delivery_fee_minor,
+       r.delivery_snapshot ->> 'terms' AS delivery_terms,
        r.rental_total_minor,
        r.security_required_minor,
        r.due_now_minor,
