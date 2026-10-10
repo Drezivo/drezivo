@@ -59,29 +59,51 @@ export function BookingStatus({ store, reservationId }: { store: PublicStorefron
       const anchor = target.closest('a[href]');
       if (!(anchor instanceof HTMLAnchorElement) || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
       const destination = new URL(anchor.href, window.location.href);
-      if (destination.origin === window.location.origin && destination.pathname === window.location.pathname && destination.search === window.location.search) return;
+      const sameDocument =
+        destination.origin === window.location.origin &&
+        destination.pathname === window.location.pathname &&
+        destination.search === window.location.search;
+      if (sameDocument && destination.hash === window.location.hash) return;
       event.preventDefault();
-      event.stopImmediatePropagation();
       setExitAttempt({ kind: 'link', href: destination.href });
     };
 
     window.addEventListener('popstate', onPopState);
     window.addEventListener('beforeunload', onBeforeUnload);
-    document.addEventListener('click', onClick, true);
+    // Window capture runs before storefront transitions listen at document capture.
+    window.addEventListener('click', onClick, true);
     return () => {
       window.removeEventListener('popstate', onPopState);
       window.removeEventListener('beforeunload', onBeforeUnload);
-      document.removeEventListener('click', onClick, true);
+      window.removeEventListener('click', onClick, true);
     };
   }, [ready]);
 
   function leaveProofPage() {
     if (!exitAttempt) return;
-    allowLeave.current = true;
     if (exitAttempt.kind === 'link') {
+      const destination = new URL(exitAttempt.href, window.location.href);
+      const current = new URL(window.location.href);
+      const sameDocument =
+        destination.origin === current.origin &&
+        destination.pathname === current.pathname &&
+        destination.search === current.search;
+      if (sameDocument) {
+        setExitAttempt(null);
+        window.history.pushState(window.history.state, '', destination.href);
+        if (destination.hash) {
+          const targetId = decodeURIComponent(destination.hash.slice(1));
+          document.getElementById(targetId)?.scrollIntoView({ block: 'start' });
+        } else {
+          window.scrollTo(0, 0);
+        }
+        return;
+      }
+      allowLeave.current = true;
       window.location.assign(exitAttempt.href);
       return;
     }
+    allowLeave.current = true;
     if (window.history.length > 2) {
       window.history.go(-2);
       return;
