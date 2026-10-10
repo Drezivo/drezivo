@@ -14,6 +14,18 @@ vi.mock('../../files/files.repository.js', () => ({
 const { EMPTY_EXTRACTION, extractClothingPhoto, parseModelReply } = await import('../photo-extraction.service.js');
 
 const settings = { baseUrl: 'https://vision.test/v1', model: 'test/vision', apiKey: 'sk-test-0000000000', timeoutMs: 5_000 };
+const gemmaSettings = {
+  baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+  model: 'gemma-4-31b-it',
+  apiKey: 'test-google-key',
+  timeoutMs: 5_000,
+};
+const openRouterSettings = {
+  baseUrl: 'https://openrouter.ai/api/v1',
+  model: 'inclusionai/ling-3.0-flash-vl:free,openrouter/free',
+  apiKey: 'sk-or-test-key',
+  timeoutMs: 5_000,
+};
 const storage = {
   authorizeUpload: vi.fn(),
   inspectUploadedObject: vi.fn(),
@@ -34,6 +46,7 @@ describe('parseModelReply', () => {
       name: 'Mirabelle',
       rental_price_minor: '50000',
       size_label: null,
+      fit_range: null,
       free_size: false,
       measurement_unit: 'in',
       measurements: { Bust: 30, Waist: 24, Length: 22 },
@@ -41,17 +54,49 @@ describe('parseModelReply', () => {
     });
   });
 
-  it('reads a wedding-gown card with a free-size range and a price written as text', () => {
+  it('reads Yasmin’s explicit Small–XL flexible-fit range and a price written as text', () => {
     const fields = parseModelReply(
-      '{"name":"Astrid","rental_price":"P1,000","size":"Small-XL","free_size":true,"unit":null,"measurements":{},"color":"White"}',
+      '{"name":"Yasmin","rental_price":"P800","size":null,"free_size":true,"fit_range":"Small–XL","unit":null,"measurements":{},"color":"White"}',
     );
     expect(fields).toMatchObject({
-      name: 'Astrid',
-      rental_price_minor: '100000',
-      size_label: 'Small-XL',
+      name: 'Yasmin',
+      rental_price_minor: '80000',
+      size_label: null,
       free_size: true,
+      fit_range: 'Small–XL',
       measurement_unit: null,
     });
+  });
+
+  it('reads Hailey’s flexible-fit dimension note and exact waist and length without inferring a range', () => {
+    const fields = parseModelReply(
+      '{"name":"Hailey","rental_price":800,"size":null,"free_size":true,"fit_range":null,"unit":"in","measurements":{"Bust":{"type":"fit_note","text":"Flexible fit"},"Waist":28,"Length":61},"color":"White"}',
+    );
+    expect(fields).toMatchObject({
+      name: 'Hailey',
+      size_label: null,
+      free_size: true,
+      fit_range: null,
+      measurement_unit: 'in',
+      measurements: {
+        Bust: { type: 'fit_note', text: 'Flexible fit' },
+        Waist: 28,
+        Length: 61,
+      },
+    });
+  });
+
+  it('does not infer a range from FS alone and normalizes dimension FS to Flexible fit', () => {
+    const fields = parseModelReply(
+      '{"size":null,"free_size":true,"unit":"in","measurements":{"Bust":"FS","Waist":28,"Length":61}}',
+    );
+    expect(fields.fit_range).toBeNull();
+    expect(fields.measurements).toEqual({
+      Bust: { type: 'fit_note', text: 'Flexible fit' },
+      Waist: 28,
+      Length: 61,
+    });
+    expect(fields.measurement_unit).toBe('in');
   });
 
   it('drops anything malformed instead of trusting it', () => {
@@ -59,7 +104,10 @@ describe('parseModelReply', () => {
     expect(parseModelReply('{broken')).toEqual(EMPTY_EXTRACTION);
     expect(
       parseModelReply('{"name": 12, "rental_price": -5, "measurements": {"Bust": "thirty", "Waist": 1e9}, "unit": "ft"}'),
-    ).toEqual(EMPTY_EXTRACTION);
+    ).toMatchObject({
+      ...EMPTY_EXTRACTION,
+      measurements: { Bust: { type: 'fit_note', text: 'thirty' } },
+    });
   });
 
   it('keeps the unit only when a measurement survived', () => {
@@ -106,6 +154,116 @@ describe('extractClothingPhoto', () => {
     expect((body.messages as Array<{ role: string }>).map((message) => message.role)).toEqual(['user']);
   });
 
+  it('uses Google native generateContent for Gemma 4 image requests', async () => {
+    const fetchImpl = vi.fn((url: string) =>
+      Promise.resolve(
+        url.startsWith('https://storage.test')
+          ? new Response(new Uint8Array([1, 2, 3]))
+          : new Response(
+              JSON.stringify({
+                candidates: [
+                  {
+                    content: {
+                      parts: [
+                        {
+                          text: '{"name":"Astrid","rental_price":1000,"size":"Small-XL","free_size":true,"unit":null,"measurements":{},"color":"White"}',
+                        },
+                      ],
+                    },
+                  },
+                ],
+              }),
+            ),
+      ),
+    );
+
+    const fields = await extractClothingPhoto(input, {
+      settings: gemmaSettings,
+      storage,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(fields).toMatchObject({
+      name: 'Astrid',
+      rental_price_minor: '100000',
+      size_label: null,
+      free_size: true,
+      fit_range: 'Small-XL',
+    });
+    const [url, init] = fetchImpl.mock.calls[1] as unknown as [string, RequestInit];
+    expect(url).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemma-4-31b-it:generateContent',
+    );
+    expect((init.headers as Record<string, string>)['x-goog-api-key']).toBe('test-google-key');
+    const body = JSON.parse(init.body as string) as { contents: unknown };
+    expect(JSON.stringify(body.contents)).toContain('"inline_data":{"mime_type":"image/jpeg","data":"AQID"}');
+  });
+
+  it('uses OpenRouter provider failover and model fallbacks for multimodal extraction', async () => {
+    const fetchImpl = vi.fn((url: string) =>
+      Promise.resolve(
+        url.startsWith('https://storage.test')
+          ? new Response(new Uint8Array([1, 2, 3]))
+          : reply('{"name":"Mira","rental_price":650,"measurements":{},"free_size":false}'),
+      ),
+    );
+
+    const fields = await extractClothingPhoto(input, {
+      settings: openRouterSettings,
+      storage,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(fields).toMatchObject({ name: 'Mira', rental_price_minor: '65000' });
+    const [url, init] = fetchImpl.mock.calls[1] as unknown as [string, RequestInit];
+    expect(url).toBe('https://openrouter.ai/api/v1/chat/completions');
+    expect(init.headers).toMatchObject({
+      authorization: 'Bearer sk-or-test-key',
+      'HTTP-Referer': 'https://drezivo.shop',
+      'X-Title': 'Drezivo',
+    });
+    const body = JSON.parse(init.body as string) as {
+      models: string[];
+      provider: { allow_fallbacks: boolean };
+      messages: unknown;
+    };
+    expect(body.models).toEqual(['inclusionai/ling-3.0-flash-vl:free', 'openrouter/free']);
+    expect(body.provider).toEqual({ allow_fallbacks: true });
+    expect(JSON.stringify(body.messages)).toContain('data:image/jpeg;base64,AQID');
+  });
+
+  it('accepts the full catalogue upload size range instead of refusing 8-10 MB photos', async () => {
+    file.row = { ...file.row, byte_size: String(9 * 1024 * 1024) };
+    const fetchImpl = vi.fn((url: string) =>
+      Promise.resolve(
+        url.startsWith('https://storage.test')
+          ? new Response(new Uint8Array([1]))
+          : reply('{"name":"Large card","rental_price":500,"measurements":{},"free_size":false}'),
+      ),
+    );
+
+    await expect(
+      extractClothingPhoto(input, { settings, storage, fetchImpl: fetchImpl as unknown as typeof fetch }),
+    ).resolves.toMatchObject({ name: 'Large card' });
+  });
+
+  it('fails visibly when the provider returns no usable text instead of silently filling nothing', async () => {
+    const fetchImpl = vi.fn((url: string) =>
+      Promise.resolve(
+        url.startsWith('https://storage.test')
+          ? new Response(new Uint8Array([1]))
+          : new Response(JSON.stringify({ choices: [{ message: {} }] })),
+      ),
+    );
+
+    await expect(
+      extractClothingPhoto(input, { settings, storage, fetchImpl: fetchImpl as unknown as typeof fetch }),
+    ).rejects.toMatchObject({
+      status: 503,
+      message: 'The photo reader returned an unreadable response. Try again.',
+    });
+  });
+
   it('refuses photos that are not accepted catalogue images of this shop', async () => {
     const accepted = file.row;
     for (const row of [null, { ...accepted, purpose: 'payment_receipt' }, { ...accepted, lifecycle_status: 'pending_upload' }]) {
@@ -125,10 +283,28 @@ describe('extractClothingPhoto', () => {
     });
 
     const down = vi.fn().mockResolvedValueOnce(photo()).mockResolvedValueOnce(reply('', 500));
-    await expect(extractClothingPhoto(input, { settings, storage, fetchImpl: down })).rejects.toMatchObject({ status: 503 });
+    await expect(extractClothingPhoto(input, { settings, storage, fetchImpl: down })).rejects.toMatchObject({
+      status: 503,
+      message: 'The photo reader provider returned HTTP 500. Try again in a moment or check the staging provider logs.',
+    });
 
     await expect(extractClothingPhoto(input, { settings: null, storage, fetchImpl: vi.fn() })).rejects.toMatchObject({
       status: 503,
+      code: 'PHOTO_READER_CONFIGURATION',
+    });
+  });
+
+  it('returns a useful error when the configured model rejects an image request', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(new Uint8Array([1])))
+      .mockResolvedValueOnce(reply('', 400));
+
+    await expect(
+      extractClothingPhoto(input, { settings, storage, fetchImpl }),
+    ).rejects.toMatchObject({
+      status: 503,
+      code: 'PHOTO_READER_CONFIGURATION',
+      message: 'The configured photo model rejected the image request. Check the model setting.',
     });
   });
 });

@@ -305,7 +305,9 @@ export async function createReservationGraph(
     dueNowMinor: number;
     variantId: string;
     lineNameSnapshot: string;
-    measurementsSnapshot: Record<string, number>;
+    measurementsSnapshot: Record<string, number | { type: 'fit_note'; text: string }>;
+    fitRangeSnapshot: string | null;
+    measurementUnitSnapshot: 'cm' | 'in';
     pricingSnapshot: Record<string, unknown>;
     assetId: string;
     blockedStart: string;
@@ -371,8 +373,8 @@ export async function createReservationGraph(
   await client.query(
     `INSERT INTO reservation_line
        (id, tenant_id, reservation_id, variant_id, line_number, name_snapshot,
-        measurements_snapshot, pricing_snapshot, rental_minor, deposit_minor, currency)
-     VALUES ($1, $2, $3, $4, 1, $5, $6::jsonb, $7::jsonb, $8, $9, 'PHP')`,
+        measurements_snapshot, fit_range_snapshot, measurement_unit_snapshot, pricing_snapshot, rental_minor, deposit_minor, currency)
+     VALUES ($1, $2, $3, $4, 1, $5, $6::jsonb, $7, $8, $9::jsonb, $10, $11, 'PHP')`,
     [
       input.reservationLineId,
       input.tenantId,
@@ -380,6 +382,8 @@ export async function createReservationGraph(
       input.variantId,
       input.lineNameSnapshot,
       JSON.stringify(input.measurementsSnapshot),
+      input.fitRangeSnapshot,
+      input.measurementUnitSnapshot,
       JSON.stringify(input.pricingSnapshot),
       input.rentalTotalMinor,
       input.securityRequiredMinor,

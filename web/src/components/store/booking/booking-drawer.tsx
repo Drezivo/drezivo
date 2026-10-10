@@ -26,6 +26,9 @@ interface Customer {
   event_date: string;
 }
 
+type CustomerField = keyof Customer;
+type CustomerFieldErrors = Partial<Record<CustomerField, string>>;
+
 interface State {
   step: Step;
   range: DateRange | null;
@@ -104,7 +107,10 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
   const inFlight = useRef(false);
   const intent = useRef<{ fingerprint: string; key: string } | null>(null);
   const robotCheck = useRef<TurnstileHandle>(null);
+  const focusRequest = useRef(0);
   const [robotToken, setRobotToken] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<CustomerFieldErrors>({});
+  const [focusTarget, setFocusTarget] = useState<{ field: CustomerField; request: number } | null>(null);
   const requirements = store.checkout.requirements;
   const days = state.range ? rentalDays(state.range.start, state.range.end) : 0;
 
@@ -117,6 +123,13 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
       previous?.focus();
     };
   }, []);
+
+  useEffect(() => {
+    if (!focusTarget) return;
+    const field = document.getElementById(`booking-${focusTarget.field}`);
+    field?.scrollIntoView?.({ block: 'center' });
+    field?.focus({ preventScroll: true });
+  }, [focusTarget]);
 
   function requestClose() {
     if (state.pending) return;
@@ -132,18 +145,39 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
     return () => document.removeEventListener('keydown', onKey);
   });
 
-  function detailsProblem(): string | null {
-    const c = state.customer;
-    if (c.full_name.trim().length < 2) return 'Enter your full name.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email.trim())) return 'Enter a valid email address.';
-    if (requirements.phone === 'required' && !/^\d{11}$/.test(c.phone)) return 'Enter an 11-digit mobile number, e.g. 09171234567.';
-    if (c.phone && !/^\d{11}$/.test(c.phone)) return 'Mobile numbers have 11 digits, e.g. 09171234567.';
-    if (c.address.trim().length < 5) return 'Enter the address for this rental.';
-    if (requirements.social_handle === 'required' && !c.social_handle.trim()) return 'Add your Instagram or Facebook.';
-    if (requirements.event_date === 'required' && !c.event_date) return 'Add your event date.';
-    if (c.event_date && state.range && (c.event_date < state.range.start || c.event_date > state.range.end)) return 'The event date must be within your rental dates.';
-    if (!state.paymentMethodId) return 'This shop has no online payment method yet. Contact the shop to book.';
-    return null;
+  function updateCustomer(field: CustomerField, value: string) {
+    const customer = { ...state.customer, [field]: value };
+    dispatch({ type: 'customer', patch: { [field]: value } as Partial<Customer> });
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      const error = detailsProblems(customer).fieldErrors[field];
+      if (error) next[field] = error;
+      else delete next[field];
+      return next;
+    });
+  }
+
+  function detailsProblems(customer = state.customer): { fieldErrors: CustomerFieldErrors; formError: string | null } {
+    const c = customer;
+    const errors: CustomerFieldErrors = {};
+    if (c.full_name.trim().length < 2) errors.full_name = 'Enter your full name.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email.trim())) errors.email = 'Enter a valid email address.';
+    if (requirements.phone === 'required' && !/^\d{11}$/.test(c.phone)) {
+      errors.phone = 'Enter an 11-digit mobile number, e.g. 09171234567.';
+    } else if (c.phone && !/^\d{11}$/.test(c.phone)) {
+      errors.phone = 'Mobile numbers have 11 digits, e.g. 09171234567.';
+    }
+    if (c.address.trim().length < 5) errors.address = 'Enter the address for this rental.';
+    if (requirements.social_handle === 'required' && !c.social_handle.trim()) errors.social_handle = 'Add your Instagram or Facebook.';
+    if (requirements.event_date === 'required' && !c.event_date) errors.event_date = 'Add your event date.';
+    if (c.event_date && state.range && (c.event_date < state.range.start || c.event_date > state.range.end)) {
+      errors.event_date = 'The event date must be within your rental dates.';
+    }
+    return {
+      fieldErrors: errors,
+      formError: !state.paymentMethodId ? 'This shop has no online payment method yet. Contact the shop to book.' : null,
+    };
   }
 
   async function placeHold() {
@@ -270,17 +304,17 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
           {state.step === 'details' ? (
             <div className="space-y-5">
               <h3 className="font-sf-display text-2xl">Your details</h3>
-              <TextField label="Email address" type="email" autoComplete="email" inputMode="email" value={state.customer.email} onChange={(email) => dispatch({ type: 'customer', patch: { email } })} />
-              <TextField label="Full name" autoComplete="name" value={state.customer.full_name} onChange={(full_name) => dispatch({ type: 'customer', patch: { full_name } })} />
+              <TextField id="booking-email" label="Email address" error={fieldErrors.email} type="email" autoComplete="email" inputMode="email" value={state.customer.email} onChange={(email) => updateCustomer('email', email)} />
+              <TextField id="booking-full_name" label="Full name" error={fieldErrors.full_name} autoComplete="name" value={state.customer.full_name} onChange={(full_name) => updateCustomer('full_name', full_name)} />
               {requirements.phone !== 'hidden' ? (
-                <TextField label={`Mobile number${requirements.phone === 'optional' ? ' (optional)' : ''}`} autoComplete="tel" inputMode="numeric" placeholder="09171234567" value={state.customer.phone} onChange={(phone) => dispatch({ type: 'customer', patch: { phone: phone.replace(/\D/g, '').slice(0, 11) } })} />
+                <TextField id="booking-phone" label={`Mobile number${requirements.phone === 'optional' ? ' (optional)' : ''}`} error={fieldErrors.phone} autoComplete="tel" inputMode="numeric" placeholder="09171234567" value={state.customer.phone} onChange={(phone) => updateCustomer('phone', phone.replace(/\D/g, '').slice(0, 11))} />
               ) : null}
-              <TextField label="Address" autoComplete="street-address" multiline value={state.customer.address} onChange={(address) => dispatch({ type: 'customer', patch: { address } })} />
+              <TextField id="booking-address" label="Address" error={fieldErrors.address} autoComplete="street-address" multiline value={state.customer.address} onChange={(address) => updateCustomer('address', address)} />
               {requirements.social_handle !== 'hidden' ? (
-                <TextField label={`Instagram or Facebook${requirements.social_handle === 'optional' ? ' (optional)' : ''}`} placeholder="@yourname" value={state.customer.social_handle} onChange={(social_handle) => dispatch({ type: 'customer', patch: { social_handle } })} />
+                <TextField id="booking-social_handle" label={`Instagram or Facebook${requirements.social_handle === 'optional' ? ' (optional)' : ''}`} error={fieldErrors.social_handle} placeholder="@yourname" value={state.customer.social_handle} onChange={(social_handle) => updateCustomer('social_handle', social_handle)} />
               ) : null}
               {requirements.event_date !== 'hidden' ? (
-                <TextField label={`Event date${requirements.event_date === 'optional' ? ' (optional)' : ''}`} type="date" min={state.range?.start} max={state.range?.end} value={state.customer.event_date} onChange={(event_date) => dispatch({ type: 'customer', patch: { event_date } })} />
+                <TextField id="booking-event_date" label={`Event date${requirements.event_date === 'optional' ? ' (optional)' : ''}`} error={fieldErrors.event_date} type="date" min={state.range?.start} max={state.range?.end} value={state.customer.event_date} onChange={(event_date) => updateCustomer('event_date', event_date)} />
               ) : null}
 
               {store.fulfillment.delivery ? (
@@ -362,7 +396,11 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
         {state.step === 'dates' || state.step === 'details' || state.step === 'review' ? (
           <div className="flex gap-3 border-t border-sf-line p-5">
             {state.step !== 'dates' ? (
-              <button type="button" className="sf-button sf-button-outline" disabled={state.pending} onClick={() => dispatch({ type: 'step', step: state.step === 'review' ? 'details' : 'dates' })}>
+              <button type="button" className="sf-button sf-button-outline" disabled={state.pending} onClick={() => {
+                setFieldErrors({});
+                setFocusTarget(null);
+                dispatch({ type: 'step', step: state.step === 'review' ? 'details' : 'dates' });
+              }}>
                 Back
               </button>
             ) : null}
@@ -375,8 +413,16 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                 type="button"
                 className="sf-button sf-button-primary flex-1"
                 onClick={() => {
-                  const problem = detailsProblem();
-                  if (problem) dispatch({ type: 'error', message: problem });
+                  const { fieldErrors: errors, formError } = detailsProblems();
+                  setFieldErrors(errors);
+                  const firstInvalidField = (['email', 'full_name', 'phone', 'address', 'social_handle', 'event_date'] as const)
+                    .find((field) => errors[field]);
+                  if (firstInvalidField) {
+                    focusRequest.current += 1;
+                    setFocusTarget({ field: firstInvalidField, request: focusRequest.current });
+                  }
+                  if (formError) dispatch({ type: 'error', message: formError });
+                  else if (firstInvalidField) dispatch({ type: 'error', message: null });
                   else dispatch({ type: 'step', step: 'review' });
                 }}
               >
@@ -418,25 +464,50 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 function TextField({
+  id,
   label,
   value,
   onChange,
+  error,
   multiline = false,
   ...rest
 }: {
+  id: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
+  error?: string | undefined;
   multiline?: boolean;
 } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
   return (
-    <label className="block">
-      <span className="mb-1.5 block text-sm font-medium">{label}</span>
-      {multiline ? (
-        <textarea className="sf-input min-h-20" rows={2} maxLength={500} value={value} onChange={(event) => onChange(event.target.value)} />
-      ) : (
-        <input className="sf-input" maxLength={200} value={value} onChange={(event) => onChange(event.target.value)} {...rest} />
-      )}
-    </label>
+    <div>
+      <label className="block" htmlFor={id}>
+        <span className="mb-1.5 block text-sm font-medium">{label}</span>
+        {multiline ? (
+          <textarea
+            id={id}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? `${id}-error` : undefined}
+            className="sf-input min-h-20"
+            rows={2}
+            maxLength={500}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        ) : (
+          <input
+            id={id}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? `${id}-error` : undefined}
+            className="sf-input"
+            maxLength={200}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            {...rest}
+          />
+        )}
+      </label>
+      {error ? <p id={`${id}-error`} className="mt-1 text-sm text-[#b3311f]">{error}</p> : null}
+    </div>
   );
 }

@@ -11,9 +11,9 @@ import { SubscribeDialog } from "@/components/billing/subscribe-dialog";
 import { Button } from "@/components/ui/button";
 
 /**
- * Pilot subscription UI. There is one plan and no billing page: every "Pay" action opens the
- * Subscribe dialog. After a trial or paid month ends the workspace is view-only for 30 days (the
- * storefront stays up, taking no bookings, for the first 3), then it locks until the owner pays.
+ * Pilot subscription UI for Starter and Standard. Every "Pay" action opens the Subscribe dialog.
+ * After a trial or paid month ends the workspace is view-only for 30 days (the storefront stays
+ * up, taking no bookings, for the first 3), then it locks until the owner pays.
  */
 
 /** Fired by the API client when the server refuses an action because of the subscription. */
@@ -34,34 +34,69 @@ function inDays(days: number | null): string {
 }
 
 /** Plain-language status for the banner, prompt, wall, and dialog. */
-export function accessMessage(access: SubscriptionAccess): { tone: Tone; title: string; body: string } {
+export function accessMessage(access: SubscriptionAccess): {
+  tone: Tone;
+  title: string;
+  body: string;
+} {
   const pending = access.pending_payment ? " Your payment is waiting for approval." : "";
   const storefront = access.storefront_online
     ? access.storefront_offline_at
       ? ` Your storefront goes offline ${inDays(daysUntil(access.storefront_offline_at))}.`
       : " Your storefront is visible, but customers cannot book."
     : " Your storefront is offline.";
-  const readOnlyEnds = access.read_only_until ? ` View-only access ends ${inDays(daysUntil(access.read_only_until))}.` : "";
+  const readOnlyEnds = access.read_only_until
+    ? ` View-only access ends ${inDays(daysUntil(access.read_only_until))}.`
+    : "";
   switch (access.reason) {
     case "trial":
-      return { tone: "info", title: `Free trial: ${plural(access.days_left ?? 0, "day")} left`, body: `Subscribe any time for ₱299 a month.${pending}` };
+      return {
+        tone: "info",
+        title: `Free trial: ${plural(access.days_left ?? 0, "day")} left`,
+        body: `Subscribe any time to keep your workspace active.${pending}`,
+      };
     case "trial_ending":
-      return { tone: "attention", title: `Your free trial ends ${inDays(access.days_left)}`, body: `Subscribe for ₱299 a month to keep making changes and taking bookings.${pending}` };
+      return {
+        tone: "attention",
+        title: `Your free trial ends ${inDays(access.days_left)}`,
+        body: `Subscribe to keep making changes and taking bookings.${pending}`,
+      };
     case "renewal_due":
-      return { tone: "attention", title: `Your subscription ends ${inDays(access.days_left)}`, body: `Pay ₱299 for next month to keep making changes and taking bookings.${pending}` };
+      return {
+        tone: "attention",
+        title: `Your subscription ends ${inDays(access.days_left)}`,
+        body: `Submit payment to keep making changes and taking bookings.${pending}`,
+      };
     case "paid":
       return { tone: "info", title: "Subscription active", body: pending.trim() };
     case "trial_ended":
     case "payment_overdue":
     case "trial_extension": {
       if (access.level === "locked") {
-        return { tone: "blocked", title: "Your workspace is locked", body: `Subscribe to open your workspace and storefront again. Your data is kept safe.${pending}` };
+        return {
+          tone: "blocked",
+          title: "Your workspace is locked",
+          body: `Subscribe to open your workspace and storefront again. Your data is kept safe.${pending}`,
+        };
       }
-      const title = access.reason === "trial_ended" ? "Your free trial has ended" : access.reason === "trial_extension" ? "View-only access" : "Your subscription has ended";
-      return { tone: "attention", title, body: `You can view everything, but nothing can be changed.${storefront}${readOnlyEnds}${pending}` };
+      const title =
+        access.reason === "trial_ended"
+          ? "Your free trial has ended"
+          : access.reason === "trial_extension"
+            ? "View-only access"
+            : "Your subscription has ended";
+      return {
+        tone: "attention",
+        title,
+        body: `You can view everything, but nothing can be changed.${storefront}${readOnlyEnds}${pending}`,
+      };
     }
     case "cancelled":
-      return { tone: "blocked", title: "Your subscription is cancelled", body: `Subscribe again to reopen your workspace.${pending}` };
+      return {
+        tone: "blocked",
+        title: "Your subscription is cancelled",
+        body: `Subscribe again to reopen your workspace.${pending}`,
+      };
   }
 }
 
@@ -79,14 +114,26 @@ export const useOpenSubscribe = () => useContext(SubscribeContext);
  * Owns the Subscribe dialog, the view-only prompt, and the banner for the dashboard shell.
  * `onChanged` reloads the actor context after a payment is submitted.
  */
-export function SubscriptionProvider({ access, onChanged, children }: { access: SubscriptionAccess | null; onChanged: () => void; children: React.ReactNode }) {
+export function SubscriptionProvider({
+  access,
+  onChanged,
+  children,
+}: {
+  access: SubscriptionAccess | null;
+  onChanged: () => void;
+  children: React.ReactNode;
+}) {
   const [subscribeOpen, setSubscribeOpen] = useState(false);
   const openSubscribe = useCallback(() => setSubscribeOpen(true), []);
   return (
     <SubscribeContext.Provider value={openSubscribe}>
       {children}
       <SubscriptionPrompt access={access} onPay={openSubscribe} />
-      <SubscribeDialog open={subscribeOpen} onOpenChange={setSubscribeOpen} onSubmitted={onChanged} />
+      <SubscribeDialog
+        open={subscribeOpen}
+        onOpenChange={setSubscribeOpen}
+        onSubmitted={onChanged}
+      />
     </SubscribeContext.Provider>
   );
 }
@@ -100,12 +147,20 @@ export function SubscriptionBanner({ access }: { access: SubscriptionAccess | nu
   const message = accessMessage(access);
   const Icon = access.level === "read_only" ? Lock : Clock;
   return (
-    <div role="status" className={`flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-2.5 text-sm sm:px-6 lg:px-8 ${TONE_CLASS[message.tone]}`}>
+    <div
+      role="status"
+      className={`flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-2.5 text-sm sm:px-6 lg:px-8 ${TONE_CLASS[message.tone]}`}
+    >
       <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
       <p className="min-w-0 flex-1">
-        <span className="font-semibold">{message.title}.</span> <span className="text-dashboard-muted">{message.body}</span>
+        <span className="font-semibold">{message.title}.</span>{" "}
+        <span className="text-dashboard-muted">{message.body}</span>
       </p>
-      <button type="button" onClick={openSubscribe} className="shrink-0 text-sm font-semibold text-dashboard-accent underline underline-offset-4">
+      <button
+        type="button"
+        onClick={openSubscribe}
+        className="shrink-0 text-sm font-semibold text-dashboard-accent underline underline-offset-4"
+      >
         {access.pending_payment ? "Payment status" : "Subscribe"}
       </button>
     </div>
@@ -116,7 +171,13 @@ export function SubscriptionBanner({ access }: { access: SubscriptionAccess | nu
  * View-only mode asks to subscribe on every page the owner opens, and whenever the server refuses a
  * change because of the subscription. It can be dismissed, but it comes back.
  */
-function SubscriptionPrompt({ access, onPay }: { access: SubscriptionAccess | null; onPay: () => void }) {
+function SubscriptionPrompt({
+  access,
+  onPay,
+}: {
+  access: SubscriptionAccess | null;
+  onPay: () => void;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const readOnly = access?.level === "read_only";
@@ -143,7 +204,9 @@ function SubscriptionPrompt({ access, onPay }: { access: SubscriptionAccess | nu
             <AlertTriangle className="h-5 w-5" aria-hidden="true" />
           </div>
           <Dialog.Title className="mt-4 font-display text-2xl">{message.title}</Dialog.Title>
-          <Dialog.Description className="mt-2 text-sm leading-6 text-dashboard-muted">{message.body}</Dialog.Description>
+          <Dialog.Description className="mt-2 text-sm leading-6 text-dashboard-muted">
+            {message.body}
+          </Dialog.Description>
           <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Dialog.Close asChild>
               <Button type="button" variant="secondary">
@@ -157,7 +220,8 @@ function SubscriptionPrompt({ access, onPay }: { access: SubscriptionAccess | nu
                 onPay();
               }}
             >
-              <Receipt className="mr-2 h-4 w-4" /> {access.pending_payment ? "Payment status" : "Subscribe for ₱299"}
+              <Receipt className="mr-2 h-4 w-4" />{" "}
+              {access.pending_payment ? "Payment status" : "Subscribe"}
             </Button>
           </div>
         </Dialog.Content>
@@ -179,7 +243,8 @@ export function SubscriptionWall({ access }: { access: SubscriptionAccess }) {
         <h1 className="mt-5 font-display text-3xl text-dashboard-navy">{message.title}</h1>
         <p className="mt-3 text-sm leading-6 text-dashboard-muted">{message.body}</p>
         <Button type="button" className="mt-7" onClick={openSubscribe}>
-          <Receipt className="mr-2 h-4 w-4" /> {access.pending_payment ? "See payment status" : "Subscribe for ₱299 / month"}
+          <Receipt className="mr-2 h-4 w-4" />{" "}
+          {access.pending_payment ? "See payment status" : "Subscribe"}
         </Button>
       </section>
     </div>

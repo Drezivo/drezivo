@@ -96,25 +96,32 @@ local invitation persistence and claim state; they must not be treated as owners
 owner-eligibility implementation.
 
 TBF-030 originally exposed authenticated owner bootstrap at
-`POST /api/v1/onboarding/{onboardingId}/bootstrap`. The current pilot UI calls
+`POST /api/v1/onboarding/{onboardingId}/bootstrap`. The current pilot UI requires an owner to select
+Starter or Standard from the public plan catalog and persists that plan code before calling
 `POST /api/v1/onboarding/{onboardingId}/start-trial` with an empty body and an account-scoped
-`Idempotency-Key`; that command selects the sole active Standard plan (`starter`) and delegates
-tenant creation to the existing bootstrap command with derived idempotency keys. Each step is
-replay-safe, and the bootstrap transaction creates the tenant graph atomically.
+`Idempotency-Key`. The command preserves the selected plan and delegates tenant creation to the
+existing bootstrap command with derived idempotency keys. Older clients that skip selection default
+to Standard. Each step is replay-safe, and the bootstrap transaction creates the tenant graph
+atomically.
 Migration `0016_tenant_bootstrap.sql` originally seeded version-1 Starter, Professional, and Business
 rows; `0053_update_v1_entitlements_and_trial_policy.sql` set their historical 125/300/1,000
-physical-asset and 0/2/10 Front Desk-seat limits. The current pilot offer is one Standard plan:
-`0063_pilot_billing.sql` originally kept `starter` v1 active at 30,000 PHP minor units/month, initially setting
-its limits to 1,000 assets and 10 Front Desk seats, and deactivates Professional and Business v1.
-Migration `0071_starter_plan_limits.sql` lowers the current limits to 300 active physical clothing
-items and 3 Front Desk seats under [ADR 0013](../decisions/0013-starter-plan-capacity.md). It moves
-existing subscriptions to `starter` while recording prior plan ids in `subscription_event`, and
-normalizes expired/restricted billing states for the derived pilot access model. The old rows remain
-for audit history. The winning database transaction creates the tenant, `Main Branch`, Owner
-membership/grant, draft storefront, Standard trial subscription, `trial_started` event, both audit
-records, and a `tenant.bootstrapped` outbox event, then finalizes the safe response. `Main Branch` starts with canonical Business Hours
-`08:00–20:00` and Sunday closed in `branch.operating_hours`; this is a safe bootstrap default, not
-a fitting-specific schedule. A no-op worker handler acknowledges that event
+physical-asset and 0/2/10 Front Desk-seat limits. Migration `0063_pilot_billing.sql` originally kept
+`starter` v1 active at 30,000 PHP minor units/month, initially setting its limits to 1,000 assets and
+10 Front Desk seats, and deactivates Professional and Business v1. Migration
+`0071_starter_plan_limits.sql` set the Standard limits to 300 active physical clothing items and 3
+Front Desk seats under [ADR 0013](../decisions/0013-starter-plan-capacity.md); migration
+`0072_starter_plan_price.sql` set its price to PHP 299 under [ADR 0014](../decisions/0014-starter-plan-price.md).
+Migration `0075_starter_standard_plan_tiers.sql` preserves that Standard row and its subscription
+references while renaming its code from `starter` to `standard`, creates a new `starter` row at PHP
+149 with 125-item/0-seat limits, and normalizes existing onboarding selections to Standard. Both
+plans use the fourteen-day lifetime-eligible trial described in [ADR 0015](../decisions/0015-starter-and-standard-plans.md).
+The old Professional and Business rows remain for audit history. The winning database transaction
+creates the tenant, `Main Branch`, Owner membership/grant, draft storefront, the selected plan's trial
+subscription, `trial_started` event, both audit records, and a `tenant.bootstrapped` outbox event,
+then finalizes the safe response. `Main Branch` starts with canonical Business Hours
+`08:00–20:00` every day of the week in `branch.operating_hours`; the forward migration changes only
+the column default, so existing branch schedules remain unchanged. This is a safe bootstrap default,
+not a fitting-specific schedule. A no-op worker handler acknowledges that event
 until later consumers are introduced.
 
 TBF-032 adds `0018_entitlement_runtime_privileges.sql` as the forward-only plan-data boundary.

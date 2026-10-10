@@ -1,8 +1,7 @@
 import type { Metadata } from 'next';
 
-import { PlanShowcase } from '@/components/marketing/atelier/sections/plan-showcase';
+import { PublicPlanShowcase } from '@/components/marketing/public-plan-showcase';
 import { buildMarketingMetadata } from '@/lib/seo';
-import { getPublicPlans } from '@/lib/plans';
 import { SIGN_UP_URL } from '@/lib/site-urls';
 
 export const metadata: Metadata = buildMarketingMetadata(
@@ -15,5 +14,5 @@ export const metadata: Metadata = buildMarketingMetadata(
  * explanation live in the FAQ so the pricing page stays focused on the current offer.
  */
 export default function PricingPage() {
-  return <PlanShowcase plans={getPublicPlans()} signUpUrl={SIGN_UP_URL} headingLevel="h1" />;
+  return <PublicPlanShowcase signUpUrl={SIGN_UP_URL} headingLevel="h1" />;
 }

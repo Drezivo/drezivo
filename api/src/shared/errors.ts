@@ -193,6 +193,12 @@ export class RateLimitedError extends AppError {
 }
 
 /** 503 — a required downstream dependency (DB, Clerk, S3) is unavailable. Never expose internals. */
+export class PhotoReaderConfigurationError extends AppError {
+  readonly status = 503;
+  readonly code: ErrorCode = 'PHOTO_READER_CONFIGURATION';
+}
+
+/** 503 — a required downstream dependency (DB, Clerk, S3) is unavailable. Never expose internals. */
 export class DependencyUnavailableError extends AppError {
   readonly status = 503;
   readonly code: ErrorCode = 'DEPENDENCY_UNAVAILABLE';

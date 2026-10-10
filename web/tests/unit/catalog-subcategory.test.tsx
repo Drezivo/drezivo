@@ -57,6 +57,7 @@ const store = {
   payment_methods: [],
   booking_open: false,
   fitting: { enabled: false },
+  policy: { format: 'text', rental: '', deposit: '', cancellation: '', damage: '' },
 } as unknown as PublicStorefront;
 
 describe('storefront product subcategories', () => {
@@ -93,6 +94,87 @@ describe('storefront product subcategories', () => {
     expect(screen.queryByRole('tab', { name: 'Details' })).toBeNull();
     expect(screen.getByRole('tab', { name: 'Measurements' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.queryByRole('tab', { name: 'Rental info' })).not.toBeNull();
+  });
+
+  it('shows a flexible-fit range in Measurements alongside fit notes and exact dimensions', () => {
+    render(
+      <PreviewProvider preview={false}>
+        <ItemView
+          store={store}
+          item={{
+            ...item,
+            variants: [{
+              ...item.variants[0]!,
+              fit_range: 'Fits Small–XL',
+              measurement: {
+                mode: 'custom',
+                unit: 'in',
+                values: [
+                  { label: 'Bust', value: 'Flexible fit' },
+                  { label: 'Waist', value: '28 in' },
+                  { label: 'Length', value: '61 in' },
+                ],
+              },
+            }],
+          }}
+        />
+      </PreviewProvider>,
+    );
+
+    const fitRanges = screen.getAllByText('Fits Small–XL');
+    expect(fitRanges).toHaveLength(1);
+    const fitRange = fitRanges[0]!;
+    expect(fitRange.closest('[role="tabpanel"]')?.id).toBe('panel-measurements');
+    expect(screen.getByText('Flexible fit')).toBeTruthy();
+    expect(screen.queryByText('Fits Fits Small–XL')).toBeNull();
+    expect(screen.getByText('28 in')).toBeTruthy();
+    expect(screen.getByText('61 in')).toBeTruthy();
+    expect(screen.getByText('Approximate garment measurements.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Rental info' }));
+    expect(screen.queryByText('Fits Small–XL')).toBeNull();
+  });
+
+  it.each([
+    ['default guide', { mode: 'default_guide' as const, guide_image_url: null }],
+    ['no measurements', { mode: 'none' as const }],
+  ])('shows a flexible-fit range for a %s variant', (_label, measurement) => {
+    render(
+      <PreviewProvider preview={false}>
+        <ItemView
+          store={store}
+          item={{
+            ...item,
+            variants: [{ ...item.variants[0]!, fit_range: 'Small–XL', measurement }],
+          }}
+        />
+      </PreviewProvider>,
+    );
+
+    expect(screen.getByText('Fits Small–XL').closest('[role="tabpanel"]')?.id).toBe('panel-measurements');
+  });
+
+  it('does not call a note-only custom measurement approximate numeric dimensions', () => {
+    render(
+      <PreviewProvider preview={false}>
+        <ItemView
+          store={store}
+          item={{
+            ...item,
+            variants: [{
+              ...item.variants[0]!,
+              measurement: {
+                mode: 'custom',
+                unit: 'in',
+                values: [{ label: 'Bust', value: 'Flexible fit' }],
+              },
+            }],
+          }}
+        />
+      </PreviewProvider>,
+    );
+
+    expect(screen.getByText('Flexible fit')).toBeTruthy();
+    expect(screen.queryByText('Approximate garment measurements.')).toBeNull();
   });
 
   it.each([

@@ -216,6 +216,50 @@ describe('public storefront read API', async () => {
     expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/products/${ws.productId}`)).status).toBe(404);
   });
 
+  it('projects flexible-fit range and per-dimension fit notes to public item detail', async () => {
+    const ws = await publishedWorkspace('pub-flexible-fit');
+    const client = await admin.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`DELETE FROM physical_asset WHERE tenant_id = $1 AND variant_id = $2`, [ws.tenantId, ws.variantIds.l]);
+      await client.query(`DELETE FROM product_variant WHERE tenant_id = $1 AND id = $2`, [ws.tenantId, ws.variantIds.l]);
+      await client.query(`UPDATE product SET sizing_mode = 'free_size' WHERE tenant_id = $1 AND id = $2`, [ws.tenantId, ws.productId]);
+      await client.query(
+        `UPDATE product_variant
+            SET size_label = NULL,
+                fit_range = 'Small–XL',
+                measurement_unit = 'in',
+                measurements = '{"bust":{"type":"fit_note","text":"Flexible fit"},"waist":28,"length":61}'::jsonb
+          WHERE tenant_id = $1 AND id = $2`,
+        [ws.tenantId, ws.variantIds.m],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    const item = await request(createApp()).get(`/api/v1/public/stores/${ws.slug}/products/${ws.productId}`);
+    expect(item.status).toBe(200);
+    expect(dataOf<ItemDetail>(item).variants).toEqual([
+      expect.objectContaining({
+        size_label: null,
+        fit_range: 'Small–XL',
+        measurement: {
+          mode: 'custom',
+          unit: 'in',
+          values: [
+            { label: 'Bust', value: 'Flexible fit' },
+            { label: 'Waist', value: '28 in' },
+            { label: 'Length', value: '61 in' },
+          ],
+        },
+      }),
+    ]);
+  });
+
   it('reports day availability in store time, honouring minimum notice', async () => {
     const ws = await publishedWorkspace('pub-avail');
     const other = await createStorefrontWorkspace('pub-avail-other');

@@ -87,7 +87,7 @@ const detail = {
       measurement_mode: "custom" as const,
       measurement_guide_id: null,
       measurement_unit: "cm" as const,
-      measurements: { bust: 90, waist: 72, hips: 96 },
+      measurements: { bust: 90, waist: 72, length: 60, hips: 96 },
       rental_price_minor: "150000",
       security_deposit_minor: "50000",
       currency: "PHP",
@@ -214,7 +214,7 @@ describe("EditClothingPage", () => {
         measurement_mode: "custom",
         measurement_guide_id: null,
         measurement_unit: "cm",
-        measurements: { bust: 90, waist: 72, hips: 96 },
+        measurements: { bust: 90, waist: 72, length: 60, hips: 96 },
         rental_price_minor: "150000",
         security_deposit_minor: "50000",
         currency: "PHP",
@@ -259,6 +259,20 @@ describe("EditClothingPage", () => {
     expect(screen.getByLabelText("GWN-023-M Size Label")).toHaveValue("M");
     expect(screen.getByLabelText("GWN-023-M Color")).toHaveValue("Emerald Green");
     expect(screen.getByLabelText("GWN-023-M bust")).toHaveValue("90");
+    expect(screen.getByLabelText("GWN-023-M length")).toHaveValue("60");
+    expect(screen.getByText(/Legacy Hips \(read-only\)/)).toBeVisible();
+    expect(screen.queryByLabelText("GWN-023-M hips")).not.toBeInTheDocument();
+    const measurementSource = screen.getByText("Measurement Source", { exact: true });
+    const measurementGrid = measurementSource.parentElement;
+    expect(measurementGrid).toHaveClass("lg:grid-cols-[14rem_repeat(var(--measurement-count),minmax(0,1fr))]");
+    expect(measurementGrid).toHaveClass("gap-y-1");
+    expect(measurementGrid).toHaveClass("lg:items-end");
+    expect(measurementGrid).toContainElement(screen.getByRole("button", { name: "Measurement Source" }));
+    for (const field of ["bust", "waist", "length"]) {
+      const labels = measurementGrid?.querySelectorAll(`label[for="${variantId}-${field}-measurement"]`);
+      expect(labels).toHaveLength(2);
+    }
+    expect(screen.queryByText("Custom measurements", { selector: "span", exact: true })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Daily Rate")).toHaveValue("1500");
     expect(screen.getByRole("img", { name: "Current cover photo" })).toHaveAttribute(
       "src",
@@ -268,6 +282,72 @@ describe("EditClothingPage", () => {
     const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
     expect(within(breadcrumb).getByRole("link", { name: "Clothing" })).toHaveAttribute("href", "/inventory");
     expect(within(breadcrumb).getByText("Edit Emerald Evening Gown")).toHaveAttribute("aria-current", "page");
+  });
+
+  it("keeps legacy Hips read-only when a variant uses a reusable guide", async () => {
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: {
+        ...detail,
+        variants: [{
+          ...detail.variants[0]!,
+          measurement_mode: "default_guide",
+          measurement_guide_id: "00000000-0000-4000-8000-000000000098",
+        }],
+      },
+      requestId: "req-guide-with-legacy-hips",
+    });
+
+    render(<EditClothingPage productId={productId} />);
+    await screen.findByRole("heading", { name: "Edit Clothing" });
+
+    expect(screen.getByText(/Legacy Hips \(read-only\)/)).toBeVisible();
+    expect(screen.queryByLabelText("GWN-023-M hips")).not.toBeInTheDocument();
+  });
+
+  it("edits Length while sending legacy Hips through unchanged", async () => {
+    render(<EditClothingPage productId={productId} />);
+    await screen.findByRole("heading", { name: "Edit Clothing" });
+
+    fireEvent.change(screen.getByLabelText("GWN-023-M length"), { target: { value: "61" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(api.updateClothingVariant).toHaveBeenCalledTimes(1));
+    expect(api.updateClothingVariant.mock.calls[0]?.[2]).toMatchObject({
+      expected_updated_at: variantUpdatedAt,
+      measurement: {
+        measurement_mode: "custom",
+        measurement_unit: "cm",
+        measurements: { bust: 90, waist: 72, length: 61, hips: 96 },
+      },
+    });
+  });
+
+  it("displays a legacy range cleanly and canonicalizes edited flexible-fit values", async () => {
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: {
+        ...detail,
+        sizing_mode: "free_size",
+        variants: [{
+          ...detail.variants[0]!,
+          sku: "GWN-023-FS",
+          size_label: null,
+          fit_range: "Fits Small to Large",
+        }],
+      },
+      requestId: "req-free-size-legacy-range",
+    });
+
+    render(<EditClothingPage productId={productId} />);
+    await screen.findByRole("heading", { name: "Edit Clothing" });
+    const fitRange = screen.getByLabelText("GWN-023-FS Fits sizes");
+    expect(fitRange).toHaveValue("Small to Large");
+    fireEvent.change(fitRange, { target: { value: "Fits Medium to XL" } });
+    fireEvent.blur(fitRange);
+    expect(fitRange).toHaveValue("Medium to XL");
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(api.updateClothingVariant).toHaveBeenCalledTimes(1));
+    expect(api.updateClothingVariant.mock.calls[0]?.[2]).toMatchObject({ fit_range: "Medium to XL" });
   });
 
   it("clears an existing subcategory when None is selected", async () => {
@@ -283,16 +363,21 @@ describe("EditClothingPage", () => {
     });
   });
 
-  it("migrates a sized clothing item to Free size through the dedicated command", async () => {
+  it("migrates a sized clothing item to flexible fit without changing legacy Hips", async () => {
     render(<EditClothingPage productId={productId} />);
     await screen.findByRole("heading", { name: "Edit Clothing" });
 
-    expect(screen.getByText("Sized", { selector: "span" })).toBeVisible();
+    expect(screen.getByText("Multiple labeled sizes", { selector: "span" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Change sizing mode" }));
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/exactly one null-size variant/i)).toBeVisible();
-    expect(within(dialog).getByText(/Size label:/)).toBeVisible();
+    expect(within(dialog).getByText(/Flexible fit uses one variant without a size label/i)).toBeVisible();
+    expect(within(dialog).getByLabelText("Sizing transition fit range")).toBeVisible();
+    fireEvent.change(within(dialog).getByLabelText("Sizing transition fit range"), {
+      target: { value: "Fits Small to Large" },
+    });
+    expect(within(dialog).queryByLabelText("Sizing transition 1 bust type")).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/Legacy Hips \(read-only\)/i)).toBeVisible();
     fireEvent.click(within(dialog).getByRole("button", { name: "Change sizing mode" }));
 
     await waitFor(() => expect(api.changeClothingSizingMode).toHaveBeenCalledTimes(1));
@@ -302,14 +387,15 @@ describe("EditClothingPage", () => {
         mode: "free_size",
         variant: expect.objectContaining({
           size_label: null,
+          fit_range: "Small to Large",
           color_label: "Emerald Green",
           measurement_mode: "custom",
-          measurements: { bust: 90, waist: 72, hips: 96 },
+          measurements: { bust: 90, waist: 72, length: 60, hips: 96 },
         }),
       }),
       expect.any(String)
     );
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Sizing mode changed to Free size (1 active variant; 1 archived)."));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Sizing mode changed to one flexible-fit variant (1 active variant; 1 archived)."));
   });
 
   it("can migrate a Free size clothing item back to a labelled size", async () => {
@@ -385,8 +471,18 @@ describe("EditClothingPage", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).queryByText(/draft/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /publish/i })).not.toBeInTheDocument();
+    fireEvent.pointerDown(within(dialog).getByRole("button", { name: "Measurement Source" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Custom measurements" }));
     fireEvent.change(within(dialog).getByLabelText("New Variant Size Label"), { target: { value: "XL" } });
     fireEvent.change(within(dialog).getByLabelText("New Variant Color"), { target: { value: "Emerald Green" } });
+    fireEvent.change(within(dialog).getByLabelText("New Variant bust"), { target: { value: "Flexible fit" } });
+    fireEvent.change(within(dialog).getByLabelText("New Variant length"), { target: { value: "61" } });
+    expect(within(dialog).queryByLabelText("New Variant bust type")).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("New Variant hips")).not.toBeInTheDocument();
     fireEvent.change(within(dialog).getByLabelText("Package Price"), { target: { value: "1800" } });
     fireEvent.change(within(dialog).getByLabelText("Security Deposit"), { target: { value: "500" } });
     fireEvent.change(within(dialog).getByLabelText("Extra Day Price"), { target: { value: "600" } });
@@ -397,11 +493,12 @@ describe("EditClothingPage", () => {
       productId,
       {
         size_label: "XL",
+        fit_range: null,
         color_label: "Emerald Green",
-        measurement_mode: "none",
+        measurement_mode: "custom",
         measurement_guide_id: null,
         measurement_unit: "cm",
-        measurements: {},
+        measurements: { bust: { type: "fit_note", text: "Flexible fit" }, length: 61 },
         pricing: {
           mode: "fixed_duration",
           rental_price_minor: "180000",
@@ -468,6 +565,33 @@ describe("EditClothingPage", () => {
     expect(navigation.replace).not.toHaveBeenCalled();
     expect(await screen.findByRole("status")).toHaveTextContent("Changes saved");
     expect(screen.getByRole("heading", { name: "Edit Clothing" })).toBeVisible();
+  });
+
+  it("preserves an untouched fit note when another variant field changes", async () => {
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: {
+        ...detail,
+        variants: [{
+          ...detail.variants[0]!,
+          measurements: { bust: { type: "fit_note", text: "Flexible fit" }, waist: 72, length: 60, hips: 96 },
+        }],
+      },
+      requestId: "req-fit-note-detail",
+    });
+
+    render(<EditClothingPage productId={productId} />);
+    await screen.findByRole("heading", { name: "Edit Clothing" });
+    expect(screen.getByLabelText("GWN-023-M bust")).toHaveValue("Flexible fit");
+    expect(screen.queryByLabelText("GWN-023-M bust type")).not.toBeInTheDocument();
+    const waistInput = screen.getByLabelText("GWN-023-M waist");
+    expect(waistInput).toHaveValue("72");
+    expect(waistInput.parentElement).toHaveTextContent("cm");
+    expect(screen.getByLabelText("GWN-023-M bust").parentElement).not.toHaveTextContent("cm");
+    fireEvent.change(screen.getByLabelText("GWN-023-M Color"), { target: { value: "Forest Green" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(api.updateClothingVariant).toHaveBeenCalledTimes(1));
+    expect(api.updateClothingVariant.mock.calls[0]?.[2]).not.toHaveProperty("measurement");
   });
 
   it("guards a rapid double submit so one save intent produces one product mutation", async () => {

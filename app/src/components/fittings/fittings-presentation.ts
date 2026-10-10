@@ -68,7 +68,7 @@ export function fittingGarmentModeLabel(mode: FittingGarmentMode): string {
 }
 
 export function fittingVariantLabel(line: Pick<FittingGarmentLineSummary, "variant">): string {
-  const size = line.variant.size_label ?? "Free size";
+  const size = line.variant.size_label ?? "Flexible fit";
   return line.variant.color_label ? `${size} · ${line.variant.color_label}` : size;
 }
 

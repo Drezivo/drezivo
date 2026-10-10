@@ -5,7 +5,7 @@
  * UI presents that canonical value as one explicit size so it never renders an
  * empty cell or selector option.
  */
-export const FREE_SIZE_LABEL = "Free size";
+export const FREE_SIZE_LABEL = "Flexible fit";
 
 export function displaySizeLabel(sizeLabel: string | null | undefined): string {
   return sizeLabel ?? FREE_SIZE_LABEL;

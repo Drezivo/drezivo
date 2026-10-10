@@ -55,11 +55,12 @@ export async function readPaymentMethodSettings(
   client: PoolClient,
   tenantId: string,
   paymentMethodId: string,
+  forUpdate = false,
 ): Promise<PaymentMethodSettingsRow | null> {
   const result = await client.query<PaymentMethodSettingsRow>(
     `${settingsProjection}
      WHERE pm.tenant_id = $1 AND pm.id = $2
-     LIMIT 1`,
+     LIMIT 1${forUpdate ? ' FOR UPDATE OF pm' : ''}`,
     [tenantId, paymentMethodId],
   );
   return result.rows[0] ?? null;
@@ -70,19 +71,19 @@ export async function isAcceptedStorefrontAsset(
   tenantId: string,
   fileId: string,
 ): Promise<boolean> {
-  const result = await client.query<{ accepted: boolean }>(
-    `SELECT EXISTS (
-       SELECT 1
+  const result = await client.query<{ id: string }>(
+    `SELECT id
        FROM file_object
        WHERE tenant_id = $1
          AND id = $2
          AND purpose = 'storefront_asset'
          AND lifecycle_status = 'accepted'
          AND mime_type IN ('image/jpeg', 'image/png', 'image/webp')
-     ) AS accepted`,
+      LIMIT 1
+      FOR SHARE`,
     [tenantId, fileId],
   );
-  return result.rows[0]?.accepted === true;
+  return result.rows.length === 1;
 }
 
 /** An accepted instructions file (PDF or image) of this tenant, or null. */
@@ -90,7 +91,9 @@ export async function readAcceptedPaymentMaterial(client: PoolClient, tenantId: 
   const result = await client.query<{ mime_type: string }>(
     `SELECT mime_type FROM file_object
       WHERE tenant_id = $1 AND id = $2 AND purpose = 'payment_method_material' AND lifecycle_status = 'accepted'
-        AND mime_type IN ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')`,
+        AND mime_type IN ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')
+      LIMIT 1
+      FOR SHARE`,
     [tenantId, fileId],
   );
   return result.rows[0]?.mime_type ?? null;

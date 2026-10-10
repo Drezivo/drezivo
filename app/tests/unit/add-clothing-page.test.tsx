@@ -53,6 +53,11 @@ function renderPage() {
   return render(<AddClothingPage />);
 }
 
+async function waitForDefaultGuideLoaded() {
+  await waitFor(() => expect(api.getDefaultMeasurementGuide).toHaveBeenCalled());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Use default for all" })).toBeEnabled());
+}
+
 describe("AddClothingPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -118,24 +123,37 @@ describe("AddClothingPage", () => {
 
   it("does not ask staff to enter a clothing code", async () => {
     renderPage();
-    await screen.findByText("Default Size Guide");
+    await waitForDefaultGuideLoaded();
 
     expect(screen.queryByLabelText("Clothing Code")).not.toBeInTheDocument();
     expect(screen.queryByText(/Drezivo will generate one for you/)).not.toBeInTheDocument();
   });
 
-  it("defaults to a single free-size variant", () => {
+  it("places the shared color field in Clothing Information with equal-width fields", () => {
     renderPage();
 
-    expect(screen.getByRole("button", { name: "Free size" })).toHaveAttribute("aria-pressed", "true");
+    const informationGrid = screen.getByLabelText("Clothing Name *").parentElement?.parentElement;
+    expect(informationGrid).toHaveClass("xl:grid-cols-4");
+    expect(informationGrid).toContainElement(screen.getByLabelText("Color (optional)"));
+  });
+
+  it("defaults to one flexible-fit variant rather than using the mode as a piece count", () => {
+    renderPage();
+
+    expect(screen.getByRole("button", { name: "One flexible-fit variant" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText(/1 selected · 1 Total Piece/)).toBeVisible();
-    expect(screen.getAllByText("Free size").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Flexible fit").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByLabelText("Fits sizes (optional)")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Custom" })).toBeVisible();
+    expect(screen.getByLabelText("Flexible fit bust")).toBeVisible();
+    expect(screen.queryByText("Default Size Guide")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/hips/i)).not.toBeInTheDocument();
   });
 
   it("uses selected sizes to generate one piece per size", () => {
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Sized" }));
+    fireEvent.click(screen.getByRole("button", { name: "Multiple labeled sizes" }));
     expect(screen.getByText(/4 selected · 4 Total Pieces/)).toBeVisible();
     const selectedSizes = screen.getByText("Selected sizes").parentElement;
     if (!selectedSizes) throw new Error("Expected selected-size summary.");
@@ -150,13 +168,17 @@ describe("AddClothingPage", () => {
 
   it("creates one null-size variant for a free-size clothing item", async () => {
     renderPage();
-    await screen.findByText("Default Size Guide");
+    await waitForDefaultGuideLoaded();
 
     fireEvent.change(screen.getByLabelText("Clothing Name *"), {
-      target: { value: "One Size Cape" },
+      target: { value: "Flexible Fit Cape" },
     });
+    fireEvent.change(screen.getByLabelText("Fits sizes (optional)"), {
+      target: { value: "Fits Small to Large" },
+    });
+    fireEvent.change(screen.getByLabelText("Flexible fit bust"), { target: { value: "34" } });
     expect(screen.getByText(/1 selected · 1 Total Piece/)).toBeVisible();
-    expect(screen.getAllByText("Free size").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Flexible fit").length).toBeGreaterThanOrEqual(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Save as Draft" }));
 
@@ -166,15 +188,32 @@ describe("AddClothingPage", () => {
     expect(requestBody.sizes).toHaveLength(1);
     expect(requestBody.sizes[0]).toMatchObject({
       size_label: null,
-      measurement_mode: "default_guide",
-      measurement_guide_id: "00000000-0000-4000-8000-000000000099",
+      fit_range: "Small to Large",
+      measurement_mode: "custom",
+      measurements: { bust: 34 },
     });
+    expect(requestBody.sizes[0]).not.toHaveProperty("measurement_guide_id");
+  });
+
+  it("shows the shared guide section only after a variant selects Default guide", async () => {
+    renderPage();
+    await waitForDefaultGuideLoaded();
+
+    expect(screen.queryByText("Default Size Guide")).not.toBeInTheDocument();
+    const modeTrigger = screen.getByRole("button", { name: "Custom" });
+    modeTrigger.focus();
+    fireEvent.keyDown(modeTrigger, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Default guide" }));
+
+    expect(await screen.findByText("Default Size Guide")).toBeVisible();
+    expect(screen.getByRole("button", { name: "View Measurement" })).toBeVisible();
   });
 
   it("saves the LONG preset as a product subcategory", async () => {
     renderPage();
-    await screen.findByText("Default Size Guide");
+    await waitForDefaultGuideLoaded();
     fireEvent.change(screen.getByLabelText("Clothing Name *"), { target: { value: "Long Gown" } });
+    fireEvent.change(screen.getByLabelText("Flexible fit bust"), { target: { value: "34" } });
     fireEvent.change(screen.getByLabelText("Subcategory"), { target: { value: "LONG" } });
     fireEvent.click(screen.getByRole("button", { name: "Save as Draft" }));
 
@@ -184,8 +223,9 @@ describe("AddClothingPage", () => {
 
   it("offers a custom subcategory input and trims it before saving", async () => {
     renderPage();
-    await screen.findByText("Default Size Guide");
+    await waitForDefaultGuideLoaded();
     fireEvent.change(screen.getByLabelText("Clothing Name *"), { target: { value: "Tea Dress" } });
+    fireEvent.change(screen.getByLabelText("Flexible fit bust"), { target: { value: "34" } });
     fireEvent.change(screen.getByLabelText("Subcategory"), { target: { value: "custom" } });
     const customInput = screen.getByLabelText("Custom subcategory");
     expect(customInput).toBeVisible();
@@ -196,23 +236,51 @@ describe("AddClothingPage", () => {
     expect(api.createClothing.mock.calls[0]?.[0]).toMatchObject({ subcategory: "Tea Length" });
   });
 
-  it("uses the default guide until a size opts into custom measurements", async () => {
+  it("starts with custom measurements and shows the guide only for a selected variant", async () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Sized" }));
+    await waitForDefaultGuideLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Multiple labeled sizes" }));
 
-    expect(screen.queryByLabelText("S bust")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Default guide" })).toHaveLength(4);
-
-    fireEvent.keyDown(screen.getAllByRole("button", { name: "Default guide" })[0]!, { key: "ArrowDown" });
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Custom measurements" }));
-
+    expect(screen.getAllByRole("button", { name: "Custom" })).toHaveLength(4);
     expect(screen.getByLabelText("S bust")).toBeVisible();
-    expect(screen.queryByLabelText("M bust")).not.toBeInTheDocument();
+    expect(screen.queryByText("Default Size Guide")).not.toBeInTheDocument();
+
+    const customTrigger = screen.getAllByRole("button", { name: "Custom" })[0]!;
+    customTrigger.focus();
+    fireEvent.keyDown(customTrigger, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Default guide" }));
+
+    expect(await screen.findByText("Default Size Guide")).toBeVisible();
+    expect(screen.queryByLabelText("S bust")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("M bust")).toBeVisible();
+  });
+
+  it("places the custom-measurement heading above top-aligned flexible-fit and dimension fields", async () => {
+    renderPage();
+    const heading = await screen.findByText("Custom measurements for Flexible fit");
+    const measurementGrid = heading.parentElement;
+    expect(heading).toHaveClass("lg:col-span-2");
+    expect(measurementGrid).toHaveClass("lg:grid-cols-[6rem_11rem_repeat(3,minmax(0,1fr))]");
+    expect(measurementGrid).toContainElement(screen.getByRole("button", { name: "Custom" }));
+    expect(screen.getByLabelText("Flexible fit bust")).toBeVisible();
+    expect(screen.getByLabelText("Flexible fit waist")).toBeVisible();
+    expect(screen.getByLabelText("Flexible fit length")).toBeVisible();
+    for (const field of ["bust", "waist", "length"]) {
+      const labels = Array.from(measurementGrid!.querySelectorAll(`label[for="FREE_SIZE-${field}-measurement"]`));
+      expect(labels).toHaveLength(2);
+      expect(labels.some((element) => element.classList.contains("lg:block"))).toBe(true);
+      expect(labels.some((element) => element.classList.contains("lg:hidden"))).toBe(true);
+    }
   });
 
   it("opens the shared default measurement guide without duplicating it per size", async () => {
     renderPage();
+    await waitForDefaultGuideLoaded();
 
+    const modeTrigger = screen.getByRole("button", { name: "Custom" });
+    modeTrigger.focus();
+    fireEvent.keyDown(modeTrigger, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Default guide" }));
     expect(await screen.findByText("Default Size Guide")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "View Measurement" }));
 
@@ -305,7 +373,9 @@ describe("AddClothingPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("No default measurement guide")).toBeVisible();
+    await waitFor(() => expect(api.getDefaultMeasurementGuide).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("No default measurement guide")).not.toBeInTheDocument();
+    expect(screen.queryByText("Standard Size Guide")).not.toBeInTheDocument();
     expect(screen.queryByText("Change Default")).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "Add Default Size Guide" })[0]!);
 
@@ -333,14 +403,19 @@ describe("AddClothingPage", () => {
       make_default: true,
     });
 
-    expect(await screen.findByText("Luna Standard Size Guide")).toBeVisible();
     expect(screen.getByRole("button", { name: "Use default for all" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Add Default Size Guide" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Luna Standard Size Guide")).not.toBeInTheDocument();
+    const customTrigger = screen.getByRole("button", { name: "Custom" });
+    customTrigger.focus();
+    fireEvent.keyDown(customTrigger, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Default guide" }));
+    expect(await screen.findByText("Luna Standard Size Guide")).toBeVisible();
   });
 
   it("uses one whole-day recovery setting after return", async () => {
     renderPage();
-    await screen.findByText("Default Size Guide");
+    await waitForDefaultGuideLoaded();
 
     expect(screen.getByText("1 day recovery after return")).toBeVisible();
     expect(screen.getByRole("button", { name: /Rental Timing/ })).toHaveAttribute("aria-expanded", "true");
@@ -363,7 +438,7 @@ describe("AddClothingPage", () => {
 
   it("requires a photo to activate clothing while still allowing an image-less draft", async () => {
     renderPage();
-    await screen.findByText("Default Size Guide");
+    await waitForDefaultGuideLoaded();
 
     expect(screen.getByRole("button", { name: "Add Clothing" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Save as Draft" })).toBeEnabled();
@@ -374,7 +449,7 @@ describe("AddClothingPage", () => {
 
   it("guards internal navigation with a Drezivo discard dialog once the form is dirty", async () => {
     renderPage();
-    await screen.findByText("Default Size Guide");
+    await waitForDefaultGuideLoaded();
 
     fireEvent.change(screen.getByLabelText("Clothing Name *"), {
       target: { value: "Unsaved Gown" },
@@ -400,7 +475,7 @@ describe("AddClothingPage", () => {
 
   it("uses the native beforeunload guard for reload or tab close when dirty", async () => {
     renderPage();
-    await screen.findByText("Default Size Guide");
+    await waitForDefaultGuideLoaded();
 
     fireEvent.change(screen.getByLabelText("Clothing Name *"), {
       target: { value: "Unsaved Gown" },
@@ -414,7 +489,7 @@ describe("AddClothingPage", () => {
   it("guards browser Back with the same discard dialog", async () => {
     const historyBack = vi.spyOn(window.history, "back").mockImplementation(() => undefined);
     renderPage();
-    await screen.findByText("Default Size Guide");
+    await waitForDefaultGuideLoaded();
 
     fireEvent.change(screen.getByLabelText("Clothing Name *"), {
       target: { value: "Unsaved Gown" },
@@ -429,8 +504,15 @@ describe("AddClothingPage", () => {
 
   it("submits real draft variants with stable default-guide references and custom measurements", async () => {
     renderPage();
-    expect(await screen.findByText("Default Size Guide")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Sized" }));
+    await waitForDefaultGuideLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Multiple labeled sizes" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Use default for all" }));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Default guide" })).toHaveLength(4));
+    const defaultGuideTrigger = screen.getAllByRole("button", { name: "Default guide" })[0]!;
+    defaultGuideTrigger.focus();
+    fireEvent.keyDown(defaultGuideTrigger, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Custom measurements" }));
 
     fireEvent.change(screen.getByLabelText("Clothing Name *"), {
       target: { value: "Emerald Evening Gown" },
@@ -440,12 +522,10 @@ describe("AddClothingPage", () => {
       target: { value: "2" },
     });
 
-    await waitFor(() => expect(screen.getAllByRole("button", { name: "Default guide" })).toHaveLength(4));
-    fireEvent.keyDown(screen.getAllByRole("button", { name: "Default guide" })[0]!, { key: "ArrowDown" });
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Custom measurements" }));
     fireEvent.change(screen.getByLabelText("S bust"), { target: { value: "34" } });
-    fireEvent.change(screen.getByLabelText("S waist"), { target: { value: "28" } });
-    fireEvent.change(screen.getByLabelText("S hips"), { target: { value: "36" } });
+    fireEvent.change(screen.getByLabelText("S waist"), { target: { value: "Flexible fit" } });
+    fireEvent.change(screen.getByLabelText("S length"), { target: { value: "61" } });
+    expect(screen.queryByLabelText("S bust type")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Save as Draft" }));
 
@@ -476,7 +556,11 @@ describe("AddClothingPage", () => {
       size_label: "S",
       measurement_mode: "custom",
       measurement_unit: "in",
-      measurements: { bust: 34, waist: 28, hips: 36 },
+      measurements: {
+        bust: 34,
+        waist: { type: "fit_note", text: "Flexible fit" },
+        length: 61,
+      },
     });
     expect(requestBody.sizes[1]).toMatchObject({
       size_label: "M",
@@ -503,10 +587,11 @@ describe("AddClothingPage", () => {
     );
 
     renderPage();
-    await screen.findByText("Default Size Guide");
+    await waitForDefaultGuideLoaded();
     fireEvent.change(screen.getByLabelText("Clothing Name *"), {
       target: { value: "Single Intent Draft" },
     });
+    fireEvent.change(screen.getByLabelText("Flexible fit bust"), { target: { value: "34" } });
 
     const saveDraft = screen.getByRole("button", { name: "Save as Draft" });
     fireEvent.click(saveDraft);
@@ -549,10 +634,11 @@ describe("AddClothingPage", () => {
       });
 
     renderPage();
-    await screen.findByText("Default Size Guide");
+    await waitForDefaultGuideLoaded();
     fireEvent.change(screen.getByLabelText("Clothing Name *"), {
       target: { value: "Retry Draft" },
     });
+    fireEvent.change(screen.getByLabelText("Flexible fit bust"), { target: { value: "34" } });
 
     fireEvent.click(screen.getByRole("button", { name: "Save as Draft" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("The request timed out. Please try again.");
@@ -574,10 +660,11 @@ describe("AddClothingPage", () => {
     );
 
     renderPage();
-    await screen.findByText("Default Size Guide");
+    await waitForDefaultGuideLoaded();
     fireEvent.change(screen.getByLabelText("Clothing Name *"), {
       target: { value: "Capacity Draft" },
     });
+    fireEvent.change(screen.getByLabelText("Flexible fit bust"), { target: { value: "34" } });
     fireEvent.click(screen.getByRole("button", { name: "Save as Draft" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -648,10 +735,11 @@ describe("AddClothingPage", () => {
     );
 
     renderPage();
-    await screen.findByText("Default Size Guide");
+    await waitForDefaultGuideLoaded();
     fireEvent.change(screen.getByLabelText("Clothing Name *"), {
       target: { value: "Photo Gown" },
     });
+    fireEvent.change(screen.getByLabelText("Flexible fit bust"), { target: { value: "34" } });
     fireEvent.change(screen.getByLabelText("Color (optional)"), {
       target: { value: "Gold" },
     });
@@ -675,6 +763,7 @@ describe("AddClothingPage", () => {
     await waitFor(() => expect(api.createClothing).toHaveBeenCalledTimes(1));
     const [requestBody] = api.createClothing.mock.calls[0]!;
     expect(requestBody.activate).toBe(true);
+    expect(requestBody.color_label).toBe("Gold");
     expect(requestBody.image_file_ids).toEqual(
       Array.from(
         { length: 5 },

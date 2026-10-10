@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { categoryId, productId, productVariantId } from '../common/ids';
 import { moneyString } from '../common/money';
 import { isoDate, isoInstant } from '../common/time';
-import { MAX_CLOTHING_PHOTOS } from '../catalogue/admin';
+import { MAX_CLOTHING_PHOTOS, variantFitRange } from '../catalogue/admin';
 
 export const pricingMode = z.enum(['fixed_duration', 'daily']);
 export type PricingMode = z.infer<typeof pricingMode>;
@@ -75,6 +75,7 @@ export const catalogueVariant = z
   .object({
     variant_id: productVariantId,
     size_label: z.string().nullable(),
+    fit_range: variantFitRange.nullable().optional(),
     color_label: z.string().nullable(),
     rental_price_minor: moneyString,
     security_deposit_minor: moneyString,

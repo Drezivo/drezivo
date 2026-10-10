@@ -144,7 +144,8 @@ export const productVariant = pgTable(
     sku: text('sku').notNull(),
     sizeLabel: text('size_label'),
     colorLabel: text('color_label'),
-    measurements: jsonb('measurements').$type<Record<string, number>>().notNull().default({}),
+    measurements: jsonb('measurements').$type<Record<string, number | { type: 'fit_note'; text: string }>>().notNull().default({}),
+    fitRange: text('fit_range'),
     measurementUnit: text('measurement_unit').notNull().default('cm'),
     measurementMode: measurementModeEnum('measurement_mode').notNull().default('none'),
     measurementGuideId: uuid('measurement_guide_id'),
@@ -186,6 +187,7 @@ export const productVariant = pgTable(
     check('product_variant_sku_not_blank', sql`length(btrim(${table.sku})) BETWEEN 1 AND 120`),
     check('product_variant_size_not_blank', sql`length(btrim(${table.sizeLabel})) BETWEEN 1 AND 40`),
     check('product_variant_color_not_blank', sql`length(btrim(${table.colorLabel})) BETWEEN 1 AND 80`),
+    check('product_variant_fit_range_check', sql`${table.fitRange} IS NULL OR (${table.sizeLabel} IS NULL AND length(btrim(${table.fitRange})) BETWEEN 1 AND 120)`),
   ],
 );
 

@@ -5,19 +5,30 @@ on:
     paths:
       - "api/**"
       - "contracts/**"
+      - ".github/scripts/**"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/ci.yml"
   push:
-    branches: [main]
+    branches: [main, staging]
     tags: ["v*.*.*"]
     paths:
       - "api/**"
       - "contracts/**"
+      - ".github/scripts/**"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/ci.yml"
   workflow_dispatch:
+    inputs:
+      migration_action:
+        description: Choose whether a manual run should only report status or apply pending migrations.
+        required: true
+        type: choice
+        default: status
+        options:
+          - status
+          - apply
 
 concurrency:
   group: backend-${{ github.ref }}
@@ -85,22 +96,8 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Build shared contracts
-        run: npm run build --workspace @drezivo/contracts
-      - name: Lint shared contracts
-        run: npm run lint --workspace @drezivo/contracts
-      - name: Test shared contracts
-        run: npm run test --workspace @drezivo/contracts
-      - name: Type-check API
-        run: npm run typecheck --workspace @drezivo/api
-      - name: Lint API
-        run: npm run lint --workspace @drezivo/api
-      - name: Run API unit tests
-        run: npm run test --workspace @drezivo/api
-      - name: Run API integration tests
-        run: npm run test:integration --workspace @drezivo/api
-      - name: Build API
-        run: npm run build --workspace @drezivo/api
+      - name: Run shared backend validation
+        run: npm run validate:backend:ci
 
   container:
     name: build backend container
@@ -122,6 +119,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       run: ${{ steps.scope.outputs.run }}
+      apply: ${{ steps.action.outputs.apply }}
     steps:
       - name: Check out the triggering commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -157,6 +155,128 @@ jobs:
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
+      - name: Select migration action
+        id: action
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_ACTION: ${{ inputs.migration_action }}
+        run: |
+          set -euo pipefail
+          apply="$(node .github/scripts/migration-action.mjs "$EVENT_NAME" "$REQUESTED_ACTION")"
+          echo "apply=$apply" >> "$GITHUB_OUTPUT"
+
+  staging-migration-scope:
+    name: detect staging migration run
+    if: >-
+      github.ref == 'refs/heads/staging' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.scope.outputs.run }}
+      apply: ${{ steps.action.outputs.apply }}
+    steps:
+      - name: Check out the triggering commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Select migration runs
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ ! "$BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The push event does not include a usable previous commit; refusing to infer migration changes."
+            exit 1
+          fi
+          git cat-file -e "${BEFORE_SHA}^{commit}"
+
+          changed_files="$(git diff --name-only "$BEFORE_SHA" "$GITHUB_SHA" -- api/src/db/migrations/)"
+          migration_files="$(printf '%s\n' "$changed_files" | grep -E '^api/src/db/migrations/[0-9]{4}_.*\.sql$' || true)"
+          if [[ -n "$migration_files" ]]; then
+            echo "Migration files changed on staging:"
+            printf '%s\n' "$migration_files"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Select migration action
+        id: action
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_ACTION: ${{ inputs.migration_action }}
+        run: |
+          set -euo pipefail
+          apply="$(node .github/scripts/migration-action.mjs "$EVENT_NAME" "$REQUESTED_ACTION")"
+          echo "apply=$apply" >> "$GITHUB_OUTPUT"
+
+  staging-migrations:
+    name: apply migrations to staging
+    if: needs.staging-migration-scope.outputs.run == 'true'
+    needs: [backend, container, secrets, staging-migration-scope]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    concurrency:
+      group: drezivo-preview-migrations
+      cancel-in-progress: false
+    env:
+      NODE_ENV: staging
+      DATABASE_URL_MIGRATION: ${{ secrets.MIGRATION_DATABASE_URL }}
+    steps:
+      - name: Check out the triggering commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Reject a stale staging commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin staging --quiet
+          staging_head="$(git rev-parse FETCH_HEAD)"
+          if [[ "$staging_head" != "$GITHUB_SHA" ]]; then
+            echo "::error::This migration run is stale. The checked-out commit is no longer the staging branch head."
+            exit 1
+          fi
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --include=dev
+      - name: Report staging migration status
+        run: npm run db:migrate:status --workspace @drezivo/api
+      - name: Reject a stale staging commit before applying
+        if: needs.staging-migration-scope.outputs.apply == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin staging --quiet
+          staging_head="$(git rev-parse FETCH_HEAD)"
+          if [[ "$staging_head" != "$GITHUB_SHA" ]]; then
+            echo "::error::This migration run became stale before application."
+            exit 1
+          fi
+      - name: Apply staging migrations
+        if: needs.staging-migration-scope.outputs.apply == 'true'
+        run: npm run db:migrate --workspace @drezivo/api
+      - name: Verify staging migration status
+        if: needs.staging-migration-scope.outputs.apply == 'true'
+        run: npm run db:migrate:status --workspace @drezivo/api
 
   preview-migrations:
     name: apply migrations to preview
@@ -165,9 +285,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: preview
+    concurrency:
+      group: drezivo-preview-migrations
+      cancel-in-progress: false
     env:
       NODE_ENV: staging
-      DATABASE_URL_DIRECT: ${{ secrets.MIGRATION_DATABASE_URL_DIRECT }}
+      DATABASE_URL_MIGRATION: ${{ secrets.MIGRATION_DATABASE_URL }}
     steps:
       - name: Check out the triggering commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -194,6 +317,7 @@ jobs:
       - name: Report preview migration status
         run: npm run db:migrate:status --workspace @drezivo/api
       - name: Reject a stale main commit before applying
+        if: needs.migration-scope.outputs.apply == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -204,20 +328,22 @@ jobs:
             exit 1
           fi
       - name: Apply preview migrations
+        if: needs.migration-scope.outputs.apply == 'true'
         run: npm run db:migrate --workspace @drezivo/api
       - name: Verify preview migration status
+        if: needs.migration-scope.outputs.apply == 'true'
         run: npm run db:migrate:status --workspace @drezivo/api
 
   production-migrations:
     name: apply migrations to production
-    if: needs.migration-scope.outputs.run == 'true'
+    if: needs.migration-scope.outputs.run == 'true' && needs.migration-scope.outputs.apply == 'true'
     needs: [backend, container, secrets, migration-scope, preview-migrations]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
     env:
       NODE_ENV: production
-      DATABASE_URL_DIRECT: ${{ secrets.MIGRATION_DATABASE_URL_DIRECT }}
+      DATABASE_URL_MIGRATION: ${{ secrets.MIGRATION_DATABASE_URL }}
       MIGRATION_PRODUCTION_RECONCILED: ${{ vars.MIGRATION_PRODUCTION_RECONCILED }}
     steps:
       - name: Check out the triggering commit

@@ -1,4 +1,5 @@
 import {
+  MAX_UPLOAD_BYTES,
   extractedClothingFields,
   type ExtractedClothingFields,
 } from '@drezivo/contracts';
@@ -10,13 +11,12 @@ import { objectStorage } from '../../integrations/storage/s3-compatible-object-s
 import {
   DependencyUnavailableError,
   NotFoundError,
+  PhotoReaderConfigurationError,
   RateLimitedError,
 } from '../../shared/errors.js';
 import { logger } from '../../shared/logger.js';
 import { readFileObject } from '../files/files.repository.js';
 
-/** Photos above this are not sent to the model; catalogue cards are far smaller. */
-const MAX_EXTRACT_BYTES = 8 * 1024 * 1024;
 const READ_URL_TTL_SECONDS = 120;
 const DEFAULT_RETRY_AFTER_SECONDS = 20;
 
@@ -43,6 +43,7 @@ export const EMPTY_EXTRACTION: ExtractedClothingFields = {
   name: null,
   rental_price_minor: null,
   size_label: null,
+  fit_range: null,
   free_size: false,
   measurement_unit: null,
   measurements: {},
@@ -55,14 +56,16 @@ const SYSTEM_PROMPT =
 
 const USER_PROMPT = `Return this JSON object:
 {"name": string|null, "rental_price": number|null, "size": string|null, "free_size": boolean,
- "unit": "in"|"cm"|null, "measurements": {"<Label>": number}, "color": string|null}
+ "fit_range": string|null, "unit": "in"|"cm"|null,
+ "measurements": {"<Label>": number|{"type":"fit_note","text":string}}, "color": string|null}
 
 Rules:
 - name: the garment's name, usually the large title. A decorative first letter belongs to the word. Title Case, e.g. "Mirabelle".
 - rental_price: the rental fee as a plain number, e.g. 800 for "P800" or "₱800". Not a deposit.
-- measurements: numbers printed for body measurements, keyed in Title Case, e.g. "BUST: 30 IN" -> {"Bust": 30}. Leave out any measurement written as FS or free size.
+- measurements: copy exact numeric body measurements, e.g. "WAIST: 28 IN" -> {"Waist": 28}; for an explicit dimension note such as "BUST: FS", use {"Bust":{"type":"fit_note","text":"Flexible fit"}}. Do not use hips as a standard field; keep any other clearly printed dimension under its own label.
 - unit: "in" for IN, INCH or INCHES; "cm" for CM. null when no measurement is shown.
-- size: a printed size such as "S", "Medium" or "Small-XL"; null when none is shown.
+- size: a printed labeled variant size such as "S" or "Medium"; null for a flexible-fit variant or when none is shown.
+- fit_range: only an explicitly printed wearer-size range for the flexible-fit variant (e.g. "Small-XL"); null if none is printed. Do not infer a range from "FS", "free size" or "freesize" alone.
 - free_size: true when the card says FS, free size or freesize anywhere.
 - color: the garment's main colour in one or two words, judged from the photo.
 - Ignore the shop name, address, social media handles, website and rental instructions.`;
@@ -71,6 +74,7 @@ type ModelReply = {
   name?: unknown;
   rental_price?: unknown;
   size?: unknown;
+  fit_range?: unknown;
   free_size?: unknown;
   unit?: unknown;
   measurements?: unknown;
@@ -100,16 +104,29 @@ export function parseModelReply(text: string): ExtractedClothingFields {
   const price = typeof raw.rental_price === 'string'
     ? Number(raw.rental_price.replace(/[^0-9.]/g, ''))
     : raw.rental_price;
-  const measurements: Record<string, number> = {};
+  const measurements: Record<string, number | { type: 'fit_note'; text: string }> = {};
   if (raw.measurements && typeof raw.measurements === 'object' && !Array.isArray(raw.measurements)) {
     for (const [label, value] of Object.entries(raw.measurements as Record<string, unknown>)) {
       const key = label.trim().slice(0, 80);
       if (key && typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 10_000) {
         measurements[key] = value;
+      } else if (key && typeof value === 'string' && value.trim()) {
+        const note = /^(fs|free\s*size|freesize)$/i.test(value.trim()) ? 'Flexible fit' : value.trim();
+        if (note.length <= 120) measurements[key] = { type: 'fit_note', text: note };
+      } else if (
+        key && typeof value === 'object' && value !== null &&
+        (value as { type?: unknown }).type === 'fit_note' &&
+        typeof (value as { text?: unknown }).text === 'string'
+      ) {
+        const rawNote = ((value as { text: string }).text).trim();
+        const note = /^(fs|free\s*size|freesize)$/i.test(rawNote) ? 'Flexible fit' : rawNote;
+        if (note && note.length <= 120) measurements[key] = { type: 'fit_note', text: note };
       }
     }
   }
   const unit = raw.unit === 'in' || raw.unit === 'cm' ? raw.unit : null;
+  const size = text_(raw.size, 40);
+  const explicitRange = text_(raw.fit_range, 120) ?? (raw.free_size === true && size && /\b(?:to|through)\b|[-–—]/i.test(size) ? size : null);
 
   const candidate = {
     name: text_(raw.name, 200),
@@ -117,14 +134,73 @@ export function parseModelReply(text: string): ExtractedClothingFields {
       typeof price === 'number' && Number.isFinite(price) && price >= 0 && price < 10_000_000
         ? String(Math.round(price * 100))
         : null,
-    size_label: text_(raw.size, 40),
+    size_label: raw.free_size === true ? null : size,
+    fit_range: raw.free_size === true ? explicitRange : null,
     free_size: raw.free_size === true,
-    measurement_unit: Object.keys(measurements).length > 0 ? unit : null,
+    measurement_unit: Object.values(measurements).some((value) => typeof value === 'number') ? unit : null,
     measurements,
     color_label: text_(raw.color, 80),
   };
   const parsed = extractedClothingFields.safeParse(candidate);
   return parsed.success ? parsed.data : EMPTY_EXTRACTION;
+}
+
+function geminiNativeGemmaEndpoint(settings: VisionSettings): string | null {
+  const [model, ...fallbacks] = settings.model.split(',').map((value) => value.trim()).filter(Boolean);
+  if (!model || fallbacks.length > 0 || !/^gemma-4-/i.test(model)) return null;
+
+  let baseUrl: URL;
+  try {
+    baseUrl = new URL(settings.baseUrl);
+  } catch {
+    return null;
+  }
+  if (baseUrl.hostname !== 'generativelanguage.googleapis.com') return null;
+
+  const apiPath = baseUrl.pathname.replace(/\/openai\/?$/i, '').replace(/\/$/, '');
+  return `${baseUrl.origin}${apiPath}/models/${encodeURIComponent(model)}:generateContent`;
+}
+
+function openRouterSettings(settings: VisionSettings): { models: string[]; headers: Record<string, string> } | null {
+  let baseUrl: URL;
+  try {
+    baseUrl = new URL(settings.baseUrl);
+  } catch {
+    return null;
+  }
+  if (baseUrl.hostname !== 'openrouter.ai') return null;
+
+  const models = settings.model.split(',').map((value) => value.trim()).filter(Boolean);
+  if (models.length === 0) return null;
+  return {
+    models,
+    headers: {
+      'HTTP-Referer': 'https://drezivo.shop',
+      'X-Title': 'Drezivo',
+    },
+  };
+}
+
+function openAiCompatibleContent(payload: unknown): string | null {
+  const content = (payload as { choices?: Array<{ message?: { content?: unknown } }> } | null)
+    ?.choices?.[0]?.message?.content;
+  return typeof content === 'string' && content.trim() ? content : null;
+}
+
+function nativeGeminiContent(payload: unknown): string | null {
+  const parts = (
+    payload as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: unknown; thought?: unknown }> } }>;
+    } | null
+  )?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return null;
+
+  const content = parts
+    .filter((part) => part.thought !== true && typeof part.text === 'string')
+    .map((part) => part.text as string)
+    .join('\n')
+    .trim();
+  return content || null;
 }
 
 export interface ExtractDependencies {
@@ -138,7 +214,7 @@ export async function extractClothingPhoto(
   dependencies: ExtractDependencies = {},
 ): Promise<ExtractedClothingFields> {
   const settings = dependencies.settings === undefined ? visionSettings() : dependencies.settings;
-  if (!settings) throw new DependencyUnavailableError('Reading details from photos is not set up.');
+  if (!settings) throw new PhotoReaderConfigurationError('Reading details from photos is not set up.');
   const storage = dependencies.storage ?? objectStorage;
   const fetchImpl = dependencies.fetchImpl ?? fetch;
 
@@ -149,7 +225,7 @@ export async function extractClothingPhoto(
     !file ||
     file.purpose !== 'catalogue_image' ||
     file.lifecycle_status !== 'accepted' ||
-    Number(file.byte_size) > MAX_EXTRACT_BYTES
+    Number(file.byte_size) > MAX_UPLOAD_BYTES
   ) {
     throw new NotFoundError('The photo could not be found.');
   }
@@ -162,33 +238,56 @@ export async function extractClothingPhoto(
   const image = await fetchImpl(read.readUrl, { signal: AbortSignal.timeout(settings.timeoutMs) }).catch(() => null);
   if (!image?.ok) throw new DependencyUnavailableError('The photo could not be read. Try again.');
   const bytes = Buffer.from(await image.arrayBuffer());
-  const dataUrl = `data:${file.mime_type};base64,${bytes.toString('base64')}`;
+  const base64 = bytes.toString('base64');
+  const dataUrl = `data:${file.mime_type};base64,${base64}`;
+  const nativeGemmaEndpoint = geminiNativeGemmaEndpoint(settings);
+  const openRouter = openRouterSettings(settings);
 
   let response: Response;
   try {
-    response = await fetchImpl(`${settings.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${settings.apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: settings.model,
-        temperature: 0,
-        max_tokens: 400,
-        // One user message, no system role: some providers (e.g. Gemma models on the Gemini API)
-        // reject system instructions, and every OpenAI-compatible endpoint accepts this shape.
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: `${SYSTEM_PROMPT}
-
-${USER_PROMPT}` },
-              { type: 'image_url', image_url: { url: dataUrl } },
+    response = nativeGemmaEndpoint
+      ? await fetchImpl(nativeGemmaEndpoint, {
+          method: 'POST',
+          headers: { 'x-goog-api-key': settings.apiKey, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: 'user',
+                parts: [
+                  { text: `${SYSTEM_PROMPT}\n\n${USER_PROMPT}` },
+                  { inline_data: { mime_type: file.mime_type, data: base64 } },
+                ],
+              },
             ],
+            generationConfig: { temperature: 0, maxOutputTokens: 400 },
+          }),
+          signal: AbortSignal.timeout(settings.timeoutMs),
+        })
+      : await fetchImpl(`${settings.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${settings.apiKey}`,
+            'content-type': 'application/json',
+            ...(openRouter?.headers ?? {}),
           },
-        ],
-      }),
-      signal: AbortSignal.timeout(settings.timeoutMs),
-    });
+          body: JSON.stringify({
+            ...(openRouter && openRouter.models.length > 1
+              ? { models: openRouter.models, provider: { allow_fallbacks: true } }
+              : { model: openRouter?.models[0] ?? settings.model }),
+            temperature: 0,
+            max_tokens: 400,
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: `${SYSTEM_PROMPT}\n\n${USER_PROMPT}` },
+                  { type: 'image_url', image_url: { url: dataUrl } },
+                ],
+              },
+            ],
+          }),
+          signal: AbortSignal.timeout(settings.timeoutMs),
+        });
   } catch {
     throw new DependencyUnavailableError('The photo reader did not answer in time. Try again.');
   }
@@ -202,13 +301,30 @@ ${USER_PROMPT}` },
   }
   if (!response.ok) {
     // Status only: the provider body can echo request details and never belongs in logs.
-    logger.warn({ status: response.status, model: settings.model }, 'catalogue photo extraction failed');
-    throw new DependencyUnavailableError('The photo reader is unavailable right now.');
+    logger.warn(
+      {
+        status: response.status,
+        model: settings.model,
+        transport: nativeGemmaEndpoint ? 'gemini-native' : openRouter ? 'openrouter' : 'openai-compatible',
+      },
+      'catalogue photo extraction failed',
+    );
+    if (response.status === 401 || response.status === 403) {
+      throw new PhotoReaderConfigurationError('The photo reader credentials were rejected. Check its API key.');
+    }
+    if ([400, 404, 415, 422].includes(response.status)) {
+      throw new PhotoReaderConfigurationError('The configured photo model rejected the image request. Check the model setting.');
+    }
+    if (response.status >= 500) {
+      throw new DependencyUnavailableError(
+        `The photo reader provider returned HTTP ${response.status}. Try again in a moment or check the staging provider logs.`,
+      );
+    }
+    throw new DependencyUnavailableError(`The photo reader request failed with HTTP ${response.status}.`);
   }
 
-  const payload = (await response.json().catch(() => null)) as
-    | { choices?: Array<{ message?: { content?: unknown } }> }
-    | null;
-  const content = payload?.choices?.[0]?.message?.content;
-  return typeof content === 'string' ? parseModelReply(content) : EMPTY_EXTRACTION;
+  const payload = await response.json().catch(() => null);
+  const content = nativeGemmaEndpoint ? nativeGeminiContent(payload) : openAiCompatibleContent(payload);
+  if (!content) throw new DependencyUnavailableError('The photo reader returned an unreadable response. Try again.');
+  return parseModelReply(content);
 }

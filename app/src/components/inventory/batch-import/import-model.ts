@@ -1,4 +1,13 @@
-import type { CreateClothingRequest, ExtractedClothingFields } from "@drezivo/contracts";
+import {
+  createClothingRequest,
+  normalizeVariantFitRange,
+  type CreateClothingRequest,
+  type ExtractedClothingFields,
+  type MeasurementMode,
+  type VariantMeasurementValue,
+} from "@drezivo/contracts";
+
+import { parseMeasurementInput } from "@/lib/measurement-input";
 
 /**
  * One garment in a batch import. Every editable value is kept as the text the owner typed, so a
@@ -19,17 +28,24 @@ export type ImportRow = {
   createKey: string;
   name: string;
   category: string;
+  /** Optional style-level label. LONG/MINI are common presets; any trimmed custom value is valid. */
+  subcategory: string;
   color: string;
-  /** Free size when true; otherwise `sizeLabel` is the one size this piece comes in. */
+  /** One flexible-fit variant when true; otherwise `sizeLabel` is a labeled-size variant. */
   freeSize: boolean;
   sizeLabel: string;
-  /** Free-text fit note shown in the description, e.g. "Fits Small to XL". */
-  fitNote: string;
+  /** Optional wearer size range, only used by the flexible-fit variant. */
+  fitRange: string;
+  description: string;
+  /** Same measurement behavior as the single Add Clothing form. */
+  measurementMode: MeasurementMode;
   unit: "in" | "cm";
   bust: string;
   waist: string;
-  hips: string;
   length: string;
+  measurementKinds: Record<MeasurementField, "exact" | "fit_note">;
+  measurementConflicts: MeasurementField[];
+  conflictingFitNotes: Partial<Record<MeasurementField, string>>;
   price: string;
   deposit: string;
   status: ImportRowStatus;
@@ -58,7 +74,7 @@ export const DEFAULT_IMPORT_DEFAULTS: ImportDefaults = {
   unit: "in",
 };
 
-export const MEASUREMENT_FIELDS = ["bust", "waist", "hips", "length"] as const;
+export const MEASUREMENT_FIELDS = ["bust", "waist", "length"] as const;
 export type MeasurementField = (typeof MEASUREMENT_FIELDS)[number];
 
 export function newKey(prefix: string): string {
@@ -76,15 +92,20 @@ export function emptyRow(defaults: ImportDefaults, patch: Partial<ImportRow> = {
     createKey: newKey("create"),
     name: "",
     category: "",
+    subcategory: "",
     color: "",
     freeSize: true,
     sizeLabel: "",
-    fitNote: "",
+    fitRange: "",
+    description: "",
+    measurementMode: "custom",
     unit: defaults.unit,
     bust: "",
     waist: "",
-    hips: "",
     length: "",
+    measurementKinds: { bust: "exact", waist: "exact", length: "exact" },
+    measurementConflicts: [],
+    conflictingFitNotes: {},
     price: "",
     deposit: "",
     status: "draft",
@@ -128,7 +149,9 @@ export function applyExtraction(row: ImportRow, fields: ExtractedClothingFields)
   const fill = (current: string, next: string | null | undefined) => (current.trim() === "" && next ? next : current);
   const measure = (key: MeasurementField, current: string) => {
     const match = Object.entries(fields.measurements).find(([label]) => label.toLowerCase().startsWith(key.replace(/s$/, "")));
-    return fill(current, match ? String(match[1]) : null);
+    if (!match || current.trim() !== "") return { value: current, kind: row.measurementKinds[key] };
+    if (typeof match[1] === "number") return { value: String(match[1]), kind: "exact" as const };
+    return { value: match[1].text, kind: "fit_note" as const };
   };
   const hasMeasurements = Object.keys(fields.measurements).length > 0;
   return {
@@ -139,12 +162,17 @@ export function applyExtraction(row: ImportRow, fields: ExtractedClothingFields)
     price: fill(row.price, fields.rental_price_minor ? minorToPesos(fields.rental_price_minor) : null),
     freeSize: fields.size_label && !fields.free_size ? false : row.freeSize,
     sizeLabel: fields.free_size ? row.sizeLabel : fill(row.sizeLabel, fields.size_label),
-    fitNote: fields.free_size ? fill(row.fitNote, fields.size_label ? `Fits ${fields.size_label}` : null) : row.fitNote,
+    fitRange: normalizeVariantFitRange(fill(row.fitRange, fields.fit_range)),
+    measurementKinds: {
+      bust: measure("bust", row.bust).kind,
+      waist: measure("waist", row.waist).kind,
+      length: measure("length", row.length).kind,
+    },
+    measurementMode: hasMeasurements ? "custom" : row.measurementMode,
     unit: hasMeasurements && fields.measurement_unit ? fields.measurement_unit : row.unit,
-    bust: measure("bust", row.bust),
-    waist: measure("waist", row.waist),
-    hips: measure("hips", row.hips),
-    length: measure("length", row.length),
+    bust: measure("bust", row.bust).value,
+    waist: measure("waist", row.waist).value,
+    length: measure("length", row.length).value,
   };
 }
 
@@ -164,29 +192,67 @@ export function pesosToMinor(value: string): string | null {
   return (BigInt(match[1] ?? "0") * 100n + BigInt(fraction || "0")).toString();
 }
 
-function measurementValue(value: string): number | null | "invalid" {
-  const trimmed = value.trim();
-  if (trimmed === "") return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) && parsed > 0 && parsed <= 10_000 ? parsed : "invalid";
-}
-
 export type RowProblem = { field: keyof ImportRow | "photo"; message: string };
 
+/**
+ * Empty fields worth drawing the owner's attention to after a successful photo scan.
+ * Required fields still render as validation errors in the UI; this list is for the softer
+ * "the photo did not give us this" treatment.
+ */
+export function scanReviewFields(row: ImportRow): Set<keyof ImportRow> {
+  if (!row.read) return new Set();
+  const fields = new Set<keyof ImportRow>();
+  if (!row.name.trim()) fields.add("name");
+  if (!row.category.trim()) fields.add("category");
+  if (!row.subcategory.trim()) fields.add("subcategory");
+  if (!row.price.trim()) fields.add("price");
+  if (row.freeSize) {
+    if (!row.fitRange.trim()) fields.add("fitRange");
+  } else if (!row.sizeLabel.trim()) {
+    fields.add("sizeLabel");
+  }
+  if (!row.color.trim()) fields.add("color");
+  if (row.measurementMode === "custom") {
+    for (const field of MEASUREMENT_FIELDS) {
+      if (!row[field].trim()) fields.add(field);
+    }
+  }
+  return fields;
+}
+
 /** What blocks this row from being created, in the order the owner should fix it. */
-export function rowProblems(row: ImportRow, defaults: ImportDefaults): RowProblem[] {
+export function rowProblems(row: ImportRow, defaults: ImportDefaults, defaultGuideId: string | null = null): RowProblem[] {
   const problems: RowProblem[] = [];
   if (!row.name.trim()) problems.push({ field: "name", message: "Add a name." });
   if (row.name.trim().length > 200) problems.push({ field: "name", message: "Name is too long." });
   if (!row.category.trim()) problems.push({ field: "category", message: "Choose a category." });
   else if (row.category.trim().length > 120) problems.push({ field: "category", message: "Category name is too long." });
-  if (!row.freeSize && !row.sizeLabel.trim()) problems.push({ field: "sizeLabel", message: "Add a size or mark it Free size." });
+  if (row.subcategory.trim().length > 120) problems.push({ field: "subcategory", message: "Subcategory is too long." });
+  if (!row.freeSize && !row.sizeLabel.trim()) problems.push({ field: "sizeLabel", message: "Add a size or mark it flexible fit." });
+  if (row.fitRange.trim().length > 120) problems.push({ field: "fitRange", message: "Fits sizes is too long." });
+  if (row.description.trim().length > 2_000) problems.push({ field: "description", message: "Description is too long." });
+  if (row.measurementMode === "default_guide" && !defaultGuideId) {
+    problems.push({ field: "measurementMode", message: "Choose Custom/No measurements, or set a default measurement guide." });
+  }
   if (pesosToMinor(row.price) === null) problems.push({ field: "price", message: "Add the rental price." });
   if (pesosToMinor(row.deposit.trim() || defaults.deposit) === null) {
     problems.push({ field: "deposit", message: "Deposit must be a peso amount." });
   }
-  for (const field of MEASUREMENT_FIELDS) {
-    if (measurementValue(row[field]) === "invalid") problems.push({ field, message: `${capitalize(field)} must be a number.` });
+  if (row.measurementMode === "custom") {
+    for (const field of row.measurementConflicts) {
+      problems.push({ field, message: `Choose which imported ${capitalize(field)} value to keep.` });
+    }
+    let hasMeasurement = false;
+    for (const field of MEASUREMENT_FIELDS) {
+      try {
+        if (parseMeasurementInput(row[field], capitalize(field), row.measurementKinds[field]) !== null) hasMeasurement = true;
+      } catch (error) {
+        problems.push({ field, message: error instanceof Error ? error.message : `${capitalize(field)} is invalid.` });
+      }
+    }
+    if (!hasMeasurement) {
+      problems.push({ field: "measurementMode", message: "Add at least one custom measurement or fit note." });
+    }
   }
   return problems;
 }
@@ -196,13 +262,20 @@ function capitalize(value: string): string {
 }
 
 /** Converts a valid row into the same request the single Add Clothing form sends. */
-export function toCreateRequest(row: ImportRow, defaults: ImportDefaults, categoryId: string, activate: boolean): CreateClothingRequest {
-  const measurements: Record<string, number> = {};
-  for (const field of MEASUREMENT_FIELDS) {
-    const value = measurementValue(row[field]);
-    if (typeof value === "number") measurements[field] = value;
+export function toCreateRequest(
+  row: ImportRow,
+  defaults: ImportDefaults,
+  categoryId: string,
+  activate: boolean,
+  defaultGuideId: string | null = null
+): CreateClothingRequest {
+  const measurements: Record<string, VariantMeasurementValue> = {};
+  if (row.measurementMode === "custom") {
+    for (const field of MEASUREMENT_FIELDS) {
+      const value = parseMeasurementInput(row[field], capitalize(field), row.measurementKinds[field], true);
+      if (value !== null) measurements[field] = value;
+    }
   }
-  const hasMeasurements = Object.keys(measurements).length > 0;
   const deposit = pesosToMinor(row.deposit.trim() || defaults.deposit) ?? "0";
   const common = {
     rental_price_minor: pesosToMinor(row.price) ?? "0",
@@ -211,9 +284,10 @@ export function toCreateRequest(row: ImportRow, defaults: ImportDefaults, catego
     prep_minutes: 0 as const,
     turnaround_minutes: Math.min(Math.max(Number(defaults.recoveryDays) || 0, 0), 14) * 24 * 60,
   };
-  return {
+  return createClothingRequest.parse({
     name: row.name.trim(),
-    description: row.fitNote.trim(),
+    description: row.description.trim(),
+    subcategory: row.subcategory.trim() || null,
     category_id: categoryId as CreateClothingRequest["category_id"],
     color_label: row.color.trim() || null,
     image_file_ids: row.fileId ? [row.fileId as CreateClothingRequest["image_file_ids"][number]] : [],
@@ -221,7 +295,9 @@ export function toCreateRequest(row: ImportRow, defaults: ImportDefaults, catego
     sizes: [
       {
         size_label: row.freeSize ? null : row.sizeLabel.trim(),
-        measurement_mode: hasMeasurements ? "custom" : "none",
+        fit_range: row.freeSize ? normalizeVariantFitRange(row.fitRange) || null : null,
+        measurement_mode: row.measurementMode,
+        ...(row.measurementMode === "default_guide" ? { measurement_guide_id: defaultGuideId } : {}),
         measurement_unit: row.unit,
         measurements,
       },
@@ -231,7 +307,7 @@ export function toCreateRequest(row: ImportRow, defaults: ImportDefaults, catego
         ? { mode: "fixed_duration", included_days: Math.min(Math.max(Number(defaults.includedDays) || 1, 1), 30), ...common }
         : { mode: "daily", ...common },
     activate: activate && row.fileId !== null,
-  };
+  });
 }
 
 /** A row's content changed after a failed attempt: that is a new intent and gets new keys. */
@@ -241,6 +317,23 @@ export function editedRow(row: ImportRow, patch: Partial<ImportRow>): ImportRow 
     return { ...next, status: "draft", message: null, createKey: newKey("create") };
   }
   return next;
+}
+
+export function resolveMeasurementConflict(
+  row: ImportRow,
+  field: MeasurementField,
+  kind: "exact" | "fit_note"
+): Partial<ImportRow> {
+  const measurementConflicts = row.measurementConflicts.filter((candidate) => candidate !== field);
+  const conflictingFitNotes = { ...row.conflictingFitNotes };
+  const importedFitNote = conflictingFitNotes[field];
+  delete conflictingFitNotes[field];
+  return {
+    [field]: kind === "fit_note" && importedFitNote ? importedFitNote : row[field],
+    measurementKinds: { ...row.measurementKinds, [field]: kind },
+    measurementConflicts,
+    conflictingFitNotes,
+  };
 }
 
 export function sameCategory(a: string, b: string): boolean {

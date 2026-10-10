@@ -56,11 +56,14 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 - `DATABASE_URL_DIRECT` — the privileged direct Supabase PostgreSQL connection used first by
   migration, backup, restore, and administrative tooling. It must never be supplied to the API or
   worker runtime. Local Compose uses its direct loopback PostgreSQL endpoint for both variables.
-- `MIGRATION_DATABASE_URL_DIRECT` — GitHub Actions environment secret for the migration-only
-  direct Supabase connection. Store a distinct value in each of the `preview` and `production`
-  environments; the workflow maps it to `DATABASE_URL_DIRECT` only inside the migration job and
-  never provides `DATABASE_URL`. Use the actual direct endpoint from Supabase Connect, not a
-  Supavisor pooler URL. See [`migrations.md`](migrations.md) for the IPv4 add-on and approval setup.
+- `MIGRATION_DATABASE_URL` — GitHub Actions environment secret for the migration role. Store a
+  value in each of the `staging`, `preview`, and `production` environments; the workflow maps it to
+  `DATABASE_URL_MIGRATION` only inside the migration job and never provides the runtime
+  `DATABASE_URL`. Use either the Supabase direct endpoint on port 5432 or the shared Session pooler
+  on port 5432. The Session pooler is the IPv4 option for GitHub-hosted runners without the paid
+  IPv4 add-on; transaction pooling on port 6543 is rejected. `staging` may intentionally target the
+  same preview database as `preview`; the jobs are serialized. See [`migrations.md`](migrations.md)
+  for the protected status/apply flow.
 - `MIGRATION_PRODUCTION_RECONCILED` — GitHub `production` environment variable, not a database
   credential. Leave it unset until an operator has manually compared the live production schema
   with `public.schema_migrations`; set it to `true` only after reconciliation. The workflow fails
@@ -149,6 +152,13 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
 - `OBJECT_STORAGE_FORCE_PATH_STYLE` — `false` for R2; `true` for loopback MinIO.
 - `OBJECT_STORAGE_UPLOADS_ENABLED` — production cutover gate for issuing new upload URLs. If omitted
   in production it defaults to `false`; outside production it defaults to `true`.
+- `FILE_OBJECT_CLEANUP_ENABLED` — producer gate for enqueueing cleanup when a replacement displaces
+  an accepted file. Local development/test defaults to `true`; staging and production default to
+  `false`. When disabled, a replacement that would enqueue cleanup returns a retryable 503 before
+  changing business references; the whole command transaction, including its idempotency claim,
+  rolls back. The old reference stays in place and no cleanup event is lost. Enable only after the
+  migration and every worker's compatible handler are verified. This gate does not pause worker
+  consumption of already-queued events.
 - Legacy `AWS_REGION`/`S3_*` variables are accepted only for loopback MinIO compatibility in local
   development/test. They cannot select AWS or any other remote provider in staging/production.
 - `EMAIL_PROVIDER_*` — sender verification credentials for the email adapter (TRD §1 recommends

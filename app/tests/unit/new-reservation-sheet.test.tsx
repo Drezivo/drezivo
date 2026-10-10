@@ -499,15 +499,15 @@ describe("NewReservationSheet", () => {
     expect(returnMinute).toHaveValue("30");
   });
 
-  it("automatically selects a free-size variant without rendering an empty size button", async () => {
+  it("automatically selects a flexible-fit variant without rendering an empty size button", async () => {
     api.getCatalogueClothing.mockResolvedValue(listPage([freeSizeProduct]));
     api.getCatalogueClothingDetail.mockResolvedValue({ data: freeSizeDetail, requestId: "req-free-size-detail" });
     renderSheet();
 
     fireEvent.click(await screen.findByRole("button", { name: /Emerald Gown/i }));
 
-    expect(await screen.findByText("Free size")).toBeVisible();
-    expect(screen.queryByRole("button", { name: /^Free size$/i })).not.toBeInTheDocument();
+    expect(await screen.findByText("Flexible fit")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /^Flexible fit$/i })).not.toBeInTheDocument();
     await waitFor(() =>
       expect(api.getStaffReservationAvailabilityCalendar).toHaveBeenCalledWith({
         variant_id: ids.variant,

@@ -49,7 +49,7 @@ export async function createStorefrontWorkspace(label: string): Promise<Storefro
     await client.query(
       `INSERT INTO subscription (tenant_id, plan_id, status, current_period_start, current_period_end)
        SELECT $1, id, 'active', now(), now() + interval '30 days'
-         FROM plan WHERE code = 'starter' AND version = 1 AND active = true LIMIT 1`,
+         FROM plan WHERE code = 'standard' AND version = 1 AND active = true LIMIT 1`,
       [tenant.id],
     );
     const storefrontId = await one(

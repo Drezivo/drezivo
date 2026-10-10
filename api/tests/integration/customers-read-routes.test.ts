@@ -509,7 +509,7 @@ describe('Customers read routes', async () => {
          VALUES ($1, $2, true, 10, 60, 0, 'PHP', 1)`,
         [tenant.id, id],
       );
-      const plan = await client.query<{ id: string }>(`SELECT id FROM plan WHERE code = 'starter' AND version = 1 AND active LIMIT 1`);
+      const plan = await client.query<{ id: string }>(`SELECT id FROM plan WHERE code = 'standard' AND version = 1 AND active LIMIT 1`);
       const planId = plan.rows[0]?.id;
       if (!planId) throw new Error('starter plan missing');
       await client.query(

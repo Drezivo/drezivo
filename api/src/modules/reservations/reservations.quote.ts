@@ -12,6 +12,7 @@ import {
   type ProductVariantId,
   type StaffReservationCreateRequest,
   type StorefrontId,
+  type VariantMeasurementMap,
 } from '@drezivo/contracts';
 
 import { resolveReservationCatalogueQuoteSelection } from '../catalogue/catalogue-allocation.service.js';
@@ -56,7 +57,8 @@ export interface ReservationQuote {
     measurement_mode: 'default_guide' | 'custom' | 'none';
     measurement_guide_id: string | null;
     measurement_unit: 'cm' | 'in';
-    measurements: Record<string, number>;
+    measurements: VariantMeasurementMap;
+    fit_range: string | null;
   };
   price_snapshot: {
     rental_total_minor: string;
@@ -216,6 +218,7 @@ export async function resolveReservationQuote(
       measurement_guide_id: catalogue.variant.measurement_guide_id,
       measurement_unit: catalogue.variant.measurement_unit,
       measurements: catalogue.variant.measurements,
+      fit_range: catalogue.variant.fit_range ?? null,
     },
     price_snapshot: {
       rental_total_minor: rental.totalMinor.toString(),

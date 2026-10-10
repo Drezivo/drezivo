@@ -68,7 +68,7 @@ export const branch = pgTable(
     operatingHours: jsonb('operating_hours')
       .$type<BranchOperatingHours>()
       .notNull()
-      .default(sql`'{"opens_local":"08:00","closes_local":"20:00","closed_weekdays":["sunday"]}'::jsonb`),
+      .default(sql`'{"opens_local":"08:00","closes_local":"20:00","closed_weekdays":[]}'::jsonb`),
     operatingHoursVersion: bigint('operating_hours_version', { mode: 'number' }).notNull().default(1),
     operatingHoursUpdatedAt: timestamp('operating_hours_updated_at', { withTimezone: true })
       .notNull()

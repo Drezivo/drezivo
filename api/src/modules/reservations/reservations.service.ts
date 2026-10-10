@@ -619,6 +619,8 @@ export async function getReservationDetail(
       line_number: line.line_number,
       name_snapshot: line.name_snapshot,
       measurements_snapshot: line.measurements_snapshot,
+      fit_range_snapshot: line.fit_range_snapshot,
+      measurement_unit_snapshot: line.measurement_unit_snapshot,
       pricing_snapshot: {
         rental_minor: String(line.rental_minor),
         deposit_minor: String(line.deposit_minor),

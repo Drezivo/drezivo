@@ -24,6 +24,7 @@ import type {
   PhysicalAssetSummary,
   UpdatePhysicalAssetStateResponse,
 } from "@drezivo/contracts";
+import { normalizeVariantFitRange } from "@drezivo/contracts";
 
 import { ArchiveClothingDialog, archiveSuccessMessage } from "@/components/inventory/archive-clothing-dialog";
 import {
@@ -744,10 +745,16 @@ function ReadinessBadge({ readiness }: { readiness: PhysicalAssetSummary["readin
 }
 
 function measurementLabel(variant: ClothingVariantDetail): string {
+  const values = Object.entries(variant.measurements).map(([key, value]) => {
+    const label = key.trim().toLocaleLowerCase() === "hips" ? "Hips (legacy, read-only)" : labelize(key);
+    return `${label}: ${typeof value === "number" ? `${value} ${variant.measurement_unit}` : value.text}`;
+  });
+  const fitRange = variant.fit_range ? normalizeVariantFitRange(variant.fit_range) : "";
+  if (fitRange) values.unshift(`Fits ${fitRange}`);
+  if (values.length > 0) return values.join(" · ");
   if (variant.measurement_mode === "default_guide") return "Default guide";
   if (variant.measurement_mode === "none") return "None";
-  const count = Object.keys(variant.measurements).length;
-  return count > 0 ? `Custom · ${count} fields` : "Custom";
+  return "Custom";
 }
 
 function formatPriceRange(variants: ClothingVariantDetail[]): string {

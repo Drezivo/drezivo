@@ -1,10 +1,10 @@
 import { Check } from "lucide-react";
 
-export type OnboardingStep = "organization" | "launch";
+export type OnboardingStep = "organization" | "plan" | "launch";
 
-// One plan only (Standard), so there is no plan step: business details, then start the trial.
 const STEPS: ReadonlyArray<{ id: OnboardingStep; label: string }> = [
   { id: "organization", label: "Business" },
+  { id: "plan", label: "Plan" },
   { id: "launch", label: "Start trial" },
 ];
 
@@ -12,7 +12,10 @@ export function OnboardingProgress({ current }: { current: OnboardingStep }) {
   const currentIndex = STEPS.findIndex((step) => step.id === current);
 
   return (
-    <ol aria-label="Onboarding progress" className="mx-auto flex w-full max-w-md items-start text-center">
+    <ol
+      aria-label="Onboarding progress"
+      className="mx-auto flex w-full max-w-md items-start text-center"
+    >
       {STEPS.map((step, index) => {
         const isCurrent = index === currentIndex;
         const isComplete = index < currentIndex;
@@ -40,7 +43,11 @@ export function OnboardingProgress({ current }: { current: OnboardingStep }) {
                       : "border-auth-line text-auth-dark-muted",
                 ].join(" ")}
               >
-                {isComplete ? <Check aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2.4} /> : index + 1}
+                {isComplete ? (
+                  <Check aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2.4} />
+                ) : (
+                  index + 1
+                )}
               </span>
               {index < STEPS.length - 1 ? (
                 <span

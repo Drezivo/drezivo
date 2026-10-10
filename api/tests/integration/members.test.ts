@@ -158,7 +158,7 @@ describe('Owner member and invitation APIs', async () => {
         [tenant.id, branchId, ownerMembershipId, frontdeskMembershipId],
       );
       const plan = await client.query<{ id: string }>(
-        `SELECT id FROM plan WHERE code = 'starter' AND version = 1 AND active = true`,
+        `SELECT id FROM plan WHERE code = 'standard' AND version = 1 AND active = true`,
       );
       const planId = plan.rows[0]?.id;
       if (!planId) throw new Error('Standard plan fixture is unavailable.');

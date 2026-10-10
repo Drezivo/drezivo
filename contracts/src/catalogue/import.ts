@@ -14,7 +14,7 @@ import { fileObjectId } from '../common/ids';
 import { idempotencyKey } from '../common/idempotency';
 import { nonNegativeMoneyString } from '../common/money';
 import { MAX_UPLOAD_BYTES, sha256Base64, uploadContentType } from '../files/uploads';
-import { measurementMap, measurementUnit } from './admin';
+import { measurementUnit, variantFitRange, variantMeasurementMap } from './admin';
 
 /** Rows per batch request. The client splits larger imports into consecutive batches. */
 export const MAX_IMPORT_BATCH_ITEMS = 25;
@@ -121,12 +121,18 @@ export const extractedClothingFields = z.object({
   rental_price_minor: nonNegativeMoneyString.nullable(),
   /** Printed size such as "S", "Medium" or "Small-XL"; null when none is shown. */
   size_label: z.string().trim().min(1).max(40).nullable(),
+  /** Explicit overall fit range, e.g. "Small–XL"; never inferred from a generic FS label. */
+  fit_range: variantFitRange.nullable().optional(),
   /** True when the photo says the piece is free size (e.g. "FS", "Freesize"). */
   free_size: z.boolean(),
   measurement_unit: measurementUnit.nullable(),
-  /** Numeric garment measurements keyed by label, e.g. { Bust: 30, Waist: 24, Length: 22 }. */
-  measurements: measurementMap,
+  /** Exact numeric measurements or explicit dimension-specific fit notes keyed by label. */
+  measurements: variantMeasurementMap,
   color_label: z.string().trim().min(1).max(80).nullable(),
+}).superRefine((value, ctx) => {
+  if (value.fit_range != null && !value.free_size) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['fit_range'], message: 'Fit range is only supported for a flexible-fit variant.' });
+  }
 });
 export type ExtractedClothingFields = z.infer<typeof extractedClothingFields>;
 

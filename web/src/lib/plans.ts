@@ -1,4 +1,4 @@
-import { MARKETING_PLANS, MARKETING_TRIAL_DAYS } from './marketing-content';
+import type { PublicPlanCatalogResponse } from '@drezivo/contracts';
 
 /** A subscription plan as the marketing site shows it. */
 export interface PublicPlan {
@@ -16,21 +16,34 @@ export interface PublicPlan {
 /** The marketing site lays out between one and four plans; more would need a different page. */
 export const MAX_PUBLIC_PLANS = 4;
 
-/**
- * Plans to show. During the pilot there is one plan and the copy lives in marketing-content;
- * the operator-managed plan catalogue replaces this source without changing the shape.
- */
-export function getPublicPlans(): readonly PublicPlan[] {
-  return MARKETING_PLANS.slice(0, MAX_PUBLIC_PLANS).map((plan, index) => ({
-    code: plan.name.toLowerCase(),
-    name: plan.name,
-    tagline: plan.blurb,
-    price: plan.price,
-    interval: 'month',
-    trialDays: MARKETING_TRIAL_DAYS,
-    features: plan.features,
-    highlighted: plan.highlighted ?? index === 0,
-  }));
+/** Builds marketing cards from the validated, server-owned catalog response. */
+export function toPublicPlans(catalog: PublicPlanCatalogResponse): readonly PublicPlan[] {
+  return catalog.plans.slice(0, MAX_PUBLIC_PLANS).map((plan) => {
+    const features = [`Up to ${plan.limits.active_garments} active garments`];
+    if (plan.code === 'starter') {
+      features.push('Owner-only access (no Front Desk accounts)');
+    } else if (plan.limits.frontdesk_seats > 0) {
+      features.push(`Up to ${plan.limits.frontdesk_seats} Front Desk staff`);
+    }
+    features.push(
+      'Online storefront with bookings and fittings',
+      'Reservations, calendar & availability',
+      'Customers, payments, returns & exports',
+    );
+    return {
+      code: plan.code,
+      name: plan.name,
+      tagline:
+        plan.code === 'starter'
+          ? 'The essentials to keep a clothing rental shop organized and bookable.'
+          : 'More room for a growing rental shop and a small front-desk team.',
+      price: (plan.monthly_price_minor / 100).toFixed(2),
+      interval: 'month',
+      trialDays: plan.trial_days,
+      features,
+      highlighted: plan.code === 'standard',
+    };
+  });
 }
 
 /** Formats whole pesos without centavos and preserves non-zero centavos. */

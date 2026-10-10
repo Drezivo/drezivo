@@ -37,6 +37,17 @@ export class PermanentOutboxError extends Error {
   }
 }
 
+/** A durable wait state that does not consume the bounded failure retry budget. */
+export class DeferredOutboxError extends Error {
+  readonly retryAfterSeconds: number;
+
+  constructor(message: string, retryAfterSeconds: number) {
+    super(message);
+    this.name = 'DeferredOutboxError';
+    this.retryAfterSeconds = Math.max(1, Math.floor(retryAfterSeconds));
+  }
+}
+
 /**
  * Lease-claim polling loop with bounded retry to a terminal state (TRD §8). Polling, not
  * `LISTEN`/`NOTIFY`, per TRD §9: "Polling, not session LISTEN, is the initial design" — pooled
@@ -143,8 +154,26 @@ export class WorkerRunner {
       await handler(row);
       await this.complete(row);
     } catch (error) {
-      await this.retryOrDie(row, error);
+      if (error instanceof DeferredOutboxError) {
+        await this.defer(row, error);
+      } else {
+        await this.retryOrDie(row, error);
+      }
     }
+  }
+
+  private async defer(row: OutboxRow, error: DeferredOutboxError): Promise<void> {
+    logger.info(
+      { outboxId: row.id, retryAfterSeconds: error.retryAfterSeconds, reason: error.message },
+      'outbox event deferred without consuming a retry',
+    );
+    await this.db.query(
+      `UPDATE outbox_event
+       SET status = 'pending', safe_last_error = $2,
+           available_at = now() + make_interval(secs => $3), lease_token = NULL, lease_until = NULL
+       WHERE id = $1 AND lease_token = $4`,
+      [row.id, error.message, error.retryAfterSeconds, row._leaseToken],
+    );
   }
 
   private async complete(row: OutboxRow): Promise<void> {

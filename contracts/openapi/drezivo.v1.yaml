@@ -62,6 +62,7 @@ components:
                 - VALIDATION_FAILED
                 - RATE_LIMITED
                 - NOT_IMPLEMENTED
+                - PHOTO_READER_CONFIGURATION
                 - DEPENDENCY_UNAVAILABLE
                 - INTERNAL_ERROR
             message:
@@ -111,7 +112,7 @@ components:
           format: uuid
         booking_channel:
           type: string
-          enum: &a41
+          enum: &a42
             - staff
             - storefront
         status:
@@ -328,7 +329,7 @@ components:
           type: array
           items:
             type: string
-            enum: &a42
+            enum: &a43
               - confirm
               - reject
               - cancel
@@ -595,7 +596,7 @@ components:
           type: array
           items:
             type: string
-            enum: &a46
+            enum: &a47
               - monday
               - tuesday
               - wednesday
@@ -696,8 +697,7 @@ components:
       type: string
       enum: &a7
         - starter
-        - professional
-        - business
+        - standard
     SubscriptionStatus:
       type: string
       enum: &a9
@@ -816,6 +816,57 @@ components:
         - onboarding
         - has_current_owned_tenant
         - has_consumed_lifetime_trial
+    PublicPlanCatalogResponse:
+      type: object
+      properties:
+        plans:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+                enum: *a7
+              name:
+                type: string
+                enum: &a27
+                  - Starter
+                  - Standard
+              monthly_price_minor:
+                type: integer
+                exclusiveMinimum: 0
+              currency:
+                type: string
+                enum:
+                  - PHP
+              trial_days:
+                type: integer
+                exclusiveMinimum: 0
+              limits:
+                type: object
+                properties:
+                  active_garments:
+                    type: integer
+                    minimum: 0
+                  frontdesk_seats:
+                    type: integer
+                    minimum: 0
+                required:
+                  - active_garments
+                  - frontdesk_seats
+                additionalProperties: false
+            required:
+              - code
+              - name
+              - monthly_price_minor
+              - currency
+              - trial_days
+              - limits
+            additionalProperties: false
+          minItems: 1
+      required:
+        - plans
+      additionalProperties: false
     MembershipInvitation:
       type: object
       properties:
@@ -1014,7 +1065,7 @@ components:
       properties:
         reason_code:
           type: string
-          enum: &a29
+          enum: &a30
             - not_now
             - wrong_details
             - payment_concern
@@ -1337,13 +1388,13 @@ components:
           properties:
             level:
               type: string
-              enum: &a27
+              enum: &a28
                 - full
                 - read_only
                 - locked
             reason:
               type: string
-              enum: &a28
+              enum: &a29
                 - trial
                 - trial_ending
                 - trial_ended
@@ -1940,10 +1991,31 @@ components:
               measurements:
                 type: object
                 additionalProperties:
-                  type: number
-                  minimum: 0
-                  maximum: 10000
+                  anyOf:
+                    - type: number
+                      minimum: 0
+                      maximum: 10000
+                    - type: object
+                      properties:
+                        type:
+                          type: string
+                          enum:
+                            - fit_note
+                        text:
+                          type: string
+                          minLength: 1
+                          maxLength: 120
+                      required:
+                        - type
+                        - text
+                      additionalProperties: false
                 default: {}
+              fit_range:
+                type:
+                  - string
+                  - "null"
+                minLength: 1
+                maxLength: 120
             required:
               - size_label
               - measurement_mode
@@ -2074,10 +2146,31 @@ components:
               measurements:
                 type: object
                 additionalProperties:
-                  type: number
-                  minimum: 0
-                  maximum: 10000
+                  anyOf:
+                    - type: number
+                      minimum: 0
+                      maximum: 10000
+                    - type: object
+                      properties:
+                        type:
+                          type: string
+                          enum:
+                            - fit_note
+                        text:
+                          type: string
+                          minLength: 1
+                          maxLength: 120
+                      required:
+                        - type
+                        - text
+                      additionalProperties: false
                 default: &a22 {}
+              fit_range:
+                type:
+                  - string
+                  - "null"
+                minLength: 1
+                maxLength: 120
               pricing:
                 oneOf:
                   - type: object
@@ -2187,10 +2280,31 @@ components:
             measurements:
               type: object
               additionalProperties:
-                type: number
-                minimum: 0
-                maximum: 10000
+                anyOf:
+                  - type: number
+                    minimum: 0
+                    maximum: 10000
+                  - type: object
+                    properties:
+                      type:
+                        type: string
+                        enum:
+                          - fit_note
+                      text:
+                        type: string
+                        minLength: 1
+                        maxLength: 120
+                    required:
+                      - type
+                      - text
+                    additionalProperties: false
               default: *a22
+            fit_range:
+              type:
+                - string
+                - "null"
+              minLength: 1
+              maxLength: 120
             pricing:
               oneOf:
                 - type: object
@@ -2443,9 +2557,30 @@ components:
               measurements:
                 type: object
                 additionalProperties:
-                  type: number
-                  minimum: 0
-                  maximum: 10000
+                  anyOf:
+                    - type: number
+                      minimum: 0
+                      maximum: 10000
+                    - type: object
+                      properties:
+                        type:
+                          type: string
+                          enum:
+                            - fit_note
+                        text:
+                          type: string
+                          minLength: 1
+                          maxLength: 120
+                      required:
+                        - type
+                        - text
+                      additionalProperties: false
+              fit_range:
+                type:
+                  - string
+                  - "null"
+                minLength: 1
+                maxLength: 120
               rental_price_minor:
                 type: string
                 pattern: ^-?(0|[1-9]\d*)$
@@ -2501,7 +2636,7 @@ components:
                         - lost
                     readiness:
                       type: string
-                      enum: &a38
+                      enum: &a39
                         - ready
                         - needs_cleaning
                         - needs_repair
@@ -2651,7 +2786,7 @@ components:
           maxLength: 200
         status:
           type: string
-          enum: &a37
+          enum: &a38
             - active
             - archived
             - all
@@ -2890,7 +3025,7 @@ components:
                 maxLength: 300
               status:
                 type: string
-                enum: &a32
+                enum: &a33
                   - held
                   - pending_confirmation
                   - confirmed
@@ -3965,6 +4100,123 @@ paths:
                   - success
                   - error
                   - request_id
+  /plans:
+    get:
+      tags:
+        - billing
+      summary: List the active public subscription plans and their included limits.
+      responses:
+        "200":
+          description: Current monthly plan catalog and limits.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      plans:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            code:
+                              type: string
+                              enum: *a7
+                            name:
+                              type: string
+                              enum: *a27
+                            monthly_price_minor:
+                              type: integer
+                              exclusiveMinimum: 0
+                            currency:
+                              type: string
+                              enum:
+                                - PHP
+                            trial_days:
+                              type: integer
+                              exclusiveMinimum: 0
+                            limits:
+                              type: object
+                              properties:
+                                active_garments:
+                                  type: integer
+                                  minimum: 0
+                                frontdesk_seats:
+                                  type: integer
+                                  minimum: 0
+                              required:
+                                - active_garments
+                                - frontdesk_seats
+                              additionalProperties: false
+                          required:
+                            - code
+                            - name
+                            - monthly_price_minor
+                            - currency
+                            - trial_days
+                            - limits
+                          additionalProperties: false
+                        minItems: 1
+                    required:
+                      - plans
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "429":
+          description: Public plan catalog rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
   /onboarding/current:
     get:
       tags:
@@ -4411,10 +4663,10 @@ paths:
                         properties:
                           level:
                             type: string
-                            enum: *a27
+                            enum: *a28
                           reason:
                             type: string
-                            enum: *a28
+                            enum: *a29
                           ends_at:
                             type:
                               - string
@@ -4636,7 +4888,7 @@ paths:
               properties:
                 reason_code:
                   type: string
-                  enum: *a29
+                  enum: *a30
               required:
                 - reason_code
               additionalProperties: false
@@ -6022,10 +6274,10 @@ paths:
                         properties:
                           level:
                             type: string
-                            enum: *a27
+                            enum: *a28
                           reason:
                             type: string
-                            enum: *a28
+                            enum: *a29
                           ends_at:
                             type:
                               - string
@@ -7326,7 +7578,7 @@ paths:
                           - "null"
                       theme:
                         type: string
-                        enum: &a47
+                        enum: &a48
                           - ivory
                           - sage
                           - blush
@@ -7516,7 +7768,7 @@ paths:
                               pattern: ^-?(0|[1-9]\d*)$
                             pricing_mode:
                               type: string
-                              enum: &a30
+                              enum: &a31
                                 - fixed_duration
                                 - daily
                             included_duration_minutes:
@@ -7569,7 +7821,7 @@ paths:
                               pattern: ^-?(0|[1-9]\d*)$
                             pricing_mode:
                               type: string
-                              enum: *a30
+                              enum: *a31
                             included_duration_minutes:
                               type: integer
                               exclusiveMinimum: 0
@@ -7681,16 +7933,16 @@ paths:
                             properties:
                               phone:
                                 type: string
-                                enum: &a31
+                                enum: &a32
                                   - required
                                   - optional
                                   - hidden
                               social_handle:
                                 type: string
-                                enum: *a31
+                                enum: *a32
                               event_date:
                                 type: string
-                                enum: *a31
+                                enum: *a32
                             required:
                               - phone
                               - social_handle
@@ -7915,7 +8167,7 @@ paths:
                               pattern: ^-?(0|[1-9]\d*)$
                             pricing_mode:
                               type: string
-                              enum: *a30
+                              enum: *a31
                             included_duration_minutes:
                               type: integer
                               exclusiveMinimum: 0
@@ -8041,6 +8293,12 @@ paths:
                               type:
                                 - string
                                 - "null"
+                            fit_range:
+                              type:
+                                - string
+                                - "null"
+                              minLength: 1
+                              maxLength: 120
                             color_label:
                               type:
                                 - string
@@ -8053,7 +8311,7 @@ paths:
                               pattern: ^-?(0|[1-9]\d*)$
                             pricing_mode:
                               type: string
-                              enum: *a30
+                              enum: *a31
                             included_duration_minutes:
                               type: integer
                               exclusiveMinimum: 0
@@ -8353,7 +8611,7 @@ paths:
                   pattern: ^\d{4}-\d{2}-\d{2}$
                 fulfillment_method:
                   type: string
-                  enum: &a33
+                  enum: &a34
                     - pickup
                     - delivery
                 payment_method_id:
@@ -8400,7 +8658,7 @@ paths:
                             minLength: 1
                           status:
                             type: string
-                            enum: *a32
+                            enum: *a33
                           item_name:
                             type: string
                           size_label:
@@ -8409,7 +8667,7 @@ paths:
                               - "null"
                           fulfillment_method:
                             type: string
-                            enum: *a33
+                            enum: *a34
                           pickup_at:
                             type: string
                             format: date-time
@@ -8454,7 +8712,7 @@ paths:
                                 minLength: 1
                               rail:
                                 type: string
-                                enum: &a35
+                                enum: &a36
                                   - cash
                                   - manual_qr
                                   - manual_transfer
@@ -8469,7 +8727,7 @@ paths:
                                 format: uri
                               material_content_type:
                                 type: string
-                                enum: &a36
+                                enum: &a37
                                   - application/pdf
                                   - image/jpeg
                                   - image/png
@@ -8710,7 +8968,7 @@ paths:
                         properties:
                           pricing_mode:
                             type: string
-                            enum: &a34
+                            enum: &a35
                               - fixed_duration
                               - daily
                           rental_price_minor:
@@ -9071,7 +9329,7 @@ paths:
                         properties:
                           pricing_mode:
                             type: string
-                            enum: *a34
+                            enum: *a35
                           rental_price_minor:
                             type: string
                             pattern: ^-?(0|[1-9]\d*)$
@@ -9410,7 +9668,7 @@ paths:
                   pattern: ^\d{4}-\d{2}-\d{2}$
                 fulfillment_method:
                   type: string
-                  enum: *a33
+                  enum: *a34
                 payment_method_id:
                   type: string
                   format: uuid
@@ -9447,7 +9705,7 @@ paths:
                             maxLength: 120
                           status:
                             type: string
-                            enum: *a32
+                            enum: *a33
                           branch_id:
                             type: string
                             format: uuid
@@ -9462,7 +9720,7 @@ paths:
                             format: uuid
                           fulfillment_method:
                             type: string
-                            enum: *a33
+                            enum: *a34
                           pickup_at:
                             type: string
                             format: date-time
@@ -9532,7 +9790,7 @@ paths:
                             minLength: 1
                           rail:
                             type: string
-                            enum: *a35
+                            enum: *a36
                           qr_image_url:
                             type: string
                             format: uri
@@ -9544,7 +9802,7 @@ paths:
                             format: uri
                           material_content_type:
                             type: string
-                            enum: *a36
+                            enum: *a37
                         required:
                           - method_name
                           - rail
@@ -9662,7 +9920,7 @@ paths:
                             maxLength: 120
                           status:
                             type: string
-                            enum: *a32
+                            enum: *a33
                           branch_id:
                             type: string
                             format: uuid
@@ -9677,7 +9935,7 @@ paths:
                             format: uuid
                           fulfillment_method:
                             type: string
-                            enum: *a33
+                            enum: *a34
                           pickup_at:
                             type: string
                             format: date-time
@@ -9868,7 +10126,7 @@ paths:
                             maxLength: 120
                           status:
                             type: string
-                            enum: *a32
+                            enum: *a33
                           branch_id:
                             type: string
                             format: uuid
@@ -9883,7 +10141,7 @@ paths:
                             format: uuid
                           fulfillment_method:
                             type: string
-                            enum: *a33
+                            enum: *a34
                           pickup_at:
                             type: string
                             format: date-time
@@ -10108,7 +10366,7 @@ paths:
                             maxLength: 120
                           status:
                             type: string
-                            enum: *a32
+                            enum: *a33
                           branch_id:
                             type: string
                             format: uuid
@@ -10123,7 +10381,7 @@ paths:
                             format: uuid
                           fulfillment_method:
                             type: string
-                            enum: *a33
+                            enum: *a34
                           pickup_at:
                             type: string
                             format: date-time
@@ -10300,7 +10558,7 @@ paths:
                             maxLength: 120
                           status:
                             type: string
-                            enum: *a32
+                            enum: *a33
                           branch_id:
                             type: string
                             format: uuid
@@ -10315,7 +10573,7 @@ paths:
                             format: uuid
                           fulfillment_method:
                             type: string
-                            enum: *a33
+                            enum: *a34
                           pickup_at:
                             type: string
                             format: date-time
@@ -10449,7 +10707,7 @@ paths:
                             maxLength: 120
                           status:
                             type: string
-                            enum: *a32
+                            enum: *a33
                           branch_id:
                             type: string
                             format: uuid
@@ -10464,7 +10722,7 @@ paths:
                             format: uuid
                           fulfillment_method:
                             type: string
-                            enum: *a33
+                            enum: *a34
                           pickup_at:
                             type: string
                             format: date-time
@@ -10645,10 +10903,31 @@ paths:
                       measurements:
                         type: object
                         additionalProperties:
-                          type: number
-                          minimum: 0
-                          maximum: 10000
+                          anyOf:
+                            - type: number
+                              minimum: 0
+                              maximum: 10000
+                            - type: object
+                              properties:
+                                type:
+                                  type: string
+                                  enum:
+                                    - fit_note
+                                text:
+                                  type: string
+                                  minLength: 1
+                                  maxLength: 120
+                              required:
+                                - type
+                                - text
+                              additionalProperties: false
                         default: *a22
+                      fit_range:
+                        type:
+                          - string
+                          - "null"
+                        minLength: 1
+                        maxLength: 120
                       pricing:
                         oneOf:
                           - type: object
@@ -10758,10 +11037,31 @@ paths:
                     measurements:
                       type: object
                       additionalProperties:
-                        type: number
-                        minimum: 0
-                        maximum: 10000
+                        anyOf:
+                          - type: number
+                            minimum: 0
+                            maximum: 10000
+                          - type: object
+                            properties:
+                              type:
+                                type: string
+                                enum:
+                                  - fit_note
+                              text:
+                                type: string
+                                minLength: 1
+                                maxLength: 120
+                            required:
+                              - type
+                              - text
+                            additionalProperties: false
                       default: *a22
+                    fit_range:
+                      type:
+                        - string
+                        - "null"
+                      minLength: 1
+                      maxLength: 120
                     pricing:
                       oneOf:
                         - type: object
@@ -11028,7 +11328,7 @@ paths:
                         pattern: ^[A-Za-z0-9_-]+$
                       content_type:
                         type: string
-                        enum: &a45
+                        enum: &a46
                           - image/jpeg
                           - image/png
                           - image/webp
@@ -11563,6 +11863,12 @@ paths:
                               - "null"
                             minLength: 1
                             maxLength: 40
+                          fit_range:
+                            type:
+                              - string
+                              - "null"
+                            minLength: 1
+                            maxLength: 120
                           free_size:
                             type: boolean
                           measurement_unit:
@@ -11573,9 +11879,24 @@ paths:
                           measurements:
                             type: object
                             additionalProperties:
-                              type: number
-                              minimum: 0
-                              maximum: 10000
+                              anyOf:
+                                - type: number
+                                  minimum: 0
+                                  maximum: 10000
+                                - type: object
+                                  properties:
+                                    type:
+                                      type: string
+                                      enum:
+                                        - fit_note
+                                    text:
+                                      type: string
+                                      minLength: 1
+                                      maxLength: 120
+                                  required:
+                                    - type
+                                    - text
+                                  additionalProperties: false
                           color_label:
                             type:
                               - string
@@ -11761,7 +12082,7 @@ paths:
           in: query
         - schema:
             type: string
-            enum: *a37
+            enum: *a38
             default: active
           required: false
           name: status
@@ -12785,7 +13106,7 @@ paths:
                               maxLength: 300
                             status:
                               type: string
-                              enum: *a32
+                              enum: *a33
                             pickup_at:
                               type: string
                               format: date-time
@@ -13814,7 +14135,7 @@ paths:
           in: query
         - schema:
             type: string
-            enum: &a39
+            enum: &a40
               - reserved
               - rented
               - unavailable
@@ -13966,7 +14287,7 @@ paths:
                                   format: uuid
                                 readiness:
                                   type: string
-                                  enum: *a38
+                                  enum: *a39
                               required:
                                 - id
                                 - readiness
@@ -13982,7 +14303,7 @@ paths:
                                     maxLength: 200
                                   type:
                                     type: string
-                                    enum: *a39
+                                    enum: *a40
                                   period:
                                     type: object
                                     properties:
@@ -14484,7 +14805,7 @@ paths:
                                           maximum: 9007199254740991
                                         status:
                                           type: string
-                                          enum: &a40
+                                          enum: &a41
                                             - pending_confirmation
                                             - confirmed
                                             - picked_up
@@ -14569,7 +14890,7 @@ paths:
                                           maximum: 9007199254740991
                                         status:
                                           type: string
-                                          enum: *a40
+                                          enum: *a41
                                       required:
                                         - id
                                         - source
@@ -14741,7 +15062,7 @@ paths:
                                   format: date-time
                                 booking_channel:
                                   type: string
-                                  enum: *a41
+                                  enum: *a42
                                 status:
                                   type: string
                                   enum:
@@ -15602,7 +15923,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a41
+                            enum: *a42
                           status:
                             type: string
                             enum: *a1
@@ -15801,7 +16122,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a42
+                              enum: *a43
                             maxItems: 8
                           version:
                             type: integer
@@ -16005,7 +16326,7 @@ paths:
                         format: uuid
                       booking_channel:
                         type: string
-                        enum: *a41
+                        enum: *a42
                       status:
                         type: string
                         enum: *a1
@@ -16204,7 +16525,7 @@ paths:
                         type: array
                         items:
                           type: string
-                          enum: *a42
+                          enum: *a43
                         maxItems: 8
                       version:
                         type: integer
@@ -16546,7 +16867,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a41
+                            enum: *a42
                           status:
                             type: string
                             enum: *a1
@@ -16745,7 +17066,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a42
+                              enum: *a43
                             maxItems: 8
                           version:
                             type: integer
@@ -16988,7 +17309,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a41
+                            enum: *a42
                           status:
                             type: string
                             enum: *a1
@@ -17187,7 +17508,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a42
+                              enum: *a43
                             maxItems: 8
                           version:
                             type: integer
@@ -17461,7 +17782,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a41
+                            enum: *a42
                           status:
                             type: string
                             enum: *a1
@@ -17660,7 +17981,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a42
+                              enum: *a43
                             maxItems: 8
                           version:
                             type: integer
@@ -17929,7 +18250,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a41
+                            enum: *a42
                           status:
                             type: string
                             enum: *a1
@@ -18128,7 +18449,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a42
+                              enum: *a43
                             maxItems: 8
                           version:
                             type: integer
@@ -18401,7 +18722,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a41
+                            enum: *a42
                           status:
                             type: string
                             enum: *a1
@@ -18600,7 +18921,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a42
+                              enum: *a43
                             maxItems: 8
                           version:
                             type: integer
@@ -18873,7 +19194,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a41
+                            enum: *a42
                           status:
                             type: string
                             enum: *a1
@@ -19072,7 +19393,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a42
+                              enum: *a43
                             maxItems: 8
                           version:
                             type: integer
@@ -19340,7 +19661,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a41
+                            enum: *a42
                           status:
                             type: string
                             enum: *a1
@@ -19539,7 +19860,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a42
+                              enum: *a43
                             maxItems: 8
                           version:
                             type: integer
@@ -19807,7 +20128,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a41
+                            enum: *a42
                           status:
                             type: string
                             enum: *a1
@@ -20006,7 +20327,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a42
+                              enum: *a43
                             maxItems: 8
                           version:
                             type: integer
@@ -20277,7 +20598,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a41
+                            enum: *a42
                           status:
                             type: string
                             enum: *a1
@@ -20476,7 +20797,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a42
+                              enum: *a43
                             maxItems: 8
                           version:
                             type: integer
@@ -20747,7 +21068,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a41
+                            enum: *a42
                           status:
                             type: string
                             enum: *a1
@@ -20946,7 +21267,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a42
+                              enum: *a43
                             maxItems: 8
                           version:
                             type: integer
@@ -21237,7 +21558,7 @@ paths:
                             format: uuid
                           booking_channel:
                             type: string
-                            enum: *a41
+                            enum: *a42
                           status:
                             type: string
                             enum: *a1
@@ -21436,7 +21757,7 @@ paths:
                             type: array
                             items:
                               type: string
-                              enum: *a42
+                              enum: *a43
                             maxItems: 8
                           version:
                             type: integer
@@ -22064,7 +22385,7 @@ paths:
                         minLength: 1
                       status:
                         type: string
-                        enum: *a32
+                        enum: *a33
                       item_name:
                         type: string
                       size_label:
@@ -22073,7 +22394,7 @@ paths:
                           - "null"
                       fulfillment_method:
                         type: string
-                        enum: *a33
+                        enum: *a34
                       pickup_at:
                         type: string
                         format: date-time
@@ -22118,7 +22439,7 @@ paths:
                             minLength: 1
                           rail:
                             type: string
-                            enum: *a35
+                            enum: *a36
                           qr_image_url:
                             type: string
                             format: uri
@@ -22130,7 +22451,7 @@ paths:
                             format: uri
                           material_content_type:
                             type: string
-                            enum: *a36
+                            enum: *a37
                         required:
                           - method_name
                           - rail
@@ -22318,7 +22639,7 @@ paths:
                               type:
                                 - string
                                 - "null"
-                              enum: &a44
+                              enum: &a45
                                 - requested
                                 - processing
                                 - completed
@@ -22518,7 +22839,7 @@ paths:
                         minLength: 1
                       status:
                         type: string
-                        enum: *a32
+                        enum: *a33
                       item_name:
                         type: string
                       size_label:
@@ -22527,7 +22848,7 @@ paths:
                           - "null"
                       fulfillment_method:
                         type: string
-                        enum: *a33
+                        enum: *a34
                       pickup_at:
                         type: string
                         format: date-time
@@ -22572,7 +22893,7 @@ paths:
                             minLength: 1
                           rail:
                             type: string
-                            enum: *a35
+                            enum: *a36
                           qr_image_url:
                             type: string
                             format: uri
@@ -22584,7 +22905,7 @@ paths:
                             format: uri
                           material_content_type:
                             type: string
-                            enum: *a36
+                            enum: *a37
                         required:
                           - method_name
                           - rail
@@ -22684,7 +23005,7 @@ paths:
                   pattern: ^[A-Z]{3}$
                 purpose:
                   type: string
-                  enum: &a43
+                  enum: &a44
                     - rental_refund
                     - security_deposit_release
                     - goodwill_adjustment
@@ -22731,10 +23052,10 @@ paths:
                             pattern: ^[A-Z]{3}$
                           purpose:
                             type: string
-                            enum: *a43
+                            enum: *a44
                           status:
                             type: string
-                            enum: *a44
+                            enum: *a45
                           merchant_reference:
                             type:
                               - string
@@ -22839,7 +23160,7 @@ paths:
                     - payment_method_material
                 content_type:
                   type: string
-                  enum: *a45
+                  enum: *a46
                 byte_size:
                   type: integer
                   exclusiveMinimum: 0
@@ -22975,7 +23296,7 @@ paths:
                         type: array
                         items:
                           type: string
-                          enum: *a46
+                          enum: *a47
                         maxItems: 7
                       branch_id:
                         type: string
@@ -23082,7 +23403,7 @@ paths:
                   type: array
                   items:
                     type: string
-                    enum: *a46
+                    enum: *a47
                   maxItems: 7
                 version:
                   type: integer
@@ -23118,7 +23439,7 @@ paths:
                         type: array
                         items:
                           type: string
-                          enum: *a46
+                          enum: *a47
                         maxItems: 7
                       branch_id:
                         type: string
@@ -24190,7 +24511,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: &a48
+                        enum: &a49
                           - draft
                           - published
                           - suspended
@@ -24241,7 +24562,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a47
+                                enum: *a48
                             required:
                               - display_name
                               - tagline
@@ -24393,13 +24714,13 @@ paths:
                                 properties:
                                   phone:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                   social_handle:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                   event_date:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                 required:
                                   - phone
                                   - social_handle
@@ -24476,7 +24797,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: &a49
+                                enum: &a50
                                   - text
                                   - images
                                 default: text
@@ -24504,7 +24825,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: &a50 []
+                                default: &a51 []
                               delivery:
                                 type: object
                                 properties:
@@ -24541,7 +24862,7 @@ paths:
                             additionalProperties:
                               type: string
                               format: uri
-                            default: &a51 {}
+                            default: &a52 {}
                         required:
                           - version
                           - effective_at
@@ -24729,7 +25050,7 @@ paths:
                           format: uuid
                         theme:
                           type: string
-                          enum: *a47
+                          enum: *a48
                       required:
                         - display_name
                         - tagline
@@ -24881,13 +25202,13 @@ paths:
                           properties:
                             phone:
                               type: string
-                              enum: *a31
+                              enum: *a32
                             social_handle:
                               type: string
-                              enum: *a31
+                              enum: *a32
                             event_date:
                               type: string
-                              enum: *a31
+                              enum: *a32
                           required:
                             - phone
                             - social_handle
@@ -24943,7 +25264,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a48
+                        enum: *a49
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -24991,7 +25312,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a47
+                                enum: *a48
                             required:
                               - display_name
                               - tagline
@@ -25143,13 +25464,13 @@ paths:
                                 properties:
                                   phone:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                   social_handle:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                   event_date:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                 required:
                                   - phone
                                   - social_handle
@@ -25226,7 +25547,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: *a49
+                                enum: *a50
                                 default: text
                               rental:
                                 type: string
@@ -25252,7 +25573,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: *a50
+                                default: *a51
                               delivery:
                                 type: object
                                 properties:
@@ -25289,7 +25610,7 @@ paths:
                             additionalProperties:
                               type: string
                               format: uri
-                            default: *a51
+                            default: *a52
                         required:
                           - version
                           - effective_at
@@ -25602,7 +25923,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a48
+                        enum: *a49
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -25650,7 +25971,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a47
+                                enum: *a48
                             required:
                               - display_name
                               - tagline
@@ -25802,13 +26123,13 @@ paths:
                                 properties:
                                   phone:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                   social_handle:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                   event_date:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                 required:
                                   - phone
                                   - social_handle
@@ -25885,7 +26206,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: *a49
+                                enum: *a50
                                 default: text
                               rental:
                                 type: string
@@ -25911,7 +26232,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: *a50
+                                default: *a51
                               delivery:
                                 type: object
                                 properties:
@@ -25948,7 +26269,7 @@ paths:
                             additionalProperties:
                               type: string
                               format: uri
-                            default: *a51
+                            default: *a52
                         required:
                           - version
                           - effective_at
@@ -26126,7 +26447,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a48
+                        enum: *a49
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -26174,7 +26495,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a47
+                                enum: *a48
                             required:
                               - display_name
                               - tagline
@@ -26326,13 +26647,13 @@ paths:
                                 properties:
                                   phone:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                   social_handle:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                   event_date:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                 required:
                                   - phone
                                   - social_handle
@@ -26409,7 +26730,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: *a49
+                                enum: *a50
                                 default: text
                               rental:
                                 type: string
@@ -26435,7 +26756,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: *a50
+                                default: *a51
                               delivery:
                                 type: object
                                 properties:
@@ -26472,7 +26793,7 @@ paths:
                             additionalProperties:
                               type: string
                               format: uri
-                            default: *a51
+                            default: *a52
                         required:
                           - version
                           - effective_at
@@ -26650,7 +26971,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a48
+                        enum: *a49
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -26698,7 +27019,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a47
+                                enum: *a48
                             required:
                               - display_name
                               - tagline
@@ -26850,13 +27171,13 @@ paths:
                                 properties:
                                   phone:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                   social_handle:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                   event_date:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                 required:
                                   - phone
                                   - social_handle
@@ -26933,7 +27254,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: *a49
+                                enum: *a50
                                 default: text
                               rental:
                                 type: string
@@ -26959,7 +27280,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: *a50
+                                default: *a51
                               delivery:
                                 type: object
                                 properties:
@@ -26996,7 +27317,7 @@ paths:
                             additionalProperties:
                               type: string
                               format: uri
-                            default: *a51
+                            default: *a52
                         required:
                           - version
                           - effective_at
@@ -27156,7 +27477,7 @@ paths:
                   properties:
                     format:
                       type: string
-                      enum: *a49
+                      enum: *a50
                       default: text
                     rental:
                       type: string
@@ -27182,7 +27503,7 @@ paths:
                         type: string
                         format: uuid
                       maxItems: 6
-                      default: *a50
+                      default: *a51
                     delivery:
                       type: object
                       properties:
@@ -27238,7 +27559,7 @@ paths:
                         pattern: ^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$
                       status:
                         type: string
-                        enum: *a48
+                        enum: *a49
                       version:
                         type: integer
                         exclusiveMinimum: 0
@@ -27286,7 +27607,7 @@ paths:
                                 format: uuid
                               theme:
                                 type: string
-                                enum: *a47
+                                enum: *a48
                             required:
                               - display_name
                               - tagline
@@ -27438,13 +27759,13 @@ paths:
                                 properties:
                                   phone:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                   social_handle:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                   event_date:
                                     type: string
-                                    enum: *a31
+                                    enum: *a32
                                 required:
                                   - phone
                                   - social_handle
@@ -27521,7 +27842,7 @@ paths:
                             properties:
                               format:
                                 type: string
-                                enum: *a49
+                                enum: *a50
                                 default: text
                               rental:
                                 type: string
@@ -27547,7 +27868,7 @@ paths:
                                   type: string
                                   format: uuid
                                 maxItems: 6
-                                default: *a50
+                                default: *a51
                               delivery:
                                 type: object
                                 properties:
@@ -27584,7 +27905,7 @@ paths:
                             additionalProperties:
                               type: string
                               format: uri
-                            default: *a51
+                            default: *a52
                         required:
                           - version
                           - effective_at
@@ -29403,39 +29724,75 @@ paths:
                     type: object
                     properties:
                       plan:
-                        type: object
-                        properties:
-                          code:
-                            type: string
-                            enum: *a7
-                          name:
-                            type: string
-                            enum:
-                              - Standard
-                          monthly_minor:
-                            type: string
-                            pattern: ^\d+$
-                          currency:
-                            type: string
-                            pattern: ^[A-Z]{3}$
-                          physical_assets_max:
-                            type: integer
-                            exclusiveMinimum: 0
-                          frontdesk_seats_max:
-                            type: integer
-                            minimum: 0
-                          trial_days:
-                            type: integer
-                            exclusiveMinimum: 0
-                        required:
-                          - code
-                          - name
-                          - monthly_minor
-                          - currency
-                          - physical_assets_max
-                          - frontdesk_seats_max
-                          - trial_days
-                        additionalProperties: false
+                        oneOf:
+                          - type: object
+                            properties:
+                              code:
+                                type: string
+                                enum:
+                                  - starter
+                              name:
+                                type: string
+                                enum:
+                                  - Starter
+                              monthly_minor:
+                                type: string
+                                pattern: ^\d+$
+                              currency:
+                                type: string
+                                pattern: ^[A-Z]{3}$
+                              physical_assets_max:
+                                type: integer
+                                exclusiveMinimum: 0
+                              frontdesk_seats_max:
+                                type: integer
+                                minimum: 0
+                              trial_days:
+                                type: integer
+                                exclusiveMinimum: 0
+                            required:
+                              - code
+                              - name
+                              - monthly_minor
+                              - currency
+                              - physical_assets_max
+                              - frontdesk_seats_max
+                              - trial_days
+                            additionalProperties: false
+                          - type: object
+                            properties:
+                              code:
+                                type: string
+                                enum:
+                                  - standard
+                              name:
+                                type: string
+                                enum:
+                                  - Standard
+                              monthly_minor:
+                                type: string
+                                pattern: ^\d+$
+                              currency:
+                                type: string
+                                pattern: ^[A-Z]{3}$
+                              physical_assets_max:
+                                type: integer
+                                exclusiveMinimum: 0
+                              frontdesk_seats_max:
+                                type: integer
+                                minimum: 0
+                              trial_days:
+                                type: integer
+                                exclusiveMinimum: 0
+                            required:
+                              - code
+                              - name
+                              - monthly_minor
+                              - currency
+                              - physical_assets_max
+                              - frontdesk_seats_max
+                              - trial_days
+                            additionalProperties: false
                       subscription:
                         type: object
                         properties:
@@ -29466,10 +29823,10 @@ paths:
                         properties:
                           level:
                             type: string
-                            enum: *a27
+                            enum: *a28
                           reason:
                             type: string
-                            enum: *a28
+                            enum: *a29
                           ends_at:
                             type:
                               - string
@@ -29560,7 +29917,7 @@ paths:
                               pattern: ^[A-Z]{3}$
                             status:
                               type: string
-                              enum: &a52
+                              enum: &a53
                                 - pending
                                 - verified
                                 - failed
@@ -29744,7 +30101,7 @@ paths:
                             pattern: ^[A-Z]{3}$
                           status:
                             type: string
-                            enum: *a52
+                            enum: *a53
                           reference:
                             type: string
                             minLength: 1
@@ -29781,10 +30138,10 @@ paths:
                         properties:
                           level:
                             type: string
-                            enum: *a27
+                            enum: *a28
                           reason:
                             type: string
-                            enum: *a28
+                            enum: *a29
                           ends_at:
                             type:
                               - string
@@ -30221,7 +30578,7 @@ paths:
                             maxLength: 120
                           status:
                             type: string
-                            enum: *a32
+                            enum: *a33
                           branch_id:
                             type: string
                             format: uuid
@@ -30236,7 +30593,7 @@ paths:
                             format: uuid
                           fulfillment_method:
                             type: string
-                            enum: *a33
+                            enum: *a34
                           pickup_at:
                             type: string
                             format: date-time
@@ -30306,7 +30663,7 @@ paths:
                             minLength: 1
                           rail:
                             type: string
-                            enum: *a35
+                            enum: *a36
                           qr_image_url:
                             type: string
                             format: uri
@@ -30318,7 +30675,7 @@ paths:
                             format: uri
                           material_content_type:
                             type: string
-                            enum: *a36
+                            enum: *a37
                         required:
                           - method_name
                           - rail

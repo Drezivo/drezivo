@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { defaultStorefrontDocument, type StorefrontSettings } from "@drezivo/contracts";
+import { defaultStorefrontDocument, type StorefrontPolicyRules, type StorefrontSettings } from "@drezivo/contracts";
 
 import { StorefrontEditorProvider } from "@/components/storefront/storefront-editor";
 import { StorefrontPoliciesPage } from "@/components/storefront/storefront-policy-pages";
@@ -26,7 +26,7 @@ vi.mock("@/lib/storefront-assets", async (importOriginal) => ({
 const pageOne = "00000000-0000-4000-8000-000000000101";
 const pageTwo = "00000000-0000-4000-8000-000000000102";
 
-function settings(): StorefrontSettings {
+function settings(rules: StorefrontPolicyRules | null = null): StorefrontSettings {
   return {
     slug: "luna-gowns",
     status: "draft",
@@ -36,7 +36,7 @@ function settings(): StorefrontSettings {
     public_path: "/s/luna-gowns",
     document: defaultStorefrontDocument("Luna Gown Rentals"),
     media: { logo_url: null, cover_url: null, hero_image_url: null, about_image_url: null },
-    policy: { version: 1, effective_at: "2026-09-29T02:00:00.000Z", rules: null, image_urls: {} },
+    policy: { version: 1, effective_at: "2026-09-29T02:00:00.000Z", rules, image_urls: {} },
     readiness: { has_policy: false, has_active_clothing: true, has_storefront_payment_method: true, has_contact: false, ready: false },
   };
 }
@@ -104,5 +104,58 @@ describe("rental terms as images", () => {
 
     expect(await screen.findByText("Add at least one image of your policy")).toBeVisible();
     expect(api.publishStorefrontPolicy).not.toHaveBeenCalled();
+  });
+});
+
+describe("privacy notice starter", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clerk.getToken.mockResolvedValue("token");
+    clerk.useAuth.mockReturnValue({ getToken: clerk.getToken });
+    api.getStorefront.mockResolvedValue({ data: settings(), requestId: "r" });
+    api.publishStorefrontPolicy.mockResolvedValue({ data: settings(), requestId: "r" });
+  });
+
+  it("prefills and counts an editable privacy draft without publishing it", async () => {
+    render(
+      <StorefrontEditorProvider>
+        <StorefrontPoliciesPage />
+      </StorefrontEditorProvider>
+    );
+
+    const textarea = await screen.findByRole("textbox", { name: "Privacy notice" });
+    expect(textarea).toHaveValue(
+      "Your shop uses the information you provide, such as your name, email, phone number, rental or fitting details, and, for reservations, your pickup or delivery address, to manage your request, arrange pickup or delivery, and contact you. Depending on your request, this may also include the selected item and dates, event date, social-media handle, fitting note, and any payment proof you submit. Drezivo processes this information for the shop to provide the booking service. Contact the shop through its storefront details with privacy questions."
+    );
+    expect(
+      screen.getByText(`${(textarea as HTMLTextAreaElement).value.length}/2000`)
+    ).toBeVisible();
+    expect(api.publishStorefrontPolicy).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Publish policy" })).toBeEnabled();
+  });
+
+  it("preserves a nonblank saved privacy notice", async () => {
+    const savedNotice = "Keep this shop-specific privacy wording.";
+    const rules: StorefrontPolicyRules = {
+      format: "text",
+      rental: "",
+      deposit: "",
+      cancellation: "",
+      damage: null,
+      image_file_ids: [],
+      delivery: { enabled: false, fee_minor: "0", notes: null },
+      privacy_notice: savedNotice,
+    };
+    api.getStorefront.mockResolvedValue({ data: settings(rules), requestId: "r" });
+
+    render(
+      <StorefrontEditorProvider>
+        <StorefrontPoliciesPage />
+      </StorefrontEditorProvider>
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: "Privacy notice" })).toHaveValue(savedNotice)
+    );
   });
 });

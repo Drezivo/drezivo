@@ -20,19 +20,20 @@ way a contract-affecting change with no `@drezivo/contracts` PR is incomplete
 
 ## Contents
 
-| File | Use when |
-| --- | --- |
-| `environments.md` | You need to know what an environment variable is for, or which environment (dev/staging/production) you're touching. |
-| `release.md` | You're cutting a release of `contracts`, `api`, `app`, or `web`. |
-| `deploy.md` | You're deploying, or a deploy just failed, or you need to know what "graceful shutdown" means for a given surface. |
-| `migrations.md` | You're running or reviewing a database migration. |
-| `rollback.md` | Something shipped broken and you need to undo it. |
-| `incident.md` | Something is actively broken in production right now. |
-| `oncall-checklist.md` | You're starting an on-call shift, or a dashboard signal fired and you don't know what it means. |
-| `security-incident.md` | A credential leaked. |
-| `ci-baseline.md` | You are deciding when the root verification workflow is safe to enable. |
-| `github-ruleset.md` | You are configuring or reviewing protection for the root `main` branch. |
-| `security-automation.md` | You are deciding when GitHub secret scanning or dependency review can be enabled. |
+| File                     | Use when                                                                                                             |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `environments.md`        | You need to know what an environment variable is for, or which environment (dev/staging/production) you're touching. |
+| `release.md`             | You're cutting a release of `contracts`, `api`, `app`, or `web`.                                                     |
+| `deploy.md`              | You're deploying, or a deploy just failed, or you need to know what "graceful shutdown" means for a given surface.   |
+| `migrations.md`          | You're running or reviewing a database migration.                                                                    |
+| `file-object-cleanup.md` | You're rolling out or operating asynchronous R2 cleanup after image replacement.                                     |
+| `rollback.md`            | Something shipped broken and you need to undo it.                                                                    |
+| `incident.md`            | Something is actively broken in production right now.                                                                |
+| `oncall-checklist.md`    | You're starting an on-call shift, or a dashboard signal fired and you don't know what it means.                      |
+| `security-incident.md`   | A credential leaked.                                                                                                 |
+| `ci-baseline.md`         | You are deciding when the root verification workflow is safe to enable.                                              |
+| `github-ruleset.md`      | You are configuring or reviewing protection for the root `main` branch.                                              |
+| `security-automation.md` | You are deciding when GitHub secret scanning or dependency review can be enabled.                                    |
 
 Start with `incident.md` if you are not sure which one applies and something is on fire.
 

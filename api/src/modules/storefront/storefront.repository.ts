@@ -324,6 +324,7 @@ export interface ItemVariantRow {
   measurement_mode: 'none' | 'custom' | 'default_guide';
   measurement_unit: 'cm' | 'in';
   measurements: Record<string, unknown>;
+  fit_range: string | null;
   guide_file_id: string | null;
 }
 
@@ -355,7 +356,7 @@ export async function readPublicItem(
     `SELECT v.id AS variant_id, v.size_label, v.color_label,
             v.rental_price_minor::text AS rental_price_minor, v.security_deposit_minor::text AS security_deposit_minor,
             v.pricing_mode, v.included_duration_minutes, v.extra_day_price_minor::text AS extra_day_price_minor,
-            v.measurement_mode, v.measurement_unit, v.measurements,
+            v.measurement_mode, v.measurement_unit, v.measurements, v.fit_range,
             CASE WHEN v.measurement_mode = 'default_guide' AND mg.status = 'active' THEN mg.file_id END AS guide_file_id
        FROM product_variant v
        LEFT JOIN measurement_guide mg ON mg.tenant_id = v.tenant_id AND mg.id = v.measurement_guide_id

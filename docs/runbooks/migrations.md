@@ -103,33 +103,42 @@ backend checks and container build pass. It uses `npm run db:migrate`, not Supab
 history. The Drezivo `public.schema_migrations` table is authoritative; Supabase's own CLI history
 is a separate ledger.
 
-For an automatic run, a migration-file change must reach `main`. A manual workflow dispatch from
-`main` also runs the migration sequence. Pull requests and other branches never receive migration
-secrets. Main-branch workflow runs are serialized without cancelling an active run, and each
-database job refuses to continue if its commit is no longer the current `main` head.
+For an automatic run, a migration-file change must reach `staging` or `main`. A push to `staging`
+runs the protected staging migration job. A push to `main` runs the preview and production sequence.
+A manual workflow dispatch from either branch also runs that branch's migration job. Pull requests
+and other branches never receive migration secrets. Staging and preview jobs share a non-cancelling
+concurrency group because they may target the same preview database. Each database job refuses to
+continue if its commit is no longer the current branch head.
 
 The sequence is:
 
 1. Backend tests and the container build pass.
-2. The `preview` environment reports the Drezivo migration status, applies pending files, then
-   verifies that none remain. Preview must contain only synthetic or anonymized data.
-3. The `production` job starts only after preview succeeds. GitHub pauses it for the required
+2. On `staging`, the `staging` environment reports the Drezivo migration status, applies pending
+   files, then verifies that none remain. Staging must contain only synthetic or anonymized data.
+3. On `main`, the `preview` environment performs the same status, apply, and verification sequence.
+4. The `production` job starts only after preview succeeds. GitHub pauses it for the required
    repository-owner approval configured on the `production` environment.
-4. After approval, the job checks that the live schema/ledger baseline was manually reconciled,
+5. After approval, the job checks that the live schema/ledger baseline was manually reconciled,
    reports status, applies pending files in filename order, and verifies the final status.
 
-Configure two GitHub Actions environments, `preview` and `production`, with deployment branches
-restricted to `main`. Add a separate `MIGRATION_DATABASE_URL_DIRECT` environment secret to each,
-using the actual Supabase direct endpoint and a migration-only role. The production environment
-also requires the repository owner as reviewer; leave **Prevent self-review** disabled so the
-owner can approve their own run. Environment secrets are available only after the configured
+Configure three GitHub Actions environments, `staging`, `preview`, and `production`, with branch
+restrictions matching their job: `staging` for `staging`, and `preview`/`production` for `main`.
+Add a separate `MIGRATION_DATABASE_URL` environment secret to each, using the migration database
+role. The GitHub-hosted runner may use a Supabase direct connection on port 5432 or the shared
+Session pooler on port 5432. Use Session mode for the IPv4-only runner when the project does not
+have the paid IPv4 add-on. Do not use transaction pooling on port 6543. Supabase recommends direct
+connections for migrations; Session mode is the compatibility path being introduced for this
+runner constraint. The staging secret may point to the same preview database used by the `preview`
+job, but both jobs must retain the shared non-cancelling concurrency group. The production
+environment also requires the repository owner as reviewer; leave **Prevent self-review** disabled
+so the owner can approve their own run. Environment secrets are available only after the configured
 protection rules pass. A named environment without its reviewer and branch rules is not an approval
 gate.
 
-The GitHub-hosted runner is IPv4-only. Configure Supabase's IPv4 add-on and copy the direct
-connection URL from the project Connect dialog; do not use a Supavisor session-pooler URL, even
-when it uses port 5432. Supabase direct connections use IPv6 by default and become reachable over
-IPv4 with the add-on ([connection guidance](https://supabase.com/docs/guides/database/connecting-to-postgres)).
+Manual workflow dispatch defaults to status-only and reports pending migrations without applying
+them. Select `apply` only after reviewing the pending list and confirming that every pending file is
+intended for that database. Pushes that change migration files retain automatic status, apply, and
+verification behavior after the backend checks pass.
 
 Before enabling production migrations, rotate any previously exposed database password, confirm
 the API and worker use restricted runtime roles, and manually compare the production schema with
@@ -150,9 +159,10 @@ history consistency, not data from an incorrect migration; fixes still use forwa
 
 ## Supabase-specific operational notes
 
-- **Use the direct endpoint for migrations.** `DATABASE_URL_DIRECT` authenticates the migration
-  role over Supabase's direct connection. The API and worker use restricted runtime URLs. Do not
-  run DDL through the shared transaction pooler.
+- **Use a single-session connection for migrations.** Direct connections remain preferred.
+  GitHub-hosted runners can use the shared Supavisor Session pooler on port 5432 as the IPv4
+  fallback; it keeps one session for the migration client. Do not use transaction pooling on port
+  6543. The API and worker use separate, restricted runtime URLs.
 - **Rehearsal environments are not backups.** Use the separate Supabase staging project, seeded
   with synthetic or anonymized data, for migration rehearsal. Do not clone live personal data into
   an environment with broader preview access.
@@ -162,9 +172,9 @@ history consistency, not data from an incorrect migration; fixes still use forwa
 - **Keep the Data API disabled.** A migration that creates objects in `public` must not silently
   create a second browser-accessible API. Audit default grants to `anon`, `authenticated`, and
   `service_role` as part of migration review.
-- **Direct networking must be available to the migration runner.** Supabase direct connections are
-  IPv6 unless the project has the IPv4 add-on. Use an IPv6-capable approved runner or provision the
-  add-on; do not substitute a pooled runtime URL silently.
+- **Keep the migration connection mode explicit.** Use the direct endpoint when the runner can
+  reach it; otherwise use the shared Session pooler URL. Do not substitute a transaction-pooler or
+  runtime URL.
 - Pin the supported Postgres major version; schedule and rehearse upgrades rather than letting
   them happen implicitly (TRD §9).
 
@@ -174,8 +184,8 @@ history consistency, not data from an incorrect migration; fixes still use forwa
       (`CONTRIBUTING.md`).
 - [ ] It ran successfully against the Supabase staging project seeded with
       representative data first.
-- [ ] The migration used `DATABASE_URL_DIRECT`, and runtime smoke tests used only the restricted
-      `drezivo_app` / `drezivo_worker` roles.
+- [ ] The migration used the protected `MIGRATION_DATABASE_URL` secret, and runtime smoke tests
+      used only the restricted `drezivo_app` / `drezivo_worker` roles.
 - [ ] Data API exposure and default Supabase role grants were checked for every new object.
 - [ ] Its lock behavior and duration were measured, not assumed, for any index/constraint change
       against a large table.

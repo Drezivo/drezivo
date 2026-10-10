@@ -4,7 +4,7 @@ type: index
 status: active
 owner: Drezivo team
 source: "ROOT-REPOSITORY-ARCHITECTURE.md and linked second-brain notes"
-updated: 2026-10-04
+updated: 2026-10-10
 tags: [drezivo, index]
 ---
 
@@ -26,6 +26,7 @@ The navigation hub for the Drezivo second brain.
 - [[04-Decisions/Supabase Managed PostgreSQL]]
 - [[05-Operations/Operating Model]]
 - [[05-Operations/Reservation Email Verification Removal Plan]]
+- [[05-Operations/R2 Image Replacement Cleanup Checklist]]
 - [[05-Operations/API Security Review 2026-09-23]]
 - [[06-Research/Research Register]]
 - [[07-Glossary/Glossary]]
@@ -37,6 +38,7 @@ The navigation hub for the Drezivo second brain.
 - [[08-Daily/2026-09-28]]
 - [[08-Daily/2026-09-29]]
 - [[08-Daily/2026-10-02]]
+- [[08-Daily/2026-10-10]]
 
 ## Current truth
 

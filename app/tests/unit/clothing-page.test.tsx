@@ -181,7 +181,7 @@ describe("ClothingPage", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
-  it("shows free-size clothing as one explicit size instead of zero sizes", async () => {
+  it("shows flexible-fit clothing as one explicit size instead of zero sizes", async () => {
     api.getCatalogueClothing.mockResolvedValue({
       data: {
         items: [{ ...firstItem, sizing_mode: "free_size", has_free_size: true, size_labels: [] }],
@@ -192,7 +192,7 @@ describe("ClothingPage", () => {
 
     render(<ClothingPage />);
 
-    expect((await screen.findAllByText("Free size")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Flexible fit")).length).toBeGreaterThan(0);
     expect(await screen.findByText("1 size")).toBeVisible();
     expect(screen.queryByText("0 sizes")).not.toBeInTheDocument();
   });

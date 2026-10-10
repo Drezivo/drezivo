@@ -26,6 +26,7 @@ import {
   ValidationError,
 } from '../../shared/errors.js';
 import { runIdempotentCommand, type CommandResult } from '../../shared/idempotent-command.js';
+import { enqueueReplacedFileObjectCleanup } from '../files/file-object-cleanup.repository.js';
 import {
   appendSettingsAudit,
   readTenantSettings,
@@ -79,6 +80,7 @@ export class StorefrontCmsService {
   updateDocument(context: StaffContext, idempotencyKey: string, request: UpdateStorefrontRequest): Promise<CommandResult<StorefrontSettings>> {
     return this.command(context, idempotencyKey, 'storefront.document.update', request, async (client, row) => {
       this.assertVersion(row, request.version);
+      const previousDocument = toDocument(row);
       // Lock tenant settings after the storefront row so cross-page contact sync uses one lock order.
       await readTenantSettings(client, context.tenantId, true);
       await this.assertReferencesBelongToWorkspace(client, context.tenantId, request.document);
@@ -88,6 +90,20 @@ export class StorefrontCmsService {
         expectedVersion: request.version,
         document: request.document,
       });
+      const replacedMedia: Array<[string | null, string | null]> = [
+        [previousDocument.branding.logo_file_id, request.document.branding.logo_file_id],
+        [previousDocument.branding.cover_file_id, request.document.branding.cover_file_id],
+        [previousDocument.content.hero.image_file_id, request.document.content.hero.image_file_id],
+        [previousDocument.content.about.image_file_id, request.document.content.about.image_file_id],
+      ];
+      const currentMedia = new Set(
+        replacedMedia.flatMap(([, replacementFileId]) => replacementFileId ? [replacementFileId] : []),
+      );
+      for (const [previousFileId, replacementFileId] of replacedMedia) {
+        if (previousFileId && !currentMedia.has(previousFileId)) {
+          await enqueueReplacedFileObjectCleanup(client, context.tenantId, previousFileId, replacementFileId);
+        }
+      }
       const businessContactChanged = await syncBusinessContactFromStorefront(client, {
         tenantId: context.tenantId,
         businessEmail: request.document.contact.email,

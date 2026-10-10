@@ -1,11 +1,3 @@
-export interface MarketingPlan {
-  readonly name: string;
-  readonly price: string;
-  readonly blurb: string;
-  readonly features: readonly string[];
-  readonly highlighted?: boolean;
-}
-
 export interface MarketingFaq {
   readonly question: string;
   readonly answer: string;
@@ -70,26 +62,6 @@ export const MARKETING_FEATURES = [
 /** Free trial length; keep in step with the API's billing constants. */
 export const MARKETING_TRIAL_DAYS = 14;
 
-/**
- * One plan during the pilot (internal code `starter`, sold as Standard). The API owns the real price,
- * limits, and trial length; keep this copy in step with the current billing policy / migrations.
- */
-export const MARKETING_PLANS: readonly MarketingPlan[] = [
-  {
-    name: 'Standard',
-    price: '299.00',
-    blurb: 'Everything you need to run your rental shop, with a 14-day free trial.',
-    features: [
-      'Up to 300 active garments',
-      'Up to 3 Front Desk staff',
-      'Online storefront with bookings and fittings',
-      'Reservations, calendar & availability',
-      'Customers, payments, returns & exports',
-    ],
-    highlighted: true,
-  },
-];
-
 export interface MarketingFaqGroup {
   readonly title: string;
   readonly faqs: readonly MarketingFaq[];
@@ -97,7 +69,7 @@ export interface MarketingFaqGroup {
 
 /**
  * The full FAQ, grouped for the /faq page. Answers about trial length, plans, staff, and fittings
- * must match what the product does today (billing.constants, MARKETING_PLANS); update them together.
+ * must match the server-owned public plan catalog and billing policy; update them together.
  */
 export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
   {
@@ -119,7 +91,7 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
       },
       {
         question: 'How much does Drezivo cost?',
-        answer: `One plan, Standard, at ₱299 a month after the ${MARKETING_TRIAL_DAYS}-day free trial. It includes up to 300 active physical garments and 3 Front Desk staff. Asset limits are based on active physical garments, not the number of styles in your catalogue.`,
+        answer: `Starter is ₱149 a month for up to 125 active garments and owner-only access (no Front Desk accounts). Standard is ₱299 a month for up to 300 active garments and up to 3 Front Desk staff. Both plans include the same core features and a ${MARKETING_TRIAL_DAYS}-day free trial. Asset limits count active physical garments, not styles in your catalogue.`,
       },
       {
         question: 'What happens if I do not renew after the trial or a paid month?',
@@ -179,7 +151,7 @@ export const MARKETING_FAQ_GROUPS: readonly MarketingFaqGroup[] = [
       {
         question: 'Can staff access everything in my account?',
         answer:
-          'The Standard plan allows up to 3 Front Desk staff accounts. Staff access is role-limited; only the shop owner can manage owner-only settings and actions.',
+          'Starter is for the shop owner only and does not include Front Desk accounts. Standard allows up to 3 Front Desk staff accounts. Staff access is role-limited; only the shop owner can manage owner-only settings and actions.',
       },
       {
         question: 'How is customer and business data protected?',

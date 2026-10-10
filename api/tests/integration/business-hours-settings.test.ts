@@ -225,7 +225,11 @@ describe('Settings Business Hours ownership', async () => {
         `SELECT operating_hours FROM branch WHERE tenant_id=$1 AND id=$2`,
         [seeded.tenantId, seeded.otherBranchId],
       );
-      expect(other.rows[0]?.operating_hours).toMatchObject({ opens_local: '08:00', closes_local: '20:00' });
+      expect(other.rows[0]?.operating_hours).toMatchObject({
+        opens_local: '08:00',
+        closes_local: '20:00',
+        closed_weekdays: [],
+      });
       const foreignTenant = await client.query<{ operating_hours: Record<string, unknown> }>(
         `SELECT operating_hours FROM branch WHERE tenant_id=$1 AND id=$2`,
         [otherTenant.tenantId, otherTenant.branchId],

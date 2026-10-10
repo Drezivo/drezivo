@@ -45,7 +45,7 @@ describe('branch Business Hours bootstrap persistence', () => {
       expect(branch.rows[0]?.operating_hours).toEqual({
         opens_local: '08:00',
         closes_local: '20:00',
-        closed_weekdays: ['sunday'],
+        closed_weekdays: [],
       });
       expect(branch.rows[0]?.operating_hours_version).toBe('1');
       expect(branch.rows[0]?.operating_hours_updated_at).toBeInstanceOf(Date);

@@ -1,6 +1,6 @@
 /**
- * Pilot billing: one plan (Standard, internal code `starter`), a 14-day trial, and manual payment of
- * Drezivo's subscription by QR/transfer with uploaded proof that an operator approves.
+ * Pilot billing: Starter and Standard plans, a 14-day trial, and manual payment of Drezivo's
+ * subscription by QR/transfer with uploaded proof that an operator approves.
  *
  * Access is derived at request time from the subscription (no background job decides it). "End" is
  * the trial end while trialing, otherwise the paid-through date:
@@ -15,7 +15,7 @@ import { z } from 'zod';
 
 import { fileObjectId } from '../common/ids';
 import { isoInstant } from '../common/time';
-import { planCode, subscriptionStatus } from './onboarding';
+import { subscriptionStatus } from './onboarding';
 
 export const subscriptionAccessLevel = z.enum(['full', 'read_only', 'locked']);
 export type SubscriptionAccessLevel = z.infer<typeof subscriptionAccessLevel>;
@@ -94,23 +94,38 @@ export const subscriptionPaymentView = z
   .strict();
 export type SubscriptionPaymentView = z.infer<typeof subscriptionPaymentView>;
 
+const billingPlanDetails = z.discriminatedUnion('code', [
+  z
+    .object({
+      code: z.literal('starter'),
+      name: z.literal('Starter'),
+      monthly_minor: z.string().regex(/^\d+$/),
+      currency: z.string().regex(/^[A-Z]{3}$/),
+      physical_assets_max: z.number().int().positive(),
+      frontdesk_seats_max: z.number().int().nonnegative(),
+      trial_days: z.number().int().positive(),
+    })
+    .strict(),
+  z
+    .object({
+      code: z.literal('standard'),
+      name: z.literal('Standard'),
+      monthly_minor: z.string().regex(/^\d+$/),
+      currency: z.string().regex(/^[A-Z]{3}$/),
+      physical_assets_max: z.number().int().positive(),
+      frontdesk_seats_max: z.number().int().nonnegative(),
+      trial_days: z.number().int().positive(),
+    })
+    .strict(),
+]);
+
 /**
- * GET /billing — data for the Subscribe dialog (there is no billing page and no plan choice).
+ * GET /billing — current tenant plan and payment data for the Subscribe dialog.
  * Owner and front desk may read; only the owner may pay. Works in every access level.
  */
 export const billingOverview = z
   .object({
-    plan: z
-      .object({
-        code: planCode,
-        name: z.literal('Standard'),
-        monthly_minor: z.string().regex(/^\d+$/),
-        currency: z.string().regex(/^[A-Z]{3}$/),
-        physical_assets_max: z.number().int().positive(),
-        frontdesk_seats_max: z.number().int().nonnegative(),
-        trial_days: z.number().int().positive(),
-      })
-      .strict(),
+    plan: billingPlanDetails,
     subscription: z
       .object({
         status: subscriptionStatus,
@@ -143,6 +158,6 @@ export const submitSubscriptionPaymentResponse = z
   .strict();
 export type SubmitSubscriptionPaymentResponse = z.infer<typeof submitSubscriptionPaymentResponse>;
 
-/** POST /onboarding/{id}/start-trial — replaces plan selection: Standard + 14-day trial, then bootstrap. */
+/** Legacy combined start command; newer clients select a plan before bootstrap. */
 export const startTrialRequest = z.object({}).strict();
 export type StartTrialRequest = z.infer<typeof startTrialRequest>;

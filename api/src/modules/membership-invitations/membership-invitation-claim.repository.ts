@@ -7,6 +7,11 @@ export interface ClaimTenantRow {
   status: 'active' | 'restricted' | 'cancelled';
 }
 
+export interface WebhookClaimInvitation {
+  tenant: ClaimTenantRow;
+  invitationId: string;
+}
+
 export interface ClaimInvitationRow {
   id: string;
   tenant_id: string;
@@ -34,6 +39,26 @@ export async function findClaimTenant(
     [clerkOrgId, invitationId],
   );
   return result.rows[0] ?? null;
+}
+
+/** A signed Clerk webhook identifies the provider invitation, not the local UUID. */
+export async function findWebhookClaimInvitation(
+  client: PoolClient,
+  clerkOrgId: string,
+  clerkInvitationId: string,
+): Promise<WebhookClaimInvitation | null> {
+  const result = await client.query<ClaimTenantRow & { invitation_id: string }>(
+    `SELECT id, clerk_org_id, status, invitation_id
+       FROM public.resolve_membership_invitation_webhook($1, $2)
+      LIMIT 1`,
+    [clerkOrgId, clerkInvitationId],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    tenant: { id: row.id, clerk_org_id: row.clerk_org_id, status: row.status },
+    invitationId: row.invitation_id,
+  };
 }
 
 export async function lockClaimTenant(

@@ -204,7 +204,7 @@ describe('TBF-011 onboarding persistence', async () => {
     if (eligibleOnboarding.kind !== 'created') throw new Error('expected onboarding creation');
     const eligibleChoice = await chooseOnboardingPlan(
       eligibleOnboarding.onboarding.id,
-      'starter',
+      'standard',
       'user_onboarding_trial_eligible',
     );
     expect(eligibleChoice.kind).toBe('updated');
@@ -222,7 +222,7 @@ describe('TBF-011 onboarding persistence', async () => {
     if (pending.kind !== 'created') throw new Error('expected onboarding creation');
     const pendingChoice = await chooseOnboardingPlan(
       pending.onboarding.id,
-      'starter',
+      'standard',
       'user_onboarding_trial_consumed',
     );
     expect(pendingChoice.kind).toBe('updated');
@@ -249,7 +249,7 @@ describe('TBF-011 onboarding persistence', async () => {
       requestId: 'req-plan-idempotent',
       idempotencyKey,
       onboardingId: created.onboarding.id,
-      request: { plan_code: 'starter' as const },
+      request: { plan_code: 'standard' as const },
     };
 
     const first = await selectOnboardingPlan(input);
@@ -258,7 +258,7 @@ describe('TBF-011 onboarding persistence', async () => {
     expect(first.status).toBe(200);
     expect(second).toEqual(first);
     const current = await getCurrentOwnerOnboarding('user_onboarding_plan_idempotent');
-    expect(current?.selectedPlanCode).toBe('starter');
+    expect(current?.selectedPlanCode).toBe('standard');
 
     const auditCount = await withGlobalTransaction(
       'user_onboarding_plan_idempotent',
@@ -290,14 +290,14 @@ describe('TBF-011 onboarding persistence', async () => {
       requestId: 'req-plan-concurrent',
       idempotencyKey,
       onboardingId: created.onboarding.id,
-      request: { plan_code: 'starter' as const },
+      request: { plan_code: 'standard' as const },
     };
 
     const results = await Promise.all([selectOnboardingPlan(input), selectOnboardingPlan(input)]);
     expect(results.every((result) => result.status === 200 || result.status === 409)).toBe(true);
 
     const current = await getCurrentOwnerOnboarding('user_onboarding_plan_concurrent_key');
-    expect(current?.selectedPlanCode).toBe('starter');
+    expect(current?.selectedPlanCode).toBe('standard');
     const auditCount = await withGlobalTransaction(
       'user_onboarding_plan_concurrent_key',
       async (client) => {
@@ -313,24 +313,24 @@ describe('TBF-011 onboarding persistence', async () => {
     expect(auditCount).toBe(1);
   });
 
-  it('refuses a retired plan, audits the rejection, and replays it', async () => {
-    const account = await ensureAccount('user_onboarding_plan_retired');
-    const created = await createOrResumeOnboarding(account.id, 'org_plan_retired', 'user_onboarding_plan_retired');
-    if (created.kind !== 'created') throw new Error('expected onboarding creation');
-    const input = {
-      principalId: 'user_onboarding_plan_retired',
-      requestId: 'req-plan-retired',
-      idempotencyKey: randomUUID(),
-      onboardingId: created.onboarding.id,
-      request: { plan_code: 'business' as const },
-    };
+  it('persists either offered plan as the onboarding selection', async () => {
+    for (const [planCode, suffix] of [['starter', 'starter'], ['standard', 'standard']] as const) {
+      const principalId = `user_onboarding_${suffix}_selection`;
+      const account = await ensureAccount(principalId);
+      const created = await createOrResumeOnboarding(account.id, `org_${suffix}_selection`, principalId);
+      if (created.kind !== 'created') throw new Error('expected onboarding creation');
 
-    const first = await selectOnboardingPlan(input);
-    const replay = await selectOnboardingPlan(input);
+      const result = await selectOnboardingPlan({
+        principalId,
+        requestId: `req-${suffix}-selection`,
+        idempotencyKey: randomUUID(),
+        onboardingId: created.onboarding.id,
+        request: { plan_code: planCode },
+      });
 
-    expect(first).toMatchObject({ status: 409, body: { success: false, error: { code: 'STATE_CONFLICT' } } });
-    expect(replay).toEqual(first);
-    expect((await getCurrentOwnerOnboarding('user_onboarding_plan_retired'))?.selectedPlanCode).toBeNull();
+      expect(result.status).toBe(200);
+      expect((await getCurrentOwnerOnboarding(principalId))?.selectedPlanCode).toBe(planCode);
+    }
   });
 
   it('serializes concurrent plan changes and allows pending abandonment', async () => {
@@ -344,8 +344,8 @@ describe('TBF-011 onboarding persistence', async () => {
     if (created.kind !== 'created') throw new Error('expected onboarding creation');
 
     const results = await Promise.all([
-      chooseOnboardingPlan(created.onboarding.id, 'starter', 'user_onboarding_plan_race'),
-      chooseOnboardingPlan(created.onboarding.id, 'starter', 'user_onboarding_plan_race'),
+      chooseOnboardingPlan(created.onboarding.id, 'standard', 'user_onboarding_plan_race'),
+      chooseOnboardingPlan(created.onboarding.id, 'standard', 'user_onboarding_plan_race'),
     ]);
     expect(results.every((result) => result.kind === 'updated')).toBe(true);
     const abandoned = await abandonOnboarding(created.onboarding.id, 'user_onboarding_plan_race');
@@ -364,7 +364,7 @@ describe('TBF-011 onboarding persistence', async () => {
     if (created.kind !== 'created') throw new Error('expected onboarding creation');
     const selected = await chooseOnboardingPlan(
       created.onboarding.id,
-      'starter',
+      'standard',
       'user_onboarding_payment',
     );
     if (selected.kind !== 'updated') throw new Error('expected plan selection');
@@ -424,7 +424,7 @@ describe('TBF-011 onboarding persistence', async () => {
     if (created.kind !== 'created') throw new Error('expected onboarding creation');
     const selected = await chooseOnboardingPlan(
       created.onboarding.id,
-      'starter',
+      'standard',
       'user_onboarding_no_side_effect',
     );
     if (selected.kind !== 'updated') throw new Error('expected plan selection');

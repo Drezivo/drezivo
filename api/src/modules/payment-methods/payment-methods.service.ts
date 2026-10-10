@@ -18,6 +18,7 @@ import {
 
 import { withTenantTransaction } from '../../db/client.js';
 import {
+  DependencyUnavailableError,
   ForbiddenError,
   IdempotencyKeyReusedError,
   NotFoundError,
@@ -32,6 +33,10 @@ import { canonicalRequestHash } from '../../shared/idempotency.js';
 import type { FailureEnvelope, SuccessEnvelope } from '../../shared/response.js';
 import { claimTenantIdempotency, finalizeTenantIdempotency } from '../../shared/tenant-idempotency.js';
 import { isPaymentMaterialContentType } from './payment-method-readiness.js';
+import {
+  assertFileObjectCleanupProducerEnabled,
+  enqueueReplacedFileObjectCleanup,
+} from '../files/file-object-cleanup.repository.js';
 import {
   appendPaymentMethodAuditEvent,
   countActiveOnlineMethods,
@@ -86,7 +91,7 @@ export async function updatePaymentMethodSettings(
   const request = parsed.data;
 
   return runCommand(input, UPDATE_OPERATION, { payment_method_id: input.paymentMethodId, ...request }, 200, async (client) => {
-    const current = await readPaymentMethodSettings(client, input.tenantId, input.paymentMethodId);
+    const current = await readPaymentMethodSettings(client, input.tenantId, input.paymentMethodId, true);
     if (!current) throw new NotFoundError('The payment method could not be found.');
     const cash = current.rail === 'cash';
     if (cash && request.storefront_enabled) {
@@ -100,6 +105,19 @@ export async function updatePaymentMethodSettings(
       material_file_id: request.material_file_id === undefined ? current.material_file_id : request.material_file_id,
     });
 
+    const currentFileIds = new Set([files.qrFileId, files.materialFileId].filter((fileId): fileId is string => fileId !== null));
+    const cleanupCandidates = [
+      current.qr_file_id && files.qrFileId && !currentFileIds.has(current.qr_file_id)
+        ? current.qr_file_id
+        : null,
+      current.material_file_id &&
+      files.materialFileId &&
+      !currentFileIds.has(current.material_file_id)
+        ? current.material_file_id
+        : null,
+    ].filter((fileId): fileId is string => fileId !== null);
+    assertFileObjectCleanupProducerEnabled(cleanupCandidates);
+
     const updated = await updatePaymentMethodSettingsRow(client, {
       tenantId: input.tenantId,
       paymentMethodId: input.paymentMethodId,
@@ -112,6 +130,12 @@ export async function updatePaymentMethodSettings(
       materialFileId: files.materialFileId,
     });
     if (!updated) throw new StateConflictError('This payment method changed while you were editing it. Refresh and try again.');
+    if (current.qr_file_id && !currentFileIds.has(current.qr_file_id)) {
+      await enqueueReplacedFileObjectCleanup(client, input.tenantId, current.qr_file_id, files.qrFileId);
+    }
+    if (current.material_file_id && !currentFileIds.has(current.material_file_id)) {
+      await enqueueReplacedFileObjectCleanup(client, input.tenantId, current.material_file_id, files.materialFileId);
+    }
     return { paymentMethodId: input.paymentMethodId, action: 'payment_method.settings.updated' as const };
   });
 }
@@ -211,7 +235,7 @@ async function runCommand(
       await finalizeTenantIdempotency(client, { ...key, status: 'succeeded', responseCode: successStatus, safeResponse: body });
       return { status: successStatus, body };
     } catch (error) {
-      if (!isAppError(error)) throw error;
+      if (!isAppError(error) || error instanceof DependencyUnavailableError) throw error;
       const body: FailureEnvelope = { success: false, error: { code: error.code, message: error.message }, request_id: input.requestId };
       await finalizeTenantIdempotency(client, { ...key, status: 'failed', responseCode: error.status, safeResponse: body });
       return { status: error.status, body };

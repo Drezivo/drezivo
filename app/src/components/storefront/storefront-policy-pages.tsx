@@ -41,25 +41,30 @@ export function minorToPesos(minor: string): string {
   return value % 100 === 0 ? String(value / 100) : (value / 100).toFixed(2);
 }
 
-/** Starter wording a new shop can publish as-is or edit. Also shown as each field's placeholder. */
+/** Editable starter wording for a new shop's privacy notice. Publishing remains an explicit action. */
 const EXAMPLE_TEXT = {
   rental: "Rentals run 3 days from pickup. Pick up from 10 AM and return by 10 AM on your return date.",
   deposit: "A refundable deposit is paid with your booking and returned within 3 days after inspection.",
   cancellation: "Cancel at least 7 days before pickup for a full refund of the rental fee.",
   damage: "Late returns are charged one extra day per day late. Damage beyond normal wear is charged at the cost of repair.",
-  privacy_notice: "We use your name, contact details, and address only to process this rental and contact you about it.",
+  privacy_notice: "Your shop uses the information you provide, such as your name, email, phone number, rental or fitting details, and, for reservations, your pickup or delivery address, to manage your request, arrange pickup or delivery, and contact you. Depending on your request, this may also include the selected item and dates, event date, social-media handle, fitting note, and any payment proof you submit. Drezivo processes this information for the shop to provide the booking service. Contact the shop through its storefront details with privacy questions.",
 } as const;
+
+function rulesWithPrivacyStarter(saved: StorefrontPolicyRules | null): StorefrontPolicyRules {
+  const rules = saved ?? EMPTY_RULES;
+  return rules.privacy_notice.trim() ? rules : { ...rules, privacy_notice: EXAMPLE_TEXT.privacy_notice };
+}
 
 export function StorefrontPoliciesPage() {
   const editor = useStorefrontEditor();
   const saved = editor.settings?.policy.rules ?? null;
   const version = editor.settings?.policy.version;
-  const [rules, setRules] = useState<StorefrontPolicyRules>(saved ?? EMPTY_RULES);
+  const [rules, setRules] = useState<StorefrontPolicyRules>(() => rulesWithPrivacyStarter(saved));
   const [fee, setFee] = useState(minorToPesos(saved?.delivery.fee_minor ?? "0"));
   const [uploadingImages, setUploadingImages] = useState(false);
 
   useEffect(() => {
-    setRules(saved ?? EMPTY_RULES);
+    setRules(rulesWithPrivacyStarter(saved));
     setFee(minorToPesos(saved?.delivery.fee_minor ?? "0"));
     // Reset only when a new policy version arrives from the server.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -78,10 +83,11 @@ export function StorefrontPoliciesPage() {
   const dirty = JSON.stringify(next) !== JSON.stringify(saved ?? EMPTY_RULES);
   const text = (key: "rental" | "deposit" | "cancellation" | "privacy_notice", label: string, hint: string, max: number) => (
     <Field label={label} hint={hint} error={err(key)} count={{ value: rules[key].length, max }}>
-      {(props) => <Textarea {...props} rows={4} maxLength={max} placeholder={EXAMPLE_TEXT[key]} value={rules[key]} onChange={(e) => update({ [key]: e.target.value })} />}
+      {(props) => <Textarea {...props} rows={4} maxLength={max} placeholder={key === "privacy_notice" ? undefined : EXAMPLE_TEXT[key]} value={rules[key]} onChange={(e) => update({ [key]: e.target.value })} />}
     </Field>
   );
-  const blank = !saved && !rules.rental && !rules.deposit && !rules.cancellation && !rules.damage && !rules.privacy_notice;
+  const blank = !saved && !rules.rental && !rules.deposit && !rules.cancellation && !rules.damage &&
+    (!rules.privacy_notice || rules.privacy_notice === EXAMPLE_TEXT.privacy_notice);
   const imageTerms = rules.format === "images";
 
   return (

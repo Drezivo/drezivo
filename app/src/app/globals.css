@@ -79,6 +79,32 @@ html {
   color-scheme: light;
 }
 
+@keyframes batch-loading-copy {
+  0% {
+    opacity: 0.42;
+    transform: translateY(2px);
+  }
+  38%,
+  62% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0.42;
+    transform: translateY(-1px);
+  }
+}
+
+.batch-loading-copy {
+  animation: batch-loading-copy 1.9s ease-in-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .batch-loading-copy {
+    animation: none;
+  }
+}
+
 /*
  * Workspace size scale: the ONE source of truth for type, control and spacing sizes, stepped per
  * device class (phone < 640px, tablet 640px+, laptop 1024px+, desktop 1440px+). Components use the

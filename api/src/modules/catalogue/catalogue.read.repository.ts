@@ -88,7 +88,8 @@ export interface ClothingDetailVariantRow {
   measurement_mode: 'default_guide' | 'custom' | 'none';
   measurement_guide_id: string | null;
   measurement_unit: 'cm' | 'in';
-  measurements: Record<string, number>;
+  measurements: Record<string, number | { type: 'fit_note'; text: string }>;
+  fit_range: string | null;
   rental_price_minor: number;
   security_deposit_minor: number;
   currency: string;
@@ -646,6 +647,7 @@ export async function readClothingDetailModel(
        measurement_guide_id,
        measurement_unit,
        measurements,
+       fit_range,
        rental_price_minor,
        security_deposit_minor,
        currency,

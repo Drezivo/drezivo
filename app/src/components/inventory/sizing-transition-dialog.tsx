@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   changeClothingSizingModeRequest,
+  normalizeVariantFitRange,
   type ChangeClothingSizingModeResponse,
   type ChangeClothingSizingModeRequest,
   type ClothingVariantDetail,
@@ -21,6 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { inferMeasurementKind, parseMeasurementInput } from "@/lib/measurement-input";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +30,7 @@ type SizingMode = "sized" | "free_size";
 type MeasurementMode = "default_guide" | "custom" | "none";
 type MeasurementUnit = "cm" | "in";
 type PricingMode = "fixed_duration" | "daily";
+type MeasurementValue = ClothingVariantDetail["measurements"][string];
 
 type TransitionDraft = {
   id: string;
@@ -36,7 +39,10 @@ type TransitionDraft = {
   measurementMode: MeasurementMode;
   measurementGuideId: string | null;
   measurementUnit: MeasurementUnit;
+  fitRange: string;
   measurements: Record<string, string>;
+  measurementKinds: Record<string, "exact" | "fit_note">;
+  legacyHips: Record<string, MeasurementValue>;
   pricingMode: PricingMode;
   rentalPrice: string;
   securityDeposit: string;
@@ -141,7 +147,7 @@ export function SizingTransitionDialog({
           <div className="flex items-start justify-between gap-4">
             <div>
               <Dialog.Title className="text-lg font-semibold text-dashboard-navy">
-                Change to {targetMode === "free_size" ? "Free size" : "Sized"}
+                Change to {targetMode === "free_size" ? "One flexible-fit variant" : "Multiple labeled sizes"}
               </Dialog.Title>
               <Dialog.Description className="mt-1 max-w-2xl text-sm leading-6 text-dashboard-muted">
                 Drezivo archives the current active variants instead of deleting them, so reservations, fittings, allocations, and physical-piece history remain intact.
@@ -156,7 +162,7 @@ export function SizingTransitionDialog({
 
           <div className="mt-5 rounded-lg border border-dashboard-border bg-dashboard-active/30 px-3 py-3 text-xs text-dashboard-muted">
             {targetMode === "free_size"
-              ? "Free size uses exactly one null-size variant. If this product already has a preserved Free size variant, Drezivo restores it with its saved configuration; otherwise the values below create the new variant."
+              ? "Flexible fit uses one variant without a size label; it can fit several wearer sizes. This is different from how many physical pieces you own. If a flexible-fit variant already exists, Drezivo restores it with its saved configuration."
               : "Sized mode uses one or more unique labelled variants. Each row creates one active rentable piece and may consume physical-asset capacity."}
           </div>
 
@@ -219,7 +225,7 @@ function TransitionVariantEditor({
   removable: boolean;
   row: TransitionDraft;
 }) {
-  const measurementKeys = Object.keys(row.measurements).length > 0 ? Object.keys(row.measurements) : ["bust", "waist", "hips"];
+  const measurementKeys = [...new Set(["bust", "waist", "length", ...Object.keys(row.measurements).filter((key) => !isLegacyHipsKey(key))])];
   const guideLabel = row.measurementGuideId && row.measurementGuideId === defaultGuide?.id
     ? defaultGuide.name
     : row.measurementGuideId
@@ -230,7 +236,7 @@ function TransitionVariantEditor({
     <div className="overflow-hidden rounded-xl border border-dashboard-border bg-dashboard-surface">
       <div className="flex items-center justify-between gap-3 border-b border-dashboard-border bg-dashboard-active/35 px-4 py-3">
         <div>
-          <p className="text-sm font-semibold text-dashboard-navy">Variant {index + 1}{isFreeSize ? " · Free size" : ""}</p>
+          <p className="text-sm font-semibold text-dashboard-navy">Variant {index + 1}{isFreeSize ? " · Flexible fit" : ""}</p>
           <p className="mt-0.5 text-xs text-dashboard-muted">Configure the future active variant.</p>
         </div>
         {removable ? (
@@ -244,7 +250,7 @@ function TransitionVariantEditor({
       <div className="space-y-5 p-4">
         <div className="grid gap-4 sm:grid-cols-2">
           {isFreeSize ? (
-            <div className="rounded-lg border border-dashboard-border bg-dashboard-active/25 px-3 py-2.5 text-sm text-dashboard-muted">Size label: <span className="font-semibold text-dashboard-navy">Free size</span></div>
+            <div className="rounded-lg border border-dashboard-border bg-dashboard-active/25 px-3 py-2.5 text-sm text-dashboard-muted">Variant: <span className="font-semibold text-dashboard-navy">Flexible fit</span></div>
           ) : (
             <label className="block">
               <span className="mb-2 block text-sm font-medium text-dashboard-navy">Size label <span className="text-dashboard-danger">*</span></span>
@@ -256,6 +262,13 @@ function TransitionVariantEditor({
             <Input aria-label={`Sizing transition color ${index + 1}`} value={row.color} disabled={disabled} onChange={(event) => onChange({ color: event.target.value })} placeholder="No color" />
           </label>
         </div>
+
+        {isFreeSize ? (
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-dashboard-navy">Fits sizes (optional)</span>
+            <Input aria-label="Sizing transition fit range" value={row.fitRange} maxLength={120} disabled={disabled} onChange={(event) => onChange({ fitRange: event.target.value })} onBlur={() => onChange({ fitRange: normalizeVariantFitRange(row.fitRange) })} placeholder="e.g. Small–XL" />
+          </label>
+        ) : null}
 
         <div className="rounded-lg border border-dashboard-border bg-dashboard-active/25 p-4">
           <div className="grid gap-4 lg:grid-cols-[14rem_minmax(0,1fr)]">
@@ -270,7 +283,7 @@ function TransitionVariantEditor({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-52">
                   <DropdownMenuItem disabled={!row.measurementGuideId && !defaultGuide} onSelect={() => onChange({ measurementMode: "default_guide", measurementGuideId: row.measurementGuideId ?? defaultGuide?.id ?? null, measurements: {} })}>Reusable guide</DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => onChange({ measurementMode: "custom", measurementGuideId: null, measurements: Object.keys(row.measurements).length > 0 ? row.measurements : { bust: "", waist: "", hips: "" } })}>Custom measurements</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => onChange({ measurementMode: "custom", measurementGuideId: null, measurements: Object.keys(row.measurements).length > 0 ? row.measurements : { bust: "", waist: "", length: "" } })}>Custom measurements</DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => onChange({ measurementMode: "none", measurementGuideId: null, measurements: {} })}>No measurements</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -281,9 +294,42 @@ function TransitionVariantEditor({
             ) : row.measurementMode === "custom" ? (
               <div>
                 <div className="mb-2 flex justify-end"><div className="flex overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-surface">{(["cm", "in"] as const).map((unit) => <button key={unit} type="button" disabled={disabled} aria-pressed={row.measurementUnit === unit} onClick={() => onChange({ measurementUnit: unit })} className={cn("min-h-8 px-3 text-[0.68rem] font-medium uppercase", row.measurementUnit === unit ? "bg-dashboard-active text-dashboard-accent" : "text-dashboard-muted hover:bg-dashboard-active")}>{unit}</button>)}</div></div>
-                <div className="grid gap-2 sm:grid-cols-3">{measurementKeys.map((key) => <div key={key} className="relative"><Input aria-label={`Sizing transition ${index + 1} ${key}`} inputMode="decimal" value={row.measurements[key] ?? ""} disabled={disabled} onChange={(event) => onChange({ measurements: { ...row.measurements, [key]: event.target.value } })} placeholder={labelize(key)} className="pr-10" /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[0.65rem] uppercase text-dashboard-muted">{row.measurementUnit}</span></div>)}</div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {measurementKeys.map((key) => {
+                    const kind = row.measurementKinds[key] ?? "exact";
+                    return (
+                      <div key={key} className="space-y-1.5">
+                        <label className="block text-xs font-medium text-dashboard-muted" htmlFor={`${row.id}-${key}-measurement`}>{labelize(key)}</label>
+                        <div className="relative">
+                          <Input
+                            id={`${row.id}-${key}-measurement`}
+                            aria-label={`Sizing transition ${index + 1} ${key}`}
+                            inputMode="text"
+                            maxLength={120}
+                            value={row.measurements[key] ?? ""}
+                            disabled={disabled}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              onChange({
+                                measurements: { ...row.measurements, [key]: value },
+                                measurementKinds: { ...row.measurementKinds, [key]: inferMeasurementKind(value) },
+                              });
+                            }}
+                            placeholder={`${labelize(key)} (e.g. 36 or Flexible fit)`}
+                            className={kind === "exact" ? "pr-10" : undefined}
+                          />
+                          {kind === "exact" ? (
+                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[0.65rem] uppercase text-dashboard-muted">{row.measurementUnit}</span>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {Object.keys(row.legacyHips).length > 0 ? <p className="mt-3 rounded-md border border-dashboard-border bg-dashboard-surface px-3 py-2 text-xs text-dashboard-muted"><span className="font-medium text-dashboard-navy">Legacy Hips (read-only): </span>{Object.entries(row.legacyHips).map(([key, value]) => `${labelize(key)}: ${typeof value === "number" ? `${value} ${row.measurementUnit}` : value.text}`).join(" · ")}</p> : null}
               </div>
             ) : <p className="self-center text-xs text-dashboard-muted">No measurement data will be stored for this variant.</p>}
+            {row.measurementMode !== "custom" && Object.keys(row.legacyHips).length > 0 ? <p className="mt-3 rounded-md border border-dashboard-border bg-dashboard-surface px-3 py-2 text-xs text-dashboard-muted"><span className="font-medium text-dashboard-navy">Legacy Hips (read-only): </span>{Object.entries(row.legacyHips).map(([key, value]) => `${labelize(key)}: ${typeof value === "number" ? `${value} ${row.measurementUnit}` : value.text}`).join(" · ")}</p> : null}
           </div>
         </div>
 
@@ -308,6 +354,8 @@ function TransitionVariantEditor({
 }
 
 function createTransitionDraft(variant: ClothingVariantDetail | null, targetMode: SizingMode, index: number): TransitionDraft {
+  const legacyHips = Object.fromEntries(Object.entries(variant?.measurements ?? {}).filter(([key]) => isLegacyHipsKey(key)));
+  const editableMeasurements = Object.entries(variant?.measurements ?? {}).filter(([key]) => !isLegacyHipsKey(key));
   return {
     id: `transition-${index + 1}`,
     sizeLabel: targetMode === "free_size" ? "" : SIZE_OPTIONS[index + 1] ?? SIZE_OPTIONS[0],
@@ -315,7 +363,10 @@ function createTransitionDraft(variant: ClothingVariantDetail | null, targetMode
     measurementMode: variant?.measurement_mode ?? "none",
     measurementGuideId: variant?.measurement_guide_id ?? null,
     measurementUnit: variant?.measurement_unit ?? "cm",
-    measurements: Object.fromEntries(Object.entries(variant?.measurements ?? {}).map(([key, value]) => [key, String(value)])),
+    fitRange: targetMode === "free_size" && variant?.fit_range ? normalizeVariantFitRange(variant.fit_range) : "",
+    measurements: Object.fromEntries(editableMeasurements.map(([key, value]) => [key, typeof value === "number" ? String(value) : value.text])),
+    measurementKinds: Object.fromEntries(editableMeasurements.map(([key, value]) => [key, typeof value === "number" ? "exact" : "fit_note"])),
+    legacyHips,
     pricingMode: variant?.pricing_mode ?? "fixed_duration",
     rentalPrice: variant ? minorToPesos(variant.rental_price_minor) : "",
     securityDeposit: variant ? minorToPesos(variant.security_deposit_minor) : "0",
@@ -330,7 +381,7 @@ function buildSizingModeRequest(
   rows: TransitionDraft[],
   defaultGuide: MeasurementGuide | null
 ): ChangeClothingSizingModeRequest {
-  if (mode === "free_size" && rows.length !== 1) throw new Error("Free size requires exactly one variant.");
+  if (mode === "free_size" && rows.length !== 1) throw new Error("Flexible fit requires exactly one variant.");
   const seen = new Set<string>();
   const variants = rows.map((row, index) => {
     const sizeLabel = mode === "free_size" ? null : row.sizeLabel.trim();
@@ -344,6 +395,7 @@ function buildSizingModeRequest(
     const measurement = buildTransitionMeasurement(row, defaultGuide, index);
     return {
       size_label: sizeLabel,
+      ...(mode === "free_size" ? { fit_range: normalizeVariantFitRange(row.fitRange) || null } : {}),
       color_label: row.color.trim() || null,
       measurement_mode: measurement.measurement_mode,
       measurement_guide_id: measurement.measurement_guide_id,
@@ -365,9 +417,18 @@ function buildTransitionMeasurement(row: TransitionDraft, defaultGuide: Measurem
   if (row.measurementMode === "none") {
     return { measurement_mode: "none" as const, measurement_guide_id: null, measurement_unit: row.measurementUnit, measurements: {} };
   }
-  const measurements = Object.fromEntries(Object.entries(row.measurements).filter(([, value]) => value.trim() !== "").map(([key, value]) => [key, parseMeasurement(value, `${key} for variant ${index + 1}`)]));
-  if (Object.keys(measurements).length === 0) throw new Error(`Enter at least one custom measurement for variant ${index + 1}.`);
+  const measurements = Object.fromEntries(
+    Object.entries(row.measurements)
+      .filter(([, value]) => value.trim() !== "")
+      .map(([key, value]) => [key, parseMeasurementInput(value, `${key} for variant ${index + 1}`, row.measurementKinds[key] ?? "exact", true)])
+  );
+  for (const [key, value] of Object.entries(row.legacyHips)) measurements[key] = value;
+  if (Object.keys(measurements).length === 0) throw new Error(`Enter at least one custom measurement or fit note for variant ${index + 1}.`);
   return { measurement_mode: "custom" as const, measurement_guide_id: null, measurement_unit: row.measurementUnit, measurements };
+}
+
+function isLegacyHipsKey(key: string): boolean {
+  return key.trim().replace(/[_\s]+/g, " ").toLocaleLowerCase() === "hips";
 }
 
 function buildTransitionPricing(row: TransitionDraft, index: number) {
@@ -412,12 +473,6 @@ function hoursToMinutes(value: string, label: string): number {
   const minutes = Math.round(parsed * 60);
   if (!Number.isFinite(parsed) || parsed < 0 || !Number.isSafeInteger(minutes)) throw new Error(`${label} must be a valid non-negative number of hours.`);
   return minutes;
-}
-
-function parseMeasurement(value: string, label: string): number {
-  const parsed = Number(value.trim());
-  if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`${label} must be greater than zero.`);
-  return parsed;
 }
 
 function minorToPesos(value: string): string {

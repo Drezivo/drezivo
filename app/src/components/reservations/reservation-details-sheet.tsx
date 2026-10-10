@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import type { PermissionCode, ReservationDetail } from "@drezivo/contracts";
+import { normalizeVariantFitRange, type PermissionCode, type ReservationDetail } from "@drezivo/contracts";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -248,18 +248,23 @@ function ReservationDetails({
                         )}
                       />
                     </div>
-                    {Object.keys(line.measurements_snapshot).length > 0 ? (
+                    {line.fit_range_snapshot || Object.keys(line.measurements_snapshot).length > 0 ? (
                       <div className="mt-3">
                         <p className="text-xs font-medium text-dashboard-muted">
                           Measurements at booking
                         </p>
+                        {line.fit_range_snapshot && normalizeVariantFitRange(line.fit_range_snapshot) ? (
+                          <p className="mt-2 text-xs text-dashboard-navy">Fits {normalizeVariantFitRange(line.fit_range_snapshot)}</p>
+                        ) : null}
                         <div className="mt-2 flex flex-wrap gap-2">
                           {Object.entries(line.measurements_snapshot).map(([label, value]) => (
                             <span
                               key={label}
                               className="rounded-md bg-dashboard-active px-2 py-1 text-xs text-dashboard-navy"
                             >
-                              {humanize(label)}: {value}
+                              {humanize(label)}: {typeof value === "number"
+                                ? `${value}${line.measurement_unit_snapshot ? ` ${line.measurement_unit_snapshot}` : ""}`
+                                : value.text}
                             </span>
                           ))}
                         </div>

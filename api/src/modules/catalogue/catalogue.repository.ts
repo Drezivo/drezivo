@@ -7,6 +7,7 @@ import type {
   CreateClothingVariantRequest,
   CreatePhysicalAssetRequest,
   MeasurementMap,
+  VariantMeasurementMap,
   UpdateClothingProductRequest,
   UpdateClothingVariantRequest,
   UpdatePhysicalAssetStateRequest,
@@ -82,7 +83,8 @@ export interface EditableVariantRow {
   measurement_mode: 'default_guide' | 'custom' | 'none';
   measurement_guide_id: string | null;
   measurement_unit: 'cm' | 'in';
-  measurements: MeasurementMap;
+  measurements: VariantMeasurementMap;
+  fit_range: string | null;
   rental_price_minor: number;
   security_deposit_minor: number;
   currency: string;
@@ -306,7 +308,8 @@ export async function validateMeasurementGuideFile(
     `SELECT id, purpose, mime_type, byte_size, lifecycle_status, frozen_at, version_id, sha256
        FROM file_object
       WHERE tenant_id = $1 AND id = $2
-      LIMIT 1`,
+      LIMIT 1
+      FOR SHARE`,
     [tenantId, fileId],
   );
   const row = result.rows[0];
@@ -454,7 +457,7 @@ export async function readPreservedFreeSizeVariant(
 ): Promise<EditableVariantRow | null> {
   const result = await client.query<EditableVariantRow>(
     `SELECT id, product_id, size_label, color_label, measurement_mode, measurement_guide_id,
-            measurement_unit, measurements, rental_price_minor, security_deposit_minor, currency,
+            measurement_unit, measurements, fit_range, rental_price_minor, security_deposit_minor, currency,
             pricing_mode, included_duration_minutes, extra_day_price_minor, prep_minutes,
             turnaround_minutes, status, updated_at
        FROM product_variant
@@ -475,7 +478,7 @@ export async function readVariantForEdit(
 ): Promise<EditableVariantRow | null> {
   const result = await client.query<EditableVariantRow>(
     `SELECT id, product_id, size_label, color_label, measurement_mode, measurement_guide_id,
-            measurement_unit, measurements, rental_price_minor, security_deposit_minor, currency,
+            measurement_unit, measurements, fit_range, rental_price_minor, security_deposit_minor, currency,
             pricing_mode, included_duration_minutes, extra_day_price_minor, prep_minutes,
             turnaround_minutes, status, updated_at
        FROM product_variant
@@ -503,6 +506,9 @@ export async function updateVariantForEdit(
   },
 ): Promise<EditableVariantRow> {
   const measurement = input.request.measurement;
+  const measurements = measurement
+    ? preserveLegacyHips(input.current.measurements, measurement.measurements)
+    : input.current.measurements;
   const result = await client.query<EditableVariantRow>(
     `UPDATE product_variant
         SET size_label = $3,
@@ -511,17 +517,18 @@ export async function updateVariantForEdit(
             measurement_guide_id = $6,
             measurement_unit = $7,
             measurements = $8::jsonb,
-            rental_price_minor = $9,
-            security_deposit_minor = $10,
-            pricing_mode = $11,
-            included_duration_minutes = $12,
-            extra_day_price_minor = $13,
-            prep_minutes = $14,
-            turnaround_minutes = $15,
+            fit_range = $9,
+            rental_price_minor = $10,
+            security_deposit_minor = $11,
+            pricing_mode = $12,
+            included_duration_minutes = $13,
+            extra_day_price_minor = $14,
+            prep_minutes = $15,
+            turnaround_minutes = $16,
             updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
       WHERE tenant_id = $1 AND id = $2
       RETURNING id, product_id, size_label, color_label, measurement_mode, measurement_guide_id,
-                measurement_unit, measurements, rental_price_minor, security_deposit_minor, currency,
+                measurement_unit, measurements, fit_range, rental_price_minor, security_deposit_minor, currency,
                 pricing_mode, included_duration_minutes, extra_day_price_minor, prep_minutes,
                 turnaround_minutes, status, updated_at`,
     [
@@ -536,7 +543,8 @@ export async function updateVariantForEdit(
           : null
         : input.current.measurement_guide_id,
       measurement?.measurement_unit ?? input.current.measurement_unit,
-      JSON.stringify(measurement ? measurement.measurements : input.current.measurements),
+      JSON.stringify(measurements),
+      input.request.fit_range !== undefined ? input.request.fit_range : input.current.fit_range,
       input.pricing?.rentalPriceMinor ?? input.current.rental_price_minor,
       input.pricing?.securityDepositMinor ?? input.current.security_deposit_minor,
       input.request.pricing?.mode ?? input.current.pricing_mode,
@@ -549,6 +557,16 @@ export async function updateVariantForEdit(
   const row = result.rows[0];
   if (!row) throw new StateConflictError('The clothing variant could not be updated. Refresh and try again.');
   return row;
+}
+
+function preserveLegacyHips(
+  current: VariantMeasurementMap,
+  requested: VariantMeasurementMap,
+): VariantMeasurementMap {
+  const preserved = Object.fromEntries(
+    Object.entries(current).filter(([key]) => key.trim().replace(/[_\s]+/g, ' ').toLocaleLowerCase() === 'hips'),
+  );
+  return { ...requested, ...preserved };
 }
 
 export async function readProductPublishability(
@@ -710,7 +728,7 @@ export async function updateVariantLifecycle(
             updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
       WHERE tenant_id = $1 AND id = $2
       RETURNING id, product_id, size_label, color_label, measurement_mode, measurement_guide_id,
-                measurement_unit, measurements, rental_price_minor, security_deposit_minor, currency,
+                measurement_unit, measurements, fit_range, rental_price_minor, security_deposit_minor, currency,
                 pricing_mode, included_duration_minutes, extra_day_price_minor, prep_minutes,
                 turnaround_minutes, status, updated_at`,
     [input.tenantId, input.variantId, input.status],
@@ -764,18 +782,18 @@ export async function createVariantForProduct(
   const measurements = input.request.measurement_mode === 'custom' ? input.request.measurements : {};
   const result = await client.query<(EditableVariantRow & { sku: string; created_at: Date })>(
     `INSERT INTO product_variant
-       (id, tenant_id, product_id, sku, size_label, color_label, measurements, measurement_unit,
+       (id, tenant_id, product_id, sku, size_label, color_label, measurements, fit_range, measurement_unit,
         measurement_mode, measurement_guide_id, rental_price_minor, security_deposit_minor, currency,
         pricing_mode, included_duration_minutes, extra_day_price_minor, prep_minutes, turnaround_minutes,
         status, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,'PHP',$13,$14,$15,$16,$17,'active',now(),now())
+     VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13,'PHP',$14,$15,$16,$17,$18,'active',now(),now())
      ON CONFLICT DO NOTHING
      RETURNING id, product_id, sku, size_label, color_label, measurement_mode, measurement_guide_id,
-               measurement_unit, measurements, rental_price_minor, security_deposit_minor, currency,
+               measurement_unit, measurements, fit_range, rental_price_minor, security_deposit_minor, currency,
                pricing_mode, included_duration_minutes, extra_day_price_minor, prep_minutes,
                turnaround_minutes, status, created_at, updated_at`,
     [variantId, input.tenantId, input.productId, sku, input.request.size_label, input.request.color_label,
-      JSON.stringify(measurements), input.request.measurement_unit, input.request.measurement_mode, measurementGuideId,
+      JSON.stringify(measurements), input.request.fit_range ?? null, input.request.measurement_unit, input.request.measurement_mode, measurementGuideId,
       input.rentalPriceMinor, input.securityDepositMinor, input.request.pricing.mode, input.includedDurationMinutes,
       input.extraDayPriceMinor, input.request.pricing.prep_minutes, input.request.pricing.turnaround_minutes],
   );
@@ -1020,6 +1038,21 @@ export async function replaceProductImages(
   return rows;
 }
 
+export async function readProductImageFileIds(
+  client: PoolClient,
+  tenantId: string,
+  productId: string,
+): Promise<string[]> {
+  const result = await client.query<{ file_id: string }>(
+    `SELECT file_id
+       FROM product_image
+      WHERE tenant_id = $1 AND product_id = $2
+      ORDER BY display_order, file_id`,
+    [tenantId, productId],
+  );
+  return result.rows.map((row) => row.file_id);
+}
+
 export async function createClothingGraph(
   client: PoolClient,
   input: {
@@ -1060,18 +1093,18 @@ export async function createClothingGraph(
     const sku = generatedCode('SKU', productId, size.size_label ?? 'FREE-SIZE', index);
     const measurementGuideId =
       size.measurement_mode === 'default_guide' ? (size.measurement_guide_id ?? null) : null;
-    const measurements: MeasurementMap =
+    const measurements: VariantMeasurementMap =
       size.measurement_mode === 'custom' ? size.measurements : {};
 
     await client.query(
       `INSERT INTO product_variant
         (id, tenant_id, product_id, sku, size_label, color_label,
-          measurements, measurement_unit, measurement_mode, measurement_guide_id,
+          measurements, fit_range, measurement_unit, measurement_mode, measurement_guide_id,
           rental_price_minor, security_deposit_minor, currency, pricing_mode,
           included_duration_minutes, extra_day_price_minor, prep_minutes,
           turnaround_minutes, status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10,
-               $11, $12, 'PHP', $13, $14, $15, $16, $17, $18, now(), now())`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11,
+               $12, $13, 'PHP', $14, $15, $16, $17, $18, $19, now(), now())`,
       [
         variantId,
         input.tenantId,
@@ -1080,6 +1113,7 @@ export async function createClothingGraph(
         size.size_label,
         input.request.color_label,
         JSON.stringify(measurements),
+        size.fit_range ?? null,
         size.measurement_unit,
         size.measurement_mode,
         measurementGuideId,

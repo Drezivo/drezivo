@@ -24,6 +24,8 @@ import {
   measurementMode,
   measurementUnit,
   productSizingMode,
+  variantFitRange,
+  variantMeasurementMap,
 } from './admin';
 
 export const clothingProductLifecycle = z.enum(['draft', 'active', 'archived']);
@@ -236,7 +238,8 @@ export const clothingVariantDetail = z.object({
   measurement_mode: measurementMode,
   measurement_guide_id: measurementGuideId.nullable(),
   measurement_unit: measurementUnit,
-  measurements: measurementMap,
+  measurements: variantMeasurementMap,
+  fit_range: variantFitRange.nullable().optional(),
   rental_price_minor: nonNegativeMoneyString,
   security_deposit_minor: nonNegativeMoneyString,
   currency: currencyCode,
@@ -346,11 +349,12 @@ const variantMeasurementPatch = z
     measurement_mode: measurementMode,
     measurement_guide_id: measurementGuideId.nullable().optional(),
     measurement_unit: measurementUnit.default('cm'),
-    measurements: measurementMap.default({}),
+    measurements: variantMeasurementMap.default({}),
   })
   .strict()
   .superRefine((value, ctx) => {
     const hasMeasurements = Object.keys(value.measurements).length > 0;
+    const hasFitNotes = Object.values(value.measurements).some((measurement) => typeof measurement === 'object');
     const guideId = value.measurement_guide_id ?? null;
 
     if (value.measurement_mode === 'default_guide') {
@@ -394,12 +398,20 @@ const variantMeasurementPatch = z
         message: 'None measurement mode cannot reference a guide or structured measurements.',
       });
     }
+    if (hasFitNotes && value.measurement_mode !== 'custom') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['measurement_mode'],
+        message: 'Fit notes require custom measurement mode.',
+      });
+    }
   });
 
 export const updateClothingVariantRequest = z
   .object({
     expected_updated_at: isoInstant,
     size_label: z.string().trim().min(1).max(40).nullable().optional(),
+    fit_range: variantFitRange.optional(),
     color_label: z.string().trim().min(1).max(80).nullable().optional(),
     measurement: variantMeasurementPatch.optional(),
     pricing: clothingPricingInput.optional(),
@@ -408,6 +420,7 @@ export const updateClothingVariantRequest = z
   .refine(
     (value) =>
       value.size_label !== undefined ||
+      value.fit_range !== undefined ||
       value.color_label !== undefined ||
       value.measurement !== undefined ||
       value.pricing !== undefined,
@@ -423,7 +436,8 @@ export const updateClothingVariantResponse = z.object({
   measurement_mode: measurementMode,
   measurement_guide_id: measurementGuideId.nullable(),
   measurement_unit: measurementUnit,
-  measurements: measurementMap,
+  measurements: variantMeasurementMap,
+  fit_range: variantFitRange.nullable().optional(),
   rental_price_minor: nonNegativeMoneyString,
   security_deposit_minor: nonNegativeMoneyString,
   currency: currencyCode,
@@ -499,12 +513,14 @@ export const createClothingVariantRequest = z
     measurement_mode: measurementMode,
     measurement_guide_id: measurementGuideId.nullable().optional(),
     measurement_unit: measurementUnit.default('cm'),
-    measurements: measurementMap.default({}),
+    measurements: variantMeasurementMap.default({}),
+    fit_range: variantFitRange.optional(),
     pricing: clothingPricingInput,
   })
   .strict()
   .superRefine((value, ctx) => {
     const hasMeasurements = Object.keys(value.measurements).length > 0;
+    const hasFitNotes = Object.values(value.measurements).some((measurement) => typeof measurement === 'object');
     const guideId = value.measurement_guide_id ?? null;
     if (value.measurement_mode === 'default_guide' && !guideId) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['measurement_guide_id'], message: 'Default-guide measurement mode requires measurement_guide_id.' });
@@ -517,6 +533,12 @@ export const createClothingVariantRequest = z
     }
     if (value.measurement_mode === 'none' && (guideId || hasMeasurements)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['measurement_mode'], message: 'None measurement mode cannot reference a guide or structured measurements.' });
+    }
+    if (hasFitNotes && value.measurement_mode !== 'custom') {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['measurement_mode'], message: 'Fit notes require custom measurement mode.' });
+    }
+    if (value.size_label !== null && value.fit_range != null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['fit_range'], message: 'Fit range is only supported for a flexible-fit variant.' });
     }
   });
 export type CreateClothingVariantRequest = z.infer<typeof createClothingVariantRequest>;
@@ -537,6 +559,13 @@ export const changeClothingSizingModeRequest = z
           message: 'Sized mode requires at least one variant with a real size label.',
         });
       }
+      if (value.variants?.some((variant) => variant.fit_range != null)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['variants'],
+          message: 'Fit range is only supported for a flexible-fit variant.',
+        });
+      }
       if (value.variant !== undefined) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -551,14 +580,14 @@ export const changeClothingSizingModeRequest = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['variants'],
-        message: 'Free size mode uses one Free size variant, not a variants array.',
+        message: 'Flexible-fit mode uses one null-size variant, not a variants array.',
       });
     }
     if (value.variant && value.variant.size_label !== null) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['variant', 'size_label'],
-        message: 'Free size mode requires a null size label.',
+        message: 'Flexible-fit mode requires a null size label.',
       });
     }
   });

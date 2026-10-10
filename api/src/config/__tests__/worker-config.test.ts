@@ -37,4 +37,31 @@ describe('worker configuration', () => {
     expect(issuePaths({ WORKER_ENABLED: 'yes' })).toContain('WORKER_ENABLED');
     expect(issuePaths({ WORKER_ENABLED: '0' })).toContain('WORKER_ENABLED');
   });
+
+  it('keeps cleanup producers enabled locally but fail-closed in deployed environments', () => {
+    const local = parse({ NODE_ENV: 'test', FILE_OBJECT_CLEANUP_ENABLED: undefined });
+    expect(local.success && local.data.FILE_OBJECT_CLEANUP_ENABLED).toBe(true);
+
+    const stagingEnvironment = {
+      NODE_ENV: 'staging',
+      STAFF_APP_URL: 'https://partners.example.test',
+      TURNSTILE_SECRET_KEY: 'test-turnstile-secret',
+      OBJECT_STORAGE_ENDPOINT: 'https://account.r2.cloudflarestorage.com',
+      OBJECT_STORAGE_REGION: 'auto',
+      OBJECT_STORAGE_FORCE_PATH_STYLE: 'false',
+    };
+    const staging = parse({
+      ...stagingEnvironment,
+      FILE_OBJECT_CLEANUP_ENABLED: undefined,
+    });
+    expect(staging.success && staging.data.FILE_OBJECT_CLEANUP_ENABLED).toBe(false);
+
+    const explicitlyEnabled = parse({ ...stagingEnvironment, FILE_OBJECT_CLEANUP_ENABLED: 'true' });
+    expect(explicitlyEnabled.success && explicitlyEnabled.data.FILE_OBJECT_CLEANUP_ENABLED).toBe(
+      true,
+    );
+    expect(issuePaths({ FILE_OBJECT_CLEANUP_ENABLED: 'yes' })).toContain(
+      'FILE_OBJECT_CLEANUP_ENABLED',
+    );
+  });
 });
