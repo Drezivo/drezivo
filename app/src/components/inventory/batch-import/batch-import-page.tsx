@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import type { CatalogueImportCapabilities, ExtractedClothingFields, MeasurementGuide } from "@drezivo/contracts";
+import { normalizeVariantFitRange, type CatalogueImportCapabilities, type ExtractedClothingFields, type MeasurementGuide } from "@drezivo/contracts";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   AlertTriangle,
@@ -969,6 +969,7 @@ function RowEditor({
                   className={inputClass("fitRange")}
                   title={reviewTitle("fitRange")}
                   onChange={(event) => onChange({ fitRange: event.target.value })}
+                  onBlur={() => onChange({ fitRange: normalizeVariantFitRange(row.fitRange) })}
                 />
               ) : (
                 <Input
