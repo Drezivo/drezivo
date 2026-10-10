@@ -12,6 +12,7 @@ import {
   requireTestDatabaseUrl,
   resetTestDatabase,
 } from './helpers/test-db.js';
+import { reservationTestDate, reservationTestInstant } from './helpers/reservation-dates.js';
 
 const clerk = vi.hoisted(() => ({ getAuth: vi.fn() }));
 vi.mock('@clerk/express', () => ({
@@ -200,8 +201,8 @@ describe('RSV-021/022 staff reservation creation', async () => {
       .toBe(15 * 60 * 1000);
     expect(persisted.lineCount).toBe(1);
     expect(persisted.allocation).toMatchObject({ asset_id: seed.assetId, is_blocking: true });
-    expect(persisted.allocation.starts_at.toISOString()).toBe('2026-10-10T02:00:00.000Z');
-    expect(persisted.allocation.ends_at.toISOString()).toBe('2026-10-14T02:00:00.000Z');
+    expect(persisted.allocation.starts_at.toISOString()).toBe(reservationTestInstant(0));
+    expect(persisted.allocation.ends_at.toISOString()).toBe(reservationTestInstant(4));
     expect(persisted.payment).toEqual({ status: 'pending', amount_minor: 265000 });
     expect(persisted.customer).toEqual({
       address: '123 Test Street, Quezon City',
@@ -478,7 +479,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
     await expect(
       createStaffReservation(
         commandContext(seed, 'req-rsv021-replay-c', 'idem-rsv021-replay'),
-        { ...requestBody, event_date: '2026-10-12' },
+        { ...requestBody, event_date: reservationTestDate(2) },
       ),
     ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
 
@@ -845,8 +846,15 @@ describe('RSV-021/022 staff reservation creation', async () => {
         `INSERT INTO asset_allocation
            (tenant_id, branch_id, asset_id, maintenance_id, kind, period, is_blocking)
          VALUES ($1, $2, $3, $4, 'maintenance',
-                 tstzrange('2026-10-11T02:00:00Z', '2026-10-12T02:00:00Z', '[)'), true)`,
-        [seed.tenantId, seed.branchId, seed.assetId, workOrderId],
+                 tstzrange($5::timestamptz, $6::timestamptz, '[)'), true)`,
+        [
+          seed.tenantId,
+          seed.branchId,
+          seed.assetId,
+          workOrderId,
+          reservationTestInstant(1),
+          reservationTestInstant(2),
+        ],
       );
       // Staff availability is operational inventory data and must not depend on storefront policy
       // configuration. Reservation creation still requires/snapshots an effective policy.
@@ -858,8 +866,8 @@ describe('RSV-021/022 staff reservation creation', async () => {
       .get('/api/v1/reservations/availability-calendar')
       .query({
         variant_id: seed.variantId,
-        start_date: '2026-10-10',
-        end_date: '2026-10-14',
+        start_date: reservationTestDate(0),
+        end_date: reservationTestDate(4),
       });
 
     expect(calendar.status).toBe(200);
@@ -887,19 +895,19 @@ describe('RSV-021/022 staff reservation creation', async () => {
     const calendarData = calendarBody.data;
     expect(calendarData.days).toHaveLength(5);
     expect(calendarData.days).toEqual([
-      expect.objectContaining({ date: '2026-10-10', available_assets: 2, state: 'available' }),
-      expect.objectContaining({ date: '2026-10-11', available_assets: 1, state: 'limited' }),
-      expect.objectContaining({ date: '2026-10-12', available_assets: 1, state: 'limited' }),
-      expect.objectContaining({ date: '2026-10-13', available_assets: 2, state: 'available' }),
-      expect.objectContaining({ date: '2026-10-14', available_assets: 2, state: 'available' }),
+      expect.objectContaining({ date: reservationTestDate(0), available_assets: 2, state: 'available' }),
+      expect.objectContaining({ date: reservationTestDate(1), available_assets: 1, state: 'limited' }),
+      expect.objectContaining({ date: reservationTestDate(2), available_assets: 1, state: 'limited' }),
+      expect.objectContaining({ date: reservationTestDate(3), available_assets: 2, state: 'available' }),
+      expect.objectContaining({ date: reservationTestDate(4), available_assets: 2, state: 'available' }),
     ]);
 
     const exact = await request(createApp())
       .get('/api/v1/reservations/availability-check')
       .query({
         variant_id: seed.variantId,
-        pickup_at: '2026-10-10T02:00:00.000Z',
-        due_at: '2026-10-13T02:00:00.000Z',
+        pickup_at: reservationTestInstant(0),
+        due_at: reservationTestInstant(3),
       });
     expect(exact.status).toBe(200);
     expect(exact.body).toMatchObject({
@@ -910,12 +918,12 @@ describe('RSV-021/022 staff reservation creation', async () => {
         available_assets: 1,
         guaranteed: false,
         requested_interval: {
-          start: '2026-10-10T02:00:00.000Z',
-          end: '2026-10-13T02:00:00.000Z',
+          start: reservationTestInstant(0),
+          end: reservationTestInstant(3),
         },
         blocked_interval: {
-          start: '2026-10-10T02:00:00.000Z',
-          end: '2026-10-14T02:00:00.000Z',
+          start: reservationTestInstant(0),
+          end: reservationTestInstant(4),
         },
         rental_preview: {
           rental_total_minor: '190000',
@@ -931,8 +939,8 @@ describe('RSV-021/022 staff reservation creation', async () => {
       .get('/api/v1/reservations/availability-check')
       .query({
         variant_id: seed.variantId,
-        pickup_at: '2026-10-10T08:00:00.000Z',
-        due_at: '2026-10-12T01:00:00.000Z',
+        pickup_at: reservationTestInstant(0, '08:00:00.000Z'),
+        due_at: reservationTestInstant(2, '01:00:00.000Z'),
       });
     expect(pickupDayOne.status).toBe(200);
     expect(pickupDayOne.body).toMatchObject({
@@ -943,8 +951,8 @@ describe('RSV-021/022 staff reservation creation', async () => {
       .get('/api/v1/reservations/availability-check')
       .query({
         variant_id: seed.variantId,
-        pickup_at: '2026-10-10T02:00:00.000Z',
-        due_at: '2026-10-11T08:00:00.000Z',
+        pickup_at: reservationTestInstant(0),
+        due_at: reservationTestInstant(1, '08:00:00.000Z'),
       });
     expect(tooShort.status).toBe(409);
     expectSafeError(tooShort.body, 'STATE_CONFLICT');
@@ -955,9 +963,9 @@ describe('RSV-021/022 staff reservation creation', async () => {
       'reservations.manage',
     ]);
     await seedReturnedRecovery(seed, {
-      pickupAt: '2026-10-07T02:00:00.000Z',
-      dueAt: '2026-10-10T02:00:00.000Z',
-      recoveryEnd: '2026-10-11T02:00:00.000Z',
+      pickupAt: reservationTestInstant(-3),
+      dueAt: reservationTestInstant(0),
+      recoveryEnd: reservationTestInstant(1),
     });
     useClerk(seed);
 
@@ -965,8 +973,8 @@ describe('RSV-021/022 staff reservation creation', async () => {
       .get('/api/v1/reservations/availability-check')
       .query({
         variant_id: seed.variantId,
-        pickup_at: '2026-10-10T10:00:00.000Z',
-        due_at: '2026-10-13T10:00:00.000Z',
+        pickup_at: reservationTestInstant(0, '10:00:00.000Z'),
+        due_at: reservationTestInstant(3, '10:00:00.000Z'),
       });
     expect(overlapping.status).toBe(200);
     expect(overlapping.body).toMatchObject({
@@ -978,8 +986,8 @@ describe('RSV-021/022 staff reservation creation', async () => {
       .get('/api/v1/reservations/availability-check')
       .query({
         variant_id: seed.variantId,
-        pickup_at: '2026-10-11T02:00:00.000Z',
-        due_at: '2026-10-14T02:00:00.000Z',
+        pickup_at: reservationTestInstant(1),
+        due_at: reservationTestInstant(4),
       });
     expect(afterRecovery.status).toBe(200);
     expect(afterRecovery.body).toMatchObject({
@@ -992,8 +1000,8 @@ describe('RSV-021/022 staff reservation creation', async () => {
       {
         variant_id: seed.variantId as StaffReservationCreateRequest['variant_id'],
         requested_interval: {
-          start: '2026-10-11T02:00:00.000Z',
-          end: '2026-10-14T02:00:00.000Z',
+          start: reservationTestInstant(1),
+          end: reservationTestInstant(4),
         },
         fulfillment_method: 'pickup',
         payment_method_id: seed.paymentMethodId as StaffReservationCreateRequest['payment_method_id'],
@@ -1025,8 +1033,8 @@ describe('RSV-021/022 staff reservation creation', async () => {
       .get('/api/v1/reservations/availability-calendar')
       .query({
         variant_id: seed.variantId,
-        start_date: '2026-10-10',
-        end_date: '2026-10-13',
+        start_date: reservationTestDate(0),
+        end_date: reservationTestDate(3),
       });
     expect(calendar.status).toBe(200);
     const calendarBody = calendar.body as {
@@ -1038,8 +1046,8 @@ describe('RSV-021/022 staff reservation creation', async () => {
       .get('/api/v1/reservations/availability-check')
       .query({
         variant_id: seed.variantId,
-        pickup_at: '2026-10-10T02:00:00.000Z',
-        due_at: '2026-10-13T02:00:00.000Z',
+        pickup_at: reservationTestInstant(0),
+        due_at: reservationTestInstant(3),
       });
     expect(exact.status).toBe(200);
     expect(exact.body).toMatchObject({
@@ -1182,7 +1190,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
     const reusedKey = await request(createApp())
       .post('/api/v1/reservations')
       .set('Idempotency-Key', 'route-success')
-      .send({ ...createRequest(allowed), event_date: '2026-10-12' });
+      .send({ ...createRequest(allowed), event_date: reservationTestDate(2) });
     expect(reusedKey.status).toBe(409);
     expectSafeError(reusedKey.body, 'IDEMPOTENCY_KEY_REUSED');
 
@@ -1306,10 +1314,10 @@ describe('RSV-021/022 staff reservation creation', async () => {
       },
       variant_id: seed.variantId as StaffReservationCreateRequest['variant_id'],
       requested_interval: {
-        start: '2026-10-10T02:00:00.000Z',
-        end: '2026-10-13T02:00:00.000Z',
+        start: reservationTestInstant(0),
+        end: reservationTestInstant(3),
       },
-      event_date: '2026-10-11',
+      event_date: reservationTestDate(1),
       fulfillment_method: 'delivery',
       payment_method_id: seed.paymentMethodId as StaffReservationCreateRequest['payment_method_id'],
     };
@@ -1428,11 +1436,19 @@ describe('RSV-021/022 staff reservation creation', async () => {
             price_snapshot, currency, rental_total_minor, security_required_minor, due_now_minor,
             hold_acquired_at, hold_expires_at)
          VALUES ($1, $2, $3, $4, $5, 'RSV-EXPIRED-SEED', 'held',
-                 '2026-10-10T02:00:00Z', '2026-10-12T04:00:00Z', 'Asia/Manila',
+                 $6::timestamptz, $7::timestamptz, 'Asia/Manila',
                  '{"fulfillment_method":"pickup"}'::jsonb, '{}'::jsonb, 'PHP', 150000, 50000, 200000,
                  statement_timestamp() - interval '20 minutes', statement_timestamp() - interval '5 minutes')
          RETURNING id`,
-        [seed.tenantId, seed.branchId, seed.storefrontId, seed.policySnapshotId, seed.paymentMethodId],
+        [
+          seed.tenantId,
+          seed.branchId,
+          seed.storefrontId,
+          seed.policySnapshotId,
+          seed.paymentMethodId,
+          reservationTestInstant(0),
+          reservationTestInstant(2, '04:00:00.000Z'),
+        ],
       );
       const reservationId = requireRow(reservation.rows, 'expired reservation').id;
       const line = await client.query<{ id: string }>(
@@ -1448,8 +1464,15 @@ describe('RSV-021/022 staff reservation creation', async () => {
         `INSERT INTO asset_allocation
            (tenant_id, branch_id, asset_id, reservation_line_id, kind, period, is_blocking)
          VALUES ($1, $2, $3, $4, 'reservation_hold',
-                 tstzrange('2026-10-10T01:00:00Z', '2026-10-13T04:00:00Z', '[)'), true)`,
-        [seed.tenantId, seed.branchId, seed.assetId, lineId],
+                 tstzrange($5::timestamptz, $6::timestamptz, '[)'), true)`,
+        [
+          seed.tenantId,
+          seed.branchId,
+          seed.assetId,
+          lineId,
+          reservationTestInstant(0, '01:00:00.000Z'),
+          reservationTestInstant(3, '04:00:00.000Z'),
+        ],
       );
       return reservationId;
     });
@@ -1480,10 +1503,10 @@ describe('RSV-021/022 staff reservation creation', async () => {
             price_snapshot, currency, rental_total_minor, security_required_minor, due_now_minor,
             hold_acquired_at, hold_expires_at)
          SELECT $1, $2, $3, $4, $5, requested.reference_code, 'held',
-                '2026-10-10T02:00:00Z', '2026-10-12T04:00:00Z', 'Asia/Manila',
+                $6::timestamptz, $7::timestamptz, 'Asia/Manila',
                 '{"fulfillment_method":"pickup"}'::jsonb, '{}'::jsonb, 'PHP', 150000, 50000, 200000,
                 statement_timestamp() - interval '20 minutes', statement_timestamp() - interval '5 minutes'
-           FROM unnest($6::text[]) AS requested(reference_code)
+           FROM unnest($8::text[]) AS requested(reference_code)
          RETURNING id, reference_code`,
         [
           seed.tenantId,
@@ -1491,6 +1514,8 @@ describe('RSV-021/022 staff reservation creation', async () => {
           seed.storefrontId,
           seed.policySnapshotId,
           seed.paymentMethodId,
+          reservationTestInstant(0),
+          reservationTestInstant(2, '04:00:00.000Z'),
           referenceCodes,
         ],
       );
@@ -1526,13 +1551,15 @@ describe('RSV-021/022 staff reservation creation', async () => {
         `INSERT INTO asset_allocation
            (tenant_id, branch_id, asset_id, reservation_line_id, kind, period, is_blocking)
          SELECT $1, $2, requested.asset_id, requested.line_id, 'reservation_hold',
-                tstzrange('2026-10-10T01:00:00Z', '2026-10-13T04:00:00Z', '[)'), true
+                tstzrange($5::timestamptz, $6::timestamptz, '[)'), true
            FROM unnest($3::uuid[], $4::uuid[]) AS requested(asset_id, line_id)`,
         [
           seed.tenantId,
           seed.branchId,
           lineRows.map((line) => line.assetId),
           lineRows.map((line) => line.lineId),
+          reservationTestInstant(0, '01:00:00.000Z'),
+          reservationTestInstant(3, '04:00:00.000Z'),
         ],
       );
 

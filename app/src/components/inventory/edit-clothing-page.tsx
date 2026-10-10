@@ -35,6 +35,7 @@ import {
 
 import {
   MAX_CLOTHING_PHOTOS,
+  normalizeVariantFitRange,
   type CatalogueCategory,
   type ClothingDetail,
   type CreateClothingVariantRequest,
@@ -1373,6 +1374,7 @@ function VariantEditor({
               maxLength={120}
               disabled={disabled}
               onChange={(event) => onChange({ fitRange: event.target.value })}
+              onBlur={() => onChange({ fitRange: normalizeVariantFitRange(variant.fitRange) })}
               placeholder="e.g. Small–XL"
             />
           </Field>
@@ -1869,8 +1871,9 @@ function buildVariantPatch(
     if (!sizeLabel) throw new Error(`Enter a size label for ${initial.sku}.`);
     if (sizeLabel !== initial.size_label) patch.size_label = sizeLabel;
   }
-  if (initial.fit_range !== (draft.fitRange.trim() || null)) {
-    patch.fit_range = draft.fitRange.trim() || null;
+  const fitRange = normalizeVariantFitRange(draft.fitRange) || null;
+  if (initial.fit_range !== fitRange) {
+    patch.fit_range = fitRange;
   }
 
   const color = draft.color.trim() || null;
@@ -1979,7 +1982,7 @@ function variantToDraft(variant: ClothingVariantDetail): VariantDraft {
     measurementMode: variant.measurement_mode,
     measurementGuideId: variant.measurement_guide_id,
     measurementUnit: variant.measurement_unit,
-    fitRange: variant.fit_range ?? "",
+    fitRange: variant.fit_range ? normalizeVariantFitRange(variant.fit_range) : "",
     measurements: Object.fromEntries(
       editableEntries.map(([key, value]) => [key, typeof value === "number" ? String(value) : value.text])
     ),

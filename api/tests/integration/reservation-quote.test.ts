@@ -10,6 +10,11 @@ import {
   requireTestDatabaseUrl,
   resetTestDatabase,
 } from './helpers/test-db.js';
+import {
+  nextUsSpringForwardDate,
+  reservationTestDate,
+  reservationTestInstant,
+} from './helpers/reservation-dates.js';
 
 const adminUrl = requireTestDatabaseUrl();
 
@@ -80,8 +85,8 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
       staffRequest(seed, {
         fulfillment_method: 'delivery',
         requested_interval: {
-          start: '2026-10-10T02:00:00.000Z',
-          end: '2026-10-14T02:00:00.000Z',
+          start: reservationTestInstant(0),
+          end: reservationTestInstant(4),
         },
       }),
     );
@@ -92,12 +97,12 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
       policy_snapshot_id: seed.policySnapshotId,
       payment_method_id: seed.paymentMethodId,
       variant_id: seed.variantId,
-      pickup_at: '2026-10-10T02:00:00.000Z',
-      due_at: '2026-10-14T02:00:00.000Z',
+      pickup_at: reservationTestInstant(0),
+      due_at: reservationTestInstant(4),
       timezone_snapshot: 'Asia/Manila',
       blocked_interval: {
-        start: '2026-10-10T02:00:00.000Z',
-        end: '2026-10-15T02:00:00.000Z',
+        start: reservationTestInstant(0),
+        end: reservationTestInstant(5),
       },
       capacity: { guaranteed: false },
       line_snapshot: {
@@ -181,8 +186,8 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
         staffRequest(seed, {
           fulfillment_method: 'pickup',
           requested_interval: {
-            start: '2026-10-10T02:00:00.000Z',
-            end: '2026-10-11T09:00:00.000Z',
+            start: reservationTestInstant(0),
+            end: reservationTestInstant(1, '09:00:00.000Z'),
           },
         }),
       ),
@@ -192,14 +197,14 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
         'This clothing variant is a 3-day rental. The pickup date counts as Day 1, so the return date must be at least 2 days after the pickup date.',
     });
 
-    // Owner example: a 4 PM pickup on Oct 10 returned at 9 AM on Oct 12 is the 3-day package.
+    // Owner example: a 4 PM pickup returned at 9 AM two local dates later is the 3-day package.
     const quote = await getStaffReservationQuote(
       reservationContext(seed),
       staffRequest(seed, {
         fulfillment_method: 'pickup',
         requested_interval: {
-          start: '2026-10-10T08:00:00.000Z',
-          end: '2026-10-12T01:00:00.000Z',
+          start: reservationTestInstant(0, '08:00:00.000Z'),
+          end: reservationTestInstant(2, '01:00:00.000Z'),
         },
       }),
     );
@@ -262,19 +267,28 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
     const base = staffRequest(seed, {
       fulfillment_method: 'pickup',
       requested_interval: {
-        start: '2026-10-10T02:00:00.000Z',
-        end: '2026-10-11T02:00:00.000Z',
+        start: reservationTestInstant(0),
+        end: reservationTestInstant(1),
       },
     });
 
     await expect(
-      getStaffReservationQuote(reservationContext(seed), { ...base, event_date: '2026-10-09' }),
+      getStaffReservationQuote(reservationContext(seed), {
+        ...base,
+        event_date: reservationTestDate(-1),
+      }),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
     await expect(
-      getStaffReservationQuote(reservationContext(seed), { ...base, event_date: '2026-10-12' }),
+      getStaffReservationQuote(reservationContext(seed), {
+        ...base,
+        event_date: reservationTestDate(2),
+      }),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
     await expect(
-      getStaffReservationQuote(reservationContext(seed), { ...base, event_date: '2026-10-11' }),
+      getStaffReservationQuote(reservationContext(seed), {
+        ...base,
+        event_date: reservationTestDate(1),
+      }),
     ).resolves.toMatchObject({ pickup_at: base.requested_interval.start, due_at: base.requested_interval.end });
   });
 
@@ -298,16 +312,16 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
 
     await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       await addMaintenanceBlock(client, seed, beforeAsset, {
-        start: '2026-10-08T02:00:00.000Z',
-        end: '2026-10-10T02:00:00.000Z',
+        start: reservationTestInstant(-2),
+        end: reservationTestInstant(0),
       });
       await addMaintenanceBlock(client, seed, afterAsset, {
-        start: '2026-10-12T04:00:00.000Z',
-        end: '2026-10-13T04:00:00.000Z',
+        start: reservationTestInstant(2, '04:00:00.000Z'),
+        end: reservationTestInstant(3, '04:00:00.000Z'),
       });
       await addMaintenanceBlock(client, seed, overlapAsset, {
-        start: '2026-10-12T03:59:00.000Z',
-        end: '2026-10-13T04:00:00.000Z',
+        start: reservationTestInstant(2, '03:59:00.000Z'),
+        end: reservationTestInstant(3, '04:00:00.000Z'),
       });
     });
 
@@ -316,15 +330,15 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
       staffRequest(seed, {
         fulfillment_method: 'pickup',
         requested_interval: {
-          start: '2026-10-10T02:00:00.000Z',
-          end: '2026-10-12T02:00:00.000Z',
+          start: reservationTestInstant(0),
+          end: reservationTestInstant(2),
         },
       }),
     );
 
     expect(quote.blocked_interval).toEqual({
-      start: '2026-10-10T02:00:00.000Z',
-      end: '2026-10-12T04:00:00.000Z',
+      start: reservationTestInstant(0),
+      end: reservationTestInstant(2, '04:00:00.000Z'),
     });
     expect(quote.capacity.candidate_asset_ids).toEqual([beforeAsset, afterAsset].sort());
     expect(quote.capacity.candidate_asset_ids).not.toContain(overlapAsset);
@@ -347,25 +361,34 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
       deliveryRules: {},
     });
 
-    // 01:30 EST on Mar 14 -> 01:30 EDT on Mar 15 is 23 elapsed hours because DST springs forward,
-    // but it is two local rental dates, so a daily rate is charged twice.
+    const springForwardDate = nextUsSpringForwardDate();
+    const dayAfterSpringForward = new Date(
+      Date.parse(`${springForwardDate}T00:00:00.000Z`) + 24 * 60 * 60 * 1000,
+    )
+      .toISOString()
+      .slice(0, 10);
+    const pickupAt = `${springForwardDate}T06:30:00.000Z`;
+    const dueAt = `${dayAfterSpringForward}T05:30:00.000Z`;
+    const blockedUntil = `${dayAfterSpringForward}T06:30:00.000Z`;
+    // 01:30 EST -> 01:30 EDT is 23 elapsed hours because DST springs forward, but it is two
+    // local rental dates, so a daily rate is charged twice.
     const quote = await getStaffReservationQuote(
       reservationContext(seed),
       staffRequest(seed, {
         fulfillment_method: 'pickup',
         requested_interval: {
-          start: '2027-03-14T06:30:00.000Z',
-          end: '2027-03-15T05:30:00.000Z',
+          start: pickupAt,
+          end: dueAt,
         },
       }),
     );
 
     expect(quote.timezone_snapshot).toBe('America/New_York');
-    expect(quote.pickup_at).toBe('2027-03-14T06:30:00.000Z');
-    expect(quote.due_at).toBe('2027-03-15T05:30:00.000Z');
+    expect(quote.pickup_at).toBe(pickupAt);
+    expect(quote.due_at).toBe(dueAt);
     expect(quote.blocked_interval).toEqual({
-      start: '2027-03-14T06:30:00.000Z',
-      end: '2027-03-15T06:30:00.000Z',
+      start: pickupAt,
+      end: blockedUntil,
     });
     expect(quote.price_snapshot).toMatchObject({
       rental_total_minor: '60000',
@@ -395,8 +418,8 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
     const request = staffRequest(seed, {
       fulfillment_method: 'pickup',
       requested_interval: {
-        start: '2026-11-01T02:00:00.000Z',
-        end: '2026-11-02T02:00:00.000Z',
+        start: reservationTestInstant(20),
+        end: reservationTestInstant(21),
       },
     });
 
@@ -430,8 +453,8 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
     const request = staffRequest(seed, {
       fulfillment_method: 'pickup',
       requested_interval: {
-        start: '2026-12-01T02:00:00.000Z',
-        end: '2026-12-02T02:00:00.000Z',
+        start: reservationTestInstant(50),
+        end: reservationTestInstant(51),
       },
     });
 

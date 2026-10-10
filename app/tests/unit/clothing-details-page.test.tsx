@@ -184,6 +184,22 @@ describe("ClothingDetailsPage", () => {
     expect(screen.getByText(/Bust: Flexible fit · Waist: 72 cm · Length: 61 cm · Hips \(legacy, read-only\): 96 cm/)).toBeVisible();
   });
 
+  it("renders legacy fit ranges with a single Fits label", async () => {
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: {
+        ...detail,
+        variants: [{ ...detail.variants[0]!, fit_range: "Fits Small to Large" }],
+      },
+      requestId: "req-detail-legacy-fit-range",
+    });
+
+    render(<ClothingDetailsPage productId={productId} />);
+
+    const fitRange = await screen.findByText(/Fits Small to Large/);
+    expect(fitRange).toHaveTextContent(/^Fits Small to Large · Bust:/);
+    expect(screen.queryByText(/Fits Fits Small to Large/)).not.toBeInTheDocument();
+  });
+
   it("renders signed product images, switches gallery photos, and falls back when an image fails", async () => {
     api.getCatalogueClothingDetail.mockResolvedValueOnce({
       data: {

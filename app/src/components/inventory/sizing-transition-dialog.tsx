@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   changeClothingSizingModeRequest,
+  normalizeVariantFitRange,
   type ChangeClothingSizingModeResponse,
   type ChangeClothingSizingModeRequest,
   type ClothingVariantDetail,
@@ -265,7 +266,7 @@ function TransitionVariantEditor({
         {isFreeSize ? (
           <label className="block">
             <span className="mb-2 block text-sm font-medium text-dashboard-navy">Fits sizes (optional)</span>
-            <Input aria-label="Sizing transition fit range" value={row.fitRange} maxLength={120} disabled={disabled} onChange={(event) => onChange({ fitRange: event.target.value })} placeholder="e.g. Small–XL" />
+            <Input aria-label="Sizing transition fit range" value={row.fitRange} maxLength={120} disabled={disabled} onChange={(event) => onChange({ fitRange: event.target.value })} onBlur={() => onChange({ fitRange: normalizeVariantFitRange(row.fitRange) })} placeholder="e.g. Small–XL" />
           </label>
         ) : null}
 
@@ -362,7 +363,7 @@ function createTransitionDraft(variant: ClothingVariantDetail | null, targetMode
     measurementMode: variant?.measurement_mode ?? "none",
     measurementGuideId: variant?.measurement_guide_id ?? null,
     measurementUnit: variant?.measurement_unit ?? "cm",
-    fitRange: targetMode === "free_size" ? variant?.fit_range ?? "" : "",
+    fitRange: targetMode === "free_size" && variant?.fit_range ? normalizeVariantFitRange(variant.fit_range) : "",
     measurements: Object.fromEntries(editableMeasurements.map(([key, value]) => [key, typeof value === "number" ? String(value) : value.text])),
     measurementKinds: Object.fromEntries(editableMeasurements.map(([key, value]) => [key, typeof value === "number" ? "exact" : "fit_note"])),
     legacyHips,
@@ -394,7 +395,7 @@ function buildSizingModeRequest(
     const measurement = buildTransitionMeasurement(row, defaultGuide, index);
     return {
       size_label: sizeLabel,
-      ...(mode === "free_size" ? { fit_range: row.fitRange.trim() || null } : {}),
+      ...(mode === "free_size" ? { fit_range: normalizeVariantFitRange(row.fitRange) || null } : {}),
       color_label: row.color.trim() || null,
       measurement_mode: measurement.measurement_mode,
       measurement_guide_id: measurement.measurement_guide_id,

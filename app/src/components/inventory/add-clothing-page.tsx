@@ -31,6 +31,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   MAX_CLOTHING_PHOTOS,
   createClothingRequest,
+  normalizeVariantFitRange,
   type CatalogueCategory,
   type CreateClothingRequest,
   type MeasurementGuide,
@@ -649,7 +650,7 @@ export function AddClothingPage() {
         }
         return {
           size_label: sizeLabel,
-          fit_range: sizeLabel === null ? fitRanges[target].trim() || null : null,
+          fit_range: sizeLabel === null ? normalizeVariantFitRange(fitRanges[target]) || null : null,
           measurement_mode: mode,
           measurement_unit: measurementUnit,
           measurements: values,
@@ -657,7 +658,7 @@ export function AddClothingPage() {
       }
       return {
         size_label: sizeLabel,
-        fit_range: sizeLabel === null ? fitRanges[target].trim() || null : null,
+        fit_range: sizeLabel === null ? normalizeVariantFitRange(fitRanges[target]) || null : null,
         measurement_mode: mode,
         measurement_unit: measurementUnit,
         measurements: {},
@@ -1078,6 +1079,10 @@ export function AddClothingPage() {
                         setFitRanges((current) => ({ ...current, FREE_SIZE: event.target.value }));
                         markDirty();
                       }}
+                      onBlur={() => setFitRanges((current) => ({
+                        ...current,
+                        FREE_SIZE: normalizeVariantFitRange(current.FREE_SIZE),
+                      }))}
                       placeholder="e.g. Small–XL"
                       className="max-w-md"
                     />
