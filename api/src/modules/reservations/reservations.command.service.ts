@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 
 import {
+  MAX_RESERVATION_LINES,
   staffReservationCreateRequest,
   staffReservationCreateResponse,
   type StaffReservationCreateRequest,
@@ -35,6 +36,7 @@ import {
   createReservationCustomer,
   createReservationGraph,
   fillReservationCustomerAddress,
+  type NewReservationLine,
   lockEligibleReservationAssets,
   readReservationCustomerForCreate,
   RESERVATION_HOLD_RECLAIM_BATCH_SIZE,
@@ -86,12 +88,14 @@ export async function createStaffReservationCommand(
 
     let savepointOpen = false;
     try {
-      const { quote, assetId } = await claimReservationAsset(client, {
+      const { booking, assetIds } = await claimReservationAssets(client, {
         tenantId: context.tenantId,
         branchId: context.branchId,
         requestId: context.requestId,
         request,
+        variantIds: [request.variant_id, ...(request.additional_variant_ids ?? [])],
       });
+      const quote = booking.first;
 
       await client.query(`SAVEPOINT ${CREATE_EFFECTS_SAVEPOINT}`);
       savepointOpen = true;
@@ -104,8 +108,8 @@ export async function createStaffReservationCommand(
         actor: { kind: 'staff', key: context.principalId },
         eventDate: request.event_date ?? null,
         fulfillmentMethod: request.fulfillment_method,
-        quote,
-        assetId,
+        booking,
+        assetIds,
         customer,
       });
 
@@ -124,9 +128,9 @@ export async function createStaffReservationCommand(
           timezone_snapshot: quote.timezone_snapshot,
           ...(request.event_date ? { event_date: request.event_date } : {}),
           price_snapshot: {
-            rental_total_minor: quote.price_snapshot.rental_total_minor,
-            security_required_minor: quote.price_snapshot.security_required_minor,
-            due_now_minor: quote.price_snapshot.due_now_minor,
+            rental_total_minor: booking.price_snapshot.rental_total_minor,
+            security_required_minor: booking.price_snapshot.security_required_minor,
+            due_now_minor: booking.price_snapshot.due_now_minor,
             currency: 'PHP',
           },
           hold_expires_at: graph.hold_expires_at.toISOString(),
@@ -173,31 +177,72 @@ export async function createStaffReservationCommand(
 }
 
 export type ReservationQuote = Awaited<ReturnType<typeof resolveReservationQuote>>;
+type ReservationQuoteRequest = Parameters<typeof resolveReservationQuote>[1]['request'];
 
 /**
- * Capacity step shared by staff and guest booking: quote, lock the size's eligible garments,
- * reclaim expired holds with database time, and choose a garment free for the blocked interval.
- * The chosen garment is only a promise once `createHeldReservation` inserts its allocation.
+ * One booking of one or more garments for the same dates: a quote per garment plus what the
+ * renter pays in total. Dates, policy, payment method and delivery are shared, so delivery is
+ * charged once per booking, not per garment.
  */
-export async function claimReservationAsset(
+export interface ReservationBookingQuote {
+  lines: ReservationQuote[];
+  /** The first garment's quote, which carries the booking-level facts every line shares. */
+  first: ReservationQuote;
+  price_snapshot: ReservationQuote['price_snapshot'];
+}
+
+const POSTGRES_INT_MAX = 2_147_483_647n;
+
+export async function resolveReservationBookingQuote(
   client: PoolClient,
-  input: {
-    tenantId: string;
-    branchId: string;
-    requestId: string;
-    request: Parameters<typeof resolveReservationQuote>[1]['request'];
-  },
-): Promise<{ quote: ReservationQuote; assetId: string }> {
-  const quote = await resolveReservationQuote(client, {
-    tenantId: input.tenantId,
-    branchId: input.branchId,
-    request: input.request,
-  });
+  input: { tenantId: string; branchId: string; request: ReservationQuoteRequest; variantIds: readonly string[] },
+): Promise<ReservationBookingQuote> {
+  if (input.variantIds.length === 0 || input.variantIds.length > MAX_RESERVATION_LINES) {
+    throw new ValidationError(`A booking holds from 1 to ${MAX_RESERVATION_LINES} garments.`);
+  }
+  const lines: ReservationQuote[] = [];
+  for (const variantId of input.variantIds) {
+    lines.push(
+      await resolveReservationQuote(client, {
+        tenantId: input.tenantId,
+        branchId: input.branchId,
+        request: { ...input.request, variant_id: variantId as ReservationQuoteRequest['variant_id'] },
+      }),
+    );
+  }
+  const [first] = lines;
+  if (!first) throw new ValidationError('A booking needs at least one garment.');
+  const rental = lines.reduce((sum, line) => sum + BigInt(line.price_snapshot.rental_total_minor), 0n);
+  const deposit = lines.reduce((sum, line) => sum + BigInt(line.price_snapshot.security_required_minor), 0n);
+  const dueNow = rental + deposit + BigInt(first.price_snapshot.delivery_total_minor);
+  if (dueNow > POSTGRES_INT_MAX) throw new StateConflictError('This booking total is too large to record.');
+  return {
+    lines,
+    first,
+    price_snapshot: {
+      ...first.price_snapshot,
+      rental_total_minor: rental.toString(),
+      security_required_minor: deposit.toString(),
+      due_now_minor: dueNow.toString(),
+    },
+  };
+}
+
+/**
+ * Capacity step shared by staff and guest booking: quote every garment, lock all their eligible
+ * pieces in one UUID order, reclaim expired holds with database time, and choose a distinct free
+ * piece per garment. The choices are only a promise once `createHeldReservation` inserts them.
+ */
+export async function claimReservationAssets(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; requestId: string; request: ReservationQuoteRequest; variantIds: readonly string[] },
+): Promise<{ booking: ReservationBookingQuote; assetIds: string[] }> {
+  const booking = await resolveReservationBookingQuote(client, input);
 
   const lockedAssetIds = await lockEligibleReservationAssets(client, {
     tenantId: input.tenantId,
     branchId: input.branchId,
-    variantIds: [input.request.variant_id],
+    variantIds: input.variantIds,
   });
   if (lockedAssetIds.length === 0) {
     throw new CapacityConflictError('No ready garment is available for this reservation.');
@@ -210,18 +255,27 @@ export async function claimReservationAsset(
     assetIds: lockedAssetIds,
   });
 
-  const assetId = await chooseAvailableLockedAsset(client, {
-    tenantId: input.tenantId,
-    branchId: input.branchId,
-    variantId: input.request.variant_id,
-    assetIds: lockedAssetIds,
-    blockedStart: quote.blocked_interval.start,
-    blockedEnd: quote.blocked_interval.end,
-  });
-  if (!assetId) {
-    throw new CapacityConflictError('The requested garment is no longer available for those dates.');
+  const assetIds: string[] = [];
+  for (const line of booking.lines) {
+    const assetId = await chooseAvailableLockedAsset(client, {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      variantId: line.variant_id,
+      // A piece already chosen for an earlier line of this booking is not free for the next one.
+      assetIds: lockedAssetIds.filter((id) => !assetIds.includes(id)),
+      blockedStart: line.blocked_interval.start,
+      blockedEnd: line.blocked_interval.end,
+    });
+    if (!assetId) {
+      throw new CapacityConflictError(
+        booking.lines.length === 1
+          ? 'The requested garment is no longer available for those dates.'
+          : `${line.line_snapshot.name} is no longer available for those dates.`,
+      );
+    }
+    assetIds.push(assetId);
   }
-  return { quote, assetId };
+  return { booking, assetIds };
 }
 
 /**
@@ -255,7 +309,7 @@ export async function reclaimExpiredHoldsOnLockedAssets(
   }
 }
 
-/** Inserts the held reservation, its exclusion-protected allocation, audit, and outbox event. */
+/** Inserts the held reservation, one line and exclusion-protected allocation per garment, audit, and outbox event. */
 export async function createHeldReservation(
   client: PoolClient,
   input: {
@@ -265,36 +319,59 @@ export async function createHeldReservation(
     actor: { kind: 'staff' | 'guest'; key: string };
     eventDate: string | null;
     fulfillmentMethod: StaffReservationCreateRequest['fulfillment_method'];
-    quote: ReservationQuote;
-    assetId: string;
+    booking: ReservationBookingQuote;
+    assetIds: string[];
     customer: ReservationCustomerSnapshotRow | null;
   },
 ): Promise<{ graph: Awaited<ReturnType<typeof createReservationGraph>>; referenceCode: string }> {
+  const { booking } = input;
+  const first = booking.first;
+  if (input.assetIds.length !== booking.lines.length) throw new Error('Each garment needs exactly one chosen piece.');
   const reservationId = randomUUID();
-  const reservationLineId = randomUUID();
-  const allocationId = randomUUID();
   const paymentId = randomUUID();
   const referenceCode = `RSV-${reservationId.toUpperCase()}`;
-  const rentalTotalMinor = Number(input.quote.price_snapshot.rental_total_minor);
-  const securityRequiredMinor = Number(input.quote.price_snapshot.security_required_minor);
-  const dueNowMinor = Number(input.quote.price_snapshot.due_now_minor);
+
+  const lines: NewReservationLine[] = booking.lines.map((quote, index) => ({
+    reservationLineId: randomUUID(),
+    allocationId: randomUUID(),
+    variantId: quote.variant_id,
+    nameSnapshot: quote.line_snapshot.name,
+    measurementsSnapshot: quote.line_snapshot.measurements,
+    fitRangeSnapshot: quote.line_snapshot.fit_range,
+    measurementUnitSnapshot: quote.line_snapshot.measurement_unit,
+    pricingSnapshot: {
+      rental_minor: quote.price_snapshot.rental_total_minor,
+      deposit_minor: quote.price_snapshot.security_required_minor,
+      currency: 'PHP',
+      pricing_mode: quote.price_snapshot.pricing_mode,
+      included_duration_minutes: quote.price_snapshot.included_duration_minutes,
+      extra_day_price_minor: quote.price_snapshot.extra_day_price_minor,
+      extra_day_count: quote.price_snapshot.extra_day_count,
+      rental_day_basis: quote.price_snapshot.rental_day_basis,
+      included_rental_days: quote.price_snapshot.included_rental_days,
+      rental_day_count: quote.price_snapshot.rental_day_count,
+    },
+    rentalMinor: Number(quote.price_snapshot.rental_total_minor),
+    depositMinor: Number(quote.price_snapshot.security_required_minor),
+    assetId: input.assetIds[index] as string,
+    blockedStart: quote.blocked_interval.start,
+    blockedEnd: quote.blocked_interval.end,
+  }));
 
   const graph = await createReservationGraph(client, {
     reservationId,
-    reservationLineId,
-    allocationId,
     paymentId,
     tenantId: input.tenantId,
     branchId: input.branchId,
     customerId: input.customer?.id ?? null,
-    storefrontId: input.quote.storefront_id,
-    policySnapshotId: input.quote.policy_snapshot_id,
-    paymentMethodId: input.quote.payment_method_id,
+    storefrontId: first.storefront_id,
+    policySnapshotId: first.policy_snapshot_id,
+    paymentMethodId: first.payment_method_id,
     referenceCode,
     eventDate: input.eventDate,
-    pickupAt: input.quote.pickup_at,
-    dueAt: input.quote.due_at,
-    timezoneSnapshot: input.quote.timezone_snapshot,
+    pickupAt: first.pickup_at,
+    dueAt: first.due_at,
+    timezoneSnapshot: first.timezone_snapshot,
     customerSnapshot: input.customer
       ? {
           full_name: input.customer.full_name,
@@ -303,33 +380,15 @@ export async function createHeldReservation(
           address: input.customer.address,
         }
       : null,
-    deliverySnapshot: input.quote.delivery_snapshot,
-    priceSnapshot: input.quote.price_snapshot,
-    rentalTotalMinor,
-    securityRequiredMinor,
-    dueNowMinor,
-    variantId: input.quote.variant_id,
-    lineNameSnapshot: input.quote.line_snapshot.name,
-    measurementsSnapshot: input.quote.line_snapshot.measurements,
-    fitRangeSnapshot: input.quote.line_snapshot.fit_range,
-    measurementUnitSnapshot: input.quote.line_snapshot.measurement_unit,
-    pricingSnapshot: {
-      rental_minor: input.quote.price_snapshot.rental_total_minor,
-      deposit_minor: input.quote.price_snapshot.security_required_minor,
-      currency: 'PHP',
-      pricing_mode: input.quote.price_snapshot.pricing_mode,
-      included_duration_minutes: input.quote.price_snapshot.included_duration_minutes,
-      extra_day_price_minor: input.quote.price_snapshot.extra_day_price_minor,
-      extra_day_count: input.quote.price_snapshot.extra_day_count,
-      rental_day_basis: input.quote.price_snapshot.rental_day_basis,
-      included_rental_days: input.quote.price_snapshot.included_rental_days,
-      rental_day_count: input.quote.price_snapshot.rental_day_count,
-    },
-    assetId: input.assetId,
-    blockedStart: input.quote.blocked_interval.start,
-    blockedEnd: input.quote.blocked_interval.end,
+    deliverySnapshot: first.delivery_snapshot,
+    priceSnapshot: booking.price_snapshot,
+    rentalTotalMinor: Number(booking.price_snapshot.rental_total_minor),
+    securityRequiredMinor: Number(booking.price_snapshot.security_required_minor),
+    dueNowMinor: Number(booking.price_snapshot.due_now_minor),
+    lines,
   });
 
+  const variantIds = booking.lines.map((quote) => quote.variant_id);
   await appendReservationAuditEvent(client, {
     tenantId: input.tenantId,
     actorKind: input.actor.kind,
@@ -340,8 +399,9 @@ export async function createHeldReservation(
     redactedSummary: {
       status: 'held',
       branch_id: input.branchId,
-      variant_id: input.quote.variant_id,
-      asset_id: input.assetId,
+      variant_id: first.variant_id,
+      asset_id: input.assetIds[0],
+      ...(variantIds.length > 1 ? { variant_ids: variantIds, asset_ids: input.assetIds } : {}),
       fulfillment_method: input.fulfillmentMethod,
     },
     requestId: input.requestId,
@@ -354,8 +414,9 @@ export async function createHeldReservation(
       reservationId: graph.reservation_id,
       reservationVersion: graph.version,
       branchId: input.branchId,
-      variantId: input.quote.variant_id,
-      assetId: input.assetId,
+      variantId: first.variant_id,
+      assetId: input.assetIds[0],
+      ...(variantIds.length > 1 ? { variantIds, assetIds: input.assetIds } : {}),
     },
   });
   return { graph, referenceCode };

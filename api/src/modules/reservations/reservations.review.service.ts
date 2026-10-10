@@ -972,12 +972,12 @@ function isImmutableAcceptedReceipt(receipt: LockedReservationReceiptRow): boole
 function assertCurrentBlockingAllocation(
   allocations: Awaited<ReturnType<typeof lockReservationAllocationsForReview>>,
 ): void {
+  // A booking may hold several garments; every one must still be a current blocking hold.
   if (
-    allocations.length !== 1 ||
-    allocations[0]?.kind !== 'reservation_hold' ||
-    allocations[0].is_blocking !== true
+    allocations.length === 0 ||
+    allocations.some((allocation) => allocation.kind !== 'reservation_hold' || allocation.is_blocking !== true)
   ) {
-    throw new StateConflictError('Reservation does not have exactly one current blocking hold allocation.');
+    throw new StateConflictError('Reservation garments are not all current blocking holds.');
   }
 }
 
@@ -1002,7 +1002,7 @@ async function expireLockedReview(
       tenantId: context.tenantId,
       reservationId,
     });
-    if (released !== 1) {
+    if (released < 1) {
       throw new StateConflictError('Reservation expiry could not release its current allocation.');
     }
     await appendReservationAuditEvent(client, {

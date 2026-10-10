@@ -8,6 +8,7 @@ import {
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
+import { custodyBusinessKey } from './reservations.pickup.service.js';
 import {
   AssetUnavailableError,
   IdempotencyKeyReusedError,
@@ -95,7 +96,7 @@ export async function returnReservationByStaff(
         branchId: context.branchId,
         reservationId,
       });
-      const allocation = requireReturnAllocation(context, allocations);
+      const returning = requireReturnAllocations(context, allocations);
 
       await client.query(`SAVEPOINT ${RETURN_SAVEPOINT}`);
       savepointOpen = true;
@@ -110,51 +111,64 @@ export async function returnReservationByStaff(
         throw new StateConflictError('Reservation return lost a concurrent state change.');
       }
 
-      const returnedAsset = await markPhysicalAssetReturned(client, {
-        tenantId: context.tenantId,
-        branchId: context.branchId,
-        assetId: allocation.asset_id,
-        assetVersion: allocation.asset_version,
-        recoveryManagedReadiness:
-          reservation.database_now.getTime() <= reservation.due_at.getTime() &&
-          allocation.blocked_end.getTime() > reservation.database_now.getTime() &&
-          allocation.blocked_end.getTime() > reservation.due_at.getTime(),
-        ...(request.condition_note ? { conditionNote: request.condition_note } : {}),
-      });
-      if (!returnedAsset) {
-        throw new StateConflictError('The garment custody changed before return could be recorded.');
-      }
+      // Every garment comes back together; each one gets its own custody fact and readiness.
+      const returned: Array<{ assetId: string; custodyEventId: string; occurredAt: Date; readiness: string }> = [];
+      let disruptionsAffected = 0;
+      for (const allocation of returning) {
+        const returnedAsset = await markPhysicalAssetReturned(client, {
+          tenantId: context.tenantId,
+          branchId: context.branchId,
+          assetId: allocation.asset_id,
+          assetVersion: allocation.asset_version,
+          recoveryManagedReadiness:
+            reservation.database_now.getTime() <= reservation.due_at.getTime() &&
+            allocation.blocked_end.getTime() > reservation.database_now.getTime() &&
+            allocation.blocked_end.getTime() > reservation.due_at.getTime(),
+          ...(request.condition_note ? { conditionNote: request.condition_note } : {}),
+        });
+        if (!returnedAsset) {
+          throw new StateConflictError('A garment custody changed before return could be recorded.');
+        }
 
-      const custodyEvent = await appendReturnCustodyEvent(client, {
-        tenantId: context.tenantId,
-        branchId: context.branchId,
-        assetId: allocation.asset_id,
-        reservationLineId: allocation.reservation_line_id,
-        actorMembershipId: context.membershipId,
-        businessKey: `reservation:${reservationId}:return`,
-        conditionSnapshot: {
-          condition_note: request.condition_note ?? null,
-          readiness_before: allocation.asset_readiness,
-          readiness_after: returnedAsset.readiness,
-          custody_before: allocation.asset_custody_kind,
-          custody_after: 'at_branch',
-          asset_version_before: allocation.asset_version,
-          asset_version_after: returnedAsset.version,
-        },
-      });
-      if (!custodyEvent) {
-        throw new StateConflictError('Return custody was already recorded for this reservation.');
-      }
+        const custodyEvent = await appendReturnCustodyEvent(client, {
+          tenantId: context.tenantId,
+          branchId: context.branchId,
+          assetId: allocation.asset_id,
+          reservationLineId: allocation.reservation_line_id,
+          actorMembershipId: context.membershipId,
+          businessKey: custodyBusinessKey(reservationId, 'return', allocation, returning.length),
+          conditionSnapshot: {
+            condition_note: request.condition_note ?? null,
+            readiness_before: allocation.asset_readiness,
+            readiness_after: returnedAsset.readiness,
+            custody_before: allocation.asset_custody_kind,
+            custody_after: 'at_branch',
+            asset_version_before: allocation.asset_version,
+            asset_version_after: returnedAsset.version,
+          },
+        });
+        if (!custodyEvent) {
+          throw new StateConflictError('Return custody was already recorded for this reservation.');
+        }
 
-      const disruptionsAffected = await createOrUpdateReturnDisruptions(client, {
-        tenantId: context.tenantId,
-        branchId: context.branchId,
-        assetId: allocation.asset_id,
-        currentReservationLineId: allocation.reservation_line_id,
-        custodyEventId: custodyEvent.id,
-        occurredAt: custodyEvent.occurred_at,
-      });
-      const lateReturn = custodyEvent.occurred_at.getTime() > reservation.due_at.getTime();
+        disruptionsAffected += await createOrUpdateReturnDisruptions(client, {
+          tenantId: context.tenantId,
+          branchId: context.branchId,
+          assetId: allocation.asset_id,
+          currentReservationLineId: allocation.reservation_line_id,
+          custodyEventId: custodyEvent.id,
+          occurredAt: custodyEvent.occurred_at,
+        });
+        returned.push({
+          assetId: allocation.asset_id,
+          custodyEventId: custodyEvent.id,
+          occurredAt: custodyEvent.occurred_at,
+          readiness: returnedAsset.readiness,
+        });
+      }
+      const [firstReturned] = returned;
+      if (!firstReturned) throw new StateConflictError('Reservation return found no garment.');
+      const lateReturn = firstReturned.occurredAt.getTime() > reservation.due_at.getTime();
 
       await appendReservationAuditEvent(client, {
         tenantId: context.tenantId,
@@ -165,11 +179,17 @@ export async function returnReservationByStaff(
         entityId: reservationId,
         redactedSummary: {
           version: newReservationVersion,
-          asset_id: allocation.asset_id,
-          custody_event_id: custodyEvent.id,
+          asset_id: firstReturned.assetId,
+          custody_event_id: firstReturned.custodyEventId,
           late_return: lateReturn,
           disruptions_affected: disruptionsAffected,
-          readiness_after_return: returnedAsset.readiness,
+          readiness_after_return: firstReturned.readiness,
+          ...(returned.length > 1
+            ? {
+                asset_ids: returned.map((item) => item.assetId),
+                custody_event_ids: returned.map((item) => item.custodyEventId),
+              }
+            : {}),
         },
         requestId: context.requestId,
       });
@@ -180,7 +200,8 @@ export async function returnReservationByStaff(
         payload: {
           reservationId,
           reservationVersion: newReservationVersion,
-          assetId: allocation.asset_id,
+          assetId: firstReturned.assetId,
+          ...(returned.length > 1 ? { assetIds: returned.map((item) => item.assetId) } : {}),
           lateReturn,
           disruptionsAffected,
         },
@@ -213,28 +234,24 @@ function assertReturnState(reservation: LockedReservationReviewRow, version: num
   }
 }
 
-function requireReturnAllocation(
+function requireReturnAllocations(
   context: ReservationReturnContext,
   allocations: LockedReservationAllocationRow[],
-): LockedReservationAllocationRow {
-  const allocation = allocations[0];
+): LockedReservationAllocationRow[] {
   if (
-    allocations.length !== 1 ||
-    !allocation ||
-    allocation.kind !== 'reservation_confirmed' ||
-    allocation.is_blocking !== true
+    allocations.length === 0 ||
+    allocations.some((allocation) => allocation.kind !== 'reservation_confirmed' || allocation.is_blocking !== true)
   ) {
-    throw new AssetUnavailableError(
-      'Reservation does not have exactly one active confirmed garment allocation.',
-    );
+    throw new AssetUnavailableError('Reservation garments are not all active confirmed allocations.');
   }
   if (
-    allocation.asset_branch_id !== context.branchId ||
-    allocation.asset_custody_kind !== 'with_customer'
+    allocations.some(
+      (allocation) => allocation.asset_branch_id !== context.branchId || allocation.asset_custody_kind !== 'with_customer',
+    )
   ) {
-    throw new StateConflictError('The allocated garment is not currently recorded with the customer.');
+    throw new StateConflictError('A garment on this reservation is not currently recorded with the customer.');
   }
-  return allocation;
+  return allocations;
 }
 
 async function requireMutationSummary(

@@ -724,6 +724,7 @@ function toReservationListItem(
       deposit_minor: String(row.line_deposit_minor),
       currency: row.line_currency,
     },
+    ...(row.line_count !== null ? { line_count: Number(row.line_count) } : {}),
     fulfillment_method: row.fulfillment_method,
     pickup_at: row.pickup_at.toISOString(),
     due_at: row.due_at.toISOString(),

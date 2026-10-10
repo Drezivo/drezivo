@@ -32,6 +32,7 @@ export interface ReservationListReadRow {
   line_rental_minor: string | number | null;
   line_deposit_minor: string | number | null;
   line_currency: string | null;
+  line_count: string | number | null;
   line_cover_storage_key: string | null;
   line_cover_version_id: string | null;
   fulfillment_method: 'pickup' | 'delivery' | null;
@@ -281,6 +282,7 @@ export async function listReservationsReadModel(
        line.rental_minor AS line_rental_minor,
        line.deposit_minor AS line_deposit_minor,
        line.currency AS line_currency,
+       line.line_count,
        cover_image.storage_key AS line_cover_storage_key,
        cover_image.version_id AS line_cover_version_id,
        r.delivery_snapshot ->> 'fulfillment_method' AS fulfillment_method,
@@ -318,7 +320,8 @@ export async function listReservationsReadModel(
        lower(r.reference_code) AS sort_reference
      FROM reservation r
      LEFT JOIN LATERAL (
-       SELECT rl.id, rl.variant_id, rl.name_snapshot, rl.rental_minor, rl.deposit_minor, rl.currency
+       SELECT rl.id, rl.variant_id, rl.name_snapshot, rl.rental_minor, rl.deposit_minor, rl.currency,
+              count(*) OVER () AS line_count
          FROM reservation_line rl
         WHERE rl.tenant_id = r.tenant_id
           AND rl.reservation_id = r.id

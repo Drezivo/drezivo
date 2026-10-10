@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -419,6 +419,37 @@ describe("NewReservationSheet", () => {
       data: { reservation: { ...heldResponse.reservation, status: "cancelled", version: 2 } },
       requestId: "req-cancel",
     });
+  });
+
+  it("adds a second piece of the same gown only while two pieces are free, then reserves both", async () => {
+    renderSheet();
+    await fillDatesAndSelectProduct();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Reserve" })).not.toBeDisabled());
+
+    fireEvent.click(screen.getByRole("button", { name: /add another dress/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add Emerald Gown" }));
+    const size = within(await screen.findByRole("group", { name: "Emerald Gown size" })).getByRole("button", { name: /M · Emerald/i });
+    // Only one piece exists for these dates, so the same size twice cannot be reserved.
+    fireEvent.click(size);
+    expect(await screen.findByText("Only 1 Emerald Gown in this size is free for these dates.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Reserve" })).toBeDisabled();
+
+    api.getStaffReservationAvailabilityCheck.mockResolvedValue({ data: { ...exactResponse, available_assets: 2 }, requestId: "req-exact-2" });
+    fireEvent.click(screen.getByRole("button", { name: /Remove Emerald Gown from this booking/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add another dress/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add Emerald Gown" }));
+    fireEvent.click(within(await screen.findByRole("group", { name: "Emerald Gown size" })).getByRole("button", { name: /M · Emerald/i }));
+    expect(await screen.findByText("2 free pieces for these dates")).toBeTruthy();
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Reserve" })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
+    await waitFor(() =>
+      expect(api.createStaffReservation).toHaveBeenCalledWith(
+        expect.objectContaining({ variant_id: ids.variant, additional_variant_ids: [ids.variant] }),
+        expect.any(String)
+      )
+    );
+    expect(api.createStaffReservation).toHaveBeenCalledTimes(1);
   });
 
   it("pre-fills Continue from a finished reservation and re-checks the copied dates", async () => {

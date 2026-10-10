@@ -112,45 +112,58 @@ export async function inspectReturnedReservationByStaff(
         branchId: context.branchId,
         reservationId,
       });
-      const allocation = requireReturnedAllocation(context, allocations);
-      const openMaintenance = await lockOpenAssetMaintenance(client, {
-        tenantId: context.tenantId,
-        branchId: context.branchId,
-        assetId: allocation.asset_id,
-      });
-      if (request.readiness === 'ready' && openMaintenance.length > 0) {
-        throw new StateConflictError(
-          'The garment still has open cleaning or maintenance work and cannot be marked ready.',
-        );
+      // The readiness staff record applies to every garment returned on this booking.
+      const inspected = requireReturnedAllocations(context, allocations);
+      const maintenance = new Map<string, number>();
+      for (const allocation of inspected) {
+        const open = await lockOpenAssetMaintenance(client, {
+          tenantId: context.tenantId,
+          branchId: context.branchId,
+          assetId: allocation.asset_id,
+        });
+        if (request.readiness === 'ready' && open.length > 0) {
+          throw new StateConflictError(
+            'A garment still has open cleaning or maintenance work and cannot be marked ready.',
+          );
+        }
+        maintenance.set(allocation.asset_id, open.length);
       }
 
       await client.query(`SAVEPOINT ${INSPECTION_SAVEPOINT}`);
       savepointOpen = true;
-      const updated = await inspectReturnedPhysicalAsset(client, {
-        tenantId: context.tenantId,
-        branchId: context.branchId,
-        assetId: allocation.asset_id,
-        assetVersion: allocation.asset_version,
-        readiness: request.readiness,
-        recoveryManagedReadiness:
-          request.readiness === 'needs_cleaning' &&
-          allocation.asset_recovery_managed_readiness &&
-          openMaintenance.length === 0 &&
-          allocation.blocked_end.getTime() > reservation.database_now.getTime(),
-        ...(request.condition_note ? { conditionNote: request.condition_note } : {}),
-      });
-      if (!updated) {
-        throw new StateConflictError('The garment changed before the inspection could be recorded.');
+      const results: Array<{ allocation: LockedReservationAllocationRow; readiness: string; version: number; released: boolean }> = [];
+      for (const allocation of inspected) {
+        const openMaintenanceCount = maintenance.get(allocation.asset_id) ?? 0;
+        const updated = await inspectReturnedPhysicalAsset(client, {
+          tenantId: context.tenantId,
+          branchId: context.branchId,
+          assetId: allocation.asset_id,
+          assetVersion: allocation.asset_version,
+          readiness: request.readiness,
+          recoveryManagedReadiness:
+            request.readiness === 'needs_cleaning' &&
+            allocation.asset_recovery_managed_readiness &&
+            openMaintenanceCount === 0 &&
+            allocation.blocked_end.getTime() > reservation.database_now.getTime(),
+          ...(request.condition_note ? { conditionNote: request.condition_note } : {}),
+        });
+        if (!updated) {
+          throw new StateConflictError('A garment changed before the inspection could be recorded.');
+        }
+        const releasedAt =
+          request.readiness === 'ready'
+            ? await truncateReturnedReservationRecovery(client, {
+                tenantId: context.tenantId,
+                branchId: context.branchId,
+                reservationId,
+                assetId: allocation.asset_id,
+              })
+            : null;
+        results.push({ allocation, readiness: updated.readiness, version: updated.version, released: Boolean(releasedAt) });
       }
-      const recoveryReleasedAt =
-        request.readiness === 'ready'
-          ? await truncateReturnedReservationRecovery(client, {
-              tenantId: context.tenantId,
-              branchId: context.branchId,
-              reservationId,
-              assetId: allocation.asset_id,
-            })
-          : null;
+      // The audit and response keep their single-garment fields for the first piece.
+      const [first] = results;
+      if (!first) throw new StateConflictError('Reservation inspection found no garment.');
 
       await appendReservationAuditEvent(client, {
         tenantId: context.tenantId,
@@ -161,21 +174,22 @@ export async function inspectReturnedReservationByStaff(
         entityId: reservationId,
         redactedSummary: {
           reservation_version: reservation.version,
-          asset_id: allocation.asset_id,
-          readiness_before: allocation.asset_readiness,
-          readiness_after: updated.readiness,
-          asset_version_before: allocation.asset_version,
-          asset_version_after: updated.version,
-          open_maintenance_count: openMaintenance.length,
+          asset_id: first.allocation.asset_id,
+          readiness_before: first.allocation.asset_readiness,
+          readiness_after: first.readiness,
+          asset_version_before: first.allocation.asset_version,
+          asset_version_after: first.version,
+          open_maintenance_count: maintenance.get(first.allocation.asset_id) ?? 0,
           condition_note_recorded: Boolean(request.condition_note),
-          recovery_released_by_readiness: Boolean(recoveryReleasedAt),
+          recovery_released_by_readiness: first.released,
+          ...(results.length > 1 ? { asset_ids: results.map((result) => result.allocation.asset_id) } : {}),
         },
         requestId: context.requestId,
       });
 
       const data = reservationInspectionResponse.parse({
         reservation: await requireMutationSummary(client, context, reservationId),
-        asset_readiness: updated.readiness,
+        asset_readiness: first.readiness,
       });
       await client.query(`RELEASE SAVEPOINT ${INSPECTION_SAVEPOINT}`);
       savepointOpen = false;
@@ -232,44 +246,49 @@ export async function completeReturnedReservationByStaff(
         branchId: context.branchId,
         reservationId,
       });
-      let allocation = requireReturnedAllocation(context, allocations);
-      if (
-        allocation.asset_readiness === 'needs_cleaning' &&
-        allocation.asset_recovery_managed_readiness
-      ) {
-        const promoted = await promoteRecoveryManagedReadinessIfDue(client, {
+      const completing: LockedReservationAllocationRow[] = [];
+      for (let allocation of requireReturnedAllocations(context, allocations)) {
+        if (
+          allocation.asset_readiness === 'needs_cleaning' &&
+          allocation.asset_recovery_managed_readiness
+        ) {
+          const promoted = await promoteRecoveryManagedReadinessIfDue(client, {
+            tenantId: context.tenantId,
+            branchId: context.branchId,
+            assetId: allocation.asset_id,
+            assetVersion: allocation.asset_version,
+          });
+          if (promoted) {
+            allocation = {
+              ...allocation,
+              asset_readiness: promoted.readiness,
+              asset_recovery_managed_readiness: false,
+              asset_version: promoted.version,
+            };
+          }
+        }
+        if (
+          allocation.asset_lifecycle_status !== 'active' ||
+          allocation.asset_readiness !== 'ready'
+        ) {
+          throw new AssetUnreadyError(
+            'Every returned garment must pass inspection and be ready before the rental can complete.',
+          );
+        }
+        const openMaintenance = await lockOpenAssetMaintenance(client, {
           tenantId: context.tenantId,
           branchId: context.branchId,
           assetId: allocation.asset_id,
-          assetVersion: allocation.asset_version,
         });
-        if (promoted) {
-          allocation = {
-            ...allocation,
-            asset_readiness: promoted.readiness,
-            asset_recovery_managed_readiness: false,
-            asset_version: promoted.version,
-          };
+        if (openMaintenance.length > 0) {
+          throw new AssetUnreadyError(
+            'A garment still has open cleaning or maintenance work and cannot complete yet.',
+          );
         }
+        completing.push(allocation);
       }
-      if (
-        allocation.asset_lifecycle_status !== 'active' ||
-        allocation.asset_readiness !== 'ready'
-      ) {
-        throw new AssetUnreadyError(
-          'The returned garment must pass inspection and be ready before the rental can complete.',
-        );
-      }
-      const openMaintenance = await lockOpenAssetMaintenance(client, {
-        tenantId: context.tenantId,
-        branchId: context.branchId,
-        assetId: allocation.asset_id,
-      });
-      if (openMaintenance.length > 0) {
-        throw new AssetUnreadyError(
-          'The garment still has open cleaning or maintenance work and cannot complete yet.',
-        );
-      }
+      const [allocation] = completing;
+      if (!allocation) throw new StateConflictError('Reservation completion found no garment.');
 
       const settlement = await readReservationSettlementState(client, {
         tenantId: context.tenantId,
@@ -293,9 +312,9 @@ export async function completeReturnedReservationByStaff(
         tenantId: context.tenantId,
         reservationId,
       });
-      if (released !== 1) {
+      if (released !== completing.length) {
         throw new AssetUnavailableError(
-          'Reservation completion could not safely release its blocking garment allocation.',
+          'Reservation completion could not safely release its blocking garment allocations.',
         );
       }
 
@@ -310,6 +329,7 @@ export async function completeReturnedReservationByStaff(
           version: newVersion,
           asset_id: allocation.asset_id,
           allocation_id: allocation.allocation_id,
+          ...(completing.length > 1 ? { asset_ids: completing.map((item) => item.asset_id) } : {}),
           payment_status: payment?.status ?? null,
           outstanding_charge_minor: settlement.outstanding_charge_minor,
           deposit_holding_minor: settlement.deposit_holding_minor,
@@ -359,28 +379,24 @@ function assertReturnedState(
   }
 }
 
-function requireReturnedAllocation(
+function requireReturnedAllocations(
   context: ReservationCompletionGateContext,
   allocations: LockedReservationAllocationRow[],
-): LockedReservationAllocationRow {
-  const allocation = allocations[0];
+): LockedReservationAllocationRow[] {
   if (
-    allocations.length !== 1 ||
-    !allocation ||
-    allocation.kind !== 'reservation_confirmed' ||
-    allocation.is_blocking !== true
+    allocations.length === 0 ||
+    allocations.some((allocation) => allocation.kind !== 'reservation_confirmed' || allocation.is_blocking !== true)
   ) {
-    throw new AssetUnavailableError(
-      'Returned reservation does not have exactly one active confirmed garment allocation.',
-    );
+    throw new AssetUnavailableError('Returned reservation garments are not all active confirmed allocations.');
   }
   if (
-    allocation.asset_branch_id !== context.branchId ||
-    allocation.asset_custody_kind !== 'at_branch'
+    allocations.some(
+      (allocation) => allocation.asset_branch_id !== context.branchId || allocation.asset_custody_kind !== 'at_branch',
+    )
   ) {
-    throw new StateConflictError('The returned garment is not physically recorded at this branch.');
+    throw new StateConflictError('A returned garment is not physically recorded at this branch.');
   }
-  return allocation;
+  return allocations;
 }
 
 function assertSettlementComplete(
