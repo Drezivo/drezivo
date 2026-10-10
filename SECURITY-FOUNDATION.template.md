@@ -1,3 +1,4 @@
+<!-- Some Test Comment for CI -->
 # Drezivo security foundation template
 
 The detailed `SECURITY-FOUNDATION.md` is intentionally kept outside Git. Obtain that private
