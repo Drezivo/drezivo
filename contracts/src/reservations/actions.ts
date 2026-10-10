@@ -5,11 +5,11 @@
  */
 import { z } from 'zod';
 
-import { fileObjectId, paymentId, paymentReceiptId } from '../common/ids';
+import { fileObjectId, paymentId, paymentReceiptId, productVariantId, reservationLineId } from '../common/ids';
 import { moneyString } from '../common/money';
 import { instantInterval, isoDate, isoInstant } from '../common/time';
 import { physicalAssetReadiness } from '../catalogue/staff';
-import { staffReservationCustomerInput } from './hold';
+import { MAX_RESERVATION_LINES, staffReservationCustomerInput } from './hold';
 import { fulfillmentMethod, reservationSummary } from './reservation';
 
 const versionedAction = z
@@ -136,6 +136,27 @@ export const reservationPaymentVerifyResponse = z
   .strict();
 export type ReservationPaymentVerifyResponse = z.infer<typeof reservationPaymentVerifyResponse>;
 
+/**
+ * POST /reservations/:id/balance-payments/:paymentId/collect: staff record that the balance an edit
+ * added was received. The amount must equal the balance; replays of the same key are safe.
+ */
+export const reservationBalanceCollectRequest = z
+  .object({
+    verified_amount_minor: moneyString,
+    merchant_reference: z.string().trim().min(1).max(200).optional(),
+  })
+  .strict();
+export type ReservationBalanceCollectRequest = z.infer<typeof reservationBalanceCollectRequest>;
+
+export const reservationBalanceCollectResponse = z
+  .object({
+    reservation: reservationSummary,
+    payment_id: paymentId,
+    verified_at: isoInstant,
+  })
+  .strict();
+export type ReservationBalanceCollectResponse = z.infer<typeof reservationBalanceCollectResponse>;
+
 /** pending_confirmation -> rejected with an auditable merchant reason. */
 export const reservationRejectRequest = versionedAction.extend({
   reason: z.string().trim().min(1).max(500),
@@ -194,6 +215,16 @@ export const reservationEditRequest = versionedAction
     event_date: isoDate.nullable().optional(),
     fulfillment_method: fulfillmentMethod.optional(),
     requested_interval: instantInterval.optional(),
+    /**
+     * The full list of items the booking should hold, in display order. Keep an item by sending its
+     * `line_id` (with its current `variant_id`); add one by sending only `variant_id`; leave an
+     * item out to remove it. New items are priced at today's price and get their own free piece.
+     */
+    garments: z
+      .array(z.object({ line_id: reservationLineId.optional(), variant_id: productVariantId }).strict())
+      .min(1, 'A booking needs at least one item.')
+      .max(MAX_RESERVATION_LINES)
+      .optional(),
     accept_price_change: z.boolean().default(false),
   })
   .strict()
@@ -202,8 +233,16 @@ export const reservationEditRequest = versionedAction
       value.customer !== undefined ||
       value.event_date !== undefined ||
       value.fulfillment_method !== undefined ||
-      value.requested_interval !== undefined,
+      value.requested_interval !== undefined ||
+      value.garments !== undefined,
     { message: 'Change at least one reservation detail.' },
+  )
+  .refine(
+    (value) => {
+      const kept = (value.garments ?? []).flatMap((garment) => (garment.line_id ? [garment.line_id] : []));
+      return new Set(kept).size === kept.length;
+    },
+    { path: ['garments'], message: 'An item can appear only once.' },
   );
 export type ReservationEditRequest = z.infer<typeof reservationEditRequest>;
 /** What a client sends: `accept_price_change` may be omitted. */
@@ -257,6 +296,8 @@ export type ReservationReturnResponse = z.infer<typeof reservationReturnResponse
 export const reservationInspectionRequest = versionedAction.extend({
   readiness: physicalAssetReadiness,
   condition_note: z.string().trim().max(1_000).optional(),
+  /** Inspect one item of a multi-item booking; without it the readiness applies to every item. */
+  reservation_line_id: reservationLineId.optional(),
 });
 export type ReservationInspectionRequest = z.infer<typeof reservationInspectionRequest>;
 

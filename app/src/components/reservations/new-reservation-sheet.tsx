@@ -670,7 +670,7 @@ export function NewReservationSheet({
       return;
     }
     if (!extrasReadiness.ready) {
-      setNotice({ tone: "attention", text: extrasReadiness.problem ?? "Check the other dresses before reserving." });
+      setNotice({ tone: "attention", text: extrasReadiness.problem ?? "Check the other items before reserving." });
       return;
     }
 
@@ -1232,9 +1232,9 @@ export function NewReservationSheet({
 
                 <Separator />
                 <section>
-                  <SectionTitle icon={Shirt} title="Other dresses on this booking" />
+                  <SectionTitle icon={Shirt} title="Other items on this booking" />
                   <p className="mt-1 text-xs text-dashboard-muted">
-                    Same pickup and return. Each dress is checked and priced on its own, and delivery is charged once.
+                    Same pickup and return. Each item is checked and priced on its own, and delivery is charged once.
                   </p>
                   <div className="mt-3">
                     <AdditionalGarments

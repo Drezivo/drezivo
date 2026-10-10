@@ -612,4 +612,114 @@ Calendar exception-state styling    ✅
 Backend regression tests            ✅
 Frontend focused re-test            ⏳ blocked by local node_modules repair
 Full repo tooling cleanup            ⏳ separate follow-up
+Multi-item / edit / balances (§23)  ✅ in review (#242–#246)
 ```
+
+---
+
+## 23. Multi-item reservations, edit, balances, delivery and Continue (October 2026)
+
+Handoff for engineers and coding agents picking up this work. The product rules and invariants are
+in [ADR 0016](decisions/0016-multi-item-reservations-edit-and-balances.md); read it first. This
+section is the implementation map.
+
+### Pull request stack
+
+Merge in this order. Each PR is based on the one before it, so retarget the next PR to `staging`
+after its base merges.
+
+| PR | Branch | What it adds |
+| --- | --- | --- |
+| #241 (merged) | `feat/reservation-delivery-requests` | Delivery always offered; `to_arrange` terms; owner email flags delivery requests |
+| #242 | `feat/reservation-continue` | Continue a cancelled, expired or rejected reservation as a new booking |
+| #243 | `feat/reservation-edit` | `PATCH /reservations/:id` for customer, dates, event date and fulfillment |
+| #244 | `feat/reservation-multi-garment` | Staff book up to 10 items; pickup, return, cancel and completion loop over every allocation |
+| #245 | `feat/storefront-multi-piece` | Storefront "Add another item" and multi-item status page |
+| #246 | `feat/reservation-quality-pass` | Edit adds and removes items; balance payments; per-item inspection; "item" wording; this documentation |
+
+PR #246 replaces PR #243's interim rule that refused a higher total after payment.
+
+### Endpoints
+
+- `POST /api/v1/reservations` and the storefront guest booking accept `additional_variant_ids`
+  (at most 9) next to the main variant.
+- `PATCH /api/v1/reservations/:reservationId` edits a reservation. Needs `reservations.manage`,
+  `version` and an `Idempotency-Key`.
+- `POST /api/v1/reservations/:reservationId/balance-payments/:paymentId/collect` records a received
+  balance. Needs `reservations.manage`, `payments.manage`, `evidence.verify` and an
+  `Idempotency-Key`.
+- The inspection request accepts an optional `reservation_line_id` to inspect one item.
+- Reservation detail adds `balance_payments`, line `product_id`, and delivery `fee_minor` and
+  `terms`. The list adds `line_count`.
+- New error code: `PRICE_CHANGE_NOT_ACCEPTED` (send `accept_price_change: true` to confirm).
+
+### File map
+
+Contracts (`contracts/src/`):
+
+- `reservations/hold.ts`: `MAX_RESERVATION_LINES`, `additional_variant_ids`.
+- `reservations/actions.ts`: edit request and response, balance collect request and response,
+  inspection `reservation_line_id`.
+- `reservations/detail.ts`, `reservations/list.ts`, `reservations/reservation.ts`: detail, list and
+  delivery terms fields.
+- `storefront/guest-booking.ts`: guest `additional_variant_ids` and `items` on the view.
+
+API (`api/src/modules/reservations/`):
+
+- `reservations.quote.ts`: per-line quoting, `resolveDelivery`.
+- `reservations.command.service.ts`, `reservations.command.repository.ts`: multi-line create and
+  distinct asset claiming.
+- `reservations.edit.service.ts`, `reservations.edit.repository.ts`: edit planning, re-matching
+  items to assets, repricing, `settleBalanceAfterEdit`.
+- `reservations.balance.service.ts`, `reservations.balance.repository.ts`: balance rows and
+  collection.
+- `reservations.pickup.service.ts`, `reservations.return.service.ts`,
+  `reservations.review.service.ts`, `reservations.cancellation.service.ts`,
+  `reservations.completion-gate.service.ts`: loops over every allocation, balance checks.
+- `reservations.repository.ts`: list and detail read model; payment summary excludes balances.
+- `../guest-booking/`: storefront multi-item booking. `../notifications/email-notifications.ts`:
+  owner email lists items and delivery requests.
+
+App (`app/src/components/reservations/`): `reservation-details-sheet.tsx` (Delivery card, Edit,
+Continue, refund owed), `reservation-edit-form.tsx`, `reservation-balance-payments.tsx`,
+`additional-garments.tsx`, `new-reservation-sheet.tsx` (extra items, Continue prefill),
+`reservations-page.tsx`, `reservation-mutation-actions.tsx` (per-item inspection);
+`app/src/lib/zoned-time.ts`.
+
+Web (`web/src/components/store/`): `booking/booking-drawer.tsx`, `booking/extra-pieces.tsx`,
+`booking-status.tsx`.
+
+### Tests
+
+- API integration (real PostgreSQL): `api/tests/integration/reservation-edit.test.ts`,
+  `reservation-multi-garment.test.ts`, plus updates to `reservation-quote`, `reservation-create` and
+  `storefront-guest-booking`. Run with `npm run test:integration` in `api/` after
+  `docker compose --env-file api/.env up -d` (see `docs/runbooks/local-development.md`), or point
+  `TEST_DATABASE_URL` at any disposable PostgreSQL.
+- App: `app/tests/unit/reservation-details-sheet.test.tsx`, `additional-garments.test.ts`,
+  `new-reservation-sheet.test.tsx`. Web: `web/tests/unit/booking-extra-pieces.test.tsx`.
+- Results on #246 (10 October 2026): API integration 496 of 497, API unit 251 of 252, app 473 of
+  480, web 65 of 65, contracts 200 of 200. Every failure also fails on clean `staging`: the API
+  `pilot-billing` "lapsed shop view-only" test, the API Turnstile "skipped only when no secret" test
+  (fails when a local `api/.env` sets Turnstile keys), and seven app tests (two sign-in redirects,
+  sign-up back link, catalogue window, fittings reschedule, two reservation tests).
+
+### Gotchas
+
+- Never assume one line, allocation or payment per reservation. Read the initial payment and the
+  balances separately.
+- Any new query for "the" payment of a reservation must exclude
+  `business_key LIKE 'reservation:<id>:balance:%'`. Filtering on the initial-payment key instead
+  hides rows that fixtures and older data created under other keys.
+- Custody business keys keep the legacy form for one-item reservations; do not change that format.
+- Edit inserts new lines at temporary line numbers (1000 and up), then renumbers in two phases
+  through negative numbers to avoid the unique `(reservation_id, line_number)` collision.
+- Idempotency keys must be at least 8 characters; short test keys fail validation.
+- Working-tree files are CRLF on Windows checkouts. Normalize line endings after scripted edits.
+
+### Not built yet
+
+- Partial physical return (one item back early). All items are picked up and returned together.
+- Recording a refund when an edit lowers a paid total. The panel only shows the amount owed.
+- Renter-side edits. Only staff can edit; renters contact the shop.
+- Manual QA on staging by the product owner after the stack merges.

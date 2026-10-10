@@ -26,6 +26,7 @@ import { displaySizeLabel } from "@/lib/catalogue-display";
 import { cn } from "@/lib/utils";
 
 import type { ReservationRebookSource } from "./new-reservation-sheet";
+import { ReservationBalancePayments } from "./reservation-balance-payments";
 import { ReservationEditForm } from "./reservation-edit-form";
 
 import {
@@ -375,6 +376,15 @@ function ReservationDetails({
           </dl>
 
           <PaymentDifferenceNote detail={detail} />
+          <ReservationBalancePayments
+            detail={detail}
+            permissionCodes={permissionCodes}
+            onCollected={(message) => {
+              onNotice({ tone: "success", message });
+              onMutationSuccess();
+            }}
+            onError={(message) => onNotice({ tone: "attention", message })}
+          />
 
           <Separator className="my-4" />
 
@@ -526,17 +536,19 @@ const CONTINUABLE_STATUSES: ReadonlySet<ReservationDetail["status"]> = new Set([
 const EDITABLE_STATUSES: ReadonlySet<ReservationDetail["status"]> = new Set(["held", "pending_confirmation", "confirmed"]);
 
 /**
- * What staff still owe or are owed after an edit changed the total once money was in. Null when
- * nothing was paid yet (the payment amount follows the total) or the amounts match.
+ * What the shop owes back after an edit lowered the total once money was in: the first payment plus
+ * collected balances, minus what is due now. Money still owed shows as an open balance instead.
  */
-function paymentDifference(detail: ReservationDetail): { kind: "collect" | "refund"; minor: bigint } | null {
+function refundOwed(detail: ReservationDetail): bigint | null {
   const payment = detail.payment;
   if (!payment) return null;
   const moneyIn = payment.status !== "pending" || ["uploaded", "under_review", "verified"].includes(payment.evidence_status);
   if (!moneyIn) return null;
-  const difference = BigInt(detail.price_snapshot.due_now_minor) - BigInt(payment.amount_minor);
-  if (difference === 0n) return null;
-  return difference > 0n ? { kind: "collect", minor: difference } : { kind: "refund", minor: -difference };
+  const collected = (detail.balance_payments ?? [])
+    .filter((balance) => balance.status === "paid")
+    .reduce((sum, balance) => sum + BigInt(balance.amount_minor), 0n);
+  const overpaid = BigInt(payment.amount_minor) + collected - BigInt(detail.price_snapshot.due_now_minor);
+  return overpaid > 0n ? overpaid : null;
 }
 
 /**
@@ -654,14 +666,11 @@ function DeliveryCard({ detail }: { detail: ReservationDetail }) {
 }
 
 function PaymentDifferenceNote({ detail }: { detail: ReservationDetail }) {
-  const difference = paymentDifference(detail);
-  if (!difference) return null;
-  const amount = formatMinorMoney(difference.minor.toString(), detail.price_snapshot.currency);
+  const refund = refundOwed(detail);
+  if (!refund) return null;
   return (
     <p role="status" className="mt-3 rounded-lg bg-dashboard-attention/10 px-3 py-2 text-sm text-dashboard-attention">
-      {difference.kind === "collect"
-        ? `The total changed after payment. Collect ${amount} more from the renter.`
-        : `The total changed after payment. Refund ${amount} to the renter.`}
+      The total went down after payment. Refund {formatMinorMoney(refund.toString(), detail.price_snapshot.currency)} to the renter.
     </p>
   );
 }

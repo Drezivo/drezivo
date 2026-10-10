@@ -146,6 +146,35 @@ describe('multi-garment reservations', async () => {
     expect((await lineState(seed, booking.id)).every((line) => !line.is_blocking)).toBe(true);
   });
 
+  it('inspects each returned item on its own and completes only when every one is ready', async () => {
+    const seed = await seedWorkspace('org_multi_inspect', 'user_multi_inspect');
+    const booking = await createBooking(seed, 'inspect', [seed.celestineId, seed.amaraId]);
+    const confirmed = await confirm(seed, booking);
+    const picked = await service.pickupReservation(context(seed, 'inspect-pickup'), booking.id, { version: confirmed });
+    if (picked.body.success !== true) throw new Error('Expected pickup.');
+    const returned = await service.returnReservation(context(seed, 'inspect-return'), booking.id, { version: picked.body.data.reservation.version });
+    if (returned.body.success !== true) throw new Error('Expected return.');
+    const version = returned.body.data.reservation.version;
+    const detail = await service.getReservationDetail(context(seed, 'inspect-detail'), booking.id);
+    const [celestine, amara] = detail.lines;
+
+    await service.inspectReturnedReservation(context(seed, 'inspect-celestine'), booking.id, { version, readiness: 'ready', reservation_line_id: celestine?.id });
+    await service.inspectReturnedReservation(context(seed, 'inspect-amara'), booking.id, {
+      version,
+      readiness: 'needs_repair',
+      condition_note: 'Torn hem.',
+      reservation_line_id: amara?.id,
+    });
+    expect((await lineState(seed, booking.id)).map((line) => line.readiness)).toEqual(['ready', 'needs_repair']);
+
+    const blocked = await service.completeRentalReservation(context(seed, 'inspect-complete-blocked'), booking.id, { version });
+    expect(blocked.body).toMatchObject({ success: false, error: { code: 'ASSET_UNREADY' } });
+
+    await service.inspectReturnedReservation(context(seed, 'inspect-amara-fixed'), booking.id, { version, readiness: 'ready', reservation_line_id: amara?.id });
+    const completed = await service.completeRentalReservation(context(seed, 'inspect-complete'), booking.id, { version });
+    expect(completed.body).toMatchObject({ success: true, data: { reservation: { status: 'completed' } } });
+  });
+
   it('releases every garment when a multi-garment booking is cancelled', async () => {
     const seed = await seedWorkspace('org_multi_cancel', 'user_multi_cancel');
     const booking = await createBooking(seed, 'cancel', [seed.celestineId, seed.celestineId]);
@@ -174,6 +203,69 @@ describe('multi-garment reservations', async () => {
     expect(lines.every((line) => line.is_blocking)).toBe(true);
     expect(new Set(lines.map((line) => line.upper)).size).toBe(1);
     expect(lines[0]?.upper).toBe(new Date(Date.parse(end) + 1_440 * 60_000).toISOString());
+  });
+
+  it("adds an item to a held booking at today's price and moves the unpaid payment with it", async () => {
+    const seed = await seedWorkspace('org_multi_add', 'user_multi_add');
+    const booking = await createBooking(seed, 'add', [seed.celestineId]);
+    const detail = await service.getReservationDetail(context(seed, 'add-detail'), booking.id);
+
+    const edited = await service.editReservation(context(seed, 'add-edit'), booking.id, {
+      version: booking.version,
+      garments: [
+        { line_id: detail.lines[0]?.id, variant_id: seed.celestineId },
+        { variant_id: seed.amaraId },
+      ],
+    });
+
+    expect(edited.body).toMatchObject({ success: true, data: { price_changed: true, previous_due_now_minor: '225000' } });
+    const lines = await lineState(seed, booking.id);
+    expect(lines.map((line) => [line.line_number, line.variant_id, line.is_blocking])).toEqual([
+      [1, seed.celestineId, true],
+      [2, seed.amaraId, true],
+    ]);
+    // 1,500 + 1,000 rentals, 500 + 300 deposits, one 250 delivery fee.
+    expect(await paymentAmount(seed, booking.id)).toBe(355000);
+  });
+
+  it('removes an item, frees its piece, and renumbers the rest', async () => {
+    const seed = await seedWorkspace('org_multi_remove', 'user_multi_remove');
+    const booking = await createBooking(seed, 'remove', [seed.celestineId, seed.amaraId]);
+    const detail = await service.getReservationDetail(context(seed, 'remove-detail'), booking.id);
+    const amaraLine = detail.lines.find((line) => line.variant_id === seed.amaraId);
+
+    const edited = await service.editReservation(context(seed, 'remove-edit'), booking.id, {
+      version: booking.version,
+      garments: [{ line_id: amaraLine?.id, variant_id: seed.amaraId }],
+    });
+
+    expect(edited.body).toMatchObject({ success: true });
+    expect((await lineState(seed, booking.id)).map((line) => [line.line_number, line.variant_id])).toEqual([[1, seed.amaraId]]);
+    expect(await paymentAmount(seed, booking.id)).toBe(155000);
+    // Both Celestine pieces are free again for the same dates.
+    const again = await service.createStaffReservation(context(seed, 'remove-again'), await request(seed, [seed.celestineId, seed.celestineId]));
+    expect(again.status).toBe(201);
+  });
+
+  it('leaves the booking untouched when an added item has no free piece, and refuses a size change in place', async () => {
+    const seed = await seedWorkspace('org_multi_add_full', 'user_multi_add_full');
+    await createBooking(seed, 'add-full-other', [seed.amaraId]);
+    const booking = await createBooking(seed, 'add-full', [seed.celestineId]);
+    const detail = await service.getReservationDetail(context(seed, 'add-full-detail'), booking.id);
+    const before = await lineState(seed, booking.id);
+
+    const full = await service.editReservation(context(seed, 'add-full-edit'), booking.id, {
+      version: booking.version,
+      garments: [{ line_id: detail.lines[0]?.id, variant_id: seed.celestineId }, { variant_id: seed.amaraId }],
+    });
+    expect(full.body).toMatchObject({ success: false, error: { code: 'CAPACITY_CONFLICT', message: 'Amara is not free for these dates. The reservation was not changed.' } });
+    expect(await lineState(seed, booking.id)).toEqual(before);
+
+    const resized = await service.editReservation(context(seed, 'add-full-resize'), booking.id, {
+      version: booking.version,
+      garments: [{ line_id: detail.lines[0]?.id, variant_id: seed.amaraId }],
+    });
+    expect(resized.body).toMatchObject({ success: false, error: { code: 'VALIDATION_FAILED' } });
   });
 
   it('creates one booking for a sequential or concurrent double-fire of the same intent', async () => {

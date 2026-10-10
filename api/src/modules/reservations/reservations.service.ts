@@ -8,6 +8,7 @@ import {
   reservationListResponse,
   reservationPaymentProjection,
   type PermissionCode,
+  type ReservationBalanceCollectRequest,
   type ReservationDeliverySnapshot,
   type ReservationDetail,
   type ReservationEditRequestInput,
@@ -72,6 +73,8 @@ import {
   createStaffReservationCommand,
   type ReservationCommandResponse,
 } from './reservations.command.service.js';
+import { collectReservationBalanceByStaff, type ReservationBalanceCommandResponse } from './reservations.balance.service.js';
+import { readReservationBalancePayments } from './reservations.balance.repository.js';
 import { cancelReservationByStaff } from './reservations.cancellation.service.js';
 import { editReservationByStaff, type ReservationEditCommandResponse } from './reservations.edit.service.js';
 import { completeStaffReservationCommand } from './reservations.completion.service.js';
@@ -319,6 +322,28 @@ export async function editReservation(
       idempotencyKey: input.idempotencyKey,
     },
     reservationId,
+    request,
+  );
+}
+
+export async function collectReservationBalance(
+  input: ReservationReadContext & { requestId: string; idempotencyKey: string },
+  reservationId: string,
+  paymentId: string,
+  request: ReservationBalanceCollectRequest,
+): Promise<ReservationBalanceCommandResponse> {
+  assertReservationReviewContext(input);
+  return collectReservationBalanceByStaff(
+    {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      membershipId: input.membershipId,
+      principalId: input.principalId,
+      requestId: input.requestId,
+      idempotencyKey: input.idempotencyKey,
+    },
+    reservationId,
+    paymentId,
     request,
   );
 }
@@ -578,12 +603,16 @@ export async function getReservationDetail(
 ): Promise<ReservationDetail> {
   assertReservationReadContext(input);
 
-  const model = await withTenantTransaction(input.tenantId, input.principalId, async (client) => {
-    return readReservationDetailModel(client, {
+  const { model, balances } = await withTenantTransaction(input.tenantId, input.principalId, async (client) => {
+    const detailModel = await readReservationDetailModel(client, {
       tenantId: input.tenantId,
       branchId: input.branchId,
       reservationId,
     });
+    return {
+      model: detailModel,
+      balances: detailModel ? await readReservationBalancePayments(client, { tenantId: input.tenantId, reservationId }) : [],
+    };
   });
   if (!model) {
     throw new NotFoundError('Reservation could not be found.');
@@ -663,6 +692,16 @@ export async function getReservationDetail(
       currency: header.reservation_currency,
     },
     payment: header.payment_id ? toPaymentProjection(header) : null,
+    ...(balances.length > 0
+      ? {
+          balance_payments: balances.map((balance) => ({
+            id: balance.payment_id,
+            amount_minor: String(balance.amount_minor),
+            status: balance.status,
+            verified_at: balance.verified_at?.toISOString() ?? null,
+          })),
+        }
+      : {}),
     booking_channel: header.booking_channel,
     hold_acquired_at: header.hold_acquired_at.toISOString(),
     hold_expires_at: header.hold_expires_at?.toISOString() ?? null,

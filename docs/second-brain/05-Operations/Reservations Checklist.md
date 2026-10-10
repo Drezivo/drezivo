@@ -30,7 +30,7 @@ Before marking a task complete:
 
 ## Non-negotiable outcomes
 
-- V1 supports one serialized garment per checkout UI, while preserving `reservation_line` structure for future multi-line V1.1.
+- V1 supports up to 10 serialized garments per reservation, one `reservation_line` each (ADR 0016, 2026-10-10).
 - Reservation lifecycle uses the canonical states: `held`, `pending_confirmation`, `confirmed`, `picked_up`, `returned`, `completed`, `cancelled`, `expired`, `rejected`.
 - Initial hold and all blocking booking states claim a real physical asset through `asset_allocation`.
 - Overlapping blocking allocation cannot be created even under concurrent requests.
@@ -520,7 +520,7 @@ Before marking a task complete:
 
 ## Deferred from Reservations V1
 
-- Multi-item reservation UI and partial physical return — V1.1.
+- Partial physical return — later. Multi-item reservation UI shipped in V1 (ADR 0016).
 - Fitting appointments/resources/capacity — V1.1.
 - Native payment gateway/card collection or automated recurring payments.
 - Marketplace booking across multiple tenants.

@@ -77,6 +77,8 @@ export function ReservationMutationActions({
   const [reason, setReason] = useState("");
   const [conditionNote, setConditionNote] = useState("");
   const [readiness, setReadiness] = useState<InspectionReadiness>("ready");
+  // Empty means every item on the booking; otherwise one line of a multi-item booking.
+  const [inspectLineId, setInspectLineId] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(detail.terms_accepted_at !== null);
   const [amountReceived, setAmountReceived] = useState(() =>
     detail.payment ? minorUnitsToMajorInput(detail.payment.amount_minor) : ""
@@ -328,6 +330,7 @@ export function ReservationMutationActions({
                 version: detail.version,
                 readiness,
                 ...(conditionNote.trim() ? { condition_note: conditionNote.trim() } : {}),
+                ...(inspectLineId ? { reservation_line_id: inspectLineId as ReservationDetail["lines"][number]["id"] } : {}),
               },
               idempotencyKey
             );
@@ -822,6 +825,26 @@ export function ReservationMutationActions({
 
             {selectedAction === "inspect" ? (
               <>
+                {detail.lines.length > 1 ? (
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">Item</span>
+                    <select
+                      aria-label="Item to inspect"
+                      value={inspectLineId}
+                      disabled={submitGuard.isSubmitting}
+                      onChange={(event) => updateIntentField(() => setInspectLineId(event.target.value))}
+                      className="h-9 w-full rounded-md border border-dashboard-border bg-dashboard-surface px-3 text-sm text-dashboard-navy outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <option value="">All items</option>
+                      {detail.lines.map((line) => (
+                        <option key={line.id} value={line.id}>
+                          {line.name_snapshot}
+                          {line.variant.size_label ? ` · ${line.variant.size_label}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
                     Garment readiness

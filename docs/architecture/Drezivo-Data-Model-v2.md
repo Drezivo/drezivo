@@ -9,7 +9,7 @@ The [DBML](Drezivo-ERD-v2.dbml) defines exact types, nullability, keys, indexes 
 
 Start with a shared tenant schema. Create one default branch from day one. Separate catalogue styles, variants and individually tracked garments. A mutable clothing status or quantity is not the source of future booking availability.
 
-V1 presents one garment per checkout and Owner/Front desk operations. Multiple reservation lines are supported structurally for V1.1. Fittings are V1.1; locations/transfers are V2. V3 is governed evolution, not speculative enterprise tables to deploy now.
+V1 presents up to 10 reservation lines per booking (ADR 0016) and Owner/Front desk operations. Each line has one garment allocation; a reservation may carry an initial payment plus balance payments keyed `reservation:<id>:balance:<version>`. Fittings are V1.1; locations/transfers are V2. V3 is governed evolution, not speculative enterprise tables to deploy now.
 
 **Migration boundary:** the DBML includes future entities to show the complete ERD. A V1 migration omits V1.1/V2 tables and their nullable extension columns/FKs (`fitting_id`, `fitting_line_id`, `transfer_line_id`, `location_id` where applicable). Add these in their release. Retain tenant, default branch, variant and reservation-line identities from V1.
 
@@ -191,7 +191,7 @@ Lock the payment row before summing/inserting any postings; lock related charges
 
 Same-tenant FKs cannot prove matching currency or reservation. Validate these cross-row invariants in domain transactions and deferred constraint triggers where appropriate. Do not use a row CHECK to pretend to enforce an aggregate balance across concurrent rows.
 
-Partial monetary refunds and damage deductions belong in V1. Partial physical returns belong in V1.1's multi-item UI. Financial exceptions can outlive operational completion without rewriting custody facts.
+Partial monetary refunds and damage deductions belong in V1. Partial physical returns remain out of scope; V1 picks up and returns all items of a reservation together and inspects each item separately (ADR 0016). Financial exceptions can outlive operational completion without rewriting custody facts.
 
 ## 8. SaaS billing, files and durable jobs
 

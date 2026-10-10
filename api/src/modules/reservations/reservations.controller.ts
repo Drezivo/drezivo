@@ -7,6 +7,7 @@ import { sendSuccess } from '../../shared/response.js';
 import {
   attachReservationReceipt,
   cancelReservation,
+  collectReservationBalance,
   editReservation,
   completeStaffReservation,
   confirmReservation,
@@ -109,6 +110,24 @@ export async function cancelReservationController(req: Request, res: Response): 
   const result = await cancelReservation(
     { ...requireContext(req), requestId: req.requestId, idempotencyKey },
     reservationId,
+    request,
+  );
+  res.status(result.status).json(result.body);
+}
+
+export async function collectReservationBalanceController(req: Request, res: Response): Promise<void> {
+  const reservationId = req.reservationId;
+  const paymentId = req.reservationPaymentId;
+  const request = req.reservationBalanceCollectRequest;
+  const idempotencyKey = req.reservationIdempotencyKey;
+  if (!reservationId || !paymentId) throw new ValidationError('A valid reservation and payment id are required.');
+  if (!request) throw new ValidationError('Balance collection request is invalid.');
+  if (!idempotencyKey) throw new ValidationError('A valid Idempotency-Key header is required.');
+
+  const result = await collectReservationBalance(
+    { ...requireContext(req), requestId: req.requestId, idempotencyKey },
+    reservationId,
+    paymentId,
     request,
   );
   res.status(result.status).json(result.body);

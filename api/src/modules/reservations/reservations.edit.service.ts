@@ -38,25 +38,44 @@ import {
   appendReservationAuditEvent,
   appendReservationOutboxEvent,
   chooseAvailableLockedAsset,
+  insertReservationLineWithAllocation,
   lockEligibleReservationAssets,
 } from './reservations.command.repository.js';
-import { isAllocationOverlapViolation, reclaimExpiredHoldsOnLockedAssets } from './reservations.command.service.js';
+import {
+  isAllocationOverlapViolation,
+  reclaimExpiredHoldsOnLockedAssets,
+  type ReservationQuote,
+} from './reservations.command.service.js';
+import { randomUUID } from 'node:crypto';
+
+import {
+  balanceBusinessKey,
+  closeOpenBalance,
+  insertReservationBalancePayment,
+  lockReservationBalancePayments,
+  updateOpenBalanceAmount,
+} from './reservations.balance.repository.js';
 import {
   applyReservationEdit,
+  deleteReservationLinesForEdit,
+  readLinesWithDisruptions,
   readReservationEditFacts,
   readReservationLinesForEdit,
   rebookReservationLineAllocation,
+  renumberReservationLines,
   unblockReservationAllocationsForEdit,
   updatePendingReservationPaymentAmount,
   updateReservationLinePricing,
   type ReservationEditFactsRow,
   type ReservationEditLineRow,
 } from './reservations.edit.repository.js';
+import type { ReservationBalancePaymentRow } from './reservations.balance.repository.js';
 import {
   assertEventDateWithinRentalPeriod,
   assertRequestedPickupNotInPast,
   computeRentalTotal,
   resolveDelivery,
+  resolveReservationQuote,
 } from './reservations.quote.js';
 import {
   lockLatestReservationReceipt,
@@ -140,6 +159,7 @@ export async function editReservationByStaff(
       const receipt = payment
         ? await lockLatestReservationReceipt(client, { tenantId: context.tenantId, paymentId: payment.payment_id })
         : null;
+      const balances = await lockReservationBalancePayments(client, { tenantId: context.tenantId, reservationId });
       const allocations = await lockReservationAllocationsForReview(client, {
         tenantId: context.tenantId,
         branchId: context.branchId,
@@ -169,34 +189,59 @@ export async function editReservationByStaff(
         throw new ValidationError('Add the customer by completing the booking first.');
       }
 
-      const linePrices = datesChanged
-        ? lines.map((line) => repriceLine(line, interval, facts.timezone_snapshot))
-        : lines.map((line) => ({ line, rentalMinor: Number(line.rental_minor), pricingSnapshot: line.pricing_snapshot }));
+      const plan = planGarments(lines, request.garments);
+      if (plan.removed.length > 0) {
+        const referenced = await readLinesWithDisruptions(client, { tenantId: context.tenantId, lineIds: plan.removed.map((line) => line.id) });
+        if (referenced.length > 0) {
+          throw new StateConflictError('An item you removed has a late-return record on it, so it cannot be removed. Keep it or cancel the booking.');
+        }
+      }
+      // New items are priced at today's price for the booking's dates and handover method.
+      const added: AddedGarment[] = [];
+      for (const variantId of plan.addedVariantIds) {
+        const quote = await resolveReservationQuote(client, {
+          tenantId: context.tenantId,
+          branchId: context.branchId,
+          request: {
+            variant_id: variantId as ReservationQuote['variant_id'],
+            requested_interval: interval,
+            ...(eventDate ? { event_date: eventDate } : {}),
+            fulfillment_method: fulfillment,
+            payment_method_id: facts.payment_method_id as ReservationQuote['payment_method_id'],
+          },
+        });
+        added.push({ lineId: randomUUID(), quote });
+      }
+      const keptPrices = datesChanged
+        ? plan.kept.map((line) => repriceLine(line, interval, facts.timezone_snapshot))
+        : plan.kept.map((line) => ({ line, rentalMinor: Number(line.rental_minor), pricingSnapshot: line.pricing_snapshot }));
+      const linePrices = keptPrices;
+      const securityRequired =
+        plan.kept.reduce((sum, line) => sum + Number(line.deposit_minor), 0) +
+        added.reduce((sum, garment) => sum + Number(garment.quote.price_snapshot.security_required_minor), 0);
       const delivery =
         fulfillment === currentFulfillment
           ? { feeMinor: BigInt(deliveryFeeOf(facts)), deliverySnapshot: facts.delivery_snapshot }
           : deliveryFor(facts, fulfillment);
-      const rentalTotal = linePrices.reduce((sum, price) => sum + price.rentalMinor, 0);
-      const dueNow = rentalTotal + Number(facts.security_required_minor) + Number(delivery.feeMinor);
+      const rentalTotal =
+        keptPrices.reduce((sum, price) => sum + price.rentalMinor, 0) +
+        added.reduce((sum, garment) => sum + Number(garment.quote.price_snapshot.rental_total_minor), 0);
+      const dueNow = rentalTotal + securityRequired + Number(delivery.feeMinor);
       const previousDueNow = Number(facts.due_now_minor);
       const priceChanged = dueNow !== previousDueNow;
 
-      // Once the renter paid or sent a receipt, the recorded amount stays; staff settle the difference.
+      // Once the renter paid or sent a receipt, the first payment stays as recorded. A higher total
+      // becomes a balance for staff to collect before pickup; a lower one is refunded by the shop.
       const moneyCommitted =
         payment !== null &&
         (payment.status !== 'pending' ||
           payment.verified_at !== null ||
           (receipt !== null && RECEIPT_COMMITS_AMOUNT.has(receipt.evidence_status)));
-      // Pickup requires the verified amount to cover the total, and there is no flow to record a
-      // top-up, so a paid booking can only keep or lower its total. Raising it needs a new booking.
-      if (moneyCommitted && dueNow > previousDueNow) {
-        throw new StateConflictError(
-          `This change raises the amount due to ${formatPeso(dueNow)}, but the renter already paid or sent a receipt for ${formatPeso(previousDueNow)}. Keep the current total, or cancel and continue it as a new booking.`,
-        );
-      }
       if (priceChanged && moneyCommitted && !request.accept_price_change) {
         throw new PriceChangeNotAcceptedError(
-          `This change lowers the amount due to ${formatPeso(dueNow)} from ${formatPeso(previousDueNow)}, and the renter already paid or sent a receipt. Confirm the price change to save it, then refund the difference.`,
+          dueNow > previousDueNow
+            ? `This change raises the amount due to ${formatPeso(dueNow)} from ${formatPeso(previousDueNow)}. The renter already paid or sent a receipt, so the difference becomes a balance to collect before pickup. Confirm the price change to save it.`
+            : `This change lowers the amount due to ${formatPeso(dueNow)} from ${formatPeso(previousDueNow)}, and the renter already paid or sent a receipt. Confirm the price change to save it, then refund the difference.`,
         );
       }
       if (priceChanged && payment === null && dueNow > 0) {
@@ -206,8 +251,18 @@ export async function editReservationByStaff(
       await client.query(`SAVEPOINT ${EDIT_SAVEPOINT}`);
       savepointOpen = true;
 
-      if (datesChanged) {
-        await moveGarmentsToNewDates(client, context, reservationId, lines, allocations, interval);
+      if (datesChanged || plan.changed) {
+        await rematchGarments(client, context, {
+          reservationId,
+          currentLineCount: lines.length,
+          kept: plan.kept,
+          removed: plan.removed,
+          added,
+          order: plan.order(added),
+          allocations,
+          interval,
+          kind: reservation.status === 'confirmed' ? 'reservation_confirmed' : 'reservation_hold',
+        });
         for (const price of linePrices) {
           await updateReservationLinePricing(client, {
             tenantId: context.tenantId,
@@ -243,6 +298,7 @@ export async function editReservationByStaff(
           due_now_minor: String(dueNow),
         },
         rentalTotalMinor: rentalTotal,
+        securityRequiredMinor: securityRequired,
         dueNowMinor: dueNow,
       });
       if (newVersion === null) throw new StateConflictError('Reservation edit lost a concurrent change. Refresh and try again.');
@@ -255,12 +311,24 @@ export async function editReservationByStaff(
         });
         if (!updated) throw new StateConflictError('The payment changed during this edit. Refresh and try again.');
       }
+      if (priceChanged && payment !== null && moneyCommitted) {
+        await settleBalanceAfterEdit(client, {
+          tenantId: context.tenantId,
+          reservationId,
+          version: newVersion,
+          paymentMethodId: payment.payment_method_id,
+          firstPaymentMinor: Number(payment.amount_minor),
+          balances,
+          dueNowMinor: dueNow,
+        });
+      }
 
       const changed = [
         request.customer ? 'customer' : null,
         request.event_date !== undefined && request.event_date !== facts.event_date ? 'event_date' : null,
         fulfillment !== currentFulfillment ? 'fulfillment_method' : null,
         datesChanged ? 'dates' : null,
+        plan.changed ? 'items' : null,
       ].filter((field): field is string => field !== null);
       await appendReservationAuditEvent(client, {
         tenantId: context.tenantId,
@@ -276,6 +344,13 @@ export async function editReservationByStaff(
           previous_due_now_minor: previousDueNow,
           due_now_minor: dueNow,
           money_committed: moneyCommitted,
+          ...(plan.changed
+            ? {
+                added_variant_ids: plan.addedVariantIds,
+                removed_line_ids: plan.removed.map((line) => line.id),
+                item_count: plan.kept.length + added.length,
+              }
+            : {}),
         },
         requestId: context.requestId,
       });
@@ -312,6 +387,49 @@ export async function editReservationByStaff(
   });
 }
 
+/**
+ * Keeps at most one open balance equal to what is still owed after the first payment and any
+ * collected balances. Collected money is never rewritten; an open balance that is no longer owed
+ * is closed, and an overpayment is left for staff to refund (the detail shows it).
+ */
+async function settleBalanceAfterEdit(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    reservationId: string;
+    version: number;
+    paymentMethodId: string;
+    firstPaymentMinor: number;
+    balances: ReservationBalancePaymentRow[];
+    dueNowMinor: number;
+  },
+): Promise<void> {
+  const collected = input.balances
+    .filter((balance) => balance.status === 'paid')
+    .reduce((sum, balance) => sum + Number(balance.amount_minor), 0);
+  const open = input.balances.find((balance) => balance.status === 'pending') ?? null;
+  const owed = input.dueNowMinor - input.firstPaymentMinor - collected;
+
+  if (owed > 0 && open) {
+    if (Number(open.amount_minor) !== owed) {
+      const updated = await updateOpenBalanceAmount(client, { tenantId: input.tenantId, paymentId: open.payment_id, amountMinor: owed });
+      if (!updated) throw new StateConflictError('The open balance changed during this edit. Refresh and try again.');
+    }
+  } else if (owed > 0) {
+    await insertReservationBalancePayment(client, {
+      paymentId: randomUUID(),
+      tenantId: input.tenantId,
+      reservationId: input.reservationId,
+      paymentMethodId: input.paymentMethodId,
+      amountMinor: owed,
+      businessKey: balanceBusinessKey(input.reservationId, input.version),
+    });
+  } else if (open) {
+    const closed = await closeOpenBalance(client, { tenantId: input.tenantId, paymentId: open.payment_id });
+    if (!closed) throw new StateConflictError('The open balance changed during this edit. Refresh and try again.');
+  }
+}
+
 function assertEditableState(reservation: LockedReservationReviewRow, version: number): void {
   if (reservation.version !== version) {
     throw new StaleVersionError('Reservation version is stale. Refresh before retrying.');
@@ -344,35 +462,104 @@ function assertOneBlockingAllocationPerLine(
   }
 }
 
+interface AddedGarment {
+  lineId: string;
+  quote: ReservationQuote;
+}
+
+type GarmentRequest = NonNullable<ReservationEditRequestInput['garments']>;
+
 /**
- * Matches every line to a garment free for the new dates. The reservation's own allocations stop
- * blocking first so its current garments are candidates, and each line keeps its garment when that
- * one is still free, so a date change does not shuffle garments without need.
+ * Splits the requested item list into kept, removed and added items. Without a list, every item
+ * stays as it is. A kept item must keep its size; to change size, remove it and add the new one.
  */
-async function moveGarmentsToNewDates(
+interface GarmentPlan {
+  kept: ReservationEditLineRow[];
+  removed: ReservationEditLineRow[];
+  addedVariantIds: string[];
+  changed: boolean;
+  /** Final line ids in display order, once the new items have ids. */
+  order: (added: AddedGarment[]) => string[];
+}
+
+function planGarments(lines: ReservationEditLineRow[], garments: GarmentRequest | undefined): GarmentPlan {
+  if (!garments) {
+    return {
+      kept: lines,
+      removed: [] as ReservationEditLineRow[],
+      addedVariantIds: [] as string[],
+      changed: false,
+      order: (): string[] => lines.map((line) => line.id),
+    };
+  }
+  const byId = new Map(lines.map((line) => [line.id, line]));
+  const kept: ReservationEditLineRow[] = [];
+  const addedVariantIds: string[] = [];
+  for (const garment of garments) {
+    if (!garment.line_id) {
+      addedVariantIds.push(garment.variant_id);
+      continue;
+    }
+    const line = byId.get(garment.line_id);
+    if (!line) throw new ValidationError('An item in the list is not on this reservation. Refresh and try again.');
+    if (line.variant_id !== garment.variant_id) {
+      throw new ValidationError('To change an item\'s size, remove it and add the new size.');
+    }
+    kept.push(line);
+  }
+  const keptIds = new Set(kept.map((line) => line.id));
+  const removed = lines.filter((line) => !keptIds.has(line.id));
+  const reordered = kept.some((line, index) => lines[index]?.id !== line.id);
+  return {
+    kept,
+    removed,
+    addedVariantIds,
+    changed: removed.length > 0 || addedVariantIds.length > 0 || reordered,
+    // Final line order follows the request: kept and new items in the order they were sent.
+    order: (added: AddedGarment[]): string[] => {
+      let next = 0;
+      return garments.map((garment) => garment.line_id ?? (added[next++] as AddedGarment).lineId);
+    },
+  };
+}
+
+/**
+ * Matches every item to a free piece for the booking's dates in one locked pass: removed items go,
+ * kept items keep their piece when it is still free, and new items get a distinct piece each. The
+ * reservation's own allocations stop blocking first so its current pieces count as free. Any
+ * conflict rolls the whole edit back to the original booking.
+ */
+async function rematchGarments(
   client: PoolClient,
   context: ReservationEditContext,
-  reservationId: string,
-  lines: ReservationEditLineRow[],
-  allocations: LockedReservationAllocationRow[],
-  interval: InstantInterval,
+  input: {
+    reservationId: string;
+    currentLineCount: number;
+    kept: ReservationEditLineRow[];
+    removed: ReservationEditLineRow[];
+    added: AddedGarment[];
+    order: string[];
+    allocations: LockedReservationAllocationRow[];
+    interval: InstantInterval;
+    kind: 'reservation_hold' | 'reservation_confirmed';
+  },
 ): Promise<void> {
   const blocked = new Map<string, { start: string; end: string }>();
-  for (const line of lines) {
+  for (const line of input.kept) {
     const selection = await resolveReservationCatalogueQuoteSelection(client, {
       tenantId: tenantIdSchema.parse(context.tenantId),
       branchId: branchIdSchema.parse(context.branchId),
       variantId: productVariantId.parse(line.variant_id),
-      requestedInterval: interval,
+      requestedInterval: input.interval,
     });
-    if (!selection) throw new NotFoundError('A clothing item on this reservation is no longer available to book.');
+    if (!selection) throw new NotFoundError('An item on this reservation is no longer available to book.');
     blocked.set(line.id, selection.blocked_interval);
   }
 
   const lockedAssetIds = await lockEligibleReservationAssets(client, {
     tenantId: context.tenantId,
     branchId: context.branchId,
-    variantIds: lines.map((line) => line.variant_id),
+    variantIds: [...input.kept.map((line) => line.variant_id), ...input.added.map((garment) => garment.quote.variant_id)],
   });
   await reclaimExpiredHoldsOnLockedAssets(client, {
     tenantId: context.tenantId,
@@ -381,27 +568,37 @@ async function moveGarmentsToNewDates(
     assetIds: lockedAssetIds,
   });
 
-  const unblocked = await unblockReservationAllocationsForEdit(client, { tenantId: context.tenantId, reservationId });
-  if (unblocked !== lines.length) throw new StateConflictError('Reservation garments changed during this edit.');
+  const unblocked = await unblockReservationAllocationsForEdit(client, { tenantId: context.tenantId, reservationId: input.reservationId });
+  if (unblocked !== input.currentLineCount) throw new StateConflictError('Reservation items changed during this edit.');
+  const removed = await deleteReservationLinesForEdit(client, {
+    tenantId: context.tenantId,
+    reservationId: input.reservationId,
+    lineIds: input.removed.map((line) => line.id),
+  });
+  if (removed !== input.removed.length) throw new StateConflictError('Reservation items changed during this edit.');
 
-  for (const line of lines) {
+  const chosen: string[] = [];
+  const choose = (variantId: string, assetIds: string[], period: { start: string; end: string }): Promise<string | null> =>
+    chooseAvailableLockedAsset(client, {
+      tenantId: context.tenantId,
+      branchId: context.branchId,
+      variantId,
+      assetIds: assetIds.filter((id) => !chosen.includes(id)),
+      blockedStart: period.start,
+      blockedEnd: period.end,
+    });
+
+  for (const line of input.kept) {
     const period = blocked.get(line.id);
-    if (!period) throw new StateConflictError('Reservation garment period is unavailable.');
-    const current = allocations.find((allocation) => allocation.reservation_line_id === line.id)?.asset_id;
-    const choose = (assetIds: string[]): Promise<string | null> =>
-      chooseAvailableLockedAsset(client, {
-        tenantId: context.tenantId,
-        branchId: context.branchId,
-        variantId: line.variant_id,
-        assetIds,
-        blockedStart: period.start,
-        blockedEnd: period.end,
-      });
+    if (!period) throw new StateConflictError('Reservation item period is unavailable.');
+    const current = input.allocations.find((allocation) => allocation.reservation_line_id === line.id)?.asset_id;
     const assetId =
-      (current && lockedAssetIds.includes(current) ? await choose([current]) : null) ?? (await choose(lockedAssetIds));
+      (current && lockedAssetIds.includes(current) ? await choose(line.variant_id, [current], period) : null) ??
+      (await choose(line.variant_id, lockedAssetIds, period));
     if (!assetId) {
-      throw new CapacityConflictError('A garment on this reservation is not free for the new dates. The reservation was not changed.');
+      throw new CapacityConflictError('An item on this reservation is not free for these dates. The reservation was not changed.');
     }
+    chosen.push(assetId);
     const rebooked = await rebookReservationLineAllocation(client, {
       tenantId: context.tenantId,
       reservationLineId: line.id,
@@ -409,8 +606,53 @@ async function moveGarmentsToNewDates(
       blockedStart: period.start,
       blockedEnd: period.end,
     });
-    if (!rebooked) throw new StateConflictError('Reservation garments changed during this edit.');
+    if (!rebooked) throw new StateConflictError('Reservation items changed during this edit.');
   }
+
+  for (const [index, garment] of input.added.entries()) {
+    const { quote } = garment;
+    const assetId = await choose(quote.variant_id, lockedAssetIds, quote.blocked_interval);
+    if (!assetId) {
+      throw new CapacityConflictError(`${quote.line_snapshot.name} is not free for these dates. The reservation was not changed.`);
+    }
+    chosen.push(assetId);
+    await insertReservationLineWithAllocation(client, {
+      tenantId: context.tenantId,
+      branchId: context.branchId,
+      reservationId: input.reservationId,
+      // Placed after every existing number, then renumbered into the requested order below.
+      lineNumber: 1_000 + index,
+      kind: input.kind,
+      line: {
+        reservationLineId: garment.lineId,
+        allocationId: randomUUID(),
+        variantId: quote.variant_id,
+        nameSnapshot: quote.line_snapshot.name,
+        measurementsSnapshot: quote.line_snapshot.measurements,
+        fitRangeSnapshot: quote.line_snapshot.fit_range,
+        measurementUnitSnapshot: quote.line_snapshot.measurement_unit,
+        pricingSnapshot: {
+          rental_minor: quote.price_snapshot.rental_total_minor,
+          deposit_minor: quote.price_snapshot.security_required_minor,
+          currency: 'PHP',
+          pricing_mode: quote.price_snapshot.pricing_mode,
+          included_duration_minutes: quote.price_snapshot.included_duration_minutes,
+          extra_day_price_minor: quote.price_snapshot.extra_day_price_minor,
+          extra_day_count: quote.price_snapshot.extra_day_count,
+          rental_day_basis: quote.price_snapshot.rental_day_basis,
+          included_rental_days: quote.price_snapshot.included_rental_days,
+          rental_day_count: quote.price_snapshot.rental_day_count,
+        },
+        rentalMinor: Number(quote.price_snapshot.rental_total_minor),
+        depositMinor: Number(quote.price_snapshot.security_required_minor),
+        assetId,
+        blockedStart: quote.blocked_interval.start,
+        blockedEnd: quote.blocked_interval.end,
+      },
+    });
+  }
+
+  await renumberReservationLines(client, { tenantId: context.tenantId, reservationId: input.reservationId, orderedLineIds: input.order });
 }
 
 /** Re-prices one line for new dates from the price terms recorded when it was booked. */

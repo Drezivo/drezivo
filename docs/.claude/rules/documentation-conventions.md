@@ -13,7 +13,7 @@ Docs should help future implementation stay aligned with the product:
 * Treat product docs as source-of-truth guidance for product intent.
 * Keep documentation rental-first, not generic ecommerce-first.
 * Preserve the distinction between business-facing SaaS workflows and public customer storefront workflows.
-* Keep V1 single-branch and single-garment; fittings and multi-item UI are V1.1. See product/Drezivo-PRD.md.
+* Keep V1 single-branch; fittings are V1.1. A V1 reservation may hold up to 10 items (any clothing category) per ADR 0016; partial physical returns stay out of scope. See product/Drezivo-PRD.md and decisions/0016-multi-item-reservations-edit-and-balances.md.
 * Do not casually introduce marketplace behavior, native mobile apps, integrated payment gateways, advanced analytics, AI recommendations, loyalty systems, complex accounting, or enterprise workflows unless explicitly requested.
 * Make tenant isolation explicit when documenting data, backend behavior, permissions, or product flows.
 * Prefer clear product language over implementation jargon unless the doc is specifically technical.
@@ -40,7 +40,7 @@ If a conflict cannot be resolved from the docs, call it out instead of silently 
 * Payment status and reservation status are separate concepts.
 * Exclusive physical-asset holds expire at their communicated deadline or release on a valid cancellation/rejection.
 * A customer cancellation request does not release held availability until the owner processes it.
-* Products have variants; each physical garment is separately identified and allocated. One garment per V1 checkout.
+* Products have variants; each physical garment is separately identified and allocated. Each reservation line holds one garment; a reservation has 1 to 10 lines (ADR 0016).
 
 ## Documentation Style
 

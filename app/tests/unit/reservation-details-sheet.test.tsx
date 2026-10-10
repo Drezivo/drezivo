@@ -255,6 +255,55 @@ describe("ReservationDetailsSheet", () => {
   });
 });
 
+describe("editing the items on a booking", () => {
+  it("removes one item of two and sends the remaining list", async () => {
+    api.editReservation.mockReset();
+    api.editReservation.mockResolvedValue({
+      data: { price_changed: true, previous_due_now_minor: "1050000", reservation: { price_snapshot: { due_now_minor: "800000" } } },
+    });
+    const base = detailWith({ status: "confirmed" });
+    const second = { ...base.lines[0], id: "00000000-0000-4000-8000-000000000113", variant_id: "00000000-0000-4000-8000-000000000114", line_number: 2, name_snapshot: "Amara" };
+    render(
+      <ReservationDetailsSheet
+        reservationId={base.id}
+        detail={detailWith({ status: "confirmed", lines: [base.lines[0], second] })}
+        error={null}
+        isLoading={false}
+        permissionCodes={MANAGE}
+        timeZone="Asia/Manila"
+        onOpenChange={vi.fn()}
+        onMutationSuccess={vi.fn()}
+        onRefreshRequired={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /edit details/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove Celestine from this booking" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(api.editReservation).toHaveBeenCalledTimes(1));
+    expect(api.editReservation.mock.calls[0]?.[1]).toEqual({
+      version: 2,
+      garments: [{ line_id: "00000000-0000-4000-8000-000000000113", variant_id: "00000000-0000-4000-8000-000000000114" }],
+    });
+  });
+
+  it("refuses to remove every item", () => {
+    const original = {
+      fullName: "", phone: "", email: "", address: "", eventDate: "", fulfillment: "pickup" as const,
+      pickupDate: "2026-10-17", pickupTime: "10:00", dueDate: "2026-10-20", dueTime: "10:00",
+    };
+    expect(
+      buildEditBody(original, original, "Asia/Manila", false, {
+        lines: [{ id: "line-1", variantId: "variant-1" }],
+        removedLineIds: new Set(["line-1"]),
+        added: [],
+      })
+    ).toEqual({ ok: false, problem: "Keep at least one item, or cancel the booking instead." });
+  });
+});
+
 describe("buildEditBody", () => {
   const original = {
     fullName: "Bea Santiago",

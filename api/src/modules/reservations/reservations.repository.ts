@@ -376,6 +376,8 @@ export async function listReservationsReadModel(
        ) receipt ON true
        WHERE p.tenant_id = r.tenant_id
          AND p.reservation_id = r.id
+         -- Balances added by edits are listed separately; every other payment row keeps its old meaning.
+         AND p.business_key NOT LIKE ('reservation:' || r.id::text || ':balance:%')
        ORDER BY p.created_at DESC, p.id DESC
        LIMIT 1
      ) payment_summary ON true
@@ -497,6 +499,8 @@ export async function readReservationDetailModel(
        ) receipt ON true
        WHERE p.tenant_id = r.tenant_id
          AND p.reservation_id = r.id
+         -- Balances added by edits are listed separately; every other payment row keeps its old meaning.
+         AND p.business_key NOT LIKE ('reservation:' || r.id::text || ':balance:%')
        ORDER BY p.created_at DESC, p.id DESC
        LIMIT 1
      ) payment_summary ON true

@@ -4,7 +4,7 @@ type: decision-index
 status: current
 owner: Drezivo team
 source: "../../decisions/ and accepted owner decisions"
-updated: 2026-10-01
+updated: 2026-10-10
 tags: [drezivo, decisions, adr]
 ---
 
@@ -16,6 +16,7 @@ tags: [drezivo, decisions, adr]
 - [[Cloudflare R2 Object Storage]] - production object storage targets Cloudflare R2; local development keeps MinIO behind the same S3-compatible boundary.
 - [[Single Standard Pilot Plan]] - one sellable Standard offer at PHP 300/month, internally backed by `starter` v1.
 - [[Shared Contracts Package]] - workspace package `@drezivo/contracts` as the API contract authority.
+- [[Multi-Item Reservations]] - up to 10 items per reservation, staff edits, balance payments, delivery requests and Continue (ADR 0016).
 - [[Obsidian Second Brain]] - project-only linked notes, Canvas, and Bases with no secrets.
 
 Each decision records context, choice, consequences, and supersession. The accepted ADRs in

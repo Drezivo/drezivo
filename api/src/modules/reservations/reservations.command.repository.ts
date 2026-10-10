@@ -297,6 +297,47 @@ export interface NewReservationLine {
   blockedEnd: string;
 }
 
+/** One garment line and its exclusion-protected blocking allocation, shared by create and edit. */
+export async function insertReservationLineWithAllocation(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    reservationId: string;
+    lineNumber: number;
+    kind: 'reservation_hold' | 'reservation_confirmed';
+    line: NewReservationLine;
+  },
+): Promise<void> {
+  const { line } = input;
+  await client.query(
+    `INSERT INTO reservation_line
+       (id, tenant_id, reservation_id, variant_id, line_number, name_snapshot,
+        measurements_snapshot, fit_range_snapshot, measurement_unit_snapshot, pricing_snapshot, rental_minor, deposit_minor, currency)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10::jsonb, $11, $12, 'PHP')`,
+    [
+      line.reservationLineId,
+      input.tenantId,
+      input.reservationId,
+      line.variantId,
+      input.lineNumber,
+      line.nameSnapshot,
+      JSON.stringify(line.measurementsSnapshot),
+      line.fitRangeSnapshot,
+      line.measurementUnitSnapshot,
+      JSON.stringify(line.pricingSnapshot),
+      line.rentalMinor,
+      line.depositMinor,
+    ],
+  );
+  await client.query(
+    `INSERT INTO asset_allocation
+       (id, tenant_id, branch_id, asset_id, reservation_line_id, kind, period, is_blocking)
+     VALUES ($1, $2, $3, $4, $5, $6, tstzrange($7::timestamptz, $8::timestamptz, '[)'), true)`,
+    [line.allocationId, input.tenantId, input.branchId, line.assetId, line.reservationLineId, input.kind, line.blockedStart, line.blockedEnd],
+  );
+}
+
 export async function createReservationGraph(
   client: PoolClient,
   input: {
@@ -380,33 +421,14 @@ export async function createReservationGraph(
   }
 
   for (const [index, line] of input.lines.entries()) {
-    await client.query(
-      `INSERT INTO reservation_line
-         (id, tenant_id, reservation_id, variant_id, line_number, name_snapshot,
-          measurements_snapshot, fit_range_snapshot, measurement_unit_snapshot, pricing_snapshot, rental_minor, deposit_minor, currency)
-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10::jsonb, $11, $12, 'PHP')`,
-      [
-        line.reservationLineId,
-        input.tenantId,
-        input.reservationId,
-        line.variantId,
-        index + 1,
-        line.nameSnapshot,
-        JSON.stringify(line.measurementsSnapshot),
-        line.fitRangeSnapshot,
-        line.measurementUnitSnapshot,
-        JSON.stringify(line.pricingSnapshot),
-        line.rentalMinor,
-        line.depositMinor,
-      ],
-    );
-    await client.query(
-      `INSERT INTO asset_allocation
-         (id, tenant_id, branch_id, asset_id, reservation_line_id, kind, period, is_blocking)
-       VALUES ($1, $2, $3, $4, $5, 'reservation_hold',
-               tstzrange($6::timestamptz, $7::timestamptz, '[)'), true)`,
-      [line.allocationId, input.tenantId, input.branchId, line.assetId, line.reservationLineId, line.blockedStart, line.blockedEnd],
-    );
+    await insertReservationLineWithAllocation(client, {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      reservationId: input.reservationId,
+      lineNumber: index + 1,
+      kind: 'reservation_hold',
+      line,
+    });
   }
 
   const row = reservation.rows[0];

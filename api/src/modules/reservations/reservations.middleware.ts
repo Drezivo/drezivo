@@ -2,6 +2,8 @@ import type { RequestHandler } from 'express';
 
 import {
   idempotencyKey,
+  paymentId,
+  reservationBalanceCollectRequest,
   reservationCancelRequest,
   reservationEditRequest,
   reservationConfirmRequest,
@@ -20,6 +22,7 @@ import {
   staffReservationCompleteRequest,
   staffReservationCreateRequest,
   staffReservationIntakeQuery,
+  type ReservationBalanceCollectRequest,
   type ReservationCancelRequest,
   type ReservationEditRequest,
   type ReservationConfirmRequest,
@@ -48,6 +51,8 @@ declare module 'express-serve-static-core' {
     reservationAvailabilityCalendarQuery?: StaffReservationAvailabilityCalendarQuery;
     reservationAvailabilityCheckQuery?: StaffReservationAvailabilityCheckQuery;
     reservationId?: string;
+    reservationPaymentId?: string;
+    reservationBalanceCollectRequest?: ReservationBalanceCollectRequest;
     reservationCreateRequest?: StaffReservationCreateRequest;
     reservationCompleteRequest?: StaffReservationCompleteRequest;
     reservationCancelRequest?: ReservationCancelRequest;
@@ -150,6 +155,27 @@ export const validateReservationId: RequestHandler = (req, _res, next): void => 
     return;
   }
   req.reservationId = parsed.data;
+  next();
+};
+
+export const validateReservationPaymentId: RequestHandler = (req, _res, next): void => {
+  const parsed = paymentId.safeParse(req.params.paymentId);
+  if (!parsed.success) {
+    next(new ValidationError('A valid payment id is required.'));
+    return;
+  }
+  req.reservationPaymentId = parsed.data;
+  next();
+};
+
+export const validateReservationBalanceCollect: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationBalanceCollectRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError('Balance collection request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  req.reservationBalanceCollectRequest = parsed.data;
   next();
 };
 
