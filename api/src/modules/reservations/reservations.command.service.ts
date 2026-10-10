@@ -197,17 +197,46 @@ export async function claimReservationAsset(
   const lockedAssetIds = await lockEligibleReservationAssets(client, {
     tenantId: input.tenantId,
     branchId: input.branchId,
-    variantId: input.request.variant_id,
+    variantIds: [input.request.variant_id],
   });
   if (lockedAssetIds.length === 0) {
     throw new CapacityConflictError('No ready garment is available for this reservation.');
   }
 
+  await reclaimExpiredHoldsOnLockedAssets(client, {
+    tenantId: input.tenantId,
+    branchId: input.branchId,
+    requestId: input.requestId,
+    assetIds: lockedAssetIds,
+  });
+
+  const assetId = await chooseAvailableLockedAsset(client, {
+    tenantId: input.tenantId,
+    branchId: input.branchId,
+    variantId: input.request.variant_id,
+    assetIds: lockedAssetIds,
+    blockedStart: quote.blocked_interval.start,
+    blockedEnd: quote.blocked_interval.end,
+  });
+  if (!assetId) {
+    throw new CapacityConflictError('The requested garment is no longer available for those dates.');
+  }
+  return { quote, assetId };
+}
+
+/**
+ * Releases holds that already expired on the locked garments, using database time, and records
+ * each expiry. Callers hold the asset locks, so no other booking can claim these garments meanwhile.
+ */
+export async function reclaimExpiredHoldsOnLockedAssets(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; requestId: string; assetIds: string[] },
+): Promise<void> {
   while (true) {
     const expired = await releaseExpiredReservationHolds(client, {
       tenantId: input.tenantId,
       branchId: input.branchId,
-      assetIds: lockedAssetIds,
+      assetIds: input.assetIds,
       batchSize: RESERVATION_HOLD_RECLAIM_BATCH_SIZE,
     });
     if (expired.length === 0) break;
@@ -224,19 +253,6 @@ export async function claimReservationAsset(
 
     if (expired.length < RESERVATION_HOLD_RECLAIM_BATCH_SIZE) break;
   }
-
-  const assetId = await chooseAvailableLockedAsset(client, {
-    tenantId: input.tenantId,
-    branchId: input.branchId,
-    variantId: input.request.variant_id,
-    assetIds: lockedAssetIds,
-    blockedStart: quote.blocked_interval.start,
-    blockedEnd: quote.blocked_interval.end,
-  });
-  if (!assetId) {
-    throw new CapacityConflictError('The requested garment is no longer available for those dates.');
-  }
-  return { quote, assetId };
 }
 
 /** Inserts the held reservation, its exclusion-protected allocation, audit, and outbox event. */

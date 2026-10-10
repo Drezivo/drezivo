@@ -7,6 +7,7 @@ import { sendSuccess } from '../../shared/response.js';
 import {
   attachReservationReceipt,
   cancelReservation,
+  editReservation,
   completeStaffReservation,
   confirmReservation,
   createStaffReservation,
@@ -106,6 +107,22 @@ export async function cancelReservationController(req: Request, res: Response): 
   if (!idempotencyKey) throw new ValidationError('A valid Idempotency-Key header is required.');
 
   const result = await cancelReservation(
+    { ...requireContext(req), requestId: req.requestId, idempotencyKey },
+    reservationId,
+    request,
+  );
+  res.status(result.status).json(result.body);
+}
+
+export async function editReservationController(req: Request, res: Response): Promise<void> {
+  const reservationId = req.reservationId;
+  const request = req.reservationEditRequest;
+  const idempotencyKey = req.reservationIdempotencyKey;
+  if (!reservationId) throw new ValidationError('A valid reservation id is required.');
+  if (!request) throw new ValidationError('Reservation edit request is invalid.');
+  if (!idempotencyKey) throw new ValidationError('A valid Idempotency-Key header is required.');
+
+  const result = await editReservation(
     { ...requireContext(req), requestId: req.requestId, idempotencyKey },
     reservationId,
     request,

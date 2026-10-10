@@ -42,6 +42,7 @@ import { displaySizeLabel } from "@/lib/catalogue-display";
 import { useVerifiedActorContext } from "@/components/shell/dashboard-access-gate";
 import { claimHoldOwner, clearPendingHold, readHoldDraft, saveHoldDraft, savePendingHold } from "@/lib/pending-hold";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
+import { localDateTimeParts, zonedLocalDateTimeToInstant } from "@/lib/zoned-time";
 import { cn } from "@/lib/utils";
 
 const PRODUCT_LIMIT = 5;
@@ -1848,74 +1849,6 @@ function formatIsoDateForDisplay(value: string): string {
     day: "numeric",
     year: "numeric",
   }).format(date);
-}
-
-function localDateTimeParts(
-  instant: Date,
-  timeZone: string
-): { date: string; time: string } {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    })
-      .formatToParts(instant)
-      .map((part) => [part.type, part.value])
-  );
-  return {
-    date: `${parts["year"]}-${parts["month"]}-${parts["day"]}`,
-    time: `${parts["hour"]}:${parts["minute"]}`,
-  };
-}
-
-function zonedLocalDateTimeToInstant(value: string, timeZone: string): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
-  if (!match) return null;
-  const wallTime = Date.UTC(
-    Number(match[1]),
-    Number(match[2]) - 1,
-    Number(match[3]),
-    Number(match[4]),
-    Number(match[5]),
-    0
-  );
-  let instant = new Date(wallTime);
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    instant = new Date(wallTime - timeZoneOffsetMs(instant, timeZone));
-  }
-  return Number.isFinite(instant.getTime()) ? instant : null;
-}
-
-function timeZoneOffsetMs(instant: Date, timeZone: string): number {
-  const values = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
-      day: "2-digit",
-      hour: "2-digit",
-      hourCycle: "h23",
-      minute: "2-digit",
-      month: "2-digit",
-      second: "2-digit",
-      timeZone,
-      year: "numeric",
-    })
-      .formatToParts(instant)
-      .map((part) => [part.type, part.value])
-  );
-  return (
-    Date.UTC(
-      Number(values["year"]),
-      Number(values["month"]) - 1,
-      Number(values["day"]),
-      Number(values["hour"]),
-      Number(values["minute"]),
-      Number(values["second"])
-    ) - instant.getTime()
-  );
 }
 
 function ExactAvailabilityStatus({

@@ -25,6 +25,8 @@ import {
   restoreClothingResponse,
   reservationCancelRequest,
   reservationCancelResponse,
+  reservationEditRequest,
+  reservationEditResponse,
   reservationCompleteRequest,
   reservationCompleteResponse,
   reservationConfirmRequest,
@@ -175,6 +177,8 @@ import {
   type RestoreClothingResponse,
   type ReservationCancelRequest,
   type ReservationCancelResponse,
+  type ReservationEditRequestInput,
+  type ReservationEditResponse,
   type ReservationCompleteRequest,
   type ReservationCompleteResponse,
   type ReservationConfirmRequest,
@@ -879,6 +883,19 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "POST",
         path: `/api/v1/reservations/${encodeURIComponent(reservationId)}/complete-booking`,
         responseSchema: apiEnvelope(staffReservationCompleteResponse),
+      }),
+    editReservation: (
+      reservationId: string,
+      input: ReservationEditRequestInput,
+      idempotencyKey: string
+    ) =>
+      request<ReservationEditResponse>({
+        getToken,
+        body: reservationEditRequest.parse(input),
+        idempotencyKey,
+        method: "PATCH",
+        path: `/api/v1/reservations/${encodeURIComponent(reservationId)}`,
+        responseSchema: apiEnvelope(reservationEditResponse),
       }),
     cancelReservation: (
       reservationId: string,
