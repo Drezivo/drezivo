@@ -8,6 +8,7 @@ import {
   reservationListResponse,
   reservationPaymentProjection,
   type PermissionCode,
+  type ReservationDeliverySnapshot,
   type ReservationDetail,
   type ReservationPaymentReceiptsResponse,
   type ReservationListItem,
@@ -56,6 +57,7 @@ import {
   ForbiddenError,
   NotFoundError,
   StateConflictError,
+  ValidationError,
   TenantCancelledError,
   TenantRestrictedError,
 } from '../../shared/errors.js';
@@ -251,11 +253,24 @@ export async function getStaffReservationQuote(
   request: StaffReservationCreateRequest,
 ): Promise<ReservationQuote> {
   assertReservationBookingContext(input);
+  const firstLine = request.lines?.[0];
+  const variantId = request.lines
+    ? request.lines.length === 1 && firstLine
+      ? firstLine.variant_id
+      : null
+    : request.variant_id;
+  if (!variantId) throw new ValidationError('A single-line quote request requires exactly one rental item.');
   return withTenantTransaction(input.tenantId, input.principalId, (client) =>
     resolveReservationQuote(client, {
       tenantId: input.tenantId,
       branchId: input.branchId,
-      request,
+      request: {
+        variant_id: variantId,
+        requested_interval: request.requested_interval,
+        ...(request.event_date ? { event_date: request.event_date } : {}),
+        fulfillment_method: request.fulfillment_method,
+        payment_method_id: request.payment_method_id,
+      },
     }),
   );
 }
@@ -609,6 +624,7 @@ export async function getReservationDetail(
     lines: model.lines.map((line, index) => ({
       id: line.id,
       variant_id: line.variant_id,
+      product_id: line.product_id,
       variant: {
         sku: line.variant_sku,
         size_label: line.variant_size_label,
@@ -748,13 +764,17 @@ function toPaymentProjection(
   });
 }
 
-function requireDeliverySnapshot(
-  row: ReservationDetailHeaderRow,
-): { fulfillment_method: 'pickup' | 'delivery' } {
+function requireDeliverySnapshot(row: ReservationDetailHeaderRow): ReservationDeliverySnapshot {
   if (!row.fulfillment_method) {
     throw new StateConflictError('Reservation delivery data is incomplete for staff display.');
   }
-  return { fulfillment_method: row.fulfillment_method };
+  // Unknown terms are dropped rather than passed through, so the wire value always parses.
+  const terms = row.delivery_terms === 'set_fee' || row.delivery_terms === 'to_arrange' ? row.delivery_terms : undefined;
+  return {
+    fulfillment_method: row.fulfillment_method,
+    ...(row.delivery_fee_minor !== null && /^\d+$/.test(row.delivery_fee_minor) ? { fee_minor: row.delivery_fee_minor } : {}),
+    ...(row.fulfillment_method === 'delivery' && terms ? { terms } : {}),
+  };
 }
 
 function toReviewContext(

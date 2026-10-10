@@ -4,6 +4,7 @@ import {
   branchId,
   productVariantId,
   tenantId,
+  type DeliveryTerms,
   type FulfillmentMethod,
   type InstantInterval,
   type PaymentMethodId,
@@ -77,6 +78,8 @@ export interface ReservationQuote {
   delivery_snapshot: {
     fulfillment_method: FulfillmentMethod;
     fee_minor: string;
+    /** Set on deliveries only: whether the fee was charged or the shop arranges it with the renter. */
+    terms?: DeliveryTerms;
   };
   policy_snapshot: {
     id: string;
@@ -96,6 +99,11 @@ export interface ReservationQuote {
     version: number;
   };
 }
+
+export type ReservationQuoteRequest = Pick<
+  StaffReservationCreateRequest,
+  'variant_id' | 'requested_interval' | 'event_date' | 'fulfillment_method' | 'payment_method_id'
+>;
 
 /**
  * Computes the authoritative quote inputs for a future booking transaction without claiming
@@ -121,14 +129,7 @@ export async function resolveReservationQuote(
   input: {
     tenantId: string;
     branchId: string;
-    request: Pick<
-      StaffReservationCreateRequest,
-      | 'variant_id'
-      | 'requested_interval'
-      | 'event_date'
-      | 'fulfillment_method'
-      | 'payment_method_id'
-    >;
+    request: ReservationQuoteRequest;
   },
 ): Promise<ReservationQuote> {
   await assertRequestedPickupNotInPast(client, input.request.requested_interval.start);
@@ -185,10 +186,8 @@ export async function resolveReservationQuote(
     catalogue.variant.security_deposit_minor,
     'Security deposit',
   );
-  const deliveryFee = resolveDeliveryFee(
-    foundation.delivery_rules,
-    input.request.fulfillment_method,
-  );
+  const delivery = resolveDelivery(foundation.delivery_rules, input.request.fulfillment_method);
+  const deliveryFee = delivery.feeMinor;
   const dueNow = assertSupportedAmount(
     rental.totalMinor + securityDeposit + deliveryFee,
     'Reservation amount due now',
@@ -237,6 +236,7 @@ export async function resolveReservationQuote(
     delivery_snapshot: {
       fulfillment_method: input.request.fulfillment_method,
       fee_minor: deliveryFee.toString(),
+      ...(delivery.terms ? { terms: delivery.terms } : {}),
     },
     policy_snapshot: {
       id: foundation.policy_snapshot_id,
@@ -359,17 +359,20 @@ function localIsoDate(instantValue: string, timeZone: string): string {
   return `${parts['year']}-${parts['month']}-${parts['day']}`;
 }
 
-function resolveDeliveryFee(
+/**
+ * Pickup is free. A shop that offers delivery charges its configured fee (`set_fee`). A shop that
+ * has not set up delivery still lets the renter ask for it: nothing is added to the total and the
+ * shop is told to contact the renter to arrange it (`to_arrange`).
+ */
+function resolveDelivery(
   rules: Record<string, unknown>,
   fulfillmentMethod: FulfillmentMethod,
-): bigint {
-  if (fulfillmentMethod === 'pickup') return 0n;
-  if (rules.enabled === false) {
-    throw new StateConflictError('Delivery is disabled by the effective reservation policy.');
-  }
+): { feeMinor: bigint; terms: DeliveryTerms | null } {
+  if (fulfillmentMethod === 'pickup') return { feeMinor: 0n, terms: null };
+  if (rules.enabled !== true) return { feeMinor: 0n, terms: 'to_arrange' };
   const configuredFee = rules.fee_minor;
-  if (configuredFee === undefined || configuredFee === null || configuredFee === '') return 0n;
-  return parseMinorUnits(configuredFee, 'Delivery fee');
+  if (configuredFee === undefined || configuredFee === null || configuredFee === '') return { feeMinor: 0n, terms: 'set_fee' };
+  return { feeMinor: parseMinorUnits(configuredFee, 'Delivery fee'), terms: 'set_fee' };
 }
 
 function parseMinorUnits(value: unknown, label: string): bigint {

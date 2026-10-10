@@ -37,7 +37,7 @@ import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { cn } from "@/lib/utils";
 
-import { NewReservationSheet } from "./new-reservation-sheet";
+import { NewReservationSheet, type ReservationRebookSource } from "./new-reservation-sheet";
 import { RESERVATIONS_CHANGED_EVENT } from "./pending-hold-guard";
 import { ReservationDetailsSheet } from "./reservation-details-sheet";
 import {
@@ -85,6 +85,7 @@ export function ReservationsPage() {
   const [rows, setRows] = useState<ReservationListItem[]>([]);
   const [permissionCodes, setPermissionCodes] = useState<PermissionCode[]>([]);
   const [isNewReservationOpen, setIsNewReservationOpen] = useState(false);
+  const [rebookSource, setRebookSource] = useState<ReservationRebookSource | null>(null);
   // The dashboard's pending-hold guard may complete or cancel a hold while this list is open.
   useEffect(() => {
     const reload = () => setReloadVersion((value) => value + 1);
@@ -376,7 +377,11 @@ export function ReservationsPage() {
         open={isNewReservationOpen}
         permissionCodes={permissionCodes}
         timeZone={timeZone}
-        onOpenChange={setIsNewReservationOpen}
+        rebookFrom={rebookSource}
+        onOpenChange={(open) => {
+          setIsNewReservationOpen(open);
+          if (!open) setRebookSource(null);
+        }}
         onReservationChanged={() => setReloadVersion((value) => value + 1)}
         onViewReservation={(reservationId) => {
           setReloadVersion((value) => value + 1);
@@ -392,6 +397,11 @@ export function ReservationsPage() {
         isLoading={isDetailLoading}
         permissionCodes={permissionCodes}
         timeZone={timeZone}
+        onContinue={(source) => {
+          setSelectedReservationId(null);
+          setRebookSource(source);
+          setIsNewReservationOpen(true);
+        }}
         onRetry={() => setDetailReloadVersion((value) => value + 1)}
         onMutationSuccess={() => {
           setReloadVersion((value) => value + 1);
@@ -608,6 +618,11 @@ function ReservationTable({
                   <p className="mt-1 text-xs text-dashboard-muted md:hidden">
                     Pickup {formatDateTime(reservation.pickup_at, timeZone)}
                   </p>
+                  {reservation.fulfillment_method === "delivery" ? (
+                    <span className="mt-1 inline-flex rounded-md bg-dashboard-gold-soft px-1.5 py-0.5 text-[11px] font-medium text-dashboard-gold-text lg:hidden">
+                      Delivery
+                    </span>
+                  ) : null}
                 </div>
               </div>
             </TableCell>
@@ -618,7 +633,13 @@ function ReservationTable({
               <DateCell value={reservation.due_at} timeZone={timeZone} />
             </TableCell>
             <TableCell className="hidden align-top capitalize text-dashboard-muted lg:table-cell">
-              {reservation.fulfillment_method === "pickup" ? "Pickup" : "Delivery"}
+              {reservation.fulfillment_method === "pickup" ? (
+                "Pickup"
+              ) : (
+                <span className="inline-flex rounded-md bg-dashboard-gold-soft px-1.5 py-0.5 text-xs font-medium text-dashboard-gold-text">
+                  Delivery
+                </span>
+              )}
             </TableCell>
             <TableCell className="align-top">
               <PaymentCell reservation={reservation} />

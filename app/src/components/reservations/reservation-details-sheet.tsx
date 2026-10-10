@@ -6,6 +6,7 @@ import {
   Clock3,
   CreditCard,
   PackageCheck,
+  RotateCcw,
   Shirt,
   Truck,
   UserRound,
@@ -22,6 +23,8 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import type { DrezivoApiError } from "@/lib/drezivo-api";
 import { displaySizeLabel } from "@/lib/catalogue-display";
 import { cn } from "@/lib/utils";
+
+import type { ReservationRebookSource } from "./new-reservation-sheet";
 
 import {
   ReservationMutationActions,
@@ -41,6 +44,7 @@ export function ReservationDetailsSheet({
   error,
   isLoading,
   onOpenChange,
+  onContinue,
   onMutationSuccess,
   onRefreshRequired,
   onRetry,
@@ -48,6 +52,8 @@ export function ReservationDetailsSheet({
   reservationId,
   timeZone,
 }: {
+  /** Start a new booking copied from this one; shown on cancelled, expired and rejected reservations. */
+  onContinue?: (source: ReservationRebookSource) => void;
   detail: ReservationDetail | null;
   error: DrezivoApiError | null;
   isLoading: boolean;
@@ -100,6 +106,7 @@ export function ReservationDetailsSheet({
           <ReservationDetails
             detail={detail}
             notice={notice}
+            onContinue={onContinue}
             onMutationSuccess={onMutationSuccess}
             onNotice={setNotice}
             onRefreshRequired={onRefreshRequired}
@@ -115,6 +122,7 @@ export function ReservationDetailsSheet({
 function ReservationDetails({
   detail,
   notice,
+  onContinue,
   onMutationSuccess,
   onNotice,
   onRefreshRequired,
@@ -123,6 +131,7 @@ function ReservationDetails({
 }: {
   detail: ReservationDetail;
   notice: ReservationMutationNotice | null;
+  onContinue: ((source: ReservationRebookSource) => void) | undefined;
   onMutationSuccess: () => void;
   onNotice: (notice: ReservationMutationNotice | null) => void;
   onRefreshRequired: () => void;
@@ -151,6 +160,11 @@ function ReservationDetails({
           >
             {RESERVATION_STATUS_LABELS[detail.status]}
           </Badge>
+          {detail.delivery_snapshot.fulfillment_method === "delivery" ? (
+            <Badge variant="outline" className="whitespace-nowrap border-dashboard-gold-text/30 bg-dashboard-gold-soft px-2 py-1 text-xs text-dashboard-gold-text">
+              Delivery requested
+            </Badge>
+          ) : null}
           {detail.booking_channel ? (
             <Badge variant="outline" className="whitespace-nowrap px-2 py-1 text-xs text-dashboard-muted">
               {detail.booking_channel === "online" ? "Online booking" : "Walk-in"}
@@ -174,6 +188,10 @@ function ReservationDetails({
           onMutationSuccess={onMutationSuccess}
           onRefreshRequired={onRefreshRequired}
         />
+
+        {onContinue && CONTINUABLE_STATUSES.has(detail.status) && permissionCodes.includes("reservations.manage") ? (
+          <ContinueReservation detail={detail} onContinue={onContinue} />
+        ) : null}
       </header>
 
       <div className="flex flex-1 flex-col gap-3 p-4">
@@ -296,6 +314,10 @@ function ReservationDetails({
             <DetailValue label="Event date" value={detail.event_date ?? "Not provided"} />
           </dl>
         </DetailCard>
+
+        {detail.delivery_snapshot.fulfillment_method === "delivery" ? (
+          <DeliveryCard detail={detail} />
+        ) : null}
 
         <DetailCard title="Price and payment" icon={CreditCard}>
           <dl className="grid gap-3 text-sm sm:grid-cols-3">
@@ -465,6 +487,120 @@ function ReservationDetails({
         </DetailCard>
       </div>
     </div>
+  );
+}
+
+const CONTINUABLE_STATUSES: ReadonlySet<ReservationDetail["status"]> = new Set(["cancelled", "expired", "rejected"]);
+
+/**
+ * A finished reservation stays in history; rebooking copies every line into a new booking. Older
+ * reservations whose lines lack product identity fail closed rather than silently dropping items.
+ */
+function ContinueReservation({
+  detail,
+  onContinue,
+}: {
+  detail: ReservationDetail;
+  onContinue: (source: ReservationRebookSource) => void;
+}) {
+  if (detail.lines.length === 0 || detail.lines.some((line) => !line.product_id)) return null;
+  const customer = detail.customer.snapshot;
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashboard-border bg-dashboard-active/40 p-3">
+      <p className="text-sm text-dashboard-muted">
+        This reservation is {detail.status === "expired" ? "expired" : detail.status}. Create a new reservation with the same items and details.
+      </p>
+      <Button
+        type="button"
+        size="sm"
+        onClick={() =>
+          onContinue({
+            referenceCode: detail.reference_code,
+            lines: detail.lines.map((line) => ({
+              sourceLineId: line.id,
+              productId: line.product_id!,
+              variantId: line.variant_id,
+              name: line.name_snapshot,
+            })),
+            pickupAt: detail.pickup_at,
+            dueAt: detail.due_at,
+            eventDate: detail.event_date ?? null,
+            fulfillmentMethod: detail.delivery_snapshot.fulfillment_method,
+            paymentMethodId: detail.payment?.payment_method_id ?? null,
+            customer: customer
+              ? {
+                  customerId: detail.customer.customer_id,
+                  fullName: customer.full_name,
+                  phone: customer.phone,
+                  email: customer.email,
+                  address: customer.address,
+                }
+              : null,
+          })
+        }
+      >
+        <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Create New Reservation from This
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * The renter's delivery request and what staff need to act on it. When the shop has not set up
+ * delivery (`to_arrange`), nothing was charged and staff contact the renter to arrange it.
+ */
+function DeliveryCard({ detail }: { detail: ReservationDetail }) {
+  const customer = detail.customer.snapshot;
+  const { fee_minor: feeMinor, terms } = detail.delivery_snapshot;
+  const toArrange = terms === "to_arrange";
+  return (
+    <DetailCard title="Delivery" icon={Truck}>
+      <div className="w-full space-y-3 text-sm">
+        <div className="rounded-lg border border-dashboard-gold-text/25 bg-dashboard-gold-soft p-3 text-dashboard-gold-text">
+          <p className="font-medium">
+            {toArrange ? "The renter asked for delivery" : "The renter chose delivery"}
+          </p>
+          <p className="mt-1 text-xs">
+            {toArrange
+              ? "Delivery is not set up for your storefront, so no delivery fee was charged. Contact the renter to arrange the delivery and any fee."
+              : "Contact the renter to confirm the delivery time before pickup day."}
+          </p>
+        </div>
+        <dl className="grid gap-3 sm:grid-cols-2">
+          <DetailValue label="Deliver to" value={customer?.address ?? "Not recorded"} />
+          <DetailValue
+            label="Delivery fee"
+            value={
+              toArrange
+                ? "To arrange with the renter"
+                : feeMinor !== undefined
+                  ? formatMinorMoney(feeMinor, detail.price_snapshot.currency)
+                  : "Included in the total"
+            }
+          />
+        </dl>
+        {customer?.phone || customer?.email ? (
+          <div className="flex flex-wrap gap-2">
+            {customer.phone ? (
+              <a
+                href={`tel:${customer.phone}`}
+                className="inline-flex h-8 items-center rounded-md border border-dashboard-border px-3 text-xs font-medium text-dashboard-navy hover:bg-dashboard-active"
+              >
+                Call {customer.phone}
+              </a>
+            ) : null}
+            {customer.email ? (
+              <a
+                href={`mailto:${customer.email}?subject=${encodeURIComponent(`Delivery for reservation ${detail.reference_code}`)}`}
+                className="inline-flex h-8 items-center rounded-md border border-dashboard-border px-3 text-xs font-medium text-dashboard-navy hover:bg-dashboard-active"
+              >
+                Email the renter
+              </a>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </DetailCard>
   );
 }
 

@@ -1,9 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   clothingDetail,
   clothingListItem,
+  customerDetailResponse,
   staffReservationAvailabilityCalendarResponse,
   staffReservationAvailabilityCheckResponse,
   staffReservationCompleteResponse,
@@ -30,6 +31,7 @@ const api = vi.hoisted(() => ({
   getStaffReservationAvailabilityCalendar: vi.fn(),
   getStaffReservationAvailabilityCheck: vi.fn(),
   getStaffReservationIntakeOptions: vi.fn(),
+  getCustomerDetail: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({
@@ -107,6 +109,26 @@ const ids = {
   storefront: "00000000-0000-4000-8000-000000000107",
   customer: "00000000-0000-4000-8000-000000000108",
 };
+
+const customerProfile = (overrides: Record<string, unknown> = {}) => customerDetailResponse.parse({
+  id: ids.customer,
+  full_name: "Maria Existing",
+  phone: "09170000000",
+  email: "maria@example.test",
+  address: "1 Existing Street",
+  social_media: null,
+  notes: null,
+  status: "active",
+  archived_at: null,
+  reservation_count: 0,
+  fitting_count: 0,
+  completed_engagement_count: 0,
+  last_activity: null,
+  next_activity: null,
+  created_at: "2026-09-01T00:00:00.000Z",
+  updated_at: "2026-09-01T00:00:00.000Z",
+  ...overrides,
+});
 
 const product = clothingListItem.parse({
   product_id: ids.product,
@@ -387,6 +409,10 @@ describe("NewReservationSheet", () => {
       },
       requestId: "req-intake",
     });
+    api.getCustomerDetail.mockResolvedValue({
+      data: customerProfile(),
+      requestId: "req-customer-detail",
+    });
     api.getCatalogueClothing.mockResolvedValue(listPage());
     api.getBusinessHours.mockResolvedValue({
       data: {
@@ -419,6 +445,183 @@ describe("NewReservationSheet", () => {
       data: { reservation: { ...heldResponse.reservation, status: "cancelled", version: 2 } },
       requestId: "req-cancel",
     });
+  });
+
+  it("pre-fills rebooking from a finished reservation and re-checks every copied line", async () => {
+    renderSheet({
+      rebookFrom: {
+        referenceCode: "RSV-OLD-001",
+        lines: [{
+          sourceLineId: "source-line-1",
+          productId: ids.product as never,
+          variantId: ids.variant as never,
+          name: "Amara",
+        }],
+        pickupAt: "2027-03-12T02:00:00.000Z",
+        dueAt: "2027-03-15T02:00:00.000Z",
+        eventDate: "2027-03-13",
+        fulfillmentMethod: "delivery",
+        paymentMethodId: ids.paymentMethod as never,
+        customer: { customerId: ids.customer as never, fullName: "Bea Santiago", phone: null, email: null, address: null },
+      },
+    });
+
+    expect(await screen.findByText(/Copied from RSV-OLD-001\. Dates, availability, and prices are checked again/)).toBeTruthy();
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledWith(ids.product));
+    // The original size and dates are re-checked against live availability before anything is reserved.
+    await waitFor(() =>
+      expect(api.getStaffReservationAvailabilityCheck).toHaveBeenCalledWith({
+        variant_id: ids.variant,
+        pickup_at: "2027-03-12T02:00:00.000Z",
+        due_at: "2027-03-15T02:00:00.000Z",
+      })
+    );
+    expect(api.createStaffReservation).not.toHaveBeenCalled();
+  });
+
+  it("uses the source reservation as a fallback only for blank fields on the current profile", async () => {
+    api.getStaffReservationAvailabilityCheck.mockImplementation(
+      ({ variant_id, pickup_at, due_at }: { variant_id: string; pickup_at: string; due_at: string }) =>
+        Promise.resolve({
+          data: {
+            ...exactResponse,
+            variant_id,
+            requested_interval: { start: pickup_at, end: due_at },
+          },
+          requestId: "req-rebook-profile-fallback-availability",
+        })
+    );
+    api.getStaffReservationIntakeOptions.mockImplementation((input: { customer_search?: string }) =>
+      Promise.resolve({
+        data: {
+          payment_methods: [{ id: ids.paymentMethod, name: "Cash", rail: "cash" }],
+          customers: input.customer_search
+            ? [{
+                id: ids.customer,
+                full_name: "Bea Santiago",
+                phone: null,
+                email: null,
+                has_address: false,
+              }]
+            : [],
+        },
+        requestId: "req-rebook-profile-fallback-customer",
+      })
+    );
+    api.getCustomerDetail.mockResolvedValueOnce({
+      data: customerProfile({
+        full_name: "Bea Santiago",
+        phone: null,
+        email: null,
+        address: null,
+        social_media: "@bea-current",
+        notes: "Current profile note",
+      }),
+      requestId: "req-rebook-profile-fallback-detail",
+    });
+
+    renderSheet({
+      rebookFrom: {
+        referenceCode: "RSV-OLD-FALLBACK",
+        lines: [{
+          sourceLineId: "source-line-fallback",
+          productId: ids.product as never,
+          variantId: ids.variant as never,
+          name: "Amara",
+        }],
+        pickupAt: "2027-03-12T02:00:00.000Z",
+        dueAt: "2027-03-15T02:00:00.000Z",
+        eventDate: "2027-03-13",
+        fulfillmentMethod: "delivery",
+        paymentMethodId: ids.paymentMethod as never,
+        customer: {
+          customerId: ids.customer as never,
+          fullName: "Bea Santiago",
+          phone: "09179998888",
+          email: "beasaved@example.test",
+          address: "Old reservation address",
+        },
+      },
+    });
+
+    const reserve = await screen.findByRole("button", { name: "Reserve" });
+    await waitFor(() => expect(reserve).toBeEnabled());
+    fireEvent.click(reserve);
+    await screen.findByText("RSV-WALKIN-001");
+    await waitFor(() => expect(screen.getByLabelText("Phone")).toHaveValue("09179998888"));
+    expect(screen.getByLabelText("Email")).toHaveValue("beasaved@example.test");
+    expect(screen.getByLabelText("Address")).toHaveValue("Old reservation address");
+    expect(screen.getByLabelText("Social media (optional)")).toHaveValue("@bea-current");
+    expect(screen.getByLabelText("Customer notes (optional)")).toHaveValue("Current profile note");
+  });
+
+  it("submits every selected source line as one replacement reservation", async () => {
+    const secondVariant = "00000000-0000-4000-8000-000000000112";
+    api.getStaffReservationAvailabilityCheck.mockImplementation(({ variant_id }: { variant_id: string }) =>
+      Promise.resolve({
+        data: {
+          ...exactResponse,
+          variant_id,
+          requested_interval: {
+            start: "2027-03-12T02:00:00.000Z",
+            end: "2027-03-15T02:00:00.000Z",
+          },
+        },
+        requestId: `req-exact-${variant_id}`,
+      })
+    );
+    renderSheet({
+      rebookFrom: {
+        referenceCode: "RSV-OLD-MULTI",
+        lines: [
+          { sourceLineId: "source-line-1", productId: ids.product as never, variantId: ids.variant as never, name: "Amara" },
+          { sourceLineId: "source-line-2", productId: ids.product as never, variantId: secondVariant as never, name: "Camille" },
+        ],
+        pickupAt: "2027-03-12T02:00:00.000Z",
+        dueAt: "2027-03-15T02:00:00.000Z",
+        eventDate: "2027-03-13",
+        fulfillmentMethod: "delivery",
+        paymentMethodId: ids.paymentMethod as never,
+        customer: null,
+      },
+    });
+
+    await waitFor(() => expect(api.getStaffReservationAvailabilityCheck).toHaveBeenCalledTimes(2));
+    fireEvent.click(await screen.findByRole("button", { name: "Reserve" }));
+
+    await waitFor(() => expect(api.createStaffReservation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        variant_id: ids.variant,
+        lines: [{ variant_id: ids.variant }, { variant_id: secondVariant }],
+        fulfillment_method: "delivery",
+        event_date: "2027-03-13",
+      }),
+      expect.any(String),
+    ));
+  });
+
+  it("drops copied dates that have already passed and asks for new ones", async () => {
+    renderSheet({
+      rebookFrom: {
+        referenceCode: "RSV-OLD-002",
+        lines: [{
+          sourceLineId: "source-line-2",
+          productId: ids.product as never,
+          variantId: ids.variant as never,
+          name: "Amara",
+        }],
+        pickupAt: "2025-01-10T02:00:00.000Z",
+        dueAt: "2025-01-13T02:00:00.000Z",
+        eventDate: null,
+        fulfillmentMethod: "pickup",
+        paymentMethodId: null,
+        customer: null,
+      },
+    });
+
+    expect(await screen.findByText("Copied from RSV-OLD-002. Its dates have passed, so choose new dates.")).toBeTruthy();
+    await waitFor(() => expect(api.getCatalogueClothingDetail).toHaveBeenCalledWith(ids.product));
+    expect(api.getStaffReservationAvailabilityCheck).not.toHaveBeenCalled();
   });
 
   it("shows only five recent clothing items by default and tells staff to search for more", async () => {
@@ -600,6 +803,13 @@ describe("NewReservationSheet", () => {
       })
     );
     fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
+    const confirm = screen.getByRole("button", { name: "Confirm Reservation" });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "invalid-email" } });
+    expect(screen.getByText("Enter a valid email address.")).toBeVisible();
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "walkin@example.test" } });
+    expect(confirm).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Confirm Reservation" }));
 
     await waitFor(() =>
@@ -613,6 +823,7 @@ describe("NewReservationSheet", () => {
             customer: {
               full_name: "Walk-in Customer",
               phone: "09171234567",
+              email: "walkin@example.test",
               address: "123 Test Street",
             },
           },
@@ -698,6 +909,7 @@ describe("NewReservationSheet", () => {
       target: { value: "Walk-in GCash Customer" },
     });
     fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "walkin-gcash@example.test" } });
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Test Street" } });
     fireEvent.click(
       screen.getByRole("checkbox", {
@@ -720,6 +932,7 @@ describe("NewReservationSheet", () => {
             customer: {
               full_name: "Walk-in GCash Customer",
               phone: "09171234567",
+              email: "walkin-gcash@example.test",
               address: "123 Test Street",
             },
           },
@@ -751,7 +964,11 @@ describe("NewReservationSheet", () => {
     expect(api.createStaffReservation).not.toHaveBeenCalled();
   });
 
-  it("can attach an existing tenant customer only after the garment hold exists", async () => {
+  it("prefills and saves all editable existing-customer fields only after the garment hold exists", async () => {
+    api.getCustomerDetail.mockResolvedValueOnce({
+      data: customerProfile({ social_media: "@maria", notes: "Call before arrival" }),
+      requestId: "req-customer-detail-editable",
+    });
     api.getStaffReservationIntakeOptions.mockImplementation((input: { customer_search?: string }) =>
       Promise.resolve({
         data: {
@@ -815,6 +1032,18 @@ describe("NewReservationSheet", () => {
     fireEvent.click(refreshedCustomer);
     expect(refreshedCustomer).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Selected customer")).toBeVisible();
+    await waitFor(() => expect(screen.getByLabelText("Address")).toHaveValue("1 Existing Street"));
+    expect(screen.getByLabelText("Full name")).toHaveValue("Maria Existing");
+    expect(screen.getByLabelText("Phone")).toHaveValue("09170000000");
+    expect(screen.getByLabelText("Email")).toHaveValue("maria@example.test");
+    expect(screen.getByLabelText("Social media (optional)")).toHaveValue("@maria");
+    expect(screen.getByLabelText("Customer notes (optional)")).toHaveValue("Call before arrival");
+    fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Maria Updated" } });
+    fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171112222" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "updated@example.test" } });
+    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "2 Updated Street" } });
+    fireEvent.change(screen.getByLabelText("Social media (optional)"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Customer notes (optional)"), { target: { value: "" } });
     fireEvent.click(
       screen.getByRole("checkbox", {
         name: /Customer has reviewed and accepted the business rental terms/i,
@@ -829,7 +1058,19 @@ describe("NewReservationSheet", () => {
         {
           version: 1,
           terms_accepted: true,
-          customer: { source: "existing", customer_id: ids.customer },
+          customer: {
+            source: "existing",
+            customer_id: ids.customer,
+            profile: {
+              full_name: "Maria Updated",
+              phone: "09171112222",
+              email: "updated@example.test",
+              address: "2 Updated Street",
+              social_media: null,
+              notes: null,
+              expected_updated_at: "2026-09-01T00:00:00.000Z",
+            },
+          },
           cash_collection: { amount_tendered_minor: "200000" },
         },
         expect.any(String)
@@ -838,6 +1079,15 @@ describe("NewReservationSheet", () => {
   });
 
   it("requires an inline address before an addressless existing customer can complete a reservation", async () => {
+    api.getCustomerDetail.mockResolvedValueOnce({
+      data: customerProfile({
+        full_name: "Addressless Existing",
+        phone: "09170000000",
+        email: "addressless@example.test",
+        address: null,
+      }),
+      requestId: "req-customer-detail-addressless",
+    });
     api.getStaffReservationIntakeOptions.mockImplementation((input: { customer_search?: string }) =>
       Promise.resolve({
         data: {
@@ -868,7 +1118,8 @@ describe("NewReservationSheet", () => {
     });
     fireEvent.click(await screen.findByRole("button", { name: /Addressless Existing/i }));
     const complete = screen.getByRole("button", { name: "Confirm Reservation" });
-    expect(screen.getByLabelText("Address required for this reservation")).toBeVisible();
+    await waitFor(() => expect(screen.getByLabelText("Email")).toHaveValue("addressless@example.test"));
+    expect(screen.getByLabelText("Address")).toBeVisible();
     fireEvent.click(
       screen.getByRole("checkbox", {
         name: /Customer has reviewed and accepted the business rental terms/i,
@@ -877,7 +1128,7 @@ describe("NewReservationSheet", () => {
     fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
     expect(complete).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText("Address required for this reservation"), {
+    fireEvent.change(screen.getByLabelText("Address"), {
       target: { value: "123 Test Street" },
     });
     expect(complete).toBeEnabled();
@@ -889,7 +1140,111 @@ describe("NewReservationSheet", () => {
         {
           version: 1,
           terms_accepted: true,
-          customer: { source: "existing", customer_id: ids.customer, address: "123 Test Street" },
+          customer: {
+            source: "existing",
+            customer_id: ids.customer,
+            profile: {
+              full_name: "Addressless Existing",
+              phone: "09170000000",
+              email: "addressless@example.test",
+              address: "123 Test Street",
+              social_media: null,
+              notes: null,
+              expected_updated_at: "2026-09-01T00:00:00.000Z",
+            },
+          },
+          cash_collection: { amount_tendered_minor: "200000" },
+        },
+        expect.any(String)
+      )
+    );
+  });
+
+  it.each([
+    {
+      missing: "Email",
+      fill: "rebooked@example.test",
+      savedPhone: "09170000000",
+      savedEmail: null,
+      expectedCustomer: {
+        source: "existing", customer_id: ids.customer,
+        profile: {
+          full_name: "Contact Missing Customer", phone: "09170000000",
+          email: "rebooked@example.test", address: "123 Test Street",
+          social_media: null, notes: null, expected_updated_at: "2026-09-01T00:00:00.000Z",
+        },
+      },
+    },
+    {
+      missing: "Phone",
+      fill: "09173334444",
+      savedPhone: null,
+      savedEmail: "phone-missing@example.test",
+      expectedCustomer: {
+        source: "existing", customer_id: ids.customer,
+        profile: {
+          full_name: "Contact Missing Customer", phone: "09173334444",
+          email: "phone-missing@example.test", address: "123 Test Street",
+          social_media: null, notes: null, expected_updated_at: "2026-09-01T00:00:00.000Z",
+        },
+      },
+    },
+  ])("shows the missing $missing field when continuing with a saved customer", async ({ missing, fill, savedPhone, savedEmail, expectedCustomer }) => {
+    api.getCustomerDetail.mockResolvedValueOnce({
+      data: customerProfile({
+        full_name: "Contact Missing Customer",
+        phone: savedPhone,
+        email: savedEmail,
+        address: null,
+      }),
+      requestId: `req-customer-detail-missing-${missing.toLowerCase()}`,
+    });
+    api.getStaffReservationIntakeOptions.mockImplementation((input: { customer_search?: string }) =>
+      Promise.resolve({
+        data: {
+          payment_methods: [{ id: ids.paymentMethod, name: "Cash", rail: "cash" }],
+          customers: input.customer_search
+            ? [{
+                id: ids.customer,
+                full_name: "Contact Missing Customer",
+                phone: savedPhone,
+                email: savedEmail,
+                has_address: false,
+              }]
+            : [],
+        },
+        requestId: "req-intake-missing-contact",
+      })
+    );
+
+    renderSheet();
+    await fillDatesAndSelectProduct();
+    fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
+    await screen.findByText("RSV-WALKIN-001");
+    fireEvent.click(screen.getByRole("button", { name: "Existing customer" }));
+    fireEvent.change(screen.getByLabelText("Search existing customer"), { target: { value: "Contact" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Contact Missing Customer/i }));
+
+    expect(await screen.findByLabelText(missing)).toBeVisible();
+    expect(screen.getByLabelText("Address")).toBeVisible();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Customer has reviewed and accepted/i }));
+    fireEvent.click(screen.getAllByRole("checkbox", { name: "Cash received" })[0]!);
+    const confirm = screen.getByRole("button", { name: "Confirm Reservation" });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(missing), { target: { value: fill } });
+    fireEvent.change(screen.getByLabelText("Address"), {
+      target: { value: "123 Test Street" },
+    });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    fireEvent.click(confirm);
+
+    await waitFor(() =>
+      expect(api.completeStaffReservation).toHaveBeenCalledWith(
+        ids.reservation,
+        {
+          version: 1,
+          terms_accepted: true,
+          customer: expectedCustomer,
           cash_collection: { amount_tendered_minor: "200000" },
         },
         expect.any(String)
@@ -938,6 +1293,7 @@ describe("NewReservationSheet", () => {
 
     fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Walk-in Customer" } });
     fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "walkin@example.test" } });
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Test Street" } });
     fireEvent.click(
       screen.getByRole("checkbox", {
@@ -959,6 +1315,15 @@ describe("NewReservationSheet", () => {
     await screen.findByText("RSV-WALKIN-001");
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel Hold" }));
+    const dialog = await screen.findByRole("dialog", { name: "Cancel this hold?" });
+    expect(dialog).toBeVisible();
+    expect(within(dialog).getByText(/customer details already entered above/i)).toBeVisible();
+    expect(within(dialog).queryByRole("textbox")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Save customer and cancel hold" })).toBeVisible();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save customer and cancel hold" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/name and at least one contact method/i);
+    expect(api.cancelReservation).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel hold without saving" }));
 
     await waitFor(() =>
       expect(api.cancelReservation).toHaveBeenCalledWith(
@@ -967,6 +1332,34 @@ describe("NewReservationSheet", () => {
         expect.any(String)
       )
     );
+    expect(await screen.findByText(/garment hold was released/i)).toBeVisible();
+    expect(props.onReservationChanged).toHaveBeenCalledWith(ids.reservation);
+  });
+
+  it("saves the entered customer with hold cancellation", async () => {
+    const { props } = renderSheet();
+    await fillDatesAndSelectProduct();
+    fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
+    await screen.findByText("RSV-WALKIN-001");
+    fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Saved Walk-in" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "saved-walkin@example.test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel Hold" }));
+    const dialog = await screen.findByRole("dialog", { name: "Cancel this hold?" });
+    expect(within(dialog).queryByRole("textbox")).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save customer and cancel hold" }));
+
+    await waitFor(() => expect(api.cancelReservation).toHaveBeenCalledWith(
+      ids.reservation,
+      {
+        version: 1,
+        reason: "Staff abandoned new reservation flow",
+        customer: {
+          source: "new",
+          customer: { full_name: "Saved Walk-in", email: "saved-walkin@example.test" },
+        },
+      },
+      expect.any(String),
+    ));
     expect(await screen.findByText(/garment hold was released/i)).toBeVisible();
     expect(props.onReservationChanged).toHaveBeenCalledWith(ids.reservation);
   });

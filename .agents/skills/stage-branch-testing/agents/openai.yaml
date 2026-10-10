@@ -1,0 +1,4 @@
+interface:
+  display_name: "Stage Branch Testing"
+  short_description: "Fetch a branch, map tests, and merge it to staging"
+  default_prompt: "Use $stage-branch-testing <remote-branch> to explain the changes, map local and preview tests, and merge to staging through a protected PR when checks allow."

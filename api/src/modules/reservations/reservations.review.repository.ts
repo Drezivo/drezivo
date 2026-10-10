@@ -128,12 +128,8 @@ export async function lockReservationForReview(
   return result.rows[0] ?? null;
 }
 
-/**
- * Repairs only the missing address on a pre-address reservation snapshot while
- * the reservation header remains locked. The original identity/contact facts
- * are intentionally preserved.
- */
-export async function repairReservationSnapshotAddressForSubmit(
+/** Repairs only missing customer fields on a held reservation while preserving saved snapshot values. */
+export async function repairReservationSnapshotForSubmit(
   client: PoolClient,
   input: {
     tenantId: string;
@@ -141,17 +137,12 @@ export async function repairReservationSnapshotAddressForSubmit(
     reservationId: string;
     version: number;
     customerId: string;
-    address: string;
+    customerSnapshot: Record<string, unknown>;
   },
 ): Promise<boolean> {
   const result = await client.query<{ id: string }>(
     `UPDATE reservation
-        SET customer_snapshot = jsonb_set(
-          customer_snapshot,
-          '{address}',
-          to_jsonb($6::text),
-          true
-        )
+        SET customer_snapshot = $6::jsonb
       WHERE tenant_id = $1
         AND branch_id = $2
         AND id = $3::uuid
@@ -159,7 +150,6 @@ export async function repairReservationSnapshotAddressForSubmit(
         AND version = $4
         AND customer_id = $5::uuid
         AND customer_snapshot IS NOT NULL
-        AND nullif(btrim(customer_snapshot ->> 'address'), '') IS NULL
       RETURNING id`,
     [
       input.tenantId,
@@ -167,7 +157,7 @@ export async function repairReservationSnapshotAddressForSubmit(
       input.reservationId,
       input.version,
       input.customerId,
-      input.address,
+      JSON.stringify(input.customerSnapshot),
     ],
   );
   return result.rowCount === 1;
@@ -292,6 +282,20 @@ export async function lockReservationAllocationsForReview(
     [input.tenantId, input.reservationId, input.branchId],
   );
   return result.rows;
+}
+
+export async function readReservationLineCountForReview(
+  client: PoolClient,
+  input: { tenantId: string; reservationId: string },
+): Promise<number> {
+  const result = await client.query<{ line_count: string }>(
+    `SELECT count(*)::text AS line_count
+       FROM reservation_line
+      WHERE tenant_id = $1
+        AND reservation_id = $2::uuid`,
+    [input.tenantId, input.reservationId],
+  );
+  return Number(result.rows[0]?.line_count ?? 0);
 }
 
 export async function bindReservationCustomerForSubmit(
@@ -1072,19 +1076,36 @@ export async function appendPickupCustodyEvent(
 
 export async function cancelReservationPreHandover(
   client: PoolClient,
-  input: { tenantId: string; branchId: string; reservationId: string; version: number },
+  input: {
+    tenantId: string;
+    branchId: string;
+    reservationId: string;
+    version: number;
+    customerId?: string;
+    customerSnapshot?: Record<string, unknown>;
+  },
 ): Promise<number | null> {
   const result = await client.query<{ version: number }>(
     `UPDATE reservation
         SET status = 'cancelled',
+            customer_id = COALESCE($5::uuid, customer_id),
+            customer_snapshot = COALESCE($6::jsonb, customer_snapshot),
             version = version + 1
       WHERE tenant_id = $1
         AND branch_id = $2
         AND id = $3::uuid
         AND status IN ('held', 'pending_confirmation', 'confirmed')
         AND version = $4
+        AND ($5::uuid IS NULL OR customer_id IS NULL OR customer_id = $5::uuid)
       RETURNING version`,
-    [input.tenantId, input.branchId, input.reservationId, input.version],
+    [
+      input.tenantId,
+      input.branchId,
+      input.reservationId,
+      input.version,
+      input.customerId ?? null,
+      input.customerSnapshot ? JSON.stringify(input.customerSnapshot) : null,
+    ],
   );
   return result.rows[0]?.version ?? null;
 }

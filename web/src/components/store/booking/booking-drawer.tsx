@@ -230,7 +230,10 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
   }
 
   const rental = state.range ? estimateRentalMinor(variant, days) : 0n;
-  const delivery = state.fulfillment === 'delivery' ? BigInt(store.fulfillment.delivery_fee_minor) : 0n;
+  // Delivery is always offered. A shop that has not set it up arranges it with the renter after
+  // booking, so nothing is added to the total (the API records it as `to_arrange`).
+  const deliveryToArrange = state.fulfillment === 'delivery' && !store.fulfillment.delivery;
+  const delivery = state.fulfillment === 'delivery' && store.fulfillment.delivery ? BigInt(store.fulfillment.delivery_fee_minor) : 0n;
   const estimate = rental + BigInt(variant.security_deposit_minor) + delivery;
   const stepIndex = STEPS.findIndex((step) => step.key === state.step);
 
@@ -317,18 +320,25 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                 <TextField id="booking-event_date" label={`Event date${requirements.event_date === 'optional' ? ' (optional)' : ''}`} error={fieldErrors.event_date} type="date" min={state.range?.start} max={state.range?.end} value={state.customer.event_date} onChange={(event_date) => updateCustomer('event_date', event_date)} />
               ) : null}
 
-              {store.fulfillment.delivery ? (
-                <fieldset>
-                  <legend className="mb-2 text-sm font-medium">Pickup or delivery</legend>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(['pickup', 'delivery'] as const).map((method) => (
-                      <Choice key={method} name="fulfillment" checked={state.fulfillment === method} onSelect={() => dispatch({ type: 'set', patch: { fulfillment: method } })}>
-                        {method === 'pickup' ? 'Pick up at the shop' : `Delivery${store.fulfillment.delivery_fee_minor !== '0' ? ` · ${formatMinor(store.fulfillment.delivery_fee_minor)}` : ''}`}
-                      </Choice>
-                    ))}
-                  </div>
-                </fieldset>
-              ) : null}
+              <fieldset>
+                <legend className="mb-2 text-sm font-medium">Pickup or delivery</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['pickup', 'delivery'] as const).map((method) => (
+                    <Choice key={method} name="fulfillment" checked={state.fulfillment === method} onSelect={() => dispatch({ type: 'set', patch: { fulfillment: method } })}>
+                      {method === 'pickup'
+                        ? 'Pick up at the shop'
+                        : store.fulfillment.delivery
+                          ? `Delivery${store.fulfillment.delivery_fee_minor !== '0' ? ` · ${formatMinor(store.fulfillment.delivery_fee_minor)}` : ''}`
+                          : 'Delivery · arranged with the shop'}
+                    </Choice>
+                  ))}
+                </div>
+                {deliveryToArrange ? (
+                  <p className="mt-2 text-sm text-sf-muted">
+                    The shop will contact you to arrange delivery and any delivery fee. It is not part of this total.
+                  </p>
+                ) : null}
+              </fieldset>
 
               {store.payment_methods.length > 1 ? (
                 <fieldset>
@@ -361,6 +371,7 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                 <Row label={`Rental · ${days} day${days === 1 ? '' : 's'}`} value={formatMinor(rental.toString())} />
                 <Row label="Refundable deposit" value={formatMinor(variant.security_deposit_minor)} />
                 {delivery > 0n ? <Row label="Delivery" value={formatMinor(delivery.toString())} /> : null}
+                {deliveryToArrange ? <Row label="Delivery" value="Arranged with the shop" /> : null}
                 <div className="flex justify-between gap-4 border-t border-sf-line pt-2 font-medium">
                   <dt>Estimated total</dt>
                   <dd className="tabular-nums">{formatMinor(estimate.toString())}</dd>
