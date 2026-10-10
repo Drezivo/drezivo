@@ -284,6 +284,37 @@ describe('storefront guest booking', async () => {
     });
   });
 
+  it('books several pieces in one request, lists them for the renter and the owner, and refuses a piece with no free size', async () => {
+    const ws = await liveStore('gv-multi');
+    const business = await settingsService.getBusiness(ws.owner);
+    await settingsService.updateBusiness(ws.owner, 'biz', { version: business.version, business_name: 'Luna Gown Rentals', business_email: 'owner@luna.test', business_phone: null, business_address: null });
+
+    const created = await booking.createReservation(ws.slug, { requestId: 'm1', idempotencyKey: 'multi-hold' }, holdRequest(ws, 'ana@example.test', { additional_variant_ids: [ws.variantIds.l] }));
+    expect(created.status).toBe(201);
+    if (!created.body.success) throw new Error('multi hold failed');
+    const { reservation } = created.body.data;
+    // Four rental days each: M 1,800 + 500 and L 1,900 + 500; a 2,000 deposit per piece; pickup.
+    expect(reservation.money).toEqual({ rental_total_minor: '470000', security_required_minor: '400000', delivery_total_minor: '0', due_now_minor: '870000' });
+    expect(reservation.items).toEqual([
+      { name: 'Emerald Gown', size_label: 'M' },
+      { name: 'Emerald Gown', size_label: 'L' },
+    ]);
+
+    const capability = guestTokenFor(reservation.id);
+    const upload = await booking.authorizeReceiptUpload(reservation.id, capability, { content_type: 'image/png', byte_size: PNG.length, sha256: pngSha });
+    await booking.submitReceipt(reservation.id, capability, { requestId: 'm2', idempotencyKey: 'multi-receipt' }, upload.file_id);
+    const emails = await admin.query<Record<string, unknown>>(`SELECT payload FROM outbox_event WHERE tenant_id = $1 AND dedupe_key LIKE 'reservation-email:%:new_request:business'`, [ws.tenantId]);
+    expect(openSealedEmail(emails.rows[0]?.['payload'] as Record<string, unknown>).text).toContain('Item: Emerald Gown, Emerald Gown');
+
+    // The shop has one M piece, and it is now held: a second request for M twice is refused whole.
+    const twice = booking.createReservation(ws.slug, { requestId: 'm3', idempotencyKey: 'multi-twice' }, holdRequest(ws, 'ben@example.test', { requested_interval: interval(3, 10), additional_variant_ids: [ws.variantIds.m] }));
+    const refused = await twice;
+    expect(refused.status).toBe(409);
+    expect(refused.body).toMatchObject({ success: false, error: { code: 'CAPACITY_CONFLICT', message: 'Emerald Gown is no longer available for those dates.' } });
+    const holds = await admin.query<{ n: number }>(`SELECT count(*)::int AS n FROM reservation WHERE tenant_id = $1`, [ws.tenantId]);
+    expect(holds.rows[0]?.n).toBe(1);
+  });
+
   it('lets a renter ask for delivery when the shop has not set it up, charges no fee, and tells the owner to arrange it', async () => {
     const ws = await liveStore('gv-deliver', undefined, { ...policy, delivery: { enabled: false, fee_minor: '0', notes: null } });
     const business = await settingsService.getBusiness(ws.owner);

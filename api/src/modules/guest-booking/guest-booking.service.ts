@@ -126,8 +126,11 @@ export class GuestBookingService {
           if (!methods.some((method) => method.id === request.payment_method_id)) {
             throw new ValidationError('Choose one of the payment methods this shop accepts online.');
           }
-          if (!(await isVisibleVariant(client, store.tenantId, request.variant_id))) {
-            throw new NotFoundError('This item is no longer available.');
+          const variantIds = [request.variant_id, ...(request.additional_variant_ids ?? [])];
+          for (const variantId of new Set(variantIds)) {
+            if (!(await isVisibleVariant(client, store.tenantId, variantId))) {
+              throw new NotFoundError('An item in your booking is no longer available.');
+            }
           }
 
           try {
@@ -142,7 +145,7 @@ export class GuestBookingService {
                 fulfillment_method: request.fulfillment_method,
                 payment_method_id: request.payment_method_id,
               },
-              variantIds: [request.variant_id],
+              variantIds,
             });
             const customer = await findOrCreateGuestCustomer(client, store.tenantId, request.email, request.customer);
             const { graph } = await createHeldReservation(client, {
@@ -427,6 +430,7 @@ export class GuestBookingService {
       status: row.status,
       item_name: row.item_name ?? 'Rental',
       size_label: row.size_label,
+      ...(row.items.length > 1 ? { items: row.items } : {}),
       fulfillment_method: row.delivery_snapshot['fulfillment_method'] === 'delivery' ? 'delivery' : 'pickup',
       pickup_at: row.pickup_at.toISOString(),
       due_at: row.due_at.toISOString(),
