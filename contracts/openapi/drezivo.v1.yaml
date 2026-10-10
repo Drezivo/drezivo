@@ -8593,6 +8593,12 @@ paths:
                 variant_id:
                   type: string
                   format: uuid
+                additional_variant_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                  maxItems: 9
                 requested_interval:
                   type: object
                   properties:
@@ -8666,6 +8672,22 @@ paths:
                             type:
                               - string
                               - "null"
+                          items:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                                size_label:
+                                  type:
+                                    - string
+                                    - "null"
+                              required:
+                                - name
+                                - size_label
+                              additionalProperties: false
+                            maxItems: 10
                           fulfillment_method:
                             type: string
                             enum: *a34
@@ -22399,6 +22421,22 @@ paths:
                         type:
                           - string
                           - "null"
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                            size_label:
+                              type:
+                                - string
+                                - "null"
+                          required:
+                            - name
+                            - size_label
+                          additionalProperties: false
+                        maxItems: 10
                       fulfillment_method:
                         type: string
                         enum: *a34
@@ -22853,6 +22891,22 @@ paths:
                         type:
                           - string
                           - "null"
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                            size_label:
+                              type:
+                                - string
+                                - "null"
+                          required:
+                            - name
+                            - size_label
+                          additionalProperties: false
+                        maxItems: 10
                       fulfillment_method:
                         type: string
                         enum: *a34

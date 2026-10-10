@@ -6,7 +6,7 @@ import { fileObjectId, fittingId, paymentMethodId, productVariantId, reservation
 import { moneyString } from '../common/money';
 import { instantInterval, isoDate, isoInstant } from '../common/time';
 import { fulfillmentMethod, reservationState } from '../reservations';
-import { paymentInstructions } from '../reservations/hold';
+import { MAX_RESERVATION_LINES, paymentInstructions } from '../reservations/hold';
 
 const guestEmail = z.string().trim().toLowerCase().email().max(254);
 const turnstileToken = z.string().trim().min(1).max(2_048).optional();
@@ -28,6 +28,8 @@ export const guestReservationRequest = z
     email: guestEmail,
     customer: guestCustomer,
     variant_id: productVariantId,
+    /** More pieces for the same dates; each gets its own free piece or the whole request is refused. */
+    additional_variant_ids: z.array(productVariantId).max(MAX_RESERVATION_LINES - 1).optional(),
     requested_interval: instantInterval,
     event_date: isoDate.nullable(),
     fulfillment_method: fulfillmentMethod,
@@ -43,6 +45,11 @@ export const guestReservationView = z
     status: reservationState,
     item_name: z.string(),
     size_label: z.string().nullable(),
+    /** Every piece on the booking in order; `item_name` and `size_label` describe the first. */
+    items: z
+      .array(z.object({ name: z.string(), size_label: z.string().nullable() }).strict())
+      .max(MAX_RESERVATION_LINES)
+      .optional(),
     fulfillment_method: fulfillmentMethod,
     pickup_at: isoInstant,
     due_at: isoInstant,

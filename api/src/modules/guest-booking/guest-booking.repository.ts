@@ -80,12 +80,17 @@ export interface GuestReservationRow {
   material_file_id: string | null;
   material_mime: string | null;
   receipt_submitted: boolean;
+  items: Array<{ name: string; size_label: string | null }>;
 }
 
 export async function readGuestReservation(client: PoolClient, tenantId: string, reservationId: string): Promise<GuestReservationRow | null> {
   const result = await client.query<GuestReservationRow>(
     `SELECT r.id, r.branch_id, r.reference_code, r.status, r.pickup_at, r.due_at, r.hold_expires_at,
             r.price_snapshot, r.delivery_snapshot, rl.name_snapshot AS item_name, pv.size_label,
+            (SELECT coalesce(json_agg(json_build_object('name', l.name_snapshot, 'size_label', v.size_label) ORDER BY l.line_number), '[]'::json)
+               FROM reservation_line l
+               LEFT JOIN product_variant v ON v.tenant_id = l.tenant_id AND v.id = l.variant_id
+              WHERE l.tenant_id = r.tenant_id AND l.reservation_id = r.id) AS items,
             pm.name AS method_name, pm.rail, pm.destination_snapshot, pm.qr_file_id,
             pm.presentation, pm.material_file_id,
             (SELECT fo.mime_type FROM file_object fo WHERE fo.tenant_id = pm.tenant_id AND fo.id = pm.material_file_id) AS material_mime,

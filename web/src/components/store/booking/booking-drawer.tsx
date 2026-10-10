@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
 import type { CatalogueVariant, FulfillmentMethod, GuestReservationRequest, GuestReservationView, ItemDetail, PublicStorefront } from '@drezivo/contracts';
 
@@ -13,6 +13,7 @@ import { lockPageScroll } from '../motion/scroll';
 import { Turnstile, TURNSTILE_SITE_KEY, type TurnstileHandle } from '../turnstile';
 import { AvailabilityCalendar, type DateRange, type DateRangeNotice } from './availability-calendar';
 import { BookingDateNotice } from './booking-date-notice';
+import { ExtraPieces, extraPiecesReadiness, type ExtraPiece } from './extra-pieces';
 import { PaymentStep } from './payment-step';
 
 type Step = 'dates' | 'details' | 'review' | 'pay';
@@ -111,6 +112,9 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
   const [robotToken, setRobotToken] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<CustomerFieldErrors>({});
   const [focusTarget, setFocusTarget] = useState<{ field: CustomerField; request: number } | null>(null);
+  const [extras, setExtras] = useState<ExtraPiece[]>([]);
+  const updateExtras = useCallback((update: (current: ExtraPiece[]) => ExtraPiece[]) => setExtras(update), []);
+  const extrasReadiness = extraPiecesReadiness(extras, state.range);
   const requirements = store.checkout.requirements;
   const days = state.range ? rentalDays(state.range.start, state.range.end) : 0;
 
@@ -197,6 +201,9 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
         social_handle: requirements.social_handle === 'hidden' || !c.social_handle.trim() ? null : c.social_handle.trim(),
       },
       variant_id: variant.variant_id,
+      ...(extras.length > 0
+        ? { additional_variant_ids: extras.flatMap((piece) => (piece.variant ? [piece.variant.variant_id] : [])) as GuestReservationRequest['variant_id'][] }
+        : {}),
       requested_interval: {
         start: zonedInstant(state.range.start, store.checkout.handover_time, store.timezone),
         end: zonedInstant(state.range.end, store.checkout.handover_time, store.timezone),
@@ -234,7 +241,11 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
   // booking, so nothing is added to the total (the API records it as `to_arrange`).
   const deliveryToArrange = state.fulfillment === 'delivery' && !store.fulfillment.delivery;
   const delivery = state.fulfillment === 'delivery' && store.fulfillment.delivery ? BigInt(store.fulfillment.delivery_fee_minor) : 0n;
-  const estimate = rental + BigInt(variant.security_deposit_minor) + delivery;
+  const extraRental = state.range
+    ? extras.reduce((sum, piece) => (piece.variant ? sum + estimateRentalMinor(piece.variant, days) : sum), 0n)
+    : 0n;
+  const deposits = extras.reduce((sum, piece) => (piece.variant ? sum + BigInt(piece.variant.security_deposit_minor) : sum), BigInt(variant.security_deposit_minor));
+  const estimate = rental + extraRental + deposits + delivery;
   const stepIndex = STEPS.findIndex((step) => step.key === state.step);
 
   return (
@@ -301,6 +312,12 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                   {formatDay(state.range.start)} → {formatDay(state.range.end)} · {days} day{days === 1 ? '' : 's'}
                 </p>
               ) : null}
+              {state.range ? <ExtraPieces slug={store.slug} range={state.range} pieces={extras} onChange={updateExtras} /> : null}
+              {state.range && extras.length > 0 && extrasReadiness.problem ? (
+                <p className="text-xs text-sf-muted" role="status">
+                  {extrasReadiness.problem}
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -362,14 +379,24 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                 <Row label="Dates" value={`${formatDay(state.range.start)} → ${formatDay(state.range.end)}`} />
                 <Row label="Handover" value={`${formatTime(store.checkout.handover_time)}, pickup and return`} />
                 <Row label="Size" value={variant.size_label ?? 'One size'} />
+                {extras.map((piece) => (
+                  <Row key={piece.key} label="Also" value={`${piece.name} · ${piece.variant?.size_label ?? 'One size'}`} />
+                ))}
                 <Row label="Name" value={state.customer.full_name} />
                 <Row label="Email" value={state.customer.email.trim().toLowerCase()} />
                 <Row label={state.fulfillment === 'delivery' ? 'Delivery to' : 'Address'} value={state.customer.address} />
                 <Row label="Payment" value={store.payment_methods.find((method) => method.id === state.paymentMethodId)?.name ?? ''} />
               </dl>
               <dl className="space-y-2 border-t border-sf-line pt-4 text-sm">
-                <Row label={`Rental · ${days} day${days === 1 ? '' : 's'}`} value={formatMinor(rental.toString())} />
-                <Row label="Refundable deposit" value={formatMinor(variant.security_deposit_minor)} />
+                <Row label={`${extras.length > 0 ? `${item.name} · ` : 'Rental · '}${days} day${days === 1 ? '' : 's'}`} value={formatMinor(rental.toString())} />
+                {state.range
+                  ? extras.map((piece) =>
+                      piece.variant ? (
+                        <Row key={piece.key} label={`${piece.name} · ${days} day${days === 1 ? '' : 's'}`} value={formatMinor(estimateRentalMinor(piece.variant, days).toString())} />
+                      ) : null,
+                    )
+                  : null}
+                <Row label={extras.length > 0 ? 'Refundable deposits' : 'Refundable deposit'} value={formatMinor(deposits.toString())} />
                 {delivery > 0n ? <Row label="Delivery" value={formatMinor(delivery.toString())} /> : null}
                 {deliveryToArrange ? <Row label="Delivery" value="Arranged with the shop" /> : null}
                 <div className="flex justify-between gap-4 border-t border-sf-line pt-2 font-medium">
@@ -416,7 +443,7 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
               </button>
             ) : null}
             {state.step === 'dates' ? (
-              <button type="button" className="sf-button sf-button-primary flex-1" disabled={!state.range} onClick={() => dispatch({ type: 'step', step: 'details' })}>
+              <button type="button" className="sf-button sf-button-primary flex-1" disabled={!state.range || !extrasReadiness.ready} onClick={() => dispatch({ type: 'step', step: 'details' })}>
                 Continue
               </button>
             ) : state.step === 'details' ? (

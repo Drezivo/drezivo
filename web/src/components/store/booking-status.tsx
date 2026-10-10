@@ -138,10 +138,14 @@ export function BookingStatus({ store, reservationId }: { store: PublicStorefron
           <p className="mt-4 max-w-xl text-sf-muted">{status.body}</p>
           <dl className="mt-8 space-y-3 border-y border-sf-line py-6 text-sm">
             <div className="flex justify-between gap-4">
-              <dt className="text-sf-muted">Item</dt>
-              <dd>
-                {view.item_name}
-                {view.size_label ? ` · ${view.size_label}` : ''}
+              <dt className="text-sf-muted">{view.items && view.items.length > 1 ? 'Items' : 'Item'}</dt>
+              <dd className="text-right">
+                {(view.items && view.items.length > 1 ? view.items : [{ name: view.item_name, size_label: view.size_label }]).map((item, index) => (
+                  <span key={index} className="block">
+                    {item.name}
+                    {item.size_label ? ` · ${item.size_label}` : ''}
+                  </span>
+                ))}
               </dd>
             </div>
             <div className="flex justify-between gap-4">
