@@ -218,6 +218,7 @@ describe('RSV-021/022 staff reservation creation', async () => {
         branchId: seed.branchId,
         variantId: seed.variantId,
         assetId: seed.assetId,
+        lineCount: 1,
       },
     });
     expect(persisted.idempotency).toEqual({ status: 'succeeded', response_code: 201 });

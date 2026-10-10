@@ -428,6 +428,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     const held = await createHold(seed, 'address-legacy');
     const customer = await reservationCustomerState(seed, held.id);
     expect(customer.customer_id).not.toBeNull();
+    const savedPhone = customer.customer_snapshot?.phone;
 
     await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       await client.query(
@@ -479,7 +480,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       );
       return requireRow(profile.rows, 'unchanged customer after conflict');
     });
-    expect(unchangedProfile).toEqual({ phone: '09170000032', email: null, address: null });
+    expect(unchangedProfile).toEqual({ phone: savedPhone, email: null, address: null });
 
     const submitted = await submitReservationForConfirmation(
       reviewContext(seed, 'req-address-legacy', 'idem-address-legacy'),
@@ -499,7 +500,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
 
     const repaired = await reservationCustomerState(seed, held.id);
     expect(repaired.customer_snapshot).toMatchObject({
-      phone: '09170000032',
+      phone: savedPhone,
       email: 'repaired-customer@example.test',
       address: '456 Legacy Address Avenue, Quezon City',
     });
@@ -509,7 +510,7 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
         [seed.tenantId, customer.customer_id],
       );
       expect(requireRow(profile.rows, 'legacy customer')).toEqual({
-        phone: '09170000032',
+        phone: savedPhone,
         email: 'repaired-customer@example.test',
         address: '456 Legacy Address Avenue, Quezon City',
       });
