@@ -308,7 +308,8 @@ export async function validateMeasurementGuideFile(
     `SELECT id, purpose, mime_type, byte_size, lifecycle_status, frozen_at, version_id, sha256
        FROM file_object
       WHERE tenant_id = $1 AND id = $2
-      LIMIT 1`,
+      LIMIT 1
+      FOR SHARE`,
     [tenantId, fileId],
   );
   const row = result.rows[0];
@@ -1035,6 +1036,21 @@ export async function replaceProductImages(
     rows.push(row);
   }
   return rows;
+}
+
+export async function readProductImageFileIds(
+  client: PoolClient,
+  tenantId: string,
+  productId: string,
+): Promise<string[]> {
+  const result = await client.query<{ file_id: string }>(
+    `SELECT file_id
+       FROM product_image
+      WHERE tenant_id = $1 AND product_id = $2
+      ORDER BY display_order, file_id`,
+    [tenantId, productId],
+  );
+  return result.rows.map((row) => row.file_id);
 }
 
 export async function createClothingGraph(

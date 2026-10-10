@@ -2,6 +2,7 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import '../../src/config/load-env.js';
+import { fileObjectId } from '@drezivo/contracts';
 import {
   buildAppRoleDatabaseUrl,
   ensureAppRoleLogin,
@@ -22,12 +23,15 @@ const dataOf = <T>(response: { body: unknown }): T => (response.body as { data: 
 
 const adminUrl = requireTestDatabaseUrl();
 process.env.NODE_ENV = 'test';
+process.env.FILE_OBJECT_CLEANUP_ENABLED = 'true';
 process.env.DATABASE_URL = buildAppRoleDatabaseUrl(adminUrl);
 
 describe('storefront CMS and settings HTTP boundary', async () => {
+  const { config } = await import('../../src/config/index.js');
   const { createApp } = await import('../../src/app.js');
-  const { closePool } = await import('../../src/db/client.js');
-  const { createStorefrontWorkspace } = await import('./helpers/storefront-fixture.js');
+  const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
+  const { createStorefrontAsset, createStorefrontWorkspace } =
+    await import('./helpers/storefront-fixture.js');
   const { defaultStorefrontDocument } = await import('@drezivo/contracts');
 
   beforeAll(async () => {
@@ -57,7 +61,9 @@ describe('storefront CMS and settings HTTP boundary', async () => {
     expect(read.status).toBe(200);
     expect(dataOf<StorefrontSettings>(read)).not.toHaveProperty('tenant_id');
 
-    const noKey = await request(app).patch('/api/v1/storefront').send({ version: 1, document: defaultStorefrontDocument('A') });
+    const noKey = await request(app)
+      .patch('/api/v1/storefront')
+      .send({ version: 1, document: defaultStorefrontDocument('A') });
     expect(noKey.status).toBe(422);
 
     const unknownKey = await request(app)
@@ -70,10 +76,21 @@ describe('storefront CMS and settings HTTP boundary', async () => {
     const scriptInText = await request(app)
       .patch('/api/v1/storefront')
       .set('Idempotency-Key', 'routes-validate-script')
-      .send({ version: 1, document: { ...defaultStorefrontDocument('A'), branding: { ...defaultStorefrontDocument('A').branding, tagline: '<script>alert(1)</script>' } } });
+      .send({
+        version: 1,
+        document: {
+          ...defaultStorefrontDocument('A'),
+          branding: {
+            ...defaultStorefrontDocument('A').branding,
+            tagline: '<script>alert(1)</script>',
+          },
+        },
+      });
     // Plain text is stored as typed; the storefront renders it escaped. It must not be rejected or altered.
     expect(scriptInText.status).toBe(200);
-    expect(dataOf<StorefrontSettings>(scriptInText).document.branding.tagline).toBe('<script>alert(1)</script>');
+    expect(dataOf<StorefrontSettings>(scriptInText).document.branding.tagline).toBe(
+      '<script>alert(1)</script>',
+    );
   });
 
   it('normalizes submitted social profile URLs before saving the storefront document', async () => {
@@ -126,10 +143,150 @@ describe('storefront CMS and settings HTTP boundary', async () => {
       .set('Idempotency-Key', 'routes-facebook-id-save')
       .send({ version: 1, document });
     expect(saved.status).toBe(200);
-    expect(dataOf<StorefrontSettings>(saved).document.contact.facebook).toBe('profile.php?id=615940716454514');
+    expect(dataOf<StorefrontSettings>(saved).document.contact.facebook).toBe(
+      'profile.php?id=615940716454514',
+    );
 
     const reloaded = await request(app).get('/api/v1/storefront');
-    expect(dataOf<StorefrontSettings>(reloaded).document.contact.facebook).toBe('profile.php?id=615940716454514');
+    expect(dataOf<StorefrontSettings>(reloaded).document.contact.facebook).toBe(
+      'profile.php?id=615940716454514',
+    );
+  });
+
+  it('queues only storefront images displaced across logo, cover, hero, and about fields', async () => {
+    const ws = await createStorefrontWorkspace('routes-cleanup-media');
+    clerk.getAuth.mockReturnValue({ userId: ws.owner.principalId, orgId: ws.clerkOrgId });
+    const app = createApp();
+    const previous = {
+      logo: fileObjectId.parse(
+        await createStorefrontAsset(ws.tenantId, ws.owner.principalId, 'cleanup-logo-old'),
+      ),
+      cover: fileObjectId.parse(
+        await createStorefrontAsset(ws.tenantId, ws.owner.principalId, 'cleanup-cover-kept'),
+      ),
+      hero: fileObjectId.parse(
+        await createStorefrontAsset(ws.tenantId, ws.owner.principalId, 'cleanup-hero-old'),
+      ),
+      about: fileObjectId.parse(
+        await createStorefrontAsset(ws.tenantId, ws.owner.principalId, 'cleanup-about-old'),
+      ),
+    };
+    const replacement = {
+      logo: fileObjectId.parse(
+        await createStorefrontAsset(ws.tenantId, ws.owner.principalId, 'cleanup-logo-new'),
+      ),
+      about: fileObjectId.parse(
+        await createStorefrontAsset(ws.tenantId, ws.owner.principalId, 'cleanup-about-new'),
+      ),
+    };
+    const initialDocument = defaultStorefrontDocument('A');
+    initialDocument.branding.logo_file_id = previous.logo;
+    initialDocument.branding.cover_file_id = previous.cover;
+    initialDocument.content.hero.image_file_id = previous.hero;
+    initialDocument.content.about.image_file_id = previous.about;
+
+    const initial = await request(app)
+      .patch('/api/v1/storefront')
+      .set('Idempotency-Key', 'routes-cleanup-media-initial')
+      .send({ version: 1, document: initialDocument });
+    expect(initial.status).toBe(200);
+
+    await withTenantTransaction(ws.tenantId, ws.owner.principalId, async (client) => {
+      await client.query(
+        `UPDATE policy_snapshot
+            SET rental_rules = jsonb_set(COALESCE(rental_rules, '{}'::jsonb), '{image_file_ids}', $3::jsonb, true)
+          WHERE tenant_id = $1 AND storefront_id = $2 AND version = 1`,
+        [ws.tenantId, ws.storefrontId, JSON.stringify([previous.about])],
+      );
+    });
+
+    const replacementDocument = { ...initialDocument };
+    replacementDocument.branding = { ...initialDocument.branding, logo_file_id: replacement.logo };
+    replacementDocument.content = {
+      ...initialDocument.content,
+      hero: { ...initialDocument.content.hero, image_file_id: replacement.logo },
+      about: { ...initialDocument.content.about, image_file_id: replacement.about },
+    };
+    const saved = await request(app)
+      .patch('/api/v1/storefront')
+      .set('Idempotency-Key', 'routes-cleanup-media-replace')
+      .send({ version: 2, document: replacementDocument });
+    expect(saved.status).toBe(200);
+    expect(dataOf<StorefrontSettings>(saved).document.branding).toMatchObject({
+      logo_file_id: replacement.logo,
+      cover_file_id: previous.cover,
+    });
+    expect(dataOf<StorefrontSettings>(saved).document.content).toMatchObject({
+      hero: { image_file_id: replacement.logo },
+      about: { image_file_id: replacement.about },
+    });
+
+    const cleanupCandidates = await withTenantTransaction(
+      ws.tenantId,
+      ws.owner.principalId,
+      async (client) => {
+        const result = await client.query<{ payload: { file_id: string } }>(
+          `SELECT payload FROM outbox_event
+          WHERE tenant_id = $1 AND event_type = 'file.object_cleanup.requested'
+          ORDER BY dedupe_key`,
+          [ws.tenantId],
+        );
+        return result.rows.map((row) => row.payload.file_id);
+      },
+    );
+    expect(cleanupCandidates).toEqual([previous.about, previous.hero, previous.logo].sort());
+    expect(cleanupCandidates).not.toContain(previous.cover);
+  });
+
+  it('keeps the storefront document unchanged while the cleanup producer gate is off', async () => {
+    const ws = await createStorefrontWorkspace('routes-cleanup-gate');
+    clerk.getAuth.mockReturnValue({ userId: ws.owner.principalId, orgId: ws.clerkOrgId });
+    const app = createApp();
+    const previous = fileObjectId.parse(
+      await createStorefrontAsset(ws.tenantId, ws.owner.principalId, 'cleanup-gate-logo-old'),
+    );
+    const replacement = fileObjectId.parse(
+      await createStorefrontAsset(ws.tenantId, ws.owner.principalId, 'cleanup-gate-logo-new'),
+    );
+    const initialDocument = defaultStorefrontDocument('A');
+    initialDocument.branding.logo_file_id = previous;
+    const initial = await request(app)
+      .patch('/api/v1/storefront')
+      .set('Idempotency-Key', 'routes-cleanup-gate-initial')
+      .send({ version: 1, document: initialDocument });
+    expect(initial.status).toBe(200);
+
+    const replacementDocument = {
+      ...initialDocument,
+      branding: { ...initialDocument.branding, logo_file_id: replacement },
+    };
+    config.FILE_OBJECT_CLEANUP_ENABLED = false;
+    let rejected: request.Response;
+    try {
+      rejected = await request(app)
+        .patch('/api/v1/storefront')
+        .set('Idempotency-Key', 'routes-cleanup-gate-replace')
+        .send({ version: 2, document: replacementDocument });
+    } finally {
+      config.FILE_OBJECT_CLEANUP_ENABLED = true;
+    }
+
+    expect(rejected.status).toBe(503);
+    const current = await request(app).get('/api/v1/storefront');
+    expect(dataOf<StorefrontSettings>(current).document.branding.logo_file_id).toBe(previous);
+    const cleanupCount = await withTenantTransaction(
+      ws.tenantId,
+      ws.owner.principalId,
+      async (client) => {
+        const result = await client.query<{ count: string }>(
+          `SELECT count(*)::text AS count FROM outbox_event
+          WHERE tenant_id = $1 AND event_type = 'file.object_cleanup.requested'`,
+          [ws.tenantId],
+        );
+        return Number(result.rows[0]?.count ?? 0);
+      },
+    );
+    expect(cleanupCount).toBe(0);
   });
 
   it('forbids front desk writes while allowing reads', async () => {

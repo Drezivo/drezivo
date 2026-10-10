@@ -20,6 +20,7 @@ import {
 const adminUrl = requireTestDatabaseUrl();
 
 process.env.NODE_ENV = 'test';
+process.env.FILE_OBJECT_CLEANUP_ENABLED = 'true';
 process.env.DATABASE_URL = buildAppRoleDatabaseUrl(adminUrl);
 process.env.DATABASE_POOL_MAX ??= '10';
 process.env.CLERK_SECRET_KEY ??= 'test';
@@ -63,11 +64,7 @@ class FakeStorage {
   >();
   failInspection = false;
 
-  authorizeUpload(input: {
-    storageKey: string;
-    contentType: string;
-    expiresInSeconds: number;
-  }) {
+  authorizeUpload(input: { storageKey: string; contentType: string; expiresInSeconds: number }) {
     this.authorized.push(input);
     return Promise.resolve({
       uploadUrl: `https://uploads.example.test/${encodeURIComponent(input.storageKey)}`,
@@ -102,8 +99,11 @@ class FakeStorage {
 
 describe('CLT-022 clothing file attachment flow', async () => {
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
-  const { authorizeUpload, finalizeUpload } = await import('../../src/modules/files/files.service.js');
-  const { getDefaultMeasurementGuide, replaceClothingImages } = await import('../../src/modules/catalogue/catalogue.service.js');
+  const { config } = await import('../../src/config/index.js');
+  const { authorizeUpload, finalizeUpload } =
+    await import('../../src/modules/files/files.service.js');
+  const { getDefaultMeasurementGuide, replaceClothingImages } =
+    await import('../../src/modules/catalogue/catalogue.service.js');
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
 
   beforeAll(async () => {
@@ -139,7 +139,11 @@ describe('CLT-022 clothing file attachment flow', async () => {
          RETURNING id`,
         [seed.tenantId, fileRow.id],
       );
-      return { fileId: fileRow.id, storageKey: fileRow.storage_key, guideId: requireRow(guide.rows, 'guide').id };
+      return {
+        fileId: fileRow.id,
+        storageKey: fileRow.storage_key,
+        guideId: requireRow(guide.rows, 'guide').id,
+      };
     });
 
     const result = await getDefaultMeasurementGuide(seed.catalogueContext, storage);
@@ -182,8 +186,12 @@ describe('CLT-022 clothing file attachment flow', async () => {
       'Content-Type': 'image/png',
       'If-None-Match': '*',
     });
-    expect(JSON.stringify(authorization.body)).not.toContain(process.env.OBJECT_STORAGE_SECRET_ACCESS_KEY);
-    expect(JSON.stringify(authorization.body)).not.toContain(process.env.OBJECT_STORAGE_ACCESS_KEY_ID);
+    expect(JSON.stringify(authorization.body)).not.toContain(
+      process.env.OBJECT_STORAGE_SECRET_ACCESS_KEY,
+    );
+    expect(JSON.stringify(authorization.body)).not.toContain(
+      process.env.OBJECT_STORAGE_ACCESS_KEY_ID,
+    );
 
     const fileId = authorization.body.data.file_id;
     const pending = await readFile(seed.tenantId, seed.principalId, fileId);
@@ -258,7 +266,8 @@ describe('CLT-022 clothing file attachment flow', async () => {
       storage,
     );
     expect(authorization.status).toBe(201);
-    if (!authorization.body.success) throw new Error('Expected payment receipt authorization success.');
+    if (!authorization.body.success)
+      throw new Error('Expected payment receipt authorization success.');
 
     const fileId = authorization.body.data.file_id;
     const pending = await readFile(seed.tenantId, seed.principalId, fileId);
@@ -312,7 +321,13 @@ describe('CLT-022 clothing file attachment flow', async () => {
   it('rejects mismatched uploaded bytes and never marks provider failures as accepted', async () => {
     const seed = await seedTenant('org_clt022_invalid', 'user_clt022_invalid');
     const storage = new FakeStorage();
-    const first = await authorizeCatalogueFile(seed, storage, 'clt022-invalid-authorize', SHA_A, 300);
+    const first = await authorizeCatalogueFile(
+      seed,
+      storage,
+      'clt022-invalid-authorize',
+      SHA_A,
+      300,
+    );
     const firstRow = await readFile(seed.tenantId, seed.principalId, first);
     storage.objects.set(firstRow.storage_key, {
       contentType: 'image/png',
@@ -333,9 +348,17 @@ describe('CLT-022 clothing file attachment flow', async () => {
     );
     expect(rejected.status).toBe(422);
     expectFailure(rejected.body, 'VALIDATION_FAILED');
-    expect((await readFile(seed.tenantId, seed.principalId, first)).lifecycle_status).toBe('rejected');
+    expect((await readFile(seed.tenantId, seed.principalId, first)).lifecycle_status).toBe(
+      'rejected',
+    );
 
-    const second = await authorizeCatalogueFile(seed, storage, 'clt022-provider-authorize', SHA_A, 320);
+    const second = await authorizeCatalogueFile(
+      seed,
+      storage,
+      'clt022-provider-authorize',
+      SHA_A,
+      320,
+    );
     storage.failInspection = true;
     await expect(
       finalizeUpload(
@@ -348,7 +371,9 @@ describe('CLT-022 clothing file attachment flow', async () => {
         storage,
       ),
     ).rejects.toThrow('provider unavailable');
-    expect((await readFile(seed.tenantId, seed.principalId, second)).lifecycle_status).toBe('pending_upload');
+    expect((await readFile(seed.tenantId, seed.principalId, second)).lifecycle_status).toBe(
+      'pending_upload',
+    );
   });
 
   it('finalizes an existing upload by its stored legacy object key', async () => {
@@ -387,7 +412,9 @@ describe('CLT-022 clothing file attachment flow', async () => {
 
     expect(finalized.status).toBe(200);
     expect(storage.inspected).toEqual([legacyStorageKey]);
-    expect((await readFile(seed.tenantId, seed.principalId, fileId)).version_id).toBe('legacy-version-1');
+    expect((await readFile(seed.tenantId, seed.principalId, fileId)).version_id).toBe(
+      'legacy-version-1',
+    );
   });
 
   it('conceals foreign uploads before storage inspection', async () => {
@@ -458,7 +485,9 @@ describe('CLT-022 clothing file attachment flow', async () => {
       storage,
     );
     expect(typeResult.status).toBe(422);
-    expect((await readFile(seed.tenantId, seed.principalId, wrongType)).lifecycle_status).toBe('rejected');
+    expect((await readFile(seed.tenantId, seed.principalId, wrongType)).lifecycle_status).toBe(
+      'rejected',
+    );
 
     const wrongSize = await authorizeCatalogueFile(seed, storage, 'clt022-wrong-size', SHA_B, 401);
     const wrongSizeRow = await readFile(seed.tenantId, seed.principalId, wrongSize);
@@ -479,7 +508,9 @@ describe('CLT-022 clothing file attachment flow', async () => {
       storage,
     );
     expect(sizeResult.status).toBe(422);
-    expect((await readFile(seed.tenantId, seed.principalId, wrongSize)).lifecycle_status).toBe('rejected');
+    expect((await readFile(seed.tenantId, seed.principalId, wrongSize)).lifecycle_status).toBe(
+      'rejected',
+    );
   });
 
   it('checks assets.manage before upload authorization or photo mutation', async () => {
@@ -562,9 +593,104 @@ describe('CLT-022 clothing file attachment flow', async () => {
     ]);
   });
 
+  it('queues only displaced clothing images and does not queue an image retained in the new set', async () => {
+    const seed = await seedTenant('org_clt022_cleanup', 'user_clt022_cleanup');
+    const productId = await seedProduct(seed, 'IMG-CLEANUP');
+    const retained = await seedAcceptedImage(seed, 'cleanup-retained', SHA_A);
+    const displaced = await seedAcceptedImage(seed, 'cleanup-displaced', SHA_B);
+    const replacement = await seedAcceptedImage(seed, 'cleanup-replacement', SHA_A);
+
+    const initial = await replaceClothingImages({
+      ...seed.catalogueContext,
+      productId,
+      requestId: 'req-clt022-cleanup-initial',
+      idempotencyKey: 'clt022-cleanup-initial',
+      request: replaceClothingImagesRequest.parse({ file_ids: [retained, displaced] }),
+    });
+    expect(initial.status).toBe(200);
+
+    const replaced = await replaceClothingImages({
+      ...seed.catalogueContext,
+      productId,
+      requestId: 'req-clt022-cleanup-replace',
+      idempotencyKey: 'clt022-cleanup-replace',
+      request: replaceClothingImagesRequest.parse({ file_ids: [replacement, retained] }),
+    });
+    expect(replaced.status).toBe(200);
+    expect(await readProductImages(seed, productId)).toEqual([
+      { file_id: replacement, display_order: 0 },
+      { file_id: retained, display_order: 1 },
+    ]);
+
+    const cleanupCandidates = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const result = await client.query<{ payload: { file_id: string } }>(
+          `SELECT payload FROM outbox_event
+          WHERE tenant_id = $1 AND event_type = 'file.object_cleanup.requested'
+          ORDER BY dedupe_key`,
+          [seed.tenantId],
+        );
+        return result.rows.map((row) => row.payload.file_id);
+      },
+    );
+    expect(cleanupCandidates).toEqual([displaced]);
+  });
+
+  it('keeps the old clothing image set when the cleanup producer gate is off', async () => {
+    const seed = await seedTenant('org_clt022_cleanup_gate', 'user_clt022_cleanup_gate');
+    const productId = await seedProduct(seed, 'IMG-CLEANUP-GATE');
+    const previous = await seedAcceptedImage(seed, 'cleanup-gate-previous', SHA_A);
+    const replacement = await seedAcceptedImage(seed, 'cleanup-gate-replacement', SHA_B);
+    const initial = await replaceClothingImages({
+      ...seed.catalogueContext,
+      productId,
+      requestId: 'req-clt022-cleanup-gate-initial',
+      idempotencyKey: 'clt022-cleanup-gate-initial',
+      request: replaceClothingImagesRequest.parse({ file_ids: [previous] }),
+    });
+    expect(initial.status).toBe(200);
+
+    config.FILE_OBJECT_CLEANUP_ENABLED = false;
+    try {
+      await expect(
+        replaceClothingImages({
+          ...seed.catalogueContext,
+          productId,
+          requestId: 'req-clt022-cleanup-gate-replace',
+          idempotencyKey: 'clt022-cleanup-gate-replace',
+          request: replaceClothingImagesRequest.parse({ file_ids: [replacement] }),
+        }),
+      ).rejects.toMatchObject({ status: 503, code: 'DEPENDENCY_UNAVAILABLE' });
+    } finally {
+      config.FILE_OBJECT_CLEANUP_ENABLED = true;
+    }
+
+    expect(await readProductImages(seed, productId)).toEqual([
+      { file_id: previous, display_order: 0 },
+    ]);
+    const cleanupCandidates = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const result = await client.query<{ count: string }>(
+          `SELECT count(*)::text AS count FROM outbox_event
+          WHERE tenant_id = $1 AND event_type = 'file.object_cleanup.requested'`,
+          [seed.tenantId],
+        );
+        return Number(result.rows[0]?.count ?? 0);
+      },
+    );
+    expect(cleanupCandidates).toBe(0);
+  });
+
   it('rejects duplicate, pending, and foreign photo references without altering the existing photo set', async () => {
     const seed = await seedTenant('org_clt022_attachment', 'user_clt022_attachment');
-    const foreign = await seedTenant('org_clt022_attachment_foreign', 'user_clt022_attachment_foreign');
+    const foreign = await seedTenant(
+      'org_clt022_attachment_foreign',
+      'user_clt022_attachment_foreign',
+    );
     const productId = await seedProduct(seed, 'IMG-002');
     const accepted = await seedAcceptedImage(seed, 'accepted-image', SHA_A);
     const pending = await seedPendingImage(seed, 'pending-image', SHA_B);
@@ -741,7 +867,10 @@ describe('CLT-022 clothing file attachment flow', async () => {
     });
   }
 
-  async function seedProduct(seed: Awaited<ReturnType<typeof seedTenant>>, code: string): Promise<string> {
+  async function seedProduct(
+    seed: Awaited<ReturnType<typeof seedTenant>>,
+    code: string,
+  ): Promise<string> {
     return withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       const category = await client.query<{ id: string }>(
         `INSERT INTO category (tenant_id, name, status, display_order)

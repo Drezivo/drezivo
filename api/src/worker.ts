@@ -11,6 +11,7 @@ import { promoteElapsedRecoveryReadinessForAllTenants } from './worker/handlers/
 import { WorkerRunner, type EventHandler } from './worker/runner.js';
 import { createEmailDeliveryHandler } from './worker/handlers/email-delivery.js';
 import { createSubscriptionPaymentReviewedHandler, PAYMENT_REVIEWED_EVENT_TYPE } from './worker/handlers/subscription-payment-reviewed.js';
+import { FILE_OBJECT_CLEANUP_EVENT_TYPE, handleFileObjectCleanup } from './modules/files/file-object-cleanup.js';
 import { EMAIL_EVENT_TYPE } from './modules/notifications/email-notifications.js';
 import { logger } from './shared/logger.js';
 import { SUBSCRIPTION_LIFECYCLE_SWEEP_ENABLED } from './modules/billing/billing.constants.js';
@@ -34,6 +35,7 @@ const handlers: Record<string, EventHandler> = {
   'tenant.bootstrapped': handleTenantBootstrapped,
   [EMAIL_EVENT_TYPE]: createEmailDeliveryHandler(),
   [PAYMENT_REVIEWED_EVENT_TYPE]: createSubscriptionPaymentReviewedHandler(),
+  [FILE_OBJECT_CLEANUP_EVENT_TYPE]: handleFileObjectCleanup,
   'clerk.invitation.dispatch_requested': handleMembershipInvitationDispatch,
   'clerk.invitation.revoke_requested': handleMembershipInvitationDispatch,
   ...Object.fromEntries(ACKNOWLEDGED_DOMAIN_EVENTS.map((eventType) => [eventType, acknowledgeDomainEvent])),

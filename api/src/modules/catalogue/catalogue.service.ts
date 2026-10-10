@@ -82,6 +82,11 @@ import {
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
+import {
+  assertFileObjectCleanupProducerEnabled,
+  enqueueReplacedFileObjectSetCleanup,
+  replacedFileObjectSetCleanupCandidates,
+} from '../files/file-object-cleanup.repository.js';
 import type { ObjectStorage } from '../../integrations/storage/object-storage.js';
 import { objectStorage } from '../../integrations/storage/s3-compatible-object-storage.js';
 import {
@@ -89,6 +94,7 @@ import {
   lockTenantQuotaScope,
 } from '../entitlements/entitlements.service.js';
 import {
+  DependencyUnavailableError,
   ForbiddenError,
   IdempotencyKeyReusedError,
   InvalidCategoryError,
@@ -142,6 +148,7 @@ import {
   readProductForEdit,
   readPreservedFreeSizeVariant,
   readProductForImageMutation,
+  readProductImageFileIds,
   readVariantForEdit,
   replaceDefaultMeasurementGuide,
   removeCategory,
@@ -1913,11 +1920,16 @@ export async function replaceClothingImages(input: CommandContext & {
 
     try {
       await assertCatalogueImageFiles(client, input.tenantId, request.file_ids);
+      const previousFileIds = await readProductImageFileIds(client, input.tenantId, input.productId);
+      assertFileObjectCleanupProducerEnabled(
+        replacedFileObjectSetCleanupCandidates(previousFileIds, request.file_ids),
+      );
       const rows = await replaceProductImages(client, {
         tenantId: input.tenantId,
         productId: input.productId,
         fileIds: request.file_ids,
       });
+      await enqueueReplacedFileObjectSetCleanup(client, input.tenantId, previousFileIds, request.file_ids);
       const data = replaceClothingImagesResponse.parse({
         images: rows.map((row) => ({
           file_id: row.file_id,
@@ -2141,7 +2153,7 @@ async function finalizeKnownFailure<TBody>(
   payloadHash: string,
   error: unknown,
 ): Promise<CatalogueCommandResponse<TBody>> {
-  if (!isAppError(error)) throw error;
+  if (!isAppError(error) || error instanceof DependencyUnavailableError) throw error;
   const body = failureBody(input.requestId, error.code, error.message);
   await finalizeTenantIdempotency(client, {
     tenantId: input.tenantId,

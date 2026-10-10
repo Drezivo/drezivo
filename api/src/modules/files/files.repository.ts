@@ -17,7 +17,7 @@ export interface FileObjectRow {
   sha256: string | null;
   mime_type: string;
   byte_size: number;
-  lifecycle_status: 'pending_upload' | 'uploaded' | 'scanning' | 'accepted' | 'rejected' | 'deleted';
+  lifecycle_status: 'pending_upload' | 'uploaded' | 'scanning' | 'accepted' | 'rejected' | 'deletion_pending' | 'deleted';
   upload_expires_at: Date;
   frozen_at: Date | null;
 }
