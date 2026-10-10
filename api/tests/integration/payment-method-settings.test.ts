@@ -308,21 +308,21 @@ describe('payment method settings', async () => {
     });
 
     config.FILE_OBJECT_CLEANUP_ENABLED = false;
-    let rejected: Awaited<ReturnType<typeof updatePaymentMethodSettings>>;
     try {
-      rejected = await updatePaymentMethodSettings({
-        ...context,
-        permissionCodes: [...context.permissionCodes],
-        requestId: 'req-payment-settings-cleanup-gate',
-        idempotencyKey: 'payment-settings-cleanup-gate',
-        paymentMethodId: context.paymentMethodId,
-        request: { ...request(), qr_file_id: replacementQr },
-      });
+      await expect(
+        updatePaymentMethodSettings({
+          ...context,
+          permissionCodes: [...context.permissionCodes],
+          requestId: 'req-payment-settings-cleanup-gate',
+          idempotencyKey: 'payment-settings-cleanup-gate',
+          paymentMethodId: context.paymentMethodId,
+          request: { ...request(), qr_file_id: replacementQr },
+        }),
+      ).rejects.toMatchObject({ status: 503, code: 'DEPENDENCY_UNAVAILABLE' });
     } finally {
       config.FILE_OBJECT_CLEANUP_ENABLED = true;
     }
 
-    expect(rejected.status).toBe(503);
     const state = await withTenantTransaction(
       context.tenantId,
       context.principalId,

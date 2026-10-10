@@ -653,20 +653,20 @@ describe('CLT-022 clothing file attachment flow', async () => {
     expect(initial.status).toBe(200);
 
     config.FILE_OBJECT_CLEANUP_ENABLED = false;
-    let rejected: Awaited<ReturnType<typeof replaceClothingImages>>;
     try {
-      rejected = await replaceClothingImages({
-        ...seed.catalogueContext,
-        productId,
-        requestId: 'req-clt022-cleanup-gate-replace',
-        idempotencyKey: 'clt022-cleanup-gate-replace',
-        request: replaceClothingImagesRequest.parse({ file_ids: [replacement] }),
-      });
+      await expect(
+        replaceClothingImages({
+          ...seed.catalogueContext,
+          productId,
+          requestId: 'req-clt022-cleanup-gate-replace',
+          idempotencyKey: 'clt022-cleanup-gate-replace',
+          request: replaceClothingImagesRequest.parse({ file_ids: [replacement] }),
+        }),
+      ).rejects.toMatchObject({ status: 503, code: 'DEPENDENCY_UNAVAILABLE' });
     } finally {
       config.FILE_OBJECT_CLEANUP_ENABLED = true;
     }
 
-    expect(rejected.status).toBe(503);
     expect(await readProductImages(seed, productId)).toEqual([
       { file_id: previous, display_order: 0 },
     ]);
