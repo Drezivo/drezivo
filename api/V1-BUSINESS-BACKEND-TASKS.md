@@ -43,7 +43,7 @@ Backend implementation must also follow `AGENTS.md` in this directory.
 - Public storefront and root landing-page APIs
 - Guest email verification and secure guest status pages
 - Marketplace or cross-business discovery
-- Customer carts or multi-item reservations
+- Customer carts (multi-item reservations shipped in V1; see docs/decisions/0016-multi-item-reservations-edit-and-balances.md)
 - Multiple physical copies of the same configured size
 - Card, PayPal, PayMongo, or other integrated payment gateways
 - Automatic payment verification or refunds

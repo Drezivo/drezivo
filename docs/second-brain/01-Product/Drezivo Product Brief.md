@@ -15,7 +15,7 @@ with a path to multi-branch and enterprise operation. The pilot sells one Standa
 is `starter`; future plans are undecided. See the current [PRD](../../product/Drezivo-PRD.md) and
 [ADR 0011](../../decisions/0011-single-standard-pilot-plan.md).
 
-V1 focuses on one branch, catalogue and physical garments, guest single-garment booking, expiring
+V1 focuses on one branch, catalogue and physical garments, guest booking of up to 10 items, expiring
 holds, manual cash or QR evidence review, pickup, return inspection, cleaning readiness, deposits,
 exports, and audit. Branch expansion and enterprise controls arrive incrementally.
 

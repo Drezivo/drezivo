@@ -4,7 +4,7 @@ Product/architecture/runbooks repository. The nested `second-brain/` folder is a
 Obsidian memory layer. Read AGENTS.md for source precedence.
 Commands: `npm ci`, `npm run lint:md`, `npm run lint:links`.
 Current PRD and accepted decisions supersede legacy product context.
-V1 single branch/single garment; fittings V1.1; branches V2.
+V1 single branch; up to 10 items per reservation (ADR 0016); fittings V1.1; branches V2.
 
 @.claude/rules/documentation-conventions.md
 @.claude/rules/engineering-standards.md

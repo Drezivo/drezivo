@@ -1,5 +1,19 @@
 # Rentivo project memory
 
+## Reservations update 2026-10-10 (ADR 0016)
+
+- Multi-item reservations are V1: 1 to 10 items per booking, staff and storefront, any clothing
+  category. One `reservation_line` and one allocation per item; delivery fee charged once.
+- Staff can edit a reservation before pickup (`PATCH /reservations/:id`), including adding and
+  removing items. A higher total after payment becomes a separate balance payment
+  (`reservation:<id>:balance:<version>`) that staff collect before pickup.
+- Delivery is always offered; unconfigured delivery is recorded as `to_arrange`. Cancelled, expired
+  and rejected reservations can be continued as a new booking.
+- Never assume one line, one allocation or one payment per reservation. Payment summaries exclude
+  balance rows by key; never filter on the initial-payment key.
+- Full rules: `docs/decisions/0016-multi-item-reservations-edit-and-balances.md`. Handoff, file map,
+  tests and local DB setup: `docs/reservation-checklist.md` section 23.
+
 ## Active architecture update 2026-09-16
 
 - The root folder is now the single Drezivo monorepo. `contracts`, `api`, `app`, `web`, and `docs`
@@ -16,7 +30,7 @@
 - Subagents: GPT-5.5, medium reasoning. Applies to future delegated work unless changed.
 - Stack: Next.js/TypeScript; Express/TypeScript; Supabase PostgreSQL; Clerk; S3; REST.
 - Source: archived original PRD; source images unchanged. Revised PRD/TRD/model authoritative for proposed implementation.
-- V1 single branch/single garment UI; default branch + multi-line schema. V1.1 fittings/multi-item; V2 branches/transfers; V3 demand-led governance.
+- V1 single branch/single garment UI; default branch + multi-line schema. V1.1 fittings/multi-item; V2 branches/transfers; V3 demand-led governance. (Superseded 2026-10-10 for multi-item: see below.)
 - Plan quotas, trial/grace/hold defaults proposed; owner prices confirmed. Research interviews and benchmarks not performed.
 
 ## Review lessons 2026-09-15

@@ -202,6 +202,14 @@ describe('reservation edit (PATCH /reservations/:id)', async () => {
     ]);
     expect(collected.body).toMatchObject({ success: true });
     expect(again.body).toEqual(collected.body);
+    const replayed = await collectReservationBalance(context(seed, 'edit-balance-collect'), booking.id, balanceId, { verified_amount_minor: '40000' });
+    expect(replayed.body).toEqual(collected.body);
+    const secondIntent = await collectReservationBalance(context(seed, 'edit-balance-collect-again'), booking.id, balanceId, { verified_amount_minor: '40000' });
+    expect(secondIntent.body).toMatchObject({ success: false, error: { code: 'STATE_CONFLICT' } });
+    const verifications = await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query('SELECT count(*)::int AS n FROM payment_verification WHERE payment_id = $1', [balanceId]),
+    );
+    expect(verifications.rows[0]).toEqual({ n: 1 });
 
     const picked = await pickupReservation(context(seed, 'edit-balance-pickup'), booking.id, { version: booking.version + 1 });
     expect(picked.body).toMatchObject({ success: true, data: { reservation: { status: 'picked_up' } } });
