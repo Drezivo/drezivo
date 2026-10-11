@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 import { idColumn, timestamps } from './_shared.js';
@@ -51,6 +52,9 @@ export const outboxEvent = pgTable(
   (table) => [
     uniqueIndex('outbox_event_tenant_dedupe_key_key').on(table.tenantId, table.dedupeKey),
     index('outbox_event_tenant_status_available_idx').on(table.tenantId, table.status, table.availableAt),
+    index('outbox_event_pending_member_removal_idx')
+      .on(table.tenantId, sql`(${table.payload} ->> 'membership_id')`)
+      .where(sql`${table.eventType} = 'clerk.membership.remove_requested' AND ${table.status} IN ('pending', 'leased')`),
   ],
 );
 

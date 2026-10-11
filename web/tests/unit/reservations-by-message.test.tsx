@@ -1,11 +1,16 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { productId, productVariantId, type ItemDetail, type PublicStorefront } from '@drezivo/contracts';
 
 import { HowItWorks } from '@/components/store/home-sections';
 import { ItemView } from '@/components/store/item-view';
 import { PreviewProvider } from '@/components/store/preview-context';
+
+const { getAvailability } = vi.hoisted(() => ({ getAvailability: vi.fn() }));
+
+vi.mock('@/lib/storefront-api', () => ({ getAvailability }));
+vi.mock('@/components/store/booking/booking-drawer', () => ({ BookingDrawer: () => null }));
 
 const item: ItemDetail = {
   product_id: productId.parse('00000000-0000-4000-8000-000000000101'),
@@ -36,7 +41,7 @@ function storeWith(overrides: Partial<PublicStorefront>): PublicStorefront {
     reservations_open: true,
     fitting: { enabled: false },
     fulfillment: { pickup: true, delivery: false, delivery_fee_minor: '0' },
-    checkout: { handover_time: '10:00' },
+    checkout: { handover_time: '10:00', max_rental_days: 30 },
     content: { sections: { how_it_works: true } },
     contact: {
       phone: '0917 123 4567',
@@ -51,19 +56,35 @@ function storeWith(overrides: Partial<PublicStorefront>): PublicStorefront {
   } as unknown as PublicStorefront;
 }
 
-function renderItem(store: PublicStorefront) {
+function renderItem(store: PublicStorefront, preview = false, selectedItem = item) {
   return render(
-    <PreviewProvider preview={false}>
-      <ItemView store={store} item={item} />
+    <PreviewProvider preview={preview}>
+      <ItemView store={store} item={selectedItem} />
     </PreviewProvider>,
   );
 }
 
 describe('reservations by message', () => {
-  it('replaces booking with the shop contacts when the owner takes reservations by message', () => {
+  beforeEach(() => {
+    getAvailability.mockReset();
+    getAvailability.mockResolvedValue({ days: [] });
+  });
+
+  it('offers an availability sheet and keeps shop contacts when the owner takes reservations by message', async () => {
     renderItem(storeWith({ reservations_open: false }));
 
     expect(screen.queryByRole('button', { name: 'Choose rental dates' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+    expect(await screen.findByRole('dialog', { name: 'Amara' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Check availability' })).toBeTruthy();
+    await waitFor(() => expect(getAvailability).toHaveBeenCalledWith(
+      'gigis-rental',
+      item.variants[0]?.variant_id,
+      expect.any(String),
+      expect.any(String),
+    ));
+    expect(screen.queryByText('Your details')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull();
     expect(screen.getByText(/This shop takes reservations by message/)).toBeTruthy();
     const contacts = screen.getByRole('list', { name: 'Contact the shop' });
     const links = [...contacts.querySelectorAll('a')].map((link) => [link.textContent, link.getAttribute('href')]);
@@ -73,6 +94,32 @@ describe('reservations by message', () => {
       ['0917 123 4567', 'tel:09171234567'],
       ['hello@gigis.test', 'mailto:hello@gigis.test'],
     ]);
+  });
+
+  it('requires a size choice before opening availability for a sized style', () => {
+    const sizedItem: ItemDetail = {
+      ...item,
+      variants: [
+        { ...item.variants[0]!, variant_id: productVariantId.parse('00000000-0000-4000-8000-000000000202'), size_label: 'S' },
+        { ...item.variants[0]!, variant_id: productVariantId.parse('00000000-0000-4000-8000-000000000203'), size_label: 'M' },
+      ],
+    };
+    renderItem(storeWith({ reservations_open: false }), false, sizedItem);
+
+    expect(screen.getByRole('button', { name: 'Choose a size to check availability' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('does not show the checker in preview or while booking is paused for billing', () => {
+    const { rerender } = renderItem(storeWith({ reservations_open: false }), true);
+    expect(screen.queryByRole('button', { name: 'Check availability' })).toBeNull();
+
+    rerender(
+      <PreviewProvider preview={false}>
+        <ItemView store={storeWith({ booking_open: false, reservations_open: false })} item={item} />
+      </PreviewProvider>,
+    );
+    expect(screen.queryByRole('button', { name: 'Check availability' })).toBeNull();
+    expect(screen.getByText(/Online booking is paused for now/)).toBeTruthy();
   });
 
   it('keeps online booking when reservations are open', () => {
