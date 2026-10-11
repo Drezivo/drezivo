@@ -108,6 +108,55 @@ describe("PaymentMethodSettingsPage", () => {
     );
   });
 
+  it("shows the saved QR image instead of only a Replace file label", async () => {
+    api.getPaymentMethodSettings.mockResolvedValue({
+      data: {
+        items: [
+          methods[0],
+          { ...methods[1], qr_file_id: gcashId, qr_image_url: "https://files.example.test/gcash-qr.png" },
+        ],
+      },
+    });
+    render(<PaymentMethodSettingsPage />);
+
+    const image = await screen.findByRole("img", { name: "Current QR image" });
+    expect(image).toHaveAttribute("src", "https://files.example.test/gcash-qr.png");
+  });
+
+  it("previews a newly picked QR image before it is saved", async () => {
+    const createObjectURL = vi.fn(() => "blob:new-qr");
+    const revokeObjectURL = vi.fn();
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    render(<PaymentMethodSettingsPage />);
+    await screen.findByText("GCash");
+
+    const file = new File([new Uint8Array([137, 80, 78, 71])], "new-qr.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("QR image"), { target: { files: [file] } });
+
+    const preview = await screen.findByRole("img", { name: "New QR image: new-qr.png" });
+    expect(preview).toHaveAttribute("src", "blob:new-qr");
+    expect(screen.getByText("Uploads when you save.")).toBeVisible();
+  });
+
+  it("links to a saved PDF of payment instructions", async () => {
+    api.getPaymentMethodSettings.mockResolvedValue({
+      data: {
+        items: [
+          methods[0],
+          {
+            ...methods[1],
+            presentation: "material",
+            material: { file_id: gcashId, content_type: "application/pdf" },
+            material_url: "https://files.example.test/steps.pdf",
+          },
+        ],
+      },
+    });
+    render(<PaymentMethodSettingsPage />);
+
+    expect(await screen.findByRole("link", { name: "View PDF" })).toHaveAttribute("href", "https://files.example.test/steps.pdf");
+  });
+
   it("disables adding at five online methods and says why", async () => {
     const online = Array.from({ length: 5 }, (_, index) => ({
       ...methods[1],

@@ -168,6 +168,58 @@ describe('payment method settings', async () => {
     expect(result.body.data).toMatchObject({ storefront_enabled: true, storefront_ready: true });
   });
 
+  it('shows the owner a signed link to the saved QR, and none for an unfinished upload', async () => {
+    const context = await seed();
+    const insertQr = (status: 'accepted' | 'pending_upload', label: string) =>
+      withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+        const result = await client.query<{ id: string }>(
+          `INSERT INTO file_object
+             (tenant_id, purpose, storage_key, version_id, mime_type, byte_size, lifecycle_status,
+              is_private, upload_expires_at, frozen_at)
+           VALUES ($1, 'storefront_asset', $2, $3, 'image/png', 512, $4, true,
+                   now() + interval '10 minutes', CASE WHEN $4 = 'accepted' THEN now() END)
+           RETURNING id`,
+          [context.tenantId, `tenant-files/${context.tenantId}/${label}/source`, `version-${label}`, status],
+        );
+        const row = result.rows[0];
+        if (!row) throw new Error('expected QR file');
+        return fileObjectId.parse(row.id);
+      });
+    const list = () =>
+      getPaymentMethodSettings({ ...context, permissionCodes: [...context.permissionCodes] });
+
+    expect((await list()).items[0]).toMatchObject({ qr_file_id: null, qr_image_url: null, material_url: null });
+
+    const qrFileId = await insertQr('accepted', 'preview-qr');
+    const saved = await updatePaymentMethodSettings({
+      ...context,
+      permissionCodes: [...context.permissionCodes],
+      requestId: 'req-payment-preview',
+      idempotencyKey: 'payment-preview-001',
+      paymentMethodId: context.paymentMethodId,
+      request: { ...request(), qr_file_id: qrFileId },
+    });
+    if (!saved.body.success) throw new Error('expected successful settings update');
+    // Stored command responses are replayed later, so they never carry a signed link.
+    expect(saved.body.data).not.toHaveProperty('qr_image_url');
+
+    const item = (await list()).items[0];
+    expect(item?.qr_file_id).toBe(qrFileId);
+    expect(item?.qr_image_url).toEqual(expect.stringMatching(/^https?:\/\//));
+    expect(item?.qr_image_url).toContain('preview-qr');
+
+    // A file that never finished uploading is not signed, even if a row points at it.
+    const unfinished = await insertQr('pending_upload', 'unfinished-qr');
+    await withTenantTransaction(context.tenantId, context.principalId, (client) =>
+      client.query('UPDATE payment_method SET qr_file_id = $3 WHERE tenant_id = $1 AND id = $2', [
+        context.tenantId,
+        context.paymentMethodId,
+        unfinished,
+      ]),
+    );
+    expect((await list()).items[0]).toMatchObject({ qr_file_id: unfinished, qr_image_url: null });
+  });
+
   it('queues displaced QR and instructions files when replacing both payment-method assets', async () => {
     const context = await seed();
     const previousQr = await createPaymentFile(
