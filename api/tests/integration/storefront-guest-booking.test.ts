@@ -215,6 +215,38 @@ describe('storefront guest booking', async () => {
     expect(results.map((result) => result.status).sort()).toEqual([201, 409]);
   });
 
+  it('keeps the storefront browsable but refuses online reservations when the owner takes them by message', async () => {
+    const ws = await liveStore('gv-by-message', (doc) => {
+      doc.checkout.reservation_requests = false;
+      doc.checkout.fitting_requests = true;
+    });
+    await admin.query<Record<string, unknown>>(`INSERT INTO fitting_settings (tenant_id, branch_id, enabled, capacity, duration_minutes, fee_minor, currency) VALUES ($1, $2, true, 1, 60, 0, 'PHP')`, [ws.tenantId, ws.branchId]);
+
+    const store = await request(createApp()).get(`/api/v1/public/stores/${ws.slug}`);
+    expect(store.status).toBe(200);
+    expect((store.body as { data: unknown }).data).toMatchObject({ booking_open: true, reservations_open: false, fitting: { enabled: true } });
+
+    const refused = await booking.createReservation(ws.slug, { requestId: 'msg-1', idempotencyKey: 'by-message-1' }, holdRequest(ws, 'ana@example.test'));
+    expect(refused.status).toBe(409);
+    expect(refused.body).toMatchObject({ success: false, error: { code: 'BOOKING_PAUSED' } });
+    const written = await admin.query<{ reservations: number; customers: number }>(
+      'SELECT (SELECT count(*)::int FROM reservation WHERE tenant_id = $1) AS reservations, (SELECT count(*)::int FROM customer WHERE tenant_id = $1) AS customers',
+      [ws.tenantId],
+    );
+    expect(written.rows[0]).toEqual({ reservations: 0, customers: 0 });
+
+    // Turning reservations back on reopens booking for a new request.
+    const settings = await cms.get(ws.owner);
+    const saved = await cms.updateDocument(ws.owner, 'by-message-reopen', {
+      version: settings.version,
+      document: { ...settings.document, checkout: { ...settings.document.checkout, reservation_requests: true } },
+    });
+    expect(saved.status).toBe(200);
+    const reopened = await request(createApp()).get(`/api/v1/public/stores/${ws.slug}`);
+    expect((reopened.body as { data: { reservations_open: boolean } }).data.reservations_open).toBe(true);
+    expect((await booking.createReservation(ws.slug, { requestId: 'msg-2', idempotencyKey: 'by-message-2' }, holdRequest(ws, 'ana@example.test'))).status).toBe(201);
+  });
+
   it('enforces the shop checkout rules and online-only payment on the server', async () => {
     const ws = await liveStore('gv-rules', (doc) => {
       doc.checkout.requirements.social_handle = 'hidden';

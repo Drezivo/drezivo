@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, ClipboardList, Info, ShieldCheck, Truck } from "lucide-react";
+import { CalendarCheck, CalendarClock, ClipboardList, Info, ShieldCheck, Truck } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -269,6 +269,19 @@ export function StorefrontBookingSettingsPage() {
     <PageShell>
       <PageHeader title="Booking settings" description="When renters can book, and for how long." />
       <div className="grid gap-4">
+        <Section icon={CalendarCheck} title="Online reservations">
+          <Switch
+            label="Take reservations online"
+            description="Renters can pick dates and reserve on your storefront. Turn this off to keep your storefront for browsing only; renters will be asked to contact you to reserve."
+            checked={draft.reservation_requests}
+            onChange={(reservation_requests) => checkout.update({ reservation_requests })}
+          />
+          {!draft.reservation_requests ? (
+            <p className="mt-2 text-xs text-dashboard-muted">
+              Your storefront stays live with your collection, prices, and contact details. You can still create reservations from the Reservations page.
+            </p>
+          ) : null}
+        </Section>
         <Section icon={CalendarClock} title="Rental timing">
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Handover time" hint="Pickup and return both happen at this time." error={err("handover_time")}>

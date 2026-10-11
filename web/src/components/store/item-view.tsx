@@ -8,6 +8,7 @@ import { normalizeVariantFitRange, type ItemDetail, type PublicStorefront } from
 import { durationLabel, formatMinor } from '@/lib/storefront-format';
 
 import { BookingDrawer } from './booking/booking-drawer';
+import { ContactToReserve } from './contact-to-reserve';
 import { useStorePreview } from './preview-context';
 
 type Tab = 'measurements' | 'rental';
@@ -20,8 +21,10 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
   const variant = item.variants.find((entry) => entry.variant_id === variantId) ?? null;
   const shown = variant ?? item.variants[0];
   const preview = useStorePreview();
-  // booking_open is false while the shop's subscription is view-only: the page stays browsable.
-  const canBook = store.payment_methods.length > 0 && !preview && store.booking_open;
+  // booking_open is false while the shop's subscription is view-only; reservations_open is also
+  // false when the owner takes reservations by message. Either way the page stays browsable.
+  const reservationsOpen = store.reservations_open ?? store.booking_open;
+  const canBook = store.payment_methods.length > 0 && !preview && reservationsOpen;
   const image = item.image_urls[imageIndex] ?? item.image_urls[0];
   const description = item.description?.trim();
 
@@ -79,16 +82,22 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
               {variant?.color_label ? <p className="mt-3 text-sm text-sf-muted">Color: {variant.color_label}</p> : null}
             </fieldset>
           ) : null}
-          <button type="button" className="sf-button sf-button-primary mt-8 w-full" disabled={!variant || !canBook} onClick={() => setBooking(true)}>
-            {!variant ? 'Choose a size' : 'Choose rental dates'}
-          </button>
-          {preview ? (
-            <p className="mt-3 text-sm text-sf-muted">Booking opens once you publish your storefront.</p>
-          ) : !store.booking_open ? (
-            <p className="mt-3 text-sm text-sf-muted">Online booking is paused for now. Contact the shop to reserve this piece.</p>
-          ) : !canBook ? (
-            <p className="mt-3 text-sm text-sf-muted">Online booking is not open yet. Contact the shop to reserve this piece.</p>
-          ) : null}
+          {store.booking_open && !reservationsOpen && !preview ? (
+            <ContactToReserve contact={store.contact} />
+          ) : (
+            <>
+              <button type="button" className="sf-button sf-button-primary mt-8 w-full" disabled={!variant || !canBook} onClick={() => setBooking(true)}>
+                {!variant ? 'Choose a size' : 'Choose rental dates'}
+              </button>
+              {preview ? (
+                <p className="mt-3 text-sm text-sf-muted">Booking opens once you publish your storefront.</p>
+              ) : !store.booking_open ? (
+                <p className="mt-3 text-sm text-sf-muted">Online booking is paused for now. Contact the shop to reserve this piece.</p>
+              ) : !canBook ? (
+                <p className="mt-3 text-sm text-sf-muted">Online booking is not open yet. Contact the shop to reserve this piece.</p>
+              ) : null}
+            </>
+          )}
           {store.fitting.enabled ? (
             <a href={`/s/${store.slug}/fittings`} className="mt-3 block text-center text-sm underline underline-offset-4">
               Try it on first: request a fitting

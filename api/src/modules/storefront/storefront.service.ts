@@ -129,6 +129,7 @@ export class PublicStorefrontService {
         },
         payment_methods: paymentMethods,
         booking_open: store.bookingOpen,
+        reservations_open: store.bookingOpen && document.checkout.reservation_requests,
         checkout: {
           requirements: document.checkout.requirements,
           handover_time: document.checkout.handover_time,
