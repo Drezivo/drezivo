@@ -73,7 +73,8 @@ export const fittingCreateRequest = z
   .object({
     customer: fittingCustomerInput,
     starts_at: isoInstant,
-    garments: z.array(fittingGarmentRequestLine).min(1).max(FITTING_MAX_GARMENT_LINES),
+    /** May be empty: a customer can book first and choose what to try on at the shop. */
+    garments: z.array(fittingGarmentRequestLine).max(FITTING_MAX_GARMENT_LINES),
     internal_note: z.string().trim().max(FITTING_INTERNAL_NOTE_MAX_LENGTH).optional(),
   })
   .strict();

@@ -295,6 +295,28 @@ describe("NewFittingSheet production cutover", () => {
     expect(onCreated).toHaveBeenCalledWith(createdFitting);
   });
 
+  it("books a fitting without garments and says none are selected yet", async () => {
+    render(<NewFittingSheet open settings={settings} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Walk-in customer" }));
+    fireEvent.change(screen.getByPlaceholderText("Full name"), { target: { value: "Messenger Customer" } });
+    fireEvent.change(screen.getByPlaceholderText("09XXXXXXXXX"), { target: { value: "09171234567" } });
+    fireEvent.change(screen.getByLabelText("Fitting start time hour"), { target: { value: "7" } });
+    fireEvent.change(screen.getByLabelText("Fitting start time minute"), { target: { value: "30" } });
+    fireEvent.change(screen.getByLabelText("Fitting start time period"), { target: { value: "PM" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    // Garments step: continue without adding any.
+    await screen.findByRole("button", { name: /Test Gown/ });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.queryByText("Add at least one garment to the fitting.")).not.toBeInTheDocument();
+    expect(screen.getByText(/No garments selected yet/)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create fitting" }));
+    await waitFor(() => expect(api.createFitting).toHaveBeenCalledTimes(1));
+    expect(api.createFitting.mock.calls[0]![0]).toMatchObject({ garments: [] });
+  });
+
   describe("start time follows the shop clock", () => {
     beforeEach(() => {
       vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
