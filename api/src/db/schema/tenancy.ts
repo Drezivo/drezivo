@@ -137,6 +137,7 @@ export const membership = pgTable(
     ...updatableTimestamps,
   },
   (table) => [
+    unique('membership_tenant_id_id_key').on(table.tenantId, table.id),
     uniqueIndex('membership_tenant_clerk_user_key').on(table.tenantId, table.clerkUserId),
     uniqueIndex('membership_tenant_clerk_membership_key').on(
       table.tenantId,

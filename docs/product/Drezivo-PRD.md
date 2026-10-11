@@ -20,7 +20,7 @@ Verified public sign-up creates a minimal Drezivo account, not a tenant. The bac
 
 ## 2. Boundaries and users
 
-Owner controls policies, payment instructions, money verification, users, and inventory. Front desk serves customers, updates operations, and records custody. Guest customers browse mobile-first without accounts. Drezivo operators provision tenants, manage entitlements/subscriptions, suspend access, and provide audited recovery support.
+Owner controls policies, payment instructions, money verification, team membership, and inventory. Only the Owner can invite or remove Front Desk members. A removed member may be invited again, but the former membership stays disabled until the person accepts a fresh invitation; active and suspended members cannot be invited again. Front desk serves customers, updates operations, and records custody. Guest customers browse mobile-first without accounts. Drezivo operators provision tenants, manage entitlements/subscriptions, suspend access, and provide audited recovery support.
 
 V1 excludes gateway/card settlement, automatic reconciliation, SMS, ratings/reviews, wishlist, cart, marketplace, native apps, live courier APIs, customer accounts, multi-item guest checkout, multi-branch transfers, and enterprise governance. Staff-only rebooking is the exception to single-item intake: every source line is freshly quoted and held together as one replacement reservation, or none are held. Delivery is configurable text/fees. A QR image is only a merchant instruction.
 
