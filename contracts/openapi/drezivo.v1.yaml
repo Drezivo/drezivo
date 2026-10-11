@@ -5243,6 +5243,198 @@ paths:
                   - success
                   - error
                   - request_id
+  /members/{membershipId}/remove:
+    post:
+      tags:
+        - membership-invitations
+      summary: Owner removes one Front Desk member; access ends on their next request.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: membershipId
+          in: path
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
+      responses:
+        "200":
+          description: Member removed (or the same request replayed). Leaving the Clerk
+            organization is queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      membership_id:
+                        type: string
+                        format: uuid
+                      status:
+                        type: string
+                        enum:
+                          - removed
+                    required:
+                      - membership_id
+                      - status
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Only the active Owner can remove members.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "404":
+          description: No active Front Desk member with this id in the workspace.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "409":
+          description: STATE_CONFLICT — the Owner cannot be removed, or the request is
+            already in progress.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
   /membership-invitations:
     post:
       tags:
@@ -7925,6 +8117,8 @@ paths:
                           additionalProperties: false
                         maxItems: 20
                       booking_open:
+                        type: boolean
+                      reservations_open:
                         type: boolean
                       checkout:
                         type: object
@@ -25884,6 +26078,8 @@ paths:
                                 type: integer
                                 minimum: 1
                                 maximum: 30
+                              reservation_requests:
+                                type: boolean
                               fitting_requests:
                                 type: boolean
                             required:
@@ -25891,6 +26087,7 @@ paths:
                               - handover_time
                               - min_notice_days
                               - max_rental_days
+                              - reservation_requests
                               - fitting_requests
                             additionalProperties: false
                         required:
@@ -26372,6 +26569,8 @@ paths:
                           type: integer
                           minimum: 1
                           maximum: 30
+                        reservation_requests:
+                          type: boolean
                         fitting_requests:
                           type: boolean
                       required:
@@ -26379,6 +26578,7 @@ paths:
                         - handover_time
                         - min_notice_days
                         - max_rental_days
+                        - reservation_requests
                         - fitting_requests
                       additionalProperties: false
                   required:
@@ -26634,6 +26834,8 @@ paths:
                                 type: integer
                                 minimum: 1
                                 maximum: 30
+                              reservation_requests:
+                                type: boolean
                               fitting_requests:
                                 type: boolean
                             required:
@@ -26641,6 +26843,7 @@ paths:
                               - handover_time
                               - min_notice_days
                               - max_rental_days
+                              - reservation_requests
                               - fitting_requests
                             additionalProperties: false
                         required:
@@ -27293,6 +27496,8 @@ paths:
                                 type: integer
                                 minimum: 1
                                 maximum: 30
+                              reservation_requests:
+                                type: boolean
                               fitting_requests:
                                 type: boolean
                             required:
@@ -27300,6 +27505,7 @@ paths:
                               - handover_time
                               - min_notice_days
                               - max_rental_days
+                              - reservation_requests
                               - fitting_requests
                             additionalProperties: false
                         required:
@@ -27817,6 +28023,8 @@ paths:
                                 type: integer
                                 minimum: 1
                                 maximum: 30
+                              reservation_requests:
+                                type: boolean
                               fitting_requests:
                                 type: boolean
                             required:
@@ -27824,6 +28032,7 @@ paths:
                               - handover_time
                               - min_notice_days
                               - max_rental_days
+                              - reservation_requests
                               - fitting_requests
                             additionalProperties: false
                         required:
@@ -28341,6 +28550,8 @@ paths:
                                 type: integer
                                 minimum: 1
                                 maximum: 30
+                              reservation_requests:
+                                type: boolean
                               fitting_requests:
                                 type: boolean
                             required:
@@ -28348,6 +28559,7 @@ paths:
                               - handover_time
                               - min_notice_days
                               - max_rental_days
+                              - reservation_requests
                               - fitting_requests
                             additionalProperties: false
                         required:
@@ -28929,6 +29141,8 @@ paths:
                                 type: integer
                                 minimum: 1
                                 maximum: 30
+                              reservation_requests:
+                                type: boolean
                               fitting_requests:
                                 type: boolean
                             required:
@@ -28936,6 +29150,7 @@ paths:
                               - handover_time
                               - min_notice_days
                               - max_rental_days
+                              - reservation_requests
                               - fitting_requests
                             additionalProperties: false
                         required:

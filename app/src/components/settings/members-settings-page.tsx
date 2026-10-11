@@ -3,7 +3,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useAuth } from "@clerk/nextjs";
 import type { MembershipInvitationList, MemberRosterResponse } from "@drezivo/contracts";
-import { CalendarDays, Loader2, Mail, RefreshCw, UserPlus, Users, X } from "lucide-react";
+import { CalendarDays, Loader2, Mail, RefreshCw, UserMinus, UserPlus, Users, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useVerifiedActorContext } from "@/components/shell/dashboard-access-gate";
@@ -17,6 +17,7 @@ import { useSubmitGuard } from "@/lib/use-submit-guard";
 const PAGE_SIZE = 50;
 
 type Invitation = MembershipInvitationList["items"][number];
+type Member = MemberRosterResponse["members"][number];
 type InvitationAction = "resend" | "cancel";
 
 export function MembersSettingsPage() {
@@ -39,9 +40,13 @@ export function MembersSettingsPage() {
   const pendingActionRef = useRef<string | null>(null);
   const resendIntentRef = useRef<string | null>(null);
   const cancelIntentRef = useRef<string | null>(null);
+  const removeIntentRef = useRef<string | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<Member | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const createGuard = useSubmitGuard();
   const resendGuard = useSubmitGuard();
   const cancelGuard = useSubmitGuard();
+  const removeGuard = useSubmitGuard();
   const isOwner = actor?.membership.role === "owner";
   const api = useMemo(() => createDrezivoApiClient(getToken), [getToken]);
 
@@ -158,6 +163,41 @@ export function MembersSettingsPage() {
     }
   }
 
+  function handleRemoveOpenChange(member: Member | null) {
+    if (pendingActionRef.current) return;
+    setRemoveError(null);
+    if (member) setNotice(null);
+    setRemoveTarget(member);
+  }
+
+  async function removeMember() {
+    const member = removeTarget;
+    if (!member || pendingActionRef.current) return;
+    const intent = `remove:${member.id}`;
+    // One idempotency key per member being removed, so a retry after a timeout replays instead of
+    // racing a second removal.
+    if (removeIntentRef.current !== intent) {
+      removeGuard.resetIntent();
+      removeIntentRef.current = intent;
+    }
+    pendingActionRef.current = intent;
+    setPendingAction(intent);
+    setRemoveError(null);
+    setMutationError(null);
+    try {
+      const result = await removeGuard.submit((idempotencyKey) => api.removeMember(member.id, idempotencyKey));
+      if (!result) return;
+      setRemoveTarget(null);
+      setNotice(`${member.name ?? member.email ?? "The member"} was removed and can no longer open this workspace.`);
+      reload();
+    } catch (error) {
+      setRemoveError(safeError(error, "Could not remove this member. Please try again."));
+    } finally {
+      pendingActionRef.current = null;
+      setPendingAction(null);
+    }
+  }
+
   if (!actor) return <LoadingState label="Checking your workspace role…" />;
   if (!isOwner) {
     return (
@@ -250,9 +290,23 @@ export function MembersSettingsPage() {
                     </p>
                   </div>
                 </div>
-                <Badge variant={member.role === "owner" ? "secondary" : "outline"}>
-                  {member.role === "owner" ? "Owner" : "Front Desk"}
-                </Badge>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge variant={member.role === "owner" ? "secondary" : "outline"}>
+                    {member.role === "owner" ? "Owner" : "Front Desk"}
+                  </Badge>
+                  {member.role === "frontdesk" ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={pendingAction !== null}
+                      aria-label={`Remove ${member.name ?? member.email ?? "this member"}`}
+                      onClick={() => handleRemoveOpenChange(member)}
+                    >
+                      <UserMinus className="h-4 w-4" aria-hidden="true" /> Remove
+                    </Button>
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>
@@ -294,6 +348,49 @@ export function MembersSettingsPage() {
           </Button>
         ) : null}
       </Section>
+
+      <Dialog.Root open={removeTarget !== null} onOpenChange={(open: boolean) => {
+          if (!open) handleRemoveOpenChange(null);
+        }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/55" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-dashboard-border bg-dashboard-surface p-5 shadow-xl focus:outline-none sm:p-6">
+            <Dialog.Title className="text-lg font-semibold text-dashboard-navy">Remove this member?</Dialog.Title>
+            <Dialog.Description className="mt-2 text-sm leading-6 text-dashboard-muted">
+              {removeTarget?.name ?? removeTarget?.email ?? "This Front Desk member"} will lose access to this workspace right
+              away. Reservations and records they created stay. You can invite them again later.
+            </Dialog.Description>
+            {removeError ? (
+              <div
+                role="alert"
+                className="mt-4 rounded-lg border border-dashboard-danger/30 bg-dashboard-danger/10 px-3 py-2.5 text-sm text-dashboard-danger"
+              >
+                {removeError}
+              </div>
+            ) : null}
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pendingAction !== null}
+                onClick={() => handleRemoveOpenChange(null)}
+              >
+                Keep member
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                disabled={pendingAction !== null}
+                isPending={pendingAction?.startsWith("remove:") ?? false}
+                pendingLabel="Removing…"
+                onClick={() => void removeMember()}
+              >
+                <UserMinus className="h-4 w-4" aria-hidden="true" /> Remove member
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       <Dialog.Root open={isInviteOpen} onOpenChange={handleInviteOpenChange}>
         <Dialog.Portal>
