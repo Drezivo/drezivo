@@ -47,7 +47,7 @@ import {
 import { emailNotifications } from '../notifications/email-notifications.js';
 import { appendReservationOutboxEvent } from '../reservations/reservations.command.repository.js';
 import {
-  claimReservationAssets,
+  claimReservationAsset,
   createHeldReservation,
   isAllocationOverlapViolation,
 } from '../reservations/reservations.command.service.js';
@@ -131,7 +131,7 @@ export class GuestBookingService {
           }
 
           try {
-            const { booking, assetIds } = await claimReservationAssets(client, {
+            const { quote, assetId } = await claimReservationAsset(client, {
               tenantId: store.tenantId,
               branchId: store.branchId,
               requestId: meta.requestId,
@@ -142,7 +142,6 @@ export class GuestBookingService {
                 fulfillment_method: request.fulfillment_method,
                 payment_method_id: request.payment_method_id,
               },
-              variantIds: [request.variant_id],
             });
             const customer = await findOrCreateGuestCustomer(client, store.tenantId, request.email, request.customer);
             const { graph } = await createHeldReservation(client, {
@@ -152,11 +151,11 @@ export class GuestBookingService {
               actor: { kind: 'guest', key: guestActorKey(request.email) },
               eventDate: request.event_date,
               fulfillmentMethod: request.fulfillment_method,
-              booking,
-              assetIds,
+              quote,
+              assetId,
               customer,
             });
-            const expiresAt = guestAccessExpiresAt(booking.first.due_at);
+            const expiresAt = guestAccessExpiresAt(quote.due_at);
             await insertGuestAccessToken(client, {
               tenantId: store.tenantId,
               reservationId: graph.reservation_id,

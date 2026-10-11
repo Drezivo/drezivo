@@ -188,13 +188,14 @@ export default function PrivacyPage() {
         technical purpose. The reservation identifier in the page URL is not an access credential.
       </p>
       <p>
-        Drezivo uses Vercel Web Analytics to measure visits to its marketing pages and public
-        storefronts. Vercel Web Analytics does not use cookies and provides aggregated traffic
-        reporting. The information may include the page URL, referrer, timestamp, approximate
-        location, and browser, operating-system, and device information. Drezivo removes query
-        strings, generalizes item identifiers, and does not send booking-flow pageviews to
-        analytics. Vercel describes its visitor identifier as a daily hash that expires after 24
-        hours; analytics data is otherwise retained according to the applicable Vercel service
+        Drezivo uses Vercel Web Analytics to measure visits to its marketing pages, public
+        storefronts, and staff dashboard. Vercel Web Analytics does not use cookies and provides
+        aggregated traffic reporting. The information may include the page URL, referrer, timestamp,
+        approximate location, and browser, operating-system, and device information. Drezivo removes
+        query strings, generalizes item identifiers, and does not send booking-flow or
+        authentication pageviews to analytics. Staff dashboard analytics reports only known
+        dashboard routes. Vercel describes its visitor identifier as a daily hash that expires after
+        24 hours; analytics data is otherwise retained according to the applicable Vercel service
         settings. This analytics is not used for behavioral advertising or session replay.
       </p>
 

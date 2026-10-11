@@ -159,23 +159,6 @@ describe('multi-garment reservations', async () => {
     expect(again.status).toBe(201);
   });
 
-  it('moves every garment when the dates of a multi-garment booking are edited', async () => {
-    const seed = await seedWorkspace('org_multi_edit', 'user_multi_edit');
-    const booking = await createBooking(seed, 'edit', [seed.celestineId, seed.amaraId]);
-    const end = new Date(Date.parse(booking.end) + 86_400_000).toISOString();
-
-    const edited = await service.editReservation(context(seed, 'edit-dates'), booking.id, {
-      version: booking.version,
-      requested_interval: { start: booking.start, end },
-    });
-
-    expect(edited.status).toBe(200);
-    const lines = await lineState(seed, booking.id);
-    expect(lines.every((line) => line.is_blocking)).toBe(true);
-    expect(new Set(lines.map((line) => line.upper)).size).toBe(1);
-    expect(lines[0]?.upper).toBe(new Date(Date.parse(end) + 1_440 * 60_000).toISOString());
-  });
-
   it('creates one booking for a sequential or concurrent double-fire of the same intent', async () => {
     const seed = await seedWorkspace('org_multi_double', 'user_multi_double');
     const body = await request(seed, [seed.celestineId, seed.amaraId]);

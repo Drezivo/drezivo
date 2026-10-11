@@ -12,7 +12,9 @@ import { instantInterval, isoDate } from '../common/time';
 import {
   fulfillmentMethod,
   reservationSummary,
+  staffCustomerEmail,
   staffCustomerDetails,
+  staffCustomerPhone,
 } from './reservation';
 
 export const paymentInstructions = z
@@ -34,8 +36,12 @@ export const staffReservationCustomerInput = z.discriminatedUnion('source', [
     .object({
       source: z.literal('existing'),
       customer_id: customerId,
-      /** Accepted only when the selected profile is missing its required reservation address. */
+      /** Accepted only when the selected profile is missing this reservation detail. */
       address: customerAddress.optional(),
+      /** Accepted only when the selected profile is missing this contact. */
+      phone: staffCustomerPhone.optional(),
+      /** Accepted only when the selected profile is missing this contact. */
+      email: staffCustomerEmail.optional(),
     })
     .strict(),
   z
@@ -89,24 +95,50 @@ export const MAX_RESERVATION_LINES = 10;
 /**
  * POST /reservations request body. A staff walk-in may claim the garment before
  * customer/contact entry is complete, so `customer` is optional while the
- * reservation remains `held`. Tenant, branch, final totals, chosen asset,
- * allocation IDs, snapshots, and server lifecycle state are deliberately absent.
+ * reservation remains `held`. Rebooking may include several lines, which the API quotes and
+ * allocates atomically. Tenant, branch, final totals, chosen assets, allocation IDs, snapshots,
+ * and server lifecycle state are deliberately absent.
  */
-export const staffReservationCreateRequest = z
-  .object({
-    customer: staffReservationCustomerInput.optional(),
+const staffReservationCreateBase = z.object({
+  customer: staffReservationCustomerInput.optional(),
+  requested_interval: instantInterval,
+  event_date: isoDate.optional(),
+  fulfillment_method: fulfillmentMethod,
+  payment_method_id: paymentMethodId,
+});
+
+/** Ordinary staff bookings keep the legacy variant; rebooking may also submit several lines. */
+export const staffReservationCreateRequest = staffReservationCreateBase
+  .extend({
     variant_id: productVariantId,
     /**
      * More garments on the same booking, for the same dates. Each is quoted and gets its own free
      * physical piece; the same variant may appear again when the shop has several pieces of it.
      */
     additional_variant_ids: z.array(productVariantId).max(MAX_RESERVATION_LINES - 1).optional(),
-    requested_interval: instantInterval,
-    event_date: isoDate.optional(),
-    fulfillment_method: fulfillmentMethod,
-    payment_method_id: paymentMethodId,
+    lines: z
+      .array(z.object({ variant_id: productVariantId }).strict())
+      .min(1)
+      .max(20)
+      .optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.lines && value.additional_variant_ids !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['additional_variant_ids'],
+        message: 'Send either lines or additional_variant_ids, not both.',
+      });
+    }
+    if (value.lines && value.lines[0]?.variant_id !== value.variant_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['lines', 0, 'variant_id'],
+        message: 'variant_id must match the first reservation line.',
+      });
+    }
+  });
 export type StaffReservationCreateRequest = z.infer<typeof staffReservationCreateRequest>;
 
 export const staffReservationCreateResponse = z

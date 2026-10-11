@@ -6,7 +6,6 @@ import {
   Clock3,
   CreditCard,
   PackageCheck,
-  Pencil,
   RotateCcw,
   Shirt,
   Truck,
@@ -14,7 +13,11 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { normalizeVariantFitRange, type PermissionCode, type ReservationDetail } from "@drezivo/contracts";
+import {
+  normalizeVariantFitRange,
+  type PermissionCode,
+  type ReservationDetail,
+} from "@drezivo/contracts";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -144,7 +147,10 @@ function ReservationDetails({
   const effectiveTimeZone = detail.timezone_snapshot || timeZone;
   const [failedImageLines, setFailedImageLines] = useState<Set<string>>(() => new Set());
   const [editing, setEditing] = useState(false);
-  const canEdit = EDITABLE_STATUSES.has(detail.status) && permissionCodes.includes("reservations.manage");
+  const canEdit =
+    detail.status === "confirmed" &&
+    customer !== null &&
+    permissionCodes.includes("reservations.manage");
 
   useEffect(() => {
     setFailedImageLines(new Set());
@@ -166,12 +172,18 @@ function ReservationDetails({
             {RESERVATION_STATUS_LABELS[detail.status]}
           </Badge>
           {detail.delivery_snapshot.fulfillment_method === "delivery" ? (
-            <Badge variant="outline" className="whitespace-nowrap border-dashboard-gold-text/30 bg-dashboard-gold-soft px-2 py-1 text-xs text-dashboard-gold-text">
+            <Badge
+              variant="outline"
+              className="whitespace-nowrap border-dashboard-gold-text/30 bg-dashboard-gold-soft px-2 py-1 text-xs text-dashboard-gold-text"
+            >
               Delivery requested
             </Badge>
           ) : null}
           {detail.booking_channel ? (
-            <Badge variant="outline" className="whitespace-nowrap px-2 py-1 text-xs text-dashboard-muted">
+            <Badge
+              variant="outline"
+              className="whitespace-nowrap px-2 py-1 text-xs text-dashboard-muted"
+            >
               {detail.booking_channel === "online" ? "Online booking" : "Walk-in"}
             </Badge>
           ) : null}
@@ -186,20 +198,15 @@ function ReservationDetails({
           </div>
         ) : null}
 
-        <ReservationMutationActions
-          detail={detail}
-          permissionCodes={permissionCodes}
-          onNotice={onNotice}
-          onMutationSuccess={onMutationSuccess}
-          onRefreshRequired={onRefreshRequired}
-        />
-
-        {canEdit && !editing ? (
-          <div className="mt-3">
-            <Button type="button" size="sm" variant="secondary" onClick={() => setEditing(true)}>
-              <Pencil className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Edit details
-            </Button>
-          </div>
+        {!editing ? (
+          <ReservationMutationActions
+            detail={detail}
+            permissionCodes={permissionCodes}
+            onEdit={() => setEditing(true)}
+            onNotice={onNotice}
+            onMutationSuccess={onMutationSuccess}
+            onRefreshRequired={onRefreshRequired}
+          />
         ) : null}
         {canEdit && editing ? (
           <ReservationEditForm
@@ -208,7 +215,10 @@ function ReservationDetails({
             onCancel={() => setEditing(false)}
             onRefreshRequired={() => {
               setEditing(false);
-              onNotice({ tone: "attention", message: "Someone else changed this reservation. Showing the latest details." });
+              onNotice({
+                tone: "attention",
+                message: "Someone else changed this reservation. Showing the latest details.",
+              });
               onRefreshRequired();
             }}
             onSaved={(message) => {
@@ -219,7 +229,9 @@ function ReservationDetails({
           />
         ) : null}
 
-        {onContinue && CONTINUABLE_STATUSES.has(detail.status) && permissionCodes.includes("reservations.manage") ? (
+        {onContinue &&
+        CONTINUABLE_STATUSES.has(detail.status) &&
+        permissionCodes.includes("reservations.manage") ? (
           <ContinueReservation detail={detail} onContinue={onContinue} />
         ) : null}
       </header>
@@ -296,13 +308,17 @@ function ReservationDetails({
                         )}
                       />
                     </div>
-                    {line.fit_range_snapshot || Object.keys(line.measurements_snapshot).length > 0 ? (
+                    {line.fit_range_snapshot ||
+                    Object.keys(line.measurements_snapshot).length > 0 ? (
                       <div className="mt-3">
                         <p className="text-xs font-medium text-dashboard-muted">
                           Measurements at booking
                         </p>
-                        {line.fit_range_snapshot && normalizeVariantFitRange(line.fit_range_snapshot) ? (
-                          <p className="mt-2 text-xs text-dashboard-navy">Fits {normalizeVariantFitRange(line.fit_range_snapshot)}</p>
+                        {line.fit_range_snapshot &&
+                        normalizeVariantFitRange(line.fit_range_snapshot) ? (
+                          <p className="mt-2 text-xs text-dashboard-navy">
+                            Fits {normalizeVariantFitRange(line.fit_range_snapshot)}
+                          </p>
                         ) : null}
                         <div className="mt-2 flex flex-wrap gap-2">
                           {Object.entries(line.measurements_snapshot).map(([label, value]) => (
@@ -310,7 +326,8 @@ function ReservationDetails({
                               key={label}
                               className="rounded-md bg-dashboard-active px-2 py-1 text-xs text-dashboard-navy"
                             >
-                              {humanize(label)}: {typeof value === "number"
+                              {humanize(label)}:{" "}
+                              {typeof value === "number"
                                 ? `${value}${line.measurement_unit_snapshot ? ` ${line.measurement_unit_snapshot}` : ""}`
                                 : value.text}
                             </span>
@@ -522,27 +539,35 @@ function ReservationDetails({
   );
 }
 
-const CONTINUABLE_STATUSES: ReadonlySet<ReservationDetail["status"]> = new Set(["cancelled", "expired", "rejected"]);
-const EDITABLE_STATUSES: ReadonlySet<ReservationDetail["status"]> = new Set(["held", "pending_confirmation", "confirmed"]);
+const CONTINUABLE_STATUSES: ReadonlySet<ReservationDetail["status"]> = new Set([
+  "cancelled",
+  "expired",
+  "rejected",
+]);
 
 /**
  * What staff still owe or are owed after an edit changed the total once money was in. Null when
  * nothing was paid yet (the payment amount follows the total) or the amounts match.
  */
-function paymentDifference(detail: ReservationDetail): { kind: "collect" | "refund"; minor: bigint } | null {
+function paymentDifference(
+  detail: ReservationDetail
+): { kind: "collect" | "refund"; minor: bigint } | null {
   const payment = detail.payment;
   if (!payment) return null;
-  const moneyIn = payment.status !== "pending" || ["uploaded", "under_review", "verified"].includes(payment.evidence_status);
+  const moneyIn =
+    payment.status !== "pending" ||
+    ["uploaded", "under_review", "verified"].includes(payment.evidence_status);
   if (!moneyIn) return null;
   const difference = BigInt(detail.price_snapshot.due_now_minor) - BigInt(payment.amount_minor);
   if (difference === 0n) return null;
-  return difference > 0n ? { kind: "collect", minor: difference } : { kind: "refund", minor: -difference };
+  return difference > 0n
+    ? { kind: "collect", minor: difference }
+    : { kind: "refund", minor: -difference };
 }
 
 /**
- * A finished reservation stays in history; Continue starts a new booking with the same details so
- * staff only re-check the dates. Needs the first line's clothing item, so very old reservations
- * without it cannot be continued.
+ * A finished reservation stays in history; rebooking copies every line into a new booking. Older
+ * reservations whose lines lack product identity fail closed rather than silently dropping items.
  */
 function ContinueReservation({
   detail,
@@ -551,14 +576,13 @@ function ContinueReservation({
   detail: ReservationDetail;
   onContinue: (source: ReservationRebookSource) => void;
 }) {
-  const line = detail.lines[0];
-  if (!line?.product_id) return null;
-  const productId = line.product_id;
+  if (detail.lines.length === 0 || detail.lines.some((line) => !line.product_id)) return null;
   const customer = detail.customer.snapshot;
   return (
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashboard-border bg-dashboard-active/40 p-3">
       <p className="text-sm text-dashboard-muted">
-        This reservation is {detail.status === "expired" ? "expired" : detail.status}. Continue it as a new booking with the same details.
+        This reservation is {detail.status === "expired" ? "expired" : detail.status}. Create a new
+        reservation with the same items and details.
       </p>
       <Button
         type="button"
@@ -566,11 +590,12 @@ function ContinueReservation({
         onClick={() =>
           onContinue({
             referenceCode: detail.reference_code,
-            productId,
-            variantId: line.variant_id,
-            additionalGarments: detail.lines.slice(1).flatMap((other) =>
-              other.product_id ? [{ productId: other.product_id, variantId: other.variant_id, name: other.name_snapshot }] : []
-            ),
+            lines: detail.lines.map((line) => ({
+              sourceLineId: line.id,
+              productId: line.product_id!,
+              variantId: line.variant_id,
+              name: line.name_snapshot,
+            })),
             pickupAt: detail.pickup_at,
             dueAt: detail.due_at,
             eventDate: detail.event_date ?? null,
@@ -588,7 +613,8 @@ function ContinueReservation({
           })
         }
       >
-        <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Continue
+        <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Create New Reservation from
+        This
       </Button>
     </div>
   );
@@ -658,7 +684,10 @@ function PaymentDifferenceNote({ detail }: { detail: ReservationDetail }) {
   if (!difference) return null;
   const amount = formatMinorMoney(difference.minor.toString(), detail.price_snapshot.currency);
   return (
-    <p role="status" className="mt-3 rounded-lg bg-dashboard-attention/10 px-3 py-2 text-sm text-dashboard-attention">
+    <p
+      role="status"
+      className="mt-3 rounded-lg bg-dashboard-attention/10 px-3 py-2 text-sm text-dashboard-attention"
+    >
       {difference.kind === "collect"
         ? `The total changed after payment. Collect ${amount} more from the renter.`
         : `The total changed after payment. Refund ${amount} to the renter.`}

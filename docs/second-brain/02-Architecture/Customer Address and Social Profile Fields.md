@@ -4,7 +4,7 @@ type: architecture-decision
 status: implemented
 owner: Drezivo team
 source: "[PRD](../../product/Drezivo-PRD.md), [Data Model](../../architecture/Drezivo-Data-Model.md), [ERD](../../architecture/Drezivo-ERD.dbml), and [TRD](../../architecture/Drezivo-TRD.md) — 2026-09-28"
-updated: 2026-09-28
+updated: 2026-10-11
 tags: [drezivo, customer-data, reservations, fittings, privacy]
 ---
 
@@ -31,6 +31,19 @@ verified staff and tenant context. Operationally archived or anonymized profiles
 Reservation/Fitting intake search and existing-customer resolution, but existing linked bookings
 remain readable through their branch-scoped history/detail projections. The live profile remains
 tenant-scoped and never replaces historical snapshots.
+
+## 2026-10-11 — Confirmed reservation snapshot correction
+
+Staff may correct only `full_name`, `phone`, `email`, and `address` on a **confirmed** reservation
+from its detail sheet. The versioned, idempotent API command updates that reservation's
+`customer_snapshot` and version only; the customer profile and any sibling reservation remain
+unchanged. It rejects held and pending-confirmation bookings and rejects date/time, event date,
+fulfillment/delivery, payment, receipt, allocation, and custody fields. Customer profile changes
+remain in Customer management. This is distinct from New Reservation completion, where the selected
+profile can be edited explicitly as part of that new booking flow.
+
+Source: [PRD Operations](../../product/Drezivo-PRD.md) and
+[TRD reservation commands](../../architecture/Drezivo-TRD.md).
 
 See [[02-Architecture/Drezivo Architecture]] for the API and tenant boundary, and
 [[05-Operations/Reservations Checklist]] for the reservation lifecycle.

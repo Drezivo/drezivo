@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 
 import {
-  MAX_RESERVATION_LINES,
   staffReservationCreateRequest,
   staffReservationCreateResponse,
   type StaffReservationCreateRequest,
@@ -14,7 +13,6 @@ import type { FailureEnvelope, SuccessEnvelope } from '../../shared/response.js'
 import {
   CapacityConflictError,
   IdempotencyKeyReusedError,
-  NotFoundError,
   StateConflictError,
   ValidationError,
   isAppError,
@@ -26,21 +24,19 @@ import {
   type TenantIdempotencyClaim,
 } from '../../shared/tenant-idempotency.js';
 import { withTenantTransaction } from '../../db/client.js';
-import { resolveReservationQuote } from './reservations.quote.js';
+import { resolveReservationQuote, type ReservationQuoteRequest } from './reservations.quote.js';
+import { resolveReservationCustomer } from './reservations.customer.js';
 import {
   appendExpiredReservationAuditEvents,
   appendExpiredReservationOutboxEvents,
   appendReservationAuditEvent,
   appendReservationOutboxEvent,
   chooseAvailableLockedAsset,
-  createReservationCustomer,
   createReservationGraph,
-  fillReservationCustomerAddress,
-  type NewReservationLine,
   lockEligibleReservationAssets,
-  readReservationCustomerForCreate,
   RESERVATION_HOLD_RECLAIM_BATCH_SIZE,
   releaseExpiredReservationHolds,
+  type ReservationGraphLineInput,
   type ReservationCustomerSnapshotRow,
 } from './reservations.command.repository.js';
 
@@ -88,19 +84,22 @@ export async function createStaffReservationCommand(
 
     let savepointOpen = false;
     try {
-      const { booking, assetIds } = await claimReservationAssets(client, {
+      const claimedLines = await claimReservationLines(client, {
         tenantId: context.tenantId,
         branchId: context.branchId,
         requestId: context.requestId,
         request,
-        variantIds: [request.variant_id, ...(request.additional_variant_ids ?? [])],
       });
-      const quote = booking.first;
+      const firstClaimedLine = claimedLines[0];
+      if (!firstClaimedLine) throw new ValidationError('At least one rental item is required.');
+      const quote = aggregateReservationQuotes(claimedLines.map((line) => line.quote));
 
       await client.query(`SAVEPOINT ${CREATE_EFFECTS_SAVEPOINT}`);
       savepointOpen = true;
 
-      const customer = await resolveCustomer(client, context.tenantId, request);
+      const customer = request.customer
+        ? await resolveReservationCustomer(client, context.tenantId, request.customer)
+        : null;
       const { graph, referenceCode } = await createHeldReservation(client, {
         tenantId: context.tenantId,
         branchId: context.branchId,
@@ -108,8 +107,9 @@ export async function createStaffReservationCommand(
         actor: { kind: 'staff', key: context.principalId },
         eventDate: request.event_date ?? null,
         fulfillmentMethod: request.fulfillment_method,
-        booking,
-        assetIds,
+        quote,
+        assetId: firstClaimedLine.assetId,
+        lines: claimedLines,
         customer,
       });
 
@@ -128,9 +128,9 @@ export async function createStaffReservationCommand(
           timezone_snapshot: quote.timezone_snapshot,
           ...(request.event_date ? { event_date: request.event_date } : {}),
           price_snapshot: {
-            rental_total_minor: booking.price_snapshot.rental_total_minor,
-            security_required_minor: booking.price_snapshot.security_required_minor,
-            due_now_minor: booking.price_snapshot.due_now_minor,
+            rental_total_minor: quote.price_snapshot.rental_total_minor,
+            security_required_minor: quote.price_snapshot.security_required_minor,
+            due_now_minor: quote.price_snapshot.due_now_minor,
             currency: 'PHP',
           },
           hold_expires_at: graph.hold_expires_at.toISOString(),
@@ -177,72 +177,31 @@ export async function createStaffReservationCommand(
 }
 
 export type ReservationQuote = Awaited<ReturnType<typeof resolveReservationQuote>>;
-type ReservationQuoteRequest = Parameters<typeof resolveReservationQuote>[1]['request'];
 
 /**
- * One booking of one or more garments for the same dates: a quote per garment plus what the
- * renter pays in total. Dates, policy, payment method and delivery are shared, so delivery is
- * charged once per booking, not per garment.
+ * Capacity step shared by staff and guest booking: quote, lock the size's eligible garments,
+ * reclaim expired holds with database time, and choose a garment free for the blocked interval.
+ * The chosen garment is only a promise once `createHeldReservation` inserts its allocation.
  */
-export interface ReservationBookingQuote {
-  lines: ReservationQuote[];
-  /** The first garment's quote, which carries the booking-level facts every line shares. */
-  first: ReservationQuote;
-  price_snapshot: ReservationQuote['price_snapshot'];
-}
-
-const POSTGRES_INT_MAX = 2_147_483_647n;
-
-export async function resolveReservationBookingQuote(
+export async function claimReservationAsset(
   client: PoolClient,
-  input: { tenantId: string; branchId: string; request: ReservationQuoteRequest; variantIds: readonly string[] },
-): Promise<ReservationBookingQuote> {
-  if (input.variantIds.length === 0 || input.variantIds.length > MAX_RESERVATION_LINES) {
-    throw new ValidationError(`A booking holds from 1 to ${MAX_RESERVATION_LINES} garments.`);
-  }
-  const lines: ReservationQuote[] = [];
-  for (const variantId of input.variantIds) {
-    lines.push(
-      await resolveReservationQuote(client, {
-        tenantId: input.tenantId,
-        branchId: input.branchId,
-        request: { ...input.request, variant_id: variantId as ReservationQuoteRequest['variant_id'] },
-      }),
-    );
-  }
-  const [first] = lines;
-  if (!first) throw new ValidationError('A booking needs at least one garment.');
-  const rental = lines.reduce((sum, line) => sum + BigInt(line.price_snapshot.rental_total_minor), 0n);
-  const deposit = lines.reduce((sum, line) => sum + BigInt(line.price_snapshot.security_required_minor), 0n);
-  const dueNow = rental + deposit + BigInt(first.price_snapshot.delivery_total_minor);
-  if (dueNow > POSTGRES_INT_MAX) throw new StateConflictError('This booking total is too large to record.');
-  return {
-    lines,
-    first,
-    price_snapshot: {
-      ...first.price_snapshot,
-      rental_total_minor: rental.toString(),
-      security_required_minor: deposit.toString(),
-      due_now_minor: dueNow.toString(),
-    },
-  };
-}
-
-/**
- * Capacity step shared by staff and guest booking: quote every garment, lock all their eligible
- * pieces in one UUID order, reclaim expired holds with database time, and choose a distinct free
- * piece per garment. The choices are only a promise once `createHeldReservation` inserts them.
- */
-export async function claimReservationAssets(
-  client: PoolClient,
-  input: { tenantId: string; branchId: string; requestId: string; request: ReservationQuoteRequest; variantIds: readonly string[] },
-): Promise<{ booking: ReservationBookingQuote; assetIds: string[] }> {
-  const booking = await resolveReservationBookingQuote(client, input);
+  input: {
+    tenantId: string;
+    branchId: string;
+    requestId: string;
+    request: ReservationQuoteRequest;
+  },
+): Promise<{ quote: ReservationQuote; assetId: string }> {
+  const quote = await resolveReservationQuote(client, {
+    tenantId: input.tenantId,
+    branchId: input.branchId,
+    request: input.request,
+  });
 
   const lockedAssetIds = await lockEligibleReservationAssets(client, {
     tenantId: input.tenantId,
     branchId: input.branchId,
-    variantIds: input.variantIds,
+    variantIds: [input.request.variant_id],
   });
   if (lockedAssetIds.length === 0) {
     throw new CapacityConflictError('No ready garment is available for this reservation.');
@@ -255,27 +214,18 @@ export async function claimReservationAssets(
     assetIds: lockedAssetIds,
   });
 
-  const assetIds: string[] = [];
-  for (const line of booking.lines) {
-    const assetId = await chooseAvailableLockedAsset(client, {
-      tenantId: input.tenantId,
-      branchId: input.branchId,
-      variantId: line.variant_id,
-      // A piece already chosen for an earlier line of this booking is not free for the next one.
-      assetIds: lockedAssetIds.filter((id) => !assetIds.includes(id)),
-      blockedStart: line.blocked_interval.start,
-      blockedEnd: line.blocked_interval.end,
-    });
-    if (!assetId) {
-      throw new CapacityConflictError(
-        booking.lines.length === 1
-          ? 'The requested garment is no longer available for those dates.'
-          : `${line.line_snapshot.name} is no longer available for those dates.`,
-      );
-    }
-    assetIds.push(assetId);
+  const assetId = await chooseAvailableLockedAsset(client, {
+    tenantId: input.tenantId,
+    branchId: input.branchId,
+    variantId: input.request.variant_id,
+    assetIds: lockedAssetIds,
+    blockedStart: quote.blocked_interval.start,
+    blockedEnd: quote.blocked_interval.end,
+  });
+  if (!assetId) {
+    throw new CapacityConflictError('The requested garment is no longer available for those dates.');
   }
-  return { booking, assetIds };
+  return { quote, assetId };
 }
 
 /**
@@ -309,7 +259,103 @@ export async function reclaimExpiredHoldsOnLockedAssets(
   }
 }
 
-/** Inserts the held reservation, one line and exclusion-protected allocation per garment, audit, and outbox event. */
+type ClaimedReservationLine = { quote: ReservationQuote; assetId: string };
+
+/** Freshly quote every requested line, lock all candidate assets in stable order, and only then
+ * choose unique physical garments. Nothing is inserted until all lines have capacity. */
+async function claimReservationLines(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    branchId: string;
+    requestId: string;
+    request: StaffReservationCreateRequest;
+  },
+): Promise<ClaimedReservationLine[]> {
+  // Rebooking keeps staging's ordered `lines` contract (up to 20). New bookings may add
+  // garments through `additional_variant_ids` (up to 10 total). The contract rejects both.
+  const variantIds =
+    input.request.lines?.map((line) => line.variant_id) ??
+    [input.request.variant_id, ...(input.request.additional_variant_ids ?? [])];
+  const quotes: ReservationQuote[] = [];
+  for (const variantId of variantIds) {
+    const quoteRequest: ReservationQuoteRequest = {
+      variant_id: variantId,
+      requested_interval: input.request.requested_interval,
+      ...(input.request.event_date ? { event_date: input.request.event_date } : {}),
+      fulfillment_method: input.request.fulfillment_method,
+      payment_method_id: input.request.payment_method_id,
+    };
+    quotes.push(await resolveReservationQuote(client, {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      request: quoteRequest,
+    }));
+  }
+
+  const allLockedAssetIds = await lockEligibleReservationAssets(client, {
+    tenantId: input.tenantId,
+    branchId: input.branchId,
+    variantIds: [...new Set(variantIds)].sort(),
+  });
+  if (allLockedAssetIds.length === 0) {
+    throw new CapacityConflictError('No ready garment is available for this reservation.');
+  }
+
+  while (true) {
+    const expired = await releaseExpiredReservationHolds(client, {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      assetIds: allLockedAssetIds,
+      batchSize: RESERVATION_HOLD_RECLAIM_BATCH_SIZE,
+    });
+    if (expired.length === 0) break;
+    await appendExpiredReservationAuditEvents(client, { tenantId: input.tenantId, requestId: input.requestId, rows: expired });
+    await appendExpiredReservationOutboxEvents(client, { tenantId: input.tenantId, rows: expired });
+    if (expired.length < RESERVATION_HOLD_RECLAIM_BATCH_SIZE) break;
+  }
+
+  const claimed: ClaimedReservationLine[] = [];
+  const claimedAssetIds: string[] = [];
+  for (const quote of quotes) {
+    const assetId = await chooseAvailableLockedAsset(client, {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      variantId: quote.variant_id,
+      assetIds: allLockedAssetIds,
+      blockedStart: quote.blocked_interval.start,
+      blockedEnd: quote.blocked_interval.end,
+      excludeAssetIds: claimedAssetIds,
+    });
+    if (!assetId) {
+      throw new CapacityConflictError('One or more requested garments are no longer available for those dates. Remove or change unavailable items and retry.');
+    }
+    claimed.push({ quote, assetId });
+    claimedAssetIds.push(assetId);
+  }
+  return claimed;
+}
+
+function aggregateReservationQuotes(quotes: ReservationQuote[]): ReservationQuote {
+  const first = quotes[0];
+  if (!first) throw new ValidationError('At least one rental item is required.');
+  const rentalTotal = quotes.reduce((sum, quote) => sum + BigInt(quote.price_snapshot.rental_total_minor), 0n);
+  const securityTotal = quotes.reduce((sum, quote) => sum + BigInt(quote.price_snapshot.security_required_minor), 0n);
+  const deliveryTotal = BigInt(first.price_snapshot.delivery_total_minor);
+  const dueNow = rentalTotal + securityTotal + deliveryTotal;
+  if (dueNow > 2_147_483_647n) throw new ValidationError('The combined reservation total exceeds the supported amount.');
+  return {
+    ...first,
+    price_snapshot: {
+      ...first.price_snapshot,
+      rental_total_minor: rentalTotal.toString(),
+      security_required_minor: securityTotal.toString(),
+      due_now_minor: dueNow.toString(),
+    },
+  };
+}
+
+/** Inserts the held reservation, its exclusion-protected allocation, audit, and outbox event. */
 export async function createHeldReservation(
   client: PoolClient,
   input: {
@@ -319,23 +365,24 @@ export async function createHeldReservation(
     actor: { kind: 'staff' | 'guest'; key: string };
     eventDate: string | null;
     fulfillmentMethod: StaffReservationCreateRequest['fulfillment_method'];
-    booking: ReservationBookingQuote;
-    assetIds: string[];
+    quote: ReservationQuote;
+    assetId: string;
+    lines?: ClaimedReservationLine[];
     customer: ReservationCustomerSnapshotRow | null;
   },
 ): Promise<{ graph: Awaited<ReturnType<typeof createReservationGraph>>; referenceCode: string }> {
-  const { booking } = input;
-  const first = booking.first;
-  if (input.assetIds.length !== booking.lines.length) throw new Error('Each garment needs exactly one chosen piece.');
   const reservationId = randomUUID();
   const paymentId = randomUUID();
   const referenceCode = `RSV-${reservationId.toUpperCase()}`;
-
-  const lines: NewReservationLine[] = booking.lines.map((quote, index) => ({
+  const rentalTotalMinor = Number(input.quote.price_snapshot.rental_total_minor);
+  const securityRequiredMinor = Number(input.quote.price_snapshot.security_required_minor);
+  const dueNowMinor = Number(input.quote.price_snapshot.due_now_minor);
+  const claimedLines = input.lines ?? [{ quote: input.quote, assetId: input.assetId }];
+  const lines: ReservationGraphLineInput[] = claimedLines.map(({ quote, assetId }) => ({
     reservationLineId: randomUUID(),
     allocationId: randomUUID(),
     variantId: quote.variant_id,
-    nameSnapshot: quote.line_snapshot.name,
+    lineNameSnapshot: quote.line_snapshot.name,
     measurementsSnapshot: quote.line_snapshot.measurements,
     fitRangeSnapshot: quote.line_snapshot.fit_range,
     measurementUnitSnapshot: quote.line_snapshot.measurement_unit,
@@ -353,25 +400,26 @@ export async function createHeldReservation(
     },
     rentalMinor: Number(quote.price_snapshot.rental_total_minor),
     depositMinor: Number(quote.price_snapshot.security_required_minor),
-    assetId: input.assetIds[index] as string,
+    assetId,
     blockedStart: quote.blocked_interval.start,
     blockedEnd: quote.blocked_interval.end,
   }));
 
   const graph = await createReservationGraph(client, {
     reservationId,
+    lines,
     paymentId,
     tenantId: input.tenantId,
     branchId: input.branchId,
     customerId: input.customer?.id ?? null,
-    storefrontId: first.storefront_id,
-    policySnapshotId: first.policy_snapshot_id,
-    paymentMethodId: first.payment_method_id,
+    storefrontId: input.quote.storefront_id,
+    policySnapshotId: input.quote.policy_snapshot_id,
+    paymentMethodId: input.quote.payment_method_id,
     referenceCode,
     eventDate: input.eventDate,
-    pickupAt: first.pickup_at,
-    dueAt: first.due_at,
-    timezoneSnapshot: first.timezone_snapshot,
+    pickupAt: input.quote.pickup_at,
+    dueAt: input.quote.due_at,
+    timezoneSnapshot: input.quote.timezone_snapshot,
     customerSnapshot: input.customer
       ? {
           full_name: input.customer.full_name,
@@ -380,15 +428,13 @@ export async function createHeldReservation(
           address: input.customer.address,
         }
       : null,
-    deliverySnapshot: first.delivery_snapshot,
-    priceSnapshot: booking.price_snapshot,
-    rentalTotalMinor: Number(booking.price_snapshot.rental_total_minor),
-    securityRequiredMinor: Number(booking.price_snapshot.security_required_minor),
-    dueNowMinor: Number(booking.price_snapshot.due_now_minor),
-    lines,
+    deliverySnapshot: input.quote.delivery_snapshot,
+    priceSnapshot: input.quote.price_snapshot,
+    rentalTotalMinor,
+    securityRequiredMinor,
+    dueNowMinor,
   });
 
-  const variantIds = booking.lines.map((quote) => quote.variant_id);
   await appendReservationAuditEvent(client, {
     tenantId: input.tenantId,
     actorKind: input.actor.kind,
@@ -399,9 +445,9 @@ export async function createHeldReservation(
     redactedSummary: {
       status: 'held',
       branch_id: input.branchId,
-      variant_id: first.variant_id,
-      asset_id: input.assetIds[0],
-      ...(variantIds.length > 1 ? { variant_ids: variantIds, asset_ids: input.assetIds } : {}),
+      variant_id: input.quote.variant_id,
+      asset_id: input.assetId,
+      line_count: lines.length,
       fulfillment_method: input.fulfillmentMethod,
     },
     requestId: input.requestId,
@@ -414,65 +460,12 @@ export async function createHeldReservation(
       reservationId: graph.reservation_id,
       reservationVersion: graph.version,
       branchId: input.branchId,
-      variantId: first.variant_id,
-      assetId: input.assetIds[0],
-      ...(variantIds.length > 1 ? { variantIds, assetIds: input.assetIds } : {}),
+      variantId: input.quote.variant_id,
+      assetId: input.assetId,
+      lineCount: lines.length,
     },
   });
   return { graph, referenceCode };
-}
-
-async function resolveCustomer(
-  client: Parameters<typeof readReservationCustomerForCreate>[0],
-  tenantId: string,
-  request: StaffReservationCreateRequest,
-): Promise<ReservationCustomerSnapshotRow | null> {
-  if (!request.customer) return null;
-
-  if (request.customer.source === 'existing') {
-    const existing = await readReservationCustomerForCreate(client, {
-      tenantId,
-      customerId: request.customer.customer_id,
-    });
-    if (!existing) throw new NotFoundError('Customer could not be found.');
-    return fillMissingReservationAddress(client, tenantId, existing, request.customer.address);
-  }
-
-  return createReservationCustomer(client, {
-    tenantId,
-    fullName: request.customer.customer.full_name,
-    phone: request.customer.customer.phone ?? null,
-    email: request.customer.customer.email?.trim().toLowerCase() ?? null,
-    address: request.customer.customer.address,
-    socialMedia: request.customer.customer.social_media ?? null,
-    notes: request.customer.customer.notes ?? null,
-  });
-}
-
-async function fillMissingReservationAddress(
-  client: Parameters<typeof readReservationCustomerForCreate>[0],
-  tenantId: string,
-  customer: ReservationCustomerSnapshotRow,
-  address: string | undefined,
-): Promise<ReservationCustomerSnapshotRow> {
-  if (customer.address !== null) {
-    if (address !== undefined) {
-      throw new ValidationError('Customer already has an address. Update it through customer management.');
-    }
-    return customer;
-  }
-  if (address === undefined) {
-    throw new ValidationError('Customer address is required before creating a reservation.');
-  }
-  const filledAddress = await fillReservationCustomerAddress(client, {
-    tenantId,
-    customerId: customer.id,
-    address,
-  });
-  if (!filledAddress) {
-    throw new StateConflictError('Customer address changed during reservation creation.');
-  }
-  return { ...customer, address: filledAddress };
 }
 
 export function toPaymentInstructions(snapshot: {

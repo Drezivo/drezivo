@@ -36,6 +36,25 @@ export const customerDetails = z
   .strict();
 export type CustomerDetails = z.infer<typeof customerDetails>;
 
+export const staffCustomerPhone = z
+  .string()
+  .trim()
+  .regex(/^\d{11}$/, 'Phone number must contain exactly 11 digits.');
+export const staffCustomerEmail = z.string().trim().email().max(320);
+
+/** Staff reservation submission requires both contacts and the fulfillment address. */
+export const staffReservationCompletionCustomer = z
+  .object({
+    full_name: z.string().trim().min(1).max(200),
+    phone: staffCustomerPhone,
+    email: staffCustomerEmail,
+    address: customerAddress,
+  })
+  .strict();
+export type StaffReservationCompletionCustomer = z.infer<
+  typeof staffReservationCompletionCustomer
+>;
+
 /**
  * Staff may receive a walk-in/phone/social booking where only one contact
  * channel is available. At least one of phone/email is required; do not
@@ -44,8 +63,8 @@ export type CustomerDetails = z.infer<typeof customerDetails>;
 export const staffCustomerDetails = z
   .object({
     full_name: z.string().trim().min(1).max(200),
-    phone: z.string().trim().regex(/^\d{11}$/, 'Phone number must contain exactly 11 digits.').optional(),
-    email: z.string().trim().email().optional(),
+    phone: staffCustomerPhone.optional(),
+    email: staffCustomerEmail.optional(),
     address: customerAddress,
     social_media: customerSocialMedia.optional(),
     notes: z.string().trim().max(2_000).optional(),

@@ -8,6 +8,12 @@ export interface ReservationCustomerSnapshotRow {
   address: string | null;
 }
 
+export interface ReservationCustomerProfileRow extends ReservationCustomerSnapshotRow {
+  social_media: string | null;
+  notes: string | null;
+  updated_at: Date;
+}
+
 export interface ExpiredReservationHoldRow {
   reservation_id: string;
   version: number;
@@ -18,12 +24,28 @@ export const RESERVATION_HOLD_RECLAIM_BATCH_SIZE = 100;
 
 export interface CreatedReservationGraphRow {
   reservation_id: string;
-  /** In line order, matching the input lines. */
-  reservation_line_ids: string[];
+  reservation_line_id: string;
+  allocation_id: string;
   payment_id: string | null;
   hold_expires_at: Date;
   version: number;
   created_at: Date;
+}
+
+export interface ReservationGraphLineInput {
+  reservationLineId: string;
+  allocationId: string;
+  variantId: string;
+  lineNameSnapshot: string;
+  measurementsSnapshot: Record<string, number | { type: 'fit_note'; text: string }>;
+  fitRangeSnapshot: string | null;
+  measurementUnitSnapshot: 'cm' | 'in';
+  pricingSnapshot: Record<string, unknown>;
+  rentalMinor: number;
+  depositMinor: number;
+  assetId: string;
+  blockedStart: string;
+  blockedEnd: string;
 }
 
 /**
@@ -164,6 +186,7 @@ export async function chooseAvailableLockedAsset(
     assetIds: string[];
     blockedStart: string;
     blockedEnd: string;
+    excludeAssetIds?: string[];
   },
 ): Promise<string | null> {
   if (input.assetIds.length === 0) return null;
@@ -174,6 +197,7 @@ export async function chooseAvailableLockedAsset(
         AND pa.branch_id = $2
         AND pa.variant_id = $3
         AND pa.id = ANY($4::uuid[])
+        AND NOT (pa.id = ANY($7::uuid[]))
         AND pa.lifecycle_status = 'active'
         AND (
           pa.readiness = 'ready'
@@ -208,6 +232,7 @@ export async function chooseAvailableLockedAsset(
       input.assetIds,
       input.blockedStart,
       input.blockedEnd,
+      input.excludeAssetIds ?? [],
     ],
   );
   return result.rows[0]?.id ?? null;
@@ -216,10 +241,14 @@ export async function chooseAvailableLockedAsset(
 export async function readReservationCustomerForCreate(
   client: PoolClient,
   input: { tenantId: string; customerId: string },
-): Promise<ReservationCustomerSnapshotRow | null> {
-  const result = await client.query<ReservationCustomerSnapshotRow>(
-    `SELECT id, full_name, phone, lower(email) AS email,
-            nullif(btrim(address), '') AS address
+): Promise<ReservationCustomerProfileRow | null> {
+  const result = await client.query<ReservationCustomerProfileRow>(
+    `SELECT id, full_name, nullif(btrim(phone), '') AS phone,
+            nullif(lower(btrim(email)), '') AS email,
+            nullif(btrim(address), '') AS address,
+            nullif(btrim(social_media), '') AS social_media,
+            nullif(btrim(notes), '') AS notes,
+            updated_at
        FROM customer
       WHERE tenant_id = $1
         AND id = $2::uuid
@@ -240,7 +269,7 @@ export async function createReservationCustomer(
     fullName: string;
     phone: string | null;
     email: string | null;
-    address: string;
+    address: string | null;
     socialMedia: string | null;
     notes: string | null;
   },
@@ -280,27 +309,82 @@ export async function fillReservationCustomerAddress(
   return result.rows[0]?.address ?? null;
 }
 
-/** One garment on a new booking: its snapshot, its own price, and the physical piece it holds. */
-export interface NewReservationLine {
-  reservationLineId: string;
-  allocationId: string;
-  variantId: string;
-  nameSnapshot: string;
-  measurementsSnapshot: Record<string, number | { type: 'fit_note'; text: string }>;
-  fitRangeSnapshot: string | null;
-  measurementUnitSnapshot: 'cm' | 'in';
-  pricingSnapshot: Record<string, unknown>;
-  rentalMinor: number;
-  depositMinor: number;
-  assetId: string;
-  blockedStart: string;
-  blockedEnd: string;
+export async function fillReservationCustomerDetails(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    customerId: string;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+  },
+): Promise<ReservationCustomerSnapshotRow | null> {
+  const result = await client.query<ReservationCustomerSnapshotRow>(
+    `UPDATE customer
+        SET phone = COALESCE(NULLIF(btrim(phone), ''), $3),
+            email = COALESCE(NULLIF(lower(btrim(email)), ''), $4),
+            address = COALESCE(NULLIF(btrim(address), ''), $5)
+      WHERE tenant_id = $1
+        AND id = $2::uuid
+      RETURNING id, full_name, phone, lower(email) AS email,
+                nullif(btrim(address), '') AS address`,
+    [input.tenantId, input.customerId, input.phone, input.email, input.address],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function updateReservationCustomerProfileForSubmission(
+  client: PoolClient,
+  input: {
+    tenantId: string;
+    customerId: string;
+    expectedUpdatedAt: string;
+    fullName: string;
+    phone: string;
+    email: string;
+    address: string;
+    socialMedia: string | null;
+    notes: string | null;
+  },
+): Promise<ReservationCustomerProfileRow | null> {
+  const result = await client.query<ReservationCustomerProfileRow>(
+    `UPDATE customer
+        SET full_name = $4,
+            phone = $5,
+            email = $6,
+            address = $7,
+            social_media = $8,
+            notes = $9,
+            updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
+      WHERE tenant_id = $1
+        AND id = $2::uuid
+        AND date_trunc('milliseconds', updated_at) = $3::timestamptz
+      RETURNING id, full_name, nullif(btrim(phone), '') AS phone,
+                nullif(lower(btrim(email)), '') AS email,
+                nullif(btrim(address), '') AS address,
+                nullif(btrim(social_media), '') AS social_media,
+                nullif(btrim(notes), '') AS notes,
+                updated_at`,
+    [
+      input.tenantId,
+      input.customerId,
+      input.expectedUpdatedAt,
+      input.fullName,
+      input.phone,
+      input.email,
+      input.address,
+      input.socialMedia,
+      input.notes,
+    ],
+  );
+  return result.rows[0] ?? null;
 }
 
 export async function createReservationGraph(
   client: PoolClient,
   input: {
     reservationId: string;
+    lines: ReservationGraphLineInput[];
     paymentId: string;
     tenantId: string;
     branchId: string;
@@ -319,10 +403,9 @@ export async function createReservationGraph(
     rentalTotalMinor: number;
     securityRequiredMinor: number;
     dueNowMinor: number;
-    lines: NewReservationLine[];
   },
 ): Promise<CreatedReservationGraphRow> {
-  if (input.lines.length === 0) throw new Error('A reservation needs at least one line.');
+  if (input.lines.length === 0) throw new Error('A reservation must contain at least one line.');
   const reservation = await client.query<{
     id: string;
     hold_expires_at: Date;
@@ -391,7 +474,7 @@ export async function createReservationGraph(
         input.reservationId,
         line.variantId,
         index + 1,
-        line.nameSnapshot,
+        line.lineNameSnapshot,
         JSON.stringify(line.measurementsSnapshot),
         line.fitRangeSnapshot,
         line.measurementUnitSnapshot,
@@ -400,12 +483,21 @@ export async function createReservationGraph(
         line.depositMinor,
       ],
     );
+
     await client.query(
       `INSERT INTO asset_allocation
          (id, tenant_id, branch_id, asset_id, reservation_line_id, kind, period, is_blocking)
        VALUES ($1, $2, $3, $4, $5, 'reservation_hold',
                tstzrange($6::timestamptz, $7::timestamptz, '[)'), true)`,
-      [line.allocationId, input.tenantId, input.branchId, line.assetId, line.reservationLineId, line.blockedStart, line.blockedEnd],
+      [
+        line.allocationId,
+        input.tenantId,
+        input.branchId,
+        line.assetId,
+        line.reservationLineId,
+        line.blockedStart,
+        line.blockedEnd,
+      ],
     );
   }
 
@@ -413,7 +505,8 @@ export async function createReservationGraph(
   if (!row) throw new Error('Reservation insert returned no row.');
   return {
     reservation_id: row.id,
-    reservation_line_ids: input.lines.map((line) => line.reservationLineId),
+    reservation_line_id: input.lines[0]?.reservationLineId ?? '',
+    allocation_id: input.lines[0]?.allocationId ?? '',
     payment_id: input.dueNowMinor > 0 ? input.paymentId : null,
     hold_expires_at: row.hold_expires_at,
     version: row.version,

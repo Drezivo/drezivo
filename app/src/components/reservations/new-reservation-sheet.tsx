@@ -1,25 +1,32 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { CalendarDays, Check, ChevronDown, FileUp, Search, Shirt, TimerReset, UserRound } from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
+import { CalendarDays, Check, ChevronDown, FileUp, Search, Shirt, TimerReset, UserRound, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  reservationCancellationCustomerInput,
+  staffReservationCompletionCustomer,
+} from "@drezivo/contracts";
 
 import type {
   BranchBusinessHours,
   ClothingDetail,
   ClothingListItem,
   CustomerId,
+  CustomerDetailResponse,
   PaymentInstructions,
   PaymentMethodId,
   PermissionCode,
   ProductId,
   ReservationSummary,
   ProductVariantId,
+  ReservationCancellationCustomerInput,
   StaffReservationAvailabilityCalendarResponse,
   StaffReservationAvailabilityCheckResponse,
-  StaffReservationCustomerInput,
   StaffReservationCustomerOption,
   StaffReservationPaymentMethodOption,
+  StaffReservationSubmissionCustomerInput,
 } from "@drezivo/contracts";
 
 import {
@@ -46,7 +53,6 @@ import { localDateTimeParts, zonedLocalDateTimeToInstant } from "@/lib/zoned-tim
 
 import {
   AdditionalGarments,
-  additionalGarmentFrom,
   additionalGarmentsReadiness,
   type AdditionalGarment,
 } from "./additional-garments";
@@ -81,10 +87,12 @@ type HoldDraft = {
  */
 export type ReservationRebookSource = {
   referenceCode: string;
-  productId: ProductId;
-  variantId: ProductVariantId;
-  /** The booking's other garments, after the first. */
-  additionalGarments?: Array<{ productId: ProductId; variantId: ProductVariantId; name: string }>;
+  lines: Array<{
+    sourceLineId: string;
+    productId: ProductId;
+    variantId: ProductVariantId;
+    name: string;
+  }>;
   pickupAt: string;
   dueAt: string;
   eventDate: string | null;
@@ -173,6 +181,14 @@ export function NewReservationSheet({
   const appliedRebookRef = useRef<string | null>(null);
   const [productDetail, setProductDetail] = useState<ClothingDetail | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<ProductVariantId | "">("");
+  const [rebookLines, setRebookLines] = useState<ReservationRebookSource["lines"]>([]);
+  const [rebookAvailability, setRebookAvailability] = useState<
+    Record<string, StaffReservationAvailabilityCheckResponse>
+  >({});
+  const [rebookAvailabilityLoading, setRebookAvailabilityLoading] = useState(false);
+  const [rebookAvailabilityError, setRebookAvailabilityError] = useState<string | null>(null);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelDialogError, setCancelDialogError] = useState<string | null>(null);
   const [variantSelectionError, setVariantSelectionError] = useState<string | null>(null);
   const [held, setHeld] = useState<HeldState | null>(null);
   const [cashAmountReceived, setCashAmountReceived] = useState("");
@@ -193,6 +209,14 @@ export function NewReservationSheet({
     !isCustomerSearchTooShort && customerSearch.trim() !== debouncedCustomerSearch;
   const [customerOptions, setCustomerOptions] = useState<StaffReservationCustomerOption[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<CustomerId | "">("");
+  const [selectedCustomerProfile, setSelectedCustomerProfile] = useState<
+    Pick<
+      CustomerDetailResponse,
+      "id" | "full_name" | "phone" | "email" | "address" | "social_media" | "notes" | "updated_at"
+    > | null
+  >(null);
+  const [customerProfileLoading, setCustomerProfileLoading] = useState(false);
+  const [customerProfileError, setCustomerProfileError] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -206,10 +230,36 @@ export function NewReservationSheet({
     productDetail?.variants.find((variant) => variant.id === selectedVariantId) ?? null;
   const selectedCustomer =
     customerOptions.find((customer) => customer.id === selectedCustomerId) ?? null;
-  const customerReady =
-    customerMode === "existing"
-      ? Boolean(selectedCustomerId && (selectedCustomer?.has_address || address.trim()))
-      : Boolean(fullName.trim() && (phone.trim() || email.trim()) && address.trim());
+  const currentCustomerProfile =
+    selectedCustomerProfile?.id === selectedCustomerId ? selectedCustomerProfile : null;
+  const completionValues = {
+    full_name: fullName.trim(),
+    phone: phone.trim(),
+    email: email.trim(),
+    address: address.trim(),
+  };
+  const completionResult = staffReservationCompletionCustomer.safeParse(completionValues);
+  const completionErrors = completionResult.success
+    ? {}
+    : completionResult.error.issues.reduce<
+        Partial<Record<"full_name" | "phone" | "email" | "address", string>>
+      >((errors, issue) => {
+        const field = issue.path[0];
+        if (field !== "full_name" && field !== "phone" && field !== "email" && field !== "address") return errors;
+        errors[field] = field === "full_name"
+          ? "Enter the customer’s name."
+          : field === "phone"
+            ? "Enter a valid 11-digit phone number."
+            : field === "email"
+              ? "Enter a valid email address."
+              : "Enter the customer’s address.";
+        return errors;
+      }, {});
+  const customerReady = Boolean(
+    completionResult.success &&
+      (customerMode !== "existing" ||
+        (selectedCustomerId && currentCustomerProfile && !customerProfileLoading && !customerProfileError))
+  );
   const requestedInterval = useMemo(
     () => toRequestedInterval(pickupDate, pickupTime, dueDate, dueTime, timeZone),
     [dueDate, dueTime, pickupDate, pickupTime, timeZone]
@@ -229,6 +279,21 @@ export function NewReservationSheet({
     extraGarments,
     selectedVariantId,
     requestedInterval ? `${requestedInterval.start}|${requestedInterval.end}` : null
+  );
+  const rebookLineCounts = useMemo(
+    () => rebookLines.reduce<Record<string, number>>((counts, line) => {
+      counts[line.variantId] = (counts[line.variantId] ?? 0) + 1;
+      return counts;
+    }, {}),
+    [rebookLines]
+  );
+  const rebookAvailabilityReady = Boolean(
+    rebookLines.length > 0 &&
+      !rebookAvailabilityLoading &&
+      Object.entries(rebookLineCounts).every(([variantId, count]) => {
+        const availability = rebookAvailability[variantId];
+        return availability?.available_assets !== undefined && availability.available_assets >= count;
+      })
   );
   const holdRemainingMs = held?.reservation.hold_expires_at
     ? new Date(held.reservation.hold_expires_at).getTime() - now
@@ -321,8 +386,14 @@ export function NewReservationSheet({
       .getStaffReservationIntakeOptions({})
       .then((result) => {
         if (cancelled) return;
-        setPaymentMethods(result.data.payment_methods);
-        setPaymentMethodId((current) => current || result.data.payment_methods[0]?.id || "");
+        const methods = result.data.payment_methods;
+        setPaymentMethods(methods);
+        setPaymentMethodId((current) => {
+          const preferred = rebookFrom?.paymentMethodId;
+          if (preferred && methods.some((method) => method.id === preferred)) return preferred;
+          if (current && methods.some((method) => method.id === current)) return current;
+          return methods[0]?.id ?? "";
+        });
       })
       .catch((error) => {
         if (!cancelled) setNotice({ tone: "attention", text: toMessage(error) });
@@ -330,7 +401,7 @@ export function NewReservationSheet({
     return () => {
       cancelled = true;
     };
-  }, [getToken, open]);
+  }, [getToken, open, rebookFrom]);
 
   useEffect(() => {
     if (!open || step !== "select") return;
@@ -489,6 +560,41 @@ export function NewReservationSheet({
   ]);
 
   useEffect(() => {
+    if (!open || step !== "select" || !rebookFrom || !requestedInterval || rebookLines.length === 0) {
+      setRebookAvailability({});
+      setRebookAvailabilityLoading(false);
+      setRebookAvailabilityError(null);
+      return;
+    }
+    let cancelled = false;
+    const variantIds = [...new Set(rebookLines.map((line) => line.variantId))];
+    setRebookAvailability({});
+    setRebookAvailabilityError(null);
+    setRebookAvailabilityLoading(true);
+    const api = createDrezivoApiClient(getToken);
+    void Promise.all(variantIds.map(async (variantId) => {
+      const result = await api.getStaffReservationAvailabilityCheck({
+        variant_id: variantId,
+        pickup_at: requestedInterval.start,
+        due_at: requestedInterval.end,
+      });
+      return [variantId, result.data] as const;
+    }))
+      .then((results) => {
+        if (!cancelled) setRebookAvailability(Object.fromEntries(results));
+      })
+      .catch((error) => {
+        if (!cancelled) setRebookAvailabilityError(toMessage(error));
+      })
+      .finally(() => {
+        if (!cancelled) setRebookAvailabilityLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, open, rebookFrom, rebookLines, requestedInterval, step]);
+
+  useEffect(() => {
     if (!eventDate) return;
     if (!pickupDate || !dueDate || eventDate < pickupDate || eventDate > dueDate) {
       setEventDate("");
@@ -522,6 +628,50 @@ export function NewReservationSheet({
   }, [customerMode, debouncedCustomerSearch, getToken, isCustomerSearchPending, isCustomerSearchTooShort, open, step]);
 
   useEffect(() => {
+    if (!open || step !== "held" || customerMode !== "existing" || !selectedCustomerId) {
+      setCustomerProfileLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setCustomerProfileLoading(true);
+    setCustomerProfileError(null);
+    void createDrezivoApiClient(getToken)
+      .getCustomerDetail(selectedCustomerId)
+      .then((result) => {
+        if (cancelled) return;
+        const profile = result.data;
+        const rebookCustomer = rebookFrom?.customer?.customerId === selectedCustomerId
+          ? rebookFrom.customer
+          : null;
+        setSelectedCustomerProfile({
+          id: profile.id,
+          full_name: profile.full_name,
+          phone: profile.phone,
+          email: profile.email,
+          address: profile.address,
+          social_media: profile.social_media,
+          notes: profile.notes,
+          updated_at: profile.updated_at,
+        });
+        setFullName(profile.full_name);
+        setPhone(profile.phone ?? rebookCustomer?.phone ?? "");
+        setEmail(profile.email ?? rebookCustomer?.email ?? "");
+        setAddress(profile.address ?? rebookCustomer?.address ?? "");
+        setSocialMedia(profile.social_media ?? "");
+        setNotes(profile.notes ?? "");
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setCustomerProfileError(toMessage(error));
+      })
+      .finally(() => {
+        if (!cancelled) setCustomerProfileLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerMode, getToken, open, rebookFrom, selectedCustomerId, step]);
+
+  useEffect(() => {
     if (!held?.reservation.hold_expires_at || step !== "held") return;
     setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
@@ -540,13 +690,20 @@ export function NewReservationSheet({
   useEffect(() => {
     if (!open || !rebookFrom || step !== "select" || appliedRebookRef.current === rebookFrom.referenceCode) return;
     appliedRebookRef.current = rebookFrom.referenceCode;
-    pendingVariantIdRef.current = rebookFrom.variantId;
-    setSelectedProduct({ product_id: rebookFrom.productId });
-    setExtraGarments((rebookFrom.additionalGarments ?? []).map(additionalGarmentFrom));
+    const firstLine = rebookFrom.lines[0];
+    if (!firstLine) return;
+    setRebookLines(rebookFrom.lines);
+    pendingVariantIdRef.current = firstLine.variantId;
+    setSelectedProduct({ product_id: firstLine.productId });
 
-    const pickup = localDateTimeParts(new Date(rebookFrom.pickupAt), timeZone);
-    const due = localDateTimeParts(new Date(rebookFrom.dueAt), timeZone);
-    const datesAhead = pickup.date >= todayInTimeZone(timeZone);
+    const pickupInstant = new Date(rebookFrom.pickupAt);
+    const dueInstant = new Date(rebookFrom.dueAt);
+    const pickup = localDateTimeParts(pickupInstant, timeZone);
+    const due = localDateTimeParts(dueInstant, timeZone);
+    const datesAhead =
+      pickup.date >= todayInTimeZone(timeZone) &&
+      pickupInstant.getTime() > Date.now() &&
+      dueInstant.getTime() > pickupInstant.getTime();
     if (datesAhead) {
       setPickupDate(pickup.date);
       setPickupTime(pickup.time);
@@ -556,7 +713,9 @@ export function NewReservationSheet({
       if (rebookFrom.eventDate) setEventDate(rebookFrom.eventDate);
     }
     setFulfillmentMethod(rebookFrom.fulfillmentMethod);
-    if (rebookFrom.paymentMethodId) setPaymentMethodId(rebookFrom.paymentMethodId);
+    if (rebookFrom.paymentMethodId && paymentMethods.some((method) => method.id === rebookFrom.paymentMethodId)) {
+      setPaymentMethodId(rebookFrom.paymentMethodId);
+    }
 
     const customer = rebookFrom.customer;
     if (customer?.customerId) {
@@ -564,6 +723,9 @@ export function NewReservationSheet({
       setCustomerMode("existing");
       setCustomerSearch(customer.fullName);
       setSelectedCustomerId(customer.customerId);
+      setPhone(customer.phone ?? "");
+      setEmail(customer.email ?? "");
+      setAddress(customer.address ?? "");
     } else if (customer) {
       setCustomerMode("new");
       setFullName(customer.fullName);
@@ -577,7 +739,7 @@ export function NewReservationSheet({
         ? `Copied from ${rebookFrom.referenceCode}. Check that the dates are still free, then reserve.`
         : `Copied from ${rebookFrom.referenceCode}. Its dates have passed, so choose new dates.`,
     });
-  }, [open, rebookFrom, step, timeZone]);
+  }, [open, paymentMethods, rebookFrom, step, timeZone]);
 
   const reset = () => {
     appliedRebookRef.current = null;
@@ -605,6 +767,12 @@ export function NewReservationSheet({
     setSelectedProduct(null);
     setProductDetail(null);
     setSelectedVariantId("");
+    setRebookLines([]);
+    setRebookAvailability({});
+    setRebookAvailabilityLoading(false);
+    setRebookAvailabilityError(null);
+    setCancelDialogOpen(false);
+    setCancelDialogError(null);
     setVariantSelectionError(null);
     setHeld(null);
     setCashAmountReceived("");
@@ -617,6 +785,9 @@ export function NewReservationSheet({
     setCustomerSearch("");
     setCustomerOptions([]);
     setSelectedCustomerId("");
+    setSelectedCustomerProfile(null);
+    setCustomerProfileLoading(false);
+    setCustomerProfileError(null);
     setFullName("");
     setPhone("");
     setEmail("");
@@ -644,46 +815,57 @@ export function NewReservationSheet({
       setNotice({ tone: "attention", text: "Reservation management permission is required." });
       return;
     }
-    if (!selectedVariant || !requestedInterval || !paymentMethodId) {
+    if ((!rebookFrom && !selectedVariant) || !requestedInterval || !paymentMethodId || (rebookFrom && rebookLines.length === 0)) {
       setNotice({
         tone: "attention",
         text: "Choose clothing, a variant, rental dates, pickup/return times, and a payment method before reserving.",
       });
       return;
     }
-    if (minimumDurationIssue) {
+    if (!rebookFrom && minimumDurationIssue) {
       setNotice({ tone: "attention", text: minimumDurationIssue });
       return;
     }
-    if (!exactAvailability || !exactAvailabilityMatchesSelection) {
+    if (!rebookFrom && (!exactAvailability || !exactAvailabilityMatchesSelection)) {
       setNotice({
         tone: "attention",
         text: "Wait for the exact pickup and return time availability check before reserving.",
       });
       return;
     }
-    if (!exactAvailability.available) {
+    if (!rebookFrom && !exactAvailability?.available) {
       setNotice({
         tone: "attention",
         text: "No single garment in this variant is available for the exact pickup and return times. Choose another period.",
       });
       return;
     }
-    if (!extrasReadiness.ready) {
+    if (!rebookFrom && !extrasReadiness.ready) {
       setNotice({ tone: "attention", text: extrasReadiness.problem ?? "Check the other dresses before reserving." });
       return;
     }
 
+    const request = {
+      requested_interval: requestedInterval,
+      ...(eventDate ? { event_date: eventDate } : {}),
+      fulfillment_method: fulfillmentMethod,
+      payment_method_id: paymentMethodId,
+    };
     const result = await reserveGuard.submit((idempotencyKey) =>
       createDrezivoApiClient(getToken).createStaffReservation(
-        {
-          variant_id: selectedVariant.id,
-          ...(extrasReadiness.variantIds.length > 0 ? { additional_variant_ids: extrasReadiness.variantIds } : {}),
-          requested_interval: requestedInterval,
-          ...(eventDate ? { event_date: eventDate } : {}),
-          fulfillment_method: fulfillmentMethod,
-          payment_method_id: paymentMethodId,
-        },
+        rebookFrom
+          ? {
+              ...request,
+              variant_id: rebookLines[0]!.variantId,
+              lines: rebookLines.map((line) => ({ variant_id: line.variantId })),
+            }
+          : {
+              ...request,
+              variant_id: selectedVariant!.id,
+              ...(extrasReadiness.variantIds.length > 0
+                ? { additional_variant_ids: extrasReadiness.variantIds }
+                : {}),
+            },
         idempotencyKey
       )
     );
@@ -704,12 +886,10 @@ export function NewReservationSheet({
     setServerExpired(false);
     setStep("held");
     setNow(Date.now());
+    const reservedLineCount = rebookFrom ? rebookLines.length : extrasReadiness.variantIds.length + 1;
     setNotice({
       tone: "success",
-      text:
-        extrasReadiness.variantIds.length > 0
-          ? `${extrasReadiness.variantIds.length + 1} garments reserved. Finish the customer information before the hold expires.`
-          : "Garment reserved. Finish the customer information before the hold expires.",
+      text: `${reservedLineCount} ${reservedLineCount === 1 ? "garment" : "garments"} reserved. Finish the customer information before the hold expires.`,
     });
     reserveGuard.resetIntent();
     onReservationChanged(result.data.reservation.id);
@@ -766,11 +946,8 @@ export function NewReservationSheet({
 
   const complete = async () => {
     if (!held || holdExpired) return;
-    if (customerMode === "new" && phone.trim() && !/^\d{11}$/.test(phone.trim())) {
-      setNotice({
-        tone: "attention",
-        text: "Phone number must contain exactly 11 digits.",
-      });
+    if (!customerReady) {
+      setNotice({ tone: "attention", text: "Complete the highlighted customer details before confirming the reservation." });
       return;
     }
     const customer = buildCustomerInput({
@@ -780,7 +957,7 @@ export function NewReservationSheet({
       phone,
       email,
       address,
-      hasAddress: selectedCustomer?.has_address ?? false,
+      profile: currentCustomerProfile,
       socialMedia,
       notes,
     });
@@ -789,8 +966,8 @@ export function NewReservationSheet({
         tone: "attention",
         text:
           customerMode === "existing"
-            ? "Choose an existing customer and enter an address when the profile is missing one."
-            : "Enter the customer name, address, and at least one contact method.",
+            ? "Choose an existing customer and enter a valid name, phone, email, and address."
+            : "Enter a customer name, valid phone number, valid email address, and address.",
       });
       return;
     }
@@ -864,17 +1041,51 @@ export function NewReservationSheet({
     });
   };
 
-  const cancelHold = async () => {
+  const cancelHold = async (saveCustomer: boolean) => {
     if (!held || holdExpired) return;
     setNotice(null);
+    setCancelDialogError(null);
+    const customerInput = saveCustomer
+      ? buildCancellationCustomerInput({
+          customerMode,
+          selectedCustomerId,
+          fullName,
+          phone,
+          email,
+          address,
+          socialMedia,
+          notes,
+        })
+      : null;
+    if (saveCustomer && !customerInput) {
+      setCancelDialogError(
+        customerMode === "existing"
+          ? "Choose an existing customer to link to this cancelled reservation."
+          : "Enter the customer's name and at least one contact method. Address and other details are optional."
+      );
+      return;
+    }
+    const parsedCustomer = customerInput
+      ? reservationCancellationCustomerInput.safeParse(customerInput)
+      : null;
+    if (parsedCustomer && !parsedCustomer.success) {
+      setCancelDialogError(parsedCustomer.error.issues[0]?.message ?? "Check the customer details and try again.");
+      return;
+    }
+    const customer = parsedCustomer?.success ? parsedCustomer.data : null;
     const result = await cancelGuard.submit((idempotencyKey) =>
       createDrezivoApiClient(getToken).cancelReservation(
         held.reservation.id,
-        { version: held.reservation.version, reason: "Staff abandoned new reservation flow" },
+        {
+          version: held.reservation.version,
+          reason: "Staff abandoned new reservation flow",
+          ...(customer ? { customer } : {}),
+        },
         idempotencyKey
       )
     );
     if (!result) return;
+    setCancelDialogOpen(false);
     cancelGuard.resetIntent();
     onReservationChanged(result.data.reservation.id);
     setHeld((current) =>
@@ -882,6 +1093,16 @@ export function NewReservationSheet({
     );
     setStep("done");
     setNotice({ tone: "info", text: "Reservation cancelled and the garment hold was released." });
+  };
+
+  const handleCancelFailure = (error: unknown) => {
+    const apiError = toApiError(error);
+    if (apiError.code === "HOLD_EXPIRED") {
+      setCancelDialogOpen(false);
+      handleFailure(error, cancelGuard);
+      return;
+    }
+    setCancelDialogError(apiError.message);
   };
 
   const handleFailure = (
@@ -951,8 +1172,61 @@ export function NewReservationSheet({
 
         {step === "select" ? (
           <div className="space-y-5 p-5">
+            {rebookFrom ? (
+              <section className="rounded-lg border border-dashboard-border bg-dashboard-active/30 p-4">
+                <SectionTitle icon={Shirt} title="Items in the new reservation" />
+                <p className="mt-1 text-xs text-dashboard-muted">
+                  Copied from {rebookFrom.referenceCode}. Dates, availability, and prices are checked again before a new hold is created.
+                </p>
+                <div className="mt-3 space-y-2">
+                  {rebookLines.map((line) => {
+                    const availability = rebookAvailability[line.variantId];
+                    const enoughPieces = availability
+                      ? availability.available_assets >= (rebookLineCounts[line.variantId] ?? 1)
+                      : false;
+                    return (
+                      <div key={line.sourceLineId} className="flex items-start justify-between gap-3 rounded-md border border-dashboard-border bg-dashboard-surface p-3">
+                        <div className="min-w-0">
+                          <p className="font-medium text-dashboard-navy">{line.name}</p>
+                          {availability ? (
+                            <p className="mt-1 text-xs text-dashboard-muted">
+                              {enoughPieces ? `${availability.available_assets} available` : "Unavailable for these dates"}
+                              {` · Rental ${formatMinorMoney(availability.rental_preview.rental_total_minor, availability.rental_preview.currency)}`}
+                              {` · Deposit ${formatMinorMoney(availability.pricing.security_deposit_minor, availability.pricing.currency)}`}
+                            </p>
+                          ) : rebookAvailabilityLoading ? (
+                            <p className="mt-1 text-xs text-dashboard-muted">Checking availability and current price…</p>
+                          ) : null}
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setRebookLines((current) => current.filter((item) => item.sourceLineId !== line.sourceLineId))}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    );
+                  })}
+                  {rebookLines.length === 0 ? (
+                    <p className="rounded-md border border-dashboard-danger/30 bg-dashboard-danger/10 p-3 text-sm text-dashboard-danger" role="alert">
+                      Add at least one active item below before reserving.
+                    </p>
+                  ) : null}
+                </div>
+                {rebookAvailabilityError ? (
+                  <p className="mt-2 text-sm text-dashboard-danger" role="alert">{rebookAvailabilityError}</p>
+                ) : null}
+                {rebookLines.some((line) => !rebookAvailability[line.variantId] || rebookAvailability[line.variantId]!.available_assets < (rebookLineCounts[line.variantId] ?? 1)) ? (
+                  <p className="mt-2 text-xs text-dashboard-muted">
+                    Remove unavailable lines, choose dates with enough pieces, or select another item below.
+                  </p>
+                ) : null}
+              </section>
+            ) : null}
             <section>
-              <SectionTitle icon={Search} title="Choose clothing" />
+              <SectionTitle icon={Search} title={rebookFrom ? "Add or replace a clothing item" : "Choose clothing"} />
               <Input
                 className="mt-3"
                 aria-label="Search clothing for reservation"
@@ -979,11 +1253,13 @@ export function NewReservationSheet({
                         setProductDetail(null);
                         setSelectedVariantId("");
                         setVariantSelectionError(null);
-                        setPickupDate("");
-                        setDueDate("");
-                        setPickupTime("");
-                        setDueTime("");
-                        setEventDate("");
+                        if (!rebookFrom) {
+                          setPickupDate("");
+                          setDueDate("");
+                          setPickupTime("");
+                          setDueTime("");
+                          setEventDate("");
+                        }
                         setCalendarAvailability(null);
                         setExactAvailability(null);
                         setExactAvailabilityError(null);
@@ -1059,11 +1335,13 @@ export function NewReservationSheet({
                           variant={selectedVariantId === variant.id ? "default" : "secondary"}
                           onClick={() => {
                             setSelectedVariantId(variant.id);
-                            setPickupDate("");
-                            setDueDate("");
-                            setPickupTime("");
-                            setDueTime("");
-                            setEventDate("");
+                            if (!rebookFrom) {
+                              setPickupDate("");
+                              setDueDate("");
+                              setPickupTime("");
+                              setDueTime("");
+                              setEventDate("");
+                            }
                             setCalendarAvailability(null);
                             setExactAvailability(null);
                             setExactAvailabilityError(null);
@@ -1104,6 +1382,25 @@ export function NewReservationSheet({
                         </Badge>
                       ) : null}
                     </div>
+                    {rebookFrom ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="mt-3"
+                        onClick={() => setRebookLines((current) => [
+                          ...current,
+                          {
+                            sourceLineId: `added-${Date.now()}-${current.length}`,
+                            productId: selectedProduct!.product_id,
+                            variantId: selectedVariant.id,
+                            name: productDetail?.name ?? "Rental item",
+                          },
+                        ])}
+                      >
+                        Add selected item to replacement
+                      </Button>
+                    ) : null}
                   </div>
                 ) : (
                   <p className="mt-3 text-sm text-dashboard-muted">
@@ -1218,9 +1515,9 @@ export function NewReservationSheet({
                       ) : null}
 
                       <ExactAvailabilityStatus
-                        availability={exactAvailability}
-                        error={exactAvailabilityError}
-                        loading={exactAvailabilityLoading}
+                        availability={rebookFrom ? null : exactAvailability}
+                        error={rebookFrom ? null : exactAvailabilityError}
+                        loading={rebookFrom ? rebookAvailabilityLoading : exactAvailabilityLoading}
                       />
                     </div>
                   ) : (
@@ -1230,26 +1527,30 @@ export function NewReservationSheet({
                   )}
                 </section>
 
-                <Separator />
-                <section>
-                  <SectionTitle icon={Shirt} title="Other dresses on this booking" />
-                  <p className="mt-1 text-xs text-dashboard-muted">
-                    Same pickup and return. Each dress is checked and priced on its own, and delivery is charged once.
-                  </p>
-                  <div className="mt-3">
-                    <AdditionalGarments
-                      disabled={reserveGuard.isSubmitting}
-                      garments={extraGarments}
-                      onChange={updateExtraGarments}
-                      requestedInterval={requestedInterval}
-                    />
-                  </div>
-                  {extraGarments.length > 0 && extrasReadiness.problem ? (
-                    <p className="mt-2 text-xs text-dashboard-muted" role="status">
-                      {extrasReadiness.problem}
-                    </p>
-                  ) : null}
-                </section>
+                {!rebookFrom ? (
+                  <>
+                    <Separator />
+                    <section>
+                      <SectionTitle icon={Shirt} title="Other dresses on this booking" />
+                      <p className="mt-1 text-xs text-dashboard-muted">
+                        Same pickup and return. Each dress is checked and priced on its own, and delivery is charged once.
+                      </p>
+                      <div className="mt-3">
+                        <AdditionalGarments
+                          disabled={reserveGuard.isSubmitting}
+                          garments={extraGarments}
+                          onChange={updateExtraGarments}
+                          requestedInterval={requestedInterval}
+                        />
+                      </div>
+                      {extraGarments.length > 0 && extrasReadiness.problem ? (
+                        <p className="mt-2 text-xs text-dashboard-muted" role="status">
+                          {extrasReadiness.problem}
+                        </p>
+                      ) : null}
+                    </section>
+                  </>
+                ) : null}
               </>
             ) : null}
 
@@ -1294,13 +1595,13 @@ export function NewReservationSheet({
                 type="button"
                 disabled={
                   reserveGuard.isSubmitting ||
-                  exactAvailabilityLoading ||
-                  !selectedVariant ||
+                  (rebookFrom ? rebookAvailabilityLoading : exactAvailabilityLoading) ||
+                  (!rebookFrom && !selectedVariant) ||
                   !requestedInterval ||
-                  Boolean(minimumDurationIssue) ||
-                  !exactAvailabilityMatchesSelection ||
-                  !exactAvailability?.available ||
-                  !extrasReadiness.ready ||
+                  (!rebookFrom && Boolean(minimumDurationIssue)) ||
+                  (rebookFrom
+                    ? !rebookAvailabilityReady || Boolean(rebookAvailabilityError)
+                    : !exactAvailabilityMatchesSelection || !exactAvailability?.available || !extrasReadiness.ready) ||
                   !paymentMethodId
                 }
                 onClick={() =>
@@ -1498,7 +1799,15 @@ export function NewReservationSheet({
                       variant={customerMode === "new" ? "default" : "secondary"}
                       onClick={() => {
                         setCustomerMode("new");
+                        setSelectedCustomerId("");
+                        setSelectedCustomerProfile(null);
+                        setCustomerProfileError(null);
+                        setFullName("");
+                        setPhone("");
+                        setEmail("");
                         setAddress("");
+                        setSocialMedia("");
+                        setNotes("");
                         completeGuard.resetIntent();
                       }}
                     >
@@ -1510,6 +1819,12 @@ export function NewReservationSheet({
                       variant={customerMode === "existing" ? "default" : "secondary"}
                       onClick={() => {
                         setCustomerMode("existing");
+                        setSelectedCustomerId("");
+                        setSelectedCustomerProfile(null);
+                        setCustomerProfileError(null);
+                        setFullName("");
+                        setPhone("");
+                        setEmail("");
                         setAddress("");
                         setSocialMedia("");
                         completeGuard.resetIntent();
@@ -1521,8 +1836,11 @@ export function NewReservationSheet({
 
                   {customerMode === "new" ? (
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <Field label="Full name">
+                      <Field label="Full name" error={completionErrors.full_name} errorId="completion-full-name-error">
                         <Input
+                          required
+                          aria-invalid={Boolean(completionErrors.full_name)}
+                          aria-describedby={completionErrors.full_name ? "completion-full-name-error" : undefined}
                           value={fullName}
                           onChange={(event) => {
                             setFullName(event.target.value);
@@ -1530,8 +1848,11 @@ export function NewReservationSheet({
                           }}
                         />
                       </Field>
-                      <Field label="Phone">
+                      <Field label="Phone" error={completionErrors.phone} errorId="completion-phone-error">
                         <Input
+                          required
+                          aria-invalid={Boolean(completionErrors.phone)}
+                          aria-describedby={completionErrors.phone ? "completion-phone-error" : undefined}
                           inputMode="numeric"
                           autoComplete="tel"
                           maxLength={11}
@@ -1544,9 +1865,12 @@ export function NewReservationSheet({
                           }}
                         />
                       </Field>
-                      <Field label="Email">
+                      <Field label="Email" error={completionErrors.email} errorId="completion-email-error">
                         <Input
+                          required
                           type="email"
+                          aria-invalid={Boolean(completionErrors.email)}
+                          aria-describedby={completionErrors.email ? "completion-email-error" : undefined}
                           value={email}
                           onChange={(event) => {
                             setEmail(event.target.value);
@@ -1554,8 +1878,11 @@ export function NewReservationSheet({
                           }}
                         />
                       </Field>
-                      <Field label="Address">
+                      <Field label="Address" error={completionErrors.address} errorId="completion-address-error">
                         <Input
+                          required
+                          aria-invalid={Boolean(completionErrors.address)}
+                          aria-describedby={completionErrors.address ? "completion-address-error" : undefined}
                           autoComplete="street-address"
                           maxLength={500}
                           value={address}
@@ -1594,6 +1921,8 @@ export function NewReservationSheet({
                         onChange={(event) => {
                           setCustomerSearch(event.target.value);
                           setSelectedCustomerId("");
+                                setSelectedCustomerProfile(null);
+                                setCustomerProfileError(null);
                           completeGuard.resetIntent();
                         }}
                       />
@@ -1614,7 +1943,17 @@ export function NewReservationSheet({
                               aria-pressed={isSelected}
                               onClick={() => {
                                 setSelectedCustomerId(customer.id);
-                                setAddress("");
+                                setSelectedCustomerProfile(null);
+                                setCustomerProfileError(null);
+                                const rebookCustomer = rebookFrom?.customer?.customerId === customer.id
+                                  ? rebookFrom.customer
+                                  : null;
+                                setFullName(customer.full_name);
+                                setPhone(customer.phone ?? rebookCustomer?.phone ?? "");
+                                setEmail(customer.email ?? rebookCustomer?.email ?? "");
+                                setAddress(rebookCustomer?.address ?? "");
+                                setSocialMedia("");
+                                setNotes("");
                                 setNotice(null);
                                 completeGuard.resetIntent();
                               }}
@@ -1654,26 +1993,95 @@ export function NewReservationSheet({
                             <p className="text-xs font-medium uppercase tracking-wide text-dashboard-muted">
                               Selected customer
                             </p>
-                            <p className="mt-1 font-medium text-dashboard-navy">
-                              {selectedCustomer.full_name}
-                            </p>
-                            <p className="mt-1 text-xs text-dashboard-muted">
-                              {selectedCustomer.phone ?? selectedCustomer.email ?? "No contact shown"}
-                            </p>
+                            {customerProfileLoading ? <p className="mt-1 text-xs text-dashboard-muted">Loading saved customer details…</p> : null}
+                            {customerProfileError ? <p role="alert" className="mt-1 text-xs text-dashboard-danger">Could not load the selected customer’s saved details. Try selecting the customer again.</p> : null}
                           </div>
-                          {!selectedCustomer.has_address ? (
-                            <Field label="Address required for this reservation">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <Field label="Full name" error={completionErrors.full_name} errorId="completion-full-name-error">
                               <Input
+                                required
+                                maxLength={200}
+                                aria-invalid={Boolean(completionErrors.full_name)}
+                                aria-describedby={completionErrors.full_name ? "completion-full-name-error" : undefined}
+                                value={fullName}
+                                disabled={customerProfileLoading || !currentCustomerProfile || Boolean(customerProfileError)}
+                                onChange={(event) => {
+                                  setFullName(event.target.value);
+                                  completeGuard.resetIntent();
+                                }}
+                              />
+                            </Field>
+                            <Field label="Phone" error={completionErrors.phone} errorId="completion-phone-error">
+                              <Input
+                                required
+                                aria-invalid={Boolean(completionErrors.phone)}
+                                aria-describedby={completionErrors.phone ? "completion-phone-error" : undefined}
+                                inputMode="numeric"
+                                autoComplete="tel"
+                                maxLength={11}
+                                pattern="[0-9]{11}"
+                                placeholder="09XXXXXXXXX"
+                                value={phone}
+                                disabled={customerProfileLoading || !currentCustomerProfile || Boolean(customerProfileError)}
+                                onChange={(event) => {
+                                  setPhone(event.target.value.replace(/\D/g, "").slice(0, 11));
+                                  completeGuard.resetIntent();
+                                }}
+                              />
+                            </Field>
+                            <Field label="Email" error={completionErrors.email} errorId="completion-email-error">
+                              <Input
+                                required
+                                type="email"
+                                maxLength={320}
+                                aria-invalid={Boolean(completionErrors.email)}
+                                aria-describedby={completionErrors.email ? "completion-email-error" : undefined}
+                                value={email}
+                                disabled={customerProfileLoading || !currentCustomerProfile || Boolean(customerProfileError)}
+                                onChange={(event) => {
+                                  setEmail(event.target.value);
+                                  completeGuard.resetIntent();
+                                }}
+                              />
+                            </Field>
+                            <Field label="Address" error={completionErrors.address} errorId="completion-address-error">
+                              <Input
+                                required
+                                aria-invalid={Boolean(completionErrors.address)}
+                                aria-describedby={completionErrors.address ? "completion-address-error" : undefined}
                                 autoComplete="street-address"
                                 maxLength={500}
                                 value={address}
+                                disabled={customerProfileLoading || !currentCustomerProfile || Boolean(customerProfileError)}
                                 onChange={(event) => {
                                   setAddress(event.target.value);
                                   completeGuard.resetIntent();
                                 }}
                               />
                             </Field>
-                          ) : null}
+                            <Field label="Social media (optional)">
+                              <Input
+                                maxLength={320}
+                                value={socialMedia}
+                                disabled={customerProfileLoading || !currentCustomerProfile || Boolean(customerProfileError)}
+                                onChange={(event) => {
+                                  setSocialMedia(event.target.value);
+                                  completeGuard.resetIntent();
+                                }}
+                              />
+                            </Field>
+                            <Field label="Customer notes (optional)">
+                              <Input
+                                maxLength={2_000}
+                                value={notes}
+                                disabled={customerProfileLoading || !currentCustomerProfile || Boolean(customerProfileError)}
+                                onChange={(event) => {
+                                  setNotes(event.target.value);
+                                  completeGuard.resetIntent();
+                                }}
+                              />
+                            </Field>
+                          </div>
                         </div>
                       ) : null}
                     </div>
@@ -1700,11 +2108,12 @@ export function NewReservationSheet({
                     type="button"
                     variant="danger"
                     disabled={cancelGuard.isSubmitting || completeGuard.isSubmitting}
-                    onClick={() =>
-                      void cancelHold().catch((error) => handleFailure(error, cancelGuard))
-                    }
+                    onClick={() => {
+                      setCancelDialogError(null);
+                      setCancelDialogOpen(true);
+                    }}
                   >
-                    {cancelGuard.isSubmitting ? "Cancelling…" : "Cancel Hold"}
+                    Cancel Hold
                   </Button>
                   <Button
                     type="button"
@@ -1762,6 +2171,44 @@ export function NewReservationSheet({
             )}
           </div>
         ) : null}
+        <Dialog.Root open={cancelDialogOpen} onOpenChange={(nextOpen: boolean) => {
+          if (cancelGuard.isSubmitting) return;
+          setCancelDialogOpen(nextOpen);
+          if (nextOpen) setCancelDialogError(null);
+        }}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 z-[70] bg-black/55" />
+            <Dialog.Content className="fixed left-1/2 top-1/2 z-[70] max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-dashboard-border bg-dashboard-surface p-5 shadow-xl focus:outline-none sm:p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <Dialog.Title className="text-lg font-semibold text-dashboard-navy">Cancel this hold?</Dialog.Title>
+                  <Dialog.Description className="mt-1 text-sm leading-6 text-dashboard-muted">
+                    This will permanently cancel the current hold and release the garment. Save the customer details already entered above for rebooking; a name and one valid phone or email are enough, and address and other details are optional. Existing profiles are linked without changes. This does not complete the reservation or copy payment or receipt details.
+                  </Dialog.Description>
+                </div>
+                <Dialog.Close asChild>
+                  <button type="button" aria-label="Return to reservation" disabled={cancelGuard.isSubmitting} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-dashboard-muted hover:bg-dashboard-active">
+                    <X className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </Dialog.Close>
+              </div>
+              {cancelDialogError ? (
+                <p role="alert" className="mt-4 rounded-lg border border-dashboard-danger/30 bg-dashboard-danger/10 p-3 text-sm text-dashboard-danger">{cancelDialogError}</p>
+              ) : null}
+              <div className="mt-6 flex flex-col-reverse gap-2 border-t border-dashboard-border pt-4 sm:flex-row sm:flex-wrap sm:justify-between">
+                <Button type="button" variant="danger" disabled={cancelGuard.isSubmitting} onClick={() => void cancelHold(false).catch(handleCancelFailure)}>
+                  {cancelGuard.isSubmitting ? "Cancelling…" : "Cancel hold without saving"}
+                </Button>
+                <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                  <Dialog.Close asChild><Button type="button" variant="secondary" disabled={cancelGuard.isSubmitting}>Return to reservation</Button></Dialog.Close>
+                  <Button type="button" disabled={cancelGuard.isSubmitting} onClick={() => void cancelHold(true).catch(handleCancelFailure)}>
+                    {cancelGuard.isSubmitting ? "Saving and cancelling…" : "Save customer and cancel hold"}
+                  </Button>
+                </div>
+              </div>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
       </SheetContent>
     </Sheet>
   );
@@ -1774,15 +2221,32 @@ function buildCustomerInput(input: {
   phone: string;
   email: string;
   address: string;
-  hasAddress: boolean;
+  profile: Pick<
+    CustomerDetailResponse,
+    "id" | "full_name" | "phone" | "email" | "address" | "social_media" | "notes" | "updated_at"
+  > | null;
   socialMedia: string;
   notes: string;
-}): StaffReservationCustomerInput | null {
+}): StaffReservationSubmissionCustomerInput | null {
   if (input.customerMode === "existing") {
-    if (!input.selectedCustomerId) return null;
-    if (input.hasAddress) return { source: "existing", customer_id: input.selectedCustomerId };
-    const address = input.address.trim();
-    return address ? { source: "existing", customer_id: input.selectedCustomerId, address } : null;
+    if (!input.selectedCustomerId || !input.profile) return null;
+    const completion = staffReservationCompletionCustomer.safeParse({
+      full_name: input.fullName.trim(),
+      phone: input.phone.trim(),
+      email: input.email.trim(),
+      address: input.address.trim(),
+    });
+    if (!completion.success) return null;
+    return {
+      source: "existing",
+      customer_id: input.selectedCustomerId,
+      profile: {
+        ...completion.data,
+        social_media: input.socialMedia.trim() || null,
+        notes: input.notes.trim() || null,
+        expected_updated_at: input.profile.updated_at,
+      },
+    };
   }
 
   const fullName = input.fullName.trim();
@@ -1791,14 +2255,57 @@ function buildCustomerInput(input: {
   const address = input.address.trim();
   const socialMedia = input.socialMedia.trim();
   const notes = input.notes.trim();
-  if (!fullName || !address || (!phone && !email)) return null;
+  const completion = staffReservationCompletionCustomer.safeParse({
+    full_name: fullName,
+    phone,
+    email,
+    address,
+  });
+  if (!completion.success) return null;
+  return {
+    source: "new",
+    customer: {
+      full_name: completion.data.full_name,
+      phone: completion.data.phone,
+      email: completion.data.email,
+      address: completion.data.address,
+      ...(socialMedia ? { social_media: socialMedia } : {}),
+      ...(notes ? { notes } : {}),
+    },
+  };
+}
+
+function buildCancellationCustomerInput(input: {
+  customerMode: CustomerMode;
+  selectedCustomerId: CustomerId | "";
+  fullName: string;
+  phone: string;
+  email: string;
+  address: string;
+  socialMedia: string;
+  notes: string;
+}): ReservationCancellationCustomerInput | null {
+  if (input.customerMode === "existing") {
+    return input.selectedCustomerId
+      ? { source: "existing", customer_id: input.selectedCustomerId }
+      : null;
+  }
+
+  const fullName = input.fullName.trim();
+  const phone = input.phone.trim();
+  const email = input.email.trim();
+  if (!fullName || (!phone && !email)) return null;
+
+  const address = input.address.trim();
+  const socialMedia = input.socialMedia.trim();
+  const notes = input.notes.trim();
   return {
     source: "new",
     customer: {
       full_name: fullName,
       ...(phone ? { phone } : {}),
       ...(email ? { email } : {}),
-      address,
+      ...(address ? { address } : {}),
       ...(socialMedia ? { social_media: socialMedia } : {}),
       ...(notes ? { notes } : {}),
     },
@@ -1962,12 +2469,33 @@ function SectionTitle({ icon: Icon, title }: { icon: typeof CalendarDays; title:
   );
 }
 
-function Field({ children, label }: { children: React.ReactNode; label: string }) {
+function Field({
+  children,
+  label,
+  error,
+  errorId,
+}: {
+  children: React.ReactNode;
+  label: string;
+  error?: string | undefined;
+  errorId?: string | undefined;
+}) {
   return (
-    <label>
-      <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">{label}</span>
+    <div>
+      <label className="block">
+        <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">{label}</span>
+        {children}
+      </label>
+      {error ? <FieldError id={errorId}>{error}</FieldError> : null}
+    </div>
+  );
+}
+
+function FieldError({ id, children }: { id?: string | undefined; children: React.ReactNode }) {
+  return (
+    <p id={id} className="mt-1 text-xs text-dashboard-danger" aria-live="polite">
       {children}
-    </label>
+    </p>
   );
 }
 
