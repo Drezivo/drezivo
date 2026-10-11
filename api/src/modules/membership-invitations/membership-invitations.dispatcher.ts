@@ -8,11 +8,17 @@ import {
 } from '../../integrations/clerk/clerk.adapter.js';
 import { withSystemTenantTransaction } from '../../db/client.js';
 import {
+  hasPendingPriorMembershipRemoval,
   lockInvitationForDispatch,
   updateInvitationProviderCorrelation,
 } from './membership-invitations.repository.js';
 import { decryptRecipientEmail } from '../../shared/protected-recipient.js';
-import { PermanentOutboxError, type EventHandler, type OutboxRow } from '../../worker/runner.js';
+import {
+  DeferredOutboxError,
+  PermanentOutboxError,
+  type EventHandler,
+  type OutboxRow,
+} from '../../worker/runner.js';
 import { config } from '../../config/index.js';
 
 const dispatchPayload = z.object({
@@ -83,6 +89,18 @@ async function dispatchInvitation(
         snapshot.invitation.dispatch_version !== payload.dispatch_version
       ) {
         return;
+      }
+      if (
+        await hasPendingPriorMembershipRemoval(
+          client,
+          row.tenant_id,
+          snapshot.invitation.recipient_email_digest,
+        )
+      ) {
+        throw new DeferredOutboxError(
+          'The prior member removal is still processing; invitation dispatch is deferred.',
+          30,
+        );
       }
 
       const marker = {

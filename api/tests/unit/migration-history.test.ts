@@ -75,7 +75,7 @@ describe('migration history inspection', () => {
 
     expect(inspectMigrationHistory(migrationFilesOnDisk, appliedFiles)).toEqual({
       appliedFiles,
-      pendingFiles: ['0076_file_object_cleanup.sql'],
+      pendingFiles: migrationFilesOnDisk.slice(cleanupMigrationIndex),
     });
   });
 
