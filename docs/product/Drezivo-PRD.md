@@ -48,6 +48,8 @@ After email verification, a public user is an owner candidate. The API, not the 
 
 Publish requires contact, policy, payment instruction, and one active rentable asset. Preview must equal public route. Acceptance: anonymous mobile visitor opens URL, views a style, selects future date, gets real availability, and sees contact. Publish/first availability are instrumented.
 
+When the owner turns off reservation requests while the storefront remains published and booking is otherwise enabled, omit the header Reserve action but keep the product's contact message and links. Each product detail offers a non-booking Check availability sheet for that product and its selected size, reusing the reservation calendar's public availability and rental-length rules. The sheet can display a selected range and advisory availability only; it has no customer/payment step and creates no hold or reservation. Multi-size products require a size selection first. A billing-paused storefront retains its paused-booking message and does not expose this checker; preview continues to use preview behavior.
+
 ### Guest booking (FR15–FR21)
 
 For staff reservations, catalogue cards remain highlighted while one or more of their variants are selected. Each variant can be toggled in the booking; the same style may contribute several distinct variants, but a variant may appear only once in a new booking. Up to ten items are selectable. The Reserve and Complete stages show every server-persisted garment line, its variant, current rental price, and deposit. Rebooking retains copied legacy duplicate lines when they already exist in the source reservation, while its add-item controls prevent introducing another copy of a selected variant.
