@@ -215,16 +215,6 @@ describe('storefront guest booking', async () => {
     expect(results.map((result) => result.status).sort()).toEqual([201, 409]);
   });
 
-  it('never lets a storefront renter book a pickup in the past', async () => {
-    const ws = await liveStore('gv-past', (doc) => {
-      doc.checkout.min_notice_days = 0;
-    });
-    const result = await booking.createReservation(ws.slug, { requestId: 'past', idempotencyKey: 'guest-past-1' }, holdRequest(ws, 'ana@example.test', { requested_interval: interval(2, -3) }));
-    expect(result.status).toBe(422);
-    const holds = await admin.query<{ n: number }>('SELECT count(*)::int AS n FROM reservation WHERE tenant_id = $1', [ws.tenantId]);
-    expect(holds.rows[0]?.n).toBe(0);
-  });
-
   it('enforces the shop checkout rules and online-only payment on the server', async () => {
     const ws = await liveStore('gv-rules', (doc) => {
       doc.checkout.requirements.social_handle = 'hidden';
@@ -292,6 +282,16 @@ describe('storefront guest booking', async () => {
       const { result } = await attempt('bh-none', []);
       expect(result.status).toBe(201);
     });
+  });
+
+  it('never lets a storefront renter book a pickup in the past', async () => {
+    const ws = await liveStore('gv-past', (doc) => {
+      doc.checkout.min_notice_days = 0;
+    });
+    const result = await booking.createReservation(ws.slug, { requestId: 'past', idempotencyKey: 'guest-past-1' }, holdRequest(ws, 'ana@example.test', { requested_interval: interval(2, -3) }));
+    expect(result.status).toBe(422);
+    const holds = await admin.query<{ n: number }>('SELECT count(*)::int AS n FROM reservation WHERE tenant_id = $1', [ws.tenantId]);
+    expect(holds.rows[0]?.n).toBe(0);
   });
 
   it('lets a renter ask for delivery when the shop has not set it up, charges no fee, and tells the owner to arrange it', async () => {
