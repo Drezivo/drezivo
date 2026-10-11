@@ -1387,12 +1387,15 @@ function getVisibleMutationActions(
 
   switch (detail.status) {
     case "held":
-      return canManage
-        ? [
+      if (!canManage) return [];
+      // An online hold waits for the renter's own payment and receipt, so staff can only cancel it.
+      // A walk-in hold is finished at the counter.
+      return detail.booking_channel === "online"
+        ? [{ action: "cancel", label: "Cancel", tone: "danger" }]
+        : [
             { action: "complete_reservation", label: "Complete Reservation" },
             { action: "cancel", label: "Cancel", tone: "danger" },
-          ]
-        : [];
+          ];
     case "pending_confirmation": {
       if (!canManage) return [];
       const paymentAction: ActionOption[] = [];
