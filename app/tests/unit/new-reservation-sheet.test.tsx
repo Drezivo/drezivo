@@ -584,6 +584,74 @@ describe("NewReservationSheet", () => {
     ).toBeVisible();
   });
 
+  it("keeps a removed flexible-fit card out of the selection until the catalogue adds it again", async () => {
+    const rosalieProductId = "00000000-0000-4000-8000-000000000121";
+    const rosalieVariantId = "00000000-0000-4000-8000-000000000122";
+    const rosalieProduct = clothingListItem.parse({
+      ...product,
+      product_id: rosalieProductId,
+      code: "ROSALIE-FS",
+      name: "Rosalie",
+      sizing_mode: "free_size",
+      has_free_size: true,
+      size_labels: [],
+    });
+    const rosalieDetail = clothingDetail.parse({
+      ...freeSizeDetail,
+      product_id: rosalieProductId,
+      code: "ROSALIE-FS",
+      name: "Rosalie",
+      variants: freeSizeDetail.variants.map((variant) => ({
+        ...variant,
+        id: rosalieVariantId,
+        sku: "ROSALIE-FS",
+        assets: variant.assets.map((asset) => ({ ...asset, variant_id: rosalieVariantId })),
+      })),
+    });
+    api.getCatalogueClothing.mockResolvedValue(listPage([product, rosalieProduct]));
+    api.getCatalogueClothingDetail.mockImplementation((productId: string) =>
+      Promise.resolve({
+        data: productId === rosalieProductId ? rosalieDetail : multiSizeDetail,
+        requestId: `req-detail-${productId}`,
+      })
+    );
+
+    renderSheet();
+    await selectProductVariantAndRentalPeriod();
+    fireEvent.click(await screen.findByRole("button", { name: "Add Rosalie" }));
+
+    const rosalieRemove = await screen.findByRole("button", {
+      name: /Remove Rosalie.*from this booking/,
+    });
+    await waitFor(() =>
+      expect(api.getStaffReservationAvailabilityCheck).toHaveBeenCalledWith({
+        variant_id: rosalieVariantId,
+        pickup_at: exactResponse.requested_interval.start,
+        due_at: exactResponse.requested_interval.end,
+      })
+    );
+    fireEvent.click(rosalieRemove);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: /Remove Rosalie.*from this booking/ })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Remove Emerald Gown · M · Emerald/i })
+      ).toBeVisible();
+      expect(screen.getByRole("button", { name: "Reserve" })).toBeEnabled();
+    });
+    expect(
+      screen.queryByText("Select a variant to view its rental calendar.")
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Rosalie" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Rosalie" }));
+    expect(
+      await screen.findByRole("button", { name: /Remove Rosalie.*from this booking/ })
+    ).toBeVisible();
+  });
+
   it("pre-fills rebooking from a finished reservation and re-checks every copied line", async () => {
     renderSheet({
       rebookFrom: {
@@ -626,6 +694,43 @@ describe("NewReservationSheet", () => {
       })
     );
     expect(api.createStaffReservation).not.toHaveBeenCalled();
+  });
+
+  it("shows an already-selected flexible-fit rebooking line as a status, not a button", async () => {
+    api.getCatalogueClothingDetail.mockResolvedValueOnce({
+      data: freeSizeDetail,
+      requestId: "req-free-size-rebook",
+    });
+
+    renderSheet({
+      rebookFrom: {
+        referenceCode: "RSV-OLD-FLEXIBLE",
+        lines: [
+          {
+            sourceLineId: "source-line-flexible",
+            productId: ids.product as never,
+            variantId: ids.variant as never,
+            name: "Emerald Gown",
+          },
+        ],
+        pickupAt: "2027-03-12T02:00:00.000Z",
+        dueAt: "2027-03-15T02:00:00.000Z",
+        eventDate: null,
+        fulfillmentMethod: "pickup",
+        paymentMethodId: ids.paymentMethod as never,
+        customer: {
+          customerId: ids.customer as never,
+          fullName: "Bea Santiago",
+          phone: null,
+          email: null,
+          address: null,
+        },
+      },
+    });
+
+    const selectedStatus = await screen.findByText("Already selected");
+    expect(selectedStatus).toHaveAttribute("role", "status");
+    expect(screen.queryByRole("button", { name: "Already selected" })).not.toBeInTheDocument();
   });
 
   it("uses the source reservation as a fallback only for blank fields on the current profile", async () => {
@@ -961,6 +1066,9 @@ describe("NewReservationSheet", () => {
             disabled={false}
             garments={extraGarments}
             onChange={(update) => setExtraGarments(update)}
+            onRemoveGarment={(key) =>
+              setExtraGarments((current) => current.filter((garment) => garment.key !== key))
+            }
             primaryVariantId={primaryGarment?.variantId ?? ""}
             requestedInterval={null}
             calendarAvailabilityByVariant={{}}
@@ -1037,6 +1145,9 @@ describe("NewReservationSheet", () => {
           disabled={false}
           garments={items}
           onChange={(update) => setItems(update)}
+          onRemoveGarment={(key) =>
+            setItems((current) => current.filter((item) => item.key !== key))
+          }
           primaryVariantId=""
           requestedInterval={exactUnavailable.requested_interval}
           calendarAvailabilityByVariant={{ [ids.variant]: calendarWithRecoveryConflict }}

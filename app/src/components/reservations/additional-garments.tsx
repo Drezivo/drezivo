@@ -151,6 +151,7 @@ export function AdditionalGarments({
   disabled,
   garments,
   onChange,
+  onRemoveGarment,
   primaryVariantId,
   requestedInterval,
   calendarAvailabilityByVariant,
@@ -159,6 +160,7 @@ export function AdditionalGarments({
   disabled: boolean;
   garments: AdditionalGarment[];
   onChange: Update;
+  onRemoveGarment: (garmentKey: string) => void;
   primaryVariantId: ProductVariantId | "";
   requestedInterval: InstantInterval | null;
   calendarAvailabilityByVariant: Record<string, StaffReservationAvailabilityCalendarResponse>;
@@ -268,9 +270,7 @@ export function AdditionalGarments({
             key={garment.key}
             garment={garment}
             disabled={disabled}
-            onRemove={() =>
-              onChange((current) => current.filter((item) => item.key !== garment.key))
-            }
+            onRemove={() => onRemoveGarment(garment.key)}
             status={
               <GarmentStatus
                 garment={garment}

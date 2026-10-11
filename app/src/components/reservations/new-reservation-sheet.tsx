@@ -49,7 +49,7 @@ import {
   type ReservationCalendarAvailabilityItem,
 } from "@/components/reservations/reservation-availability-calendar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { DatePickerField } from "@/components/ui/date-picker-field";
 import { Input } from "@/components/ui/input";
 import { TimePickerField } from "@/components/ui/time-picker-field";
@@ -1080,6 +1080,45 @@ export function NewReservationSheet({
     setExactAvailabilityError(null);
   };
 
+  const removeAdditionalGarment = (garmentKey: string) => {
+    const removedGarment = extraGarments.find((garment) => garment.key === garmentKey);
+    if (!removedGarment) return;
+
+    updateExtraGarments((current) => current.filter((garment) => garment.key !== garmentKey));
+
+    const anotherSelectedLineUsesProduct =
+      primaryGarment?.productId === removedGarment.productId ||
+      extraGarments.some(
+        (garment) =>
+          garment.key !== removedGarment.key && garment.productId === removedGarment.productId
+      );
+    if (
+      removedGarment.detail?.sizing_mode !== "free_size" ||
+      selectedProduct?.product_id !== removedGarment.productId ||
+      anotherSelectedLineUsesProduct
+    ) {
+      return;
+    }
+
+    // The free-size auto-selection effect treats a focused product as a fresh add intent.
+    // Move the chooser away from a removed item so the effect cannot immediately restore it.
+    if (primaryGarment) {
+      pendingVariantIdRef.current = primaryGarment.variantId || null;
+      setSelectedProduct({ product_id: primaryGarment.productId });
+      setProductDetail(primaryGarment.detail);
+      setSelectedVariantId(primaryGarment.variantId);
+      return;
+    }
+
+    pendingVariantIdRef.current = null;
+    setSelectedProduct(null);
+    setProductDetail(null);
+    setSelectedVariantId("");
+    setVariantSelectionError(null);
+    setExactAvailability(null);
+    setExactAvailabilityError(null);
+  };
+
   const toggleManualVariant = (variantId: ProductVariantId) => {
     const primary = primaryGarment;
     if (primary?.variantId === variantId) {
@@ -1808,38 +1847,48 @@ export function NewReservationSheet({
                       This clothing item has one rentable size.
                     </p>
                     {activeVariant ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="mt-3"
-                        variant={
-                          rebookFrom
-                            ? rebookLines.some((line) => line.variantId === activeVariant.id)
-                              ? "default"
-                              : "secondary"
+                      rebookFrom &&
+                      rebookLines.some((line) => line.variantId === activeVariant.id) ? (
+                        <span
+                          className={buttonVariants({
+                            variant: "default",
+                            size: "sm",
+                            className: "mt-3 pointer-events-none cursor-default",
+                          })}
+                          role="status"
+                        >
+                          Already selected
+                        </span>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="mt-3"
+                          variant={
+                            rebookFrom
+                              ? "secondary"
+                              : primaryVariantId === activeVariant.id ||
+                                  extraGarments.some(
+                                    (garment) => garment.variantId === activeVariant.id
+                                  )
+                                ? "default"
+                                : "secondary"
+                          }
+                          onClick={() => {
+                            if (rebookFrom) setSelectedVariantId(activeVariant.id);
+                            else toggleManualVariant(activeVariant.id);
+                          }}
+                        >
+                          {rebookFrom
+                            ? "Select flexible fit"
                             : primaryVariantId === activeVariant.id ||
                                 extraGarments.some(
                                   (garment) => garment.variantId === activeVariant.id
                                 )
-                              ? "default"
-                              : "secondary"
-                        }
-                        onClick={() => {
-                          if (rebookFrom) setSelectedVariantId(activeVariant.id);
-                          else toggleManualVariant(activeVariant.id);
-                        }}
-                      >
-                        {rebookFrom
-                          ? rebookLines.some((line) => line.variantId === activeVariant.id)
-                            ? "Already selected"
-                            : "Select flexible fit"
-                          : primaryVariantId === activeVariant.id ||
-                              extraGarments.some(
-                                (garment) => garment.variantId === activeVariant.id
-                              )
-                            ? "Remove flexible fit"
-                            : "Select flexible fit"}
-                      </Button>
+                              ? "Remove flexible fit"
+                              : "Select flexible fit"}
+                        </Button>
+                      )
                     ) : null}
                   </div>
                 ) : (
@@ -2143,6 +2192,7 @@ export function NewReservationSheet({
                           disabled={reserveGuard.isSubmitting}
                           garments={extraGarments}
                           onChange={updateExtraGarments}
+                          onRemoveGarment={removeAdditionalGarment}
                           primaryVariantId={primaryVariantId}
                           requestedInterval={requestedInterval}
                           calendarAvailabilityByVariant={calendarAvailabilityByVariant}
