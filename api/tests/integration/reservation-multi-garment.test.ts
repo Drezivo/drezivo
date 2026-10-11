@@ -142,15 +142,12 @@ describe('multi-garment reservations', async () => {
 
   it('rejects duplicate variants for new bookings but keeps duplicate copied rebooking lines valid', async () => {
     const seed = await seedWorkspace('org_multi_unique', 'user_multi_unique');
-    const duplicateNewBooking = await service.createStaffReservation(
-      context(seed, 'duplicate-new'),
-      await request(seed, [seed.celestineId, seed.celestineId]),
-    );
-    expect(duplicateNewBooking.status).toBe(422);
-    expect(duplicateNewBooking.body).toMatchObject({
-      success: false,
-      error: { code: 'VALIDATION_FAILED' },
-    });
+    await expect(
+      service.createStaffReservation(
+        context(seed, 'duplicate-new'),
+        await request(seed, [seed.celestineId, seed.celestineId]),
+      ),
+    ).rejects.toMatchObject({ status: 422, code: 'VALIDATION_FAILED' });
     expect(await reservationCount(seed)).toBe(0);
 
     const legacyCopiedLines = await service.createStaffReservation(
