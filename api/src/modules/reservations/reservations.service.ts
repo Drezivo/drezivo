@@ -10,6 +10,7 @@ import {
   type PermissionCode,
   type ReservationDeliverySnapshot,
   type ReservationDetail,
+  type ReservationEditRequestInput,
   type ReservationPaymentReceiptsResponse,
   type ReservationListItem,
   type ReservationListQuery,
@@ -73,6 +74,7 @@ import {
   type ReservationCommandResponse,
 } from './reservations.command.service.js';
 import { cancelReservationByStaff } from './reservations.cancellation.service.js';
+import { editReservationByStaff, type ReservationEditCommandResponse } from './reservations.edit.service.js';
 import { completeStaffReservationCommand } from './reservations.completion.service.js';
 import {
   completeReturnedReservationByStaff,
@@ -309,6 +311,26 @@ export async function completeStaffReservation(
       requestId: input.requestId,
       idempotencyKey: input.idempotencyKey,
       permissionCodes: input.permissionCodes,
+    },
+    reservationId,
+    request,
+  );
+}
+
+export async function editReservation(
+  input: ReservationReadContext & { requestId: string; idempotencyKey: string },
+  reservationId: string,
+  request: ReservationEditRequestInput,
+): Promise<ReservationEditCommandResponse> {
+  assertReservationReviewContext(input);
+  return editReservationByStaff(
+    {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      membershipId: input.membershipId,
+      principalId: input.principalId,
+      requestId: input.requestId,
+      idempotencyKey: input.idempotencyKey,
     },
     reservationId,
     request,
