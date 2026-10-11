@@ -352,9 +352,6 @@ export function NewFittingSheet({ open, settings, onCreated, onOpenChange }: New
         return `That time has passed. Choose ${formatSlotTime(clock.slotTime)} or later.`;
       }
     }
-    if (currentStep === 2 && garments.length === 0) {
-      return "Add at least one garment to the fitting.";
-    }
     return null;
   };
 
@@ -957,7 +954,7 @@ function StepGarments({
           Garments
         </h3>
         <p className="mt-1 text-xs text-dashboard-muted">
-          Choose the variants the customer wants to try.
+          Choose the variants the customer wants to try, or skip this if they will choose at the shop.
         </p>
 
         <label className="relative mt-4 block">
@@ -1189,6 +1186,11 @@ function StepReview({
         <ReviewItem label="Initial status" value="Pending" />
       </div>
       <div className="mt-4 space-y-2">
+        {garments.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-dashboard-border px-3 py-3 text-sm text-dashboard-muted">
+            No garments selected yet. The customer will choose what to try on at the shop.
+          </p>
+        ) : null}
         {garments.map((garment) => (
           <div
             key={garment.key}
