@@ -503,7 +503,8 @@ describe('reservation edit (PATCH /reservations/:id)', async () => {
         profile_phone: string;
         profile_email: string;
       }>(
-        `SELECT r.customer_id, r.version, r.status, r.pickup_at, r.due_at, r.fulfillment_method,
+        `SELECT r.customer_id, r.version, r.status, r.pickup_at, r.due_at,
+                r.delivery_snapshot ->> 'fulfillment_method' AS fulfillment_method,
                 r.event_date::text AS event_date, r.customer_snapshot, r.delivery_snapshot,
                 r.rental_total_minor, r.due_now_minor, p.id AS payment_id, p.amount_minor AS payment_amount_minor,
                 p.status AS payment_status, p.merchant_reference AS payment_merchant_reference,
