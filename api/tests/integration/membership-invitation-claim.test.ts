@@ -203,17 +203,15 @@ describe('TBF-042 verified invitation claim', async () => {
     });
     const firstInvitationId = String((firstInvite.body.data as { id: string }).id);
     const claimantUserId = `user_claimant_${randomUUID()}`;
-    const providerInvitations = new Map<
-      string,
-      {
-        id: string;
-        organizationId: string;
-        emailAddress: string;
-        role: 'org:member';
-        status: 'accepted' | 'pending';
-        expiresAt: Date;
-      }
-    >();
+    type TestProviderInvitation = {
+      id: string;
+      organizationId: string;
+      emailAddress: string;
+      role: 'org:member';
+      status: 'accepted' | 'pending';
+      expiresAt: Date;
+    };
+    const providerInvitations = new Map<string, TestProviderInvitation>();
     providerInvitations.set(firstInvitationId, {
       id: `orginv_${randomUUID()}`,
       organizationId: tenant.clerkOrgId,
@@ -233,14 +231,19 @@ describe('TBF-042 verified invitation claim', async () => {
       userId: claimantUserId,
       role: 'org:member',
     };
-    const createInvitation = vi.fn((request: { organizationId: string; emailAddress: string }) => ({
-      id: `orginv_${randomUUID()}`,
-      organizationId: request.organizationId,
-      emailAddress: request.emailAddress,
-      role: 'org:member' as const,
-      status: 'pending' as const,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    }));
+    const freshDispatch = { invitation: null as TestProviderInvitation | null };
+    const createInvitation = vi.fn((request: { organizationId: string; emailAddress: string }) => {
+      const invitation: TestProviderInvitation = {
+        id: `orginv_${randomUUID()}`,
+        organizationId: request.organizationId,
+        emailAddress: request.emailAddress,
+        role: 'org:member',
+        status: 'pending',
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      };
+      freshDispatch.invitation = invitation;
+      return invitation;
+    });
     const clerk = {
       findInvitationByDispatchMarker: vi.fn(
         (_orgId: string, marker: { invitationId: string; operation: string }) =>
@@ -412,14 +415,11 @@ describe('TBF-042 verified invitation claim', async () => {
     await inviteHandler({ ...inviteEvent, tenant_id: tenant.id, _leaseToken: 'invite-lease-2' });
     expect(createInvitation).toHaveBeenCalledTimes(1);
 
-    const acceptedFreshInvitation = {
-      id: `orginv_${randomUUID()}`,
-      organizationId: tenant.clerkOrgId,
-      emailAddress: 'former-member@example.test',
-      role: 'org:member' as const,
-      status: 'accepted' as const,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    };
+    const createdFreshInvitation = freshDispatch.invitation;
+    if (!createdFreshInvitation) {
+      throw new Error('Fresh invitation dispatch did not create a provider invitation.');
+    }
+    const acceptedFreshInvitation = { ...createdFreshInvitation, status: 'accepted' as const };
     providerInvitations.set(freshInvitationId, acceptedFreshInvitation);
     providerMembership = {
       id: `orgmem_${randomUUID()}`,
