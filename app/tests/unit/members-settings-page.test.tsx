@@ -21,8 +21,10 @@ vi.mock("@/components/shell/dashboard-access-gate", () => ({
 vi.mock("@/lib/drezivo-api", () => ({
   createDrezivoApiClient: () => api,
   DrezivoApiError: class DrezivoApiError extends Error {
-    constructor(message: string) {
+    status: number;
+    constructor(message: string, options: { status?: number } = {}) {
       super(message);
+      this.status = options.status ?? 0;
     }
   },
 }));
@@ -264,9 +266,7 @@ describe("MembersSettingsPage", () => {
   it("keeps the dialog open with the server message when removal fails, and retries with the same key", async () => {
     const { DrezivoApiError } = await import("@/lib/drezivo-api");
     // A 503 is retryable, so the retry must replay the same intent rather than start a new one.
-    api.removeMember.mockRejectedValueOnce(
-      Object.assign(new DrezivoApiError("Clerk is temporarily unavailable."), { status: 503 })
-    );
+    api.removeMember.mockRejectedValueOnce(new DrezivoApiError("Clerk is temporarily unavailable.", { status: 503 }));
     render(<MembersSettingsPage />);
     await screen.findByText("Sam Staff");
 
