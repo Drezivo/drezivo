@@ -2,9 +2,16 @@
 
 import { useAuth } from "@clerk/nextjs";
 import * as Dialog from "@radix-ui/react-dialog";
-import { AlertTriangle, Check, CheckCircle2, Eye, Loader2, ShieldCheck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import {
+  AlertTriangle,
+  Check,
+  CheckCircle2,
+  Eye,
+  Loader2,
+  Pencil,
+  ShieldCheck,
+} from "lucide-react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { staffReservationCompletionCustomer } from "@drezivo/contracts";
 
 import type {
@@ -63,12 +70,14 @@ type CustomerMode = "new" | "existing";
 
 export function ReservationMutationActions({
   detail,
+  onEdit,
   onMutationSuccess,
   onNotice,
   onRefreshRequired,
   permissionCodes,
 }: {
   detail: ReservationDetail;
+  onEdit: () => void;
   onMutationSuccess: () => void;
   onNotice: (notice: ReservationMutationNotice | null) => void;
   onRefreshRequired: () => void;
@@ -96,9 +105,10 @@ export function ReservationMutationActions({
     !isCustomerSearchTooShort && customerSearch.trim() !== debouncedCustomerSearch;
   const [customerOptions, setCustomerOptions] = useState<StaffReservationCustomerOption[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<CustomerId | "">("");
-  const [selectedCustomerProfile, setSelectedCustomerProfile] = useState<
-    Pick<CustomerDetailResponse, "id" | "full_name" | "phone" | "email" | "address"> | null
-  >(null);
+  const [selectedCustomerProfile, setSelectedCustomerProfile] = useState<Pick<
+    CustomerDetailResponse,
+    "id" | "full_name" | "phone" | "email" | "address"
+  > | null>(null);
   const [customerProfileLoading, setCustomerProfileLoading] = useState(false);
   const [customerProfileError, setCustomerProfileError] = useState(false);
   const [fullName, setFullName] = useState("");
@@ -119,21 +129,23 @@ export function ReservationMutationActions({
   const disabledActionReasons = actions
     .filter((option) => option.disabled && option.disabledReason)
     .map((option) => option.disabledReason as string);
+  const canEditConfirmed =
+    detail.status === "confirmed" && permissionCodes.includes("reservations.manage");
   const needsCustomerEntry =
     selectedAction === "complete_reservation" &&
     detail.status === "held" &&
     !detail.customer.snapshot;
   const needsBoundCustomerCompletion = Boolean(
     selectedAction === "complete_reservation" &&
-      detail.status === "held" &&
-      detail.customer.snapshot &&
-      detail.customer.customer_id &&
-      !staffReservationCompletionCustomer.safeParse(detail.customer.snapshot).success
+    detail.status === "held" &&
+    detail.customer.snapshot &&
+    detail.customer.customer_id &&
+    !staffReservationCompletionCustomer.safeParse(detail.customer.snapshot).success
   );
   const selectedCustomer =
     customerOptions.find((customer) => customer.id === selectedCustomerId) ?? null;
   const customerProfileLookupId = needsBoundCustomerCompletion
-    ? detail.customer.customer_id ?? ""
+    ? (detail.customer.customer_id ?? "")
     : needsCustomerEntry && customerMode === "existing"
       ? selectedCustomerId
       : "";
@@ -147,7 +159,9 @@ export function ReservationMutationActions({
     setReadiness("ready");
     setTermsAccepted(detail.terms_accepted_at !== null);
     setAmountReceived(
-      currentPaymentAmountMinor === undefined ? "" : minorUnitsToMajorInput(currentPaymentAmountMinor)
+      currentPaymentAmountMinor === undefined
+        ? ""
+        : minorUnitsToMajorInput(currentPaymentAmountMinor)
     );
     setCashReceived(false);
     setMerchantReference("");
@@ -201,7 +215,15 @@ export function ReservationMutationActions({
     return () => {
       cancelled = true;
     };
-  }, [customerMode, debouncedCustomerSearch, detail.customer.snapshot, getToken, isCustomerSearchPending, isCustomerSearchTooShort, selectedAction]);
+  }, [
+    customerMode,
+    debouncedCustomerSearch,
+    detail.customer.snapshot,
+    getToken,
+    isCustomerSearchPending,
+    isCustomerSearchTooShort,
+    selectedAction,
+  ]);
 
   useEffect(() => {
     if (!customerProfileLookupId) {
@@ -292,10 +314,7 @@ export function ReservationMutationActions({
       selectedCustomer?.full_name ??
       customerSnapshot?.full_name ??
       fullName,
-    phone:
-      currentCustomerProfile?.phone ??
-      selectedCustomer?.phone ??
-      phone,
+    phone: currentCustomerProfile?.phone ?? selectedCustomer?.phone ?? phone,
     email: currentCustomerProfile?.email ?? selectedCustomer?.email ?? email,
     address: currentCustomerProfile?.address ?? address,
   };
@@ -376,11 +395,7 @@ export function ReservationMutationActions({
             );
           }
           case "confirm_reservation":
-            return api.confirmReservation(
-              detail.id,
-              { version: detail.version },
-              idempotencyKey
-            );
+            return api.confirmReservation(detail.id, { version: detail.version }, idempotencyKey);
           case "cancel":
             return api.cancelReservation(
               detail.id,
@@ -499,17 +514,29 @@ export function ReservationMutationActions({
         <p className="text-xs font-medium text-dashboard-muted">Reservation actions</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {actions.map((option) => (
-            <Button
-              key={option.action}
-              type="button"
-              variant={option.tone === "danger" ? "danger" : "secondary"}
-              size="sm"
-              disabled={submitGuard.isSubmitting || option.disabled}
-              title={option.disabledReason}
-              onClick={() => chooseAction(option.action)}
-            >
-              {option.label}
-            </Button>
+            <Fragment key={option.action}>
+              {canEditConfirmed && option.action === "cancel" ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={submitGuard.isSubmitting}
+                  onClick={onEdit}
+                >
+                  <Pencil className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Edit
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant={option.tone === "danger" ? "danger" : "secondary"}
+                size="sm"
+                disabled={submitGuard.isSubmitting || option.disabled}
+                title={option.disabledReason}
+                onClick={() => chooseAction(option.action)}
+              >
+                {option.label}
+              </Button>
+            </Fragment>
           ))}
         </div>
         {disabledActionReasons.length > 0 ? (
@@ -623,7 +650,9 @@ export function ReservationMutationActions({
                         value={address}
                         disabled={submitGuard.isSubmitting}
                         maxLength={500}
-                        onChange={(event) => updateIntentField(() => setAddress(event.target.value))}
+                        onChange={(event) =>
+                          updateIntentField(() => setAddress(event.target.value))
+                        }
                       />
                       {completionFieldErrors.address ? (
                         <span className="mt-1 block text-xs text-red-700" role="alert">
@@ -639,7 +668,9 @@ export function ReservationMutationActions({
                         value={socialMedia}
                         disabled={submitGuard.isSubmitting}
                         maxLength={320}
-                        onChange={(event) => updateIntentField(() => setSocialMedia(event.target.value))}
+                        onChange={(event) =>
+                          updateIntentField(() => setSocialMedia(event.target.value))
+                        }
                       />
                     </label>
                     <label className="block">
@@ -720,47 +751,49 @@ export function ReservationMutationActions({
                     <div className="mt-2 grid gap-2">
                       {isCustomerSearchPending ? (
                         <p className="text-sm text-dashboard-muted">Waiting to search customers…</p>
-                      ) : isCustomerSearchTooShort ? null : customerOptions.map((customer) => {
-                        const isSelected = selectedCustomerId === customer.id;
-                        return (
-                          <button
-                            key={customer.id}
-                            type="button"
-                            aria-pressed={isSelected}
-                            disabled={submitGuard.isSubmitting}
-                            onClick={() =>
-                              updateIntentField(() => {
-                                setSelectedCustomerId(customer.id);
-                                setAddress("");
-                              })
-                            }
-                            className={`flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition-colors ${
-                              isSelected
-                                ? "border-dashboard-accent bg-dashboard-active"
-                                : "border-dashboard-border hover:bg-dashboard-active/40"
-                            }`}
-                          >
-                            <span className="min-w-0">
-                              <span className="block truncate text-sm font-medium text-dashboard-navy">
-                                {customer.full_name}
-                              </span>
-                              <span className="mt-1 block truncate text-xs text-dashboard-muted">
-                                {customer.phone ?? customer.email ?? "No contact shown"}
-                              </span>
-                            </span>
-                            <span
-                              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
+                      ) : isCustomerSearchTooShort ? null : (
+                        customerOptions.map((customer) => {
+                          const isSelected = selectedCustomerId === customer.id;
+                          return (
+                            <button
+                              key={customer.id}
+                              type="button"
+                              aria-pressed={isSelected}
+                              disabled={submitGuard.isSubmitting}
+                              onClick={() =>
+                                updateIntentField(() => {
+                                  setSelectedCustomerId(customer.id);
+                                  setAddress("");
+                                })
+                              }
+                              className={`flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition-colors ${
                                 isSelected
-                                  ? "border-dashboard-accent bg-dashboard-primary text-dashboard-primary-ink"
-                                  : "border-dashboard-border text-transparent"
+                                  ? "border-dashboard-accent bg-dashboard-active"
+                                  : "border-dashboard-border hover:bg-dashboard-active/40"
                               }`}
-                              aria-hidden="true"
                             >
-                              <Check className="h-3.5 w-3.5" />
-                            </span>
-                          </button>
-                        );
-                      })}
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm font-medium text-dashboard-navy">
+                                  {customer.full_name}
+                                </span>
+                                <span className="mt-1 block truncate text-xs text-dashboard-muted">
+                                  {customer.phone ?? customer.email ?? "No contact shown"}
+                                </span>
+                              </span>
+                              <span
+                                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
+                                  isSelected
+                                    ? "border-dashboard-accent bg-dashboard-primary text-dashboard-primary-ink"
+                                    : "border-dashboard-border text-transparent"
+                                }`}
+                                aria-hidden="true"
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                              </span>
+                            </button>
+                          );
+                        })
+                      )}
                     </div>
                     {selectedCustomer ? (
                       <div className="mt-3 space-y-3 rounded-lg border border-dashboard-accent/50 bg-dashboard-active/60 p-3">
@@ -773,10 +806,13 @@ export function ReservationMutationActions({
                           </p>
                         </div>
                         {customerProfileLoading ? (
-                          <p className="text-xs text-dashboard-muted">Loading saved customer details…</p>
+                          <p className="text-xs text-dashboard-muted">
+                            Loading saved customer details…
+                          </p>
                         ) : customerProfileError ? (
                           <p className="text-xs text-red-700" role="alert">
-                            Saved customer details could not be loaded. Retry by selecting the customer again.
+                            Saved customer details could not be loaded. Retry by selecting the
+                            customer again.
                           </p>
                         ) : (
                           <div className="grid gap-3 sm:grid-cols-2">
@@ -831,7 +867,9 @@ export function ReservationMutationActions({
                                   autoComplete="email"
                                   value={email}
                                   disabled={submitGuard.isSubmitting}
-                                  onChange={(event) => updateIntentField(() => setEmail(event.target.value))}
+                                  onChange={(event) =>
+                                    updateIntentField(() => setEmail(event.target.value))
+                                  }
                                 />
                                 {completionFieldErrors.email ? (
                                   <span className="mt-1 block text-xs text-red-700" role="alert">
@@ -849,25 +887,27 @@ export function ReservationMutationActions({
                                 />
                               </div>
                             ) : (
-                          <label className="block">
-                            <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
-                              Address <span aria-hidden="true">*</span>
-                            </span>
-                            <Input
-                              aria-label="Address"
-                              aria-invalid={Boolean(completionFieldErrors.address)}
-                              autoComplete="street-address"
-                              value={address}
-                              disabled={submitGuard.isSubmitting}
-                              maxLength={500}
-                              onChange={(event) => updateIntentField(() => setAddress(event.target.value))}
-                            />
-                            {completionFieldErrors.address ? (
-                              <span className="mt-1 block text-xs text-red-700" role="alert">
-                                {completionFieldErrors.address}
-                              </span>
-                            ) : null}
-                          </label>
+                              <label className="block">
+                                <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
+                                  Address <span aria-hidden="true">*</span>
+                                </span>
+                                <Input
+                                  aria-label="Address"
+                                  aria-invalid={Boolean(completionFieldErrors.address)}
+                                  autoComplete="street-address"
+                                  value={address}
+                                  disabled={submitGuard.isSubmitting}
+                                  maxLength={500}
+                                  onChange={(event) =>
+                                    updateIntentField(() => setAddress(event.target.value))
+                                  }
+                                />
+                                {completionFieldErrors.address ? (
+                                  <span className="mt-1 block text-xs text-red-700" role="alert">
+                                    {completionFieldErrors.address}
+                                  </span>
+                                ) : null}
+                              </label>
                             )}
                           </div>
                         )}
@@ -887,9 +927,12 @@ export function ReservationMutationActions({
             {needsBoundCustomerCompletion ? (
               <div className="space-y-3 rounded-lg border border-dashboard-border bg-dashboard-surface p-3">
                 <div>
-                  <p className="text-xs font-semibold text-dashboard-navy">Complete customer details</p>
+                  <p className="text-xs font-semibold text-dashboard-navy">
+                    Complete customer details
+                  </p>
                   <p className="mt-1 text-xs text-dashboard-muted">
-                    Saved details are shown as read-only. Add any missing contact details and address before completing.
+                    Saved details are shown as read-only. Add any missing contact details and
+                    address before completing.
                   </p>
                 </div>
                 <p className="text-sm font-medium text-dashboard-navy">
@@ -920,7 +963,11 @@ export function ReservationMutationActions({
                           placeholder="09XXXXXXXXX"
                           value={phone}
                           disabled={submitGuard.isSubmitting}
-                          onChange={(event) => updateIntentField(() => setPhone(event.target.value.replace(/\D/g, "").slice(0, 11)))}
+                          onChange={(event) =>
+                            updateIntentField(() =>
+                              setPhone(event.target.value.replace(/\D/g, "").slice(0, 11))
+                            )
+                          }
                         />
                       </CompletionInput>
                     )}
@@ -939,7 +986,9 @@ export function ReservationMutationActions({
                           autoComplete="email"
                           value={email}
                           disabled={submitGuard.isSubmitting}
-                          onChange={(event) => updateIntentField(() => setEmail(event.target.value))}
+                          onChange={(event) =>
+                            updateIntentField(() => setEmail(event.target.value))
+                          }
                         />
                       </CompletionInput>
                     )}
@@ -952,7 +1001,11 @@ export function ReservationMutationActions({
                         />
                       </div>
                     ) : (
-                      <CompletionInput label="Address" required error={completionFieldErrors.address}>
+                      <CompletionInput
+                        label="Address"
+                        required
+                        error={completionFieldErrors.address}
+                      >
                         <Input
                           aria-label="Address"
                           aria-invalid={Boolean(completionFieldErrors.address)}
@@ -960,7 +1013,9 @@ export function ReservationMutationActions({
                           value={address}
                           disabled={submitGuard.isSubmitting}
                           maxLength={500}
-                          onChange={(event) => updateIntentField(() => setAddress(event.target.value))}
+                          onChange={(event) =>
+                            updateIntentField(() => setAddress(event.target.value))
+                          }
                         />
                       </CompletionInput>
                     )}
@@ -968,7 +1023,8 @@ export function ReservationMutationActions({
                 )}
                 {completionNeedsCustomer ? (
                   <p className="text-xs text-dashboard-muted">
-                    A valid phone, email, and address are required before completing the reservation.
+                    A valid phone, email, and address are required before completing the
+                    reservation.
                   </p>
                 ) : null}
               </div>
@@ -998,7 +1054,8 @@ export function ReservationMutationActions({
                     />
                   </div>
                   <span className="mt-1 block text-xs text-dashboard-muted">
-                    Amount due: {formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)}
+                    Amount due:{" "}
+                    {formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)}
                   </span>
                   {cashChangeDueMinor !== null ? (
                     <span className="mt-1 block text-xs text-dashboard-muted">
@@ -1023,16 +1080,24 @@ export function ReservationMutationActions({
             {selectedAction === "verify_payment" && detail.payment ? (
               <>
                 <ActionMessage>
-                  Open the proof, then check that {formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)} arrived in your {detail.payment.method_name} account before you verify.
+                  Open the proof, then check that{" "}
+                  {formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)} arrived
+                  in your {detail.payment.method_name} account before you verify.
                 </ActionMessage>
-                <PaymentProof state={proof} viewerOpen={proofViewerOpen} onViewerOpenChange={setProofViewerOpen} />
+                <PaymentProof
+                  state={proof}
+                  viewerOpen={proofViewerOpen}
+                  onViewerOpenChange={setProofViewerOpen}
+                />
               </>
             ) : null}
 
             {selectedAction === "log_payment" && detail.payment ? (
               <>
                 <ActionMessage>
-                  Log the {formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)} paid at the counter via {detail.payment.method_name}. No receipt is needed for a walk-in.
+                  Log the {formatMinorMoney(detail.payment.amount_minor, detail.payment.currency)}{" "}
+                  paid at the counter via {detail.payment.method_name}. No receipt is needed for a
+                  walk-in.
                 </ActionMessage>
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
@@ -1054,7 +1119,8 @@ export function ReservationMutationActions({
 
             {selectedAction === "confirm_reservation" ? (
               <ActionMessage>
-                Payment is already verified. Confirm the reservation and convert the garment hold to a confirmed allocation.
+                Payment is already verified. Confirm the reservation and convert the garment hold to
+                a confirmed allocation.
               </ActionMessage>
             ) : null}
 
@@ -1151,7 +1217,9 @@ export function ReservationMutationActions({
                 }
                 disabled={submitDisabled}
                 onClick={() =>
-                  selectedAction === "verify_payment" ? setConfirmVerifyOpen(true) : void submitAction()
+                  selectedAction === "verify_payment"
+                    ? setConfirmVerifyOpen(true)
+                    : void submitAction()
                 }
               >
                 {submitGuard.isSubmitting ? (
@@ -1176,8 +1244,11 @@ export function ReservationMutationActions({
           onViewProof={() => {
             setConfirmVerifyOpen(false);
             const receipts = proof.kind === "ready" ? proof.receipts : [];
-            const firstDocument = receipts.find((receipt) => receipt.content_type === "application/pdf");
-            if (receipts.some((receipt) => receipt.content_type !== "application/pdf")) setProofViewerOpen(true);
+            const firstDocument = receipts.find(
+              (receipt) => receipt.content_type === "application/pdf"
+            );
+            if (receipts.some((receipt) => receipt.content_type !== "application/pdf"))
+              setProofViewerOpen(true);
             else if (firstDocument) window.open(firstDocument.url, "_blank", "noopener,noreferrer");
           }}
           onConfirm={() => {
@@ -1226,13 +1297,18 @@ function VerifyPaymentDialog({
               </Dialog.Title>
               <Dialog.Description className="mt-1 text-sm leading-6 text-dashboard-muted">
                 Confirm only after you have seen {amount}
-                {customerName ? ` from ${customerName}` : ""} in your own {methodName} transaction history. The reservation is confirmed right after.
+                {customerName ? ` from ${customerName}` : ""} in your own {methodName} transaction
+                history. The reservation is confirmed right after.
               </Dialog.Description>
             </div>
           </div>
           <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Dialog.Close asChild>
-              <Button type="button" variant="ghost" className="text-dashboard-navy hover:text-dashboard-navy">
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-dashboard-navy hover:text-dashboard-navy"
+              >
                 Cancel
               </Button>
             </Dialog.Close>
@@ -1493,7 +1569,7 @@ function mutationSuccessNotice(
             ? "Payment verified and reservation confirmed."
             : action === "log_payment"
               ? "Payment logged and reservation confirmed."
-            : "Reservation confirmed.",
+              : "Reservation confirmed.",
     };
   }
 
@@ -1615,7 +1691,8 @@ function buildExistingCustomerInput(input: {
   if (!input.customerId || !input.profile) return null;
   const phone = input.profile.phone ?? (input.phone.trim() || input.snapshot?.phone || undefined);
   const email = input.profile.email ?? (input.email.trim() || input.snapshot?.email || undefined);
-  const address = input.profile.address ?? (input.address.trim() || input.snapshot?.address || undefined);
+  const address =
+    input.profile.address ?? (input.address.trim() || input.snapshot?.address || undefined);
   const candidate = {
     full_name: input.profile.full_name || input.snapshot?.full_name || "",
     phone: phone ?? "",
@@ -1676,7 +1753,11 @@ function CompletionInput({
         {label} {required ? <span aria-hidden="true">*</span> : null}
       </span>
       {children}
-      {error ? <span className="mt-1 block text-xs text-red-700" role="alert">{error}</span> : null}
+      {error ? (
+        <span className="mt-1 block text-xs text-red-700" role="alert">
+          {error}
+        </span>
+      ) : null}
     </label>
   );
 }

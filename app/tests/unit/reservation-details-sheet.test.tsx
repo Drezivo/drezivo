@@ -35,7 +35,12 @@ function detailWith(overrides: Record<string, unknown>): ReservationDetail {
     storefront_id: "00000000-0000-4000-8000-000000000301",
     customer: {
       customer_id: "00000000-0000-4000-8000-000000000102",
-      snapshot: { full_name: "Bea Santiago", phone: "09171234801", email: "bea@example.test", address: "12 Mabini St, Quezon City" },
+      snapshot: {
+        full_name: "Bea Santiago",
+        phone: "09171234801",
+        email: "bea@example.test",
+        address: "12 Mabini St, Quezon City",
+      },
     },
     lines: [
       {
@@ -66,7 +71,12 @@ function detailWith(overrides: Record<string, unknown>): ReservationDetail {
     timezone_snapshot: "Asia/Manila",
     event_date: "2026-10-18",
     delivery_snapshot: { fulfillment_method: "pickup" },
-    price_snapshot: { rental_total_minor: "550000", security_required_minor: "500000", due_now_minor: "1050000", currency: "PHP" },
+    price_snapshot: {
+      rental_total_minor: "550000",
+      security_required_minor: "500000",
+      due_now_minor: "1050000",
+      currency: "PHP",
+    },
     payment: null,
     hold_acquired_at: "2026-10-10T02:00:00.000Z",
     hold_expires_at: null,
@@ -157,87 +167,116 @@ describe("ReservationDetailsSheet", () => {
 
   it("shows a delivery request the shop must arrange, with the renter's address and contact actions", () => {
     renderSheet(
-      detailWith({ status: "pending_confirmation", delivery_snapshot: { fulfillment_method: "delivery", fee_minor: "0", terms: "to_arrange" } })
+      detailWith({
+        status: "pending_confirmation",
+        delivery_snapshot: { fulfillment_method: "delivery", fee_minor: "0", terms: "to_arrange" },
+      })
     );
 
     expect(screen.getByText("Delivery requested")).toBeTruthy();
     expect(screen.getByText("The renter asked for delivery")).toBeTruthy();
     expect(screen.getByText("To arrange with the renter")).toBeTruthy();
     expect(screen.getAllByText("12 Mabini St, Quezon City").length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: /call 09171234801/i }).getAttribute("href")).toBe("tel:09171234801");
-    expect(screen.getByRole("link", { name: /email the renter/i }).getAttribute("href")).toContain("mailto:bea@example.test");
+    expect(screen.getByRole("link", { name: /call 09171234801/i }).getAttribute("href")).toBe(
+      "tel:09171234801"
+    );
+    expect(screen.getByRole("link", { name: /email the renter/i }).getAttribute("href")).toContain(
+      "mailto:bea@example.test"
+    );
   });
 
   it("shows the charged delivery fee when the shop offers delivery", () => {
     renderSheet(
-      detailWith({ status: "confirmed", delivery_snapshot: { fulfillment_method: "delivery", fee_minor: "15000", terms: "set_fee" } })
+      detailWith({
+        status: "confirmed",
+        delivery_snapshot: { fulfillment_method: "delivery", fee_minor: "15000", terms: "set_fee" },
+      })
     );
 
     expect(screen.getByText("The renter chose delivery")).toBeTruthy();
     expect(screen.getByText(/150/)).toBeTruthy();
   });
 
-  it("offers Edit before pickup only", () => {
-    renderSheet(detailWith({ status: "picked_up" }));
-    expect(screen.queryByRole("button", { name: /edit details/i })).toBeNull();
+  it("places Edit between Pick Up and Cancel for confirmed reservations", () => {
+    renderSheet(detailWith({ status: "confirmed" }), [
+      "reservations.manage",
+      "reservations.custody",
+    ]);
+
+    const buttons = screen.getAllByRole("button");
+    const pickupIndex = buttons.indexOf(screen.getByRole("button", { name: "Pick Up" }));
+    const editIndex = buttons.indexOf(screen.getByRole("button", { name: "Edit" }));
+    const cancelIndex = buttons.indexOf(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(pickupIndex).toBeLessThan(editIndex);
+    expect(editIndex).toBeLessThan(cancelIndex);
   });
 
-  it("switches a paid delivery booking to pickup after staff accept the lower price, sending one request per press", async () => {
-    const { DrezivoApiError } = await import("@/lib/drezivo-api");
-    api.editReservation.mockReset();
-    api.editReservation
-      .mockRejectedValueOnce(
-        new (DrezivoApiError as unknown as new (message: string, options: object) => Error)(
-          "This change lowers the amount due to ₱10,250.00 from ₱10,500.00, and the renter already paid or sent a receipt. Confirm the price change to save it, then refund the difference.",
-          { code: "PRICE_CHANGE_NOT_ACCEPTED", status: 409 }
-        )
-      )
-      .mockResolvedValueOnce({
-        data: {
-          price_changed: true,
-          previous_due_now_minor: "1050000",
-          reservation: { price_snapshot: { due_now_minor: "1025000" } },
-        },
-      });
-    const paid = detailWith({
-      status: "confirmed",
-      delivery_snapshot: { fulfillment_method: "delivery", fee_minor: "25000", terms: "set_fee" },
-      payment: {
-        id: "00000000-0000-4000-8000-000000000105",
-        payment_method_id: "00000000-0000-4000-8000-000000000106",
-        method_name: "GCash",
-        rail: "manual_qr",
-        status: "paid",
-        evidence_status: "verified",
-        amount_minor: "1050000",
-        currency: "PHP",
-        verified_at: "2026-10-10T03:00:00.000Z",
+  it.each(["held", "pending_confirmation", "picked_up", "returned", "cancelled"] as const)(
+    "does not offer Edit for %s reservations",
+    (status) => {
+      renderSheet(detailWith({ status }));
+      expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    }
+  );
+
+  it("hides Edit without reservation management permission", () => {
+    renderSheet(detailWith({ status: "confirmed" }), []);
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+  });
+
+  it("opens a customer-only form and hides lifecycle actions while editing", () => {
+    renderSheet(detailWith({ status: "confirmed" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    expect(screen.getByText("Customer on this reservation")).toBeTruthy();
+    expect(screen.getByLabelText("Full name")).toBeTruthy();
+    expect(screen.getByLabelText("Mobile number")).toBeTruthy();
+    expect(screen.getByLabelText("Email")).toBeTruthy();
+    expect(screen.getByLabelText("Address")).toBeTruthy();
+    expect(screen.queryByText("Pickup date")).toBeNull();
+    expect(screen.queryByText("Pickup or delivery")).toBeNull();
+    expect(screen.queryByText("Reservation actions")).toBeNull();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save changes" }).hasAttribute("disabled")).toBe(
+      true
+    );
+  });
+
+  it("saves edited customer facts to this reservation only", async () => {
+    api.editReservation.mockReset().mockResolvedValue({
+      data: { reservation: {} },
+    });
+    const { onMutationSuccess } = renderSheet(detailWith({ status: "confirmed" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Bea Updated" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(onMutationSuccess).toHaveBeenCalledTimes(1));
+    expect(api.editReservation).toHaveBeenCalledTimes(1);
+    expect(api.editReservation.mock.calls[0]?.[1]).toEqual({
+      version: 2,
+      customer: {
+        full_name: "Bea Updated",
+        phone: "09171234801",
+        email: "bea@example.test",
+        address: "12 Mabini St, Quezon City",
       },
     });
-    const { onMutationSuccess } = renderSheet(paid);
-
-    fireEvent.click(screen.getByRole("button", { name: /edit details/i }));
-    fireEvent.click(screen.getByRole("radio", { name: "Pickup" }));
-    const save = screen.getByRole("button", { name: "Save changes" });
-    fireEvent.click(save);
-    fireEvent.click(save);
-
-    expect(await screen.findByText(/Confirm the price change to save it/)).toBeTruthy();
-    expect(api.editReservation).toHaveBeenCalledTimes(1);
-    expect(api.editReservation.mock.calls[0]?.[1]).toEqual({ version: 2, fulfillment_method: "pickup" });
-
-    fireEvent.click(screen.getByRole("button", { name: "Save with the new price" }));
-    await waitFor(() => expect(onMutationSuccess).toHaveBeenCalledTimes(1));
-    expect(api.editReservation.mock.calls[1]?.[1]).toEqual({ version: 2, fulfillment_method: "pickup", accept_price_change: true });
-    // A new intent gets a new idempotency key; the refused one is not replayed.
-    expect(api.editReservation.mock.calls[1]?.[2]).not.toBe(api.editReservation.mock.calls[0]?.[2]);
   });
 
   it("tells staff to refund the difference when the total dropped after payment", () => {
     renderSheet(
       detailWith({
         status: "confirmed",
-        price_snapshot: { rental_total_minor: "550000", security_required_minor: "500000", due_now_minor: "1025000", currency: "PHP" },
+        price_snapshot: {
+          rental_total_minor: "550000",
+          security_required_minor: "500000",
+          due_now_minor: "1025000",
+          currency: "PHP",
+        },
         payment: {
           id: "00000000-0000-4000-8000-000000000105",
           payment_method_id: "00000000-0000-4000-8000-000000000106",
@@ -259,42 +298,31 @@ describe("buildEditBody", () => {
   const original = {
     fullName: "Bea Santiago",
     phone: "09171234801",
-    email: "",
+    email: "bea@example.test",
     address: "12 Mabini St",
-    eventDate: "",
-    fulfillment: "pickup" as const,
-    pickupDate: "2026-10-17",
-    pickupTime: "10:00",
-    dueDate: "2026-10-20",
-    dueTime: "10:00",
   };
 
   it("sends nothing when nothing changed", () => {
-    expect(buildEditBody(original, original, "Asia/Manila", true)).toEqual({ ok: true, body: {} });
+    expect(buildEditBody(original, original, true)).toEqual({ ok: true, body: {} });
   });
 
-  it("sends new dates as branch-time instants", () => {
-    expect(buildEditBody(original, { ...original, dueDate: "2026-10-21" }, "Asia/Manila", true)).toEqual({
+  it("sends only validated customer snapshot fields", () => {
+    expect(buildEditBody(original, { ...original, fullName: "Bea Updated" }, true)).toEqual({
       ok: true,
-      body: { requested_interval: { start: "2026-10-17T02:00:00.000Z", end: "2026-10-21T02:00:00.000Z" } },
+      body: {
+        customer: {
+          full_name: "Bea Updated",
+          phone: "09171234801",
+          email: "bea@example.test",
+          address: "12 Mabini St",
+        },
+      },
     });
   });
 
-  it("refuses an incomplete phone and a missing contact", () => {
-    expect(buildEditBody(original, { ...original, phone: "0917" }, "Asia/Manila", true)).toEqual({
-      ok: false,
-      problem: "The mobile number must have 11 digits.",
-    });
-    expect(buildEditBody(original, { ...original, phone: "" }, "Asia/Manila", true)).toEqual({
-      ok: false,
-      problem: "Keep a mobile number or an email for the customer.",
-    });
-  });
-
-  it("refuses an event date outside the rental", () => {
-    expect(buildEditBody(original, { ...original, eventDate: "2026-10-25" }, "Asia/Manila", true)).toEqual({
-      ok: false,
-      problem: "The event date must fall within the rental dates.",
-    });
+  it("rejects invalid contact details and missing customer snapshot", () => {
+    expect(buildEditBody(original, { ...original, phone: "0917" }, true).ok).toBe(false);
+    expect(buildEditBody(original, { ...original, phone: "", email: "" }, true).ok).toBe(false);
+    expect(buildEditBody(original, original, false).ok).toBe(false);
   });
 });

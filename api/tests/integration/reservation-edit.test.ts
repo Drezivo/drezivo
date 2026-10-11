@@ -1,7 +1,12 @@
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { PaymentMethodId, PermissionCode, ProductVariantId, StaffReservationCreateRequest } from '@drezivo/contracts';
+import type {
+  PaymentMethodId,
+  PermissionCode,
+  ProductVariantId,
+  StaffReservationCreateRequest,
+} from '@drezivo/contracts';
 
 import '../../src/config/load-env.js';
 import {
@@ -71,9 +76,13 @@ interface Booking {
 describe('reservation edit (PATCH /reservations/:id)', async () => {
   const { createApp } = await import('../../src/app.js');
   const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
-  const { confirmReservation, createStaffReservation, editReservation, pickupReservation, submitReservation } = await import(
-    '../../src/modules/reservations/reservations.service.js'
-  );
+  const {
+    confirmReservation,
+    createStaffReservation,
+    editReservation,
+    pickupReservation,
+    submitReservation,
+  } = await import('../../src/modules/reservations/reservations.service.js');
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
 
   beforeAll(async () => {
@@ -84,145 +93,131 @@ describe('reservation edit (PATCH /reservations/:id)', async () => {
   afterEach(async () => resetTestDatabase(adminUrl));
   afterAll(async () => closePool());
 
-  it('corrects the customer and event date on one booking without touching the customer profile', async () => {
+  it('edits only this confirmed reservation snapshot and leaves profile, sibling booking, schedule, and payment unchanged', async () => {
     const seed = await seedWorkspace('org_edit_customer', 'user_edit_customer');
-    const booking = await createBooking(seed, 'customer');
+    const booking = await confirmBooking(seed, await createBooking(seed, 'customer'));
+    const sibling = await confirmBooking(
+      seed,
+      await createBooking(seed, 'sibling', { startDays: 10 }),
+    );
+    const initial = await reservationState(seed, booking.id);
+
+    await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
+      client.query(
+        `UPDATE reservation SET customer_id = $3::uuid, customer_snapshot = $4::jsonb
+          WHERE tenant_id = $1 AND id = $2::uuid`,
+        [seed.tenantId, sibling.id, initial.customer_id, JSON.stringify(initial.customer_snapshot)],
+      ),
+    );
+    const before = await reservationState(seed, booking.id);
+    const siblingBefore = await reservationState(seed, sibling.id);
 
     const result = await editReservation(context(seed, 'edit-customer'), booking.id, {
       version: booking.version,
-      customer: { full_name: 'Bea Santiago', phone: '09171234801', email: 'BEA@Example.test', address: '12 Mabini St, Quezon City' },
-      event_date: localDate(booking.start, 2),
+      customer: {
+        full_name: 'Bea Santiago',
+        phone: '09171234801',
+        email: 'BEA@Example.test',
+        address: '12 Mabini St, Quezon City',
+      },
     });
 
     expect(result.status).toBe(200);
     expect(result.body).toMatchObject({
       success: true,
-      data: { price_changed: false, previous_due_now_minor: '265000', reservation: { version: 2, due_at: booking.end } },
+      data: { reservation: { version: booking.version + 1, status: 'confirmed' } },
     });
-    const state = await reservationState(seed, booking.id);
-    expect(state.customer_snapshot).toEqual({
+    const after = await reservationState(seed, booking.id);
+    expect(after.customer_snapshot).toEqual({
       full_name: 'Bea Santiago',
       phone: '09171234801',
       email: 'bea@example.test',
       address: '12 Mabini St, Quezon City',
     });
-    expect(state.event_date).toBe(localDate(booking.start, 2));
-    expect(state.profile_name).toBe('Edit Customer');
-    expect(await auditChanges(seed, booking.id)).toEqual([['customer', 'event_date']]);
+    expect(after.version).toBe(before.version + 1);
+    expect({
+      ...after,
+      customer_snapshot: before.customer_snapshot,
+      version: before.version,
+    }).toEqual(before);
+    expect(await reservationState(seed, sibling.id)).toEqual(siblingBefore);
+    expect(after.profile_name).toBe('Edit Customer');
+    expect(await auditChanges(seed, booking.id)).toEqual([['customer']]);
   });
 
-  it('re-prices an unpaid booking when delivery changes to pickup and moves the pending payment with it', async () => {
-    const seed = await seedWorkspace('org_edit_pickup', 'user_edit_pickup');
-    const booking = await createBooking(seed, 'pickup');
-
-    const result = await editReservation(context(seed, 'edit-pickup'), booking.id, {
-      version: booking.version,
-      fulfillment_method: 'pickup',
-    });
-
-    expect(result.body).toMatchObject({ success: true, data: { price_changed: true, reservation: { fulfillment_method: 'pickup' } } });
-    const state = await reservationState(seed, booking.id);
-    expect(state.due_now_minor).toBe(240000);
-    expect(state.payment_amount_minor).toBe(240000);
-    expect(state.delivery_snapshot).toEqual({ fulfillment_method: 'pickup', fee_minor: '0' });
-  });
-
-  it('moves the booking to new dates with the price terms accepted at booking and keeps the same garment', async () => {
-    const seed = await seedWorkspace('org_edit_dates', 'user_edit_dates');
-    const booking = await createBooking(seed, 'dates');
-    // The catalogue price changes after booking; the edit must still use the booked terms.
-    await withTenantTransaction(seed.tenantId, seed.principalId, (client) =>
-      client.query(`UPDATE product_variant SET rental_price_minor = 999900 WHERE tenant_id = $1 AND id = $2`, [seed.tenantId, seed.variantId]),
-    );
-    const end = addHours(booking.end, 24);
-
-    const result = await editReservation(context(seed, 'edit-dates'), booking.id, {
-      version: booking.version,
-      requested_interval: { start: booking.start, end },
-    });
-
-    expect(result.body).toMatchObject({ success: true, data: { price_changed: true, reservation: { due_at: end } } });
-    const state = await reservationState(seed, booking.id);
-    // Five rental days: the 3-day package plus two extra days at ₱400.
-    expect(state.rental_total_minor).toBe(230000);
-    expect(state.due_now_minor).toBe(305000);
-    expect(state.payment_amount_minor).toBe(305000);
-    expect(state.line_rental_minor).toBe(230000);
-    expect(state.allocations).toEqual([{ asset_id: seed.assetId, is_blocking: true, upper: addHours(end, 24) }]);
-  });
-
-  it('leaves the booking untouched when the garment is not free for the new dates', async () => {
-    const seed = await seedWorkspace('org_edit_conflict', 'user_edit_conflict');
-    const booking = await createBooking(seed, 'conflict-a');
-    const other = await createBooking(seed, 'conflict-b', { startDays: 10 });
-    const before = await reservationState(seed, booking.id);
-
-    const result = await editReservation(context(seed, 'edit-conflict'), booking.id, {
-      version: booking.version,
-      requested_interval: { start: addHours(other.start, -24), end: addHours(other.end, -24) },
-    });
-
-    expect(result.status).toBe(409);
-    expect(result.body).toMatchObject({ success: false, error: { code: 'CAPACITY_CONFLICT' } });
-    expect(await reservationState(seed, booking.id)).toEqual(before);
-  });
-
-  it('asks staff to accept a lower total once the renter has paid, keeps the paid amount, and refuses a higher total', async () => {
-    const seed = await seedWorkspace('org_edit_paid', 'user_edit_paid');
-    const booking = await confirmBooking(seed, await createBooking(seed, 'paid'));
-
-    // Pickup needs the paid amount to cover the total and there is no top-up flow, so a raise is refused.
-    const raised = await editReservation(context(seed, 'edit-paid-raise'), booking.id, {
-      version: booking.version,
-      requested_interval: { start: booking.start, end: addHours(booking.end, 24) },
-      accept_price_change: true,
-    });
-    expect(raised.status).toBe(409);
-    expect(raised.body).toMatchObject({ success: false, error: { code: 'STATE_CONFLICT' } });
-    expect((await reservationState(seed, booking.id)).due_now_minor).toBe(265000);
-
-    const refused = await editReservation(context(seed, 'edit-paid-refused'), booking.id, {
-      version: booking.version,
-      fulfillment_method: 'pickup',
-    });
-    expect(refused.status).toBe(409);
-    expect(refused.body).toMatchObject({ success: false, error: { code: 'PRICE_CHANGE_NOT_ACCEPTED' } });
-
-    const accepted = await editReservation(context(seed, 'edit-paid-accepted'), booking.id, {
-      version: booking.version,
-      fulfillment_method: 'pickup',
-      accept_price_change: true,
-    });
-    expect(accepted.body).toMatchObject({
-      success: true,
-      data: { price_changed: true, previous_due_now_minor: '265000', reservation: { status: 'confirmed' } },
-    });
-    const state = await reservationState(seed, booking.id);
-    expect(state.due_now_minor).toBe(240000);
-    expect(state.payment_amount_minor).toBe(265000);
-    expect(state.payment_status).toBe('paid');
-  });
+  it.each(['held', 'pending_confirmation'] as const)(
+    'rejects edits while a reservation is %s',
+    async (status) => {
+      const seed = await seedWorkspace(`org_edit_${status}`, `user_edit_${status}`);
+      let booking = await createBooking(seed, status);
+      if (status === 'pending_confirmation') {
+        const submitted = await submitReservation(context(seed, `submit-${status}`), booking.id, {
+          version: booking.version,
+          terms_accepted: true,
+        });
+        if (!submitted.body.success) throw new Error('Expected the reservation to submit.');
+        booking = { ...booking, version: submitted.body.data.reservation.version };
+      }
+      const before = await reservationState(seed, booking.id);
+      const result = await editReservation(context(seed, `edit-${status}`), booking.id, {
+        version: booking.version,
+        customer: {
+          full_name: 'Updated Name',
+          phone: '09171234801',
+          email: 'bea@example.test',
+          address: '12 Mabini St',
+        },
+      });
+      expect(result.status).toBe(409);
+      expect(result.body).toMatchObject({
+        success: false,
+        error: { code: 'INVALID_RESERVATION_TRANSITION' },
+      });
+      expect(await reservationState(seed, booking.id)).toEqual(before);
+    },
+  );
 
   it('rejects stale versions and edits after pickup', async () => {
     const seed = await seedWorkspace('org_edit_states', 'user_edit_states');
-    const booking = await createBooking(seed, 'stale');
-    const stale = await editReservation(context(seed, 'edit-stale'), booking.id, { version: booking.version + 1, event_date: null });
+    const booking = await confirmBooking(seed, await createBooking(seed, 'stale'));
+    const customer = {
+      full_name: 'Edit Customer',
+      phone: '09171234567',
+      email: 'edit@example.test',
+      address: '123 Edit Street',
+    };
+    const stale = await editReservation(context(seed, 'edit-stale'), booking.id, {
+      version: booking.version - 1,
+      customer,
+    });
     expect(stale.body).toMatchObject({ success: false, error: { code: 'STALE_VERSION' } });
 
-    const confirmed = await confirmBooking(seed, booking);
-    const picked = await pickupReservation(context(seed, 'edit-pickup-handover'), confirmed.id, { version: confirmed.version });
+    const picked = await pickupReservation(context(seed, 'edit-pickup-handover'), booking.id, {
+      version: booking.version,
+    });
     if (picked.body.success !== true) throw new Error('Expected pickup to succeed.');
     const afterPickup = await editReservation(context(seed, 'edit-after-pickup'), booking.id, {
       version: picked.body.data.reservation.version,
-      event_date: null,
+      customer,
     });
-    expect(afterPickup.body).toMatchObject({ success: false, error: { code: 'INVALID_RESERVATION_TRANSITION' } });
+    expect(afterPickup.body).toMatchObject({
+      success: false,
+      error: { code: 'INVALID_RESERVATION_TRANSITION' },
+    });
   });
 
-  it('applies one edit for a sequential or concurrent double-fire of the same intent', async () => {
+  it('applies one confirmed customer edit for a sequential or concurrent double-fire of the same intent', async () => {
     const seed = await seedWorkspace('org_edit_double', 'user_edit_double');
-    const booking = await createBooking(seed, 'double');
-    const body = { version: booking.version, requested_interval: { start: booking.start, end: addHours(booking.end, 24) } };
+    const booking = await confirmBooking(seed, await createBooking(seed, 'double'));
+    const body = {
+      version: booking.version,
+      customer: {
+        full_name: 'Updated Edit Customer',
+        phone: '09171234567',
+        email: 'edit@example.test',
+        address: '123 Edit Street',
+      },
+    };
 
     const [first, second] = await Promise.all([
       editReservation(context(seed, 'edit-double'), booking.id, body),
@@ -230,43 +225,77 @@ describe('reservation edit (PATCH /reservations/:id)', async () => {
     ]);
     const replay = await editReservation(context(seed, 'edit-double'), booking.id, body);
 
-    expect([first.status, second.status].sort()).toEqual([200, 200].sort());
-    expect(replay.body).toEqual(first.body.success ? first.body : second.body);
+    expect([first.status, second.status]).toEqual([200, 200]);
+    expect(replay.body).toEqual(first.body);
     expect(await auditChanges(seed, booking.id)).toHaveLength(1);
-    expect((await reservationState(seed, booking.id)).version).toBe(2);
+    expect((await reservationState(seed, booking.id)).version).toBe(booking.version + 1);
 
-    // A different intent for the same old version loses on the version guard.
-    const racing = await editReservation(context(seed, 'edit-double-other'), booking.id, { version: booking.version, event_date: null });
+    const racing = await editReservation(context(seed, 'edit-double-other'), booking.id, {
+      version: booking.version,
+      customer: { ...body.customer, full_name: 'Other intent' },
+    });
     expect(racing.body).toMatchObject({ success: false, error: { code: 'STALE_VERSION' } });
   });
 
-  it('exposes the edit only to authenticated staff with an idempotency key and a valid body', async () => {
+  it('exposes only customer snapshot fields to authenticated staff with an idempotency key', async () => {
     const seed = await seedWorkspace('org_edit_route', 'user_edit_route');
-    const booking = await createBooking(seed, 'route');
+    const booking = await confirmBooking(seed, await createBooking(seed, 'route'));
+    const customer = {
+      full_name: 'Edited Route Customer',
+      phone: '09171234801',
+      email: 'route@example.test',
+      address: '12 Mabini St',
+    };
 
     clerk.getAuth.mockReturnValue({ userId: null, orgId: null });
-    expect((await request(createApp()).patch(`/api/v1/reservations/${booking.id}`).set('Idempotency-Key', 'route-edit-1').send({ version: 1, event_date: null })).status).toBe(401);
+    expect(
+      (
+        await request(createApp())
+          .patch(`/api/v1/reservations/${booking.id}`)
+          .set('Idempotency-Key', 'route-edit-1')
+          .send({ version: booking.version, customer })
+      ).status,
+    ).toBe(401);
 
     useClerk(seed);
-    expect((await request(createApp()).patch(`/api/v1/reservations/${booking.id}`).send({ version: 1, event_date: null })).status).toBe(422);
-    useClerk(seed);
-    const empty = await request(createApp()).patch(`/api/v1/reservations/${booking.id}`).set('Idempotency-Key', 'route-edit-2').send({ version: 1 });
-    expect(empty.status).toBe(422);
-    expect(empty.body).toMatchObject({ error: { message: 'Change at least one reservation detail.' } });
-    useClerk(seed);
-    const injected = await request(createApp())
-      .patch(`/api/v1/reservations/${booking.id}`)
-      .set('Idempotency-Key', 'route-edit-3')
-      .send({ version: 1, due_now_minor: '1' });
-    expect(injected.status).toBe(422);
+    expect(
+      (
+        await request(createApp())
+          .patch(`/api/v1/reservations/${booking.id}`)
+          .send({ version: booking.version, customer })
+      ).status,
+    ).toBe(422);
+    for (const [index, field] of [
+      'requested_interval',
+      'event_date',
+      'fulfillment_method',
+      'accept_price_change',
+      'due_now_minor',
+      'payment_method_id',
+    ].entries()) {
+      useClerk(seed);
+      const rejected = await request(createApp())
+        .patch(`/api/v1/reservations/${booking.id}`)
+        .set('Idempotency-Key', `route-edit-invalid-${index}`)
+        .send({
+          version: booking.version,
+          customer,
+          [field]:
+            field === 'requested_interval' ? { start: booking.start, end: booking.end } : null,
+        });
+      expect(rejected.status).toBe(422);
+    }
 
     useClerk(seed);
     const edited = await request(createApp())
       .patch(`/api/v1/reservations/${booking.id}`)
-      .set('Idempotency-Key', 'route-edit-4')
-      .send({ version: 1, fulfillment_method: 'pickup' });
+      .set('Idempotency-Key', 'route-edit-valid')
+      .send({ version: booking.version, customer });
     expect(edited.status).toBe(200);
-    expect(edited.body).toMatchObject({ success: true, data: { reservation: { fulfillment_method: 'pickup', version: 2 } } });
+    expect(edited.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'confirmed', version: booking.version + 1 } },
+    });
   });
 
   async function seedWorkspace(clerkOrgId: string, principalId: string): Promise<Seed> {
@@ -287,7 +316,10 @@ describe('reservation edit (PATCH /reservations/:id)', async () => {
         `INSERT INTO branch_membership (tenant_id, branch_id, membership_id, permission_codes) VALUES ($1, $2, $3, $4::jsonb)`,
         [tenant.id, branch.id, membershipId, JSON.stringify(PERMISSIONS)],
       );
-      const plan = await one<{ id: string }>(`SELECT id FROM plan WHERE code = 'standard' AND version = 1 AND active = true LIMIT 1`, []);
+      const plan = await one<{ id: string }>(
+        `SELECT id FROM plan WHERE code = 'standard' AND version = 1 AND active = true LIMIT 1`,
+        [],
+      );
       await client.query(
         `INSERT INTO subscription (tenant_id, plan_id, status, current_period_start, current_period_end)
          VALUES ($1, $2, 'active', statement_timestamp(), statement_timestamp() + interval '30 days')`,
@@ -341,7 +373,11 @@ describe('reservation edit (PATCH /reservations/:id)', async () => {
     });
   }
 
-  async function createBooking(seed: Seed, suffix: string, options: { startDays?: number } = {}): Promise<Booking> {
+  async function createBooking(
+    seed: Seed,
+    suffix: string,
+    options: { startDays?: number } = {},
+  ): Promise<Booking> {
     const startDays = options.startDays ?? 3;
     const dates = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       const result = await client.query<{ start: Date; end: Date }>(
@@ -358,7 +394,12 @@ describe('reservation edit (PATCH /reservations/:id)', async () => {
     const body: StaffReservationCreateRequest = {
       customer: {
         source: 'new',
-        customer: { full_name: 'Edit Customer', phone: '09171234567', email: 'edit@example.test', address: '123 Edit Street, Quezon City' },
+        customer: {
+          full_name: 'Edit Customer',
+          phone: '09171234567',
+          email: 'edit@example.test',
+          address: '123 Edit Street, Quezon City',
+        },
       },
       variant_id: seed.variantId as ProductVariantId,
       requested_interval: { start: dates.start.toISOString(), end: dates.end.toISOString() },
@@ -366,23 +407,37 @@ describe('reservation edit (PATCH /reservations/:id)', async () => {
       payment_method_id: seed.paymentMethodId as PaymentMethodId,
     };
     const result = await createStaffReservation(context(seed, `create-${suffix}`), body);
-    if (result.status !== 201 || result.body.success !== true) throw new Error(`Expected a held booking, got ${result.status}.`);
+    if (result.status !== 201 || result.body.success !== true)
+      throw new Error(`Expected a held booking, got ${result.status}.`);
     const reservation = result.body.data.reservation;
-    const paymentId = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const payment = await client.query<{ id: string }>(`SELECT id FROM payment WHERE tenant_id = $1 AND reservation_id = $2`, [
-        seed.tenantId,
-        reservation.id,
-      ]);
-      const id = payment.rows[0]?.id;
-      if (!id) throw new Error('Expected the initial payment.');
-      return id;
-    });
-    return { id: reservation.id, version: reservation.version, paymentId, start: reservation.pickup_at, end: reservation.due_at };
+    const paymentId = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const payment = await client.query<{ id: string }>(
+          `SELECT id FROM payment WHERE tenant_id = $1 AND reservation_id = $2`,
+          [seed.tenantId, reservation.id],
+        );
+        const id = payment.rows[0]?.id;
+        if (!id) throw new Error('Expected the initial payment.');
+        return id;
+      },
+    );
+    return {
+      id: reservation.id,
+      version: reservation.version,
+      paymentId,
+      start: reservation.pickup_at,
+      end: reservation.due_at,
+    };
   }
 
   /** Submits, records verified cash, and confirms, the way the counter flow does. */
   async function confirmBooking(seed: Seed, booking: Booking): Promise<Booking> {
-    const submitted = await submitReservation(context(seed, `submit-${booking.id}`), booking.id, { version: booking.version, terms_accepted: true });
+    const submitted = await submitReservation(context(seed, `submit-${booking.id}`), booking.id, {
+      version: booking.version,
+      terms_accepted: true,
+    });
     if (submitted.status !== 200) throw new Error('Expected submission to succeed.');
     await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       const paid = await client.query<{ amount_minor: number }>(
@@ -393,11 +448,20 @@ describe('reservation edit (PATCH /reservations/:id)', async () => {
       await client.query(
         `INSERT INTO payment_verification (tenant_id, payment_id, verifier_membership_id, decision, verified_amount_minor, evidence_note, business_key)
          VALUES ($1, $2, $3, 'verified', $4, 'Cash counted at the counter.', $5)`,
-        [seed.tenantId, booking.paymentId, seed.membershipId, paid.rows[0]?.amount_minor, `verify:${booking.paymentId}`],
+        [
+          seed.tenantId,
+          booking.paymentId,
+          seed.membershipId,
+          paid.rows[0]?.amount_minor,
+          `verify:${booking.paymentId}`,
+        ],
       );
     });
-    const confirmed = await confirmReservation(context(seed, `confirm-${booking.id}`), booking.id, { version: booking.version + 1 });
-    if (confirmed.status !== 200 || confirmed.body.success !== true) throw new Error('Expected confirmation to succeed.');
+    const confirmed = await confirmReservation(context(seed, `confirm-${booking.id}`), booking.id, {
+      version: booking.version + 1,
+    });
+    if (confirmed.status !== 200 || confirmed.body.success !== true)
+      throw new Error('Expected confirmation to succeed.');
     return { ...booking, version: confirmed.body.data.reservation.version };
   }
 
@@ -417,28 +481,48 @@ describe('reservation edit (PATCH /reservations/:id)', async () => {
   async function reservationState(seed: Seed, reservationId: string) {
     return withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       const reservation = await client.query<{
+        customer_id: string;
         version: number;
+        status: string;
+        pickup_at: Date;
+        due_at: Date;
+        fulfillment_method: string;
         event_date: string | null;
         customer_snapshot: Record<string, unknown>;
         delivery_snapshot: Record<string, unknown>;
         rental_total_minor: number;
         due_now_minor: number;
+        payment_id: string;
         payment_amount_minor: number;
         payment_status: string;
+        payment_merchant_reference: string | null;
+        payment_verified_at: Date | null;
+        payment_receipt_count: string;
         line_rental_minor: number;
         profile_name: string;
+        profile_phone: string;
+        profile_email: string;
       }>(
-        `SELECT r.version, r.event_date::text AS event_date, r.customer_snapshot, r.delivery_snapshot,
-                r.rental_total_minor, r.due_now_minor, p.amount_minor AS payment_amount_minor, p.status AS payment_status,
+        `SELECT r.customer_id, r.version, r.status, r.pickup_at, r.due_at,
+                r.delivery_snapshot ->> 'fulfillment_method' AS fulfillment_method,
+                r.event_date::text AS event_date, r.customer_snapshot, r.delivery_snapshot,
+                r.rental_total_minor, r.due_now_minor, p.id AS payment_id, p.amount_minor AS payment_amount_minor,
+                p.status AS payment_status, p.merchant_reference AS payment_merchant_reference,
+                p.verified_at AS payment_verified_at,
+                (SELECT count(*) FROM payment_receipt pr WHERE pr.tenant_id = r.tenant_id AND pr.payment_id = p.id) AS payment_receipt_count,
                 (SELECT rental_minor FROM reservation_line WHERE tenant_id = r.tenant_id AND reservation_id = r.id) AS line_rental_minor,
-                c.full_name AS profile_name
+                c.full_name AS profile_name, c.phone AS profile_phone, c.email AS profile_email
            FROM reservation r
            JOIN payment p ON p.tenant_id = r.tenant_id AND p.reservation_id = r.id
            JOIN customer c ON c.tenant_id = r.tenant_id AND c.id = r.customer_id
           WHERE r.tenant_id = $1 AND r.id = $2`,
         [seed.tenantId, reservationId],
       );
-      const allocations = await client.query<{ asset_id: string; is_blocking: boolean; upper: Date }>(
+      const allocations = await client.query<{
+        asset_id: string;
+        is_blocking: boolean;
+        upper: Date;
+      }>(
         `SELECT aa.asset_id, aa.is_blocking, upper(aa.period) AS upper
            FROM asset_allocation aa JOIN reservation_line rl ON rl.tenant_id = aa.tenant_id AND rl.id = aa.reservation_line_id
           WHERE aa.tenant_id = $1 AND rl.reservation_id = $2`,
@@ -446,7 +530,15 @@ describe('reservation edit (PATCH /reservations/:id)', async () => {
       );
       const row = reservation.rows[0];
       if (!row) throw new Error('Expected the reservation.');
-      return { ...row, allocations: allocations.rows.map((allocation) => ({ ...allocation, upper: allocation.upper.toISOString() })) };
+      return {
+        ...row,
+        pickup_at: row.pickup_at.toISOString(),
+        due_at: row.due_at.toISOString(),
+        allocations: allocations.rows.map((allocation) => ({
+          ...allocation,
+          upper: allocation.upper.toISOString(),
+        })),
+      };
     });
   }
 
@@ -465,12 +557,3 @@ describe('reservation edit (PATCH /reservations/:id)', async () => {
     clerk.getAuth.mockReturnValue({ userId: seed.principalId, orgId: seed.clerkOrgId });
   }
 });
-
-function addHours(iso: string, hours: number): string {
-  return new Date(Date.parse(iso) + hours * 3_600_000).toISOString();
-}
-
-/** Manila calendar date `days` after the given instant. */
-function localDate(iso: string, days: number): string {
-  return new Date(Date.parse(iso) + 8 * 3_600_000 + days * 86_400_000).toISOString().slice(0, 10);
-}

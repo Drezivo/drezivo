@@ -63,13 +63,23 @@ const confirmedDetail = reservationDetail.parse({
   storefront_id: "00000000-0000-4000-8000-000000000301",
   customer: {
     customer_id: "00000000-0000-4000-8000-000000000102",
-    snapshot: { full_name: "Action Customer", phone: "09171234567", email: null, address: "123 Test Street" },
+    snapshot: {
+      full_name: "Action Customer",
+      phone: "09171234567",
+      email: null,
+      address: "123 Test Street",
+    },
   },
   lines: [
     {
       id: "00000000-0000-4000-8000-000000000103",
       variant_id: "00000000-0000-4000-8000-000000000104",
-      variant: { sku: "ACTION-M-EMERALD", size_label: "Medium", color_label: "Emerald", image_url: null },
+      variant: {
+        sku: "ACTION-M-EMERALD",
+        size_label: "Medium",
+        color_label: "Emerald",
+        image_url: null,
+      },
       current_asset_readiness: "ready",
       line_number: 1,
       name_snapshot: "Action Gown",
@@ -114,18 +124,20 @@ function renderActions(
   permissionCodes: PermissionCode[] = permissions
 ) {
   const onMutationSuccess = vi.fn();
+  const onEdit = vi.fn();
   const onNotice = vi.fn();
   const onRefreshRequired = vi.fn();
   render(
     <ReservationMutationActions
       detail={detail}
       permissionCodes={permissionCodes}
+      onEdit={onEdit}
       onMutationSuccess={onMutationSuccess}
       onNotice={onNotice}
       onRefreshRequired={onRefreshRequired}
     />
   );
-  return { onMutationSuccess, onNotice, onRefreshRequired };
+  return { onEdit, onMutationSuccess, onNotice, onRefreshRequired };
 }
 
 function mutationResult(status: string, version = 4) {
@@ -274,7 +286,11 @@ describe("ReservationMutationActions", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Confirm Reservation" })[1]!);
 
     await waitFor(() => expect(api.confirmReservation).toHaveBeenCalledTimes(1));
-    expect(api.confirmReservation).toHaveBeenCalledWith(pendingDetail.id, { version: 2 }, expect.any(String));
+    expect(api.confirmReservation).toHaveBeenCalledWith(
+      pendingDetail.id,
+      { version: 2 },
+      expect.any(String)
+    );
     expect(api.completeStaffReservation).not.toHaveBeenCalled();
     expect(callbacks.onNotice).toHaveBeenLastCalledWith({
       tone: "success",
@@ -554,7 +570,9 @@ describe("ReservationMutationActions", () => {
       renderActions(pendingManual("online"));
 
       fireEvent.click(screen.getByRole("button", { name: "Verify Payment" }));
-      const thumbnail = await screen.findByRole("button", { name: "View proof of payment 1 full size" });
+      const thumbnail = await screen.findByRole("button", {
+        name: "View proof of payment 1 full size",
+      });
       expect(screen.queryByLabelText("Merchant reference")).not.toBeInTheDocument();
 
       // Verifying asks first; "View proof again" reopens the receipt instead of verifying.
@@ -588,7 +606,9 @@ describe("ReservationMutationActions", () => {
       expect(screen.queryByRole("button", { name: "Verify Payment" })).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Log Payment" }));
       expect(api.getReservationPaymentReceipts).not.toHaveBeenCalled();
-      fireEvent.change(screen.getByLabelText("Merchant reference"), { target: { value: "MAYA-123" } });
+      fireEvent.change(screen.getByLabelText("Merchant reference"), {
+        target: { value: "MAYA-123" },
+      });
       fireEvent.click(screen.getByRole("button", { name: "Log Payment & Confirm" }));
 
       await waitFor(() => expect(api.verifyReservationPayment).toHaveBeenCalledTimes(1));

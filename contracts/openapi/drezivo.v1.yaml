@@ -11632,6 +11632,359 @@ paths:
                   - success
                   - error
                   - request_id
+  /reservations/{id}:
+    patch:
+      tags:
+        - reservations
+      summary: Correct customer snapshot details on one confirmed reservation only.
+      parameters:
+        - schema:
+            type: string
+            format: uuid
+          required: true
+          name: id
+          in: path
+        - schema:
+            type: string
+            minLength: 8
+            maxLength: 255
+          required: true
+          name: Idempotency-Key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                version:
+                  type: integer
+                  exclusiveMinimum: 0
+                customer:
+                  type: object
+                  properties:
+                    full_name:
+                      type: string
+                      minLength: 1
+                      maxLength: 200
+                    phone:
+                      type:
+                        - string
+                        - "null"
+                      pattern: ^\d{11}$
+                    email:
+                      type:
+                        - string
+                        - "null"
+                      maxLength: 320
+                      format: email
+                    address:
+                      type: string
+                      minLength: 1
+                      maxLength: 500
+                  required:
+                    - full_name
+                    - phone
+                    - email
+                    - address
+                  additionalProperties: false
+              required:
+                - version
+                - customer
+              additionalProperties: false
+      responses:
+        "200":
+          description: The confirmed reservation snapshot was updated; linked customer
+            profile and booking facts are unchanged.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      reservation:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          reference_code:
+                            type: string
+                            minLength: 1
+                            maxLength: 120
+                          status:
+                            type: string
+                            enum: *a33
+                          branch_id:
+                            type: string
+                            format: uuid
+                          storefront_id:
+                            type: string
+                            format: uuid
+                          variant_id:
+                            type: string
+                            format: uuid
+                          payment_method_id:
+                            type: string
+                            format: uuid
+                          fulfillment_method:
+                            type: string
+                            enum: *a34
+                          pickup_at:
+                            type: string
+                            format: date-time
+                          due_at:
+                            type: string
+                            format: date-time
+                          timezone_snapshot:
+                            type: string
+                            pattern: ^[A-Za-z_]+\/[A-Za-z_/-]+$
+                          event_date:
+                            type: string
+                            pattern: ^\d{4}-\d{2}-\d{2}$
+                          price_snapshot:
+                            type: object
+                            properties:
+                              rental_total_minor:
+                                type: string
+                                pattern: ^-?(0|[1-9]\d*)$
+                              security_required_minor:
+                                type: string
+                                pattern: ^-?(0|[1-9]\d*)$
+                              due_now_minor:
+                                type: string
+                                pattern: ^-?(0|[1-9]\d*)$
+                              currency:
+                                type: string
+                                pattern: ^[A-Z]{3}$
+                            required:
+                              - rental_total_minor
+                              - security_required_minor
+                              - due_now_minor
+                              - currency
+                            additionalProperties: false
+                          hold_expires_at:
+                            type:
+                              - string
+                              - "null"
+                            format: date-time
+                          version:
+                            type: integer
+                            exclusiveMinimum: 0
+                          created_at:
+                            type: string
+                            format: date-time
+                        required:
+                          - id
+                          - reference_code
+                          - status
+                          - branch_id
+                          - storefront_id
+                          - variant_id
+                          - payment_method_id
+                          - fulfillment_method
+                          - pickup_at
+                          - due_at
+                          - timezone_snapshot
+                          - price_snapshot
+                          - hold_expires_at
+                          - version
+                          - created_at
+                        additionalProperties: false
+                    required:
+                      - reservation
+                    additionalProperties: false
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - data
+                  - request_id
+        "403":
+          description: Reservation management permission is required.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "404":
+          description: The reservation was not found for the active tenant and branch.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "409":
+          description: STALE_VERSION, INVALID_RESERVATION_TRANSITION, or
+            IDEMPOTENCY_KEY_REUSED.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
+        "422":
+          description: Only customer snapshot fields are accepted; customer details are
+            invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: *a26
+                      message:
+                        type: string
+                        minLength: 1
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            message:
+                              type: string
+                              minLength: 1
+                          required:
+                            - field
+                            - message
+                    required:
+                      - code
+                      - message
+                  request_id:
+                    type: string
+                    minLength: 1
+                required:
+                  - success
+                  - error
+                  - request_id
   /catalogue/clothing/{productId}/sizing-mode:
     post:
       tags:
