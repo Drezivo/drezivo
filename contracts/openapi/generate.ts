@@ -56,6 +56,7 @@ import {
   membershipInvitationList,
   membershipInvitationParams,
   membershipInvitationStatus,
+  memberRemovalResponse,
   memberRosterResponse,
   onboardingActorContext,
   onboardingStatus,
@@ -425,6 +426,27 @@ registry.registerPath({
     },
     403: jsonError('Only the active Owner can view tenant members.'),
     503: jsonError('The identity provider is temporarily unavailable.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/members/{membershipId}/remove',
+  tags: ['membership-invitations'],
+  summary: 'Owner removes one Front Desk member; access ends on their next request.',
+  request: {
+    params: z.object({ membershipId: z.string().uuid() }),
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: z.object({}).strict() } } },
+  },
+  responses: {
+    200: {
+      description: 'Member removed (or the same request replayed). Leaving the Clerk organization is queued.',
+      content: { 'application/json': { schema: successEnvelope(memberRemovalResponse) } },
+    },
+    403: jsonError('Only the active Owner can remove members.'),
+    404: jsonError('No active Front Desk member with this id in the workspace.'),
+    409: jsonError('STATE_CONFLICT — the Owner cannot be removed, or the request is already in progress.'),
   },
 });
 
