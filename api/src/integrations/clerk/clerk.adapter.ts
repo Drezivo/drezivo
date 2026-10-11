@@ -56,6 +56,8 @@ export interface ClerkOrganizationInvitation {
 
 export interface ClerkUserVerificationState {
   primaryEmailVerified: boolean;
+  /** The primary email address, only when it is verified. */
+  verifiedPrimaryEmail?: string | null;
 }
 
 export interface ClerkUserProfile {
@@ -369,8 +371,10 @@ export function createClerkServerAdapter(
         const primary = primaryId
           ? user.emailAddresses.find((email) => email.id === primaryId)
           : undefined;
+        const verified = primary?.verification?.status === 'verified';
         return {
-          primaryEmailVerified: primary?.verification?.status === 'verified',
+          primaryEmailVerified: verified,
+          verifiedPrimaryEmail: verified ? (primary?.emailAddress ?? null) : null,
         };
       });
     },
