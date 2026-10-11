@@ -7,6 +7,7 @@ import {
   type OwnerMembershipInvitation,
   type PaginationRequest,
 } from '@drezivo/contracts';
+import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 
 import { withTenantTransaction } from '../../db/client.js';
@@ -33,7 +34,9 @@ import {
 import {
   assertTenantInvitationWritesAllowed,
   expirePendingInvitations,
-  findInvitationByDigest,
+  findAcceptedInvitationMembershipsByDigest,
+  findPendingInvitationByDigest,
+  findReusableInvitationByDigest,
   insertInvitation,
   insertInvitationOutbox,
   insertInvitationRevokeOutbox,
@@ -78,15 +81,24 @@ export async function createMembershipInvitation(
   return runCommand(input, CREATE_OPERATION, input.request, async (client) => {
     const digest = digestRecipientEmail(input.request.email);
     await expirePendingInvitations(client, input.tenantId);
-    const existing = await findInvitationByDigest(client, input.tenantId, digest);
-    if (existing?.status === 'pending') return toSafeInvitation(existing);
-    if (existing?.status === 'accepted') {
+    const accepted = await findAcceptedInvitationMembershipsByDigest(
+      client,
+      input.tenantId,
+      digest,
+    );
+    if (accepted.length > 0 && accepted.some((row) => row.membership_status !== 'removed')) {
       throw new StateConflictError('This invitation has already been accepted.');
     }
+    const pending = await findPendingInvitationByDigest(client, input.tenantId, digest);
+    if (pending) return toSafeInvitation(pending);
 
     await assertFrontDeskSeatCapacity(client, input.tenantId, 1);
-    if (existing) {
-      const reopened = await updateInvitationForResend(client, input.tenantId, existing.id);
+    const reusable =
+      accepted.length === 0
+        ? await findReusableInvitationByDigest(client, input.tenantId, digest)
+        : null;
+    if (reusable) {
+      const reopened = await updateInvitationForResend(client, input.tenantId, reusable.id);
       if (!reopened) throw new StateConflictError('Invitation cannot be resent.');
       await insertInvitationOutbox(client, {
         tenantId: input.tenantId,
@@ -97,11 +109,13 @@ export async function createMembershipInvitation(
       return toSafeInvitation(reopened);
     }
 
+    const id = randomUUID();
     const created = await insertInvitation(client, {
       tenantId: input.tenantId,
+      id,
       digest,
       ciphertext: encryptRecipientEmail(input.request.email),
-      businessKey: `membership-invitation:${input.tenantId}:${digest}`,
+      businessKey: `membership-invitation:${input.tenantId}:${id}`,
     });
     await insertInvitationOutbox(client, {
       tenantId: input.tenantId,

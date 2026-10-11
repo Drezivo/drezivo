@@ -8,6 +8,7 @@ import { normalizeVariantFitRange, type ItemDetail, type PublicStorefront } from
 import { durationLabel, formatMinor } from '@/lib/storefront-format';
 
 import { BookingDrawer } from './booking/booking-drawer';
+import { AvailabilityDrawer } from './booking/availability-drawer';
 import { ContactToReserve } from './contact-to-reserve';
 import { useStorePreview } from './preview-context';
 
@@ -18,6 +19,7 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
   const [variantId, setVariantId] = useState(item.variants.length === 1 ? (item.variants[0]?.variant_id ?? null) : null);
   const [tab, setTab] = useState<Tab>('measurements');
   const [booking, setBooking] = useState(false);
+  const [availability, setAvailability] = useState(false);
   const variant = item.variants.find((entry) => entry.variant_id === variantId) ?? null;
   const shown = variant ?? item.variants[0];
   const preview = useStorePreview();
@@ -83,7 +85,17 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
             </fieldset>
           ) : null}
           {store.booking_open && !reservationsOpen && !preview ? (
-            <ContactToReserve contact={store.contact} />
+            <>
+              <button
+                type="button"
+                className="sf-button sf-button-primary mt-8 w-full"
+                disabled={!variant}
+                onClick={() => setAvailability(true)}
+              >
+                {variant ? 'Check availability' : 'Choose a size to check availability'}
+              </button>
+              <ContactToReserve contact={store.contact} />
+            </>
           ) : (
             <>
               <button type="button" className="sf-button sf-button-primary mt-8 w-full" disabled={!variant || !canBook} onClick={() => setBooking(true)}>
@@ -148,6 +160,9 @@ export function ItemView({ store, item }: { store: PublicStorefront; item: ItemD
         </div>
       </div>
       {booking && variant ? <BookingDrawer store={store} item={item} variant={variant} onClose={() => setBooking(false)} /> : null}
+      {availability && variant ? (
+        <AvailabilityDrawer store={store} item={item} variant={variant} onClose={() => setAvailability(false)} />
+      ) : null}
     </>
   );
 }
