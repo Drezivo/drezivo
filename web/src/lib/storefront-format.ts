@@ -1,3 +1,5 @@
+import type { CatalogueVariant } from '@drezivo/contracts';
+
 const PESO = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
 /** Integer centavos from the API → "₱1,800" or "₱1,800.50". Display only; the server owns the maths. */
@@ -14,6 +16,11 @@ export function durationLabel(mode: 'fixed_duration' | 'daily', includedMinutes:
   if (mode === 'daily') return 'per day';
   const days = Math.max(1, Math.round(includedMinutes / 1440));
   return days === 1 ? '1 day' : `${days} days`;
+}
+
+/** A fixed-duration package covers its included days, which is also the shortest rental allowed. */
+export function minimumRentalDays(variant: Pick<CatalogueVariant, 'pricing_mode' | 'included_duration_minutes'>): number {
+  return variant.pricing_mode === 'fixed_duration' ? Math.max(1, Math.ceil(variant.included_duration_minutes / 1440)) : 1;
 }
 
 /** Calendar date (YYYY-MM-DD) of an instant in a time zone. */

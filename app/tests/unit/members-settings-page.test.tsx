@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   createMembershipInvitation: vi.fn(),
   resendMembershipInvitation: vi.fn(),
   cancelMembershipInvitation: vi.fn(),
+  removeMember: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs", () => ({ useAuth: clerk.useAuth }));
@@ -20,8 +21,10 @@ vi.mock("@/components/shell/dashboard-access-gate", () => ({
 vi.mock("@/lib/drezivo-api", () => ({
   createDrezivoApiClient: () => api,
   DrezivoApiError: class DrezivoApiError extends Error {
-    constructor(message: string) {
+    status: number;
+    constructor(message: string, options: { status?: number } = {}) {
       super(message);
+      this.status = options.status ?? 0;
     }
   },
 }));
@@ -75,6 +78,7 @@ function installDefaults() {
   });
   api.resendMembershipInvitation.mockResolvedValue({ data: invitations[1] });
   api.cancelMembershipInvitation.mockResolvedValue({ data: invitations[0] });
+  api.removeMember.mockResolvedValue({ data: { membership_id: frontDesk.id, status: "removed" } });
 }
 
 describe("MembersSettingsPage", () => {
@@ -231,6 +235,49 @@ describe("MembersSettingsPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not load your team");
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Riley Owner")).toBeVisible();
+  });
+
+  it("offers Remove only on Front Desk rows and removes once per confirmed intent", async () => {
+    let finishRemoval: ((value: unknown) => void) | undefined;
+    api.removeMember.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRemoval = resolve;
+        })
+    );
+    render(<MembersSettingsPage />);
+    await screen.findByText("Sam Staff");
+
+    expect(screen.queryByRole("button", { name: "Remove Riley Owner" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Remove Sam Staff" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Sam Staff will lose access to this workspace right away");
+    const confirm = within(dialog).getByRole("button", { name: "Remove member" });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(api.removeMember).toHaveBeenCalledTimes(1));
+    expect(api.removeMember).toHaveBeenCalledWith(frontDesk.id, expect.any(String));
+    finishRemoval?.({ data: { membership_id: frontDesk.id, status: "removed" } });
+    expect(await screen.findByText(/Sam Staff was removed/)).toBeVisible();
+    await waitFor(() => expect(api.getMemberRoster).toHaveBeenCalledTimes(2));
+  });
+
+  it("keeps the dialog open with the server message when removal fails, and retries with the same key", async () => {
+    const { DrezivoApiError } = await import("@/lib/drezivo-api");
+    // A 503 is retryable, so the retry must replay the same intent rather than start a new one.
+    api.removeMember.mockRejectedValueOnce(new DrezivoApiError("Clerk is temporarily unavailable.", { status: 503 }));
+    render(<MembersSettingsPage />);
+    await screen.findByText("Sam Staff");
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove Sam Staff" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Remove member" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Clerk is temporarily unavailable.");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Remove member" }));
+    await waitFor(() => expect(api.removeMember).toHaveBeenCalledTimes(2));
+    expect(api.removeMember.mock.calls[1]?.[1]).toBe(api.removeMember.mock.calls[0]?.[1]);
   });
 
   it("shows the empty state when there are no invitations", async () => {

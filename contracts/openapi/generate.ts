@@ -56,6 +56,7 @@ import {
   membershipInvitationList,
   membershipInvitationParams,
   membershipInvitationStatus,
+  memberRemovalResponse,
   memberRosterResponse,
   onboardingActorContext,
   onboardingStatus,
@@ -151,18 +152,24 @@ import {
   reservationCancelResponse,
   reservationConfirmRequest,
   reservationConfirmResponse,
+  reservationEditRequest,
+  reservationEditResponse,
   reservationPickupRequest,
   reservationPickupResponse,
   reservationRescheduleRequest,
   reservationRescheduleResponse,
   reservationReturnRequest,
   reservationReturnResponse,
+  reservationSubmitRequest,
+  reservationSubmitResponse,
   staffReservationAvailabilityCalendarQuery,
   staffReservationAvailabilityCalendarResponse,
   staffReservationAvailabilityCheckQuery,
   staffReservationAvailabilityCheckResponse,
   staffReservationCreateRequest,
   staffReservationCreateResponse,
+  staffReservationCompleteRequest,
+  staffReservationCompleteResponse,
   subscriptionStatus,
   subscriptionSummary,
   tenantBootstrapResponse,
@@ -419,6 +426,27 @@ registry.registerPath({
     },
     403: jsonError('Only the active Owner can view tenant members.'),
     503: jsonError('The identity provider is temporarily unavailable.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/members/{membershipId}/remove',
+  tags: ['membership-invitations'],
+  summary: 'Owner removes one Front Desk member; access ends on their next request.',
+  request: {
+    params: z.object({ membershipId: z.string().uuid() }),
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: z.object({}).strict() } } },
+  },
+  responses: {
+    200: {
+      description: 'Member removed (or the same request replayed). Leaving the Clerk organization is queued.',
+      content: { 'application/json': { schema: successEnvelope(memberRemovalResponse) } },
+    },
+    403: jsonError('Only the active Owner can remove members.'),
+    404: jsonError('No active Front Desk member with this id in the workspace.'),
+    409: jsonError('STATE_CONFLICT — the Owner cannot be removed, or the request is already in progress.'),
   },
 });
 
@@ -728,6 +756,46 @@ registry.registerPath({
 
 registry.registerPath({
   method: 'post',
+  path: '/reservations/{id}/submit',
+  tags: ['reservations'],
+  summary: 'Submit a held staff reservation for confirmation after required customer details are complete.',
+  request: {
+    params: z.object({ id: z.string().uuid() }),
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: reservationSubmitRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Reservation submitted after validating its customer name, phone, email, and address.',
+      content: { 'application/json': { schema: successEnvelope(reservationSubmitResponse) } },
+    },
+    409: jsonError('STATE_CONFLICT — stale version, expired hold, or customer changed concurrently.'),
+    422: jsonError('Customer phone, email, or address is incomplete or invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/reservations/{id}/complete-booking',
+  tags: ['reservations'],
+  summary: 'Complete a staff booking from its temporary hold, then confirm or submit for payment review.',
+  request: {
+    params: z.object({ id: z.string().uuid() }),
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: staffReservationCompleteRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Booking completed only after both contacts and the address are valid.',
+      content: { 'application/json': { schema: successEnvelope(staffReservationCompleteResponse) } },
+    },
+    409: jsonError('STATE_CONFLICT — stale version, expired hold, or customer changed concurrently.'),
+    422: jsonError('Customer phone, email, or address is incomplete or invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
   path: '/reservations/{id}/confirm',
   tags: ['reservations'],
   summary: 'Merchant confirmation — atomic with verified-payment posting (TRD §5).',
@@ -818,6 +886,29 @@ registry.registerPath({
       content: { 'application/json': { schema: successEnvelope(reservationCancelResponse) } },
     },
     409: jsonError('STATE_CONFLICT — already picked up, cannot cancel into available.'),
+  },
+});
+
+registry.registerPath({
+  method: 'patch',
+  path: '/reservations/{id}',
+  tags: ['reservations'],
+  summary: 'Correct customer snapshot details on one confirmed reservation only.',
+  request: {
+    params: z.object({ id: z.string().uuid() }),
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: reservationEditRequest } } },
+  },
+  responses: {
+    200: {
+      description:
+        'The confirmed reservation snapshot was updated; linked customer profile and booking facts are unchanged.',
+      content: { 'application/json': { schema: successEnvelope(reservationEditResponse) } },
+    },
+    403: jsonError('Reservation management permission is required.'),
+    404: jsonError('The reservation was not found for the active tenant and branch.'),
+    409: jsonError('STALE_VERSION, INVALID_RESERVATION_TRANSITION, or IDEMPOTENCY_KEY_REUSED.'),
+    422: jsonError('Only customer snapshot fields are accepted; customer details are invalid.'),
   },
 });
 

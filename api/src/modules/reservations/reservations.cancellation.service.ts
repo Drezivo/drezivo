@@ -19,6 +19,7 @@ import {
   isAppError,
 } from '../../shared/errors.js';
 import { canonicalRequestHash } from '../../shared/idempotency.js';
+import { resolveReservationCancellationCustomer } from './reservations.customer.js';
 import type { FailureEnvelope, SuccessEnvelope } from '../../shared/response.js';
 import {
   claimTenantIdempotency,
@@ -35,6 +36,7 @@ import {
   lockReservationAllocationsForReview,
   lockReservationForReview,
   lockReservationPaymentForReview,
+  readReservationLineCountForReview,
   readReservationMutationSummary,
   releaseReservationAllocations,
   type LockedReservationReviewRow,
@@ -99,23 +101,53 @@ export async function cancelReservationByStaff(
         branchId: context.branchId,
         reservationId,
       });
-      assertCancellableAllocation(reservation, allocations);
+      const reservationLineCount = await readReservationLineCountForReview(client, {
+        tenantId: context.tenantId,
+        reservationId,
+      });
+      assertCancellableAllocation(reservation, allocations, reservationLineCount);
+      if (request.customer && reservation.status !== 'held') {
+        throw new ValidationError('Customer details can only be saved while cancelling an unfinished hold.');
+      }
 
       if (
         (reservation.status === 'held' || reservation.status === 'pending_confirmation') &&
         deadlineElapsed(reservation)
       ) {
-        await expireInsteadOfCancel(client, context, reservation, reservationId);
+        await expireInsteadOfCancel(
+          client,
+          context,
+          reservation,
+          reservationId,
+          allocations.filter((allocation) => allocation.is_blocking).length,
+        );
         throw new HoldExpiredError('This reservation expired before cancellation completed.');
       }
 
       await client.query(`SAVEPOINT ${CANCELLATION_SAVEPOINT}`);
       savepointOpen = true;
+      const customer = request.customer
+        ? await resolveReservationCancellationCustomer(client, context.tenantId, request.customer)
+        : null;
+      if (customer && reservation.customer_id && customer.id !== reservation.customer_id) {
+        throw new StateConflictError('A different customer is already attached to this reservation.');
+      }
       const newVersion = await cancelReservationPreHandover(client, {
         tenantId: context.tenantId,
         branchId: context.branchId,
         reservationId,
         version: request.version,
+        ...(customer
+          ? {
+              customerId: customer.id,
+              customerSnapshot: {
+                full_name: customer.full_name,
+                phone: customer.phone,
+                email: customer.email,
+                address: customer.address,
+              },
+            }
+          : {}),
       });
       if (newVersion === null) {
         throw new StateConflictError('Reservation cancellation lost a concurrent state change.');
@@ -124,7 +156,7 @@ export async function cancelReservationByStaff(
         tenantId: context.tenantId,
         reservationId,
       });
-      if (released !== allocations.length) {
+      if (released !== allocations.filter((allocation) => allocation.is_blocking).length) {
         throw new StateConflictError('Reservation allocation changed during cancellation.');
       }
 
@@ -142,6 +174,7 @@ export async function cancelReservationByStaff(
           version: newVersion,
           previous_status: reservation.status,
           cancellation_reason: request.reason ?? null,
+          customer_saved: customer !== null,
           payment_status: payment?.status ?? null,
           financial_followup_required: financialFollowupRequired,
         },
@@ -188,14 +221,18 @@ function assertCancellationState(reservation: LockedReservationReviewRow, versio
 function assertCancellableAllocation(
   reservation: LockedReservationReviewRow,
   allocations: Awaited<ReturnType<typeof lockReservationAllocationsForReview>>,
+  reservationLineCount: number,
 ): void {
   const expectedKind = reservation.status === 'confirmed' ? 'reservation_confirmed' : 'reservation_hold';
+  const blocking = allocations.filter((allocation) => allocation.is_blocking);
+  const blockingLines = new Set(blocking.map((allocation) => allocation.reservation_line_id));
   if (
-    allocations.length !== 1 ||
-    allocations[0]?.kind !== expectedKind ||
-    allocations[0].is_blocking !== true
+    reservationLineCount < 1 ||
+    blocking.length !== reservationLineCount ||
+    blockingLines.size !== reservationLineCount ||
+    blocking.some((allocation) => allocation.kind !== expectedKind)
   ) {
-    throw new StateConflictError('Reservation does not have exactly one cancellable blocking allocation.');
+    throw new StateConflictError('Every reservation line must have exactly one cancellable blocking allocation.');
   }
 }
 
@@ -211,6 +248,7 @@ async function expireInsteadOfCancel(
   context: ReservationCancellationContext,
   reservation: LockedReservationReviewRow,
   reservationId: string,
+  blockingAllocationCount: number,
 ): Promise<void> {
   await client.query(`SAVEPOINT ${EXPIRY_SAVEPOINT}`);
   try {
@@ -227,8 +265,8 @@ async function expireInsteadOfCancel(
       tenantId: context.tenantId,
       reservationId,
     });
-    if (released !== 1) {
-      throw new StateConflictError('Reservation expiry could not release its allocation.');
+    if (released !== blockingAllocationCount) {
+      throw new StateConflictError('Reservation expiry could not release every allocation.');
     }
     await appendReservationAuditEvent(client, {
       tenantId: context.tenantId,

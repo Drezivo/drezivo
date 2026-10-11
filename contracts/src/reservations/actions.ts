@@ -5,12 +5,13 @@
  */
 import { z } from 'zod';
 
-import { fileObjectId, paymentId, paymentReceiptId } from '../common/ids';
+import { customerAddress, customerSocialMedia } from '../common/customer';
+import { customerId, fileObjectId, paymentId, paymentReceiptId } from '../common/ids';
 import { moneyString } from '../common/money';
 import { instantInterval, isoInstant } from '../common/time';
 import { physicalAssetReadiness } from '../catalogue/staff';
 import { staffReservationCustomerInput } from './hold';
-import { reservationSummary } from './reservation';
+import { reservationSummary, staffReservationCompletionCustomer } from './reservation';
 
 const versionedAction = z
   .object({
@@ -18,24 +19,56 @@ const versionedAction = z
   })
   .strict();
 
-/** held -> pending_confirmation after contact/terms/evidence prerequisites are satisfied. */
-export const reservationSubmitRequest = versionedAction.extend({
+const staffReservationCompletionCustomerDetails = staffReservationCompletionCustomer.extend({
+  social_media: customerSocialMedia.optional(),
+  notes: z.string().trim().max(2_000).optional(),
+});
+
+const staffReservationExistingCustomerProfileEdit = z
+  .object({
+    full_name: z.string().trim().min(1).max(200),
+    phone: staffReservationCompletionCustomer.shape.phone,
+    email: staffReservationCompletionCustomer.shape.email,
+    address: customerAddress,
+    social_media: customerSocialMedia.nullable(),
+    notes: z.string().trim().max(2_000).nullable(),
+    expected_updated_at: isoInstant,
+  })
+  .strict();
+
+/** Existing profiles may be edited with a version guard; new profiles must be complete. */
+export const staffReservationSubmissionCustomerInput = z.discriminatedUnion('source', [
+  staffReservationCustomerInput.options[0].extend({
+    /** Full editable customer values for a new hold completed from the New Reservation sheet. */
+    profile: staffReservationExistingCustomerProfileEdit.optional(),
+  }),
+  z
+    .object({
+      source: z.literal('new'),
+      customer: staffReservationCompletionCustomerDetails,
+    })
+    .strict(),
+]);
+export type StaffReservationSubmissionCustomerInput = z.infer<typeof staffReservationSubmissionCustomerInput>;
+
+const reservationSubmitBaseRequest = versionedAction.extend({
   terms_accepted: z.literal(true),
   /** Required only when the initial staff hold was acquired before customer entry. */
-  customer: staffReservationCustomerInput.optional(),
+  customer: staffReservationSubmissionCustomerInput.optional(),
 });
+
+/** held -> pending_confirmation after all required contact/terms/evidence prerequisites pass. */
+export const reservationSubmitRequest = reservationSubmitBaseRequest;
 export type ReservationSubmitRequest = z.infer<typeof reservationSubmitRequest>;
 
-export const reservationSubmitResponse = z
-  .object({ reservation: reservationSummary })
-  .strict();
+export const reservationSubmitResponse = z.object({ reservation: reservationSummary }).strict();
 export type ReservationSubmitResponse = z.infer<typeof reservationSubmitResponse>;
 
 /**
  * Staff-facing "Complete Reservation" intent. The API may submit and then confirm,
  * but it never skips the canonical held -> pending_confirmation -> confirmed states.
  */
-export const staffReservationCompleteRequest = reservationSubmitRequest.extend({
+export const staffReservationCompleteRequest = reservationSubmitBaseRequest.extend({
   /** Staff records physical cash tendered; verified payment remains the exact amount due. */
   cash_collection: z
     .object({
@@ -51,9 +84,7 @@ export const staffReservationCompletionNextAction = z.enum([
   'merchant_review',
   'payment_verification',
 ]);
-export type StaffReservationCompletionNextAction = z.infer<
-  typeof staffReservationCompletionNextAction
->;
+export type StaffReservationCompletionNextAction = z.infer<typeof staffReservationCompletionNextAction>;
 
 export const staffReservationCompleteResponse = z
   .object({
@@ -91,18 +122,12 @@ export type StaffReservationCompleteResponse = z.infer<typeof staffReservationCo
 export const reservationConfirmRequest = versionedAction;
 export type ReservationConfirmRequest = z.infer<typeof reservationConfirmRequest>;
 
-export const reservationConfirmResponse = z
-  .object({ reservation: reservationSummary })
-  .strict();
+export const reservationConfirmResponse = z.object({ reservation: reservationSummary }).strict();
 export type ReservationConfirmResponse = z.infer<typeof reservationConfirmResponse>;
 
 /** Attach one already-finalized immutable receipt to the reservation's server-owned payment. */
-export const reservationPaymentReceiptAttachRequest = z
-  .object({ file_id: fileObjectId })
-  .strict();
-export type ReservationPaymentReceiptAttachRequest = z.infer<
-  typeof reservationPaymentReceiptAttachRequest
->;
+export const reservationPaymentReceiptAttachRequest = z.object({ file_id: fileObjectId }).strict();
+export type ReservationPaymentReceiptAttachRequest = z.infer<typeof reservationPaymentReceiptAttachRequest>;
 
 export const reservationPaymentReceiptAttachResponse = z
   .object({
@@ -111,9 +136,7 @@ export const reservationPaymentReceiptAttachResponse = z
     evidence_status: z.literal('uploaded'),
   })
   .strict();
-export type ReservationPaymentReceiptAttachResponse = z.infer<
-  typeof reservationPaymentReceiptAttachResponse
->;
+export type ReservationPaymentReceiptAttachResponse = z.infer<typeof reservationPaymentReceiptAttachResponse>;
 
 /**
  * Staff merchant collection verification. Cash does not require evidence; manual rails require
@@ -142,9 +165,7 @@ export const reservationRejectRequest = versionedAction.extend({
 });
 export type ReservationRejectRequest = z.infer<typeof reservationRejectRequest>;
 
-export const reservationRejectResponse = z
-  .object({ reservation: reservationSummary })
-  .strict();
+export const reservationRejectResponse = z.object({ reservation: reservationSummary }).strict();
 export type ReservationRejectResponse = z.infer<typeof reservationRejectResponse>;
 
 /** Atomic replacement of booking capacity; failure must preserve the old allocation. */
@@ -162,15 +183,88 @@ export const reservationRescheduleResponse = z
   .strict();
 export type ReservationRescheduleResponse = z.infer<typeof reservationRescheduleResponse>;
 
+/**
+ * The customer facts shown on one reservation. Editing them corrects this booking only; the shared
+ * customer profile is changed through customer management.
+ */
+export const reservationEditCustomer = z
+  .object({
+    full_name: z.string().trim().min(1).max(200),
+    phone: z
+      .string()
+      .trim()
+      .regex(/^\d{11}$/, 'Phone number must contain exactly 11 digits.')
+      .nullable(),
+    email: z.string().trim().email().max(320).nullable(),
+    address: z.string().trim().min(1).max(500),
+  })
+  .strict()
+  .refine((value) => value.phone !== null || value.email !== null, {
+    path: ['phone'],
+    message: 'At least one customer contact method (phone or email) is required.',
+  });
+export type ReservationEditCustomer = z.infer<typeof reservationEditCustomer>;
+
+/**
+ * PATCH /reservations/:id: correct the customer snapshot on one confirmed booking only.
+ * The linked customer profile and all booking, delivery, and payment facts remain unchanged.
+ */
+export const reservationEditRequest = versionedAction
+  .extend({
+    customer: reservationEditCustomer,
+  })
+  .strict();
+export type ReservationEditRequest = z.infer<typeof reservationEditRequest>;
+/** What a client sends for a confirmed reservation's customer snapshot edit. */
+export type ReservationEditRequestInput = z.input<typeof reservationEditRequest>;
+
+export const reservationEditResponse = z
+  .object({
+    reservation: reservationSummary,
+  })
+  .strict();
+export type ReservationEditResponse = z.infer<typeof reservationEditResponse>;
+
+/** Customer details staff may retain on a cancelled hold without completing the booking. */
+const reservationCancellationNewCustomer = z
+  .object({
+    full_name: z.string().trim().min(1).max(200),
+    phone: z
+      .string()
+      .trim()
+      .regex(/^\d{11}$/, 'Phone number must contain exactly 11 digits.')
+      .optional(),
+    email: z.string().trim().email().max(320).optional(),
+    address: customerAddress.optional(),
+    social_media: customerSocialMedia.optional(),
+    notes: z.string().trim().max(2_000).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.phone === undefined && value.email === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['phone'],
+        message: 'At least one valid customer contact method (phone or email) is required.',
+      });
+    }
+  });
+
+export const reservationCancellationCustomerInput = z.discriminatedUnion('source', [
+  z.object({ source: z.literal('existing'), customer_id: customerId }).strict(),
+  z.object({ source: z.literal('new'), customer: reservationCancellationNewCustomer }).strict(),
+]);
+export type ReservationCancellationCustomerInput = z.infer<typeof reservationCancellationCustomerInput>;
+
 /** Pre-handover cancellation only; picked-up rentals must use return/settlement. */
 export const reservationCancelRequest = versionedAction.extend({
   reason: z.string().trim().min(1).max(500).optional(),
+  /** Optional profile save/link; unlike submission, cancellation does not require an address. */
+  customer: reservationCancellationCustomerInput.optional(),
 });
 export type ReservationCancelRequest = z.infer<typeof reservationCancelRequest>;
 
-export const reservationCancelResponse = z
-  .object({ reservation: reservationSummary })
-  .strict();
+export const reservationCancelResponse = z.object({ reservation: reservationSummary }).strict();
 export type ReservationCancelResponse = z.infer<typeof reservationCancelResponse>;
 
 /** confirmed -> picked_up; actual actor is resolved from authenticated membership. */
@@ -179,9 +273,7 @@ export const reservationPickupRequest = versionedAction.extend({
 });
 export type ReservationPickupRequest = z.infer<typeof reservationPickupRequest>;
 
-export const reservationPickupResponse = z
-  .object({ reservation: reservationSummary })
-  .strict();
+export const reservationPickupResponse = z.object({ reservation: reservationSummary }).strict();
 export type ReservationPickupResponse = z.infer<typeof reservationPickupResponse>;
 
 /** picked_up -> returned; actual return remains recordable even when late. */
@@ -190,9 +282,7 @@ export const reservationReturnRequest = versionedAction.extend({
 });
 export type ReservationReturnRequest = z.infer<typeof reservationReturnRequest>;
 
-export const reservationReturnResponse = z
-  .object({ reservation: reservationSummary })
-  .strict();
+export const reservationReturnResponse = z.object({ reservation: reservationSummary }).strict();
 export type ReservationReturnResponse = z.infer<typeof reservationReturnResponse>;
 
 /** Post-return inspection updates the physical readiness projection but does not complete the rental. */
@@ -214,7 +304,5 @@ export type ReservationInspectionResponse = z.infer<typeof reservationInspection
 export const reservationCompleteRequest = versionedAction;
 export type ReservationCompleteRequest = z.infer<typeof reservationCompleteRequest>;
 
-export const reservationCompleteResponse = z
-  .object({ reservation: reservationSummary })
-  .strict();
+export const reservationCompleteResponse = z.object({ reservation: reservationSummary }).strict();
 export type ReservationCompleteResponse = z.infer<typeof reservationCompleteResponse>;

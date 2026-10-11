@@ -32,6 +32,7 @@ export interface ReservationListReadRow {
   line_rental_minor: string | number | null;
   line_deposit_minor: string | number | null;
   line_currency: string | null;
+  line_count: string | number | null;
   line_cover_storage_key: string | null;
   line_cover_version_id: string | null;
   fulfillment_method: 'pickup' | 'delivery' | null;
@@ -87,6 +88,8 @@ export interface ReservationDetailHeaderRow {
   timezone_snapshot: string;
   event_date: string | null;
   fulfillment_method: 'pickup' | 'delivery' | null;
+  delivery_fee_minor: string | null;
+  delivery_terms: string | null;
   rental_total_minor: string | number;
   security_required_minor: string | number;
   due_now_minor: string | number;
@@ -117,6 +120,7 @@ export interface ReservationDetailHeaderRow {
 export interface ReservationDetailLineRow {
   id: string;
   variant_id: string;
+  product_id: string;
   variant_sku: string;
   variant_size_label: string | null;
   variant_color_label: string | null;
@@ -278,6 +282,7 @@ export async function listReservationsReadModel(
        line.rental_minor AS line_rental_minor,
        line.deposit_minor AS line_deposit_minor,
        line.currency AS line_currency,
+       line.line_count,
        cover_image.storage_key AS line_cover_storage_key,
        cover_image.version_id AS line_cover_version_id,
        r.delivery_snapshot ->> 'fulfillment_method' AS fulfillment_method,
@@ -315,7 +320,8 @@ export async function listReservationsReadModel(
        lower(r.reference_code) AS sort_reference
      FROM reservation r
      LEFT JOIN LATERAL (
-       SELECT rl.id, rl.variant_id, rl.name_snapshot, rl.rental_minor, rl.deposit_minor, rl.currency
+       SELECT rl.id, rl.variant_id, rl.name_snapshot, rl.rental_minor, rl.deposit_minor, rl.currency,
+              count(*) OVER () AS line_count
          FROM reservation_line rl
         WHERE rl.tenant_id = r.tenant_id
           AND rl.reservation_id = r.id
@@ -417,6 +423,8 @@ export async function readReservationDetailModel(
        r.timezone_snapshot,
        r.event_date::text AS event_date,
        r.delivery_snapshot ->> 'fulfillment_method' AS fulfillment_method,
+       r.delivery_snapshot ->> 'fee_minor' AS delivery_fee_minor,
+       r.delivery_snapshot ->> 'terms' AS delivery_terms,
        r.rental_total_minor,
        r.security_required_minor,
        r.due_now_minor,
@@ -505,6 +513,7 @@ export async function readReservationDetailModel(
     `SELECT
        rl.id,
        rl.variant_id,
+       pv.product_id,
        pv.sku AS variant_sku,
        pv.size_label AS variant_size_label,
        pv.color_label AS variant_color_label,

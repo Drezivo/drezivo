@@ -26,7 +26,7 @@ export function Calendar({
           "inline-flex h-8 w-8 items-center justify-center rounded-md text-dashboard-muted transition-colors hover:bg-dashboard-active hover:text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30 disabled:pointer-events-none disabled:opacity-50 sm:h-9 sm:w-9",
         button_next:
           "inline-flex h-8 w-8 items-center justify-center rounded-md text-dashboard-muted transition-colors hover:bg-dashboard-active hover:text-dashboard-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dashboard-accent/30 disabled:pointer-events-none disabled:opacity-50 sm:h-9 sm:w-9",
-        month_grid: "w-full border-collapse",
+        month_grid: "w-full table-fixed border-collapse",
         weekdays: "flex w-full",
         weekday: "flex-1 py-1.5 text-center text-[11px] font-medium text-dashboard-muted sm:py-2 sm:text-xs",
         week: "mt-0.5 flex w-full sm:mt-1",

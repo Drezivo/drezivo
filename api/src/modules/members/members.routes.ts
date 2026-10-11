@@ -4,13 +4,19 @@ import { requireVerifiedStaffAuth } from '../../middleware/auth.js';
 import { requireTenantContext } from '../../middleware/tenant-context.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
 import { ForbiddenError } from '../../shared/errors.js';
-import { listTenantMembersController } from './members.controller.js';
+import { listTenantMembersController, removeTenantMemberController } from './members.controller.js';
 
 export const membersRouter = Router();
 
 const readRateLimit = rateLimit({
   windowMs: 60_000,
   max: 30,
+  keyOf: (req) => req.clerkPrincipal?.clerkUserId ?? req.ip ?? 'unknown',
+});
+
+const writeRateLimit = rateLimit({
+  windowMs: 60_000,
+  max: 10,
   keyOf: (req) => req.clerkPrincipal?.clerkUserId ?? req.ip ?? 'unknown',
 });
 
@@ -29,4 +35,15 @@ membersRouter.get(
   readRateLimit,
   requireOwner,
   listTenantMembersController,
+);
+
+// No tenant lifecycle gate on purpose: an Owner can always take access away, even while the
+// workspace is restricted or closed. The service re-checks Owner membership under lock.
+membersRouter.post(
+  '/members/:membershipId/remove',
+  requireVerifiedStaffAuth,
+  requireTenantContext,
+  writeRateLimit,
+  requireOwner,
+  removeTenantMemberController,
 );

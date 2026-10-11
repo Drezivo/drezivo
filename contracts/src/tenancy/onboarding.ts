@@ -122,6 +122,16 @@ export const memberRosterResponse = z.object({
 });
 export type MemberRosterResponse = z.infer<typeof memberRosterResponse>;
 
+/**
+ * Result of the Owner removing a Front Desk member. Access ends on the member's next request;
+ * leaving the Clerk organization happens in the background.
+ */
+export const memberRemovalResponse = z.object({
+  membership_id: membershipId,
+  status: z.literal('removed'),
+});
+export type MemberRemovalResponse = z.infer<typeof memberRemovalResponse>;
+
 export const subscriptionSummary = z.object({
   id: subscriptionId,
   plan_code: planCode,

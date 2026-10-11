@@ -7,7 +7,7 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import type { CatalogueVariant, FulfillmentMethod, GuestReservationRequest, GuestReservationView, ItemDetail, PublicStorefront } from '@drezivo/contracts';
 
 import { createReservation, StorefrontApiError } from '@/lib/storefront-api';
-import { dateIn, formatDay, formatMinor, formatTime, rentalDays, zonedInstant } from '@/lib/storefront-format';
+import { dateIn, formatDay, formatMinor, formatTime, minimumRentalDays, rentalDays, zonedInstant } from '@/lib/storefront-format';
 
 import { lockPageScroll } from '../motion/scroll';
 import { Turnstile, TURNSTILE_SITE_KEY, type TurnstileHandle } from '../turnstile';
@@ -74,11 +74,6 @@ function reducer(state: State, action: Action): State {
 function estimateRentalMinor(variant: CatalogueVariant, days: number): bigint {
   if (variant.pricing_mode === 'daily') return BigInt(variant.rental_price_minor) * BigInt(days);
   return BigInt(variant.rental_price_minor) + BigInt(Math.max(0, days - minimumRentalDays(variant))) * BigInt(variant.extra_day_price_minor);
-}
-
-/** A fixed-duration price covers its included days, which is also the shortest rental the server accepts. */
-function minimumRentalDays(variant: CatalogueVariant): number {
-  return variant.pricing_mode === 'fixed_duration' ? Math.max(1, Math.ceil(variant.included_duration_minutes / 1440)) : 1;
 }
 
 const STEPS: Array<{ key: Step; label: string }> = [
@@ -230,7 +225,10 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
   }
 
   const rental = state.range ? estimateRentalMinor(variant, days) : 0n;
-  const delivery = state.fulfillment === 'delivery' ? BigInt(store.fulfillment.delivery_fee_minor) : 0n;
+  // Delivery is always offered. A shop that has not set it up arranges it with the renter after
+  // booking, so nothing is added to the total (the API records it as `to_arrange`).
+  const deliveryToArrange = state.fulfillment === 'delivery' && !store.fulfillment.delivery;
+  const delivery = state.fulfillment === 'delivery' && store.fulfillment.delivery ? BigInt(store.fulfillment.delivery_fee_minor) : 0n;
   const estimate = rental + BigInt(variant.security_deposit_minor) + delivery;
   const stepIndex = STEPS.findIndex((step) => step.key === state.step);
 
@@ -317,18 +315,25 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                 <TextField id="booking-event_date" label={`Event date${requirements.event_date === 'optional' ? ' (optional)' : ''}`} error={fieldErrors.event_date} type="date" min={state.range?.start} max={state.range?.end} value={state.customer.event_date} onChange={(event_date) => updateCustomer('event_date', event_date)} />
               ) : null}
 
-              {store.fulfillment.delivery ? (
-                <fieldset>
-                  <legend className="mb-2 text-sm font-medium">Pickup or delivery</legend>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(['pickup', 'delivery'] as const).map((method) => (
-                      <Choice key={method} name="fulfillment" checked={state.fulfillment === method} onSelect={() => dispatch({ type: 'set', patch: { fulfillment: method } })}>
-                        {method === 'pickup' ? 'Pick up at the shop' : `Delivery${store.fulfillment.delivery_fee_minor !== '0' ? ` · ${formatMinor(store.fulfillment.delivery_fee_minor)}` : ''}`}
-                      </Choice>
-                    ))}
-                  </div>
-                </fieldset>
-              ) : null}
+              <fieldset>
+                <legend className="mb-2 text-sm font-medium">Pickup or delivery</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['pickup', 'delivery'] as const).map((method) => (
+                    <Choice key={method} name="fulfillment" checked={state.fulfillment === method} onSelect={() => dispatch({ type: 'set', patch: { fulfillment: method } })}>
+                      {method === 'pickup'
+                        ? 'Pick up at the shop'
+                        : store.fulfillment.delivery
+                          ? `Delivery${store.fulfillment.delivery_fee_minor !== '0' ? ` · ${formatMinor(store.fulfillment.delivery_fee_minor)}` : ''}`
+                          : 'Delivery · arranged with the shop'}
+                    </Choice>
+                  ))}
+                </div>
+                {deliveryToArrange ? (
+                  <p className="mt-2 text-sm text-sf-muted">
+                    The shop will contact you to arrange delivery and any delivery fee. It is not part of this total.
+                  </p>
+                ) : null}
+              </fieldset>
 
               {store.payment_methods.length > 1 ? (
                 <fieldset>
@@ -361,6 +366,7 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                 <Row label={`Rental · ${days} day${days === 1 ? '' : 's'}`} value={formatMinor(rental.toString())} />
                 <Row label="Refundable deposit" value={formatMinor(variant.security_deposit_minor)} />
                 {delivery > 0n ? <Row label="Delivery" value={formatMinor(delivery.toString())} /> : null}
+                {deliveryToArrange ? <Row label="Delivery" value="Arranged with the shop" /> : null}
                 <div className="flex justify-between gap-4 border-t border-sf-line pt-2 font-medium">
                   <dt>Estimated total</dt>
                   <dd className="tabular-nums">{formatMinor(estimate.toString())}</dd>

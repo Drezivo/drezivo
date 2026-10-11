@@ -118,7 +118,12 @@ export class GuestBookingService {
         async () => {
           const core = await readStoreCore(client, store);
           if (!core) throw new NotFoundError(STORE_NOT_FOUND);
-          assertCheckoutRules(toDocument(core).checkout, request, core.timezone);
+          const checkout = toDocument(core).checkout;
+          // The owner can keep the storefront up for browsing while taking reservations by message.
+          if (!checkout.reservation_requests) {
+            throw new BookingPausedError('This shop takes reservations by message. Please contact the shop to reserve.');
+          }
+          assertCheckoutRules(checkout, request, core.timezone);
           const handover = handoverDates(request, core.timezone);
           assertShopOpenForHandover(await readShopClosures(client, store, handover.pickup, handover.return), request, core.timezone);
 

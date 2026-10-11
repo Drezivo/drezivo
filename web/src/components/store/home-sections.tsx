@@ -128,12 +128,21 @@ export function ProductSection({ store, title, lead, items, id }: { store: Publi
 
 export function HowItWorks({ store }: { store: PublicStorefront }) {
   if (!store.content.sections.how_it_works) return null;
+  // A shop that takes reservations by message gets steps that match what renters can actually do.
+  const reservationsOpen = store.reservations_open ?? store.booking_open;
   const steps = [
-    { title: 'Choose your piece and dates', body: 'Pick a size, then the days you need it. The calendar only offers dates it is free.' },
-    {
-      title: 'Pay and send your receipt',
-      body: `Pay with ${store.payment_methods.map((method) => method.name).join(' or ') || 'the shop’s payment method'}, then upload the receipt. Your size is held while the shop reviews it.`,
-    },
+    ...(reservationsOpen
+      ? [
+          { title: 'Choose your piece and dates', body: 'Pick a size, then the days you need it. The calendar only offers dates it is free.' },
+          {
+            title: 'Pay and send your receipt',
+            body: `Pay with ${store.payment_methods.map((method) => method.name).join(' or ') || 'the shop’s payment method'}, then upload the receipt. Your size is held while the shop reviews it.`,
+          },
+        ]
+      : [
+          { title: 'Choose your piece', body: 'Browse the collection and note the piece and size you like.' },
+          { title: 'Message the shop', body: 'Contact the shop to check your dates and reserve. They confirm payment and pickup with you.' },
+        ]),
     {
       title: store.fulfillment.delivery ? 'Pick up or have it delivered' : 'Pick up and return',
       body: `Handover is at ${formatTime(store.checkout.handover_time)} on your pickup date and again when you return it.`,

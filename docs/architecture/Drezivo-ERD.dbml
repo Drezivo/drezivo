@@ -167,6 +167,7 @@ Table membership_invitation {
   recipient_email_digest varchar(128) [not null]
   recipient_email_ciphertext text [not null]
   status varchar(30) [not null]
+  claimed_membership_id uuid
   expires_at timestamptz [not null]
   clerk_invitation_id varchar(200)
   business_key varchar(160) [not null]
@@ -177,9 +178,13 @@ Table membership_invitation {
     (tenant_id, id) [pk]
     (tenant_id, business_key) [unique]
     (clerk_invitation_id) [unique]
+    (tenant_id, claimed_membership_id)
+    (tenant_id, recipient_email_digest, status)
   }
-  Note: 'V1 foundation tenant-owned Front Desk intent. Recipient email is encrypted and keyed-deduped; dispatch_version supports resend without a second seat. Partial unique pending recipient index and seven-day database-time expiry are migration constraints. TBF-042 accepts the row only after exact provider marker, accepted invitation, organization, role, and membership checks.'
+  Note: 'V1 foundation tenant-owned Front Desk intent. Recipient email is encrypted and keyed-deduped; dispatch_version supports resend without a second seat. Acceptance records the same-tenant membership. A removed member can receive a fresh invitation history row and stays locally denied until its claim restores that membership. Partial unique pending recipient index and seven-day database-time expiry are migration constraints.'
 }
+
+Ref: membership_invitation.(tenant_id, claimed_membership_id) > membership.(tenant_id, id)
 
 Table branch_membership {
   tenant_id uuid [not null]

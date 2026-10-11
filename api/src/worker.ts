@@ -5,6 +5,7 @@ import { expireDueHoldsForAllTenants } from './worker/handlers/hold-expirer.js';
 import { handleTenantBootstrapped } from './worker/handlers/tenant-bootstrap.js';
 import { reconcileDueSubscriptionsForAllTenants } from './worker/handlers/subscription-lifecycle.js';
 import { handleMembershipInvitationDispatch } from './modules/membership-invitations/membership-invitations.dispatcher.js';
+import { handleMemberRemovalDispatch, MEMBER_REMOVAL_EVENT_TYPE } from './modules/members/members.removal-dispatcher.js';
 import { reconcileDueClerkWebhooks } from './worker/handlers/clerk-webhook-reconciler.js';
 import { cleanupAbandonedClerkOrganizations } from './worker/handlers/clerk-organization-cleanup.js';
 import { promoteElapsedRecoveryReadinessForAllTenants } from './worker/handlers/recovery-readiness.js';
@@ -38,6 +39,7 @@ const handlers: Record<string, EventHandler> = {
   [FILE_OBJECT_CLEANUP_EVENT_TYPE]: handleFileObjectCleanup,
   'clerk.invitation.dispatch_requested': handleMembershipInvitationDispatch,
   'clerk.invitation.revoke_requested': handleMembershipInvitationDispatch,
+  [MEMBER_REMOVAL_EVENT_TYPE]: handleMemberRemovalDispatch,
   ...Object.fromEntries(ACKNOWLEDGED_DOMAIN_EVENTS.map((eventType) => [eventType, acknowledgeDomainEvent])),
 };
 const runner = new WorkerRunner(handlers);

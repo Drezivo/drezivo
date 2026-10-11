@@ -6,13 +6,18 @@ import {
   Clock3,
   CreditCard,
   PackageCheck,
+  RotateCcw,
   Shirt,
   Truck,
   UserRound,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { normalizeVariantFitRange, type PermissionCode, type ReservationDetail } from "@drezivo/contracts";
+import {
+  normalizeVariantFitRange,
+  type PermissionCode,
+  type ReservationDetail,
+} from "@drezivo/contracts";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +27,9 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import type { DrezivoApiError } from "@/lib/drezivo-api";
 import { displaySizeLabel } from "@/lib/catalogue-display";
 import { cn } from "@/lib/utils";
+
+import type { ReservationRebookSource } from "./new-reservation-sheet";
+import { ReservationEditForm } from "./reservation-edit-form";
 
 import {
   ReservationMutationActions,
@@ -41,6 +49,7 @@ export function ReservationDetailsSheet({
   error,
   isLoading,
   onOpenChange,
+  onContinue,
   onMutationSuccess,
   onRefreshRequired,
   onRetry,
@@ -48,6 +57,8 @@ export function ReservationDetailsSheet({
   reservationId,
   timeZone,
 }: {
+  /** Start a new booking copied from this one; shown on cancelled, expired and rejected reservations. */
+  onContinue?: (source: ReservationRebookSource) => void;
   detail: ReservationDetail | null;
   error: DrezivoApiError | null;
   isLoading: boolean;
@@ -100,6 +111,7 @@ export function ReservationDetailsSheet({
           <ReservationDetails
             detail={detail}
             notice={notice}
+            onContinue={onContinue}
             onMutationSuccess={onMutationSuccess}
             onNotice={setNotice}
             onRefreshRequired={onRefreshRequired}
@@ -115,6 +127,7 @@ export function ReservationDetailsSheet({
 function ReservationDetails({
   detail,
   notice,
+  onContinue,
   onMutationSuccess,
   onNotice,
   onRefreshRequired,
@@ -123,6 +136,7 @@ function ReservationDetails({
 }: {
   detail: ReservationDetail;
   notice: ReservationMutationNotice | null;
+  onContinue: ((source: ReservationRebookSource) => void) | undefined;
   onMutationSuccess: () => void;
   onNotice: (notice: ReservationMutationNotice | null) => void;
   onRefreshRequired: () => void;
@@ -132,9 +146,15 @@ function ReservationDetails({
   const customer = detail.customer.snapshot;
   const effectiveTimeZone = detail.timezone_snapshot || timeZone;
   const [failedImageLines, setFailedImageLines] = useState<Set<string>>(() => new Set());
+  const [editing, setEditing] = useState(false);
+  const canEdit =
+    detail.status === "confirmed" &&
+    customer !== null &&
+    permissionCodes.includes("reservations.manage");
 
   useEffect(() => {
     setFailedImageLines(new Set());
+    setEditing(false);
   }, [detail.id]);
 
   return (
@@ -151,8 +171,19 @@ function ReservationDetails({
           >
             {RESERVATION_STATUS_LABELS[detail.status]}
           </Badge>
+          {detail.delivery_snapshot.fulfillment_method === "delivery" ? (
+            <Badge
+              variant="outline"
+              className="whitespace-nowrap border-dashboard-gold-text/30 bg-dashboard-gold-soft px-2 py-1 text-xs text-dashboard-gold-text"
+            >
+              Delivery requested
+            </Badge>
+          ) : null}
           {detail.booking_channel ? (
-            <Badge variant="outline" className="whitespace-nowrap px-2 py-1 text-xs text-dashboard-muted">
+            <Badge
+              variant="outline"
+              className="whitespace-nowrap px-2 py-1 text-xs text-dashboard-muted"
+            >
               {detail.booking_channel === "online" ? "Online booking" : "Walk-in"}
             </Badge>
           ) : null}
@@ -167,13 +198,42 @@ function ReservationDetails({
           </div>
         ) : null}
 
-        <ReservationMutationActions
-          detail={detail}
-          permissionCodes={permissionCodes}
-          onNotice={onNotice}
-          onMutationSuccess={onMutationSuccess}
-          onRefreshRequired={onRefreshRequired}
-        />
+        {!editing ? (
+          <ReservationMutationActions
+            detail={detail}
+            permissionCodes={permissionCodes}
+            onEdit={() => setEditing(true)}
+            onNotice={onNotice}
+            onMutationSuccess={onMutationSuccess}
+            onRefreshRequired={onRefreshRequired}
+          />
+        ) : null}
+        {canEdit && editing ? (
+          <ReservationEditForm
+            key={detail.version}
+            detail={detail}
+            onCancel={() => setEditing(false)}
+            onRefreshRequired={() => {
+              setEditing(false);
+              onNotice({
+                tone: "attention",
+                message: "Someone else changed this reservation. Showing the latest details.",
+              });
+              onRefreshRequired();
+            }}
+            onSaved={(message) => {
+              setEditing(false);
+              onNotice({ tone: "success", message });
+              onMutationSuccess();
+            }}
+          />
+        ) : null}
+
+        {onContinue &&
+        CONTINUABLE_STATUSES.has(detail.status) &&
+        permissionCodes.includes("reservations.manage") ? (
+          <ContinueReservation detail={detail} onContinue={onContinue} />
+        ) : null}
       </header>
 
       <div className="flex flex-1 flex-col gap-3 p-4">
@@ -248,13 +308,17 @@ function ReservationDetails({
                         )}
                       />
                     </div>
-                    {line.fit_range_snapshot || Object.keys(line.measurements_snapshot).length > 0 ? (
+                    {line.fit_range_snapshot ||
+                    Object.keys(line.measurements_snapshot).length > 0 ? (
                       <div className="mt-3">
                         <p className="text-xs font-medium text-dashboard-muted">
                           Measurements at booking
                         </p>
-                        {line.fit_range_snapshot && normalizeVariantFitRange(line.fit_range_snapshot) ? (
-                          <p className="mt-2 text-xs text-dashboard-navy">Fits {normalizeVariantFitRange(line.fit_range_snapshot)}</p>
+                        {line.fit_range_snapshot &&
+                        normalizeVariantFitRange(line.fit_range_snapshot) ? (
+                          <p className="mt-2 text-xs text-dashboard-navy">
+                            Fits {normalizeVariantFitRange(line.fit_range_snapshot)}
+                          </p>
                         ) : null}
                         <div className="mt-2 flex flex-wrap gap-2">
                           {Object.entries(line.measurements_snapshot).map(([label, value]) => (
@@ -262,7 +326,8 @@ function ReservationDetails({
                               key={label}
                               className="rounded-md bg-dashboard-active px-2 py-1 text-xs text-dashboard-navy"
                             >
-                              {humanize(label)}: {typeof value === "number"
+                              {humanize(label)}:{" "}
+                              {typeof value === "number"
                                 ? `${value}${line.measurement_unit_snapshot ? ` ${line.measurement_unit_snapshot}` : ""}`
                                 : value.text}
                             </span>
@@ -297,6 +362,10 @@ function ReservationDetails({
           </dl>
         </DetailCard>
 
+        {detail.delivery_snapshot.fulfillment_method === "delivery" ? (
+          <DeliveryCard detail={detail} />
+        ) : null}
+
         <DetailCard title="Price and payment" icon={CreditCard}>
           <dl className="grid gap-3 text-sm sm:grid-cols-3">
             <DetailValue
@@ -321,6 +390,8 @@ function ReservationDetails({
               )}
             />
           </dl>
+
+          <PaymentDifferenceNote detail={detail} />
 
           <Separator className="my-4" />
 
@@ -465,6 +536,162 @@ function ReservationDetails({
         </DetailCard>
       </div>
     </div>
+  );
+}
+
+const CONTINUABLE_STATUSES: ReadonlySet<ReservationDetail["status"]> = new Set([
+  "cancelled",
+  "expired",
+  "rejected",
+]);
+
+/**
+ * What staff still owe or are owed after an edit changed the total once money was in. Null when
+ * nothing was paid yet (the payment amount follows the total) or the amounts match.
+ */
+function paymentDifference(
+  detail: ReservationDetail
+): { kind: "collect" | "refund"; minor: bigint } | null {
+  const payment = detail.payment;
+  if (!payment) return null;
+  const moneyIn =
+    payment.status !== "pending" ||
+    ["uploaded", "under_review", "verified"].includes(payment.evidence_status);
+  if (!moneyIn) return null;
+  const difference = BigInt(detail.price_snapshot.due_now_minor) - BigInt(payment.amount_minor);
+  if (difference === 0n) return null;
+  return difference > 0n
+    ? { kind: "collect", minor: difference }
+    : { kind: "refund", minor: -difference };
+}
+
+/**
+ * A finished reservation stays in history; rebooking copies every line into a new booking. Older
+ * reservations whose lines lack product identity fail closed rather than silently dropping items.
+ */
+function ContinueReservation({
+  detail,
+  onContinue,
+}: {
+  detail: ReservationDetail;
+  onContinue: (source: ReservationRebookSource) => void;
+}) {
+  if (detail.lines.length === 0 || detail.lines.some((line) => !line.product_id)) return null;
+  const customer = detail.customer.snapshot;
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashboard-border bg-dashboard-active/40 p-3">
+      <p className="text-sm text-dashboard-muted">
+        This reservation is {detail.status === "expired" ? "expired" : detail.status}. Create a new
+        reservation with the same items and details.
+      </p>
+      <Button
+        type="button"
+        size="sm"
+        onClick={() =>
+          onContinue({
+            referenceCode: detail.reference_code,
+            lines: detail.lines.map((line) => ({
+              sourceLineId: line.id,
+              productId: line.product_id!,
+              variantId: line.variant_id,
+              name: line.name_snapshot,
+            })),
+            pickupAt: detail.pickup_at,
+            dueAt: detail.due_at,
+            eventDate: detail.event_date ?? null,
+            fulfillmentMethod: detail.delivery_snapshot.fulfillment_method,
+            paymentMethodId: detail.payment?.payment_method_id ?? null,
+            customer: customer
+              ? {
+                  customerId: detail.customer.customer_id,
+                  fullName: customer.full_name,
+                  phone: customer.phone,
+                  email: customer.email,
+                  address: customer.address,
+                }
+              : null,
+          })
+        }
+      >
+        <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Create New Reservation from
+        This
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * The renter's delivery request and what staff need to act on it. When the shop has not set up
+ * delivery (`to_arrange`), nothing was charged and staff contact the renter to arrange it.
+ */
+function DeliveryCard({ detail }: { detail: ReservationDetail }) {
+  const customer = detail.customer.snapshot;
+  const { fee_minor: feeMinor, terms } = detail.delivery_snapshot;
+  const toArrange = terms === "to_arrange";
+  return (
+    <DetailCard title="Delivery" icon={Truck}>
+      <div className="w-full space-y-3 text-sm">
+        <div className="rounded-lg border border-dashboard-gold-text/25 bg-dashboard-gold-soft p-3 text-dashboard-gold-text">
+          <p className="font-medium">
+            {toArrange ? "The renter asked for delivery" : "The renter chose delivery"}
+          </p>
+          <p className="mt-1 text-xs">
+            {toArrange
+              ? "Delivery is not set up for your storefront, so no delivery fee was charged. Contact the renter to arrange the delivery and any fee."
+              : "Contact the renter to confirm the delivery time before pickup day."}
+          </p>
+        </div>
+        <dl className="grid gap-3 sm:grid-cols-2">
+          <DetailValue label="Deliver to" value={customer?.address ?? "Not recorded"} />
+          <DetailValue
+            label="Delivery fee"
+            value={
+              toArrange
+                ? "To arrange with the renter"
+                : feeMinor !== undefined
+                  ? formatMinorMoney(feeMinor, detail.price_snapshot.currency)
+                  : "Included in the total"
+            }
+          />
+        </dl>
+        {customer?.phone || customer?.email ? (
+          <div className="flex flex-wrap gap-2">
+            {customer.phone ? (
+              <a
+                href={`tel:${customer.phone}`}
+                className="inline-flex h-8 items-center rounded-md border border-dashboard-border px-3 text-xs font-medium text-dashboard-navy hover:bg-dashboard-active"
+              >
+                Call {customer.phone}
+              </a>
+            ) : null}
+            {customer.email ? (
+              <a
+                href={`mailto:${customer.email}?subject=${encodeURIComponent(`Delivery for reservation ${detail.reference_code}`)}`}
+                className="inline-flex h-8 items-center rounded-md border border-dashboard-border px-3 text-xs font-medium text-dashboard-navy hover:bg-dashboard-active"
+              >
+                Email the renter
+              </a>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </DetailCard>
+  );
+}
+
+function PaymentDifferenceNote({ detail }: { detail: ReservationDetail }) {
+  const difference = paymentDifference(detail);
+  if (!difference) return null;
+  const amount = formatMinorMoney(difference.minor.toString(), detail.price_snapshot.currency);
+  return (
+    <p
+      role="status"
+      className="mt-3 rounded-lg bg-dashboard-attention/10 px-3 py-2 text-sm text-dashboard-attention"
+    >
+      {difference.kind === "collect"
+        ? `The total changed after payment. Collect ${amount} more from the renter.`
+        : `The total changed after payment. Refund ${amount} to the renter.`}
+    </p>
   );
 }
 

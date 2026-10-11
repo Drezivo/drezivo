@@ -3,6 +3,7 @@ import type { RequestHandler } from 'express';
 import {
   idempotencyKey,
   reservationCancelRequest,
+  reservationEditRequest,
   reservationConfirmRequest,
   reservationId,
   reservationPaymentReceiptAttachRequest,
@@ -20,6 +21,7 @@ import {
   staffReservationCreateRequest,
   staffReservationIntakeQuery,
   type ReservationCancelRequest,
+  type ReservationEditRequest,
   type ReservationConfirmRequest,
   type ReservationPaymentReceiptAttachRequest,
   type ReservationPaymentVerifyRequest,
@@ -49,6 +51,7 @@ declare module 'express-serve-static-core' {
     reservationCreateRequest?: StaffReservationCreateRequest;
     reservationCompleteRequest?: StaffReservationCompleteRequest;
     reservationCancelRequest?: ReservationCancelRequest;
+    reservationEditRequest?: ReservationEditRequest;
     reservationPickupRequest?: ReservationPickupRequest;
     reservationReturnRequest?: ReservationReturnRequest;
     reservationInspectionRequest?: ReservationInspectionRequest;
@@ -180,6 +183,18 @@ export const validateReservationCancel: RequestHandler = (req, _res, next): void
   }
   req.body = parsed.data;
   req.reservationCancelRequest = parsed.data;
+  next();
+};
+
+/** Edit errors name the problem (for example a missing contact), since staff fix them in a form. */
+export const validateReservationEdit: RequestHandler = (req, _res, next): void => {
+  const parsed = reservationEditRequest.safeParse(req.body);
+  if (!parsed.success) {
+    next(new ValidationError(parsed.error.issues[0]?.message ?? 'Reservation edit request is invalid.'));
+    return;
+  }
+  req.body = parsed.data;
+  req.reservationEditRequest = parsed.data;
   next();
 };
 

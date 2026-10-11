@@ -58,7 +58,9 @@ interface TestWorkspace {
 
 describe('Owner member and invitation APIs', async () => {
   const { createApp } = await import('../../src/app.js');
-  const { closePool, withTenantTransaction } = await import('../../src/db/client.js');
+  const { closePool, withSystemTenantTransaction, withTenantTransaction } = await import('../../src/db/client.js');
+  const { createMemberRemovalDispatchHandler, MEMBER_REMOVAL_EVENT_TYPE } =
+    await import('../../src/modules/members/members.removal-dispatcher.js');
   const { digestRecipientEmail, encryptRecipientEmail } =
     await import('../../src/shared/protected-recipient.js');
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
@@ -135,6 +137,141 @@ describe('Owner member and invitation APIs', async () => {
     expect(JSON.stringify(roster.body)).not.toContain('@example.test');
     expect(JSON.stringify(invitations.body)).not.toContain('@example.test');
     expect(clerk.getUserProfiles).not.toHaveBeenCalled();
+  });
+
+  it('lets the Owner remove a Front Desk member once, ending their access right away', async () => {
+    const workspace = await createWorkspace('members_remove', 'user_members_remove_owner');
+    clerk.identity = { userId: workspace.ownerId, orgId: workspace.clerkOrgId };
+    const remove = (key: string) =>
+      request(createApp())
+        .post(`/api/v1/members/${workspace.frontdeskMembershipId}/remove`)
+        .set('Idempotency-Key', key)
+        .send({});
+
+    // Concurrent double-fire of one intent: one removal, the same answer twice.
+    const [first, second] = await Promise.all([remove('remove-member-1'), remove('remove-member-1')]);
+    expect(first.status).toBe(200);
+    expect(first.body.data).toEqual({ membership_id: workspace.frontdeskMembershipId, status: 'removed' });
+    expect(second.status).toBe(200);
+    expect(second.body.data).toEqual(first.body.data);
+    // Sequential replay of the same intent returns the stored answer.
+    const replay = await remove('remove-member-1');
+    expect(replay.status).toBe(200);
+    expect(replay.body.data).toEqual(first.body.data);
+    // A new intent for an already-removed member is refused, not repeated.
+    const again = await remove('remove-member-2');
+    expect(again.status).toBe(409);
+
+    const facts = await withTenantTransaction(workspace.tenantId, workspace.ownerId, async (client) => {
+      const member = await client.query<{ status: string; authz_version: number }>(
+        'SELECT status, authz_version FROM membership WHERE id = $1',
+        [workspace.frontdeskMembershipId],
+      );
+      const outbox = await client.query<{ event_type: string; payload: Record<string, unknown> }>(
+        'SELECT event_type, payload FROM outbox_event WHERE tenant_id = $1 AND event_type = $2',
+        [workspace.tenantId, MEMBER_REMOVAL_EVENT_TYPE],
+      );
+      const audit = await client.query<{ n: number }>(
+        'SELECT count(*)::int AS n FROM audit_event WHERE tenant_id = $1 AND action = $2',
+        [workspace.tenantId, 'membership.removed'],
+      );
+      return { member: member.rows[0], outbox: outbox.rows, audit: audit.rows[0]?.n };
+    });
+    expect(facts.member).toEqual({ status: 'removed', authz_version: 2 });
+    expect(facts.outbox).toEqual([
+      {
+        event_type: MEMBER_REMOVAL_EVENT_TYPE,
+        payload: { membership_id: workspace.frontdeskMembershipId, authz_version: 2 },
+      },
+    ]);
+    expect(facts.audit).toBe(1);
+
+    // The removed member is denied on their next request; the roster and seats no longer count them.
+    clerk.identity = { userId: workspace.frontdeskId, orgId: workspace.clerkOrgId };
+    expect((await request(createApp()).get('/api/v1/actor-context')).status).toBe(403);
+    clerk.identity = { userId: workspace.ownerId, orgId: workspace.clerkOrgId };
+    clerk.getUserProfiles.mockResolvedValue([]);
+    const roster = await request(createApp()).get('/api/v1/members');
+    const rosterData = (roster.body as { data: { members: Array<{ id: string }>; frontdesk_seats: { used: number } } }).data;
+    expect(rosterData.members.map((member) => member.id)).toEqual([workspace.ownerMembershipId]);
+    expect(rosterData.frontdesk_seats.used).toBe(0);
+  });
+
+  it('refuses removal by Front Desk, of the Owner, and of unknown or malformed members', async () => {
+    const workspace = await createWorkspace('members_remove_guard', 'user_members_guard_owner');
+    const post = (membershipId: string, key: string | null) => {
+      const call = request(createApp()).post(`/api/v1/members/${membershipId}/remove`);
+      return (key ? call.set('Idempotency-Key', key) : call).send({});
+    };
+
+    clerk.identity = { userId: workspace.frontdeskId, orgId: workspace.clerkOrgId };
+    expect((await post(workspace.ownerMembershipId, 'remove-guard-fd-1')).status).toBe(403);
+    expect((await post(workspace.frontdeskMembershipId, 'remove-guard-fd-2')).status).toBe(403);
+
+    clerk.identity = { userId: workspace.ownerId, orgId: workspace.clerkOrgId };
+    expect((await post(workspace.ownerMembershipId, 'remove-guard-owner')).status).toBe(409);
+    expect((await post('6f1c2b8e-0d3a-4c55-9a51-2f3e4d5c6b7a', 'remove-guard-unknown')).status).toBe(404);
+    expect((await post('not-a-uuid', 'remove-guard-bad')).status).toBe(422);
+    expect((await post(workspace.frontdeskMembershipId, null)).status).toBe(422);
+
+    const statuses = await withTenantTransaction(workspace.tenantId, workspace.ownerId, async (client) =>
+      (
+        await client.query<{ status: string }>(
+          'SELECT status FROM membership WHERE tenant_id = $1 ORDER BY role',
+          [workspace.tenantId],
+        )
+      ).rows,
+    );
+    expect(statuses).toEqual([{ status: 'active' }, { status: 'active' }]);
+  });
+
+  it('removes the member from the Clerk organization once and skips stale or finished requests', async () => {
+    const workspace = await createWorkspace('members_remove_worker', 'user_members_worker_owner');
+    clerk.identity = { userId: workspace.ownerId, orgId: workspace.clerkOrgId };
+    await request(createApp())
+      .post(`/api/v1/members/${workspace.frontdeskMembershipId}/remove`)
+      .set('Idempotency-Key', 'remove-worker-1')
+      .send({});
+    const row = await withTenantTransaction(workspace.tenantId, workspace.ownerId, async (client) => {
+      const result = await client.query<{ id: string; dedupe_key: string; payload: Record<string, unknown> }>(
+        'SELECT id, dedupe_key, payload FROM outbox_event WHERE tenant_id = $1 AND event_type = $2',
+        [workspace.tenantId, MEMBER_REMOVAL_EVENT_TYPE],
+      );
+      const event = result.rows[0];
+      if (!event) throw new Error('Member removal event was not queued.');
+      return {
+        ...event,
+        tenant_id: workspace.tenantId,
+        event_type: MEMBER_REMOVAL_EVENT_TYPE,
+        attempts: 0,
+        max_attempts: 5,
+      };
+    });
+
+    const getOrganizationMembership = vi.fn().mockResolvedValue({ id: 'orgmem_1' });
+    const deleteMembership = vi.fn().mockResolvedValue({ id: 'orgmem_1' });
+    const handler = createMemberRemovalDispatchHandler({
+      clerk: { getOrganizationMembership, deleteMembership } as never,
+      runTenantTransaction: withSystemTenantTransaction,
+    });
+    await handler(row);
+    expect(deleteMembership).toHaveBeenCalledWith({
+      organizationId: workspace.clerkOrgId,
+      userId: workspace.frontdeskId,
+    });
+
+    // Retried after Clerk already removed them: nothing left to delete.
+    getOrganizationMembership.mockResolvedValueOnce(null);
+    await handler(row);
+    expect(deleteMembership).toHaveBeenCalledTimes(1);
+
+    // Re-invited before the event ran: the stale removal must not touch the provider.
+    await withTenantTransaction(workspace.tenantId, workspace.ownerId, (client) =>
+      client.query("UPDATE membership SET status = 'active' WHERE id = $1", [workspace.frontdeskMembershipId]),
+    );
+    await handler(row);
+    expect(getOrganizationMembership).toHaveBeenCalledTimes(2);
+    expect(deleteMembership).toHaveBeenCalledTimes(1);
   });
 
   async function createWorkspace(label: string, ownerId: string): Promise<TestWorkspace> {

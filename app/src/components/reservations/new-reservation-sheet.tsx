@@ -1,24 +1,44 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { CalendarDays, Check, ChevronDown, FileUp, Search, Shirt, TimerReset, UserRound } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
+import {
+  CalendarDays,
+  Check,
+  ChevronDown,
+  FileUp,
+  Plus,
+  Search,
+  Shirt,
+  TimerReset,
+  UserRound,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  reservationCancellationCustomerInput,
+  staffReservationCompletionCustomer,
+} from "@drezivo/contracts";
 
 import type {
   BranchBusinessHours,
   ClothingDetail,
   ClothingListItem,
   CustomerId,
+  CustomerDetailResponse,
   PaymentInstructions,
   PaymentMethodId,
   PermissionCode,
+  ProductId,
   ReservationSummary,
   ProductVariantId,
+  ReservationDetail,
+  ReservationCancellationCustomerInput,
   StaffReservationAvailabilityCalendarResponse,
   StaffReservationAvailabilityCheckResponse,
-  StaffReservationCustomerInput,
   StaffReservationCustomerOption,
   StaffReservationPaymentMethodOption,
+  StaffReservationSubmissionCustomerInput,
 } from "@drezivo/contracts";
 
 import {
@@ -26,9 +46,10 @@ import {
   monthWindow,
   parseCalendarDate,
   todayInTimeZone,
+  type ReservationCalendarAvailabilityItem,
 } from "@/components/reservations/reservation-availability-calendar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { DatePickerField } from "@/components/ui/date-picker-field";
 import { Input } from "@/components/ui/input";
 import { TimePickerField } from "@/components/ui/time-picker-field";
@@ -39,9 +60,25 @@ import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { displaySizeLabel } from "@/lib/catalogue-display";
 import { useVerifiedActorContext } from "@/components/shell/dashboard-access-gate";
-import { claimHoldOwner, clearPendingHold, readHoldDraft, saveHoldDraft, savePendingHold } from "@/lib/pending-hold";
+import {
+  claimHoldOwner,
+  clearPendingHold,
+  readHoldDraft,
+  saveHoldDraft,
+  savePendingHold,
+} from "@/lib/pending-hold";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
+import { localDateTimeParts, zonedLocalDateTimeToInstant } from "@/lib/zoned-time";
+
+import {
+  AdditionalGarments,
+  SelectedGarmentCard,
+  additionalGarmentsReadiness,
+  MAX_GARMENTS_PER_BOOKING,
+  type AdditionalGarment,
+} from "./additional-garments";
 import { cn } from "@/lib/utils";
+import { recoveryAvailabilityHint } from "./recovery-availability-hint";
 
 const PRODUCT_LIMIT = 5;
 
@@ -65,6 +102,33 @@ type HoldDraft = {
   notes: string;
 };
 
+/**
+ * A finished reservation (cancelled, expired, rejected) copied into a new booking: same clothing,
+ * customer, pickup or delivery and payment method, and the same dates while they are still ahead.
+ * Nothing is reserved until staff press Reserve, which re-checks availability as usual.
+ */
+export type ReservationRebookSource = {
+  referenceCode: string;
+  lines: Array<{
+    sourceLineId: string;
+    productId: ProductId;
+    variantId: ProductVariantId;
+    name: string;
+  }>;
+  pickupAt: string;
+  dueAt: string;
+  eventDate: string | null;
+  fulfillmentMethod: "pickup" | "delivery";
+  paymentMethodId: PaymentMethodId | null;
+  customer: {
+    customerId: CustomerId | null;
+    fullName: string;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+  } | null;
+};
+
 export function NewReservationSheet({
   open,
   onOpenChange,
@@ -73,9 +137,12 @@ export function NewReservationSheet({
   permissionCodes,
   timeZone,
   resumeReservationId = null,
+  rebookFrom = null,
 }: {
   /** Reopen an existing live hold by id (after navigating away or refreshing). */
   resumeReservationId?: string | null;
+  /** Start a new booking pre-filled from a finished reservation (Continue). */
+  rebookFrom?: ReservationRebookSource | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onReservationChanged: (reservationId: string) => void;
@@ -105,9 +172,11 @@ export function NewReservationSheet({
   const [calendarMonth, setCalendarMonth] = useState(
     () => parseCalendarDate(todayInTimeZone(timeZone)) ?? new Date()
   );
-  const [calendarAvailability, setCalendarAvailability] =
-    useState<StaffReservationAvailabilityCalendarResponse | null>(null);
+  const [calendarAvailabilityByVariant, setCalendarAvailabilityByVariant] = useState<
+    Record<string, StaffReservationAvailabilityCalendarResponse>
+  >({});
   const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarAvailabilityError, setCalendarAvailabilityError] = useState<string | null>(null);
   const [exactAvailability, setExactAvailability] =
     useState<StaffReservationAvailabilityCheckResponse | null>(null);
   const [exactAvailabilityLoading, setExactAvailabilityLoading] = useState(false);
@@ -119,11 +188,39 @@ export function NewReservationSheet({
   const [businessHours, setBusinessHours] = useState<BranchBusinessHours | null>(null);
   const [productsLoading, setProductsLoading] = useState(false);
   const [availabilityReloadVersion, setAvailabilityReloadVersion] = useState(0);
-  const [selectedProduct, setSelectedProduct] = useState<ClothingListItem | null>(null);
+  // Only the product id is needed; a rebook knows the id but not the full list item.
+  const [selectedProduct, setSelectedProduct] = useState<Pick<
+    ClothingListItem,
+    "product_id"
+  > | null>(null);
+  const [primaryGarment, setPrimaryGarment] = useState<AdditionalGarment | null>(null);
+  // The size to select once a pre-filled product's detail loads, and which rebook was applied.
+  const pendingVariantIdRef = useRef<ProductVariantId | null>(null);
+  const [extraGarments, setExtraGarments] = useState<AdditionalGarment[]>([]);
+  const resetReserveIntent = reserveGuard.resetIntent;
+  // Stable, so the garment list's loading effects only re-run when the list itself changes.
+  const updateExtraGarments = useCallback(
+    (update: (current: AdditionalGarment[]) => AdditionalGarment[]) => {
+      setExtraGarments(update);
+      resetReserveIntent();
+    },
+    [resetReserveIntent]
+  );
+  const appliedRebookRef = useRef<string | null>(null);
   const [productDetail, setProductDetail] = useState<ClothingDetail | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<ProductVariantId | "">("");
+  const [rebookLines, setRebookLines] = useState<ReservationRebookSource["lines"]>([]);
+  const [rebookAvailability, setRebookAvailability] = useState<
+    Record<string, StaffReservationAvailabilityCheckResponse>
+  >({});
+  const [rebookAvailabilityLoading, setRebookAvailabilityLoading] = useState(false);
+  const [rebookAvailabilityError, setRebookAvailabilityError] = useState<string | null>(null);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelDialogError, setCancelDialogError] = useState<string | null>(null);
   const [variantSelectionError, setVariantSelectionError] = useState<string | null>(null);
   const [held, setHeld] = useState<HeldState | null>(null);
+  const [heldLines, setHeldLines] = useState<ReservationDetail["lines"] | null>(null);
+  const [heldLinesError, setHeldLinesError] = useState<string | null>(null);
   const [cashAmountReceived, setCashAmountReceived] = useState("");
   const [cashReceived, setCashReceived] = useState(false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
@@ -142,6 +239,12 @@ export function NewReservationSheet({
     !isCustomerSearchTooShort && customerSearch.trim() !== debouncedCustomerSearch;
   const [customerOptions, setCustomerOptions] = useState<StaffReservationCustomerOption[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<CustomerId | "">("");
+  const [selectedCustomerProfile, setSelectedCustomerProfile] = useState<Pick<
+    CustomerDetailResponse,
+    "id" | "full_name" | "phone" | "email" | "address" | "social_media" | "notes" | "updated_at"
+  > | null>(null);
+  const [customerProfileLoading, setCustomerProfileLoading] = useState(false);
+  const [customerProfileError, setCustomerProfileError] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -151,28 +254,127 @@ export function NewReservationSheet({
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   const canCreate = permissionCodes.includes("reservations.manage");
-  const selectedVariant =
+  const activeVariant =
     productDetail?.variants.find((variant) => variant.id === selectedVariantId) ?? null;
+  const primaryVariant =
+    primaryGarment?.detail?.variants.find((variant) => variant.id === primaryGarment.variantId) ??
+    null;
+  const primaryVariantId = primaryGarment?.variantId ?? "";
+  const rentalVariant = rebookFrom ? activeVariant : primaryVariant;
+  const calendarSelection = useMemo(() => {
+    if (rebookFrom) {
+      if (!activeVariant || !productDetail) return [];
+      return [
+        {
+          variantId: activeVariant.id,
+          label: `${productDetail.name} · ${reservationVariantLabel(
+            activeVariant.size_label,
+            activeVariant.color_label
+          )}`,
+        },
+      ];
+    }
+    return [primaryGarment, ...extraGarments]
+      .filter((garment): garment is AdditionalGarment => Boolean(garment?.variantId))
+      .map((garment) => {
+        const variant = garment.detail?.variants.find((item) => item.id === garment.variantId);
+        return {
+          variantId: garment.variantId as ProductVariantId,
+          label: `${garment.name} · ${variant ? reservationVariantLabel(variant.size_label, variant.color_label) : "Selected size"}`,
+        };
+      });
+  }, [activeVariant, extraGarments, primaryGarment, productDetail, rebookFrom]);
+  const calendarVariantIds = useMemo(
+    () => [...new Set(calendarSelection.map((item) => item.variantId))],
+    [calendarSelection]
+  );
+  const calendarVariantKey = calendarVariantIds.join("|");
+  const calendarAvailabilityItems = useMemo<ReservationCalendarAvailabilityItem[]>(
+    () =>
+      calendarSelection.flatMap((item) => {
+        const response = calendarAvailabilityByVariant[item.variantId];
+        return response ? [{ label: item.label, response }] : [];
+      }),
+    [calendarAvailabilityByVariant, calendarSelection]
+  );
+  const calendarAvailabilityReady = Boolean(
+    calendarVariantIds.length > 0 &&
+      !calendarLoading &&
+      !calendarAvailabilityError &&
+      calendarAvailabilityItems.length === calendarVariantIds.length
+  );
   const selectedCustomer =
     customerOptions.find((customer) => customer.id === selectedCustomerId) ?? null;
-  const customerReady =
-    customerMode === "existing"
-      ? Boolean(selectedCustomerId && (selectedCustomer?.has_address || address.trim()))
-      : Boolean(fullName.trim() && (phone.trim() || email.trim()) && address.trim());
+  const currentCustomerProfile =
+    selectedCustomerProfile?.id === selectedCustomerId ? selectedCustomerProfile : null;
+  const completionValues = {
+    full_name: fullName.trim(),
+    phone: phone.trim(),
+    email: email.trim(),
+    address: address.trim(),
+  };
+  const completionResult = staffReservationCompletionCustomer.safeParse(completionValues);
+  const completionErrors = completionResult.success
+    ? {}
+    : completionResult.error.issues.reduce<
+        Partial<Record<"full_name" | "phone" | "email" | "address", string>>
+      >((errors, issue) => {
+        const field = issue.path[0];
+        if (field !== "full_name" && field !== "phone" && field !== "email" && field !== "address")
+          return errors;
+        errors[field] =
+          field === "full_name"
+            ? "Enter the customer’s name."
+            : field === "phone"
+              ? "Enter a valid 11-digit phone number."
+              : field === "email"
+                ? "Enter a valid email address."
+                : "Enter the customer’s address.";
+        return errors;
+      }, {});
+  const customerReady = Boolean(
+    completionResult.success &&
+    (customerMode !== "existing" ||
+      (selectedCustomerId &&
+        currentCustomerProfile &&
+        !customerProfileLoading &&
+        !customerProfileError))
+  );
   const requestedInterval = useMemo(
     () => toRequestedInterval(pickupDate, pickupTime, dueDate, dueTime, timeZone),
     [dueDate, dueTime, pickupDate, pickupTime, timeZone]
   );
   const minimumDurationIssue = useMemo(
-    () => minimumRentalDurationIssue(selectedVariant, requestedInterval, timeZone),
-    [requestedInterval, selectedVariant, timeZone]
+    () => minimumRentalDurationIssue(rentalVariant, requestedInterval, timeZone),
+    [requestedInterval, rentalVariant, timeZone]
   );
   const exactAvailabilityMatchesSelection = Boolean(
     exactAvailability &&
-      requestedInterval &&
-      exactAvailability.variant_id === selectedVariant?.id &&
-      exactAvailability.requested_interval.start === requestedInterval.start &&
-      exactAvailability.requested_interval.end === requestedInterval.end
+    requestedInterval &&
+    exactAvailability.variant_id === primaryVariant?.id &&
+    exactAvailability.requested_interval.start === requestedInterval.start &&
+    exactAvailability.requested_interval.end === requestedInterval.end
+  );
+  const extrasReadiness = additionalGarmentsReadiness(
+    extraGarments,
+    primaryVariantId,
+    requestedInterval ? `${requestedInterval.start}|${requestedInterval.end}` : null
+  );
+  const rebookLineCounts = useMemo(
+    () =>
+      rebookLines.reduce<Record<string, number>>((counts, line) => {
+        counts[line.variantId] = (counts[line.variantId] ?? 0) + 1;
+        return counts;
+      }, {}),
+    [rebookLines]
+  );
+  const rebookAvailabilityReady = Boolean(
+    rebookLines.length > 0 &&
+    !rebookAvailabilityLoading &&
+    Object.entries(rebookLineCounts).every(([variantId, count]) => {
+      const availability = rebookAvailability[variantId];
+      return availability?.available_assets !== undefined && availability.available_assets >= count;
+    })
   );
   const holdRemainingMs = held?.reservation.hold_expires_at
     ? new Date(held.reservation.hold_expires_at).getTime() - now
@@ -181,6 +383,28 @@ export function NewReservationSheet({
   const tenantId = useVerifiedActorContext()?.tenant.id ?? null;
   const heldId = held?.reservation.id ?? null;
   const liveHold = step === "held" && heldId !== null && !holdExpired;
+
+  useEffect(() => {
+    if (!heldId || step === "select") {
+      setHeldLines(null);
+      setHeldLinesError(null);
+      return;
+    }
+    let cancelled = false;
+    setHeldLines(null);
+    setHeldLinesError(null);
+    void createDrezivoApiClient(getToken)
+      .getReservationDetail(heldId)
+      .then((result) => {
+        if (!cancelled) setHeldLines(result.data.lines);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setHeldLinesError(toMessage(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, heldId, step]);
 
   // While the hold is live this sheet owns it, so the dashboard's pending-hold guard stays out of the way.
   // Claim first, then record the pointer, so the guard never sees an unowned live hold and opens a second sheet.
@@ -207,8 +431,28 @@ export function NewReservationSheet({
   // Keep what staff typed for this hold across a refresh (this tab only).
   useEffect(() => {
     if (!liveHold || !heldId) return;
-    saveHoldDraft<HoldDraft>(heldId, { customerMode, selectedCustomerId, fullName, phone, email, address, socialMedia, notes });
-  }, [address, customerMode, email, fullName, heldId, liveHold, notes, phone, selectedCustomerId, socialMedia]);
+    saveHoldDraft<HoldDraft>(heldId, {
+      customerMode,
+      selectedCustomerId,
+      fullName,
+      phone,
+      email,
+      address,
+      socialMedia,
+      notes,
+    });
+  }, [
+    address,
+    customerMode,
+    email,
+    fullName,
+    heldId,
+    liveHold,
+    notes,
+    phone,
+    selectedCustomerId,
+    socialMedia,
+  ]);
 
   // Resume a live hold opened by the dashboard's pending-hold guard.
   useEffect(() => {
@@ -221,7 +465,8 @@ export function NewReservationSheet({
         const draft = readHoldDraft<HoldDraft>(resumeReservationId);
         if (draft) {
           if (draft.customerMode) setCustomerMode(draft.customerMode);
-          if (draft.selectedCustomerId) setSelectedCustomerId(draft.selectedCustomerId as CustomerId);
+          if (draft.selectedCustomerId)
+            setSelectedCustomerId(draft.selectedCustomerId as CustomerId);
           setFullName(draft.fullName ?? "");
           setPhone(draft.phone ?? "");
           setEmail(draft.email ?? "");
@@ -229,11 +474,19 @@ export function NewReservationSheet({
           setSocialMedia(draft.socialMedia ?? "");
           setNotes(draft.notes ?? "");
         }
-        setHeld({ reservation: result.data.reservation, paymentInstructions: result.data.payment_instructions });
-        setCashAmountReceived(minorUnitsToMajorInput(result.data.reservation.price_snapshot.due_now_minor));
+        setHeld({
+          reservation: result.data.reservation,
+          paymentInstructions: result.data.payment_instructions,
+        });
+        setCashAmountReceived(
+          minorUnitsToMajorInput(result.data.reservation.price_snapshot.due_now_minor)
+        );
         setStep("held");
         setNow(Date.now());
-        setNotice({ tone: "attention", text: "This garment is still on hold. Complete the reservation or cancel the hold to close this." });
+        setNotice({
+          tone: "attention",
+          text: "This garment is still on hold. Complete the reservation or cancel the hold to close this.",
+        });
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -243,7 +496,10 @@ export function NewReservationSheet({
           onOpenChange(false);
           return;
         }
-        setNotice({ tone: "attention", text: "Could not reload the garment hold. Check your connection; it stays on hold until it expires." });
+        setNotice({
+          tone: "attention",
+          text: "Could not reload the garment hold. Check your connection; it stays on hold until it expires.",
+        });
       });
     return () => {
       cancelled = true;
@@ -254,7 +510,8 @@ export function NewReservationSheet({
     if (!open) return;
     let cancelled = false;
     const api = createDrezivoApiClient(getToken);
-    void api.getBusinessHours()
+    void api
+      .getBusinessHours()
       .then((result) => {
         if (!cancelled) setBusinessHours(result.data);
       })
@@ -265,8 +522,14 @@ export function NewReservationSheet({
       .getStaffReservationIntakeOptions({})
       .then((result) => {
         if (cancelled) return;
-        setPaymentMethods(result.data.payment_methods);
-        setPaymentMethodId((current) => current || result.data.payment_methods[0]?.id || "");
+        const methods = result.data.payment_methods;
+        setPaymentMethods(methods);
+        setPaymentMethodId((current) => {
+          const preferred = rebookFrom?.paymentMethodId;
+          if (preferred && methods.some((method) => method.id === preferred)) return preferred;
+          if (current && methods.some((method) => method.id === current)) return current;
+          return methods[0]?.id ?? "";
+        });
       })
       .catch((error) => {
         if (!cancelled) setNotice({ tone: "attention", text: toMessage(error) });
@@ -274,7 +537,7 @@ export function NewReservationSheet({
     return () => {
       cancelled = true;
     };
-  }, [getToken, open]);
+  }, [getToken, open, rebookFrom]);
 
   useEffect(() => {
     if (!open || step !== "select") return;
@@ -325,18 +588,31 @@ export function NewReservationSheet({
         setVariantSelectionError(null);
         if (result.data.sizing_mode === "free_size") {
           const activeFreeSizeVariants = result.data.variants.filter(
-            (variant) => variant.status === "active" && variant.size_label === null,
+            (variant) => variant.status === "active" && variant.size_label === null
           );
           const [freeSizeVariant] = activeFreeSizeVariants;
           if (activeFreeSizeVariants.length === 1 && freeSizeVariant) {
             setSelectedVariantId(freeSizeVariant.id);
           } else {
             setSelectedVariantId("");
-            setVariantSelectionError("This flexible-fit clothing item is not configured correctly.");
+            setVariantSelectionError(
+              "This flexible-fit clothing item is not configured correctly."
+            );
           }
         } else {
-          setSelectedVariantId("");
+          const pending = pendingVariantIdRef.current;
+          const match = pending
+            ? result.data.variants.find(
+                (variant) => variant.id === pending && variant.status === "active"
+              )
+            : undefined;
+          setSelectedVariantId(match ? match.id : "");
+          if (pending && !match)
+            setVariantSelectionError(
+              "The size from the original reservation is no longer available. Choose a size."
+            );
         }
+        pendingVariantIdRef.current = null;
       })
       .catch((error) => {
         if (!cancelled) setNotice({ tone: "attention", text: toMessage(error) });
@@ -347,27 +623,99 @@ export function NewReservationSheet({
   }, [getToken, selectedProduct]);
 
   useEffect(() => {
-    if (!open || step !== "select" || !selectedVariantId) {
-      setCalendarAvailability(null);
+    if (
+      !open ||
+      step !== "select" ||
+      rebookFrom ||
+      !selectedProduct ||
+      productDetail?.sizing_mode !== "free_size"
+    ) {
+      return;
+    }
+    const activeVariants = productDetail.variants.filter(
+      (variant) => variant.status === "active" && variant.size_label === null
+    );
+    const [variant] = activeVariants;
+    if (activeVariants.length !== 1 || !variant) {
+      setVariantSelectionError("This flexible-fit clothing item is not configured correctly.");
+      return;
+    }
+    if (
+      primaryGarment?.productId === selectedProduct.product_id ||
+      extraGarments.some((garment) => garment.productId === selectedProduct.product_id)
+    ) {
+      return;
+    }
+    if (extraGarments.length + (primaryGarment ? 1 : 0) >= MAX_GARMENTS_PER_BOOKING) {
+      setNotice({
+        tone: "attention",
+        text: `A reservation can include up to ${MAX_GARMENTS_PER_BOOKING} garments.`,
+      });
+      return;
+    }
+    const productCard = products.find(
+      (product) => product.product_id === selectedProduct.product_id
+    );
+    const garment: AdditionalGarment = {
+      key: `${selectedProduct.product_id}-${primaryGarment ? "selected" : "primary"}-${Date.now()}`,
+      productId: selectedProduct.product_id,
+      name: productDetail.name,
+      imageUrl: productCard?.primary_image_url ?? null,
+      detail: productDetail,
+      variantId: variant.id,
+      availableAssets: null,
+      availabilityCheck: null,
+      checkedFor: null,
+      error: null,
+    };
+    if (primaryGarment) updateExtraGarments((current) => [...current, garment]);
+    else setPrimaryGarment(garment);
+    setSelectedVariantId(variant.id);
+    setVariantSelectionError(null);
+    setNotice(null);
+  }, [
+    extraGarments,
+    open,
+    primaryGarment,
+    productDetail,
+    products,
+    rebookFrom,
+    selectedProduct,
+    step,
+    updateExtraGarments,
+  ]);
+
+  useEffect(() => {
+    const variantIds = calendarVariantKey ? calendarVariantKey.split("|") : [];
+    if (!open || step !== "select" || variantIds.length === 0) {
+      setCalendarAvailabilityByVariant({});
       setCalendarLoading(false);
+      setCalendarAvailabilityError(null);
       return;
     }
     let cancelled = false;
     const window = monthWindow(calendarMonth);
     setCalendarLoading(true);
-    void createDrezivoApiClient(getToken)
-      .getStaffReservationAvailabilityCalendar({
-        variant_id: selectedVariantId,
-        start_date: window.startDate,
-        end_date: window.endDate,
+    setCalendarAvailabilityByVariant({});
+    setCalendarAvailabilityError(null);
+    const api = createDrezivoApiClient(getToken);
+    void Promise.all(
+      variantIds.map(async (variantId) => {
+        const result = await api.getStaffReservationAvailabilityCalendar({
+          variant_id: variantId as ProductVariantId,
+          start_date: window.startDate,
+          end_date: window.endDate,
+        });
+        return [variantId, result.data] as const;
       })
-      .then((result) => {
-        if (!cancelled) setCalendarAvailability(result.data);
+    )
+      .then((results) => {
+        if (!cancelled) setCalendarAvailabilityByVariant(Object.fromEntries(results));
       })
       .catch((error) => {
         if (!cancelled) {
-          setCalendarAvailability(null);
-          setNotice({ tone: "attention", text: toMessage(error) });
+          setCalendarAvailabilityByVariant({});
+          setCalendarAvailabilityError(toMessage(error));
         }
       })
       .finally(() => {
@@ -376,13 +724,13 @@ export function NewReservationSheet({
     return () => {
       cancelled = true;
     };
-  }, [availabilityReloadVersion, calendarMonth, getToken, open, selectedVariantId, step]);
+  }, [availabilityReloadVersion, calendarMonth, calendarVariantKey, getToken, open, step]);
 
   useEffect(() => {
     if (
       !open ||
       step !== "select" ||
-      !selectedVariantId ||
+      !primaryVariantId ||
       !requestedInterval ||
       minimumDurationIssue
     ) {
@@ -397,7 +745,7 @@ export function NewReservationSheet({
     setExactAvailabilityLoading(true);
     void createDrezivoApiClient(getToken)
       .getStaffReservationAvailabilityCheck({
-        variant_id: selectedVariantId,
+        variant_id: primaryVariantId,
         pickup_at: requestedInterval.start,
         due_at: requestedInterval.end,
       })
@@ -422,9 +770,52 @@ export function NewReservationSheet({
     minimumDurationIssue,
     open,
     requestedInterval,
-    selectedVariantId,
+    primaryVariantId,
     step,
   ]);
+
+  useEffect(() => {
+    if (
+      !open ||
+      step !== "select" ||
+      !rebookFrom ||
+      !requestedInterval ||
+      rebookLines.length === 0
+    ) {
+      setRebookAvailability({});
+      setRebookAvailabilityLoading(false);
+      setRebookAvailabilityError(null);
+      return;
+    }
+    let cancelled = false;
+    const variantIds = [...new Set(rebookLines.map((line) => line.variantId))];
+    setRebookAvailability({});
+    setRebookAvailabilityError(null);
+    setRebookAvailabilityLoading(true);
+    const api = createDrezivoApiClient(getToken);
+    void Promise.all(
+      variantIds.map(async (variantId) => {
+        const result = await api.getStaffReservationAvailabilityCheck({
+          variant_id: variantId,
+          pickup_at: requestedInterval.start,
+          due_at: requestedInterval.end,
+        });
+        return [variantId, result.data] as const;
+      })
+    )
+      .then((results) => {
+        if (!cancelled) setRebookAvailability(Object.fromEntries(results));
+      })
+      .catch((error) => {
+        if (!cancelled) setRebookAvailabilityError(toMessage(error));
+      })
+      .finally(() => {
+        if (!cancelled) setRebookAvailabilityLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, open, rebookFrom, rebookLines, requestedInterval, step]);
 
   useEffect(() => {
     if (!eventDate) return;
@@ -457,7 +848,58 @@ export function NewReservationSheet({
     return () => {
       cancelled = true;
     };
-  }, [customerMode, debouncedCustomerSearch, getToken, isCustomerSearchPending, isCustomerSearchTooShort, open, step]);
+  }, [
+    customerMode,
+    debouncedCustomerSearch,
+    getToken,
+    isCustomerSearchPending,
+    isCustomerSearchTooShort,
+    open,
+    step,
+  ]);
+
+  useEffect(() => {
+    if (!open || step !== "held" || customerMode !== "existing" || !selectedCustomerId) {
+      setCustomerProfileLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setCustomerProfileLoading(true);
+    setCustomerProfileError(null);
+    void createDrezivoApiClient(getToken)
+      .getCustomerDetail(selectedCustomerId)
+      .then((result) => {
+        if (cancelled) return;
+        const profile = result.data;
+        const rebookCustomer =
+          rebookFrom?.customer?.customerId === selectedCustomerId ? rebookFrom.customer : null;
+        setSelectedCustomerProfile({
+          id: profile.id,
+          full_name: profile.full_name,
+          phone: profile.phone,
+          email: profile.email,
+          address: profile.address,
+          social_media: profile.social_media,
+          notes: profile.notes,
+          updated_at: profile.updated_at,
+        });
+        setFullName(profile.full_name);
+        setPhone(profile.phone ?? rebookCustomer?.phone ?? "");
+        setEmail(profile.email ?? rebookCustomer?.email ?? "");
+        setAddress(profile.address ?? rebookCustomer?.address ?? "");
+        setSocialMedia(profile.social_media ?? "");
+        setNotes(profile.notes ?? "");
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setCustomerProfileError(toMessage(error));
+      })
+      .finally(() => {
+        if (!cancelled) setCustomerProfileLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerMode, getToken, open, rebookFrom, selectedCustomerId, step]);
 
   useEffect(() => {
     if (!held?.reservation.hold_expires_at || step !== "held") return;
@@ -475,7 +917,73 @@ export function NewReservationSheet({
     }
   }, [holdExpired, step]);
 
+  useEffect(() => {
+    if (
+      !open ||
+      !rebookFrom ||
+      step !== "select" ||
+      appliedRebookRef.current === rebookFrom.referenceCode
+    )
+      return;
+    appliedRebookRef.current = rebookFrom.referenceCode;
+    const firstLine = rebookFrom.lines[0];
+    if (!firstLine) return;
+    setRebookLines(rebookFrom.lines);
+    pendingVariantIdRef.current = firstLine.variantId;
+    setSelectedProduct({ product_id: firstLine.productId });
+
+    const pickupInstant = new Date(rebookFrom.pickupAt);
+    const dueInstant = new Date(rebookFrom.dueAt);
+    const pickup = localDateTimeParts(pickupInstant, timeZone);
+    const due = localDateTimeParts(dueInstant, timeZone);
+    const datesAhead =
+      pickup.date >= todayInTimeZone(timeZone) &&
+      pickupInstant.getTime() > Date.now() &&
+      dueInstant.getTime() > pickupInstant.getTime();
+    if (datesAhead) {
+      setPickupDate(pickup.date);
+      setPickupTime(pickup.time);
+      setDueDate(due.date);
+      setDueTime(due.time);
+      setCalendarMonth(parseCalendarDate(pickup.date) ?? new Date());
+      if (rebookFrom.eventDate) setEventDate(rebookFrom.eventDate);
+    }
+    setFulfillmentMethod(rebookFrom.fulfillmentMethod);
+    if (
+      rebookFrom.paymentMethodId &&
+      paymentMethods.some((method) => method.id === rebookFrom.paymentMethodId)
+    ) {
+      setPaymentMethodId(rebookFrom.paymentMethodId);
+    }
+
+    const customer = rebookFrom.customer;
+    if (customer?.customerId) {
+      // The customer step searches by name; the original customer is pre-selected in the results.
+      setCustomerMode("existing");
+      setCustomerSearch(customer.fullName);
+      setSelectedCustomerId(customer.customerId);
+      setPhone(customer.phone ?? "");
+      setEmail(customer.email ?? "");
+      setAddress(customer.address ?? "");
+    } else if (customer) {
+      setCustomerMode("new");
+      setFullName(customer.fullName);
+      setPhone(customer.phone ?? "");
+      setEmail(customer.email ?? "");
+      setAddress(customer.address ?? "");
+    }
+    setNotice({
+      tone: "info",
+      text: datesAhead
+        ? `Copied from ${rebookFrom.referenceCode}. Check that the dates are still free, then reserve.`
+        : `Copied from ${rebookFrom.referenceCode}. Its dates have passed, so choose new dates.`,
+    });
+  }, [open, paymentMethods, rebookFrom, step, timeZone]);
+
   const reset = () => {
+    appliedRebookRef.current = null;
+    pendingVariantIdRef.current = null;
+    setExtraGarments([]);
     reserveGuard.resetIntent();
     completeGuard.resetIntent();
     cancelGuard.resetIntent();
@@ -489,17 +997,27 @@ export function NewReservationSheet({
     setDueTime("");
     setEventDate("");
     setCalendarMonth(parseCalendarDate(todayInTimeZone(timeZone)) ?? new Date());
-    setCalendarAvailability(null);
+    setCalendarAvailabilityByVariant({});
     setCalendarLoading(false);
+    setCalendarAvailabilityError(null);
     setExactAvailability(null);
     setExactAvailabilityLoading(false);
     setExactAvailabilityError(null);
     setFulfillmentMethod("pickup");
     setSelectedProduct(null);
+    setPrimaryGarment(null);
     setProductDetail(null);
     setSelectedVariantId("");
+    setRebookLines([]);
+    setRebookAvailability({});
+    setRebookAvailabilityLoading(false);
+    setRebookAvailabilityError(null);
+    setCancelDialogOpen(false);
+    setCancelDialogError(null);
     setVariantSelectionError(null);
     setHeld(null);
+    setHeldLines(null);
+    setHeldLinesError(null);
     setCashAmountReceived("");
     setCashReceived(false);
     setReceiptFile(null);
@@ -510,6 +1028,9 @@ export function NewReservationSheet({
     setCustomerSearch("");
     setCustomerOptions([]);
     setSelectedCustomerId("");
+    setSelectedCustomerProfile(null);
+    setCustomerProfileLoading(false);
+    setCustomerProfileError(null);
     setFullName("");
     setPhone("");
     setEmail("");
@@ -517,6 +1038,154 @@ export function NewReservationSheet({
     setSocialMedia("");
     setNotes("");
     setTermsAccepted(false);
+  };
+
+  const makeSelectedGarment = (
+    variantId: ProductVariantId,
+    keySuffix: string
+  ): AdditionalGarment | null => {
+    if (!selectedProduct || !productDetail) return null;
+    const productCard = products.find(
+      (product) => product.product_id === selectedProduct.product_id
+    );
+    return {
+      key: `${selectedProduct.product_id}-${keySuffix}-${Date.now()}`,
+      productId: selectedProduct.product_id,
+      name: productDetail.name,
+      imageUrl: productCard?.primary_image_url ?? null,
+      detail: productDetail,
+      variantId,
+      availableAssets: null,
+      availabilityCheck: null,
+      checkedFor: null,
+      error: null,
+    };
+  };
+
+  const removePrimaryGarment = () => {
+    if (extraGarments[0]) {
+      const [promoted, ...remaining] = extraGarments;
+      setPrimaryGarment(promoted);
+      updateExtraGarments(() => remaining);
+      setSelectedProduct({ product_id: promoted.productId });
+      setProductDetail(promoted.detail);
+      setSelectedVariantId(promoted.variantId);
+    } else {
+      setPrimaryGarment(null);
+      setSelectedProduct(null);
+      setProductDetail(null);
+      setSelectedVariantId("");
+    }
+    setExactAvailability(null);
+    setExactAvailabilityError(null);
+  };
+
+  const removeAdditionalGarment = (garmentKey: string) => {
+    const removedGarment = extraGarments.find((garment) => garment.key === garmentKey);
+    if (!removedGarment) return;
+
+    updateExtraGarments((current) => current.filter((garment) => garment.key !== garmentKey));
+
+    const anotherSelectedLineUsesProduct =
+      primaryGarment?.productId === removedGarment.productId ||
+      extraGarments.some(
+        (garment) =>
+          garment.key !== removedGarment.key && garment.productId === removedGarment.productId
+      );
+    if (
+      removedGarment.detail?.sizing_mode !== "free_size" ||
+      selectedProduct?.product_id !== removedGarment.productId ||
+      anotherSelectedLineUsesProduct
+    ) {
+      return;
+    }
+
+    // The free-size auto-selection effect treats a focused product as a fresh add intent.
+    // Move the chooser away from a removed item so the effect cannot immediately restore it.
+    if (primaryGarment) {
+      pendingVariantIdRef.current = primaryGarment.variantId || null;
+      setSelectedProduct({ product_id: primaryGarment.productId });
+      setProductDetail(primaryGarment.detail);
+      setSelectedVariantId(primaryGarment.variantId);
+      return;
+    }
+
+    pendingVariantIdRef.current = null;
+    setSelectedProduct(null);
+    setProductDetail(null);
+    setSelectedVariantId("");
+    setVariantSelectionError(null);
+    setExactAvailability(null);
+    setExactAvailabilityError(null);
+  };
+
+  const toggleManualVariant = (variantId: ProductVariantId) => {
+    const primary = primaryGarment;
+    if (primary?.variantId === variantId) {
+      removePrimaryGarment();
+      return;
+    }
+    const existingExtra = extraGarments.find((garment) => garment.variantId === variantId);
+    if (existingExtra) {
+      updateExtraGarments((current) =>
+        current.filter((garment) => garment.key !== existingExtra.key)
+      );
+      return;
+    }
+    if (extraGarments.length + (primary ? 1 : 0) >= MAX_GARMENTS_PER_BOOKING) {
+      setNotice({
+        tone: "attention",
+        text: `A reservation can include up to ${MAX_GARMENTS_PER_BOOKING} garments.`,
+      });
+      return;
+    }
+    const garment = makeSelectedGarment(variantId, primary ? "selected" : "primary");
+    if (!garment) return;
+    if (!primary) setPrimaryGarment(garment);
+    else updateExtraGarments((current) => [...current, garment]);
+    setSelectedVariantId(variantId);
+    setNotice(null);
+  };
+
+  const addAnotherSize = (garment: AdditionalGarment) => {
+    if (extraGarments.length + (primaryGarment ? 1 : 0) >= MAX_GARMENTS_PER_BOOKING) return;
+    updateExtraGarments((current) => [
+      ...current,
+      {
+        ...garment,
+        key: `${garment.productId}-selected-${Date.now()}-${current.length}`,
+        variantId: "",
+        availableAssets: null,
+        availabilityCheck: null,
+        checkedFor: null,
+        error: null,
+      },
+    ]);
+  };
+
+  const addRebookLine = () => {
+    if (!activeVariant || !selectedProduct || !productDetail) return;
+    if (rebookLines.length >= 20) {
+      setNotice({
+        tone: "attention",
+        text: "A replacement reservation can contain up to 20 copied lines.",
+      });
+      return;
+    }
+    if (rebookLines.some((line) => line.variantId === activeVariant.id)) {
+      setNotice({ tone: "attention", text: "That variant is already in this replacement." });
+      return;
+    }
+    setRebookLines((current) => [
+      ...current,
+      {
+        sourceLineId: `added-${Date.now()}-${current.length}`,
+        productId: selectedProduct.product_id,
+        variantId: activeVariant.id,
+        name: productDetail.name,
+      },
+    ]);
+    setNotice(null);
   };
 
   const requestClose = (nextOpen: boolean) => {
@@ -537,41 +1206,65 @@ export function NewReservationSheet({
       setNotice({ tone: "attention", text: "Reservation management permission is required." });
       return;
     }
-    if (!selectedVariant || !requestedInterval || !paymentMethodId) {
+    if (
+      (!rebookFrom && !primaryGarment) ||
+      !requestedInterval ||
+      !paymentMethodId ||
+      (rebookFrom && rebookLines.length === 0)
+    ) {
       setNotice({
         tone: "attention",
         text: "Choose clothing, a variant, rental dates, pickup/return times, and a payment method before reserving.",
       });
       return;
     }
-    if (minimumDurationIssue) {
+    if (!rebookFrom && minimumDurationIssue) {
       setNotice({ tone: "attention", text: minimumDurationIssue });
       return;
     }
-    if (!exactAvailability || !exactAvailabilityMatchesSelection) {
+    if (!rebookFrom && (!exactAvailability || !exactAvailabilityMatchesSelection)) {
       setNotice({
         tone: "attention",
         text: "Wait for the exact pickup and return time availability check before reserving.",
       });
       return;
     }
-    if (!exactAvailability.available) {
+    if (!rebookFrom && !exactAvailability?.available) {
       setNotice({
         tone: "attention",
         text: "No single garment in this variant is available for the exact pickup and return times. Choose another period.",
       });
       return;
     }
+    if (!rebookFrom && !extrasReadiness.ready) {
+      setNotice({
+        tone: "attention",
+        text: extrasReadiness.problem ?? "Check the other dresses before reserving.",
+      });
+      return;
+    }
 
+    const request = {
+      requested_interval: requestedInterval,
+      ...(eventDate ? { event_date: eventDate } : {}),
+      fulfillment_method: fulfillmentMethod,
+      payment_method_id: paymentMethodId,
+    };
     const result = await reserveGuard.submit((idempotencyKey) =>
       createDrezivoApiClient(getToken).createStaffReservation(
-        {
-          variant_id: selectedVariant.id,
-          requested_interval: requestedInterval,
-          ...(eventDate ? { event_date: eventDate } : {}),
-          fulfillment_method: fulfillmentMethod,
-          payment_method_id: paymentMethodId,
-        },
+        rebookFrom
+          ? {
+              ...request,
+              variant_id: rebookLines[0]!.variantId,
+              lines: rebookLines.map((line) => ({ variant_id: line.variantId })),
+            }
+          : {
+              ...request,
+              variant_id: primaryGarment!.variantId as ProductVariantId,
+              ...(extrasReadiness.variantIds.length > 0
+                ? { additional_variant_ids: extrasReadiness.variantIds }
+                : {}),
+            },
         idempotencyKey
       )
     );
@@ -592,9 +1285,12 @@ export function NewReservationSheet({
     setServerExpired(false);
     setStep("held");
     setNow(Date.now());
+    const reservedLineCount = rebookFrom
+      ? rebookLines.length
+      : extrasReadiness.variantIds.length + 1;
     setNotice({
       tone: "success",
-      text: "Garment reserved. Finish the customer information before the hold expires.",
+      text: `${reservedLineCount} ${reservedLineCount === 1 ? "garment" : "garments"} reserved. Finish the customer information before the hold expires.`,
     });
     reserveGuard.resetIntent();
     onReservationChanged(result.data.reservation.id);
@@ -606,7 +1302,9 @@ export function NewReservationSheet({
 
     const result = await receiptGuard.submit(async (idempotencyKey) => {
       const client = createDrezivoApiClient(getToken);
-      if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(receiptFile.type)) {
+      if (
+        !["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(receiptFile.type)
+      ) {
         throw new Error("Payment receipt must be JPEG, PNG, WebP, or PDF.");
       }
       if (receiptFile.size > 10 * 1024 * 1024) {
@@ -617,10 +1315,7 @@ export function NewReservationSheet({
         {
           purpose: "payment_receipt",
           content_type: receiptFile.type as
-            | "image/jpeg"
-            | "image/png"
-            | "image/webp"
-            | "application/pdf",
+            "image/jpeg" | "image/png" | "image/webp" | "application/pdf",
           byte_size: receiptFile.size,
           sha256: await fileSha256Base64(receiptFile),
         },
@@ -651,10 +1346,10 @@ export function NewReservationSheet({
 
   const complete = async () => {
     if (!held || holdExpired) return;
-    if (customerMode === "new" && phone.trim() && !/^\d{11}$/.test(phone.trim())) {
+    if (!customerReady) {
       setNotice({
         tone: "attention",
-        text: "Phone number must contain exactly 11 digits.",
+        text: "Complete the highlighted customer details before confirming the reservation.",
       });
       return;
     }
@@ -665,7 +1360,7 @@ export function NewReservationSheet({
       phone,
       email,
       address,
-      hasAddress: selectedCustomer?.has_address ?? false,
+      profile: currentCustomerProfile,
       socialMedia,
       notes,
     });
@@ -674,8 +1369,8 @@ export function NewReservationSheet({
         tone: "attention",
         text:
           customerMode === "existing"
-            ? "Choose an existing customer and enter an address when the profile is missing one."
-            : "Enter the customer name, address, and at least one contact method.",
+            ? "Choose an existing customer and enter a valid name, phone, email, and address."
+            : "Enter a customer name, valid phone number, valid email address, and address.",
       });
       return;
     }
@@ -749,17 +1444,53 @@ export function NewReservationSheet({
     });
   };
 
-  const cancelHold = async () => {
+  const cancelHold = async (saveCustomer: boolean) => {
     if (!held || holdExpired) return;
     setNotice(null);
+    setCancelDialogError(null);
+    const customerInput = saveCustomer
+      ? buildCancellationCustomerInput({
+          customerMode,
+          selectedCustomerId,
+          fullName,
+          phone,
+          email,
+          address,
+          socialMedia,
+          notes,
+        })
+      : null;
+    if (saveCustomer && !customerInput) {
+      setCancelDialogError(
+        customerMode === "existing"
+          ? "Choose an existing customer to link to this cancelled reservation."
+          : "Enter the customer's name and at least one contact method. Address and other details are optional."
+      );
+      return;
+    }
+    const parsedCustomer = customerInput
+      ? reservationCancellationCustomerInput.safeParse(customerInput)
+      : null;
+    if (parsedCustomer && !parsedCustomer.success) {
+      setCancelDialogError(
+        parsedCustomer.error.issues[0]?.message ?? "Check the customer details and try again."
+      );
+      return;
+    }
+    const customer = parsedCustomer?.success ? parsedCustomer.data : null;
     const result = await cancelGuard.submit((idempotencyKey) =>
       createDrezivoApiClient(getToken).cancelReservation(
         held.reservation.id,
-        { version: held.reservation.version, reason: "Staff abandoned new reservation flow" },
+        {
+          version: held.reservation.version,
+          reason: "Staff abandoned new reservation flow",
+          ...(customer ? { customer } : {}),
+        },
         idempotencyKey
       )
     );
     if (!result) return;
+    setCancelDialogOpen(false);
     cancelGuard.resetIntent();
     onReservationChanged(result.data.reservation.id);
     setHeld((current) =>
@@ -767,6 +1498,16 @@ export function NewReservationSheet({
     );
     setStep("done");
     setNotice({ tone: "info", text: "Reservation cancelled and the garment hold was released." });
+  };
+
+  const handleCancelFailure = (error: unknown) => {
+    const apiError = toApiError(error);
+    if (apiError.code === "HOLD_EXPIRED") {
+      setCancelDialogOpen(false);
+      handleFailure(error, cancelGuard);
+      return;
+    }
+    setCancelDialogError(apiError.message);
   };
 
   const handleFailure = (
@@ -778,7 +1519,9 @@ export function NewReservationSheet({
     if (apiError.code === "HOLD_EXPIRED") {
       setServerExpired(true);
       if (held) onReservationChanged(held.reservation.id);
-      const reviewDeadlineExpired = apiError.message.toLowerCase().includes("merchant review deadline");
+      const reviewDeadlineExpired = apiError.message
+        .toLowerCase()
+        .includes("merchant review deadline");
       setNotice({
         tone: "attention",
         text: reviewDeadlineExpired
@@ -836,8 +1579,93 @@ export function NewReservationSheet({
 
         {step === "select" ? (
           <div className="space-y-5 p-5">
+            {rebookFrom ? (
+              <section className="rounded-lg border border-dashboard-border bg-dashboard-active/30 p-4">
+                <SectionTitle icon={Shirt} title="Items in the new reservation" />
+                <p className="mt-1 text-xs text-dashboard-muted">
+                  Copied from {rebookFrom.referenceCode}. Dates, availability, and prices are
+                  checked again before a new hold is created.
+                </p>
+                <div className="mt-3 space-y-2">
+                  {rebookLines.map((line) => {
+                    const availability = rebookAvailability[line.variantId];
+                    const enoughPieces = availability
+                      ? availability.available_assets >= (rebookLineCounts[line.variantId] ?? 1)
+                      : false;
+                    return (
+                      <div
+                        key={line.sourceLineId}
+                        className="flex items-start justify-between gap-3 rounded-md border border-dashboard-border bg-dashboard-surface p-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium text-dashboard-navy">{line.name}</p>
+                          {availability ? (
+                            <p className="mt-1 text-xs text-dashboard-muted">
+                              {enoughPieces
+                                ? `${availability.available_assets} available`
+                                : "Unavailable for these dates"}
+                              {` · Rental ${formatMinorMoney(availability.rental_preview.rental_total_minor, availability.rental_preview.currency)}`}
+                              {` · Deposit ${formatMinorMoney(availability.pricing.security_deposit_minor, availability.pricing.currency)}`}
+                            </p>
+                          ) : rebookAvailabilityLoading ? (
+                            <p className="mt-1 text-xs text-dashboard-muted">
+                              Checking availability and current price…
+                            </p>
+                          ) : null}
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() =>
+                            setRebookLines((current) =>
+                              current.filter((item) => item.sourceLineId !== line.sourceLineId)
+                            )
+                          }
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    );
+                  })}
+                  {rebookLines.length === 0 ? (
+                    <p
+                      className="rounded-md border border-dashboard-danger/30 bg-dashboard-danger/10 p-3 text-sm text-dashboard-danger"
+                      role="alert"
+                    >
+                      Add at least one active item below before reserving.
+                    </p>
+                  ) : null}
+                </div>
+                {rebookAvailabilityError ? (
+                  <p className="mt-2 text-sm text-dashboard-danger" role="alert">
+                    {rebookAvailabilityError}
+                  </p>
+                ) : null}
+                {rebookLines.some(
+                  (line) =>
+                    !rebookAvailability[line.variantId] ||
+                    rebookAvailability[line.variantId]!.available_assets <
+                      (rebookLineCounts[line.variantId] ?? 1)
+                ) ? (
+                  <p className="mt-2 text-xs text-dashboard-muted">
+                    Remove unavailable lines, choose dates with enough pieces, or select another
+                    item below.
+                  </p>
+                ) : null}
+              </section>
+            ) : null}
             <section>
-              <SectionTitle icon={Search} title="Choose clothing" />
+              <SectionTitle
+                icon={Search}
+                title={rebookFrom ? "Add or replace a clothing item" : "Choose garments"}
+              />
+              {!rebookFrom ? (
+                <p className="mt-1 text-xs text-dashboard-muted">
+                  Select a size for each garment. Selected styles are highlighted; you can add
+                  distinct sizes from the same style.
+                </p>
+              ) : null}
               <Input
                 className="mt-3"
                 aria-label="Search clothing for reservation"
@@ -848,68 +1676,152 @@ export function NewReservationSheet({
               <div className="mt-3 grid gap-2">
                 {isProductSearchPending || productsLoading ? (
                   <p className="text-sm text-dashboard-muted">
-                    {isProductSearchPending ? "Waiting to search clothing…" : "Loading active clothing…"}
+                    {isProductSearchPending
+                      ? "Waiting to search clothing…"
+                      : "Loading active clothing…"}
                   </p>
                 ) : products.length === 0 ? (
                   <p className="text-sm text-dashboard-muted">
                     No active clothing matches this search.
                   </p>
                 ) : (
-                  products.slice(0, PRODUCT_LIMIT).map((product) => (
-                    <button
-                      key={product.product_id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedProduct(product);
-                        setProductDetail(null);
-                        setSelectedVariantId("");
-                        setVariantSelectionError(null);
-                        setPickupDate("");
-                        setDueDate("");
-                        setPickupTime("");
-                        setDueTime("");
-                        setEventDate("");
-                        setCalendarAvailability(null);
-                        setExactAvailability(null);
-                        setExactAvailabilityError(null);
-                        setCalendarMonth(parseCalendarDate(todayInTimeZone(timeZone)) ?? new Date());
-                        reserveGuard.resetIntent();
-                      }}
-                      className={cn(
-                        "flex items-center justify-between gap-3 rounded-lg border p-3 text-left",
-                        selectedProduct?.product_id === product.product_id
-                          ? "border-dashboard-accent bg-dashboard-active"
-                          : "border-dashboard-border hover:bg-dashboard-active/50"
-                      )}
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-14 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-dashboard-active text-xs font-semibold text-dashboard-accent">
-                          {product.primary_image_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element -- signed catalogue URLs are dynamic and are not configured as stable next/image remote patterns.
-                            <img
-                              src={product.primary_image_url}
-                              alt={`${product.name} catalogue photo`}
-                              loading="lazy"
-                              decoding="async"
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <Shirt className="h-5 w-5" aria-hidden="true" />
+                  products.slice(0, PRODUCT_LIMIT).map((product) =>
+                    (() => {
+                      const extraCount = extraGarments.filter(
+                        (garment) => garment.productId === product.product_id
+                      ).length;
+                      const isPrimary = primaryGarment?.productId === product.product_id;
+                      const selectedCount = extraCount + (isPrimary ? 1 : 0);
+                      const isBrowsing = selectedProduct?.product_id === product.product_id;
+                      return (
+                        <button
+                          key={product.product_id}
+                          type="button"
+                          aria-label={
+                            !rebookFrom && product.sizing_mode === "free_size"
+                              ? selectedCount > 0
+                                ? `Remove ${product.name}`
+                                : `Add ${product.name}`
+                              : selectedCount > 0 && !isPrimary
+                                ? `Deselect ${product.name}`
+                                : `Choose ${product.name}`
+                          }
+                          onClick={() => {
+                            if (!rebookFrom && product.sizing_mode === "free_size") {
+                              if (selectedCount > 0) {
+                                if (isPrimary) {
+                                  removePrimaryGarment();
+                                } else {
+                                  updateExtraGarments((current) =>
+                                    current.filter(
+                                      (garment) => garment.productId !== product.product_id
+                                    )
+                                  );
+                                  if (isBrowsing) {
+                                    if (primaryGarment) {
+                                      setSelectedProduct({ product_id: primaryGarment.productId });
+                                      setProductDetail(primaryGarment.detail);
+                                      setSelectedVariantId(primaryGarment.variantId);
+                                    } else {
+                                      setSelectedProduct(null);
+                                      setProductDetail(null);
+                                      setSelectedVariantId("");
+                                    }
+                                  }
+                                }
+                                setExactAvailability(null);
+                                setExactAvailabilityError(null);
+                                return;
+                              }
+                              if (
+                                extraGarments.length + (primaryGarment ? 1 : 0) >=
+                                MAX_GARMENTS_PER_BOOKING
+                              ) {
+                                setNotice({
+                                  tone: "attention",
+                                  text: `A reservation can include up to ${MAX_GARMENTS_PER_BOOKING} garments.`,
+                                });
+                                return;
+                              }
+                              setSelectedProduct(product);
+                              setProductDetail(null);
+                              setSelectedVariantId("");
+                              setVariantSelectionError(null);
+                              setNotice(null);
+                              reserveGuard.resetIntent();
+                              return;
+                            }
+                            if (!rebookFrom && selectedCount > 0 && !isPrimary) {
+                              updateExtraGarments((current) =>
+                                current.filter(
+                                  (garment) => garment.productId !== product.product_id
+                                )
+                              );
+                              if (isBrowsing) {
+                                if (primaryGarment) {
+                                  setSelectedProduct({ product_id: primaryGarment.productId });
+                                  setProductDetail(primaryGarment.detail);
+                                  setSelectedVariantId(primaryGarment.variantId);
+                                } else {
+                                  setSelectedProduct(null);
+                                  setProductDetail(null);
+                                  setSelectedVariantId("");
+                                }
+                              }
+                              return;
+                            }
+                            setSelectedProduct(product);
+                            setProductDetail(null);
+                            setSelectedVariantId("");
+                            setVariantSelectionError(null);
+                            reserveGuard.resetIntent();
+                          }}
+                          className={cn(
+                            "flex items-center justify-between gap-3 rounded-lg border p-3 text-left",
+                            selectedCount > 0
+                              ? "border-dashboard-accent bg-dashboard-active"
+                              : isBrowsing
+                                ? "border-dashboard-accent/60 ring-1 ring-dashboard-accent/30"
+                                : "border-dashboard-border hover:bg-dashboard-active/50"
                           )}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate font-medium text-dashboard-navy">{product.name}</p>
-                          <p className="mt-1 text-xs text-dashboard-muted">
-                            {product.code} · from{" "}
-                            {formatMinorMoney(product.price_from_minor, product.currency)}
-                          </p>
-                        </div>
-                      </div>
-                      <Badge variant="outline" className="shrink-0">
-                        {product.readiness.ready} ready
-                      </Badge>
-                    </button>
-                  ))
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="flex h-14 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-dashboard-active text-xs font-semibold text-dashboard-accent">
+                              {product.primary_image_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element -- signed catalogue URLs are dynamic and are not configured as stable next/image remote patterns.
+                                <img
+                                  src={product.primary_image_url}
+                                  alt={`${product.name} catalogue photo`}
+                                  loading="lazy"
+                                  decoding="async"
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <Shirt className="h-5 w-5" aria-hidden="true" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate font-medium text-dashboard-navy">
+                                {product.name}
+                              </p>
+                              <p className="mt-1 text-xs text-dashboard-muted">
+                                {product.code} · from{" "}
+                                {formatMinorMoney(product.price_from_minor, product.currency)}
+                              </p>
+                            </div>
+                          </div>
+                          <Badge
+                            variant={selectedCount > 0 ? "default" : "outline"}
+                            className="shrink-0"
+                          >
+                            {selectedCount > 0
+                              ? `${selectedCount} selected`
+                              : `${product.readiness.ready} ready`}
+                          </Badge>
+                        </button>
+                      );
+                    })()
+                  )
                 )}
               </div>
               {!isProductSearchPending && !productsLoading && products.length > 0 ? (
@@ -921,74 +1833,146 @@ export function NewReservationSheet({
               ) : null}
             </section>
 
-            {productDetail ? (
+            {productDetail && (rebookFrom || productDetail.sizing_mode !== "free_size") ? (
               <section>
                 <SectionTitle icon={Shirt} title="Choose size / variant" />
                 <p className="mt-1 text-xs text-dashboard-muted">
-                  Availability is calculated per variant because each size can have different serialized garments and bookings.
+                  Availability is calculated per variant because each size can have different
+                  serialized garments and bookings.
                 </p>
                 {productDetail.sizing_mode === "free_size" ? (
                   <div className="mt-3 rounded-lg border border-dashboard-border bg-dashboard-active/40 p-3 text-sm">
                     <p className="font-medium text-dashboard-navy">Flexible fit</p>
-                    <p className="mt-1 text-xs text-dashboard-muted">This clothing item has one rentable size.</p>
+                    <p className="mt-1 text-xs text-dashboard-muted">
+                      This clothing item has one rentable size.
+                    </p>
+                    {activeVariant ? (
+                      rebookFrom &&
+                      rebookLines.some((line) => line.variantId === activeVariant.id) ? (
+                        <span
+                          className={buttonVariants({
+                            variant: "default",
+                            size: "sm",
+                            className: "mt-3 pointer-events-none cursor-default",
+                          })}
+                          role="status"
+                        >
+                          Already selected
+                        </span>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="mt-3"
+                          variant={
+                            rebookFrom
+                              ? "secondary"
+                              : primaryVariantId === activeVariant.id ||
+                                  extraGarments.some(
+                                    (garment) => garment.variantId === activeVariant.id
+                                  )
+                                ? "default"
+                                : "secondary"
+                          }
+                          onClick={() => {
+                            if (rebookFrom) setSelectedVariantId(activeVariant.id);
+                            else toggleManualVariant(activeVariant.id);
+                          }}
+                        >
+                          {rebookFrom
+                            ? "Select flexible fit"
+                            : primaryVariantId === activeVariant.id ||
+                                extraGarments.some(
+                                  (garment) => garment.variantId === activeVariant.id
+                                )
+                              ? "Remove flexible fit"
+                              : "Select flexible fit"}
+                        </Button>
+                      )
+                    ) : null}
                   </div>
                 ) : (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {productDetail.variants
                       .filter((variant) => variant.status === "active")
-                      .map((variant) => (
-                        <Button
-                          key={variant.id}
-                          type="button"
-                          size="sm"
-                          variant={selectedVariantId === variant.id ? "default" : "secondary"}
-                          onClick={() => {
-                            setSelectedVariantId(variant.id);
-                            setPickupDate("");
-                            setDueDate("");
-                            setPickupTime("");
-                            setDueTime("");
-                            setEventDate("");
-                            setCalendarAvailability(null);
-                            setExactAvailability(null);
-                            setExactAvailabilityError(null);
-                            reserveGuard.resetIntent();
-                          }}
-                        >
-                          {displaySizeLabel(variant.size_label)}
-                          {variant.color_label ? ` · ${variant.color_label}` : ""}
-                        </Button>
-                      ))}
+                      .map((variant) => {
+                        const alreadySelected = rebookFrom
+                          ? rebookLines.some((line) => line.variantId === variant.id)
+                          : primaryVariantId === variant.id ||
+                            extraGarments.some((garment) => garment.variantId === variant.id);
+                        const atLimit =
+                          !rebookFrom &&
+                          Boolean(primaryGarment) &&
+                          extraGarments.length >= MAX_GARMENTS_PER_BOOKING - 1;
+                        return (
+                          <Button
+                            key={variant.id}
+                            type="button"
+                            size="sm"
+                            disabled={!alreadySelected && atLimit}
+                            variant={alreadySelected ? "default" : "secondary"}
+                            onClick={() => {
+                              setSelectedVariantId(variant.id);
+                              if (rebookFrom) reserveGuard.resetIntent();
+                              else toggleManualVariant(variant.id);
+                            }}
+                          >
+                            {displaySizeLabel(variant.size_label)}
+                            {variant.color_label ? ` · ${variant.color_label}` : ""}
+                          </Button>
+                        );
+                      })}
                   </div>
                 )}
                 {variantSelectionError ? (
                   <p className="mt-3 text-sm text-dashboard-danger">{variantSelectionError}</p>
                 ) : null}
-                {selectedVariant ? (
+                {activeVariant ? (
                   <div className="mt-3 rounded-lg bg-dashboard-active/50 p-3 text-sm">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <p className="font-medium text-dashboard-navy">
-                          {displaySizeLabel(selectedVariant.size_label)}
-                          {selectedVariant.color_label ? ` · ${selectedVariant.color_label}` : ""}
+                          {displaySizeLabel(activeVariant.size_label)}
+                          {activeVariant.color_label ? ` · ${activeVariant.color_label}` : ""}
                         </p>
                         <p className="mt-1 text-dashboard-muted">
-                          {formatVariantPricingRule(selectedVariant)} · Deposit{" "}
+                          {formatVariantPricingRule(activeVariant)} · Deposit{" "}
                           {formatMinorMoney(
-                            selectedVariant.security_deposit_minor,
-                            selectedVariant.currency
+                            activeVariant.security_deposit_minor,
+                            activeVariant.currency
                           )}
                         </p>
                         <p className="mt-2 text-xs leading-5 text-dashboard-muted">
-                          {formatRentalAvailabilityPolicy(selectedVariant)}
+                          {formatRentalAvailabilityPolicy(activeVariant)}
                         </p>
                       </div>
-                      {calendarAvailability ? (
+                      {calendarAvailabilityByVariant[activeVariant.id] &&
+                      (!rebookFrom || selectedVariantId === activeVariant.id) ? (
                         <Badge variant="outline">
-                          {calendarAvailability.ready_assets} ready {calendarAvailability.ready_assets === 1 ? "piece" : "pieces"}
+                          {calendarAvailabilityByVariant[activeVariant.id]!.ready_assets} ready{" "}
+                          {calendarAvailabilityByVariant[activeVariant.id]!.ready_assets === 1
+                            ? "piece"
+                            : "pieces"}
                         </Badge>
                       ) : null}
                     </div>
+                    {rebookFrom ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="mt-3"
+                        disabled={
+                          rebookLines.length >= 20 ||
+                          rebookLines.some((line) => line.variantId === activeVariant.id)
+                        }
+                        onClick={addRebookLine}
+                      >
+                        {rebookLines.some((line) => line.variantId === activeVariant.id)
+                          ? "Variant already in replacement"
+                          : "Add selected item to replacement"}
+                      </Button>
+                    ) : null}
                   </div>
                 ) : (
                   <p className="mt-3 text-sm text-dashboard-muted">
@@ -998,15 +1982,16 @@ export function NewReservationSheet({
               </section>
             ) : null}
 
-            {selectedVariant ? (
+            {rentalVariant ? (
               <>
                 <Separator />
                 <section>
                   <SectionTitle icon={CalendarDays} title="Rental period" />
                   <div className="mt-3">
                     <ReservationAvailabilityCalendar
-                      availability={calendarAvailability}
+                      availabilityItems={calendarAvailabilityItems}
                       loading={calendarLoading}
+                      error={calendarAvailabilityError}
                       month={calendarMonth}
                       onMonthChange={setCalendarMonth}
                       pickupDate={pickupDate}
@@ -1098,23 +2083,130 @@ export function NewReservationSheet({
                       ) : null}
                       {!requestedInterval && pickupTime && dueTime && !minimumDurationIssue ? (
                         <p className="text-xs text-warning-500" role="alert">
-                          Return must be after pickup and the rental period cannot exceed 31 days. Times use the selected branch timezone.
+                          Return must be after pickup and the rental period cannot exceed 31 days.
+                          Times use the selected branch timezone.
                         </p>
                       ) : null}
 
-                      <ExactAvailabilityStatus
-                        availability={exactAvailability}
-                        error={exactAvailabilityError}
-                        loading={exactAvailabilityLoading}
-                      />
+                      {rebookFrom ? (
+                        <ExactAvailabilityStatus
+                          availability={null}
+                          error={null}
+                          loading={rebookAvailabilityLoading}
+                          itemLabel={null}
+                        />
+                      ) : null}
                     </div>
                   ) : (
                     <p className="mt-3 text-sm text-dashboard-muted">
-                      Select a pickup date and a valid return date from the calendar. Pickup and return times come next.
+                      Select a pickup date and a valid return date from the calendar. Pickup and
+                      return times come next.
                     </p>
                   )}
                 </section>
 
+                {!rebookFrom ? (
+                  <>
+                    <Separator />
+                    <section>
+                      <SectionTitle icon={Shirt} title="Selected garments" />
+                      <p className="mt-1 text-xs text-dashboard-muted">
+                        Each selected size is checked and priced on its own. The reservation is held
+                        only if every garment is available.
+                      </p>
+                      {!primaryGarment && extraGarments.length === 0 ? (
+                        <p className="mt-3 rounded-md border border-dashed border-dashboard-border p-3 text-sm text-dashboard-muted">
+                          Select at least one size from the clothing list.
+                        </p>
+                      ) : null}
+                      {primaryGarment ? (
+                        <div className="mt-3">
+                          <SelectedGarmentCard
+                            garment={primaryGarment}
+                            disabled={reserveGuard.isSubmitting}
+                            onRemove={removePrimaryGarment}
+                            status={
+                              requestedInterval ? (
+                                <ExactAvailabilityStatus
+                                  availability={exactAvailability}
+                                  error={exactAvailabilityError}
+                                  loading={exactAvailabilityLoading}
+                                  itemLabel={`${primaryGarment.name} · ${
+                                    primaryVariant
+                                      ? reservationVariantLabel(
+                                          primaryVariant.size_label,
+                                          primaryVariant.color_label
+                                        )
+                                      : "Selected size"
+                                  }`}
+                                  recoveryHint={
+                                    requestedInterval &&
+                                    exactAvailability?.requested_interval.start ===
+                                      requestedInterval.start &&
+                                    exactAvailability.requested_interval.end === requestedInterval.end
+                                      ? recoveryAvailabilityHint(
+                                          `${primaryGarment.name} · ${
+                                            primaryVariant
+                                              ? reservationVariantLabel(
+                                                  primaryVariant.size_label,
+                                                  primaryVariant.color_label
+                                                )
+                                              : "Selected size"
+                                          }`,
+                                          exactAvailability,
+                                          calendarAvailabilityByVariant[primaryVariantId],
+                                          timeZone
+                                        )
+                                      : null
+                                  }
+                                />
+                              ) : (
+                                <p className="mt-2 text-xs text-dashboard-muted">
+                                  Choose the rental dates to check {primaryGarment.name}.
+                                </p>
+                              )
+                            }
+                          >
+                            {primaryGarment.detail &&
+                            primaryGarment.detail.sizing_mode !== "free_size" ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="mt-2"
+                                disabled={
+                                  reserveGuard.isSubmitting ||
+                                  extraGarments.length + 1 >= MAX_GARMENTS_PER_BOOKING
+                                }
+                                onClick={() => addAnotherSize(primaryGarment)}
+                              >
+                                <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                                Add another size of {primaryGarment.name}
+                              </Button>
+                            ) : null}
+                          </SelectedGarmentCard>
+                        </div>
+                      ) : null}
+                      <div className="mt-2">
+                        <AdditionalGarments
+                          disabled={reserveGuard.isSubmitting}
+                          garments={extraGarments}
+                          onChange={updateExtraGarments}
+                          onRemoveGarment={removeAdditionalGarment}
+                          primaryVariantId={primaryVariantId}
+                          requestedInterval={requestedInterval}
+                          calendarAvailabilityByVariant={calendarAvailabilityByVariant}
+                          timeZone={timeZone}
+                        />
+                      </div>
+                      {extraGarments.length > 0 && extrasReadiness.problem ? (
+                        <p className="mt-2 text-xs text-dashboard-muted" role="status">
+                          {extrasReadiness.problem}
+                        </p>
+                      ) : null}
+                    </section>
+                  </>
+                ) : null}
               </>
             ) : null}
 
@@ -1159,12 +2251,16 @@ export function NewReservationSheet({
                 type="button"
                 disabled={
                   reserveGuard.isSubmitting ||
-                  exactAvailabilityLoading ||
-                  !selectedVariant ||
+                  (!rebookFrom && !calendarAvailabilityReady) ||
+                  (rebookFrom ? rebookAvailabilityLoading : exactAvailabilityLoading) ||
+                  (!rebookFrom && !primaryGarment) ||
                   !requestedInterval ||
-                  Boolean(minimumDurationIssue) ||
-                  !exactAvailabilityMatchesSelection ||
-                  !exactAvailability?.available ||
+                  (!rebookFrom && Boolean(minimumDurationIssue)) ||
+                  (rebookFrom
+                    ? !rebookAvailabilityReady || Boolean(rebookAvailabilityError)
+                    : !exactAvailabilityMatchesSelection ||
+                      !exactAvailability?.available ||
+                      !extrasReadiness.ready) ||
                   !paymentMethodId
                 }
                 onClick={() =>
@@ -1226,6 +2322,53 @@ export function NewReservationSheet({
                   )}
                 />
               </div>
+              <div className="mt-4 rounded-md border border-dashboard-border bg-dashboard-surface p-3">
+                <p className="text-sm font-semibold text-dashboard-navy">
+                  Garments in this reservation
+                </p>
+                {heldLines ? (
+                  <div className="mt-2 divide-y divide-dashboard-border">
+                    {heldLines.map((line) => (
+                      <div
+                        key={line.id}
+                        className="flex flex-wrap items-start justify-between gap-3 py-2 first:pt-0 last:pb-0"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium text-dashboard-navy">{line.name_snapshot}</p>
+                          <p className="mt-0.5 text-xs text-dashboard-muted">
+                            {reservationVariantLabel(
+                              line.variant.size_label,
+                              line.variant.color_label
+                            )}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right text-xs text-dashboard-muted">
+                          <p>
+                            Rental{" "}
+                            {formatMinorMoney(
+                              line.pricing_snapshot.rental_minor,
+                              line.pricing_snapshot.currency
+                            )}
+                          </p>
+                          <p className="mt-0.5">
+                            Deposit{" "}
+                            {formatMinorMoney(
+                              line.pricing_snapshot.deposit_minor,
+                              line.pricing_snapshot.currency
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : heldLinesError ? (
+                  <p className="mt-2 text-xs text-dashboard-danger" role="status">
+                    Could not load garment details: {heldLinesError}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-dashboard-muted">Loading garment details…</p>
+                )}
+              </div>
               <div className="mt-3 rounded-md bg-dashboard-surface p-3">
                 <div className="flex items-center justify-between gap-3 text-xs text-dashboard-muted">
                   <div>
@@ -1281,7 +2424,8 @@ export function NewReservationSheet({
                       </div>
                       {cashChangeDueMinor !== null ? (
                         <p className="mt-1 text-xs text-dashboard-muted">
-                          Change due: {formatMinorMoney(
+                          Change due:{" "}
+                          {formatMinorMoney(
                             cashChangeDueMinor,
                             held.reservation.price_snapshot.currency
                           )}
@@ -1305,7 +2449,10 @@ export function NewReservationSheet({
                 ) : (
                   <div className="mt-3 space-y-2">
                     <p className="text-xs text-dashboard-muted">
-                      Payment evidence is optional for staff-created reservations. Upload a receipt only if you want to keep it with this reservation; staff can verify the payment manually after checking the merchant account or the customer&apos;s receipt in person.
+                      Payment evidence is optional for staff-created reservations. Upload a receipt
+                      only if you want to keep it with this reservation; staff can verify the
+                      payment manually after checking the merchant account or the customer&apos;s
+                      receipt in person.
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
                       <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-dashboard-border px-3 text-sm font-medium text-dashboard-navy hover:bg-dashboard-active">
@@ -1343,7 +2490,8 @@ export function NewReservationSheet({
                     </div>
                     {receiptAttached ? (
                       <p className="text-xs font-medium text-success-500">
-                        Receipt attached. Payment will still require staff verification before confirmation.
+                        Receipt attached. Payment will still require staff verification before
+                        confirmation.
                       </p>
                     ) : null}
                   </div>
@@ -1362,7 +2510,15 @@ export function NewReservationSheet({
                       variant={customerMode === "new" ? "default" : "secondary"}
                       onClick={() => {
                         setCustomerMode("new");
+                        setSelectedCustomerId("");
+                        setSelectedCustomerProfile(null);
+                        setCustomerProfileError(null);
+                        setFullName("");
+                        setPhone("");
+                        setEmail("");
                         setAddress("");
+                        setSocialMedia("");
+                        setNotes("");
                         completeGuard.resetIntent();
                       }}
                     >
@@ -1374,6 +2530,12 @@ export function NewReservationSheet({
                       variant={customerMode === "existing" ? "default" : "secondary"}
                       onClick={() => {
                         setCustomerMode("existing");
+                        setSelectedCustomerId("");
+                        setSelectedCustomerProfile(null);
+                        setCustomerProfileError(null);
+                        setFullName("");
+                        setPhone("");
+                        setEmail("");
                         setAddress("");
                         setSocialMedia("");
                         completeGuard.resetIntent();
@@ -1385,8 +2547,17 @@ export function NewReservationSheet({
 
                   {customerMode === "new" ? (
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <Field label="Full name">
+                      <Field
+                        label="Full name"
+                        error={completionErrors.full_name}
+                        errorId="completion-full-name-error"
+                      >
                         <Input
+                          required
+                          aria-invalid={Boolean(completionErrors.full_name)}
+                          aria-describedby={
+                            completionErrors.full_name ? "completion-full-name-error" : undefined
+                          }
                           value={fullName}
                           onChange={(event) => {
                             setFullName(event.target.value);
@@ -1394,8 +2565,17 @@ export function NewReservationSheet({
                           }}
                         />
                       </Field>
-                      <Field label="Phone">
+                      <Field
+                        label="Phone"
+                        error={completionErrors.phone}
+                        errorId="completion-phone-error"
+                      >
                         <Input
+                          required
+                          aria-invalid={Boolean(completionErrors.phone)}
+                          aria-describedby={
+                            completionErrors.phone ? "completion-phone-error" : undefined
+                          }
                           inputMode="numeric"
                           autoComplete="tel"
                           maxLength={11}
@@ -1408,9 +2588,18 @@ export function NewReservationSheet({
                           }}
                         />
                       </Field>
-                      <Field label="Email">
+                      <Field
+                        label="Email"
+                        error={completionErrors.email}
+                        errorId="completion-email-error"
+                      >
                         <Input
+                          required
                           type="email"
+                          aria-invalid={Boolean(completionErrors.email)}
+                          aria-describedby={
+                            completionErrors.email ? "completion-email-error" : undefined
+                          }
                           value={email}
                           onChange={(event) => {
                             setEmail(event.target.value);
@@ -1418,8 +2607,17 @@ export function NewReservationSheet({
                           }}
                         />
                       </Field>
-                      <Field label="Address">
+                      <Field
+                        label="Address"
+                        error={completionErrors.address}
+                        errorId="completion-address-error"
+                      >
                         <Input
+                          required
+                          aria-invalid={Boolean(completionErrors.address)}
+                          aria-describedby={
+                            completionErrors.address ? "completion-address-error" : undefined
+                          }
                           autoComplete="street-address"
                           maxLength={500}
                           value={address}
@@ -1458,6 +2656,8 @@ export function NewReservationSheet({
                         onChange={(event) => {
                           setCustomerSearch(event.target.value);
                           setSelectedCustomerId("");
+                          setSelectedCustomerProfile(null);
+                          setCustomerProfileError(null);
                           completeGuard.resetIntent();
                         }}
                       />
@@ -1468,49 +2668,64 @@ export function NewReservationSheet({
                       ) : null}
                       <div className="mt-2 grid gap-2">
                         {isCustomerSearchPending ? (
-                          <p className="text-sm text-dashboard-muted">Waiting to search customers…</p>
-                        ) : isCustomerSearchTooShort ? null : customerOptions.map((customer) => {
-                          const isSelected = selectedCustomerId === customer.id;
-                          return (
-                            <button
-                              key={customer.id}
-                              type="button"
-                              aria-pressed={isSelected}
-                              onClick={() => {
-                                setSelectedCustomerId(customer.id);
-                                setAddress("");
-                                setNotice(null);
-                                completeGuard.resetIntent();
-                              }}
-                              className={cn(
-                                "flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition-colors",
-                                isSelected
-                                  ? "border-dashboard-accent bg-dashboard-active"
-                                  : "border-dashboard-border hover:bg-dashboard-active/40"
-                              )}
-                            >
-                              <span className="min-w-0">
-                                <span className="block truncate font-medium text-dashboard-navy">
-                                  {customer.full_name}
-                                </span>
-                                <span className="mt-1 block truncate text-xs text-dashboard-muted">
-                                  {customer.phone ?? customer.email ?? "No contact shown"}
-                                </span>
-                              </span>
-                              <span
+                          <p className="text-sm text-dashboard-muted">
+                            Waiting to search customers…
+                          </p>
+                        ) : isCustomerSearchTooShort ? null : (
+                          customerOptions.map((customer) => {
+                            const isSelected = selectedCustomerId === customer.id;
+                            return (
+                              <button
+                                key={customer.id}
+                                type="button"
+                                aria-pressed={isSelected}
+                                onClick={() => {
+                                  setSelectedCustomerId(customer.id);
+                                  setSelectedCustomerProfile(null);
+                                  setCustomerProfileError(null);
+                                  const rebookCustomer =
+                                    rebookFrom?.customer?.customerId === customer.id
+                                      ? rebookFrom.customer
+                                      : null;
+                                  setFullName(customer.full_name);
+                                  setPhone(customer.phone ?? rebookCustomer?.phone ?? "");
+                                  setEmail(customer.email ?? rebookCustomer?.email ?? "");
+                                  setAddress(rebookCustomer?.address ?? "");
+                                  setSocialMedia("");
+                                  setNotes("");
+                                  setNotice(null);
+                                  completeGuard.resetIntent();
+                                }}
                                 className={cn(
-                                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border",
+                                  "flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition-colors",
                                   isSelected
-                                    ? "border-dashboard-accent bg-dashboard-primary text-dashboard-primary-ink"
-                                    : "border-dashboard-border text-transparent"
+                                    ? "border-dashboard-accent bg-dashboard-active"
+                                    : "border-dashboard-border hover:bg-dashboard-active/40"
                                 )}
-                                aria-hidden="true"
                               >
-                                <Check className="h-3.5 w-3.5" />
-                              </span>
-                            </button>
-                          );
-                        })}
+                                <span className="min-w-0">
+                                  <span className="block truncate font-medium text-dashboard-navy">
+                                    {customer.full_name}
+                                  </span>
+                                  <span className="mt-1 block truncate text-xs text-dashboard-muted">
+                                    {customer.phone ?? customer.email ?? "No contact shown"}
+                                  </span>
+                                </span>
+                                <span
+                                  className={cn(
+                                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border",
+                                    isSelected
+                                      ? "border-dashboard-accent bg-dashboard-primary text-dashboard-primary-ink"
+                                      : "border-dashboard-border text-transparent"
+                                  )}
+                                  aria-hidden="true"
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                </span>
+                              </button>
+                            );
+                          })
+                        )}
                       </div>
                       {selectedCustomer ? (
                         <div className="mt-3 space-y-3 rounded-lg border border-dashboard-accent/50 bg-dashboard-active/60 p-3">
@@ -1518,26 +2733,154 @@ export function NewReservationSheet({
                             <p className="text-xs font-medium uppercase tracking-wide text-dashboard-muted">
                               Selected customer
                             </p>
-                            <p className="mt-1 font-medium text-dashboard-navy">
-                              {selectedCustomer.full_name}
-                            </p>
-                            <p className="mt-1 text-xs text-dashboard-muted">
-                              {selectedCustomer.phone ?? selectedCustomer.email ?? "No contact shown"}
-                            </p>
+                            {customerProfileLoading ? (
+                              <p className="mt-1 text-xs text-dashboard-muted">
+                                Loading saved customer details…
+                              </p>
+                            ) : null}
+                            {customerProfileError ? (
+                              <p role="alert" className="mt-1 text-xs text-dashboard-danger">
+                                Could not load the selected customer’s saved details. Try selecting
+                                the customer again.
+                              </p>
+                            ) : null}
                           </div>
-                          {!selectedCustomer.has_address ? (
-                            <Field label="Address required for this reservation">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <Field
+                              label="Full name"
+                              error={completionErrors.full_name}
+                              errorId="completion-full-name-error"
+                            >
                               <Input
+                                required
+                                maxLength={200}
+                                aria-invalid={Boolean(completionErrors.full_name)}
+                                aria-describedby={
+                                  completionErrors.full_name
+                                    ? "completion-full-name-error"
+                                    : undefined
+                                }
+                                value={fullName}
+                                disabled={
+                                  customerProfileLoading ||
+                                  !currentCustomerProfile ||
+                                  Boolean(customerProfileError)
+                                }
+                                onChange={(event) => {
+                                  setFullName(event.target.value);
+                                  completeGuard.resetIntent();
+                                }}
+                              />
+                            </Field>
+                            <Field
+                              label="Phone"
+                              error={completionErrors.phone}
+                              errorId="completion-phone-error"
+                            >
+                              <Input
+                                required
+                                aria-invalid={Boolean(completionErrors.phone)}
+                                aria-describedby={
+                                  completionErrors.phone ? "completion-phone-error" : undefined
+                                }
+                                inputMode="numeric"
+                                autoComplete="tel"
+                                maxLength={11}
+                                pattern="[0-9]{11}"
+                                placeholder="09XXXXXXXXX"
+                                value={phone}
+                                disabled={
+                                  customerProfileLoading ||
+                                  !currentCustomerProfile ||
+                                  Boolean(customerProfileError)
+                                }
+                                onChange={(event) => {
+                                  setPhone(event.target.value.replace(/\D/g, "").slice(0, 11));
+                                  completeGuard.resetIntent();
+                                }}
+                              />
+                            </Field>
+                            <Field
+                              label="Email"
+                              error={completionErrors.email}
+                              errorId="completion-email-error"
+                            >
+                              <Input
+                                required
+                                type="email"
+                                maxLength={320}
+                                aria-invalid={Boolean(completionErrors.email)}
+                                aria-describedby={
+                                  completionErrors.email ? "completion-email-error" : undefined
+                                }
+                                value={email}
+                                disabled={
+                                  customerProfileLoading ||
+                                  !currentCustomerProfile ||
+                                  Boolean(customerProfileError)
+                                }
+                                onChange={(event) => {
+                                  setEmail(event.target.value);
+                                  completeGuard.resetIntent();
+                                }}
+                              />
+                            </Field>
+                            <Field
+                              label="Address"
+                              error={completionErrors.address}
+                              errorId="completion-address-error"
+                            >
+                              <Input
+                                required
+                                aria-invalid={Boolean(completionErrors.address)}
+                                aria-describedby={
+                                  completionErrors.address ? "completion-address-error" : undefined
+                                }
                                 autoComplete="street-address"
                                 maxLength={500}
                                 value={address}
+                                disabled={
+                                  customerProfileLoading ||
+                                  !currentCustomerProfile ||
+                                  Boolean(customerProfileError)
+                                }
                                 onChange={(event) => {
                                   setAddress(event.target.value);
                                   completeGuard.resetIntent();
                                 }}
                               />
                             </Field>
-                          ) : null}
+                            <Field label="Social media (optional)">
+                              <Input
+                                maxLength={320}
+                                value={socialMedia}
+                                disabled={
+                                  customerProfileLoading ||
+                                  !currentCustomerProfile ||
+                                  Boolean(customerProfileError)
+                                }
+                                onChange={(event) => {
+                                  setSocialMedia(event.target.value);
+                                  completeGuard.resetIntent();
+                                }}
+                              />
+                            </Field>
+                            <Field label="Customer notes (optional)">
+                              <Input
+                                maxLength={2_000}
+                                value={notes}
+                                disabled={
+                                  customerProfileLoading ||
+                                  !currentCustomerProfile ||
+                                  Boolean(customerProfileError)
+                                }
+                                onChange={(event) => {
+                                  setNotes(event.target.value);
+                                  completeGuard.resetIntent();
+                                }}
+                              />
+                            </Field>
+                          </div>
                         </div>
                       ) : null}
                     </div>
@@ -1564,11 +2907,12 @@ export function NewReservationSheet({
                     type="button"
                     variant="danger"
                     disabled={cancelGuard.isSubmitting || completeGuard.isSubmitting}
-                    onClick={() =>
-                      void cancelHold().catch((error) => handleFailure(error, cancelGuard))
-                    }
+                    onClick={() => {
+                      setCancelDialogError(null);
+                      setCancelDialogOpen(true);
+                    }}
                   >
-                    {cancelGuard.isSubmitting ? "Cancelling…" : "Cancel Hold"}
+                    Cancel Hold
                   </Button>
                   <Button
                     type="button"
@@ -1626,6 +2970,78 @@ export function NewReservationSheet({
             )}
           </div>
         ) : null}
+        <Dialog.Root
+          open={cancelDialogOpen}
+          onOpenChange={(nextOpen: boolean) => {
+            if (cancelGuard.isSubmitting) return;
+            setCancelDialogOpen(nextOpen);
+            if (nextOpen) setCancelDialogError(null);
+          }}
+        >
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 z-[70] bg-black/55" />
+            <Dialog.Content className="fixed left-1/2 top-1/2 z-[70] max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-dashboard-border bg-dashboard-surface p-5 shadow-xl focus:outline-none sm:p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <Dialog.Title className="text-lg font-semibold text-dashboard-navy">
+                    Cancel this hold?
+                  </Dialog.Title>
+                  <Dialog.Description className="mt-1 text-sm leading-6 text-dashboard-muted">
+                    This will permanently cancel the current hold and release the garment. Save the
+                    customer details already entered above for rebooking; a name and one valid phone
+                    or email are enough, and address and other details are optional. Existing
+                    profiles are linked without changes. This does not complete the reservation or
+                    copy payment or receipt details.
+                  </Dialog.Description>
+                </div>
+                <Dialog.Close asChild>
+                  <button
+                    type="button"
+                    aria-label="Return to reservation"
+                    disabled={cancelGuard.isSubmitting}
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-dashboard-muted hover:bg-dashboard-active"
+                  >
+                    <X className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </Dialog.Close>
+              </div>
+              {cancelDialogError ? (
+                <p
+                  role="alert"
+                  className="mt-4 rounded-lg border border-dashboard-danger/30 bg-dashboard-danger/10 p-3 text-sm text-dashboard-danger"
+                >
+                  {cancelDialogError}
+                </p>
+              ) : null}
+              <div className="mt-6 flex flex-col-reverse gap-2 border-t border-dashboard-border pt-4 sm:flex-row sm:flex-wrap sm:justify-between">
+                <Button
+                  type="button"
+                  variant="danger"
+                  disabled={cancelGuard.isSubmitting}
+                  onClick={() => void cancelHold(false).catch(handleCancelFailure)}
+                >
+                  {cancelGuard.isSubmitting ? "Cancelling…" : "Cancel hold without saving"}
+                </Button>
+                <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                  <Dialog.Close asChild>
+                    <Button type="button" variant="secondary" disabled={cancelGuard.isSubmitting}>
+                      Return to reservation
+                    </Button>
+                  </Dialog.Close>
+                  <Button
+                    type="button"
+                    disabled={cancelGuard.isSubmitting}
+                    onClick={() => void cancelHold(true).catch(handleCancelFailure)}
+                  >
+                    {cancelGuard.isSubmitting
+                      ? "Saving and cancelling…"
+                      : "Save customer and cancel hold"}
+                  </Button>
+                </div>
+              </div>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
       </SheetContent>
     </Sheet>
   );
@@ -1638,15 +3054,32 @@ function buildCustomerInput(input: {
   phone: string;
   email: string;
   address: string;
-  hasAddress: boolean;
+  profile: Pick<
+    CustomerDetailResponse,
+    "id" | "full_name" | "phone" | "email" | "address" | "social_media" | "notes" | "updated_at"
+  > | null;
   socialMedia: string;
   notes: string;
-}): StaffReservationCustomerInput | null {
+}): StaffReservationSubmissionCustomerInput | null {
   if (input.customerMode === "existing") {
-    if (!input.selectedCustomerId) return null;
-    if (input.hasAddress) return { source: "existing", customer_id: input.selectedCustomerId };
-    const address = input.address.trim();
-    return address ? { source: "existing", customer_id: input.selectedCustomerId, address } : null;
+    if (!input.selectedCustomerId || !input.profile) return null;
+    const completion = staffReservationCompletionCustomer.safeParse({
+      full_name: input.fullName.trim(),
+      phone: input.phone.trim(),
+      email: input.email.trim(),
+      address: input.address.trim(),
+    });
+    if (!completion.success) return null;
+    return {
+      source: "existing",
+      customer_id: input.selectedCustomerId,
+      profile: {
+        ...completion.data,
+        social_media: input.socialMedia.trim() || null,
+        notes: input.notes.trim() || null,
+        expected_updated_at: input.profile.updated_at,
+      },
+    };
   }
 
   const fullName = input.fullName.trim();
@@ -1655,14 +3088,57 @@ function buildCustomerInput(input: {
   const address = input.address.trim();
   const socialMedia = input.socialMedia.trim();
   const notes = input.notes.trim();
-  if (!fullName || !address || (!phone && !email)) return null;
+  const completion = staffReservationCompletionCustomer.safeParse({
+    full_name: fullName,
+    phone,
+    email,
+    address,
+  });
+  if (!completion.success) return null;
+  return {
+    source: "new",
+    customer: {
+      full_name: completion.data.full_name,
+      phone: completion.data.phone,
+      email: completion.data.email,
+      address: completion.data.address,
+      ...(socialMedia ? { social_media: socialMedia } : {}),
+      ...(notes ? { notes } : {}),
+    },
+  };
+}
+
+function buildCancellationCustomerInput(input: {
+  customerMode: CustomerMode;
+  selectedCustomerId: CustomerId | "";
+  fullName: string;
+  phone: string;
+  email: string;
+  address: string;
+  socialMedia: string;
+  notes: string;
+}): ReservationCancellationCustomerInput | null {
+  if (input.customerMode === "existing") {
+    return input.selectedCustomerId
+      ? { source: "existing", customer_id: input.selectedCustomerId }
+      : null;
+  }
+
+  const fullName = input.fullName.trim();
+  const phone = input.phone.trim();
+  const email = input.email.trim();
+  if (!fullName || (!phone && !email)) return null;
+
+  const address = input.address.trim();
+  const socialMedia = input.socialMedia.trim();
+  const notes = input.notes.trim();
   return {
     source: "new",
     customer: {
       full_name: fullName,
       ...(phone ? { phone } : {}),
       ...(email ? { email } : {}),
-      address,
+      ...(address ? { address } : {}),
       ...(socialMedia ? { social_media: socialMedia } : {}),
       ...(notes ? { notes } : {}),
     },
@@ -1770,112 +3246,55 @@ function formatIsoDateForDisplay(value: string): string {
   }).format(date);
 }
 
-function localDateTimeParts(
-  instant: Date,
-  timeZone: string
-): { date: string; time: string } {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    })
-      .formatToParts(instant)
-      .map((part) => [part.type, part.value])
-  );
-  return {
-    date: `${parts["year"]}-${parts["month"]}-${parts["day"]}`,
-    time: `${parts["hour"]}:${parts["minute"]}`,
-  };
-}
-
-function zonedLocalDateTimeToInstant(value: string, timeZone: string): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
-  if (!match) return null;
-  const wallTime = Date.UTC(
-    Number(match[1]),
-    Number(match[2]) - 1,
-    Number(match[3]),
-    Number(match[4]),
-    Number(match[5]),
-    0
-  );
-  let instant = new Date(wallTime);
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    instant = new Date(wallTime - timeZoneOffsetMs(instant, timeZone));
-  }
-  return Number.isFinite(instant.getTime()) ? instant : null;
-}
-
-function timeZoneOffsetMs(instant: Date, timeZone: string): number {
-  const values = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
-      day: "2-digit",
-      hour: "2-digit",
-      hourCycle: "h23",
-      minute: "2-digit",
-      month: "2-digit",
-      second: "2-digit",
-      timeZone,
-      year: "numeric",
-    })
-      .formatToParts(instant)
-      .map((part) => [part.type, part.value])
-  );
-  return (
-    Date.UTC(
-      Number(values["year"]),
-      Number(values["month"]) - 1,
-      Number(values["day"]),
-      Number(values["hour"]),
-      Number(values["minute"]),
-      Number(values["second"])
-    ) - instant.getTime()
-  );
-}
-
 function ExactAvailabilityStatus({
   availability,
   error,
   loading,
+  itemLabel,
+  recoveryHint,
 }: {
   availability: StaffReservationAvailabilityCheckResponse | null;
   error: string | null;
   loading: boolean;
+  itemLabel: string | null;
+  recoveryHint?: string | null;
 }) {
   if (loading) {
     return (
-      <div className="rounded-lg border border-dashboard-border bg-dashboard-neutral-soft px-3 py-2 text-sm text-dashboard-neutral-text" role="status">
+      <p className="mt-2 text-xs text-dashboard-muted" role="status">
         Checking exact pickup and return times…
-      </div>
+      </p>
     );
   }
   if (error) {
     return (
-      <div className="rounded-lg border border-dashboard-border bg-dashboard-neutral-soft px-3 py-2 text-sm text-dashboard-neutral-text" role="alert">
+      <p className="mt-2 text-xs text-dashboard-danger" role="alert">
         {error}
-      </div>
+      </p>
     );
   }
   if (!availability) return null;
   if (!availability.available) {
     return (
-      <div className="rounded-lg border border-dashboard-border bg-dashboard-neutral-soft px-3 py-2 text-sm text-dashboard-neutral-text" role="status">
-        No single garment in this variant is free for the exact pickup and return times. Try another time or date range.
-      </div>
+      <p className="mt-2 text-xs text-dashboard-danger" role="status">
+        {recoveryHint ??
+          `${itemLabel ? `${itemLabel} is not available` : "No garment is available"} for the exact pickup and return times. Try another time or date range.`}
+      </p>
     );
   }
   return (
-    <div className="rounded-lg border border-dashboard-border bg-dashboard-green-soft px-3 py-2 text-sm text-dashboard-green-text" role="status">
+    <div className="mt-2 space-y-1 text-xs text-dashboard-green-text" role="status">
       <p className="font-medium">
-        Available · {availability.available_assets} {availability.available_assets === 1 ? "piece" : "pieces"}
+        {itemLabel ? `${itemLabel}: ` : "Available · "}
+        {availability.available_assets}{" "}
+        {availability.available_assets === 1 ? "piece" : "pieces"}
       </p>
-      <p className="mt-1 text-xs">
-        Rental preview {formatMinorMoney(availability.rental_preview.rental_total_minor, availability.rental_preview.currency)}
+      <p className="text-dashboard-muted">
+        Rental preview{" "}
+        {formatMinorMoney(
+          availability.rental_preview.rental_total_minor,
+          availability.rental_preview.currency
+        )}
         {availability.rental_preview.extra_day_count > 0
           ? ` · ${availability.rental_preview.extra_day_count} extra ${availability.rental_preview.extra_day_count === 1 ? "day" : "days"}`
           : ""}
@@ -1894,12 +3313,33 @@ function SectionTitle({ icon: Icon, title }: { icon: typeof CalendarDays; title:
   );
 }
 
-function Field({ children, label }: { children: React.ReactNode; label: string }) {
+function Field({
+  children,
+  label,
+  error,
+  errorId,
+}: {
+  children: React.ReactNode;
+  label: string;
+  error?: string | undefined;
+  errorId?: string | undefined;
+}) {
   return (
-    <label>
-      <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">{label}</span>
+    <div>
+      <label className="block">
+        <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">{label}</span>
+        {children}
+      </label>
+      {error ? <FieldError id={errorId}>{error}</FieldError> : null}
+    </div>
+  );
+}
+
+function FieldError({ id, children }: { id?: string | undefined; children: React.ReactNode }) {
+  return (
+    <p id={id} className="mt-1 text-xs text-dashboard-danger" aria-live="polite">
       {children}
-    </label>
+    </p>
   );
 }
 
@@ -1935,7 +3375,9 @@ function StepBadge({
       <span className="sm:hidden" aria-label={`${number}. ${label}`}>
         {number}
       </span>
-      <span className="hidden sm:inline">{number}. {label}</span>
+      <span className="hidden sm:inline">
+        {number}. {label}
+      </span>
     </span>
   );
 }
@@ -1988,6 +3430,10 @@ function formatMinorMoney(value: string, currency: string): string {
     currency,
     maximumFractionDigits: 0,
   }).format(Number(value) / 100);
+}
+
+function reservationVariantLabel(sizeLabel: string | null, colorLabel: string | null): string {
+  return `${displaySizeLabel(sizeLabel)}${colorLabel ? ` · ${colorLabel}` : ""}`;
 }
 
 function formatCountdown(valueMs: number): string {

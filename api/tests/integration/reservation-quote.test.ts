@@ -129,7 +129,7 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
         included_rental_days: 3,
         rental_day_count: 5,
       },
-      delivery_snapshot: { fulfillment_method: 'delivery', fee_minor: '25000' },
+      delivery_snapshot: { fulfillment_method: 'delivery', fee_minor: '25000', terms: 'set_fee' },
       policy_snapshot: {
         id: seed.policySnapshotId,
         version: 1,
@@ -162,6 +162,35 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
       };
     });
     expect(writes).toEqual({ reservations: 0, allocations: 0 });
+  });
+
+  it('accepts a delivery request when the shop has not set up delivery, with no fee and terms to arrange', async () => {
+    const seed = await seedQuoteWorkspace({
+      clerkOrgId: 'org_delivery_to_arrange',
+      principalId: 'user_delivery_to_arrange',
+      timezone: 'Asia/Manila',
+      assetCount: 1,
+      pricingMode: 'fixed_duration',
+      rentalPriceMinor: 150000,
+      securityDepositMinor: 50000,
+      includedDurationMinutes: 3 * 24 * 60,
+      extraDayPriceMinor: 40000,
+      prepMinutes: 120,
+      turnaroundMinutes: 24 * 60,
+      deliveryRules: { enabled: false, fee_minor: '25000' },
+    });
+    const request = (fulfillment_method: 'pickup' | 'delivery') =>
+      staffRequest(seed, {
+        fulfillment_method,
+        requested_interval: { start: reservationTestInstant(0), end: reservationTestInstant(2) },
+      });
+
+    const delivery = await getStaffReservationQuote(reservationContext(seed), request('delivery'));
+    expect(delivery.delivery_snapshot).toEqual({ fulfillment_method: 'delivery', fee_minor: '0', terms: 'to_arrange' });
+    expect(delivery.price_snapshot).toMatchObject({ delivery_total_minor: '0', due_now_minor: '200000' });
+
+    const pickup = await getStaffReservationQuote(reservationContext(seed), request('pickup'));
+    expect(pickup.delivery_snapshot).toEqual({ fulfillment_method: 'pickup', fee_minor: '0' });
   });
 
   it('rejects a fixed-duration rental returned before its last included day and accepts the owner example', async () => {

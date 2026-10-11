@@ -88,6 +88,12 @@ export const publicStorefront = z
     payment_methods: z.array(publicPaymentMethod).max(20),
     /** False while the shop's subscription is read-only: the storefront is visible but takes no bookings or fittings. */
     booking_open: z.boolean(),
+    /**
+     * False when the owner turned off online reservations (or booking is paused): renters can still
+     * browse but reserve by contacting the shop. Optional only so a storefront built before this
+     * field still reads an older API; the API always sends it and enforces it on reservation create.
+     */
+    reservations_open: z.boolean().optional(),
     checkout: z
       .object({
         requirements: z

@@ -13,6 +13,8 @@ import {
   reservationPickupRequest,
   reservationInspectionRequest,
   reservationRejectRequest,
+  reservationEditCustomer,
+  reservationEditRequest,
   reservationReturnRequest,
   reservationState,
   reservationSubmitRequest,
@@ -94,15 +96,21 @@ describe('reservation contracts', () => {
     expect(staffReservationIntakeQuery.safeParse({}).success).toBe(true);
     expect(staffReservationIntakeQuery.safeParse({ customer_search: 'Ma' }).success).toBe(true);
     expect(staffReservationIntakeQuery.safeParse({ customer_search: 'M' }).success).toBe(false);
-    expect(staffReservationIntakeQuery.safeParse({ customer_search: 'Maria', tenant_id: ids.branch }).success).toBe(false);
+    expect(
+      staffReservationIntakeQuery.safeParse({ customer_search: 'Maria', tenant_id: ids.branch }).success,
+    ).toBe(false);
 
     expect(
       staffReservationIntakeResponse.safeParse({
-        payment_methods: [
-          { id: ids.paymentMethod, name: 'Cash', rail: 'cash' },
-        ],
+        payment_methods: [{ id: ids.paymentMethod, name: 'Cash', rail: 'cash' }],
         customers: [
-          { id: ids.customer, full_name: 'Maria Santos', phone: '09171234567', email: null, has_address: true },
+          {
+            id: ids.customer,
+            full_name: 'Maria Santos',
+            phone: '09171234567',
+            email: null,
+            has_address: true,
+          },
         ],
       }).success,
     ).toBe(true);
@@ -150,6 +158,61 @@ describe('reservation contracts', () => {
         customer: null,
       }).success,
     ).toBe(false);
+  });
+
+  it('accepts up to ten new-booking garments and rejects ambiguous or oversized item lists', () => {
+    const extraVariants = Array.from(
+      { length: 9 },
+      (_, index) => `00000000-0000-4000-8000-${String(index + 20).padStart(12, '0')}`,
+    );
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        additional_variant_ids: extraVariants,
+      }).success,
+    ).toBe(true);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        additional_variant_ids: [...extraVariants, ids.variant],
+      }).success,
+    ).toBe(false);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        additional_variant_ids: [ids.variant],
+      }).success,
+    ).toBe(false);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        additional_variant_ids: [extraVariants[0], extraVariants[0]],
+      }).success,
+    ).toBe(false);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        additional_variant_ids: [ids.variant],
+        lines: [{ variant_id: ids.variant }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts duplicate copied variants in the legacy multi-line rebooking shape', () => {
+    const secondVariant = '00000000-0000-4000-8000-000000000012';
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        lines: [{ variant_id: ids.variant }, { variant_id: ids.variant }, { variant_id: secondVariant }],
+      }).success,
+    ).toBe(true);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        lines: [{ variant_id: secondVariant }],
+      }).success,
+    ).toBe(false);
+    expect(staffReservationCreateRequest.safeParse({ ...baseStaffCreate, lines: [] }).success).toBe(false);
   });
 
   it('accepts a new staff customer with phone or email and rejects an empty contact', () => {
@@ -274,11 +337,17 @@ describe('reservation contracts', () => {
     expect(parsed.success && parsed.data.email).toBe('guest@example.test');
 
     expect(guestReservationRequest.safeParse({ ...guestRequest, email: undefined }).success).toBe(false);
-    expect(guestReservationRequest.safeParse({ ...guestRequest, turnstile_token: 'challenge-token' }).success).toBe(true);
-    expect(guestReservationRequest.safeParse({ ...guestRequest, verification_token: 'a'.repeat(43) }).success).toBe(false);
     expect(
-      guestReservationRequest.safeParse({ ...guestRequest, allocation_id: '00000000-0000-4000-8000-000000000011' })
-        .success,
+      guestReservationRequest.safeParse({ ...guestRequest, turnstile_token: 'challenge-token' }).success,
+    ).toBe(true);
+    expect(
+      guestReservationRequest.safeParse({ ...guestRequest, verification_token: 'a'.repeat(43) }).success,
+    ).toBe(false);
+    expect(
+      guestReservationRequest.safeParse({
+        ...guestRequest,
+        allocation_id: '00000000-0000-4000-8000-000000000011',
+      }).success,
     ).toBe(false);
   });
 
@@ -300,16 +369,48 @@ describe('reservation contracts', () => {
     ).toBe(false);
   });
 
-  it('keeps the staff completion intent narrow and returns only truthful pending/confirmed outcomes', () => {
+  it('requires both contacts on new staff completion while permitting existing-profile fill-ins', () => {
     const request = staffReservationCompleteRequest.safeParse({
       version: 1,
       terms_accepted: true,
       customer: {
         source: 'new',
-        customer: { full_name: 'Walk-in Customer', phone: '09171234567', address: '123 Test Street' },
+        customer: {
+          full_name: 'Walk-in Customer',
+          phone: '09171234567',
+          email: 'walkin@example.test',
+          address: '123 Test Street',
+        },
       },
     });
     expect(request.success).toBe(true);
+    expect(
+      staffReservationCompleteRequest.safeParse({
+        version: 1,
+        terms_accepted: true,
+        customer: {
+          source: 'new',
+          customer: { full_name: 'No Email', phone: '09171234567', address: '123 Test Street' },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      staffReservationCompleteRequest.safeParse({
+        version: 1,
+        terms_accepted: true,
+        customer: {
+          source: 'new',
+          customer: { full_name: 'No Phone', email: 'walkin@example.test', address: '123 Test Street' },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      staffReservationCompleteRequest.safeParse({
+        version: 1,
+        terms_accepted: true,
+        customer: { source: 'existing', customer_id: ids.customer, email: 'new@example.test' },
+      }).success,
+    ).toBe(true);
     expect(
       staffReservationCompleteRequest.safeParse({
         version: 1,
@@ -420,7 +521,12 @@ describe('reservation contracts', () => {
       storefront_id: ids.storefront,
       customer: {
         customer_id: ids.customer,
-        snapshot: { full_name: 'Customer One', phone: '09171234567', email: null, address: '123 Test Street' },
+        snapshot: {
+          full_name: 'Customer One',
+          phone: '09171234567',
+          email: null,
+          address: '123 Test Street',
+        },
       },
       lines: [
         {
@@ -490,7 +596,12 @@ describe('reservation contracts', () => {
         storefront_id: ids.storefront,
         customer: {
           customer_id: ids.customer,
-          snapshot: { full_name: 'Legacy Customer', phone: null, email: 'legacy@example.test', address: null },
+          snapshot: {
+            full_name: 'Legacy Customer',
+            phone: null,
+            email: 'legacy@example.test',
+            address: null,
+          },
         },
         lines: [
           {
@@ -538,16 +649,169 @@ describe('reservation contracts', () => {
     expect(reservationSubmitRequest.safeParse({ version: 1, terms_accepted: true }).success).toBe(true);
     expect(reservationSubmitRequest.safeParse({ version: 1, terms_accepted: false }).success).toBe(false);
     expect(reservationConfirmRequest.safeParse({ version: 1, status: 'confirmed' }).success).toBe(false);
-    expect(reservationRejectRequest.safeParse({ version: 1, reason: 'Unable to verify payment.' }).success).toBe(true);
-    expect(reservationCancelRequest.safeParse({ version: 1, reason: 'Customer contacted the store.' }).success).toBe(true);
-    expect(reservationCancelRequest.safeParse({ version: 1, refund_amount_minor: '50000' }).success).toBe(false);
-    expect(reservationPickupRequest.safeParse({ version: 1, condition_note: 'Ready at handover.' }).success).toBe(true);
+    expect(
+      reservationRejectRequest.safeParse({ version: 1, reason: 'Unable to verify payment.' }).success,
+    ).toBe(true);
+    expect(
+      reservationCancelRequest.safeParse({ version: 1, reason: 'Customer contacted the store.' }).success,
+    ).toBe(true);
+    expect(
+      reservationCancelRequest.safeParse({
+        version: 1,
+        customer: {
+          source: 'new',
+          customer: { full_name: 'Walk-in Customer', phone: '09171234567', address: '123 Test Street' },
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      reservationCancelRequest.safeParse({
+        version: 1,
+        customer: {
+          source: 'new',
+          customer: { full_name: 'Walk-in Customer', email: 'walkin@example.test' },
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      reservationCancelRequest.safeParse({
+        version: 1,
+        customer: { source: 'new', customer: { full_name: 'Name Only' } },
+      }).success,
+    ).toBe(false);
+    expect(
+      reservationCancelRequest.safeParse({
+        version: 1,
+        customer: { source: 'new', customer: { full_name: 'Invalid Phone', phone: '123' } },
+      }).success,
+    ).toBe(false);
+    expect(
+      reservationSubmitRequest.safeParse({
+        version: 1,
+        terms_accepted: true,
+        customer: {
+          source: 'new',
+          customer: {
+            full_name: 'No Email',
+            phone: '09171234567',
+            address: '123 Test Street',
+          },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      reservationSubmitRequest.safeParse({
+        version: 1,
+        terms_accepted: true,
+        customer: {
+          source: 'new',
+          customer: {
+            full_name: 'Complete Customer',
+            phone: '09171234567',
+            email: 'complete@example.test',
+            address: '123 Test Street',
+          },
+        },
+      }).success,
+    ).toBe(true);
+    expect(reservationCancelRequest.safeParse({ version: 1, refund_amount_minor: '50000' }).success).toBe(
+      false,
+    );
+    expect(
+      reservationPickupRequest.safeParse({ version: 1, condition_note: 'Ready at handover.' }).success,
+    ).toBe(true);
     expect(reservationPickupRequest.safeParse({ version: 1, asset_id: ids.asset }).success).toBe(false);
-    expect(reservationReturnRequest.safeParse({ version: 1, condition_note: 'Returned at counter.' }).success).toBe(true);
+    expect(
+      reservationReturnRequest.safeParse({ version: 1, condition_note: 'Returned at counter.' }).success,
+    ).toBe(true);
     expect(reservationReturnRequest.safeParse({ version: 1, readiness: 'ready' }).success).toBe(false);
-    expect(reservationInspectionRequest.safeParse({ version: 5, readiness: 'needs_cleaning', condition_note: 'Normal cleaning.' }).success).toBe(true);
-    expect(reservationInspectionRequest.safeParse({ version: 5, readiness: 'ready', asset_id: ids.asset }).success).toBe(false);
+    expect(
+      reservationInspectionRequest.safeParse({
+        version: 5,
+        readiness: 'needs_cleaning',
+        condition_note: 'Normal cleaning.',
+      }).success,
+    ).toBe(true);
+    expect(
+      reservationInspectionRequest.safeParse({ version: 5, readiness: 'ready', asset_id: ids.asset }).success,
+    ).toBe(false);
     expect(reservationCompleteRequest.safeParse({ version: 0 }).success).toBe(false);
+  });
+
+  it('limits reservation edits to customer snapshot fields on a versioned request', () => {
+    const customer = {
+      full_name: 'Bea Santiago',
+      phone: '09171234801',
+      email: 'bea@example.test',
+      address: '12 Mabini St, Quezon City',
+    };
+    expect(reservationEditRequest.safeParse({ version: 4, customer }).success).toBe(true);
+    expect(
+      reservationEditRequest.safeParse({ version: 4, customer, requested_interval: interval }).success,
+    ).toBe(false);
+    expect(reservationEditRequest.safeParse({ version: 4, customer, event_date: null }).success).toBe(false);
+    expect(
+      reservationEditRequest.safeParse({ version: 4, customer, fulfillment_method: 'delivery' }).success,
+    ).toBe(false);
+    expect(
+      reservationEditRequest.safeParse({ version: 4, customer, payment_method_id: ids.paymentMethod })
+        .success,
+    ).toBe(false);
+    expect(reservationEditRequest.safeParse({ version: 4, customer, due_now_minor: '1' }).success).toBe(
+      false,
+    );
+    expect(
+      reservationEditRequest.safeParse({ version: 4, customer: { ...customer, social_media: '@bea' } })
+        .success,
+    ).toBe(false);
+    expect(reservationEditCustomer.safeParse({ ...customer, phone: null, email: null }).success).toBe(false);
+  });
+
+  it('accepts versioned editable existing-customer profile values at staff submission', () => {
+    const customer = {
+      source: 'existing',
+      customer_id: ids.customer,
+      profile: {
+        full_name: 'Updated Customer',
+        phone: '09171234567',
+        email: 'updated@example.test',
+        address: '123 Test Street',
+        social_media: null,
+        notes: null,
+        expected_updated_at: '2026-10-09T02:00:00.000Z',
+      },
+    };
+    expect(
+      reservationSubmitRequest.safeParse({
+        version: 1,
+        terms_accepted: true,
+        customer,
+      }).success,
+    ).toBe(true);
+    expect(
+      reservationSubmitRequest.safeParse({
+        version: 1,
+        terms_accepted: true,
+        customer: { ...customer, profile: { ...customer.profile, phone: '123' } },
+      }).success,
+    ).toBe(false);
+    expect(
+      reservationSubmitRequest.safeParse({
+        version: 1,
+        terms_accepted: true,
+        customer: {
+          ...customer,
+          profile: {
+            full_name: customer.profile.full_name,
+            phone: customer.profile.phone,
+            email: customer.profile.email,
+            address: customer.profile.address,
+            social_media: customer.profile.social_media,
+            notes: customer.profile.notes,
+          },
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it('reuses the finance evidence command without granting payment verification authority', () => {
