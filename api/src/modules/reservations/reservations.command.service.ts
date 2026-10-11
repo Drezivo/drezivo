@@ -274,9 +274,15 @@ async function claimReservationLines(
 ): Promise<ClaimedReservationLine[]> {
   // Rebooking keeps staging's ordered `lines` contract (up to 20). New bookings may add
   // garments through `additional_variant_ids` (up to 10 total). The contract rejects both.
-  const variantIds =
-    input.request.lines?.map((line) => line.variant_id) ??
-    [input.request.variant_id, ...(input.request.additional_variant_ids ?? [])];
+  const variantIds = input.request.lines?.map((line) => line.variant_id) ?? [
+    input.request.variant_id,
+    ...(input.request.additional_variant_ids ?? []),
+  ];
+  // The `lines` shape is retained for copied legacy rebookings, which may contain duplicate
+  // variants. Ordinary new bookings must not create duplicate lines for the same variant.
+  if (!input.request.lines && new Set(variantIds).size !== variantIds.length) {
+    throw new ValidationError('A variant can only be selected once for a new reservation.');
+  }
   const quotes: ReservationQuote[] = [];
   for (const variantId of variantIds) {
     const quoteRequest: ReservationQuoteRequest = {

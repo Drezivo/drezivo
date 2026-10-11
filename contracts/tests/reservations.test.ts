@@ -161,8 +161,9 @@ describe('reservation contracts', () => {
   });
 
   it('accepts up to ten new-booking garments and rejects ambiguous or oversized item lists', () => {
-    const extraVariants = Array.from({ length: 9 }, (_, index) =>
-      `00000000-0000-4000-8000-${String(index + 20).padStart(12, '0')}`,
+    const extraVariants = Array.from(
+      { length: 9 },
+      (_, index) => `00000000-0000-4000-8000-${String(index + 20).padStart(12, '0')}`,
     );
     expect(
       staffReservationCreateRequest.safeParse({
@@ -180,17 +181,29 @@ describe('reservation contracts', () => {
       staffReservationCreateRequest.safeParse({
         ...baseStaffCreate,
         additional_variant_ids: [ids.variant],
+      }).success,
+    ).toBe(false);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        additional_variant_ids: [extraVariants[0], extraVariants[0]],
+      }).success,
+    ).toBe(false);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        additional_variant_ids: [ids.variant],
         lines: [{ variant_id: ids.variant }],
       }).success,
     ).toBe(false);
   });
 
-  it('accepts multi-line staff rebooking only when the compatibility variant matches line one', () => {
+  it('accepts duplicate copied variants in the legacy multi-line rebooking shape', () => {
     const secondVariant = '00000000-0000-4000-8000-000000000012';
     expect(
       staffReservationCreateRequest.safeParse({
         ...baseStaffCreate,
-        lines: [{ variant_id: ids.variant }, { variant_id: secondVariant }],
+        lines: [{ variant_id: ids.variant }, { variant_id: ids.variant }, { variant_id: secondVariant }],
       }).success,
     ).toBe(true);
     expect(

@@ -1,6 +1,11 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import type { PaymentMethodId, PermissionCode, ProductVariantId, StaffReservationCreateRequest } from '@drezivo/contracts';
+import type {
+  PaymentMethodId,
+  PermissionCode,
+  ProductVariantId,
+  StaffReservationCreateRequest,
+} from '@drezivo/contracts';
 
 import '../../src/config/load-env.js';
 import {
@@ -50,6 +55,7 @@ interface Seed {
   paymentMethodId: string;
   /** Celestine: two physical pieces, ₱1,500 for 3 days, ₱500 deposit. */
   celestineId: string;
+  celestineLargeId: string;
   /** Amara: one physical piece, ₱1,000 for 3 days, ₱300 deposit. */
   amaraId: string;
 }
@@ -72,22 +78,29 @@ describe('multi-garment reservations', async () => {
 
     const created = await service.createStaffReservation(
       context(seed, 'create'),
-      await request(seed, [seed.celestineId, seed.celestineId, seed.amaraId]),
+      await request(seed, [seed.celestineId, seed.celestineLargeId, seed.amaraId]),
     );
 
     expect(created.status).toBe(201);
     if (created.body.success !== true) throw new Error('Expected the booking to be created.');
     const reservation = created.body.data.reservation;
-    // Rentals 1,500 + 1,500 + 1,000, deposits 500 + 500 + 300, one ₱250 delivery fee.
+    // Two distinct sizes of Celestine plus Amara; delivery is charged once.
     expect(reservation.price_snapshot).toMatchObject({
       rental_total_minor: '400000',
       security_required_minor: '130000',
       due_now_minor: '555000',
     });
     const lines = await lineState(seed, reservation.id);
-    expect(lines.map((line) => [line.line_number, line.variant_id, line.rental_minor, line.deposit_minor])).toEqual([
+    expect(
+      lines.map((line) => [
+        line.line_number,
+        line.variant_id,
+        line.rental_minor,
+        line.deposit_minor,
+      ]),
+    ).toEqual([
       [1, seed.celestineId, 150000, 50000],
-      [2, seed.celestineId, 150000, 50000],
+      [2, seed.celestineLargeId, 150000, 50000],
       [3, seed.amaraId, 100000, 30000],
     ]);
     expect(new Set(lines.map((line) => line.asset_id)).size).toBe(3);
@@ -95,8 +108,15 @@ describe('multi-garment reservations', async () => {
     expect(await paymentAmount(seed, reservation.id)).toBe(555000);
 
     const detail = await service.getReservationDetail(context(seed, 'detail'), reservation.id);
-    expect(detail.lines.map((line) => line.name_snapshot)).toEqual(['Celestine', 'Celestine', 'Amara']);
-    const list = await service.getReservationList(context(seed, 'list'), { limit: 10, sort: 'created_desc' });
+    expect(detail.lines.map((line) => line.name_snapshot)).toEqual([
+      'Celestine',
+      'Celestine',
+      'Amara',
+    ]);
+    const list = await service.getReservationList(context(seed, 'list'), {
+      limit: 10,
+      sort: 'created_desc',
+    });
     expect(list.items[0]).toMatchObject({ line_count: 3, line: { name_snapshot: 'Celestine' } });
   });
 
@@ -105,57 +125,123 @@ describe('multi-garment reservations', async () => {
 
     const result = await service.createStaffReservation(
       context(seed, 'full'),
-      await request(seed, [seed.celestineId, seed.amaraId, seed.amaraId]),
+      await request(seed, [seed.celestineId, seed.amaraId, seed.amaraId], true),
     );
 
     expect(result.status).toBe(409);
     expect(result.body).toMatchObject({
       success: false,
-      error: { code: 'CAPACITY_CONFLICT', message: 'Amara is no longer available for those dates.' },
+      error: {
+        code: 'CAPACITY_CONFLICT',
+        message:
+          'One or more requested garments are no longer available for those dates. Remove or change unavailable items and retry.',
+      },
     });
     expect(await reservationCount(seed)).toBe(0);
+  });
+
+  it('rejects duplicate variants for new bookings but keeps duplicate copied rebooking lines valid', async () => {
+    const seed = await seedWorkspace('org_multi_unique', 'user_multi_unique');
+    const duplicateNewBooking = await service.createStaffReservation(
+      context(seed, 'duplicate-new'),
+      await request(seed, [seed.celestineId, seed.celestineId]),
+    );
+    expect(duplicateNewBooking.status).toBe(422);
+    expect(duplicateNewBooking.body).toMatchObject({
+      success: false,
+      error: { code: 'VALIDATION_FAILED' },
+    });
+    expect(await reservationCount(seed)).toBe(0);
+
+    const legacyCopiedLines = await service.createStaffReservation(
+      context(seed, 'duplicate-rebook'),
+      await request(seed, [seed.celestineId, seed.celestineId], true),
+    );
+    expect(legacyCopiedLines.status).toBe(201);
+    expect(await reservationCount(seed)).toBe(1);
   });
 
   it('confirms, hands over, receives back, inspects, and completes every garment together', async () => {
     const seed = await seedWorkspace('org_multi_life', 'user_multi_life');
     const booking = await createBooking(seed, 'life', [seed.celestineId, seed.amaraId]);
     const confirmed = await confirm(seed, booking);
-    expect((await lineState(seed, booking.id)).every((line) => line.kind === 'reservation_confirmed')).toBe(true);
+    expect(
+      (await lineState(seed, booking.id)).every((line) => line.kind === 'reservation_confirmed'),
+    ).toBe(true);
 
-    const picked = await service.pickupReservation(context(seed, 'pickup'), booking.id, { version: confirmed });
-    expect(picked.body).toMatchObject({ success: true, data: { reservation: { status: 'picked_up' } } });
-    expect((await lineState(seed, booking.id)).map((line) => line.custody_kind)).toEqual(['with_customer', 'with_customer']);
+    const picked = await service.pickupReservation(context(seed, 'pickup'), booking.id, {
+      version: confirmed,
+    });
+    expect(picked.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'picked_up' } },
+    });
+    expect((await lineState(seed, booking.id)).map((line) => line.custody_kind)).toEqual([
+      'with_customer',
+      'with_customer',
+    ]);
     expect(await custodyEvents(seed, booking.id, 'pickup')).toBe(2);
     if (picked.body.success !== true) throw new Error('Expected pickup to succeed.');
 
     const returned = await service.returnReservation(context(seed, 'return'), booking.id, {
       version: picked.body.data.reservation.version,
     });
-    expect(returned.body).toMatchObject({ success: true, data: { reservation: { status: 'returned' } } });
-    expect((await lineState(seed, booking.id)).map((line) => line.custody_kind)).toEqual(['at_branch', 'at_branch']);
+    expect(returned.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'returned' } },
+    });
+    expect((await lineState(seed, booking.id)).map((line) => line.custody_kind)).toEqual([
+      'at_branch',
+      'at_branch',
+    ]);
     expect(await custodyEvents(seed, booking.id, 'return')).toBe(2);
     if (returned.body.success !== true) throw new Error('Expected return to succeed.');
     const version = returned.body.data.reservation.version;
 
-    const inspected = await service.inspectReturnedReservation(context(seed, 'inspect'), booking.id, { version, readiness: 'ready' });
+    const inspected = await service.inspectReturnedReservation(
+      context(seed, 'inspect'),
+      booking.id,
+      { version, readiness: 'ready' },
+    );
     expect(inspected.body).toMatchObject({ success: true, data: { asset_readiness: 'ready' } });
-    expect((await lineState(seed, booking.id)).map((line) => line.readiness)).toEqual(['ready', 'ready']);
+    expect((await lineState(seed, booking.id)).map((line) => line.readiness)).toEqual([
+      'ready',
+      'ready',
+    ]);
 
-    const completed = await service.completeRentalReservation(context(seed, 'complete'), booking.id, { version });
-    expect(completed.body).toMatchObject({ success: true, data: { reservation: { status: 'completed' } } });
+    const completed = await service.completeRentalReservation(
+      context(seed, 'complete'),
+      booking.id,
+      { version },
+    );
+    expect(completed.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'completed' } },
+    });
     expect((await lineState(seed, booking.id)).every((line) => !line.is_blocking)).toBe(true);
   });
 
   it('releases every garment when a multi-garment booking is cancelled', async () => {
     const seed = await seedWorkspace('org_multi_cancel', 'user_multi_cancel');
-    const booking = await createBooking(seed, 'cancel', [seed.celestineId, seed.celestineId]);
+    const booking = await createBooking(seed, 'cancel', [seed.celestineId, seed.celestineId], true);
 
-    const cancelled = await service.cancelReservation(context(seed, 'cancel'), booking.id, { version: booking.version });
+    const cancelled = await service.cancelReservation(context(seed, 'cancel'), booking.id, {
+      version: booking.version,
+    });
 
-    expect(cancelled.body).toMatchObject({ success: true, data: { reservation: { status: 'cancelled' } } });
-    expect((await lineState(seed, booking.id)).map((line) => line.is_blocking)).toEqual([false, false]);
+    expect(cancelled.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'cancelled' } },
+    });
+    expect((await lineState(seed, booking.id)).map((line) => line.is_blocking)).toEqual([
+      false,
+      false,
+    ]);
     // Both pieces are free again for the same dates.
-    const again = await service.createStaffReservation(context(seed, 'again'), await request(seed, [seed.celestineId, seed.celestineId]));
+    const again = await service.createStaffReservation(
+      context(seed, 'again'),
+      await request(seed, [seed.celestineId, seed.celestineId], true),
+    );
     expect(again.status).toBe(201);
   });
 
@@ -192,7 +278,10 @@ describe('multi-garment reservations', async () => {
         `INSERT INTO branch_membership (tenant_id, branch_id, membership_id, permission_codes) VALUES ($1, $2, $3, $4::jsonb)`,
         [tenant.id, branchId, membershipId, JSON.stringify(PERMISSIONS)],
       );
-      const planId = await one(`SELECT id FROM plan WHERE code = 'standard' AND version = 1 AND active = true LIMIT 1`, []);
+      const planId = await one(
+        `SELECT id FROM plan WHERE code = 'standard' AND version = 1 AND active = true LIMIT 1`,
+        [],
+      );
       await client.query(
         `INSERT INTO subscription (tenant_id, plan_id, status, current_period_start, current_period_end)
          VALUES ($1, $2, 'active', statement_timestamp(), statement_timestamp() + interval '30 days')`,
@@ -215,41 +304,57 @@ describe('multi-garment reservations', async () => {
          VALUES ($1, 'Cash', 'cash', '{"instructions":"Pay at the counter"}'::jsonb, true, 1) RETURNING id`,
         [tenant.id],
       );
-      const gown = async (code: string, name: string, rental: number, deposit: number, pieces: number): Promise<string> => {
+      const gown = async (
+        code: string,
+        name: string,
+        rental: number,
+        deposit: number,
+        pieces: number,
+      ): Promise<{ mediumId: string; largeId: string }> => {
         const productId = await one(
           `INSERT INTO product (tenant_id, code, name, description, status) VALUES ($1, $2, $3, 'Multi test gown', 'active') RETURNING id`,
           [tenant.id, code, name],
         );
-        const variantId = await one(
-          `INSERT INTO product_variant (tenant_id, product_id, sku, size_label, color_label, measurement_mode, measurement_unit,
+        const variant = async (size: 'M' | 'L', pieces: number): Promise<string> => {
+          const variantId = await one(
+            `INSERT INTO product_variant (tenant_id, product_id, sku, size_label, color_label, measurement_mode, measurement_unit,
              measurements, rental_price_minor, security_deposit_minor, currency, pricing_mode, included_duration_minutes,
              extra_day_price_minor, prep_minutes, turnaround_minutes, status)
-           VALUES ($1, $2, $3, 'M', 'Ivory', 'custom', 'in', '{"bust":34}'::jsonb, $4, $5, 'PHP',
+           VALUES ($1, $2, $3, $4, 'Ivory', 'custom', 'in', '{"bust":34}'::jsonb, $5, $6, 'PHP',
                    'fixed_duration', 4320, 40000, 0, 1440, 'active') RETURNING id`,
-          [tenant.id, productId, `${code}-M`, rental, deposit],
-        );
-        for (let piece = 1; piece <= pieces; piece += 1) {
-          await client.query(
-            `INSERT INTO physical_asset (tenant_id, branch_id, variant_id, asset_code, lifecycle_status, readiness, custody_kind)
-             VALUES ($1, $2, $3, $4, 'active', 'ready', 'at_branch')`,
-            [tenant.id, branchId, variantId, `${code}-${piece}`],
+            [tenant.id, productId, `${code}-${size}`, size, rental, deposit],
           );
-        }
-        return variantId;
+          for (let piece = 1; piece <= pieces; piece += 1) {
+            await client.query(
+              `INSERT INTO physical_asset (tenant_id, branch_id, variant_id, asset_code, lifecycle_status, readiness, custody_kind)
+             VALUES ($1, $2, $3, $4, 'active', 'ready', 'at_branch')`,
+              [tenant.id, branchId, variantId, `${code}-${size}-${piece}`],
+            );
+          }
+          return variantId;
+        };
+        return { mediumId: await variant('M', pieces), largeId: await variant('L', pieces) };
       };
+      const celestine = await gown('CELESTINE', 'Celestine', 150000, 50000, 2);
+      const amara = await gown('AMARA', 'Amara', 100000, 30000, 1);
       return {
         tenantId: tenant.id,
         principalId,
         membershipId,
         branchId,
         paymentMethodId,
-        celestineId: await gown('CELESTINE', 'Celestine', 150000, 50000, 2),
-        amaraId: await gown('AMARA', 'Amara', 100000, 30000, 1),
+        celestineId: celestine.mediumId,
+        celestineLargeId: celestine.largeId,
+        amaraId: amara.mediumId,
       };
     });
   }
 
-  async function request(seed: Seed, variantIds: string[]): Promise<StaffReservationCreateRequest> {
+  async function request(
+    seed: Seed,
+    variantIds: string[],
+    legacyLines = false,
+  ): Promise<StaffReservationCreateRequest> {
     const dates = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       const result = await client.query<{ start: Date; end: Date }>(
         `WITH pickup AS (SELECT date_trunc('day', statement_timestamp() AT TIME ZONE 'Asia/Manila') + interval '3 days 10 hours' AS local_at)
@@ -263,29 +368,54 @@ describe('multi-garment reservations', async () => {
     return {
       customer: {
         source: 'new',
-        customer: { full_name: 'Bea Santiago', phone: '09171234801', email: 'bea@example.test', address: '12 Mabini St, Quezon City' },
+        customer: {
+          full_name: 'Bea Santiago',
+          phone: '09171234801',
+          email: 'bea@example.test',
+          address: '12 Mabini St, Quezon City',
+        },
       },
       variant_id: first as ProductVariantId,
-      ...(rest.length > 0 ? { additional_variant_ids: rest as ProductVariantId[] } : {}),
+      ...(legacyLines
+        ? {
+            lines: variantIds.map((variant_id) => ({ variant_id: variant_id as ProductVariantId })),
+          }
+        : {}),
+      ...(!legacyLines && rest.length > 0
+        ? { additional_variant_ids: rest as ProductVariantId[] }
+        : {}),
       requested_interval: { start: dates.start.toISOString(), end: dates.end.toISOString() },
       fulfillment_method: 'delivery',
       payment_method_id: seed.paymentMethodId as PaymentMethodId,
     };
   }
 
-  async function createBooking(seed: Seed, key: string, variantIds: string[]) {
-    const created = await service.createStaffReservation(context(seed, `create-${key}`), await request(seed, variantIds));
-    if (created.status !== 201 || created.body.success !== true) throw new Error(`Expected a booking, got ${created.status}.`);
+  async function createBooking(seed: Seed, key: string, variantIds: string[], legacyLines = false) {
+    const created = await service.createStaffReservation(
+      context(seed, `create-${key}`),
+      await request(seed, variantIds, legacyLines),
+    );
+    if (created.status !== 201 || created.body.success !== true)
+      throw new Error(`Expected a booking, got ${created.status}.`);
     const reservation = created.body.data.reservation;
-    return { id: reservation.id, version: reservation.version, start: reservation.pickup_at, end: reservation.due_at };
+    return {
+      id: reservation.id,
+      version: reservation.version,
+      start: reservation.pickup_at,
+      end: reservation.due_at,
+    };
   }
 
   /** Submit, record verified cash for the full amount, and confirm. Returns the confirmed version. */
   async function confirm(seed: Seed, booking: { id: string; version: number }): Promise<number> {
-    const submitted = await service.submitReservation(context(seed, `submit-${booking.id}`), booking.id, {
-      version: booking.version,
-      terms_accepted: true,
-    });
+    const submitted = await service.submitReservation(
+      context(seed, `submit-${booking.id}`),
+      booking.id,
+      {
+        version: booking.version,
+        terms_accepted: true,
+      },
+    );
     if (submitted.status !== 200) throw new Error('Expected submission.');
     await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       const paid = await client.query<{ id: string; amount_minor: number }>(
@@ -298,11 +428,22 @@ describe('multi-garment reservations', async () => {
       await client.query(
         `INSERT INTO payment_verification (tenant_id, payment_id, verifier_membership_id, decision, verified_amount_minor, evidence_note, business_key)
          VALUES ($1, $2, $3, 'verified', $4, 'Cash counted.', $5)`,
-        [seed.tenantId, payment.id, seed.membershipId, payment.amount_minor, `verify:${payment.id}`],
+        [
+          seed.tenantId,
+          payment.id,
+          seed.membershipId,
+          payment.amount_minor,
+          `verify:${payment.id}`,
+        ],
       );
     });
-    const confirmed = await service.confirmReservation(context(seed, `confirm-${booking.id}`), booking.id, { version: booking.version + 1 });
-    if (confirmed.status !== 200 || confirmed.body.success !== true) throw new Error('Expected confirmation.');
+    const confirmed = await service.confirmReservation(
+      context(seed, `confirm-${booking.id}`),
+      booking.id,
+      { version: booking.version + 1 },
+    );
+    if (confirmed.status !== 200 || confirmed.body.success !== true)
+      throw new Error('Expected confirmation.');
     return confirmed.body.data.reservation.version;
   }
 
@@ -348,22 +489,29 @@ describe('multi-garment reservations', async () => {
 
   async function paymentAmount(seed: Seed, reservationId: string): Promise<number | undefined> {
     return withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const result = await client.query<{ amount_minor: number }>(`SELECT amount_minor FROM payment WHERE tenant_id = $1 AND reservation_id = $2`, [
-        seed.tenantId,
-        reservationId,
-      ]);
+      const result = await client.query<{ amount_minor: number }>(
+        `SELECT amount_minor FROM payment WHERE tenant_id = $1 AND reservation_id = $2`,
+        [seed.tenantId, reservationId],
+      );
       return result.rows[0]?.amount_minor;
     });
   }
 
   async function reservationCount(seed: Seed): Promise<number> {
     return withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const result = await client.query<{ n: number }>(`SELECT count(*)::int AS n FROM reservation WHERE tenant_id = $1`, [seed.tenantId]);
+      const result = await client.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM reservation WHERE tenant_id = $1`,
+        [seed.tenantId],
+      );
       return result.rows[0]?.n ?? -1;
     });
   }
 
-  async function custodyEvents(seed: Seed, reservationId: string, kind: 'pickup' | 'return'): Promise<number> {
+  async function custodyEvents(
+    seed: Seed,
+    reservationId: string,
+    kind: 'pickup' | 'return',
+  ): Promise<number> {
     return withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       const result = await client.query<{ n: number }>(
         `SELECT count(*)::int AS n FROM custody_event ce

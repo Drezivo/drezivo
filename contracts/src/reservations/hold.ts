@@ -112,10 +112,13 @@ export const staffReservationCreateRequest = staffReservationCreateBase
   .extend({
     variant_id: productVariantId,
     /**
-     * More garments on the same booking, for the same dates. Each is quoted and gets its own free
-     * physical piece; the same variant may appear again when the shop has several pieces of it.
+     * More garments on the same booking, for the same dates. New bookings select each variant at
+     * most once; the API quotes each line and allocates a distinct physical piece.
      */
-    additional_variant_ids: z.array(productVariantId).max(MAX_RESERVATION_LINES - 1).optional(),
+    additional_variant_ids: z
+      .array(productVariantId)
+      .max(MAX_RESERVATION_LINES - 1)
+      .optional(),
     lines: z
       .array(z.object({ variant_id: productVariantId }).strict())
       .min(1)
@@ -137,6 +140,16 @@ export const staffReservationCreateRequest = staffReservationCreateBase
         path: ['lines', 0, 'variant_id'],
         message: 'variant_id must match the first reservation line.',
       });
+    }
+    if (!value.lines) {
+      const variantIds = [value.variant_id, ...(value.additional_variant_ids ?? [])];
+      if (new Set(variantIds).size !== variantIds.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['additional_variant_ids'],
+          message: 'A variant can only be selected once for a new reservation.',
+        });
+      }
     }
   });
 export type StaffReservationCreateRequest = z.infer<typeof staffReservationCreateRequest>;
