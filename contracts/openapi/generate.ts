@@ -157,12 +157,16 @@ import {
   reservationRescheduleResponse,
   reservationReturnRequest,
   reservationReturnResponse,
+  reservationSubmitRequest,
+  reservationSubmitResponse,
   staffReservationAvailabilityCalendarQuery,
   staffReservationAvailabilityCalendarResponse,
   staffReservationAvailabilityCheckQuery,
   staffReservationAvailabilityCheckResponse,
   staffReservationCreateRequest,
   staffReservationCreateResponse,
+  staffReservationCompleteRequest,
+  staffReservationCompleteResponse,
   subscriptionStatus,
   subscriptionSummary,
   tenantBootstrapResponse,
@@ -723,6 +727,46 @@ registry.registerPath({
       content: { 'application/json': { schema: successEnvelope(staffReservationCreateResponse) } },
     },
     409: jsonError('CAPACITY_CONFLICT.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/reservations/{id}/submit',
+  tags: ['reservations'],
+  summary: 'Submit a held staff reservation for confirmation after required customer details are complete.',
+  request: {
+    params: z.object({ id: z.string().uuid() }),
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: reservationSubmitRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Reservation submitted after validating its customer name, phone, email, and address.',
+      content: { 'application/json': { schema: successEnvelope(reservationSubmitResponse) } },
+    },
+    409: jsonError('STATE_CONFLICT — stale version, expired hold, or customer changed concurrently.'),
+    422: jsonError('Customer phone, email, or address is incomplete or invalid.'),
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/reservations/{id}/complete-booking',
+  tags: ['reservations'],
+  summary: 'Complete a staff booking from its temporary hold, then confirm or submit for payment review.',
+  request: {
+    params: z.object({ id: z.string().uuid() }),
+    headers: idempotencyKeyHeader,
+    body: { content: { 'application/json': { schema: staffReservationCompleteRequest } } },
+  },
+  responses: {
+    200: {
+      description: 'Booking completed only after both contacts and the address are valid.',
+      content: { 'application/json': { schema: successEnvelope(staffReservationCompleteResponse) } },
+    },
+    409: jsonError('STATE_CONFLICT — stale version, expired hold, or customer changed concurrently.'),
+    422: jsonError('Customer phone, email, or address is incomplete or invalid.'),
   },
 });
 

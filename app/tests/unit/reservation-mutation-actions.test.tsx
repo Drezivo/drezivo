@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
   completeStaffReservation: vi.fn(),
   confirmReservation: vi.fn(),
   getStaffReservationIntakeOptions: vi.fn(),
+  getCustomerDetail: vi.fn(),
   getReservationPaymentReceipts: vi.fn(),
   verifyReservationPayment: vi.fn(),
   inspectReservationReturn: vi.fn(),
@@ -157,6 +158,16 @@ describe("ReservationMutationActions", () => {
     vi.clearAllMocks();
     clerk.getToken.mockResolvedValue("clerk-token");
     clerk.useAuth.mockReturnValue({ getToken: clerk.getToken });
+    api.getCustomerDetail.mockImplementation(async (id: string) => ({
+      data: {
+        id,
+        full_name: "Action Customer",
+        phone: "09171234567",
+        email: "customer@example.test",
+        address: "123 Test Street",
+      },
+      requestId: "req-customer",
+    }));
   });
 
   it("blocks a rapid Pick Up double-submit and sends one versioned intent", async () => {
@@ -362,6 +373,7 @@ describe("ReservationMutationActions", () => {
 
     fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Maria Walk-in" } });
     fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "09171234567" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "maria@example.test" } });
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Test Street" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Customer accepted the rental terms." }));
     expect(confirm).toBeEnabled();
@@ -375,7 +387,12 @@ describe("ReservationMutationActions", () => {
         terms_accepted: true,
         customer: {
           source: "new",
-          customer: { full_name: "Maria Walk-in", phone: "09171234567", address: "123 Test Street" },
+          customer: {
+            full_name: "Maria Walk-in",
+            phone: "09171234567",
+            email: "maria@example.test",
+            address: "123 Test Street",
+          },
         },
       },
       expect.any(String)
@@ -420,6 +437,7 @@ describe("ReservationMutationActions", () => {
     const customer = await screen.findByRole("button", { name: /Maria Existing/i });
     fireEvent.click(customer);
     expect(customer).toHaveAttribute("aria-pressed", "true");
+    await screen.findByText("Address: 123 Test Street");
     fireEvent.click(screen.getByRole("checkbox", { name: "Customer accepted the rental terms." }));
     fireEvent.click(screen.getAllByRole("button", { name: "Complete Reservation" })[1]!);
 
@@ -435,7 +453,7 @@ describe("ReservationMutationActions", () => {
     );
   });
 
-  it("captures an address before completing a held pre-change customer snapshot", async () => {
+  it("captures missing contact and address details before completing a held legacy customer snapshot", async () => {
     const heldDetail = reservationDetail.parse({
       ...confirmedDetail,
       status: "held",
@@ -454,14 +472,26 @@ describe("ReservationMutationActions", () => {
       hold_expires_at: "2026-10-10T02:15:00.000Z",
       version: 1,
     });
+    api.getCustomerDetail.mockResolvedValueOnce({
+      data: {
+        id: "00000000-0000-4000-8000-000000000102",
+        full_name: "Action Customer",
+        phone: "09171234567",
+        email: null,
+        address: null,
+      },
+      requestId: "req-customer",
+    });
     api.completeStaffReservation.mockResolvedValueOnce(mutationResult("confirmed", 2));
     renderActions(heldDetail, ["reservations.manage"]);
 
     fireEvent.click(screen.getByRole("button", { name: "Complete Reservation" }));
     const confirm = screen.getAllByRole("button", { name: "Complete Reservation" })[1]!;
-    expect(screen.getByText("Address required")).toBeVisible();
+    expect(screen.getByText("Complete customer details")).toBeVisible();
     expect(confirm).toBeDisabled();
+    await screen.findByLabelText("Email");
 
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "action@example.test" } });
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Legacy Street" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Customer accepted the rental terms." }));
     expect(confirm).toBeEnabled();
@@ -476,6 +506,7 @@ describe("ReservationMutationActions", () => {
         customer: {
           source: "existing",
           customer_id: "00000000-0000-4000-8000-000000000102",
+          email: "action@example.test",
           address: "123 Legacy Street",
         },
       },

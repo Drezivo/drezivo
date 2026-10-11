@@ -540,9 +540,8 @@ function paymentDifference(detail: ReservationDetail): { kind: "collect" | "refu
 }
 
 /**
- * A finished reservation stays in history; Continue starts a new booking with the same details so
- * staff only re-check the dates. Needs the first line's clothing item, so very old reservations
- * without it cannot be continued.
+ * A finished reservation stays in history; rebooking copies every line into a new booking. Older
+ * reservations whose lines lack product identity fail closed rather than silently dropping items.
  */
 function ContinueReservation({
   detail,
@@ -551,14 +550,12 @@ function ContinueReservation({
   detail: ReservationDetail;
   onContinue: (source: ReservationRebookSource) => void;
 }) {
-  const line = detail.lines[0];
-  if (!line?.product_id) return null;
-  const productId = line.product_id;
+  if (detail.lines.length === 0 || detail.lines.some((line) => !line.product_id)) return null;
   const customer = detail.customer.snapshot;
   return (
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashboard-border bg-dashboard-active/40 p-3">
       <p className="text-sm text-dashboard-muted">
-        This reservation is {detail.status === "expired" ? "expired" : detail.status}. Continue it as a new booking with the same details.
+        This reservation is {detail.status === "expired" ? "expired" : detail.status}. Create a new reservation with the same items and details.
       </p>
       <Button
         type="button"
@@ -566,8 +563,12 @@ function ContinueReservation({
         onClick={() =>
           onContinue({
             referenceCode: detail.reference_code,
-            productId,
-            variantId: line.variant_id,
+            lines: detail.lines.map((line) => ({
+              sourceLineId: line.id,
+              productId: line.product_id!,
+              variantId: line.variant_id,
+              name: line.name_snapshot,
+            })),
             pickupAt: detail.pickup_at,
             dueAt: detail.due_at,
             eventDate: detail.event_date ?? null,
@@ -585,7 +586,7 @@ function ContinueReservation({
           })
         }
       >
-        <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Continue
+        <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Create New Reservation from This
       </Button>
     </div>
   );

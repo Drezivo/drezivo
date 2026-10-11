@@ -4,13 +4,16 @@ import { useAuth } from "@clerk/nextjs";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AlertTriangle, Check, CheckCircle2, Eye, Loader2, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { staffReservationCompletionCustomer } from "@drezivo/contracts";
 
 import type {
   CustomerId,
+  CustomerDetailResponse,
   PermissionCode,
   ReservationDetail,
-  StaffReservationCustomerInput,
   StaffReservationCustomerOption,
+  StaffReservationSubmissionCustomerInput,
 } from "@drezivo/contracts";
 
 import { Button } from "@/components/ui/button";
@@ -73,6 +76,8 @@ export function ReservationMutationActions({
 }) {
   const { getToken } = useAuth();
   const submitGuard = useSubmitGuard();
+  const resetSubmitIntent = submitGuard.resetIntent;
+  const currentPaymentAmountMinor = detail.payment?.amount_minor;
   const [selectedAction, setSelectedAction] = useState<ReservationAction | null>(null);
   const [reason, setReason] = useState("");
   const [conditionNote, setConditionNote] = useState("");
@@ -91,6 +96,11 @@ export function ReservationMutationActions({
     !isCustomerSearchTooShort && customerSearch.trim() !== debouncedCustomerSearch;
   const [customerOptions, setCustomerOptions] = useState<StaffReservationCustomerOption[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<CustomerId | "">("");
+  const [selectedCustomerProfile, setSelectedCustomerProfile] = useState<
+    Pick<CustomerDetailResponse, "id" | "full_name" | "phone" | "email" | "address"> | null
+  >(null);
+  const [customerProfileLoading, setCustomerProfileLoading] = useState(false);
+  const [customerProfileError, setCustomerProfileError] = useState(false);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -109,6 +119,26 @@ export function ReservationMutationActions({
   const disabledActionReasons = actions
     .filter((option) => option.disabled && option.disabledReason)
     .map((option) => option.disabledReason as string);
+  const needsCustomerEntry =
+    selectedAction === "complete_reservation" &&
+    detail.status === "held" &&
+    !detail.customer.snapshot;
+  const needsBoundCustomerCompletion = Boolean(
+    selectedAction === "complete_reservation" &&
+      detail.status === "held" &&
+      detail.customer.snapshot &&
+      detail.customer.customer_id &&
+      !staffReservationCompletionCustomer.safeParse(detail.customer.snapshot).success
+  );
+  const selectedCustomer =
+    customerOptions.find((customer) => customer.id === selectedCustomerId) ?? null;
+  const customerProfileLookupId = needsBoundCustomerCompletion
+    ? detail.customer.customer_id ?? ""
+    : needsCustomerEntry && customerMode === "existing"
+      ? selectedCustomerId
+      : "";
+  const currentCustomerProfile =
+    selectedCustomerProfile?.id === customerProfileLookupId ? selectedCustomerProfile : null;
 
   useEffect(() => {
     setSelectedAction(null);
@@ -116,13 +146,18 @@ export function ReservationMutationActions({
     setConditionNote("");
     setReadiness("ready");
     setTermsAccepted(detail.terms_accepted_at !== null);
-    setAmountReceived(detail.payment ? minorUnitsToMajorInput(detail.payment.amount_minor) : "");
+    setAmountReceived(
+      currentPaymentAmountMinor === undefined ? "" : minorUnitsToMajorInput(currentPaymentAmountMinor)
+    );
     setCashReceived(false);
     setMerchantReference("");
     setCustomerMode("new");
     setCustomerSearch("");
     setCustomerOptions([]);
     setSelectedCustomerId("");
+    setSelectedCustomerProfile(null);
+    setCustomerProfileLoading(false);
+    setCustomerProfileError(false);
     setFullName("");
     setPhone("");
     setEmail("");
@@ -130,8 +165,15 @@ export function ReservationMutationActions({
     setSocialMedia("");
     setNotes("");
     setMutationError(null);
-    submitGuard.resetIntent();
-  }, [detail.id, detail.status, detail.version, detail.terms_accepted_at, submitGuard.resetIntent]);
+    resetSubmitIntent();
+  }, [
+    detail.id,
+    currentPaymentAmountMinor,
+    detail.status,
+    detail.terms_accepted_at,
+    detail.version,
+    resetSubmitIntent,
+  ]);
 
   useEffect(() => {
     if (
@@ -161,6 +203,44 @@ export function ReservationMutationActions({
     };
   }, [customerMode, debouncedCustomerSearch, detail.customer.snapshot, getToken, isCustomerSearchPending, isCustomerSearchTooShort, selectedAction]);
 
+  useEffect(() => {
+    if (!customerProfileLookupId) {
+      setCustomerProfileLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setCustomerProfileLoading(true);
+    setCustomerProfileError(false);
+    void createDrezivoApiClient(getToken)
+      .getCustomerDetail(customerProfileLookupId)
+      .then((result) => {
+        if (cancelled) return;
+        const profile = result.data;
+        setSelectedCustomerProfile({
+          id: profile.id,
+          full_name: profile.full_name,
+          phone: profile.phone,
+          email: profile.email,
+          address: profile.address,
+        });
+        setPhone(profile.phone ?? detail.customer.snapshot?.phone ?? "");
+        setEmail(profile.email ?? detail.customer.snapshot?.email ?? "");
+        setAddress(profile.address ?? detail.customer.snapshot?.address ?? "");
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setCustomerProfileError(true);
+          setMutationError(toDrezivoApiError(error));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCustomerProfileLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerProfileLookupId, detail.customer.snapshot, getToken]);
+
   if (actions.length === 0) return null;
 
   const chooseAction = (action: ReservationAction) => {
@@ -178,6 +258,9 @@ export function ReservationMutationActions({
     setCustomerSearch("");
     setCustomerOptions([]);
     setSelectedCustomerId("");
+    setSelectedCustomerProfile(null);
+    setCustomerProfileLoading(false);
+    setCustomerProfileError(false);
     setFullName("");
     setPhone("");
     setEmail("");
@@ -202,31 +285,41 @@ export function ReservationMutationActions({
     setMutationError(null);
   };
 
-  const needsCustomerEntry =
-    selectedAction === "complete_reservation" &&
-    detail.status === "held" &&
-    !detail.customer.snapshot;
-  const needsAddressCapture =
-    selectedAction === "complete_reservation" &&
-    detail.status === "held" &&
-    detail.customer.snapshot?.address === null &&
-    detail.customer.customer_id !== null;
-  const selectedCustomer =
-    customerOptions.find((customer) => customer.id === selectedCustomerId) ?? null;
+  const customerSnapshot = detail.customer.snapshot;
+  const customerFieldValues = {
+    full_name:
+      currentCustomerProfile?.full_name ??
+      selectedCustomer?.full_name ??
+      customerSnapshot?.full_name ??
+      fullName,
+    phone:
+      currentCustomerProfile?.phone ??
+      selectedCustomer?.phone ??
+      phone,
+    email: currentCustomerProfile?.email ?? selectedCustomer?.email ?? email,
+    address: currentCustomerProfile?.address ?? address,
+  };
+  const completionFieldErrors = getCompletionCustomerFieldErrors(customerFieldValues);
   const customerInput = needsCustomerEntry
-    ? buildCustomerInput({
-        customerMode,
-        selectedCustomerId,
-        fullName,
-        phone,
-        email,
-        address,
-        hasAddress: selectedCustomer?.has_address ?? false,
-        socialMedia,
-        notes,
-      })
-    : needsAddressCapture
-      ? buildBoundSnapshotCustomerInput(detail.customer.customer_id!, address)
+    ? customerMode === "new"
+      ? buildCustomerInput({ fullName, phone, email, address, socialMedia, notes })
+      : buildExistingCustomerInput({
+          customerId: selectedCustomerId,
+          profile: currentCustomerProfile,
+          snapshot: null,
+          phone,
+          email,
+          address,
+        })
+    : needsBoundCustomerCompletion
+      ? buildExistingCustomerInput({
+          customerId: detail.customer.customer_id ?? "",
+          profile: currentCustomerProfile,
+          snapshot: customerSnapshot,
+          phone,
+          email,
+          address,
+        })
       : null;
   const submitAction = async () => {
     if (!selectedAction || submitGuard.isSubmitting) return;
@@ -283,9 +376,9 @@ export function ReservationMutationActions({
             );
           }
           case "confirm_reservation":
-            return api.completeStaffReservation(
+            return api.confirmReservation(
               detail.id,
-              { version: detail.version, terms_accepted: true },
+              { version: detail.version },
               idempotencyKey
             );
           case "cancel":
@@ -369,7 +462,9 @@ export function ReservationMutationActions({
     }
   };
 
-  const completionNeedsCustomer = (needsCustomerEntry || needsAddressCapture) && customerInput === null;
+  const completionNeedsCustomer =
+    (needsCustomerEntry || needsBoundCustomerCompletion) &&
+    (customerProfileLoading || customerProfileError || customerInput === null);
   const completionNeedsTerms =
     selectedAction === "complete_reservation" &&
     detail.terms_accepted_at === null &&
@@ -499,9 +594,11 @@ export function ReservationMutationActions({
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block">
                       <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
-                        Full name
+                        Full name <span aria-hidden="true">*</span>
                       </span>
                       <Input
+                        aria-label="Full name"
+                        aria-invalid={Boolean(completionFieldErrors.full_name)}
                         value={fullName}
                         disabled={submitGuard.isSubmitting}
                         maxLength={200}
@@ -509,18 +606,30 @@ export function ReservationMutationActions({
                           updateIntentField(() => setFullName(event.target.value))
                         }
                       />
+                      {completionFieldErrors.full_name ? (
+                        <span className="mt-1 block text-xs text-red-700" role="alert">
+                          {completionFieldErrors.full_name}
+                        </span>
+                      ) : null}
                     </label>
                     <label className="block sm:col-span-2">
                       <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
-                        Address
+                        Address <span aria-hidden="true">*</span>
                       </span>
                       <Input
+                        aria-label="Address"
+                        aria-invalid={Boolean(completionFieldErrors.address)}
                         autoComplete="street-address"
                         value={address}
                         disabled={submitGuard.isSubmitting}
                         maxLength={500}
                         onChange={(event) => updateIntentField(() => setAddress(event.target.value))}
                       />
+                      {completionFieldErrors.address ? (
+                        <span className="mt-1 block text-xs text-red-700" role="alert">
+                          {completionFieldErrors.address}
+                        </span>
+                      ) : null}
                     </label>
                     <label className="block">
                       <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
@@ -535,9 +644,11 @@ export function ReservationMutationActions({
                     </label>
                     <label className="block">
                       <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
-                        Phone
+                        Phone <span aria-hidden="true">*</span>
                       </span>
                       <Input
+                        aria-label="Phone"
+                        aria-invalid={Boolean(completionFieldErrors.phone)}
                         inputMode="numeric"
                         autoComplete="tel"
                         maxLength={11}
@@ -550,18 +661,30 @@ export function ReservationMutationActions({
                           )
                         }
                       />
+                      {completionFieldErrors.phone ? (
+                        <span className="mt-1 block text-xs text-red-700" role="alert">
+                          {completionFieldErrors.phone}
+                        </span>
+                      ) : null}
                     </label>
                     <label className="block">
                       <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
-                        Email
+                        Email <span aria-hidden="true">*</span>
                       </span>
                       <Input
+                        aria-label="Email"
+                        aria-invalid={Boolean(completionFieldErrors.email)}
                         type="email"
                         autoComplete="email"
                         value={email}
                         disabled={submitGuard.isSubmitting}
                         onChange={(event) => updateIntentField(() => setEmail(event.target.value))}
                       />
+                      {completionFieldErrors.email ? (
+                        <span className="mt-1 block text-xs text-red-700" role="alert">
+                          {completionFieldErrors.email}
+                        </span>
+                      ) : null}
                     </label>
                     <label className="block">
                       <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
@@ -646,26 +769,108 @@ export function ReservationMutationActions({
                             Selected customer
                           </p>
                           <p className="mt-1 text-sm font-medium text-dashboard-navy">
-                            {selectedCustomer.full_name}
-                          </p>
-                          <p className="mt-1 text-xs text-dashboard-muted">
-                            {selectedCustomer.phone ?? selectedCustomer.email ?? "No contact shown"}
+                            {currentCustomerProfile?.full_name ?? selectedCustomer.full_name}
                           </p>
                         </div>
-                        {!selectedCustomer.has_address ? (
+                        {customerProfileLoading ? (
+                          <p className="text-xs text-dashboard-muted">Loading saved customer details…</p>
+                        ) : customerProfileError ? (
+                          <p className="text-xs text-red-700" role="alert">
+                            Saved customer details could not be loaded. Retry by selecting the customer again.
+                          </p>
+                        ) : (
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            {currentCustomerProfile?.phone ? (
+                              <ReadOnlyCustomerValue
+                                label="Phone"
+                                value={currentCustomerProfile.phone}
+                                error={completionFieldErrors.phone}
+                              />
+                            ) : (
+                              <label className="block">
+                                <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
+                                  Phone <span aria-hidden="true">*</span>
+                                </span>
+                                <Input
+                                  aria-label="Phone"
+                                  aria-invalid={Boolean(completionFieldErrors.phone)}
+                                  inputMode="numeric"
+                                  autoComplete="tel"
+                                  maxLength={11}
+                                  placeholder="09XXXXXXXXX"
+                                  value={phone}
+                                  disabled={submitGuard.isSubmitting}
+                                  onChange={(event) =>
+                                    updateIntentField(() =>
+                                      setPhone(event.target.value.replace(/\D/g, "").slice(0, 11))
+                                    )
+                                  }
+                                />
+                                {completionFieldErrors.phone ? (
+                                  <span className="mt-1 block text-xs text-red-700" role="alert">
+                                    {completionFieldErrors.phone}
+                                  </span>
+                                ) : null}
+                              </label>
+                            )}
+                            {currentCustomerProfile?.email ? (
+                              <ReadOnlyCustomerValue
+                                label="Email"
+                                value={currentCustomerProfile.email}
+                                error={completionFieldErrors.email}
+                              />
+                            ) : (
+                              <label className="block">
+                                <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
+                                  Email <span aria-hidden="true">*</span>
+                                </span>
+                                <Input
+                                  aria-label="Email"
+                                  aria-invalid={Boolean(completionFieldErrors.email)}
+                                  type="email"
+                                  autoComplete="email"
+                                  value={email}
+                                  disabled={submitGuard.isSubmitting}
+                                  onChange={(event) => updateIntentField(() => setEmail(event.target.value))}
+                                />
+                                {completionFieldErrors.email ? (
+                                  <span className="mt-1 block text-xs text-red-700" role="alert">
+                                    {completionFieldErrors.email}
+                                  </span>
+                                ) : null}
+                              </label>
+                            )}
+                            {currentCustomerProfile?.address ? (
+                              <div className="sm:col-span-2">
+                                <ReadOnlyCustomerValue
+                                  label="Address"
+                                  value={currentCustomerProfile.address}
+                                  error={completionFieldErrors.address}
+                                />
+                              </div>
+                            ) : (
                           <label className="block">
                             <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
-                              Address required for this reservation
+                              Address <span aria-hidden="true">*</span>
                             </span>
                             <Input
+                              aria-label="Address"
+                              aria-invalid={Boolean(completionFieldErrors.address)}
                               autoComplete="street-address"
                               value={address}
                               disabled={submitGuard.isSubmitting}
                               maxLength={500}
                               onChange={(event) => updateIntentField(() => setAddress(event.target.value))}
                             />
+                            {completionFieldErrors.address ? (
+                              <span className="mt-1 block text-xs text-red-700" role="alert">
+                                {completionFieldErrors.address}
+                              </span>
+                            ) : null}
                           </label>
-                        ) : null}
+                            )}
+                          </div>
+                        )}
                       </div>
                     ) : null}
                   </div>
@@ -673,35 +878,97 @@ export function ReservationMutationActions({
 
                 {completionNeedsCustomer ? (
                   <p className="text-xs text-dashboard-muted">
-                    Choose a customer before completing the reservation.
+                    Add all required customer details before completing the reservation.
                   </p>
                 ) : null}
               </div>
             ) : null}
 
-            {needsAddressCapture ? (
+            {needsBoundCustomerCompletion ? (
               <div className="space-y-3 rounded-lg border border-dashboard-border bg-dashboard-surface p-3">
                 <div>
-                  <p className="text-xs font-semibold text-dashboard-navy">Address required</p>
+                  <p className="text-xs font-semibold text-dashboard-navy">Complete customer details</p>
                   <p className="mt-1 text-xs text-dashboard-muted">
-                    Capture an address before completing this existing reservation.
+                    Saved details are shown as read-only. Add any missing contact details and address before completing.
                   </p>
                 </div>
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
-                    Address
-                  </span>
-                  <Input
-                    autoComplete="street-address"
-                    value={address}
-                    disabled={submitGuard.isSubmitting}
-                    maxLength={500}
-                    onChange={(event) => updateIntentField(() => setAddress(event.target.value))}
-                  />
-                </label>
+                <p className="text-sm font-medium text-dashboard-navy">
+                  {currentCustomerProfile?.full_name ?? customerSnapshot?.full_name ?? "Customer"}
+                </p>
+                {customerProfileLoading ? (
+                  <p className="text-xs text-dashboard-muted">Loading saved customer details…</p>
+                ) : customerProfileError ? (
+                  <p className="text-xs text-red-700" role="alert">
+                    Saved customer details could not be loaded, so completion is blocked.
+                  </p>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {currentCustomerProfile?.phone ? (
+                      <ReadOnlyCustomerValue
+                        label="Phone"
+                        value={currentCustomerProfile.phone}
+                        error={completionFieldErrors.phone}
+                      />
+                    ) : (
+                      <CompletionInput label="Phone" required error={completionFieldErrors.phone}>
+                        <Input
+                          aria-label="Phone"
+                          aria-invalid={Boolean(completionFieldErrors.phone)}
+                          inputMode="numeric"
+                          autoComplete="tel"
+                          maxLength={11}
+                          placeholder="09XXXXXXXXX"
+                          value={phone}
+                          disabled={submitGuard.isSubmitting}
+                          onChange={(event) => updateIntentField(() => setPhone(event.target.value.replace(/\D/g, "").slice(0, 11)))}
+                        />
+                      </CompletionInput>
+                    )}
+                    {currentCustomerProfile?.email ? (
+                      <ReadOnlyCustomerValue
+                        label="Email"
+                        value={currentCustomerProfile.email}
+                        error={completionFieldErrors.email}
+                      />
+                    ) : (
+                      <CompletionInput label="Email" required error={completionFieldErrors.email}>
+                        <Input
+                          aria-label="Email"
+                          aria-invalid={Boolean(completionFieldErrors.email)}
+                          type="email"
+                          autoComplete="email"
+                          value={email}
+                          disabled={submitGuard.isSubmitting}
+                          onChange={(event) => updateIntentField(() => setEmail(event.target.value))}
+                        />
+                      </CompletionInput>
+                    )}
+                    {currentCustomerProfile?.address ? (
+                      <div className="sm:col-span-2">
+                        <ReadOnlyCustomerValue
+                          label="Address"
+                          value={currentCustomerProfile.address}
+                          error={completionFieldErrors.address}
+                        />
+                      </div>
+                    ) : (
+                      <CompletionInput label="Address" required error={completionFieldErrors.address}>
+                        <Input
+                          aria-label="Address"
+                          aria-invalid={Boolean(completionFieldErrors.address)}
+                          autoComplete="street-address"
+                          value={address}
+                          disabled={submitGuard.isSubmitting}
+                          maxLength={500}
+                          onChange={(event) => updateIntentField(() => setAddress(event.target.value))}
+                        />
+                      </CompletionInput>
+                    )}
+                  </div>
+                )}
                 {completionNeedsCustomer ? (
                   <p className="text-xs text-dashboard-muted">
-                    An address is required before completing the reservation.
+                    A valid phone, email, and address are required before completing the reservation.
                   </p>
                 ) : null}
               </div>
@@ -1306,54 +1573,135 @@ function isStaffCompletionResult(value: unknown): value is {
 }
 
 function buildCustomerInput(input: {
-  customerMode: CustomerMode;
-  selectedCustomerId: CustomerId | "";
   fullName: string;
   phone: string;
   email: string;
   address: string;
-  hasAddress: boolean;
   socialMedia: string;
   notes: string;
-}): StaffReservationCustomerInput | null {
-  if (input.customerMode === "existing") {
-    if (!input.selectedCustomerId) return null;
-    if (input.hasAddress) return { source: "existing", customer_id: input.selectedCustomerId };
-    const address = input.address.trim();
-    return address ? { source: "existing", customer_id: input.selectedCustomerId, address } : null;
-  }
-
+}): StaffReservationSubmissionCustomerInput | null {
   const fullName = input.fullName.trim();
   const phone = input.phone.trim();
   const email = input.email.trim();
   const address = input.address.trim();
   const socialMedia = input.socialMedia.trim();
   const notes = input.notes.trim();
-  if (!fullName) return null;
-  if (phone && !/^\d{11}$/.test(phone)) return null;
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
-  if (!phone && !email) return null;
-  if (!address) return null;
+  const parsed = staffReservationCompletionCustomer.safeParse({
+    full_name: fullName,
+    phone,
+    email,
+    address,
+  });
+  if (!parsed.success) return null;
 
   return {
     source: "new",
     customer: {
-      full_name: fullName,
-      ...(phone ? { phone } : {}),
-      ...(email ? { email } : {}),
-      address,
+      ...parsed.data,
       ...(socialMedia ? { social_media: socialMedia } : {}),
       ...(notes ? { notes } : {}),
     },
   };
 }
 
-function buildBoundSnapshotCustomerInput(
-  customerId: CustomerId,
-  addressInput: string
-): StaffReservationCustomerInput | null {
-  const address = addressInput.trim();
-  return address ? { source: "existing", customer_id: customerId, address } : null;
+function buildExistingCustomerInput(input: {
+  customerId: CustomerId | "";
+  profile: Pick<CustomerDetailResponse, "id" | "full_name" | "phone" | "email" | "address"> | null;
+  snapshot: NonNullable<ReservationDetail["customer"]["snapshot"]> | null;
+  phone: string;
+  email: string;
+  address: string;
+}): StaffReservationSubmissionCustomerInput | null {
+  if (!input.customerId || !input.profile) return null;
+  const phone = input.profile.phone ?? (input.phone.trim() || input.snapshot?.phone || undefined);
+  const email = input.profile.email ?? (input.email.trim() || input.snapshot?.email || undefined);
+  const address = input.profile.address ?? (input.address.trim() || input.snapshot?.address || undefined);
+  const candidate = {
+    full_name: input.profile.full_name || input.snapshot?.full_name || "",
+    phone: phone ?? "",
+    email: email ?? "",
+    address: address ?? "",
+  };
+  if (!staffReservationCompletionCustomer.safeParse(candidate).success) return null;
+
+  return {
+    source: "existing",
+    customer_id: input.customerId,
+    ...(input.profile.phone === null && phone ? { phone } : {}),
+    ...(input.profile.email === null && email ? { email } : {}),
+    ...(input.profile.address === null && address ? { address } : {}),
+  };
+}
+
+function getCompletionCustomerFieldErrors(customer: {
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+}): Partial<Record<"full_name" | "phone" | "email" | "address", string>> {
+  const parsed = staffReservationCompletionCustomer.safeParse({
+    full_name: customer.full_name,
+    phone: customer.phone?.trim() ?? "",
+    email: customer.email?.trim() ?? "",
+    address: customer.address?.trim() ?? "",
+  });
+  if (parsed.success) return {};
+  const errors: Partial<Record<"full_name" | "phone" | "email" | "address", string>> = {};
+  for (const issue of parsed.error.issues) {
+    const field = issue.path[0];
+    if (
+      (field === "full_name" || field === "phone" || field === "email" || field === "address") &&
+      errors[field] === undefined
+    ) {
+      errors[field] = issue.message;
+    }
+  }
+  return errors;
+}
+
+function CompletionInput({
+  label,
+  required,
+  error,
+  children,
+}: {
+  label: string;
+  required: boolean;
+  error?: string | undefined;
+  children: ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-medium text-dashboard-muted">
+        {label} {required ? <span aria-hidden="true">*</span> : null}
+      </span>
+      {children}
+      {error ? <span className="mt-1 block text-xs text-red-700" role="alert">{error}</span> : null}
+    </label>
+  );
+}
+
+function ReadOnlyCustomerValue({
+  label,
+  value,
+  error,
+}: {
+  label: string;
+  value: string;
+  error: string | undefined;
+}) {
+  return (
+    <div>
+      <p className="text-xs text-dashboard-muted">
+        {label}: {value}
+      </p>
+      {error ? (
+        <p className="mt-1 text-xs text-red-700" role="alert">
+          {error} Update this saved value in Customers before completing.
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 function minorUnitsToMajorInput(value: string): string {

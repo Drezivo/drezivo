@@ -10,6 +10,7 @@ import {
   reservationSubmitRequest,
   reservationSubmitResponse,
   reservationSummary,
+  staffReservationCompletionCustomer,
   type ReservationConfirmRequest,
   type ReservationConfirmResponse,
   type ReservationPaymentReceiptAttachRequest,
@@ -21,7 +22,7 @@ import {
   type ReservationSubmitRequest,
   type ReservationSummary,
   type ReservationSubmitResponse,
-  type StaffReservationCustomerInput,
+  type StaffReservationSubmissionCustomerInput,
 } from '@drezivo/contracts';
 
 import { withTenantTransaction } from '../../db/client.js';
@@ -47,8 +48,10 @@ import {
   appendReservationAuditEvent,
   appendReservationOutboxEvent,
   createReservationCustomer,
-  fillReservationCustomerAddress,
+  fillReservationCustomerDetails,
   readReservationCustomerForCreate,
+  updateReservationCustomerProfileForSubmission,
+  type ReservationCustomerProfileRow,
   type ReservationCustomerSnapshotRow,
 } from './reservations.command.repository.js';
 import {
@@ -66,7 +69,7 @@ import {
   markReservationAllocationsConfirmed,
   readLatestReservationVerification,
   readReservationMutationSummary,
-  repairReservationSnapshotAddressForSubmit,
+  repairReservationSnapshotForSubmit,
   rejectReservationReview,
   releaseReservationAllocations,
   submitReservationForReview,
@@ -169,7 +172,7 @@ export async function submitReservationForConfirmation(
         throw new StateConflictError('Customer information is required before completing this hold.');
       }
       if (reservation.customer_snapshot !== null) {
-        if (reservationSnapshotNeedsAddress(reservation.customer_snapshot)) {
+        if (reservationSnapshotNeedsCompletion(reservation.customer_snapshot)) {
           if (reservation.customer_id === null) {
             throw new StateConflictError('Reservation customer information is incomplete for submission.');
           }
@@ -189,7 +192,7 @@ export async function submitReservationForConfirmation(
         if (!customerIntent) {
           throw new StateConflictError('Customer information is required before completing this hold.');
         }
-        const customer = await resolveSubmissionCustomer(client, context.tenantId, customerIntent);
+        const customer = await resolveSubmissionCustomer(client, context, customerIntent);
         const customerSnapshot = {
           full_name: customer.full_name,
           phone: customer.phone,
@@ -208,26 +211,28 @@ export async function submitReservationForConfirmation(
         if (!bound) {
           throw new StateConflictError('Reservation customer changed during submission.');
         }
-      } else if (reservationSnapshotNeedsAddress(reservation.customer_snapshot)) {
+      } else if (reservationSnapshotNeedsCompletion(reservation.customer_snapshot)) {
         if (reservation.customer_id === null) {
           throw new StateConflictError('Reservation customer information is incomplete for submission.');
         }
         const customer = await resolveBoundSnapshotCustomer(
           client,
-          context.tenantId,
+          context,
           reservation.customer_id,
           customerIntent,
         );
-        if (customer.address === null) {
-          throw new StateConflictError('Reservation customer address is incomplete for submission.');
-        }
-        const repaired = await repairReservationSnapshotAddressForSubmit(client, {
+        const customerSnapshot = mergeReservationCustomerSnapshot(
+          reservation.customer_snapshot,
+          customer,
+        );
+        assertCompleteCustomerSnapshot(customerSnapshot);
+        const repaired = await repairReservationSnapshotForSubmit(client, {
           tenantId: context.tenantId,
           branchId: context.branchId,
           reservationId,
           version: request.version,
           customerId: reservation.customer_id,
-          address: customer.address,
+          customerSnapshot,
         });
         if (!repaired) {
           throw new StateConflictError('Reservation customer changed during submission.');
@@ -561,6 +566,7 @@ export async function confirmReservationByMerchant(
     try {
       const reservation = await requireLockedReservation(client, context, reservationId);
       assertActionableState(reservation, request.version, 'pending_confirmation');
+      assertCompleteCustomerSnapshot(reservation.customer_snapshot);
 
       const payment = await lockReservationPaymentForReview(client, {
         tenantId: context.tenantId,
@@ -782,20 +788,20 @@ function deadlineElapsed(reservation: LockedReservationReviewRow): boolean {
 
 async function resolveSubmissionCustomer(
   client: Parameters<typeof readReservationCustomerForCreate>[0],
-  tenantId: string,
-  intent: StaffReservationCustomerInput,
+  context: ReservationReviewContext,
+  intent: StaffReservationSubmissionCustomerInput,
 ): Promise<ReservationCustomerSnapshotRow> {
   if (intent.source === 'existing') {
     const existing = await readReservationCustomerForCreate(client, {
-      tenantId,
+      tenantId: context.tenantId,
       customerId: intent.customer_id,
     });
     if (!existing) throw new NotFoundError('Customer could not be found.');
-    return fillMissingSubmissionCustomerAddress(client, tenantId, existing, intent.address);
+    return fillMissingSubmissionCustomerDetails(client, context, existing, intent);
   }
 
   return createReservationCustomer(client, {
-    tenantId,
+    tenantId: context.tenantId,
     fullName: intent.customer.full_name,
     phone: intent.customer.phone ?? null,
     email: intent.customer.email?.trim().toLowerCase() ?? null,
@@ -805,84 +811,181 @@ async function resolveSubmissionCustomer(
   });
 }
 
-async function fillMissingSubmissionCustomerAddress(
+async function fillMissingSubmissionCustomerDetails(
   client: Parameters<typeof readReservationCustomerForCreate>[0],
-  tenantId: string,
-  customer: ReservationCustomerSnapshotRow,
-  address: string | undefined,
+  context: ReservationReviewContext,
+  customer: ReservationCustomerProfileRow,
+  intent: Extract<StaffReservationSubmissionCustomerInput, { source: 'existing' }> | undefined,
 ): Promise<ReservationCustomerSnapshotRow> {
-  if (customer.address !== null) {
-    if (address !== undefined) {
-      throw new ValidationError('Customer already has an address. Update it through customer management.');
-    }
+  if (intent?.profile) {
+    return updateSubmittedCustomerProfile(client, context, customer, intent);
+  }
+
+  const submittedPhone = intent?.phone?.trim();
+  const submittedEmail = intent?.email?.trim().toLowerCase();
+  const submittedAddress = intent?.address?.trim();
+
+  if (customer.phone !== null && submittedPhone !== undefined && customer.phone !== submittedPhone) {
+    throw new ValidationError('Saved customer phone cannot be changed during reservation completion.');
+  }
+  if (customer.email !== null && submittedEmail !== undefined && customer.email !== submittedEmail) {
+    throw new ValidationError('Saved customer email cannot be changed during reservation completion.');
+  }
+  if (customer.address !== null && submittedAddress !== undefined && customer.address !== submittedAddress) {
+    throw new ValidationError('Saved customer address cannot be changed during reservation completion.');
+  }
+
+  if (
+    customer.phone !== null &&
+    customer.email !== null &&
+    customer.address !== null
+  ) {
     return customer;
   }
-  if (address === undefined) {
-    throw new ValidationError('Customer address is required before submitting a reservation.');
-  }
-  const filledAddress = await fillReservationCustomerAddress(client, {
-    tenantId,
+
+  const updated = await fillReservationCustomerDetails(client, {
+    tenantId: context.tenantId,
     customerId: customer.id,
-    address,
+    phone: customer.phone === null ? submittedPhone ?? null : null,
+    email: customer.email === null ? submittedEmail ?? null : null,
+    address: customer.address === null ? submittedAddress ?? null : null,
   });
-  if (!filledAddress) {
-    throw new StateConflictError('Customer address changed during reservation submission.');
+  if (!updated) {
+    throw new StateConflictError('Customer details changed during reservation submission.');
   }
-  return { ...customer, address: filledAddress };
+  return updated;
 }
 
-function reservationSnapshotNeedsAddress(snapshot: Record<string, unknown>): boolean {
-  const address = snapshot.address;
-  return typeof address !== 'string' || address.trim().length === 0;
+async function updateSubmittedCustomerProfile(
+  client: Parameters<typeof readReservationCustomerForCreate>[0],
+  context: ReservationReviewContext,
+  current: ReservationCustomerProfileRow,
+  intent: Extract<StaffReservationSubmissionCustomerInput, { source: 'existing' }>,
+): Promise<ReservationCustomerSnapshotRow> {
+  const profile = intent.profile;
+  if (!profile) {
+    throw new StateConflictError('Customer profile edits are required for this update.');
+  }
+  if (current.updated_at.getTime() !== new Date(profile.expected_updated_at).getTime()) {
+    throw new StaleVersionError('This customer profile changed before reservation completion. Refresh and try again.');
+  }
+
+  const next = {
+    full_name: profile.full_name.trim(),
+    phone: profile.phone.trim(),
+    email: profile.email.trim().toLowerCase(),
+    address: profile.address.trim(),
+    social_media: profile.social_media?.trim() || null,
+    notes: profile.notes?.trim() || null,
+  };
+  const changedFields = (
+    ['full_name', 'phone', 'email', 'address', 'social_media', 'notes'] as const
+  ).filter((field) => {
+    const currentValue = field === 'email' ? current.email?.toLowerCase() ?? null : current[field];
+    return currentValue !== next[field];
+  });
+  if (changedFields.length === 0) return current;
+
+  const updated = await updateReservationCustomerProfileForSubmission(client, {
+    tenantId: context.tenantId,
+    customerId: current.id,
+    expectedUpdatedAt: profile.expected_updated_at,
+    fullName: next.full_name,
+    phone: next.phone,
+    email: next.email,
+    address: next.address,
+    socialMedia: next.social_media,
+    notes: next.notes,
+  });
+  if (!updated) {
+    throw new StaleVersionError('This customer profile changed before reservation completion. Refresh and try again.');
+  }
+
+  await appendReservationAuditEvent(client, {
+    tenantId: context.tenantId,
+    actorKind: 'staff',
+    actorKey: context.principalId,
+    action: 'customer.profile_updated',
+    entityType: 'customer',
+    entityId: current.id,
+    redactedSummary: { changed_fields: changedFields },
+    requestId: context.requestId,
+  });
+  return updated;
+}
+
+function reservationSnapshotNeedsCompletion(snapshot: Record<string, unknown>): boolean {
+  return !staffReservationCompletionCustomer.safeParse({
+    full_name: snapshot.full_name,
+    phone: snapshot.phone,
+    email: snapshot.email,
+    address: snapshot.address,
+  }).success;
 }
 
 function assertBoundSnapshotCustomerIntent(
-  intent: StaffReservationCustomerInput | undefined,
+  intent: StaffReservationSubmissionCustomerInput | undefined,
   customerId: string,
 ): void {
   if (!intent) return;
   if (intent.source !== 'existing' || intent.customer_id !== customerId) {
     throw new StateConflictError('This reservation already has a different customer snapshot.');
   }
+  if (intent.profile) {
+    throw new StateConflictError('Customer profile edits must be saved before a reservation snapshot is created.');
+  }
 }
 
 async function resolveBoundSnapshotCustomer(
   client: Parameters<typeof readReservationCustomerForCreate>[0],
-  tenantId: string,
+  context: ReservationReviewContext,
   customerId: string,
-  intent: StaffReservationCustomerInput | undefined,
+  intent: StaffReservationSubmissionCustomerInput | undefined,
 ): Promise<ReservationCustomerSnapshotRow> {
   assertBoundSnapshotCustomerIntent(intent, customerId);
   const existingIntent = intent?.source === 'existing' ? intent : undefined;
-  const customer = await readReservationCustomerForCreate(client, { tenantId, customerId });
+  const customer = await readReservationCustomerForCreate(client, { tenantId: context.tenantId, customerId });
   if (!customer) throw new NotFoundError('Customer could not be found.');
-
-  if (customer.address === null) {
-    return fillMissingSubmissionCustomerAddress(client, tenantId, customer, existingIntent?.address);
-  }
-  if (existingIntent?.address !== undefined && existingIntent.address !== customer.address) {
-    throw new ValidationError('Customer address does not match the existing profile.');
-  }
-  return customer;
+  return fillMissingSubmissionCustomerDetails(client, context, customer, existingIntent);
 }
 
 function assertCompleteCustomerSnapshot(snapshot: Record<string, unknown> | null): void {
-  const fullName = snapshot?.full_name;
-  const phone = snapshot?.phone;
-  const email = snapshot?.email;
-  const address = snapshot?.address;
-  if (
-    typeof fullName !== 'string' ||
-    fullName.trim().length === 0 ||
-    !(
-      (typeof phone === 'string' && phone.trim().length > 0) ||
-      (typeof email === 'string' && email.trim().length > 0)
-    ) ||
-    typeof address !== 'string' ||
-    address.trim().length === 0
-  ) {
-    throw new StateConflictError('Reservation contact snapshot is incomplete for submission.');
+  const parsed = staffReservationCompletionCustomer.safeParse({
+    full_name: snapshot?.full_name,
+    phone: snapshot?.phone,
+    email: snapshot?.email,
+    address: snapshot?.address,
+  });
+  if (parsed.success) return;
+
+  const invalidFields = new Set(parsed.error.issues.map((issue) => issue.path[0]));
+  if (invalidFields.has('phone')) {
+    throw new ValidationError('Customer phone must contain exactly 11 digits before reservation submission.');
   }
+  if (invalidFields.has('email')) {
+    throw new ValidationError('A valid customer email is required before reservation submission.');
+  }
+  if (invalidFields.has('address')) {
+    throw new ValidationError('Customer address is required before reservation submission.');
+  }
+  throw new ValidationError('Customer name is required before reservation submission.');
+}
+
+function mergeReservationCustomerSnapshot(
+  snapshot: Record<string, unknown>,
+  customer: ReservationCustomerSnapshotRow,
+): Record<string, unknown> {
+  const retainedValue = (key: string, fallback: string | null): string | null => {
+    const value = snapshot[key];
+    return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+  };
+
+  return {
+    full_name: retainedValue('full_name', customer.full_name),
+    phone: retainedValue('phone', customer.phone),
+    email: retainedValue('email', customer.email),
+    address: retainedValue('address', customer.address),
+  };
 }
 
 function assertSubmissionEvidence(
