@@ -245,7 +245,9 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
     });
   });
 
-  it('rejects a staff reservation whose pickup time is already in the past', async () => {
+  // QA 10 Oct: staff may record a booking that already happened. Storefront renters still cannot
+  // (covered in storefront-guest-booking).
+  it('quotes a staff reservation whose pickup time is already in the past', async () => {
     const seed = await seedQuoteWorkspace({
       clerkOrgId: 'org_rsv020_past_pickup',
       principalId: 'user_rsv020_past_pickup',
@@ -261,21 +263,17 @@ describe('RSV-020 reservation quote and candidate resolution', async () => {
       deliveryRules: {},
     });
 
-    await expect(
-      getStaffReservationQuote(
-        reservationContext(seed),
-        staffRequest(seed, {
-          fulfillment_method: 'pickup',
-          requested_interval: {
-            start: '2020-01-01T02:00:00.000Z',
-            end: '2020-01-02T02:00:00.000Z',
-          },
-        }),
-      ),
-    ).rejects.toMatchObject({
-      code: 'VALIDATION_FAILED',
-      message: 'Pickup time cannot be in the past. Choose the current minute or a future time.',
-    });
+    const quote = await getStaffReservationQuote(
+      reservationContext(seed),
+      staffRequest(seed, {
+        fulfillment_method: 'pickup',
+        requested_interval: {
+          start: '2020-01-01T02:00:00.000Z',
+          end: '2020-01-02T02:00:00.000Z',
+        },
+      }),
+    );
+    expect(quote.pickup_at).toBe('2020-01-01T02:00:00.000Z');
   });
 
   it('requires an event date to stay inside the branch-local pickup and return dates', async () => {

@@ -2003,7 +2003,6 @@ export function NewReservationSheet({
                         setExactAvailabilityError(null);
                         reserveGuard.resetIntent();
                       }}
-                      timeZone={timeZone}
                     />
                   </div>
 
@@ -2079,6 +2078,11 @@ export function NewReservationSheet({
                       {minimumDurationIssue ? (
                         <p className="text-xs text-warning-500" role="alert">
                           {minimumDurationIssue}
+                        </p>
+                      ) : null}
+                      {requestedInterval && Date.parse(requestedInterval.start) < now ? (
+                        <p className="text-xs text-dashboard-muted" role="status">
+                          This pickup is in the past. It will be saved and labelled as a past booking.
                         </p>
                       ) : null}
                       {!requestedInterval && pickupTime && dueTime && !minimumDurationIssue ? (

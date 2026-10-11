@@ -99,7 +99,6 @@ function renderCalendar(
           setRange(nextRange);
           onRangeChange(nextRange);
         }}
-        timeZone="Asia/Manila"
       />
     );
   }
@@ -254,7 +253,6 @@ describe("ReservationAvailabilityCalendar", () => {
             pickupDate="2026-10-10"
             dueDate=""
             onRangeChange={vi.fn()}
-            timeZone="Asia/Manila"
           />
         </>
       );

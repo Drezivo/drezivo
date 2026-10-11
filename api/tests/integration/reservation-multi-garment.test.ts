@@ -242,6 +242,19 @@ describe('multi-garment reservations', async () => {
     expect(again.status).toBe(201);
   });
 
+  it('lets staff record a booking that already happened, with one or several items', async () => {
+    const seed = await seedWorkspace('org_multi_past', 'user_multi_past');
+
+    const single = await service.createStaffReservation(context(seed, 'past-one'), await request(seed, [seed.amaraId], false, -20));
+    expect(single.status).toBe(201);
+    const several = await service.createStaffReservation(context(seed, 'past-two'), await request(seed, [seed.celestineId, seed.amaraId], false, -10));
+    expect(several.status).toBe(201);
+    if (several.body.success !== true) throw new Error('Expected a past multi-item booking.');
+    expect(Date.parse(several.body.data.reservation.pickup_at)).toBeLessThan(Date.now());
+    // The hold still lasts its normal window from now, so staff can finish entering it.
+    expect(Date.parse(several.body.data.reservation.hold_expires_at ?? '')).toBeGreaterThan(Date.now());
+  });
+
   it('creates one booking for a sequential or concurrent double-fire of the same intent', async () => {
     const seed = await seedWorkspace('org_multi_double', 'user_multi_double');
     const body = await request(seed, [seed.celestineId, seed.amaraId]);
@@ -351,11 +364,13 @@ describe('multi-garment reservations', async () => {
     seed: Seed,
     variantIds: string[],
     legacyLines = false,
+    pickupDayOffset = 3,
   ): Promise<StaffReservationCreateRequest> {
     const dates = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       const result = await client.query<{ start: Date; end: Date }>(
-        `WITH pickup AS (SELECT date_trunc('day', statement_timestamp() AT TIME ZONE 'Asia/Manila') + interval '3 days 10 hours' AS local_at)
+        `WITH pickup AS (SELECT date_trunc('day', statement_timestamp() AT TIME ZONE 'Asia/Manila') + make_interval(days => $1::int, hours => 10) AS local_at)
          SELECT local_at AT TIME ZONE 'Asia/Manila' AS start, (local_at + interval '2 days') AT TIME ZONE 'Asia/Manila' AS "end" FROM pickup`,
+        [pickupDayOffset],
       );
       const row = result.rows[0];
       if (!row) throw new Error('Expected booking dates.');

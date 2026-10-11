@@ -26,6 +26,7 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import type { DrezivoApiError } from "@/lib/drezivo-api";
 import { displaySizeLabel } from "@/lib/catalogue-display";
+import { isPastBooking } from "@/lib/past-booking";
 import { cn } from "@/lib/utils";
 
 import type { ReservationRebookSource } from "./new-reservation-sheet";
@@ -185,6 +186,11 @@ function ReservationDetails({
               className="whitespace-nowrap px-2 py-1 text-xs text-dashboard-muted"
             >
               {detail.booking_channel === "online" ? "Online booking" : "Walk-in"}
+            </Badge>
+          ) : null}
+          {isPastBooking(detail) ? (
+            <Badge variant="outline" className="whitespace-nowrap px-2 py-1 text-xs text-dashboard-muted">
+              Past booking
             </Badge>
           ) : null}
         </div>
