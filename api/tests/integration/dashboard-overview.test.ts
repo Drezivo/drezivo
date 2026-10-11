@@ -120,6 +120,7 @@ describe('Dashboard overview API', async () => {
       completed_rentals: { current: 0, previous: 0 },
       average_rental_value: { current_minor: null, previous_minor: null },
       new_customers: { current: 1, previous: 1 },
+      projected_rental_value: { current_minor: '0', reservations: 0 },
     });
   });
 
@@ -254,6 +255,22 @@ describe('Dashboard overview API', async () => {
       completed_rentals: { current: 1, previous: 1 },
       average_rental_value: { current_minor: '12000', previous_minor: '7000' },
       new_customers: { current: 1, previous: 1 },
+    });
+    // Only confirmed bookings picking up this month count: 3000 today and 5000 in two days (which
+    // can fall into next month near month end). Pending, picked-up and completed ones never count.
+    const branchToday = new Date(new Date().toLocaleString('en-US', { timeZone: data.window.timezone }));
+    const pickupThisMonth = (dayOffset: number): boolean => {
+      const day = new Date(branchToday);
+      day.setDate(day.getDate() + dayOffset);
+      return day.getMonth() === branchToday.getMonth();
+    };
+    const projected = [
+      { offset: 0, amount: 3000 },
+      { offset: 2, amount: 5000 },
+    ].filter((booking) => pickupThisMonth(booking.offset));
+    expect(data.business_performance.projected_rental_value).toEqual({
+      current_minor: String(projected.reduce((sum, booking) => sum + booking.amount, 0)),
+      reservations: projected.length,
     });
 
     const serialized = JSON.stringify(data);

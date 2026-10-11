@@ -164,6 +164,15 @@ export const dashboardOverviewResponse = z
           })
           .strict(),
         new_customers: z.object({ current: dashboardCount, previous: dashboardCount }).strict(),
+        /**
+         * Rental fees (no deposits) of confirmed bookings whose pickup falls in the current month,
+         * as if they all complete. Cancelled and completed bookings are not included. Optional only
+         * so an app build from before this field still reads an older API.
+         */
+        projected_rental_value: z
+          .object({ current_minor: nonNegativeMoneyString, reservations: dashboardCount })
+          .strict()
+          .optional(),
       })
       .strict(),
   })

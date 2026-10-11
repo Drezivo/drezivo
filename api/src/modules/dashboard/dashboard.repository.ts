@@ -324,6 +324,17 @@ export const DASHBOARD_OVERVIEW_SQL = `WITH branch_clock AS MATERIALIZED (
         AND r.completed_at >= w.previous_month_start AND r.completed_at < w.month_end
        GROUP BY w.month_start, w.month_end, w.previous_month_start, w.previous_month_end
      ),
+     projection AS (
+       -- Confirmed and not yet picked up, so still expected to earn its rental fee this month.
+       SELECT
+         COALESCE(sum(r.rental_total_minor::numeric), 0)::text AS projected_value_minor,
+         count(r.id)::int AS projected_reservations
+       FROM windows w
+       LEFT JOIN reservation r
+         ON r.tenant_id = $1::uuid AND r.branch_id = $2::uuid AND r.status = 'confirmed'
+        AND r.pickup_at >= w.month_start AND r.pickup_at < w.month_end
+       GROUP BY w.month_start, w.month_end
+     ),
      new_customer_counts AS (
        SELECT
          count(*) FILTER (
@@ -387,6 +398,10 @@ export const DASHBOARD_OVERVIEW_SQL = `WITH branch_clock AS MATERIALIZED (
          'new_customers', jsonb_build_object(
            'current', customer_counts.current_customers,
            'previous', customer_counts.previous_customers
+         ),
+         'projected_rental_value', jsonb_build_object(
+           'current_minor', projected.projected_value_minor,
+           'reservations', projected.projected_reservations
          )
        )
      ) AS overview
@@ -398,6 +413,7 @@ export const DASHBOARD_OVERVIEW_SQL = `WITH branch_clock AS MATERIALIZED (
      CROSS JOIN fitting_count fitting_total
      CROSS JOIN upcoming_fittings fittings
      CROSS JOIN performance perf
+     CROSS JOIN projection projected
      CROSS JOIN new_customer_counts customer_counts`;
 
 export async function readDashboardOverview(
