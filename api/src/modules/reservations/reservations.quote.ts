@@ -130,9 +130,16 @@ export async function resolveReservationQuote(
     tenantId: string;
     branchId: string;
     request: ReservationQuoteRequest;
+    /**
+     * Staff may record a booking that already happened (to enter past transactions). Storefront
+     * guests never can; their path leaves this unset.
+     */
+    allowPastPickup?: boolean;
   },
 ): Promise<ReservationQuote> {
-  await assertRequestedPickupNotInPast(client, input.request.requested_interval.start);
+  if (!input.allowPastPickup) {
+    await assertRequestedPickupNotInPast(client, input.request.requested_interval.start);
+  }
 
   const foundation = await readReservationQuoteFoundation(client, {
     tenantId: input.tenantId,

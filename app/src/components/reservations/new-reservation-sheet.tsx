@@ -79,6 +79,9 @@ type HoldDraft = {
  * customer, pickup or delivery and payment method, and the same dates while they are still ahead.
  * Nothing is reserved until staff press Reserve, which re-checks availability as usual.
  */
+/** The API accepts up to 20 lines per reservation. */
+const MAX_BOOKING_ITEMS = 20;
+
 export type ReservationRebookSource = {
   referenceCode: string;
   lines: Array<{
@@ -166,6 +169,8 @@ export function NewReservationSheet({
   const [productDetail, setProductDetail] = useState<ClothingDetail | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<ProductVariantId | "">("");
   const [rebookLines, setRebookLines] = useState<ReservationRebookSource["lines"]>([]);
+  // Names of what the hold covers, shown on the Reserve and Complete steps.
+  const [heldItems, setHeldItems] = useState<string[]>([]);
   const [rebookAvailability, setRebookAvailability] = useState<
     Record<string, StaffReservationAvailabilityCheckResponse>
   >({});
@@ -266,6 +271,8 @@ export function NewReservationSheet({
     }, {}),
     [rebookLines]
   );
+  // A rebook always books its list; a new booking switches to a list once staff add an item.
+  const linesMode = Boolean(rebookFrom) || rebookLines.length > 0;
   const rebookAvailabilityReady = Boolean(
     rebookLines.length > 0 &&
       !rebookAvailabilityLoading &&
@@ -539,7 +546,7 @@ export function NewReservationSheet({
   ]);
 
   useEffect(() => {
-    if (!open || step !== "select" || !rebookFrom || !requestedInterval || rebookLines.length === 0) {
+    if (!open || step !== "select" || !linesMode || !requestedInterval || rebookLines.length === 0) {
       setRebookAvailability({});
       setRebookAvailabilityLoading(false);
       setRebookAvailabilityError(null);
@@ -571,7 +578,7 @@ export function NewReservationSheet({
     return () => {
       cancelled = true;
     };
-  }, [getToken, open, rebookFrom, rebookLines, requestedInterval, step]);
+  }, [getToken, linesMode, open, rebookLines, requestedInterval, step]);
 
   useEffect(() => {
     if (!eventDate) return;
@@ -746,6 +753,7 @@ export function NewReservationSheet({
     setProductDetail(null);
     setSelectedVariantId("");
     setRebookLines([]);
+    setHeldItems([]);
     setRebookAvailability({});
     setRebookAvailabilityLoading(false);
     setRebookAvailabilityError(null);
@@ -793,7 +801,7 @@ export function NewReservationSheet({
       setNotice({ tone: "attention", text: "Reservation management permission is required." });
       return;
     }
-    if ((!rebookFrom && !selectedVariant) || !requestedInterval || !paymentMethodId || (rebookFrom && rebookLines.length === 0)) {
+    if ((!linesMode && !selectedVariant) || !requestedInterval || !paymentMethodId || (linesMode && rebookLines.length === 0)) {
       setNotice({
         tone: "attention",
         text: "Choose clothing, a variant, rental dates, pickup/return times, and a payment method before reserving.",
@@ -804,14 +812,14 @@ export function NewReservationSheet({
       setNotice({ tone: "attention", text: minimumDurationIssue });
       return;
     }
-    if (!rebookFrom && (!exactAvailability || !exactAvailabilityMatchesSelection)) {
+    if (!linesMode && (!exactAvailability || !exactAvailabilityMatchesSelection)) {
       setNotice({
         tone: "attention",
         text: "Wait for the exact pickup and return time availability check before reserving.",
       });
       return;
     }
-    if (!rebookFrom && !exactAvailability?.available) {
+    if (!linesMode && !exactAvailability?.available) {
       setNotice({
         tone: "attention",
         text: "No single garment in this variant is available for the exact pickup and return times. Choose another period.",
@@ -827,7 +835,7 @@ export function NewReservationSheet({
     };
     const result = await reserveGuard.submit((idempotencyKey) =>
       createDrezivoApiClient(getToken).createStaffReservation(
-        rebookFrom
+        linesMode
           ? {
               ...request,
               variant_id: rebookLines[0]!.variantId,
@@ -843,6 +851,7 @@ export function NewReservationSheet({
       reservation: result.data.reservation,
       paymentInstructions: result.data.payment_instructions,
     });
+    setHeldItems(linesMode ? rebookLines.map((line) => line.name) : [productDetail?.name ?? "Rental item"]);
     setCashAmountReceived(
       minorUnitsToMajorInput(result.data.reservation.price_snapshot.due_now_minor)
     );
@@ -1139,11 +1148,13 @@ export function NewReservationSheet({
 
         {step === "select" ? (
           <div className="space-y-5 p-5">
-            {rebookFrom ? (
+            {linesMode ? (
               <section className="rounded-lg border border-dashboard-border bg-dashboard-active/30 p-4">
-                <SectionTitle icon={Shirt} title="Items in the new reservation" />
+                <SectionTitle icon={Shirt} title={rebookFrom ? "Items in the new reservation" : "Selected rentals"} />
                 <p className="mt-1 text-xs text-dashboard-muted">
-                  Copied from {rebookFrom.referenceCode}. Dates, availability, and prices are checked again before a new hold is created.
+                  {rebookFrom
+                    ? `Copied from ${rebookFrom.referenceCode}. Dates, availability, and prices are checked again before a new hold is created.`
+                    : "These rentals share one pickup and return. Each is checked and priced on its own."}
                 </p>
                 <div className="mt-3 space-y-2">
                   {rebookLines.map((line) => {
@@ -1193,7 +1204,10 @@ export function NewReservationSheet({
               </section>
             ) : null}
             <section>
-              <SectionTitle icon={Search} title={rebookFrom ? "Add or replace a clothing item" : "Choose clothing"} />
+              <SectionTitle
+                icon={Search}
+                title={rebookFrom ? "Add or replace a clothing item" : linesMode ? "Add another rental" : "Choose clothing"}
+              />
               <Input
                 className="mt-3"
                 aria-label="Search clothing for reservation"
@@ -1220,7 +1234,7 @@ export function NewReservationSheet({
                         setProductDetail(null);
                         setSelectedVariantId("");
                         setVariantSelectionError(null);
-                        if (!rebookFrom) {
+                        if (!linesMode) {
                           setPickupDate("");
                           setDueDate("");
                           setPickupTime("");
@@ -1235,7 +1249,8 @@ export function NewReservationSheet({
                       }}
                       className={cn(
                         "flex items-center justify-between gap-3 rounded-lg border p-3 text-left",
-                        selectedProduct?.product_id === product.product_id
+                        selectedProduct?.product_id === product.product_id ||
+                          rebookLines.some((line) => line.productId === product.product_id)
                           ? "border-dashboard-accent bg-dashboard-active"
                           : "border-dashboard-border hover:bg-dashboard-active/50"
                       )}
@@ -1302,7 +1317,7 @@ export function NewReservationSheet({
                           variant={selectedVariantId === variant.id ? "default" : "secondary"}
                           onClick={() => {
                             setSelectedVariantId(variant.id);
-                            if (!rebookFrom) {
+                            if (!linesMode) {
                               setPickupDate("");
                               setDueDate("");
                               setPickupTime("");
@@ -1349,7 +1364,7 @@ export function NewReservationSheet({
                         </Badge>
                       ) : null}
                     </div>
-                    {rebookFrom ? (
+                    {rebookLines.length < MAX_BOOKING_ITEMS ? (
                       <Button
                         type="button"
                         size="sm"
@@ -1365,7 +1380,7 @@ export function NewReservationSheet({
                           },
                         ])}
                       >
-                        Add selected item to replacement
+                        {rebookFrom ? "Add selected item to replacement" : linesMode ? "Add to this booking" : "Add to booking and choose another"}
                       </Button>
                     ) : null}
                   </div>
@@ -1397,7 +1412,6 @@ export function NewReservationSheet({
                         setExactAvailabilityError(null);
                         reserveGuard.resetIntent();
                       }}
-                      timeZone={timeZone}
                     />
                   </div>
 
@@ -1475,6 +1489,11 @@ export function NewReservationSheet({
                           {minimumDurationIssue}
                         </p>
                       ) : null}
+                      {requestedInterval && Date.parse(requestedInterval.start) < now ? (
+                        <p className="text-xs text-dashboard-muted" role="status">
+                          This pickup is in the past. It will be saved and labelled as a past booking.
+                        </p>
+                      ) : null}
                       {!requestedInterval && pickupTime && dueTime && !minimumDurationIssue ? (
                         <p className="text-xs text-warning-500" role="alert">
                           Return must be after pickup and the rental period cannot exceed 31 days. Times use the selected branch timezone.
@@ -1482,9 +1501,9 @@ export function NewReservationSheet({
                       ) : null}
 
                       <ExactAvailabilityStatus
-                        availability={rebookFrom ? null : exactAvailability}
-                        error={rebookFrom ? null : exactAvailabilityError}
-                        loading={rebookFrom ? rebookAvailabilityLoading : exactAvailabilityLoading}
+                        availability={linesMode ? null : exactAvailability}
+                        error={linesMode ? null : exactAvailabilityError}
+                        loading={linesMode ? rebookAvailabilityLoading : exactAvailabilityLoading}
                       />
                     </div>
                   ) : (
@@ -1538,11 +1557,11 @@ export function NewReservationSheet({
                 type="button"
                 disabled={
                   reserveGuard.isSubmitting ||
-                  (rebookFrom ? rebookAvailabilityLoading : exactAvailabilityLoading) ||
-                  (!rebookFrom && !selectedVariant) ||
+                  (linesMode ? rebookAvailabilityLoading : exactAvailabilityLoading) ||
+                  (!linesMode && !selectedVariant) ||
                   !requestedInterval ||
-                  (!rebookFrom && Boolean(minimumDurationIssue)) ||
-                  (rebookFrom
+                  (!linesMode && Boolean(minimumDurationIssue)) ||
+                  (linesMode
                     ? !rebookAvailabilityReady || Boolean(rebookAvailabilityError)
                     : !exactAvailabilityMatchesSelection || !exactAvailability?.available) ||
                   !paymentMethodId
@@ -1566,6 +1585,13 @@ export function NewReservationSheet({
                   <p className="font-semibold text-dashboard-navy">
                     {held.reservation.reference_code}
                   </p>
+                  {heldItems.length > 0 ? (
+                    <ul className="mt-1 text-sm text-dashboard-navy" aria-label="Rentals in this reservation">
+                      {heldItems.map((name, index) => (
+                        <li key={`${name}-${index}`}>{name}</li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </div>
                 {step === "held" && held.reservation.hold_expires_at ? (
                   <Badge

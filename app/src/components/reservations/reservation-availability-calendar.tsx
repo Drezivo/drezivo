@@ -20,7 +20,6 @@ export function ReservationAvailabilityCalendar({
   pickupDate,
   dueDate,
   onRangeChange,
-  timeZone,
 }: {
   availability: StaffReservationAvailabilityCalendarResponse | null;
   loading: boolean;
@@ -29,7 +28,6 @@ export function ReservationAvailabilityCalendar({
   pickupDate: string;
   dueDate: string;
   onRangeChange: (range: { pickupDate: string; dueDate: string }) => void;
-  timeZone: string;
 }) {
   const byDate = useMemo(
     () => new Map(availability?.days.map((day) => [day.date, day]) ?? []),
@@ -46,7 +44,6 @@ export function ReservationAvailabilityCalendar({
     ? Math.floor(availability.pricing.minimum_duration_minutes / (24 * 60))
     : 0;
   const minimumNights = Math.max(0, includedRentalDays - 1);
-  const branchToday = parseCalendarDate(todayInTimeZone(timeZone));
   const disabledDates = useMemo(
     () =>
       availability?.days
@@ -61,7 +58,6 @@ export function ReservationAvailabilityCalendar({
       : null;
 
   const [fieldNotice, setFieldNotice] = useState<string | null>(null);
-  const todayIso = todayInTimeZone(timeZone);
 
   /** First unavailable day inside the range, so a typed range cannot skip over a busy day. */
   const firstBusyDate = (start: string, end: string): string | null => {
@@ -158,10 +154,8 @@ export function ReservationAvailabilityCalendar({
           selected={selected}
           min={minimumNights}
           resetOnSelect
-          disabled={[
-            ...(branchToday ? [{ before: branchToday }] : []),
-            ...disabledDates,
-          ]}
+          // Staff may pick past dates to record a booking that already happened.
+          disabled={disabledDates}
           excludeDisabled
           onSelect={(range, triggerDate) => {
             setFieldNotice(null);
@@ -224,7 +218,6 @@ export function ReservationAvailabilityCalendar({
             ariaLabel="Date from"
             placeholder="Pickup date"
             value={pickupDate}
-            min={todayIso}
             disabledDates={disabledDates}
             onChange={choosePickupFromField}
           />
@@ -235,7 +228,7 @@ export function ReservationAvailabilityCalendar({
             ariaLabel="Date to"
             placeholder={pickupDate ? "Return date" : "Choose pickup first"}
             value={dueDate}
-            min={pickupDate ? addIsoDays(pickupDate, minimumNights) : todayIso}
+            {...(pickupDate ? { min: addIsoDays(pickupDate, minimumNights) } : {})}
             disabled={!pickupDate}
             disabledDates={disabledDates}
             onChange={chooseReturnFromField}

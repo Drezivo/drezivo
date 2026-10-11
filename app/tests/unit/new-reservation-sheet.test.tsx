@@ -768,6 +768,29 @@ describe("NewReservationSheet", () => {
     );
   });
 
+  it("books selected rentals as one reservation and lists them on the Reserve step", async () => {
+    renderSheet();
+    await fillDatesAndSelectProduct();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add to booking and choose another" }));
+    expect(await screen.findByText("Selected rentals")).toBeVisible();
+    expect(screen.getByText(/share one pickup and return/)).toBeVisible();
+    // The search section now invites another rental instead of a single choice.
+    expect(screen.getByText("Add another rental")).toBeVisible();
+
+    const reserve = screen.getByRole("button", { name: "Reserve" });
+    await waitFor(() => expect(reserve).toBeEnabled());
+    fireEvent.click(reserve);
+
+    await waitFor(() => expect(api.createStaffReservation).toHaveBeenCalledTimes(1));
+    expect(api.createStaffReservation.mock.calls[0]![0]).toMatchObject({
+      variant_id: ids.variant,
+      lines: [{ variant_id: ids.variant }],
+    });
+    const items = await screen.findByRole("list", { name: "Rentals in this reservation" });
+    expect(items.querySelectorAll("li")).toHaveLength(1);
+  });
+
   it("runs the staff fast path from advisory availability through cash collection and confirmation", async () => {
     const { props } = renderSheet();
     await fillDatesAndSelectProduct();

@@ -282,10 +282,12 @@ async function claimReservationLines(
       fulfillment_method: input.request.fulfillment_method,
       payment_method_id: input.request.payment_method_id,
     };
+    // Staff-only path: a past pickup records a booking that already happened.
     quotes.push(await resolveReservationQuote(client, {
       tenantId: input.tenantId,
       branchId: input.branchId,
       request: quoteRequest,
+      allowPastPickup: true,
     }));
   }
 

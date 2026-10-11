@@ -92,7 +92,6 @@ function renderCalendar(
           setRange(nextRange);
           onRangeChange(nextRange);
         }}
-        timeZone="Asia/Manila"
       />
     );
   }
