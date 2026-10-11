@@ -122,27 +122,31 @@ export async function pickupReservationByStaff(
         reservationId,
       });
 
-      let allocation = requirePickupAllocation(context, allocations);
-      if (
-        allocation.asset_readiness === 'needs_cleaning' &&
-        allocation.asset_recovery_managed_readiness
-      ) {
-        const promoted = await promoteRecoveryManagedReadinessIfDue(client, {
-          tenantId: context.tenantId,
-          branchId: context.branchId,
-          assetId: allocation.asset_id,
-          assetVersion: allocation.asset_version,
-        });
-        if (promoted) {
-          allocation = {
-            ...allocation,
-            asset_readiness: promoted.readiness,
-            asset_recovery_managed_readiness: false,
-            asset_version: promoted.version,
-          };
+      // Every garment on the booking must be ready and at this branch; one unready piece stops the handover.
+      const handovers: LockedReservationAllocationRow[] = [];
+      for (let allocation of requirePickupAllocations(context, allocations)) {
+        if (
+          allocation.asset_readiness === 'needs_cleaning' &&
+          allocation.asset_recovery_managed_readiness
+        ) {
+          const promoted = await promoteRecoveryManagedReadinessIfDue(client, {
+            tenantId: context.tenantId,
+            branchId: context.branchId,
+            assetId: allocation.asset_id,
+            assetVersion: allocation.asset_version,
+          });
+          if (promoted) {
+            allocation = {
+              ...allocation,
+              asset_readiness: promoted.readiness,
+              asset_recovery_managed_readiness: false,
+              asset_version: promoted.version,
+            };
+          }
         }
+        assertPickupAssetReady(context, allocation);
+        handovers.push(allocation);
       }
-      assertPickupAssetReady(context, allocation);
       assertPickupPolicyPrerequisites(reservation);
       assertPickupPaymentPrerequisites(reservation, payment, receipt, verification);
 
@@ -159,34 +163,39 @@ export async function pickupReservationByStaff(
         throw new StateConflictError('Reservation pickup lost a concurrent state change.');
       }
 
-      const newAssetVersion = await markPhysicalAssetPickedUp(client, {
-        tenantId: context.tenantId,
-        branchId: context.branchId,
-        assetId: allocation.asset_id,
-        assetVersion: allocation.asset_version,
-      });
-      if (newAssetVersion === null) {
-        throw new AssetUnreadyError('The garment is no longer ready and physically present for pickup.');
-      }
+      const custodyEventIds: string[] = [];
+      for (const allocation of handovers) {
+        const newAssetVersion = await markPhysicalAssetPickedUp(client, {
+          tenantId: context.tenantId,
+          branchId: context.branchId,
+          assetId: allocation.asset_id,
+          assetVersion: allocation.asset_version,
+        });
+        if (newAssetVersion === null) {
+          throw new AssetUnreadyError('A garment is no longer ready and physically present for pickup.');
+        }
 
-      const custodyEventId = await appendPickupCustodyEvent(client, {
-        tenantId: context.tenantId,
-        branchId: context.branchId,
-        assetId: allocation.asset_id,
-        reservationLineId: allocation.reservation_line_id,
-        actorMembershipId: context.membershipId,
-        businessKey: `reservation:${reservationId}:pickup`,
-        conditionSnapshot: {
-          condition_note: request.condition_note ?? null,
-          readiness_at_handover: allocation.asset_readiness,
-          custody_before: allocation.asset_custody_kind,
-          asset_version_before: allocation.asset_version,
-          asset_version_after: newAssetVersion,
-        },
-      });
-      if (!custodyEventId) {
-        throw new StateConflictError('Pickup custody was already recorded for this reservation.');
+        const custodyEventId = await appendPickupCustodyEvent(client, {
+          tenantId: context.tenantId,
+          branchId: context.branchId,
+          assetId: allocation.asset_id,
+          reservationLineId: allocation.reservation_line_id,
+          actorMembershipId: context.membershipId,
+          businessKey: custodyBusinessKey(reservationId, 'pickup', allocation, handovers.length),
+          conditionSnapshot: {
+            condition_note: request.condition_note ?? null,
+            readiness_at_handover: allocation.asset_readiness,
+            custody_before: allocation.asset_custody_kind,
+            asset_version_before: allocation.asset_version,
+            asset_version_after: newAssetVersion,
+          },
+        });
+        if (!custodyEventId) {
+          throw new StateConflictError('Pickup custody was already recorded for this reservation.');
+        }
+        custodyEventIds.push(custodyEventId);
       }
+      const assetIds = handovers.map((allocation) => allocation.asset_id);
 
       await appendReservationAuditEvent(client, {
         tenantId: context.tenantId,
@@ -197,8 +206,9 @@ export async function pickupReservationByStaff(
         entityId: reservationId,
         redactedSummary: {
           version: newReservationVersion,
-          asset_id: allocation.asset_id,
-          custody_event_id: custodyEventId,
+          asset_id: assetIds[0],
+          custody_event_id: custodyEventIds[0],
+          ...(assetIds.length > 1 ? { asset_ids: assetIds, custody_event_ids: custodyEventIds } : {}),
         },
         requestId: context.requestId,
       });
@@ -209,7 +219,8 @@ export async function pickupReservationByStaff(
         payload: {
           reservationId,
           reservationVersion: newReservationVersion,
-          assetId: allocation.asset_id,
+          assetId: assetIds[0],
+          ...(assetIds.length > 1 ? { assetIds } : {}),
         },
       });
 
@@ -240,25 +251,34 @@ function assertPickupState(reservation: LockedReservationReviewRow, version: num
   }
 }
 
-function requirePickupAllocation(
+function requirePickupAllocations(
   context: ReservationPickupContext,
   allocations: LockedReservationAllocationRow[],
-): LockedReservationAllocationRow {
-  const allocation = allocations[0];
+): LockedReservationAllocationRow[] {
   if (
-    allocations.length !== 1 ||
-    !allocation ||
-    allocation.kind !== 'reservation_confirmed' ||
-    allocation.is_blocking !== true
+    allocations.length === 0 ||
+    allocations.some((allocation) => allocation.kind !== 'reservation_confirmed' || allocation.is_blocking !== true)
   ) {
-    throw new AssetUnavailableError(
-      'Reservation does not have exactly one active confirmed garment allocation.',
-    );
+    throw new AssetUnavailableError('Reservation garments are not all active confirmed allocations.');
   }
-  if (allocation.asset_branch_id !== context.branchId) {
-    throw new AssetUnreadyError('The allocated garment is not physically assigned to this branch.');
+  if (allocations.some((allocation) => allocation.asset_branch_id !== context.branchId)) {
+    throw new AssetUnreadyError('An allocated garment is not physically assigned to this branch.');
   }
-  return allocation;
+  return allocations;
+}
+
+/**
+ * One custody fact per garment and handover. A single-garment booking keeps the original key so
+ * earlier records still deduplicate; each garment of a larger booking adds its line id.
+ */
+export function custodyBusinessKey(
+  reservationId: string,
+  kind: 'pickup' | 'return',
+  allocation: Pick<LockedReservationAllocationRow, 'reservation_line_id'>,
+  garmentCount: number,
+): string {
+  const base = `reservation:${reservationId}:${kind}`;
+  return garmentCount === 1 ? base : `${base}:${allocation.reservation_line_id}`;
 }
 
 function assertPickupAssetReady(

@@ -9681,6 +9681,12 @@ paths:
                 variant_id:
                   type: string
                   format: uuid
+                additional_variant_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                  maxItems: 9
                 lines:
                   type: array
                   items:

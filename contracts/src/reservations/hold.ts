@@ -89,6 +89,9 @@ export const staffReservationIntakeResponse = z
   .strict();
 export type StaffReservationIntakeResponse = z.infer<typeof staffReservationIntakeResponse>;
 
+/** Most garments one booking can hold; each one is checked, priced, and reserved on its own. */
+export const MAX_RESERVATION_LINES = 10;
+
 /**
  * POST /reservations request body. A staff walk-in may claim the garment before
  * customer/contact entry is complete, so `customer` is optional while the
@@ -108,6 +111,14 @@ const staffReservationCreateBase = z.object({
 export const staffReservationCreateRequest = staffReservationCreateBase
   .extend({
     variant_id: productVariantId,
+    /**
+     * More garments on the same booking, for the same dates. New bookings select each variant at
+     * most once; the API quotes each line and allocates a distinct physical piece.
+     */
+    additional_variant_ids: z
+      .array(productVariantId)
+      .max(MAX_RESERVATION_LINES - 1)
+      .optional(),
     lines: z
       .array(z.object({ variant_id: productVariantId }).strict())
       .min(1)
@@ -116,12 +127,29 @@ export const staffReservationCreateRequest = staffReservationCreateBase
   })
   .strict()
   .superRefine((value, ctx) => {
+    if (value.lines && value.additional_variant_ids !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['additional_variant_ids'],
+        message: 'Send either lines or additional_variant_ids, not both.',
+      });
+    }
     if (value.lines && value.lines[0]?.variant_id !== value.variant_id) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['lines', 0, 'variant_id'],
         message: 'variant_id must match the first reservation line.',
       });
+    }
+    if (!value.lines) {
+      const variantIds = [value.variant_id, ...(value.additional_variant_ids ?? [])];
+      if (new Set(variantIds).size !== variantIds.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['additional_variant_ids'],
+          message: 'A variant can only be selected once for a new reservation.',
+        });
+      }
     }
   });
 export type StaffReservationCreateRequest = z.infer<typeof staffReservationCreateRequest>;
