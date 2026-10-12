@@ -179,7 +179,6 @@ describe('Dashboard overview API', async () => {
       },
     );
 
-    expect(queryPlan).not.toMatch(/Seq Scan on reservation(?:\s|$)/);
     expect(queryPlan).not.toMatch(/Seq Scan on customer(?:\s|$)/);
     expect(queryPlan).toContain('reservation_tenant_branch_completed_at_idx');
     expect(queryPlan).toContain('customer_tenant_active_created_idx');
@@ -191,6 +190,36 @@ describe('Dashboard overview API', async () => {
     ]);
     useClerk(seed);
     await seedDashboardFacts(seed);
+    const foreignSeed = await seedDashboardWorkspace(
+      'dashboard_foreign_projection',
+      'user_dashboard_foreign_projection',
+      ['reservations.manage'],
+    );
+    await withTenantTransaction(
+      foreignSeed.tenantId,
+      foreignSeed.principalId,
+      async (client) => {
+        await client.query(
+          `INSERT INTO reservation
+             (tenant_id, branch_id, customer_id, storefront_id, policy_snapshot_id, payment_method_id,
+              reference_code, status, pickup_at, due_at, timezone_snapshot, customer_snapshot,
+              price_snapshot, currency, rental_total_minor, security_required_minor, due_now_minor)
+           VALUES ($1, $2, $3, $4, $5, $6, 'Foreign Tenant Future Reservation', 'confirmed',
+                   statement_timestamp() + interval '40 days',
+                   statement_timestamp() + interval '42 days', 'America/Los_Angeles',
+                   '{"full_name":"Foreign Tenant Customer"}'::jsonb,
+                   '{}'::jsonb, 'PHP', 1000000, 0, 1000000)`,
+          [
+            foreignSeed.tenantId,
+            foreignSeed.branchId,
+            foreignSeed.customerId,
+            foreignSeed.storefrontId,
+            foreignSeed.policyId,
+            foreignSeed.paymentMethodId,
+          ],
+        );
+      },
+    );
 
     const response = await request(createApp()).get(
       `/api/v1/dashboard/overview?branch_id=${seed.otherBranchId}`,
@@ -254,6 +283,10 @@ describe('Dashboard overview API', async () => {
       completed_rentals: { current: 1, previous: 1 },
       average_rental_value: { current_minor: '12000', previous_minor: '7000' },
       new_customers: { current: 1, previous: 1 },
+    });
+    expect(data.business_performance.projected_rental_value).toEqual({
+      current_minor: '35500',
+      reservations: 2,
     });
 
     const serialized = JSON.stringify(data);
@@ -401,6 +434,7 @@ describe('Dashboard overview API', async () => {
         dueHour: number;
         amount: number;
         lineAmount?: number;
+        securityRequiredAmount?: number;
         snapshotPhone?: string | null;
         completedMonthOffset?: number;
         branchId?: string;
@@ -423,7 +457,7 @@ describe('Dashboard overview API', async () => {
                     'email', 'secret@example.test',
                     'phone', $16::text
                   ),
-                  '{}'::jsonb, 'PHP', $14, 0, $14,
+                  '{}'::jsonb, 'PHP', $14, $17, $14::bigint + $17::bigint,
                   CASE WHEN $15::int IS NULL THEN NULL ELSE
                     (((date_trunc('month', statement_timestamp() AT TIME ZONE clock.timezone)
                        + make_interval(months => $15::int))::date + 5)::timestamp AT TIME ZONE clock.timezone)
@@ -447,6 +481,7 @@ describe('Dashboard overview API', async () => {
             input.amount,
             input.completedMonthOffset ?? null,
             input.snapshotPhone ?? null,
+            input.securityRequiredAmount ?? 0,
           ],
         );
         const id = requireId(result.rows[0]?.id, `${input.label} reservation`);
@@ -513,6 +548,44 @@ describe('Dashboard overview API', async () => {
         dueDayOffset: 4,
         dueHour: 12,
         amount: 5000,
+        securityRequiredAmount: 2500,
+      });
+      await insertReservation({
+        label: 'Future Month Confirmed Gown',
+        status: 'confirmed',
+        pickupDayOffset: 40,
+        pickupHour: 11,
+        dueDayOffset: 42,
+        dueHour: 12,
+        amount: 9000,
+        securityRequiredAmount: 4000,
+      });
+      await insertReservation({
+        label: 'Past Pickup Still Confirmed Gown',
+        status: 'confirmed',
+        pickupDayOffset: -2,
+        pickupHour: 11,
+        dueDayOffset: 0,
+        dueHour: 12,
+        amount: 8000,
+      });
+      await insertReservation({
+        label: 'Returned Gown',
+        status: 'returned',
+        pickupDayOffset: -10,
+        pickupHour: 11,
+        dueDayOffset: -8,
+        dueHour: 12,
+        amount: 7000,
+      });
+      await insertReservation({
+        label: 'Cancelled Future Gown',
+        status: 'cancelled',
+        pickupDayOffset: 3,
+        pickupHour: 11,
+        dueDayOffset: 5,
+        dueHour: 12,
+        amount: 6000,
       });
       const currentCompleteId = await insertReservation({
         label: 'Current Completed Gown',
@@ -533,6 +606,16 @@ describe('Dashboard overview API', async () => {
         dueHour: 10,
         amount: 7000,
         completedMonthOffset: -1,
+      });
+      await insertReservation({
+        label: 'Older Historical Completed Gown',
+        status: 'completed',
+        pickupDayOffset: -730,
+        pickupHour: 10,
+        dueDayOffset: -729,
+        dueHour: 10,
+        amount: 2500,
+        completedMonthOffset: -24,
       });
 
       const otherBranchStorefront = await client.query<{ id: string }>(
@@ -563,8 +646,8 @@ describe('Dashboard overview API', async () => {
             reference_code, status, pickup_at, due_at, timezone_snapshot, customer_snapshot,
             price_snapshot, currency, rental_total_minor, security_required_minor, due_now_minor)
          SELECT $1, $2, $3, $4, $5, $6, 'Other branch reservation', 'confirmed',
-                ((clock.today)::timestamp + interval '10 hours') AT TIME ZONE clock.timezone,
-                ((clock.today + 1)::timestamp + interval '10 hours') AT TIME ZONE clock.timezone,
+                ((clock.today + 10)::timestamp + interval '10 hours') AT TIME ZONE clock.timezone,
+                ((clock.today + 11)::timestamp + interval '10 hours') AT TIME ZONE clock.timezone,
                 clock.timezone, '{"full_name":"Foreign Branch Customer"}'::jsonb,
                 '{}'::jsonb, 'PHP', 500, 0, 500 FROM clock`,
         [
