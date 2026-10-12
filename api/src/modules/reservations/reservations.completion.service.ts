@@ -17,6 +17,7 @@ import {
   StateConflictError,
   ValidationError,
 } from '../../shared/errors.js';
+import { withTenantTransaction } from '../../db/client.js';
 import type { SuccessEnvelope } from '../../shared/response.js';
 import {
   confirmReservationByMerchant,
@@ -46,6 +47,19 @@ export interface StaffReservationCompletionContext {
  * historical completion command. Deterministic child keys let retries resume without duplicate
  * effects at any stage.
  */
+/** Online bookings carry a guest access token from creation; staff-created ones never do. */
+async function isOnlineBooking(context: StaffReservationCompletionContext, reservationId: string): Promise<boolean> {
+  return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+    const result = await client.query<{ online: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM guest_access_token WHERE tenant_id = $1 AND reservation_id = $2
+       ) AS online`,
+      [context.tenantId, reservationId],
+    );
+    return result.rows[0]?.online === true;
+  });
+}
+
 export async function completeStaffReservationCommand(
   context: StaffReservationCompletionContext,
   reservationId: string,
@@ -101,6 +115,13 @@ export async function completeStaffReservationCommand(
   if (current.status !== 'held' && current.status !== 'pending_confirmation') {
     throw new InvalidReservationTransitionError(
       `Reservation cannot be completed from ${current.status}.`,
+    );
+  }
+  // An online booking on hold is waiting for the renter to pay and send a receipt; staff do not
+  // complete it for them. They can cancel it, or review it once the receipt arrives.
+  if (current.status === 'held' && (await isOnlineBooking(context, reservationId))) {
+    throw new InvalidReservationTransitionError(
+      'This online booking is waiting for the renter to pay. Cancel it, or review it once their receipt arrives.',
     );
   }
   if (

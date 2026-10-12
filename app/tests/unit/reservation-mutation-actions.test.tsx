@@ -140,6 +140,20 @@ function renderActions(
   return { onEdit, onMutationSuccess, onNotice, onRefreshRequired };
 }
 
+/** Renders the actions alone and returns the testing-library handle, for tests that re-render. */
+function renderActionsFor(detail: ReservationDetail) {
+  return render(
+    <ReservationMutationActions
+      detail={detail}
+      permissionCodes={permissions}
+      onEdit={vi.fn()}
+      onMutationSuccess={vi.fn()}
+      onNotice={vi.fn()}
+      onRefreshRequired={vi.fn()}
+    />
+  );
+}
+
 function mutationResult(status: string, version = 4) {
   return {
     data: {
@@ -367,6 +381,25 @@ describe("ReservationMutationActions", () => {
       },
       expect.any(String)
     );
+  });
+
+  it("offers only Cancel on an online booking that is held, and both actions on a held walk-in", () => {
+    const held = {
+      ...confirmedDetail,
+      status: "held",
+      submitted_at: null,
+      confirmed_at: null,
+      hold_expires_at: "2026-10-10T02:15:00.000Z",
+      version: 1,
+    };
+    const online = renderActionsFor(reservationDetail.parse({ ...held, booking_channel: "online" }));
+    expect(screen.queryByRole("button", { name: "Complete Reservation" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeVisible();
+    online.unmount();
+
+    renderActionsFor(reservationDetail.parse({ ...held, booking_channel: "walk_in" }));
+    expect(screen.getByRole("button", { name: "Complete Reservation" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeVisible();
   });
 
   it("collects a new customer before completing a customer-less held reservation", async () => {
