@@ -299,9 +299,9 @@ export function NewReservationSheet({
   );
   const calendarAvailabilityReady = Boolean(
     calendarVariantIds.length > 0 &&
-      !calendarLoading &&
-      !calendarAvailabilityError &&
-      calendarAvailabilityItems.length === calendarVariantIds.length
+    !calendarLoading &&
+    !calendarAvailabilityError &&
+    calendarAvailabilityItems.length === calendarVariantIds.length
   );
   const selectedCustomer =
     customerOptions.find((customer) => customer.id === selectedCustomerId) ?? null;
@@ -380,6 +380,7 @@ export function NewReservationSheet({
     ? new Date(held.reservation.hold_expires_at).getTime() - now
     : null;
   const holdExpired = serverExpired || (holdRemainingMs !== null && holdRemainingMs <= 0);
+  const pastDueBooking = Boolean(held && Date.parse(held.reservation.due_at) < now);
   const tenantId = useVerifiedActorContext()?.tenant.id ?? null;
   const heldId = held?.reservation.id ?? null;
   const liveHold = step === "held" && heldId !== null && !holdExpired;
@@ -1384,7 +1385,10 @@ export function NewReservationSheet({
 
     const paymentDue = BigInt(held.reservation.price_snapshot.due_now_minor) > 0n;
     const isCash = held.paymentInstructions.rail === "cash";
+    const cashCollectionAuthorized = permissionCodes.includes("payments.manage");
     const cashTenderedMinor = majorInputToMinorUnits(cashAmountReceived);
+    const cashCollectionSubmitted =
+      paymentDue && isCash && cashReceived && cashTenderedMinor !== null;
     if (paymentDue && isCash) {
       if (!cashReceived) {
         setNotice({ tone: "attention", text: "Confirm that the cash payment was received." });
@@ -1412,7 +1416,7 @@ export function NewReservationSheet({
           version: held.reservation.version,
           terms_accepted: true,
           customer,
-          ...(paymentDue && isCash && cashTenderedMinor
+          ...(cashCollectionSubmitted && cashTenderedMinor
             ? { cash_collection: { amount_tendered_minor: cashTenderedMinor } }
             : {}),
         },
@@ -1429,18 +1433,27 @@ export function NewReservationSheet({
     setCompletionNextAction(result.data.next_action);
     setStep("done");
     setNotice({
-      tone: result.data.completion_state === "confirmed" ? "success" : "info",
+      tone: result.data.completion_state === "pending_confirmation" ? "info" : "success",
       text:
-        result.data.completion_state === "confirmed"
-          ? isCash && paymentDue
-            ? `Reservation confirmed. Cash payment of ${formatMinorMoney(
-                held.reservation.price_snapshot.due_now_minor,
-                held.reservation.price_snapshot.currency
-              )} was recorded.`
-            : "Reservation confirmed."
-          : result.data.next_action === "payment_verification"
-            ? "Reservation saved. Payment verification required."
-            : "Reservation saved. Merchant review required.",
+        result.data.completion_state === "completed"
+          ? result.data.next_action === "payment_verification"
+            ? "Reservation recorded as completed. Payment remains to be verified."
+            : cashCollectionSubmitted && cashCollectionAuthorized
+              ? `Reservation recorded as completed. Cash payment of ${formatMinorMoney(
+                  held.reservation.price_snapshot.due_now_minor,
+                  held.reservation.price_snapshot.currency
+                )} was recorded.`
+              : "Reservation recorded as completed."
+          : result.data.completion_state === "confirmed"
+            ? isCash && paymentDue
+              ? `Reservation confirmed. Cash payment of ${formatMinorMoney(
+                  held.reservation.price_snapshot.due_now_minor,
+                  held.reservation.price_snapshot.currency
+                )} was recorded.`
+              : "Reservation confirmed."
+            : result.data.next_action === "payment_verification"
+              ? "Reservation saved. Payment verification required."
+              : "Reservation saved. Merchant review required.",
     });
   };
 
@@ -1570,9 +1583,14 @@ export function NewReservationSheet({
               label="Check availability"
             />
             <span className="text-center text-dashboard-muted">→</span>
-            <StepBadge active={step === "held"} done={step === "done"} number="2" label="Reserve" />
+            <StepBadge active={false} done={step !== "select"} number="2" label="Reserve" />
             <span className="text-center text-dashboard-muted">→</span>
-            <StepBadge active={step === "done"} done={false} number="3" label="Complete" />
+            <StepBadge
+              active={step === "held"}
+              done={step === "done"}
+              number="3"
+              label="Complete"
+            />
           </div>
           {notice ? <Notice tone={notice.tone} text={notice.text} /> : null}
         </header>
@@ -2082,7 +2100,8 @@ export function NewReservationSheet({
                       ) : null}
                       {requestedInterval && Date.parse(requestedInterval.start) < now ? (
                         <p className="text-xs text-dashboard-muted" role="status">
-                          This pickup is in the past. It will be saved and labelled as a past booking.
+                          Past pickup times are allowed. The reservation is recorded as completed
+                          only after its return time has passed.
                         </p>
                       ) : null}
                       {!requestedInterval && pickupTime && dueTime && !minimumDurationIssue ? (
@@ -2147,7 +2166,8 @@ export function NewReservationSheet({
                                     requestedInterval &&
                                     exactAvailability?.requested_interval.start ===
                                       requestedInterval.start &&
-                                    exactAvailability.requested_interval.end === requestedInterval.end
+                                    exactAvailability.requested_interval.end ===
+                                      requestedInterval.end
                                       ? recoveryAvailabilityHint(
                                           `${primaryGarment.name} · ${
                                             primaryVariant
@@ -2891,6 +2911,24 @@ export function NewReservationSheet({
                   )}
                 </section>
 
+                {pastDueBooking ? (
+                  <p
+                    role="status"
+                    className="rounded-lg border border-dashboard-gold/40 bg-dashboard-gold-soft p-3 text-sm text-dashboard-gold-text"
+                  >
+                    This reservation is in the past. Submitting will record it as a Completed
+                    reservation.
+                  </p>
+                ) : null}
+                {pastDueBooking &&
+                held.paymentInstructions.rail === "cash" &&
+                BigInt(held.reservation.price_snapshot.due_now_minor) > 0n ? (
+                  <p className="text-xs text-dashboard-muted">
+                    Confirm that the cash was received and enter the amount tendered before
+                    recording this past booking as Completed.
+                  </p>
+                ) : null}
+
                 <label className="flex items-start gap-3 rounded-lg border border-dashboard-border p-3 text-sm">
                   <input
                     type="checkbox"
@@ -2940,9 +2978,11 @@ export function NewReservationSheet({
                   >
                     {completeGuard.isSubmitting
                       ? "Completing…"
-                      : held.paymentInstructions.rail === "cash"
-                        ? "Confirm Reservation"
-                        : "Submit for Verification"}
+                      : pastDueBooking
+                        ? "Record as Completed"
+                        : held.paymentInstructions.rail === "cash"
+                          ? "Confirm Reservation"
+                          : "Submit for Verification"}
                   </Button>
                 </div>
               </>
@@ -3290,8 +3330,7 @@ function ExactAvailabilityStatus({
     <div className="mt-2 space-y-1 text-xs text-dashboard-green-text" role="status">
       <p className="font-medium">
         {itemLabel ? `${itemLabel}: ` : "Available · "}
-        {availability.available_assets}{" "}
-        {availability.available_assets === 1 ? "piece" : "pieces"}
+        {availability.available_assets} {availability.available_assets === 1 ? "piece" : "pieces"}
       </p>
       <p className="text-dashboard-muted">
         Rental preview{" "}

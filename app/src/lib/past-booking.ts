@@ -1,7 +1,7 @@
 /**
- * A booking entered after its own pickup time: staff recording a rental that already happened.
- * Shown with a label so these are not mistaken for live, upcoming bookings.
+ * A booking entered after its return/due time, which staff record as completed during submission.
+ * A past pickup alone is insufficient while the rental is still underway.
  */
-export function isPastBooking(reservation: { pickup_at: string; created_at: string }): boolean {
-  return Date.parse(reservation.pickup_at) < Date.parse(reservation.created_at);
+export function isPastBooking(reservation: { due_at: string; created_at: string }): boolean {
+  return Date.parse(reservation.due_at) < Date.parse(reservation.created_at);
 }

@@ -44,6 +44,7 @@ import {
   RESERVATION_STATUS_CLASSES,
   RESERVATION_STATUS_LABELS,
 } from "./reservations-data";
+import { PaymentProof, usePaymentProof } from "./payment-proof";
 
 export function ReservationDetailsSheet({
   detail,
@@ -148,6 +149,12 @@ function ReservationDetails({
   const effectiveTimeZone = detail.timezone_snapshot || timeZone;
   const [failedImageLines, setFailedImageLines] = useState<Set<string>>(() => new Set());
   const [editing, setEditing] = useState(false);
+  const [paymentReceiptViewerOpen, setPaymentReceiptViewerOpen] = useState(false);
+  const canViewCompletedPaymentReceipts =
+    detail.status === "completed" &&
+    permissionCodes.includes("payments.manage") &&
+    permissionCodes.includes("evidence.verify");
+  const paymentProof = usePaymentProof(detail.id, canViewCompletedPaymentReceipts);
   const canEdit =
     detail.status === "confirmed" &&
     customer !== null &&
@@ -156,6 +163,7 @@ function ReservationDetails({
   useEffect(() => {
     setFailedImageLines(new Set());
     setEditing(false);
+    setPaymentReceiptViewerOpen(false);
   }, [detail.id]);
 
   return (
@@ -467,6 +475,19 @@ function ReservationDetails({
           ) : (
             <p className="text-sm text-dashboard-muted">No payment intent is recorded yet.</p>
           )}
+          {canViewCompletedPaymentReceipts &&
+          detail.payment &&
+          !(paymentProof.kind === "ready" && paymentProof.receipts.length === 0) ? (
+            <>
+              <Separator className="my-4" />
+              <PaymentProof
+                state={paymentProof}
+                viewerOpen={paymentReceiptViewerOpen}
+                onViewerOpenChange={setPaymentReceiptViewerOpen}
+                heading="Payment receipt"
+              />
+            </>
+          ) : null}
         </DetailCard>
 
         <DetailCard title="Reservation lifecycle" icon={Clock3}>

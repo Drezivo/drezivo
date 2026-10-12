@@ -65,8 +65,8 @@ export const reservationSubmitResponse = z.object({ reservation: reservationSumm
 export type ReservationSubmitResponse = z.infer<typeof reservationSubmitResponse>;
 
 /**
- * Staff-facing "Complete Reservation" intent. The API may submit and then confirm,
- * but it never skips the canonical held -> pending_confirmation -> confirmed states.
+ * Staff-facing "Complete Reservation" intent. A booking whose due_at has passed may be recorded
+ * directly as completed after submission; payment verification remains a separate action.
  */
 export const staffReservationCompleteRequest = reservationSubmitBaseRequest.extend({
   /** Staff records physical cash tendered; verified payment remains the exact amount due. */
@@ -89,7 +89,7 @@ export type StaffReservationCompletionNextAction = z.infer<typeof staffReservati
 export const staffReservationCompleteResponse = z
   .object({
     reservation: reservationSummary,
-    completion_state: z.enum(['pending_confirmation', 'confirmed']),
+    completion_state: z.enum(['pending_confirmation', 'confirmed', 'completed']),
     next_action: staffReservationCompletionNextAction,
   })
   .strict()
@@ -113,6 +113,13 @@ export const staffReservationCompleteResponse = z
         code: z.ZodIssueCode.custom,
         path: ['next_action'],
         message: 'A pending reservation must identify the remaining completion action.',
+      });
+    }
+    if (value.completion_state === 'completed' && value.next_action === 'merchant_review') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['next_action'],
+        message: 'A completed reservation can only require payment verification.',
       });
     }
   });

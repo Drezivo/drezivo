@@ -10502,6 +10502,7 @@ paths:
                         enum:
                           - pending_confirmation
                           - confirmed
+                          - completed
                       next_action:
                         type: string
                         enum:

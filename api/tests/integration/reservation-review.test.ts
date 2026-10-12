@@ -91,13 +91,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     submitReservation,
     verifyReservationPayment,
   } = await import('../../src/modules/reservations/reservations.service.js');
-  const { submitReservationForConfirmation } = await import(
-    '../../src/modules/reservations/reservations.review.service.js'
-  );
+  const { submitReservationForConfirmation } =
+    await import('../../src/modules/reservations/reservations.review.service.js');
   const { expireDueHoldsForAllTenants } = await import('../../src/worker/handlers/hold-expirer.js');
-  const { promoteElapsedRecoveryReadinessForTenant } = await import(
-    '../../src/worker/handlers/recovery-readiness.js'
-  );
+  const { promoteElapsedRecoveryReadinessForTenant } =
+    await import('../../src/worker/handlers/recovery-readiness.js');
   const { createTestMembership, createTestTenant } = await import('./helpers/factories.js');
 
   beforeAll(async () => {
@@ -147,7 +145,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     );
     expect(replay).toEqual(first);
 
-    const effects = await actionEffectCounts(seed, held.id, 'reservation.submitted_for_confirmation');
+    const effects = await actionEffectCounts(
+      seed,
+      held.id,
+      'reservation.submitted_for_confirmation',
+    );
     expect(effects).toEqual({ audit: 1, outbox: 1 });
   });
 
@@ -283,8 +285,12 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     const after = await reservationReviewState(seed, held.id);
     expect(after.allocation.kind).toBe('reservation_confirmed');
     expect(after.allocation.is_blocking).toBe(true);
-    expect(after.allocation.blocked_start.toISOString()).toBe(before.allocation.blocked_start.toISOString());
-    expect(after.allocation.blocked_end.toISOString()).toBe(before.allocation.blocked_end.toISOString());
+    expect(after.allocation.blocked_start.toISOString()).toBe(
+      before.allocation.blocked_start.toISOString(),
+    );
+    expect(after.allocation.blocked_end.toISOString()).toBe(
+      before.allocation.blocked_end.toISOString(),
+    );
     expect(after.allocation.released_at).toBeNull();
 
     const replay = await confirmReservation(
@@ -293,7 +299,10 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       { version: 2 },
     );
     expect(replay).toEqual(confirmed);
-    expect(await actionEffectCounts(seed, held.id, 'reservation.confirmed')).toEqual({ audit: 1, outbox: 1 });
+    expect(await actionEffectCounts(seed, held.id, 'reservation.confirmed')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
   });
 
   it('confirms verified cash without requiring a receipt but still requires an immutable merchant verification decision', async () => {
@@ -352,14 +361,18 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     const reservation = created.body.data.reservation;
     expect(reservation.price_snapshot.due_now_minor).toBe('0');
 
-    const paymentCount = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const result = await client.query<{ count: number }>(
-        `SELECT count(*)::int AS count FROM payment
+    const paymentCount = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const result = await client.query<{ count: number }>(
+          `SELECT count(*)::int AS count FROM payment
           WHERE tenant_id = $1 AND reservation_id = $2`,
-        [seed.tenantId, reservation.id],
-      );
-      return result.rows[0]?.count ?? -1;
-    });
+          [seed.tenantId, reservation.id],
+        );
+        return result.rows[0]?.count ?? -1;
+      },
+    );
     expect(paymentCount).toBe(0);
 
     const submitted = await submitReservation(
@@ -408,11 +421,16 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     const state = await reservationReviewState(seed, held.id);
     expect(state.reservation.status).toBe('confirmed');
     expect(state.allocation).toMatchObject({ kind: 'reservation_confirmed', is_blocking: true });
-    expect(await actionEffectCounts(seed, held.id, 'reservation.submitted_for_confirmation')).toEqual({
+    expect(
+      await actionEffectCounts(seed, held.id, 'reservation.submitted_for_confirmation'),
+    ).toEqual({
       audit: 1,
       outbox: 1,
     });
-    expect(await actionEffectCounts(seed, held.id, 'reservation.confirmed')).toEqual({ audit: 1, outbox: 1 });
+    expect(await actionEffectCounts(seed, held.id, 'reservation.confirmed')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
     const customerState = await reservationCustomerState(seed, held.id);
     expect(typeof customerState.customer_id).toBe('string');
     expect(customerState.customer_snapshot).toEqual({
@@ -421,6 +439,408 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       email: 'walkin@example.test',
       address: '123 Review Street, Quezon City',
     });
+  });
+
+  it('rejects an elapsed-return cash booking until cash collection is confirmed', async () => {
+    const seed = await seedWorkspace('org_rsv032_past_due', 'user_rsv032_past_due', 'cash');
+    const dates = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ pickup_at: Date; due_at: Date }>(
+        `SELECT statement_timestamp() - interval '3 days 6 hours' AS pickup_at,
+                statement_timestamp() - interval '6 hours' AS due_at`,
+      );
+      return requireRow(result.rows, 'past booking dates');
+    });
+    const held = await createHoldForInterval(
+      seed,
+      'past-due',
+      dates.pickup_at.toISOString(),
+      dates.due_at.toISOString(),
+    );
+    const completion = {
+      version: held.version,
+      terms_accepted: true as const,
+    };
+    await expect(
+      completeStaffReservation(
+        reviewContext(seed, 'req-rsv032-past-due', 'idem-rsv032-past-due'),
+        held.id,
+        completion,
+      ),
+    ).rejects.toMatchObject({ status: 409, code: 'PAYMENT_PREREQUISITE_FAILED' });
+    const state = await reservationReviewState(seed, held.id);
+    expect(state.reservation.status).toBe('held');
+    expect(state.reservation.completed_at).toBeNull();
+    expect(state.payment.status).toBe('pending');
+    expect(state.allocation).toMatchObject({
+      kind: 'reservation_hold',
+      is_blocking: true,
+      released_at: null,
+    });
+    const custodyCount = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const resultCount = await client.query<{ count: number }>(
+          `SELECT count(*)::int AS count
+           FROM custody_event ce
+           JOIN reservation_line rl ON rl.tenant_id = ce.tenant_id AND rl.id = ce.reservation_line_id
+          WHERE ce.tenant_id = $1 AND rl.reservation_id = $2`,
+          [seed.tenantId, held.id],
+        );
+        return requireRow(resultCount.rows, 'historical custody count').count;
+      },
+    );
+    expect(custodyCount).toBe(0);
+    expect(await actionEffectCounts(seed, held.id, 'reservation.completed')).toEqual({
+      audit: 0,
+      outbox: 0,
+    });
+  });
+
+  it('does not complete a reservation merely because pickup passed while return time is still future', async () => {
+    const seed = await seedWorkspace('org_rsv032_past_pickup', 'user_rsv032_past_pickup', 'cash');
+    const dates = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ pickup_at: Date; due_at: Date }>(
+        `SELECT statement_timestamp() - interval '1 day' AS pickup_at,
+                statement_timestamp() + interval '2 days' AS due_at`,
+      );
+      return requireRow(result.rows, 'past-pickup dates');
+    });
+    const held = await createHoldForInterval(
+      seed,
+      'past-pickup',
+      dates.pickup_at.toISOString(),
+      dates.due_at.toISOString(),
+    );
+    const result = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-past-pickup', 'idem-rsv032-past-pickup'),
+      held.id,
+      { version: held.version, terms_accepted: true },
+    );
+
+    expect(result.body).toMatchObject({
+      success: true,
+      data: {
+        completion_state: 'pending_confirmation',
+        reservation: { status: 'pending_confirmation', version: 2 },
+      },
+    });
+    expect((await reservationReviewState(seed, held.id)).reservation.status).toBe(
+      'pending_confirmation',
+    );
+    expect(await actionEffectCounts(seed, held.id, 'reservation.completed')).toEqual({
+      audit: 0,
+      outbox: 0,
+    });
+  });
+
+  it('records only explicitly submitted and authorized cash during historical completion', async () => {
+    const seed = await seedWorkspace('org_rsv032_past_cash', 'user_rsv032_past_cash', 'cash');
+    const dates = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ pickup_at: Date; due_at: Date }>(
+        `SELECT statement_timestamp() - interval '3 days 6 hours' AS pickup_at,
+                statement_timestamp() - interval '6 hours' AS due_at`,
+      );
+      return requireRow(result.rows, 'past cash booking dates');
+    });
+    const held = await createHoldForInterval(
+      seed,
+      'past-cash',
+      dates.pickup_at.toISOString(),
+      dates.due_at.toISOString(),
+    );
+    const paymentAmount = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const result = await client.query<{ amount_minor: number }>(
+          `SELECT amount_minor FROM payment WHERE tenant_id = $1 AND id = $2::uuid`,
+          [seed.tenantId, held.paymentId],
+        );
+        return requireRow(result.rows, 'past cash payment').amount_minor;
+      },
+    );
+
+    const completed = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-past-cash', 'idem-rsv032-past-cash'),
+      held.id,
+      {
+        version: held.version,
+        terms_accepted: true,
+        cash_collection: { amount_tendered_minor: String(paymentAmount) },
+      },
+    );
+
+    expect(completed.body, JSON.stringify(completed.body)).toMatchObject({
+      success: true,
+      data: {
+        completion_state: 'completed',
+        next_action: 'none',
+        reservation: { status: 'completed' },
+      },
+    });
+    const state = await reservationReviewState(seed, held.id);
+    expect(state.payment.status).toBe('paid');
+    expect(state.reservation.completed_at).not.toBeNull();
+    if (!state.reservation.completed_at) throw new Error('Expected historical completion timestamp');
+    expect(state.reservation.completed_at.getTime()).toBeGreaterThan(dates.due_at.getTime());
+    expect(state.allocation).toMatchObject({
+      kind: 'reservation_hold',
+      is_blocking: true,
+      released_at: null,
+    });
+    const replay = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-past-cash-retry', 'idem-rsv032-past-cash'),
+      held.id,
+      {
+        version: held.version,
+        terms_accepted: true,
+        cash_collection: { amount_tendered_minor: String(paymentAmount) },
+      },
+    );
+    expect(replay.body).toMatchObject({ success: true, data: { completion_state: 'completed' } });
+    expect(await actionEffectCounts(seed, held.id, 'reservation.completed')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
+  });
+
+  it('keeps cash outstanding when an unauthorized staff member confirms receipt on a past booking', async () => {
+    const seed = await seedWorkspace('org_rsv032_past_cash_frontdesk', 'user_rsv032_past_cash_frontdesk', 'cash');
+    const dates = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ pickup_at: Date; due_at: Date }>(
+        `SELECT statement_timestamp() - interval '3 days 6 hours' AS pickup_at,
+                statement_timestamp() - interval '6 hours' AS due_at`,
+      );
+      return requireRow(result.rows, 'past cash booking dates');
+    });
+    const held = await createHoldForInterval(
+      seed,
+      'past-cash-frontdesk',
+      dates.pickup_at.toISOString(),
+      dates.due_at.toISOString(),
+    );
+    const paymentAmount = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const result = await client.query<{ amount_minor: number }>(
+          `SELECT amount_minor FROM payment WHERE tenant_id = $1 AND id = $2::uuid`,
+          [seed.tenantId, held.paymentId],
+        );
+        return requireRow(result.rows, 'past cash payment').amount_minor;
+      },
+    );
+    const context = reviewContext(seed, 'req-rsv032-past-cash-frontdesk', 'idem-rsv032-past-cash-frontdesk');
+    context.permissionCodes = context.permissionCodes.filter((permission) => permission !== 'payments.manage');
+
+    const completed = await completeStaffReservation(context, held.id, {
+      version: held.version,
+      terms_accepted: true,
+      cash_collection: { amount_tendered_minor: String(paymentAmount) },
+    });
+
+    expect(completed.body).toMatchObject({
+      success: true,
+      data: {
+        completion_state: 'completed',
+        next_action: 'payment_verification',
+        reservation: { status: 'completed' },
+      },
+    });
+    expect((await reservationReviewState(seed, held.id)).payment.status).toBe('pending');
+    if (!completed.body.success) throw new Error('Expected past cash reservation completion.');
+
+    const recordedLater = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-past-cash-authorized-followup', 'idem-rsv032-past-cash-authorized-followup'),
+      held.id,
+      {
+        version: completed.body.data.reservation.version,
+        terms_accepted: true,
+        cash_collection: { amount_tendered_minor: String(paymentAmount) },
+      },
+    );
+    expect(recordedLater.body).toMatchObject({
+      success: true,
+      data: { completion_state: 'completed', reservation: { status: 'completed' } },
+    });
+    expect((await reservationReviewState(seed, held.id)).payment.status).toBe('paid');
+  });
+
+  it('records a past manual QR payment as paid without requiring receipt evidence', async () => {
+    const seed = await seedWorkspace('org_rsv032_past_qr', 'user_rsv032_past_qr', 'manual_qr');
+    const dates = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ pickup_at: Date; due_at: Date }>(
+        `SELECT statement_timestamp() - interval '3 days 6 hours' AS pickup_at,
+                statement_timestamp() - interval '6 hours' AS due_at`,
+      );
+      return requireRow(result.rows, 'past manual QR booking dates');
+    });
+    const held = await createHoldForInterval(
+      seed,
+      'past-qr',
+      dates.pickup_at.toISOString(),
+      dates.due_at.toISOString(),
+    );
+
+    const completed = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-past-qr', 'idem-rsv032-past-qr'),
+      held.id,
+      { version: held.version, terms_accepted: true },
+    );
+
+    expect(completed.body).toMatchObject({
+      success: true,
+      data: {
+        completion_state: 'completed',
+        next_action: 'none',
+        reservation: { status: 'completed' },
+      },
+    });
+    const state = await reservationReviewState(seed, held.id);
+    expect(state.payment.status).toBe('paid');
+    expect(state.receipt).toBeNull();
+    await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-past-qr-retry', 'idem-rsv032-past-qr'),
+      held.id,
+      { version: held.version, terms_accepted: true },
+    );
+    const verificationCount = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const result = await client.query<{ count: number }>(
+          `SELECT count(*)::int AS count FROM payment_verification
+            WHERE tenant_id = $1 AND payment_id = $2`,
+          [seed.tenantId, held.paymentId],
+        );
+        return requireRow(result.rows, 'past QR verification count').count;
+      },
+    );
+    expect(verificationCount).toBe(1);
+  });
+
+  it('marks an uploaded receipt verified when an authorized staff member records a past online payment', async () => {
+    const seed = await seedWorkspace('org_rsv032_past_qr_receipt', 'user_rsv032_past_qr_receipt', 'manual_qr');
+    const dates = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ pickup_at: Date; due_at: Date }>(
+        `SELECT statement_timestamp() - interval '3 days 6 hours' AS pickup_at,
+                statement_timestamp() - interval '6 hours' AS due_at`,
+      );
+      return requireRow(result.rows, 'past manual QR receipt booking dates');
+    });
+    const held = await createHoldForInterval(
+      seed,
+      'past-qr-receipt',
+      dates.pickup_at.toISOString(),
+      dates.due_at.toISOString(),
+    );
+    await attachAcceptedReceipt(seed, held, -1);
+
+    const completed = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-past-qr-receipt', 'idem-rsv032-past-qr-receipt'),
+      held.id,
+      { version: held.version, terms_accepted: true },
+    );
+
+    expect(completed.body).toMatchObject({
+      success: true,
+      data: {
+        completion_state: 'completed',
+        next_action: 'none',
+        reservation: { status: 'completed' },
+      },
+    });
+    const state = await reservationReviewState(seed, held.id);
+    expect(state.payment.status).toBe('paid');
+    expect(state.receipt?.evidence_status).toBe('verified');
+  });
+
+  it('keeps past online payment pending without permissions and supports payment-only follow-up', async () => {
+    const seed = await seedWorkspace('org_rsv032_past_qr_followup', 'user_rsv032_past_qr_followup', 'manual_qr');
+    const dates = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ pickup_at: Date; due_at: Date }>(
+        `SELECT statement_timestamp() - interval '3 days 6 hours' AS pickup_at,
+                statement_timestamp() - interval '6 hours' AS due_at`,
+      );
+      return requireRow(result.rows, 'past manual QR follow-up dates');
+    });
+    const held = await createHoldForInterval(
+      seed,
+      'past-qr-followup',
+      dates.pickup_at.toISOString(),
+      dates.due_at.toISOString(),
+    );
+    const restricted = reviewContext(seed, 'req-rsv032-past-qr-restricted', 'idem-rsv032-past-qr-restricted');
+    restricted.permissionCodes = restricted.permissionCodes.filter(
+      (permission) => permission !== 'payments.manage' && permission !== 'evidence.verify',
+    );
+
+    const completed = await completeStaffReservation(restricted, held.id, {
+      version: held.version,
+      terms_accepted: true,
+    });
+    expect(completed.body).toMatchObject({
+      success: true,
+      data: {
+        completion_state: 'completed',
+        next_action: 'payment_verification',
+        reservation: { status: 'completed' },
+      },
+    });
+    if (!completed.body.success) throw new Error('Expected past reservation completion.');
+    expect((await reservationReviewState(seed, held.id)).payment.status).toBe('pending');
+
+    const verified = await verifyReservationPayment(
+      reviewContext(seed, 'req-rsv032-past-qr-followup', 'idem-rsv032-past-qr-followup'),
+      held.id,
+      {
+        version: completed.body.data.reservation.version,
+        verified_amount_minor: completed.body.data.reservation.price_snapshot.due_now_minor,
+      },
+    );
+
+    expect(verified.body).toMatchObject({
+      success: true,
+      data: { payment_status: 'paid', reservation: { status: 'completed' } },
+    });
+    const state = await reservationReviewState(seed, held.id);
+    expect(state.payment.status).toBe('paid');
+    expect(state.reservation.status).toBe('completed');
+  });
+
+  it('does not report payment outstanding when the payment was already verified', async () => {
+    const seed = await seedWorkspace('org_rsv032_past_paid', 'user_rsv032_past_paid', 'cash');
+    const dates = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ pickup_at: Date; due_at: Date }>(
+        `SELECT statement_timestamp() - interval '3 days 6 hours' AS pickup_at,
+                statement_timestamp() - interval '6 hours' AS due_at`,
+      );
+      return requireRow(result.rows, 'past paid booking dates');
+    });
+    const held = await createHoldForInterval(
+      seed,
+      'past-paid',
+      dates.pickup_at.toISOString(),
+      dates.due_at.toISOString(),
+    );
+    await verifyMerchantCollection(seed, held, false);
+
+    const completed = await completeStaffReservation(
+      reviewContext(seed, 'req-rsv032-past-paid', 'idem-rsv032-past-paid'),
+      held.id,
+      { version: held.version, terms_accepted: true },
+    );
+
+    expect(completed.body).toMatchObject({
+      success: true,
+      data: {
+        completion_state: 'completed',
+        next_action: 'none',
+        reservation: { status: 'completed' },
+      },
+    });
+    expect((await reservationReviewState(seed, held.id)).payment.status).toBe('paid');
   });
 
   it('fills missing existing-customer email and address at submission without replacing saved phone', async () => {
@@ -473,13 +893,21 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     );
     expect(conflictingPhone.status).toBe(422);
     expect((await reservationReviewState(seed, held.id)).reservation.status).toBe('held');
-    const unchangedProfile = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const profile = await client.query<{ phone: string | null; email: string | null; address: string | null }>(
-        `SELECT phone, email, address FROM customer WHERE tenant_id = $1 AND id = $2::uuid`,
-        [seed.tenantId, customer.customer_id],
-      );
-      return requireRow(profile.rows, 'unchanged customer after conflict');
-    });
+    const unchangedProfile = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const profile = await client.query<{
+          phone: string | null;
+          email: string | null;
+          address: string | null;
+        }>(`SELECT phone, email, address FROM customer WHERE tenant_id = $1 AND id = $2::uuid`, [
+          seed.tenantId,
+          customer.customer_id,
+        ]);
+        return requireRow(profile.rows, 'unchanged customer after conflict');
+      },
+    );
     expect(unchangedProfile).toEqual({ phone: savedPhone, email: null, address: null });
 
     const submitted = await submitReservationForConfirmation(
@@ -505,10 +933,14 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       address: '456 Legacy Address Avenue, Quezon City',
     });
     await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const profile = await client.query<{ phone: string | null; email: string | null; address: string | null }>(
-        `SELECT phone, email, address FROM customer WHERE tenant_id = $1 AND id = $2::uuid`,
-        [seed.tenantId, customer.customer_id],
-      );
+      const profile = await client.query<{
+        phone: string | null;
+        email: string | null;
+        address: string | null;
+      }>(`SELECT phone, email, address FROM customer WHERE tenant_id = $1 AND id = $2::uuid`, [
+        seed.tenantId,
+        customer.customer_id,
+      ]);
       expect(requireRow(profile.rows, 'legacy customer')).toEqual({
         phone: savedPhone,
         email: 'repaired-customer@example.test',
@@ -518,12 +950,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
   });
 
   it('stops truthfully at pending confirmation for Front Desk and for an owner whose payment still needs verification', async () => {
-    const frontdesk = await seedWorkspace(
-      'org_rsv032_frontdesk',
-      'user_rsv032_frontdesk',
-      'cash',
-      ['reservations.manage', 'payments.view', 'evidence.view'],
-    );
+    const frontdesk = await seedWorkspace('org_rsv032_frontdesk', 'user_rsv032_frontdesk', 'cash', [
+      'reservations.manage',
+      'payments.view',
+      'evidence.view',
+    ]);
     const frontdeskHeld = await createWalkInHold(frontdesk, 'frontdesk');
     const frontdeskResult = await completeStaffReservation(
       reviewContext(frontdesk, 'req-rsv032-frontdesk', 'idem-rsv032-frontdesk'),
@@ -572,7 +1003,13 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
         },
       ),
     ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
-    expect(await actionEffectCounts(frontdesk, frontdeskHeld.id, 'reservation.submitted_for_confirmation')).toEqual({
+    expect(
+      await actionEffectCounts(
+        frontdesk,
+        frontdeskHeld.id,
+        'reservation.submitted_for_confirmation',
+      ),
+    ).toEqual({
       audit: 1,
       outbox: 1,
     });
@@ -649,13 +1086,17 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       },
     });
 
-    const amountMinor = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const payment = await client.query<{ amount_minor: number }>(
-        `SELECT amount_minor FROM payment WHERE tenant_id = $1 AND id = $2`,
-        [seed.tenantId, held.paymentId],
-      );
-      return String(requireRow(payment.rows, 'manual QR payment').amount_minor);
-    });
+    const amountMinor = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const payment = await client.query<{ amount_minor: number }>(
+          `SELECT amount_minor FROM payment WHERE tenant_id = $1 AND id = $2`,
+          [seed.tenantId, held.paymentId],
+        );
+        return String(requireRow(payment.rows, 'manual QR payment').amount_minor);
+      },
+    );
     const verified = await verifyReservationPayment(
       reviewContext(seed, 'req-rsv032-qr-manual-verify', 'idem-rsv032-qr-manual-verify'),
       held.id,
@@ -711,19 +1152,26 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     const state = await reservationReviewState(seed, held.id);
     expect(state.receipt?.evidence_status).toBe('under_review');
     expect(state.reservation.status).toBe('pending_confirmation');
-    expect(await actionEffectCounts(seed, held.id, 'reservation.confirmed')).toEqual({ audit: 0, outbox: 0 });
+    expect(await actionEffectCounts(seed, held.id, 'reservation.confirmed')).toEqual({
+      audit: 0,
+      outbox: 0,
+    });
   });
 
   it('records cash collection and confirms a walk-in reservation in one staff completion action', async () => {
     const seed = await seedWorkspace('org_rsv032_cash_direct', 'user_rsv032_cash_direct', 'cash');
     const held = await createWalkInHold(seed, 'cash-direct');
-    const amountMinor = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const payment = await client.query<{ amount_minor: number }>(
-        `SELECT amount_minor FROM payment WHERE tenant_id = $1 AND id = $2`,
-        [seed.tenantId, held.paymentId],
-      );
-      return String(requireRow(payment.rows, 'cash direct payment').amount_minor);
-    });
+    const amountMinor = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const payment = await client.query<{ amount_minor: number }>(
+          `SELECT amount_minor FROM payment WHERE tenant_id = $1 AND id = $2`,
+          [seed.tenantId, held.paymentId],
+        );
+        return String(requireRow(payment.rows, 'cash direct payment').amount_minor);
+      },
+    );
 
     const tenderedMinor = String(BigInt(amountMinor) + 20_000n);
     const result = await completeStaffReservation(
@@ -746,28 +1194,32 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
         reservation: { status: 'confirmed', version: 3 },
       },
     });
-    const financial = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const payment = await client.query<{ status: string; verified_at: Date | null }>(
-        `SELECT status, verified_at FROM payment WHERE tenant_id = $1 AND id = $2`,
-        [seed.tenantId, held.paymentId],
-      );
-      const verification = await client.query<{
-        decision: string;
-        verified_amount_minor: number | null;
-        cash_tendered_minor: number | null;
-        change_due_minor: number | null;
-      }>(
-        `SELECT decision, verified_amount_minor, cash_tendered_minor, change_due_minor
+    const financial = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const payment = await client.query<{ status: string; verified_at: Date | null }>(
+          `SELECT status, verified_at FROM payment WHERE tenant_id = $1 AND id = $2`,
+          [seed.tenantId, held.paymentId],
+        );
+        const verification = await client.query<{
+          decision: string;
+          verified_amount_minor: number | null;
+          cash_tendered_minor: number | null;
+          change_due_minor: number | null;
+        }>(
+          `SELECT decision, verified_amount_minor, cash_tendered_minor, change_due_minor
            FROM payment_verification
           WHERE tenant_id = $1 AND payment_id = $2
           ORDER BY decided_at DESC, id DESC LIMIT 1`,
-        [seed.tenantId, held.paymentId],
-      );
-      return {
-        payment: requireRow(payment.rows, 'cash verified payment'),
-        verification: requireRow(verification.rows, 'cash payment verification'),
-      };
-    });
+          [seed.tenantId, held.paymentId],
+        );
+        return {
+          payment: requireRow(payment.rows, 'cash verified payment'),
+          verification: requireRow(verification.rows, 'cash payment verification'),
+        };
+      },
+    );
     expect(financial.payment.status).toBe('paid');
     expect(financial.payment.verified_at).not.toBeNull();
     expect(financial.verification).toMatchObject({
@@ -779,24 +1231,36 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
   });
 
   it('saves edited existing-customer fields with the submitted reservation snapshot and rejects stale edits', async () => {
-    const seed = await seedWorkspace('org_rsv032_customer_profile_edit', 'user_rsv032_customer_profile_edit', 'cash');
+    const seed = await seedWorkspace(
+      'org_rsv032_customer_profile_edit',
+      'user_rsv032_customer_profile_edit',
+      'cash',
+    );
     const held = await createWalkInHold(seed, 'customer-profile-edit');
-    const customer = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const result = await client.query<{ id: string; updated_at: Date }>(
-        `INSERT INTO customer (tenant_id, full_name, phone, email, address, social_media, notes)
+    const customer = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const result = await client.query<{ id: string; updated_at: Date }>(
+          `INSERT INTO customer (tenant_id, full_name, phone, email, address, social_media, notes)
          VALUES ($1, 'Before Edit', '09170000090', 'before@example.test', 'Old address', '@before', 'Old note')
          RETURNING id, updated_at`,
-        [seed.tenantId],
-      );
-      return requireRow(result.rows, 'editable customer profile');
-    });
-    const cashAmount = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const result = await client.query<{ amount_minor: number }>(
-        `SELECT amount_minor FROM payment WHERE tenant_id = $1 AND id = $2`,
-        [seed.tenantId, held.paymentId],
-      );
-      return String(requireRow(result.rows, 'editable-profile payment').amount_minor);
-    });
+          [seed.tenantId],
+        );
+        return requireRow(result.rows, 'editable customer profile');
+      },
+    );
+    const cashAmount = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const result = await client.query<{ amount_minor: number }>(
+          `SELECT amount_minor FROM payment WHERE tenant_id = $1 AND id = $2`,
+          [seed.tenantId, held.paymentId],
+        );
+        return String(requireRow(result.rows, 'editable-profile payment').amount_minor);
+      },
+    );
     const profileEdits = {
       full_name: 'After Edit',
       phone: '09170000091',
@@ -812,7 +1276,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       {
         version: 1,
         terms_accepted: true,
-        customer: { source: 'existing', customer_id: customer.id as CustomerId, profile: profileEdits },
+        customer: {
+          source: 'existing',
+          customer_id: customer.id as CustomerId,
+          profile: profileEdits,
+        },
         cash_collection: { amount_tendered_minor: cashAmount },
       },
     );
@@ -821,26 +1289,30 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       success: true,
       data: { completion_state: 'confirmed', reservation: { status: 'confirmed' } },
     });
-    const persisted = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const result = await client.query<{
-        full_name: string;
-        phone: string;
-        email: string;
-        address: string;
-        social_media: string | null;
-        notes: string | null;
-        customer_id: string | null;
-        customer_snapshot: Record<string, unknown>;
-      }>(
-        `SELECT c.full_name, c.phone, c.email, c.address, c.social_media, c.notes,
+    const persisted = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const result = await client.query<{
+          full_name: string;
+          phone: string;
+          email: string;
+          address: string;
+          social_media: string | null;
+          notes: string | null;
+          customer_id: string | null;
+          customer_snapshot: Record<string, unknown>;
+        }>(
+          `SELECT c.full_name, c.phone, c.email, c.address, c.social_media, c.notes,
                 r.customer_id, r.customer_snapshot
            FROM customer c
            JOIN reservation r ON r.tenant_id = c.tenant_id AND r.customer_id = c.id
           WHERE c.tenant_id = $1 AND r.id = $2`,
-        [seed.tenantId, held.id],
-      );
-      return requireRow(result.rows, 'completed profile and reservation snapshot');
-    });
+          [seed.tenantId, held.id],
+        );
+        return requireRow(result.rows, 'completed profile and reservation snapshot');
+      },
+    );
     expect(persisted).toMatchObject({
       full_name: 'After Edit',
       phone: '09170000091',
@@ -859,17 +1331,25 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     expect(persisted.customer_snapshot).not.toHaveProperty('social_media');
     expect(persisted.customer_snapshot).not.toHaveProperty('notes');
 
-    const staleSeed = await seedWorkspace('org_rsv032_customer_profile_stale', 'user_rsv032_customer_profile_stale', 'cash');
+    const staleSeed = await seedWorkspace(
+      'org_rsv032_customer_profile_stale',
+      'user_rsv032_customer_profile_stale',
+      'cash',
+    );
     const staleHeld = await createWalkInHold(staleSeed, 'customer-profile-stale');
-    const staleCustomer = await withTenantTransaction(staleSeed.tenantId, staleSeed.principalId, async (client) => {
-      const result = await client.query<{ id: string; updated_at: Date }>(
-        `INSERT INTO customer (tenant_id, full_name, phone, email, address)
+    const staleCustomer = await withTenantTransaction(
+      staleSeed.tenantId,
+      staleSeed.principalId,
+      async (client) => {
+        const result = await client.query<{ id: string; updated_at: Date }>(
+          `INSERT INTO customer (tenant_id, full_name, phone, email, address)
          VALUES ($1, 'Before Concurrent Edit', '09170000092', 'stale@example.test', 'Old address')
          RETURNING id, updated_at`,
-        [staleSeed.tenantId],
-      );
-      return requireRow(result.rows, 'stale editable customer profile');
-    });
+          [staleSeed.tenantId],
+        );
+        return requireRow(result.rows, 'stale editable customer profile');
+      },
+    );
     await withTenantTransaction(staleSeed.tenantId, staleSeed.principalId, async (client) => {
       await client.query(
         `UPDATE customer
@@ -880,7 +1360,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       );
     });
     const staleResult = await completeStaffReservation(
-      reviewContext(staleSeed, 'req-rsv032-customer-profile-stale', 'idem-rsv032-customer-profile-stale'),
+      reviewContext(
+        staleSeed,
+        'req-rsv032-customer-profile-stale',
+        'idem-rsv032-customer-profile-stale',
+      ),
       staleHeld.id,
       {
         version: 1,
@@ -901,16 +1385,24 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       },
     );
     expectFailure(staleResult, 'STALE_VERSION');
-    const unchanged = await withTenantTransaction(staleSeed.tenantId, staleSeed.principalId, async (client) => {
-      const profile = await client.query<{ full_name: string; phone: string; customer_id: string | null }>(
-        `SELECT c.full_name, c.phone, r.customer_id
+    const unchanged = await withTenantTransaction(
+      staleSeed.tenantId,
+      staleSeed.principalId,
+      async (client) => {
+        const profile = await client.query<{
+          full_name: string;
+          phone: string;
+          customer_id: string | null;
+        }>(
+          `SELECT c.full_name, c.phone, r.customer_id
            FROM customer c
            CROSS JOIN reservation r
           WHERE c.tenant_id = $1 AND c.id = $2::uuid AND r.tenant_id = $1 AND r.id = $3`,
-        [staleSeed.tenantId, staleCustomer.id, staleHeld.id],
-      );
-      return requireRow(profile.rows, 'unchanged stale profile and hold');
-    });
+          [staleSeed.tenantId, staleCustomer.id, staleHeld.id],
+        );
+        return requireRow(profile.rows, 'unchanged stale profile and hold');
+      },
+    );
     expect(unchanged).toMatchObject({
       full_name: 'Concurrent Edit',
       phone: '09170000092',
@@ -949,13 +1441,17 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       data: { completion_state: 'pending_confirmation', next_action: 'payment_verification' },
     });
 
-    const amountMinor = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const payment = await client.query<{ amount_minor: number }>(
-        `SELECT amount_minor FROM payment WHERE tenant_id = $1 AND id = $2`,
-        [seed.tenantId, held.paymentId],
-      );
-      return String(requireRow(payment.rows, 'manual QR payment').amount_minor);
-    });
+    const amountMinor = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const payment = await client.query<{ amount_minor: number }>(
+          `SELECT amount_minor FROM payment WHERE tenant_id = $1 AND id = $2`,
+          [seed.tenantId, held.paymentId],
+        );
+        return String(requireRow(payment.rows, 'manual QR payment').amount_minor);
+      },
+    );
     const verified = await verifyReservationPayment(
       reviewContext(seed, 'req-rsv032-qr-verify', 'idem-rsv032-qr-verify'),
       held.id,
@@ -1012,11 +1508,16 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       success: true,
       data: { completion_state: 'confirmed', next_action: 'none', reservation: { version: 3 } },
     });
-    expect(await actionEffectCounts(seed, held.id, 'reservation.submitted_for_confirmation')).toEqual({
+    expect(
+      await actionEffectCounts(seed, held.id, 'reservation.submitted_for_confirmation'),
+    ).toEqual({
       audit: 1,
       outbox: 1,
     });
-    expect(await actionEffectCounts(seed, held.id, 'reservation.confirmed')).toEqual({ audit: 1, outbox: 1 });
+    expect(await actionEffectCounts(seed, held.id, 'reservation.confirmed')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
   });
 
   it('expires during staff completion using database time and releases the held garment', async () => {
@@ -1072,11 +1573,16 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     expect(second.status).toBe(200);
     expect(first.body).toMatchObject({ success: true, data: { completion_state: 'confirmed' } });
     expect(second.body).toMatchObject({ success: true, data: { completion_state: 'confirmed' } });
-    expect(await actionEffectCounts(seed, held.id, 'reservation.submitted_for_confirmation')).toEqual({
+    expect(
+      await actionEffectCounts(seed, held.id, 'reservation.submitted_for_confirmation'),
+    ).toEqual({
       audit: 1,
       outbox: 1,
     });
-    expect(await actionEffectCounts(seed, held.id, 'reservation.confirmed')).toEqual({ audit: 1, outbox: 1 });
+    expect(await actionEffectCounts(seed, held.id, 'reservation.confirmed')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
   });
 
   it('rejects a pending reservation once, releases its allocation, and keeps the auditable merchant reason', async () => {
@@ -1110,28 +1616,41 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       { version: 2, reason: 'Merchant could not verify the collection.' },
     );
     expect(replay).toEqual(first);
-    expect(await actionEffectCounts(seed, held.id, 'reservation.rejected')).toEqual({ audit: 1, outbox: 1 });
+    expect(await actionEffectCounts(seed, held.id, 'reservation.rejected')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
   });
 
   it('serializes concurrent confirmation double-fire and confirmation-vs-expiry to one durable outcome', async () => {
     const seed = await seedWorkspace('org_rsv031_races', 'user_rsv031_races', 'cash');
     const held = await createHold(seed, 'races');
-    await submitReservation(
-      reviewContext(seed, 'req-race-submit', 'idem-race-submit'),
-      held.id,
-      { version: 1, terms_accepted: true },
-    );
+    await submitReservation(reviewContext(seed, 'req-race-submit', 'idem-race-submit'), held.id, {
+      version: 1,
+      terms_accepted: true,
+    });
     await verifyMerchantCollection(seed, held, false);
 
     const concurrent = await Promise.all([
-      confirmReservation(reviewContext(seed, 'req-double-a', 'idem-double-confirm'), held.id, { version: 2 }),
-      confirmReservation(reviewContext(seed, 'req-double-b', 'idem-double-confirm'), held.id, { version: 2 }),
+      confirmReservation(reviewContext(seed, 'req-double-a', 'idem-double-confirm'), held.id, {
+        version: 2,
+      }),
+      confirmReservation(reviewContext(seed, 'req-double-b', 'idem-double-confirm'), held.id, {
+        version: 2,
+      }),
     ]);
     expect(concurrent[0]).toEqual(concurrent[1]);
     expect(concurrent[0]?.status).toBe(200);
-    expect(await actionEffectCounts(seed, held.id, 'reservation.confirmed')).toEqual({ audit: 1, outbox: 1 });
+    expect(await actionEffectCounts(seed, held.id, 'reservation.confirmed')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
 
-    const expirySeed = await seedWorkspace('org_rsv031_expiry_race', 'user_rsv031_expiry_race', 'cash');
+    const expirySeed = await seedWorkspace(
+      'org_rsv031_expiry_race',
+      'user_rsv031_expiry_race',
+      'cash',
+    );
     const expiryHeld = await createHold(expirySeed, 'expiry-race');
     await submitReservation(
       reviewContext(expirySeed, 'req-expiry-submit', 'idem-expiry-submit'),
@@ -1166,12 +1685,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
   });
 
   it('exposes the staff complete-booking route without requiring Front Desk to hold merchant verification permission', async () => {
-    const seed = await seedWorkspace(
-      'org_rsv032_route',
-      'user_rsv032_route',
-      'cash',
-      ['reservations.manage', 'payments.view', 'evidence.view'],
-    );
+    const seed = await seedWorkspace('org_rsv032_route', 'user_rsv032_route', 'cash', [
+      'reservations.manage',
+      'payments.view',
+      'evidence.view',
+    ]);
     const held = await createWalkInHold(seed, 'route');
 
     clerk.getAuth.mockReturnValueOnce({ userId: null, orgId: null });
@@ -1278,9 +1796,15 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       success: true,
       data: { reservation: { status: 'cancelled', version: 3 } },
     });
-    expect((await reservationReviewState(pendingSeed, pending.id)).allocation.is_blocking).toBe(false);
+    expect((await reservationReviewState(pendingSeed, pending.id)).allocation.is_blocking).toBe(
+      false,
+    );
 
-    const confirmedSeed = await seedWorkspace('org_rsv041_confirmed', 'user_rsv041_confirmed', 'cash');
+    const confirmedSeed = await seedWorkspace(
+      'org_rsv041_confirmed',
+      'user_rsv041_confirmed',
+      'cash',
+    );
     const confirmed = await createHold(confirmedSeed, 'cancel-confirmed');
     await submitReservation(
       reviewContext(confirmedSeed, 'req-cancel-confirmed-submit', 'idem-cancel-confirmed-submit'),
@@ -1313,7 +1837,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
   });
 
   it('atomically saves or links a customer while cancelling an unfinished hold and replays safely', async () => {
-    const seed = await seedWorkspace('org_rsv041_cancel_save_customer', 'user_rsv041_cancel_save_customer', 'cash');
+    const seed = await seedWorkspace(
+      'org_rsv041_cancel_save_customer',
+      'user_rsv041_cancel_save_customer',
+      'cash',
+    );
     const requestWithoutCustomer = {
       ...(await createRequest(seed)),
       customer: undefined,
@@ -1326,7 +1854,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       throw new Error('Expected an anonymous held reservation.');
     }
     const reservationId = created.body.data.reservation.id;
-    const cancelContext = reviewContext(seed, 'req-cancel-save-customer', 'idem-cancel-save-customer');
+    const cancelContext = reviewContext(
+      seed,
+      'req-cancel-save-customer',
+      'idem-cancel-save-customer',
+    );
     const cancelInput = {
       version: 1,
       customer: {
@@ -1340,21 +1872,27 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     };
     const cancelled = await cancelReservation(cancelContext, reservationId, cancelInput);
     expect(cancelled.status).toBe(200);
-    expect(cancelled.body).toMatchObject({ success: true, data: { reservation: { status: 'cancelled', version: 2 } } });
+    expect(cancelled.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'cancelled', version: 2 } },
+    });
     const replay = await cancelReservation(cancelContext, reservationId, cancelInput);
     expect(replay).toEqual(cancelled);
 
-    const persisted = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const customerState = await client.query<{
-        status: string;
-        customer_id: string | null;
-        customer_snapshot: Record<string, unknown> | null;
-        payment_status: string | null;
-        payment_count: number;
-        receipt_count: number;
-        customer_count: number;
-      }>(
-        `SELECT r.status, r.customer_id, r.customer_snapshot,
+    const persisted = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const customerState = await client.query<{
+          status: string;
+          customer_id: string | null;
+          customer_snapshot: Record<string, unknown> | null;
+          payment_status: string | null;
+          payment_count: number;
+          receipt_count: number;
+          customer_count: number;
+        }>(
+          `SELECT r.status, r.customer_id, r.customer_snapshot,
                 p.status AS payment_status,
                 (SELECT count(*)::int FROM payment px WHERE px.tenant_id = r.tenant_id AND px.reservation_id = r.id) AS payment_count,
                 (SELECT count(*)::int FROM payment_receipt pr JOIN payment pp ON pp.tenant_id = pr.tenant_id AND pp.id = pr.payment_id
@@ -1363,10 +1901,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
            FROM reservation r
            LEFT JOIN payment p ON p.tenant_id = r.tenant_id AND p.reservation_id = r.id
           WHERE r.tenant_id = $1 AND r.id = $2`,
-        [seed.tenantId, reservationId],
-      );
-      return requireRow(customerState.rows, 'cancelled reservation customer/payment state');
-    });
+          [seed.tenantId, reservationId],
+        );
+        return requireRow(customerState.rows, 'cancelled reservation customer/payment state');
+      },
+    );
     expect(persisted.status).toBe('cancelled');
     expect(persisted.customer_id).toBeTruthy();
     expect(persisted.customer_snapshot).toMatchObject({
@@ -1375,11 +1914,21 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       email: 'saved-after-cancel@example.test',
       address: null,
     });
-    expect(persisted).toMatchObject({ payment_status: 'pending', payment_count: 1, receipt_count: 0, customer_count: 1 });
+    expect(persisted).toMatchObject({
+      payment_status: 'pending',
+      payment_count: 1,
+      receipt_count: 0,
+      customer_count: 1,
+    });
 
-    const existingSeed = await seedWorkspace('org_rsv041_cancel_link_existing', 'user_rsv041_cancel_link_existing', 'cash');
+    const existingSeed = await seedWorkspace(
+      'org_rsv041_cancel_link_existing',
+      'user_rsv041_cancel_link_existing',
+      'cash',
+    );
     const existingHold = await createHold(existingSeed, 'cancel-link-existing');
-    const existingCustomer = (await reservationCustomerState(existingSeed, existingHold.id)).customer_id;
+    const existingCustomer = (await reservationCustomerState(existingSeed, existingHold.id))
+      .customer_id;
     expect(existingCustomer).toBeTruthy();
     await withTenantTransaction(existingSeed.tenantId, existingSeed.principalId, async (client) => {
       await client.query(
@@ -1396,18 +1945,26 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     const linkedState = await reservationCustomerState(existingSeed, existingHold.id);
     expect(linkedState.customer_id).toBe(existingCustomer);
     expect(linkedState.customer_snapshot).toMatchObject({ address: null });
-    const existingProfileAddress = await withTenantTransaction(existingSeed.tenantId, existingSeed.principalId, async (client) => {
-      const result = await client.query<{ address: string | null }>(
-        `SELECT address FROM customer WHERE tenant_id = $1 AND id = $2::uuid`,
-        [existingSeed.tenantId, existingCustomer],
-      );
-      return requireRow(result.rows, 'linked existing customer').address;
-    });
+    const existingProfileAddress = await withTenantTransaction(
+      existingSeed.tenantId,
+      existingSeed.principalId,
+      async (client) => {
+        const result = await client.query<{ address: string | null }>(
+          `SELECT address FROM customer WHERE tenant_id = $1 AND id = $2::uuid`,
+          [existingSeed.tenantId, existingCustomer],
+        );
+        return requireRow(result.rows, 'linked existing customer').address;
+      },
+    );
     expect(existingProfileAddress).toBeNull();
   });
 
   it('rolls back a customer insert if cancellation conflicts and rejects stale versions before saving', async () => {
-    const seed = await seedWorkspace('org_rsv041_cancel_save_rollback', 'user_rsv041_cancel_save_rollback', 'cash');
+    const seed = await seedWorkspace(
+      'org_rsv041_cancel_save_rollback',
+      'user_rsv041_cancel_save_rollback',
+      'cash',
+    );
     const attached = await createHold(seed, 'cancel-save-rollback');
     const mismatched = await cancelReservation(
       reviewContext(seed, 'req-cancel-save-mismatch', 'idem-cancel-save-mismatch'),
@@ -1426,13 +1983,24 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     );
     expectFailure(mismatched, 'STATE_CONFLICT');
     expect((await reservationReviewState(seed, attached.id)).reservation.status).toBe('held');
-    const customerCount = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const result = await client.query<{ count: number }>(`SELECT count(*)::int AS count FROM customer WHERE tenant_id = $1`, [seed.tenantId]);
-      return result.rows[0]?.count ?? 0;
-    });
+    const customerCount = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const result = await client.query<{ count: number }>(
+          `SELECT count(*)::int AS count FROM customer WHERE tenant_id = $1`,
+          [seed.tenantId],
+        );
+        return result.rows[0]?.count ?? 0;
+      },
+    );
     expect(customerCount).toBe(1);
 
-    const staleSeed = await seedWorkspace('org_rsv041_cancel_save_stale', 'user_rsv041_cancel_save_stale', 'cash');
+    const staleSeed = await seedWorkspace(
+      'org_rsv041_cancel_save_stale',
+      'user_rsv041_cancel_save_stale',
+      'cash',
+    );
     const anonymousRequest = { ...(await createRequest(staleSeed)), customer: undefined };
     const staleCreated = await createStaffReservation(
       reviewContext(staleSeed, 'req-cancel-save-stale-create', 'idem-cancel-save-stale-create'),
@@ -1448,20 +2016,36 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
         version: 2,
         customer: {
           source: 'new',
-          customer: { full_name: 'Stale Customer', phone: '09170000034', address: '789 Review Street' },
+          customer: {
+            full_name: 'Stale Customer',
+            phone: '09170000034',
+            address: '789 Review Street',
+          },
         },
       },
     );
     expectFailure(stale, 'STALE_VERSION');
-    expect((await reservationReviewState(staleSeed, staleCreated.body.data.reservation.id)).reservation.status).toBe('held');
-    expect(await withTenantTransaction(staleSeed.tenantId, staleSeed.principalId, async (client) => {
-      const result = await client.query<{ count: number }>(`SELECT count(*)::int AS count FROM customer WHERE tenant_id = $1`, [staleSeed.tenantId]);
-      return result.rows[0]?.count ?? 0;
-    })).toBe(0);
+    expect(
+      (await reservationReviewState(staleSeed, staleCreated.body.data.reservation.id)).reservation
+        .status,
+    ).toBe('held');
+    expect(
+      await withTenantTransaction(staleSeed.tenantId, staleSeed.principalId, async (client) => {
+        const result = await client.query<{ count: number }>(
+          `SELECT count(*)::int AS count FROM customer WHERE tenant_id = $1`,
+          [staleSeed.tenantId],
+        );
+        return result.rows[0]?.count ?? 0;
+      }),
+    ).toBe(0);
   });
 
   it('keeps staff cancellation idempotent, rejects post-pickup cancellation, and lets expiry win at the deadline', async () => {
-    const duplicateSeed = await seedWorkspace('org_rsv041_duplicate', 'user_rsv041_duplicate', 'cash');
+    const duplicateSeed = await seedWorkspace(
+      'org_rsv041_duplicate',
+      'user_rsv041_duplicate',
+      'cash',
+    );
     const duplicate = await createHold(duplicateSeed, 'cancel-duplicate');
     const concurrent = await Promise.all([
       cancelReservation(
@@ -1602,7 +2186,10 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       condition_note: 'Clean and complete at handover.',
       actor_membership_id: seed.membershipId,
     });
-    const detail = await getReservationDetail(reviewContext(seed, 'unused-detail', 'unused-detail'), confirmed.id);
+    const detail = await getReservationDetail(
+      reviewContext(seed, 'unused-detail', 'unused-detail'),
+      confirmed.id,
+    );
     expect(detail.status).toBe('picked_up');
     expect(detail.custody_timeline).toEqual([
       expect.objectContaining({
@@ -1625,7 +2212,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
   });
 
   it('allows pickup after staff manually verifies a manual payment without uploaded receipt evidence', async () => {
-    const seed = await seedWorkspace('org_rsv050_manual_pickup', 'user_rsv050_manual_pickup', 'manual_qr');
+    const seed = await seedWorkspace(
+      'org_rsv050_manual_pickup',
+      'user_rsv050_manual_pickup',
+      'manual_qr',
+    );
     const held = await createHold(seed, 'pickup-manual-no-receipt');
     const submitted = await submitReservation(
       reviewContext(seed, 'req-pickup-manual-submit', 'idem-pickup-manual-submit'),
@@ -1779,7 +2370,13 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       'org_rsv050_no_custody',
       'user_rsv050_no_custody',
       'cash',
-      ['reservations.manage', 'payments.manage', 'payments.view', 'evidence.verify', 'evidence.view'],
+      [
+        'reservations.manage',
+        'payments.manage',
+        'payments.view',
+        'evidence.verify',
+        'evidence.view',
+      ],
     );
     const noCustodyConfirmed = await createConfirmedReservation(noCustody, 'pickup-no-custody');
     useClerk(noCustody);
@@ -1846,7 +2443,10 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       }),
     ]);
 
-    const detail = await getReservationDetail(reviewContext(seed, 'return-detail', 'return-detail'), pickedUp.id);
+    const detail = await getReservationDetail(
+      reviewContext(seed, 'return-detail', 'return-detail'),
+      pickedUp.id,
+    );
     expect(detail.status).toBe('returned');
     expect(detail.custody_timeline).toEqual([
       expect.objectContaining({ event_kind: 'pickup', asset_id: seed.assetId }),
@@ -1946,7 +2546,10 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     const returned = await returnReservation(
       reviewContext(seed, 'req-return-late', 'idem-return-late'),
       pickedUp.id,
-      { version: pickedUp.version, condition_note: 'Returned after the next prep window had started.' },
+      {
+        version: pickedUp.version,
+        condition_note: 'Returned after the next prep window had started.',
+      },
     );
     expect(returned.status).toBe(200);
     expect(returned.body).toMatchObject({
@@ -1954,13 +2557,16 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       data: { reservation: { status: 'returned' } },
     });
 
-    const disruption = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const result = await client.query<{
-        status: string;
-        reservation_id: string;
-        cause_event_kind: string | null;
-      }>(
-        `SELECT d.status,
+    const disruption = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const result = await client.query<{
+          status: string;
+          reservation_id: string;
+          cause_event_kind: string | null;
+        }>(
+          `SELECT d.status,
                 rl.reservation_id,
                 ce.event_kind AS cause_event_kind
            FROM disruption d
@@ -1973,10 +2579,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
           WHERE d.tenant_id = $1 AND d.asset_id = $2
           ORDER BY d.created_at DESC
           LIMIT 1`,
-        [seed.tenantId, seed.assetId],
-      );
-      return requireRow(result.rows, 'late return disruption');
-    });
+          [seed.tenantId, seed.assetId],
+        );
+        return requireRow(result.rows, 'late return disruption');
+      },
+    );
     expect(disruption).toEqual({
       status: 'open',
       reservation_id: future.id,
@@ -1989,16 +2596,14 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     const pickedUp = await createPickedUpReservation(seed, 'return-race');
 
     const concurrent = await Promise.all([
-      returnReservation(
-        reviewContext(seed, 'req-return-race-a', 'idem-return-race'),
-        pickedUp.id,
-        { version: pickedUp.version, condition_note: 'Returned at counter.' },
-      ),
-      returnReservation(
-        reviewContext(seed, 'req-return-race-b', 'idem-return-race'),
-        pickedUp.id,
-        { version: pickedUp.version, condition_note: 'Returned at counter.' },
-      ),
+      returnReservation(reviewContext(seed, 'req-return-race-a', 'idem-return-race'), pickedUp.id, {
+        version: pickedUp.version,
+        condition_note: 'Returned at counter.',
+      }),
+      returnReservation(reviewContext(seed, 'req-return-race-b', 'idem-return-race'), pickedUp.id, {
+        version: pickedUp.version,
+        condition_note: 'Returned at counter.',
+      }),
     ]);
     expect(concurrent[0]).toEqual(concurrent[1]);
     expect(concurrent[0]?.status).toBe(200);
@@ -2034,7 +2639,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       .send({ version: pickedUp.version, readiness: 'ready' });
     expect(injected.status).toBe(422);
 
-    const noCustody = await seedWorkspace('org_rsv051_no_custody', 'user_rsv051_no_custody', 'cash');
+    const noCustody = await seedWorkspace(
+      'org_rsv051_no_custody',
+      'user_rsv051_no_custody',
+      'cash',
+    );
     const noCustodyPickedUp = await createPickedUpReservation(noCustody, 'return-no-custody');
     await withTenantTransaction(noCustody.tenantId, noCustody.principalId, (client) =>
       client.query(
@@ -2045,7 +2654,9 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
           noCustody.tenantId,
           noCustody.branchId,
           noCustody.membershipId,
-          JSON.stringify(noCustody.permissions.filter((permission) => permission !== 'reservations.custody')),
+          JSON.stringify(
+            noCustody.permissions.filter((permission) => permission !== 'reservations.custody'),
+          ),
         ],
       ),
     );
@@ -2084,12 +2695,19 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     const cleaning = await inspectReturnedReservation(
       reviewContext(seed, 'req-inspect-cleaning', 'idem-inspect-cleaning'),
       returned.id,
-      { version: returned.version, readiness: 'needs_cleaning', condition_note: 'Normal cleaning required.' },
+      {
+        version: returned.version,
+        readiness: 'needs_cleaning',
+        condition_note: 'Normal cleaning required.',
+      },
     );
     expect(cleaning.status).toBe(200);
     expect(cleaning.body).toMatchObject({
       success: true,
-      data: { reservation: { status: 'returned', version: returned.version }, asset_readiness: 'needs_cleaning' },
+      data: {
+        reservation: { status: 'returned', version: returned.version },
+        asset_readiness: 'needs_cleaning',
+      },
     });
     expect((await pickupState(seed, returned.id)).allocation).toMatchObject({
       is_blocking: true,
@@ -2106,7 +2724,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     const ready = await inspectReturnedReservation(
       reviewContext(seed, 'req-inspect-ready', 'idem-inspect-ready'),
       returned.id,
-      { version: returned.version, readiness: 'ready', condition_note: 'Cleaning complete; garment inspected.' },
+      {
+        version: returned.version,
+        readiness: 'ready',
+        condition_note: 'Cleaning complete; garment inspected.',
+      },
     );
     expect(ready.status).toBe(200);
     expect(ready.body).toMatchObject({ success: true, data: { asset_readiness: 'ready' } });
@@ -2145,13 +2767,17 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       success: true,
       data: { reservation: { status: 'completed', version: returned.version + 1 } },
     });
-    const completedAt = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const result = await client.query<{ completed_at: Date | null }>(
-        `SELECT completed_at FROM reservation WHERE tenant_id = $1 AND id = $2::uuid`,
-        [seed.tenantId, returned.id],
-      );
-      return requireRow(result.rows, 'completed reservation timestamp').completed_at;
-    });
+    const completedAt = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const result = await client.query<{ completed_at: Date | null }>(
+          `SELECT completed_at FROM reservation WHERE tenant_id = $1 AND id = $2::uuid`,
+          [seed.tenantId, returned.id],
+        );
+        return requireRow(result.rows, 'completed reservation timestamp').completed_at;
+      },
+    );
     expect(completedAt).toBeInstanceOf(Date);
 
     useClerk(seed);
@@ -2160,7 +2786,8 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     const dashboardData = successEnvelope(dashboardOverviewResponse).parse(dashboard.body).data;
     const businessPerformance = dashboardData.business_performance;
     expect(
-      businessPerformance.completed_rentals.current + businessPerformance.completed_rentals.previous,
+      businessPerformance.completed_rentals.current +
+        businessPerformance.completed_rentals.previous,
     ).toBe(1);
     expect(
       BigInt(businessPerformance.completed_rental_value.current_minor) +
@@ -2227,7 +2854,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
   });
 
   it('reconciles elapsed Recovery cleaning for a tenant without touching persistent readiness states', async () => {
-    const seed = await seedWorkspace('org_rsv052_recovery_worker', 'user_rsv052_recovery_worker', 'cash');
+    const seed = await seedWorkspace(
+      'org_rsv052_recovery_worker',
+      'user_rsv052_recovery_worker',
+      'cash',
+    );
     const returned = await createReturnedReservation(seed, 'completion-recovery-worker');
 
     await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
@@ -2268,16 +2899,20 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
   it('keeps canonical maintenance work authoritative and will not mark an asset ready while work remains open', async () => {
     const seed = await seedWorkspace('org_rsv052_maintenance', 'user_rsv052_maintenance', 'cash');
     const returned = await createReturnedReservation(seed, 'completion-maintenance');
-    const maintenanceId = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const result = await client.query<{ id: string }>(
-        `INSERT INTO maintenance_work_order
+    const maintenanceId = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const result = await client.query<{ id: string }>(
+          `INSERT INTO maintenance_work_order
            (tenant_id, branch_id, asset_id, kind, status, reason, opened_at)
          VALUES ($1, $2, $3, 'cleaning', 'open', 'Post-return deep cleaning', statement_timestamp())
          RETURNING id`,
-        [seed.tenantId, seed.branchId, seed.assetId],
-      );
-      return requireRow(result.rows, 'maintenance work order').id;
-    });
+          [seed.tenantId, seed.branchId, seed.assetId],
+        );
+        return requireRow(result.rows, 'maintenance work order').id;
+      },
+    );
 
     const readyWhileOpen = await inspectReturnedReservation(
       reviewContext(seed, 'req-inspect-maint-open', 'idem-inspect-maint-open'),
@@ -2354,7 +2989,13 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
         `INSERT INTO deposit_entry
            (tenant_id, reservation_id, payment_id, refund_id, kind, amount_minor, currency, business_key)
          VALUES ($1, $2, $3, $4, 'release', 50000, 'PHP', $5)`,
-        [seed.tenantId, returned.id, returned.paymentId, finance.refundId, `deposit:${returned.id}:release`],
+        [
+          seed.tenantId,
+          returned.id,
+          returned.paymentId,
+          finance.refundId,
+          `deposit:${returned.id}:release`,
+        ],
       );
     });
 
@@ -2379,11 +3020,18 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       { version: returned.version },
     );
     expect(completed.status).toBe(200);
-    expect(completed.body).toMatchObject({ success: true, data: { reservation: { status: 'completed' } } });
+    expect(completed.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'completed' } },
+    });
   });
 
   it('allows Complete Rental as an existing-rental settlement action for a cancelled workspace', async () => {
-    const seed = await seedWorkspace('org_rsv052_cancelled_settlement', 'user_rsv052_cancelled_settlement', 'cash');
+    const seed = await seedWorkspace(
+      'org_rsv052_cancelled_settlement',
+      'user_rsv052_cancelled_settlement',
+      'cash',
+    );
     const returned = await createReturnedReservation(seed, 'completion-cancelled-settlement');
     await inspectReturnedReservation(
       reviewContext(seed, 'req-inspect-cancelled-settlement', 'idem-inspect-cancelled-settlement'),
@@ -2393,7 +3041,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
 
     const completed = await completeRentalReservation(
       {
-        ...reviewContext(seed, 'req-complete-cancelled-settlement', 'idem-complete-cancelled-settlement'),
+        ...reviewContext(
+          seed,
+          'req-complete-cancelled-settlement',
+          'idem-complete-cancelled-settlement',
+        ),
         effectiveTenantStatus: 'cancelled',
       },
       returned.id,
@@ -2429,7 +3081,10 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     ]);
     expect(concurrent[0]).toEqual(concurrent[1]);
     expect(concurrent[0]?.status).toBe(200);
-    expect(await actionEffectCounts(seed, returned.id, 'reservation.completed')).toEqual({ audit: 1, outbox: 1 });
+    expect(await actionEffectCounts(seed, returned.id, 'reservation.completed')).toEqual({
+      audit: 1,
+      outbox: 1,
+    });
     expect((await pickupState(seed, returned.id)).allocation.is_blocking).toBe(false);
   });
 
@@ -2461,7 +3116,9 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
           noAssets.tenantId,
           noAssets.branchId,
           noAssets.membershipId,
-          JSON.stringify(noAssets.permissions.filter((permission) => permission !== 'assets.manage')),
+          JSON.stringify(
+            noAssets.permissions.filter((permission) => permission !== 'assets.manage'),
+          ),
         ],
       ),
     );
@@ -2476,7 +3133,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     const inspected = await request(createApp())
       .post(`/api/v1/reservations/${returned.id}/inspection`)
       .set('Idempotency-Key', 'route-inspection-success')
-      .send({ version: returned.version, readiness: 'ready', condition_note: 'Inspection passed.' });
+      .send({
+        version: returned.version,
+        readiness: 'ready',
+        condition_note: 'Inspection passed.',
+      });
     expect(inspected.status).toBe(200);
 
     const completed = await request(createApp())
@@ -2484,7 +3145,10 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       .set('Idempotency-Key', 'route-complete-success')
       .send({ version: returned.version });
     expect(completed.status).toBe(200);
-    expect(completed.body).toMatchObject({ success: true, data: { reservation: { status: 'completed' } } });
+    expect(completed.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'completed' } },
+    });
   });
 
   it('exposes protected submit/confirm/reject routes with strict bodies, idempotency, concealed foreign IDs, and merchant-review permissions', async () => {
@@ -2517,7 +3181,10 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       .set('Idempotency-Key', 'route-submit')
       .send({ version: 1, terms_accepted: true });
     expect(submitted.status).toBe(200);
-    expect(submitted.body).toMatchObject({ success: true, data: { reservation: { status: 'pending_confirmation' } } });
+    expect(submitted.body).toMatchObject({
+      success: true,
+      data: { reservation: { status: 'pending_confirmation' } },
+    });
 
     await verifyMerchantCollection(seed, held, false);
     useClerk(seed);
@@ -2545,9 +3212,15 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       .set('Idempotency-Key', 'route-confirm')
       .send({ version: 3 });
     expect(confirmKeyReuse.status).toBe(409);
-    expect((confirmKeyReuse.body as { error?: { code?: string } }).error?.code).toBe('IDEMPOTENCY_KEY_REUSED');
+    expect((confirmKeyReuse.body as { error?: { code?: string } }).error?.code).toBe(
+      'IDEMPOTENCY_KEY_REUSED',
+    );
 
-    const rejectSeed = await seedWorkspace('org_rsv03_route_reject', 'user_rsv03_route_reject', 'cash');
+    const rejectSeed = await seedWorkspace(
+      'org_rsv03_route_reject',
+      'user_rsv03_route_reject',
+      'cash',
+    );
     const rejectHeld = await createHold(rejectSeed, 'route-reject');
     await submitReservation(
       reviewContext(rejectSeed, 'req-route-reject-submit', 'idem-route-reject-submit'),
@@ -2565,12 +3238,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       data: { reservation: { status: 'rejected', version: 3 } },
     });
 
-    const frontdesk = await seedWorkspace(
-      'org_rsv03_frontdesk',
-      'user_rsv03_frontdesk',
-      'cash',
-      ['reservations.manage', 'payments.view', 'evidence.view'],
-    );
+    const frontdesk = await seedWorkspace('org_rsv03_frontdesk', 'user_rsv03_frontdesk', 'cash', [
+      'reservations.manage',
+      'payments.view',
+      'evidence.view',
+    ]);
     const frontdeskHeld = await createHold(frontdesk, 'frontdesk');
     await submitReservation(
       reviewContext(frontdesk, 'req-frontdesk-submit', 'idem-frontdesk-submit'),
@@ -2600,7 +3272,11 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
     permissions: PermissionCode[] = REVIEW_PERMISSIONS,
   ): Promise<ReviewSeed> {
     const tenant = await createTestTenant({ clerkOrgId });
-    const membershipId = await createTestMembership(tenant.id, principalId, permissions.includes('payments.manage') ? 'owner' : 'frontdesk');
+    const membershipId = await createTestMembership(
+      tenant.id,
+      principalId,
+      permissions.includes('payments.manage') ? 'owner' : 'frontdesk',
+    );
     return withTenantTransaction(tenant.id, principalId, async (client) => {
       const branch = await client.query<{ id: string }>(
         `INSERT INTO branch (tenant_id, name, code, is_default, timezone, status)
@@ -2702,14 +3378,18 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       throw new Error(`Expected customer-less held reservation creation, got ${result.status}.`);
     }
     const reservation = result.body.data.reservation;
-    const paymentId = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const payment = await client.query<{ id: string }>(
-        `SELECT id FROM payment WHERE tenant_id = $1 AND reservation_id = $2
+    const paymentId = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const payment = await client.query<{ id: string }>(
+          `SELECT id FROM payment WHERE tenant_id = $1 AND reservation_id = $2
           AND business_key = ('reservation:' || $2::text || ':initial-payment')`,
-        [seed.tenantId, reservation.id],
-      );
-      return requireRow(payment.rows, 'initial walk-in payment').id;
-    });
+          [seed.tenantId, reservation.id],
+        );
+        return requireRow(payment.rows, 'initial walk-in payment').id;
+      },
+    );
     return { id: reservation.id, version: reservation.version, paymentId };
   }
 
@@ -2722,14 +3402,18 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       throw new Error(`Expected held reservation creation, got ${result.status}.`);
     }
     const reservation = result.body.data.reservation;
-    const paymentId = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const payment = await client.query<{ id: string }>(
-        `SELECT id FROM payment WHERE tenant_id = $1 AND reservation_id = $2
+    const paymentId = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const payment = await client.query<{ id: string }>(
+          `SELECT id FROM payment WHERE tenant_id = $1 AND reservation_id = $2
           AND business_key = ('reservation:' || $2::text || ':initial-payment')`,
-        [seed.tenantId, reservation.id],
-      );
-      return requireRow(payment.rows, 'initial payment').id;
-    });
+          [seed.tenantId, reservation.id],
+        );
+        return requireRow(payment.rows, 'initial payment').id;
+      },
+    );
     return { id: reservation.id, version: reservation.version, paymentId };
   }
 
@@ -2809,14 +3493,18 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       throw new Error(`Expected held reservation creation, got ${result.status}.`);
     }
     const reservation = result.body.data.reservation;
-    const paymentId = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
-      const payment = await client.query<{ id: string }>(
-        `SELECT id FROM payment WHERE tenant_id = $1 AND reservation_id = $2
+    const paymentId = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const payment = await client.query<{ id: string }>(
+          `SELECT id FROM payment WHERE tenant_id = $1 AND reservation_id = $2
           AND business_key = ('reservation:' || $2::text || ':initial-payment')`,
-        [seed.tenantId, reservation.id],
-      );
-      return requireRow(payment.rows, 'interval payment').id;
-    });
+          [seed.tenantId, reservation.id],
+        );
+        return requireRow(payment.rows, 'interval payment').id;
+      },
+    );
     return { id: reservation.id, version: reservation.version, paymentId };
   }
 
@@ -2905,7 +3593,9 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
   }
 
   async function insertAcceptedReceiptFile(
-    client: { query: (text: string, values?: unknown[]) => Promise<{ rows: Array<{ id: string }> }> },
+    client: {
+      query: (text: string, values?: unknown[]) => Promise<{ rows: Array<{ id: string }> }>;
+    },
     tenantId: string,
     suffix: string,
   ): Promise<string> {
@@ -2972,13 +3662,14 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       const reservation = await client.query<{
         status: string;
         version: number;
+        completed_at: Date | null;
         hold_acquired_at: Date;
         hold_expires_at: Date;
         pickup_at: Date;
         terms_accepted_at: Date | null;
         submitted_at: Date | null;
       }>(
-        `SELECT status, version, hold_acquired_at, hold_expires_at, pickup_at,
+        `SELECT status, version, completed_at, hold_acquired_at, hold_expires_at, pickup_at,
                 terms_accepted_at, submitted_at
            FROM reservation WHERE tenant_id = $1 AND id = $2`,
         [seed.tenantId, reservationId],
