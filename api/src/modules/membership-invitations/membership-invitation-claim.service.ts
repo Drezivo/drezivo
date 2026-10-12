@@ -265,6 +265,7 @@ async function claimInvitationEffect(input: ClaimEffectInput): Promise<ResolvedC
     if (!(await acceptClaimInvitation(client, {
       tenantId: input.tenant.id,
       invitationId: input.invitationId,
+      membershipId: existing.id,
       providerInvitationId: providerInvitation.id,
     }))) {
       throw new StateConflictError('The invitation is not available.');
@@ -315,6 +316,7 @@ async function claimInvitationEffect(input: ClaimEffectInput): Promise<ResolvedC
     if (!(await acceptClaimInvitation(client, {
       tenantId: input.tenant.id,
       invitationId: input.invitationId,
+      membershipId: membership.id,
       providerInvitationId: providerInvitation.id,
     }))) {
       throw new StateConflictError('The invitation is not available.');

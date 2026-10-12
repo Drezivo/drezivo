@@ -37,6 +37,13 @@ export interface LockedReservationPaymentRow {
   verified_at: Date | null;
 }
 
+export interface PastCashCollectionRequirementRow {
+  due_elapsed: boolean;
+  due_now_minor: number;
+  payment_rail: LockedReservationPaymentRow['rail'] | null;
+  payment_status: LockedReservationPaymentRow['status'] | null;
+}
+
 export interface LockedReservationReceiptRow {
   receipt_id: string;
   payment_id: string;
@@ -188,6 +195,34 @@ export async function lockReservationPaymentForReview(
      LIMIT 1
      FOR UPDATE OF p`,
     [input.tenantId, input.reservationId],
+  );
+  return result.rows[0] ?? null;
+}
+
+/** Reads the database-clock and payment facts needed for the historical cash guard. */
+export async function readPastCashCollectionRequirement(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; reservationId: string },
+): Promise<PastCashCollectionRequirementRow | null> {
+  const result = await client.query<PastCashCollectionRequirementRow>(
+    `SELECT
+       r.due_at < statement_timestamp() AS due_elapsed,
+       r.due_now_minor,
+       pm.rail AS payment_rail,
+       p.status AS payment_status
+     FROM reservation r
+     LEFT JOIN payment p
+       ON p.tenant_id = r.tenant_id
+      AND p.reservation_id = r.id
+      AND p.business_key = ('reservation:' || r.id::text || ':initial-payment')
+     LEFT JOIN payment_method pm
+       ON pm.tenant_id = p.tenant_id
+      AND pm.id = p.payment_method_id
+     WHERE r.tenant_id = $1
+       AND r.branch_id = $2::uuid
+       AND r.id = $3::uuid
+     LIMIT 1`,
+    [input.tenantId, input.branchId, input.reservationId],
   );
   return result.rows[0] ?? null;
 }
@@ -607,7 +642,10 @@ export async function markPhysicalAssetReturned(
     recoveryManagedReadiness: boolean;
     conditionNote?: string;
   },
-): Promise<{ version: number; readiness: LockedReservationAllocationRow['asset_readiness'] } | null> {
+): Promise<{
+  version: number;
+  readiness: LockedReservationAllocationRow['asset_readiness'];
+} | null> {
   const result = await client.query<{
     version: number;
     readiness: LockedReservationAllocationRow['asset_readiness'];
@@ -660,7 +698,10 @@ export async function inspectReturnedPhysicalAsset(
     recoveryManagedReadiness: boolean;
     conditionNote?: string;
   },
-): Promise<{ version: number; readiness: LockedReservationAllocationRow['asset_readiness'] } | null> {
+): Promise<{
+  version: number;
+  readiness: LockedReservationAllocationRow['asset_readiness'];
+} | null> {
   const result = await client.query<{
     version: number;
     readiness: LockedReservationAllocationRow['asset_readiness'];
@@ -723,7 +764,10 @@ export async function truncateReturnedReservationRecovery(
 export async function promoteRecoveryManagedReadinessIfDue(
   client: PoolClient,
   input: { tenantId: string; branchId: string; assetId: string; assetVersion: number },
-): Promise<{ version: number; readiness: LockedReservationAllocationRow['asset_readiness'] } | null> {
+): Promise<{
+  version: number;
+  readiness: LockedReservationAllocationRow['asset_readiness'];
+} | null> {
   const result = await client.query<{
     version: number;
     readiness: LockedReservationAllocationRow['asset_readiness'];
@@ -823,7 +867,12 @@ export async function readReservationSettlementState(
       )
     : { rows: [] as Array<{ status: string }> };
 
-  const charges = await client.query<{ id: string; kind: string; amount_minor: number; reverses_id: string | null }>(
+  const charges = await client.query<{
+    id: string;
+    kind: string;
+    amount_minor: number;
+    reverses_id: string | null;
+  }>(
     `SELECT id, kind, amount_minor, reverses_id
        FROM charge
       WHERE tenant_id = $1 AND reservation_id = $2::uuid
@@ -909,6 +958,31 @@ export async function completeReturnedReservation(
   return result.rows[0]?.version ?? null;
 }
 
+/**
+ * Records a staff-entered historical booking as complete without releasing its scheduled
+ * reservation allocation. The database clock and optimistic version are the authority.
+ */
+export async function completePastPendingReservation(
+  client: PoolClient,
+  input: { tenantId: string; branchId: string; reservationId: string; version: number },
+): Promise<number | null> {
+  const result = await client.query<{ version: number }>(
+    `UPDATE reservation
+        SET status = 'completed',
+            completed_at = statement_timestamp(),
+            version = version + 1
+      WHERE tenant_id = $1
+        AND branch_id = $2::uuid
+        AND id = $3::uuid
+        AND status = 'pending_confirmation'
+        AND version = $4
+        AND due_at < statement_timestamp()
+      RETURNING version`,
+    [input.tenantId, input.branchId, input.reservationId, input.version],
+  );
+  return result.rows[0]?.version ?? null;
+}
+
 export async function appendReturnCustodyEvent(
   client: PoolClient,
   input: {
@@ -953,7 +1027,8 @@ export async function createOrUpdateReturnDisruptions(
     occurredAt: Date;
   },
 ): Promise<number> {
-  const reason = 'Returned garment remained unavailable after the next reservation allocation window had started.';
+  const reason =
+    'Returned garment remained unavailable after the next reservation allocation window had started.';
   const updated = await client.query<{ id: string }>(
     `UPDATE disruption d
         SET cause_custody_event_id = COALESCE(d.cause_custody_event_id, $5::uuid),

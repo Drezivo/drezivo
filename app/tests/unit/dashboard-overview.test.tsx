@@ -114,6 +114,7 @@ const overview: DashboardOverviewResponse = {
     completed_rentals: { current: 32, previous: 27 },
     average_rental_value: { current_minor: "151562", previous_minor: "160000" },
     new_customers: { current: 26, previous: 21 },
+    projected_rental_value: { current_minor: "1250000", reservations: 4 },
   },
 };
 
@@ -158,9 +159,46 @@ describe("DashboardOverview", () => {
 
     expect(screen.getByText("₱48,500.00")).toBeVisible();
     expect(
-      screen.getByText("Completed rental value excludes deposits; new customers are tenant-wide.")
+      screen.getByText(
+        "Completed Rental Value is month-to-date; Projected Rental Value combines completed rental fees to date with upcoming confirmed bookings, excluding deposits."
+      )
+    ).toBeVisible();
+    expect(screen.getByText("Projected Rental Value")).toBeVisible();
+    expect(screen.getByText("₱12,500.00")).toBeVisible();
+    expect(
+      screen.getByText("Completed rental fees to date + 4 upcoming confirmed reservations")
     ).toBeVisible();
     expect(screen.queryByText(/sample|prototype|maria|2025/i)).not.toBeInTheDocument();
+  });
+
+  it("leaves out the projection card when an older API does not send it", async () => {
+    const { projected_rental_value: _omitted, ...olderPerformance } = overview.business_performance;
+    dashboardApi.getDashboardOverview.mockResolvedValue({
+      data: { ...overview, business_performance: olderPerformance },
+    });
+    render(<DashboardOverview />);
+
+    expect(await screen.findByText("Completed Rental Value")).toBeVisible();
+    expect(screen.queryByText("Projected Rental Value")).not.toBeInTheDocument();
+  });
+
+  it("explains the projection when there are no upcoming confirmed reservations", async () => {
+    dashboardApi.getDashboardOverview.mockResolvedValue({
+      data: {
+        ...overview,
+        business_performance: {
+          ...overview.business_performance,
+          projected_rental_value: { current_minor: "4850000", reservations: 0 },
+        },
+      },
+    });
+    render(<DashboardOverview />);
+
+    expect(
+      await screen.findByText(
+        "Completed rental fees to date, with no upcoming confirmed bookings"
+      )
+    ).toBeVisible();
   });
 
   it("shows a loading state without presenting fabricated dashboard values", () => {

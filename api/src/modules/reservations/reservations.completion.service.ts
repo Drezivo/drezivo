@@ -10,6 +10,7 @@ import {
 } from '@drezivo/contracts';
 
 import {
+  ForbiddenError,
   HoldExpiredError,
   InvalidReservationTransitionError,
   StaleVersionError,
@@ -19,6 +20,9 @@ import {
 import type { SuccessEnvelope } from '../../shared/response.js';
 import {
   confirmReservationByMerchant,
+  assertPastCashCollectionConfirmed,
+  completePastStaffReservation,
+  readReservationPaymentStatus,
   readReservationReviewSummary,
   submitReservationForConfirmation,
   verifyReservationPaymentByStaff,
@@ -37,10 +41,10 @@ export interface StaffReservationCompletionContext {
 }
 
 /**
- * Staff-facing orchestration for the walk-in "Complete Reservation" action. It never creates a
- * direct held -> confirmed transition: the existing idempotent submit and confirm commands remain
- * the only state-changing authorities, with deterministic child intent keys derived from the one
- * UI intent key so a crash/retry can resume after either boundary without duplicate effects.
+ * Staff-facing orchestration for the walk-in "Complete Reservation" action. Normal bookings use
+ * the idempotent submit and confirm commands; past-due bookings use the separate version-checked
+ * historical completion command. Deterministic child keys let retries resume without duplicate
+ * effects at any stage.
  */
 export async function completeStaffReservationCommand(
   context: StaffReservationCompletionContext,
@@ -48,7 +52,8 @@ export async function completeStaffReservationCommand(
   requestInput: StaffReservationCompleteRequest,
 ): Promise<ReservationReviewCommandResponse<StaffReservationCompleteResponse>> {
   const parsed = staffReservationCompleteRequest.safeParse(requestInput);
-  if (!parsed.success) throw new ValidationError('Staff reservation completion request is invalid.');
+  if (!parsed.success)
+    throw new ValidationError('Staff reservation completion request is invalid.');
   const request = parsed.data;
   const submissionRequest = {
     version: request.version,
@@ -63,6 +68,36 @@ export async function completeStaffReservationCommand(
   if (current.status === 'confirmed') {
     return completionSuccess(context, current, 'none');
   }
+  if (current.status === 'completed') {
+    if (!request.cash_collection) return completionSuccess(context, current, 'none');
+    if (!context.permissionCodes.includes('payments.manage')) {
+      throw new ForbiddenError('Payment management permission is required to record cash.');
+    }
+    if (
+      BigInt(request.cash_collection.amount_tendered_minor) <
+      BigInt(current.price_snapshot.due_now_minor)
+    ) {
+      throw new ValidationError('Cash tendered cannot be less than the amount due.');
+    }
+    if ((await readReservationPaymentStatus(context, reservationId)) === 'paid') {
+      return completionSuccess(context, current, 'none');
+    }
+    const verified = await verifyReservationPaymentByStaff(
+      childContext(context, 'verify'),
+      reservationId,
+      {
+        version: current.version,
+        verified_amount_minor: current.price_snapshot.due_now_minor,
+      },
+      {
+        requireRail: 'cash',
+        cashTenderedMinor: request.cash_collection.amount_tendered_minor,
+        allowMissingPaymentEvidence: true,
+      },
+    );
+    if (!verified.body.success) return { status: verified.status, body: verified.body };
+    return completionSuccess(context, verified.body.data.reservation, 'none');
+  }
   if (current.status !== 'held' && current.status !== 'pending_confirmation') {
     throw new InvalidReservationTransitionError(
       `Reservation cannot be completed from ${current.status}.`,
@@ -70,10 +105,16 @@ export async function completeStaffReservationCommand(
   }
   if (
     request.cash_collection &&
-    BigInt(request.cash_collection.amount_tendered_minor) < BigInt(current.price_snapshot.due_now_minor)
+    BigInt(request.cash_collection.amount_tendered_minor) <
+      BigInt(current.price_snapshot.due_now_minor)
   ) {
     throw new ValidationError('Cash tendered cannot be less than the amount due.');
   }
+  const pastPaymentRequirement = await assertPastCashCollectionConfirmed(
+    context,
+    reservationId,
+    request.cash_collection !== undefined,
+  );
 
   let pendingReservation: ReservationSummary;
   if (current.status === 'held') {
@@ -121,8 +162,36 @@ export async function completeStaffReservationCommand(
 
   if (request.cash_collection) {
     if (!context.permissionCodes.includes('payments.manage')) {
-      return completionSuccess(context, pendingReservation, 'merchant_review');
+      // The explicit cash intent is not applied without payment authority. A past booking may
+      // still be recorded as completed with payment outstanding; future bookings keep the normal
+      // merchant-review gate below.
+    } else {
+      const verified = await verifyReservationPaymentByStaff(
+        childContext(context, 'verify'),
+        reservationId,
+        {
+          version: pendingReservation.version,
+          verified_amount_minor: pendingReservation.price_snapshot.due_now_minor,
+        },
+        {
+          requireRail: 'cash',
+          cashTenderedMinor: request.cash_collection.amount_tendered_minor,
+        },
+      );
+      if (!verified.body.success) {
+        return { status: verified.status, body: verified.body };
+      }
+      pendingReservation = verified.body.data.reservation;
     }
+  } else if (
+    pastPaymentRequirement.due_elapsed &&
+    pastPaymentRequirement.due_now_minor > 0 &&
+    pastPaymentRequirement.payment_rail !== null &&
+    pastPaymentRequirement.payment_rail !== 'cash' &&
+    pastPaymentRequirement.payment_status === 'pending' &&
+    context.permissionCodes.includes('payments.manage') &&
+    context.permissionCodes.includes('evidence.verify')
+  ) {
     const verified = await verifyReservationPaymentByStaff(
       childContext(context, 'verify'),
       reservationId,
@@ -130,14 +199,33 @@ export async function completeStaffReservationCommand(
         version: pendingReservation.version,
         verified_amount_minor: pendingReservation.price_snapshot.due_now_minor,
       },
-      {
-        requireRail: 'cash',
-        cashTenderedMinor: request.cash_collection.amount_tendered_minor,
-      },
+      { allowMissingPaymentEvidence: true },
     );
-    if (!verified.body.success) {
-      return { status: verified.status, body: verified.body };
-    }
+    if (!verified.body.success) return { status: verified.status, body: verified.body };
+    pendingReservation = verified.body.data.reservation;
+  }
+
+  const historical = await completePastStaffReservation(
+    childContext(context, 'historical'),
+    reservationId,
+    {
+      version: pendingReservation.version,
+      cashCollectionConfirmed: request.cash_collection !== undefined,
+    },
+  );
+  if (historical?.body.success) {
+    const paymentStatus = await readReservationPaymentStatus(context, reservationId);
+    const paymentOutstanding =
+      BigInt(pendingReservation.price_snapshot.due_now_minor) > 0n && paymentStatus !== 'paid';
+    return completionSuccess(
+      context,
+      historical.body.data.reservation,
+      paymentOutstanding ? 'payment_verification' : 'none',
+    );
+  }
+
+  if (request.cash_collection && !context.permissionCodes.includes('payments.manage')) {
+    return completionSuccess(context, pendingReservation, 'merchant_review');
   }
 
   if (!hasMerchantReviewAuthority(context.permissionCodes)) {
@@ -179,7 +267,7 @@ function hasMerchantReviewAuthority(permissions: PermissionCode[]): boolean {
 
 function childContext(
   context: StaffReservationCompletionContext,
-  stage: 'submit' | 'verify' | 'confirm',
+  stage: 'submit' | 'verify' | 'confirm' | 'historical',
 ): ReservationReviewContext {
   const digest = createHash('sha256')
     .update(`${context.idempotencyKey}:${stage}`, 'utf8')
@@ -199,7 +287,11 @@ function completionSuccess(
   reservation: ReservationSummary,
   nextAction: 'none' | 'merchant_review' | 'payment_verification',
 ): ReservationReviewCommandResponse<StaffReservationCompleteResponse> {
-  if (reservation.status !== 'pending_confirmation' && reservation.status !== 'confirmed') {
+  if (
+    reservation.status !== 'pending_confirmation' &&
+    reservation.status !== 'confirmed' &&
+    reservation.status !== 'completed'
+  ) {
     throw new StateConflictError('Reservation completion response has an invalid lifecycle state.');
   }
   const data = staffReservationCompleteResponse.parse({

@@ -160,29 +160,50 @@ describe('reservation contracts', () => {
     ).toBe(false);
   });
 
-  it('accepts multi-line staff rebooking only when the compatibility variant matches line one', () => {
-    const secondVariant = '00000000-0000-4000-8000-000000000012';
+  it('accepts up to ten new-booking garments and rejects ambiguous or oversized item lists', () => {
+    const extraVariants = Array.from(
+      { length: 9 },
+      (_, index) => `00000000-0000-4000-8000-${String(index + 20).padStart(12, '0')}`,
+    );
     expect(
       staffReservationCreateRequest.safeParse({
         ...baseStaffCreate,
-        lines: [{ variant_id: ids.variant }, { variant_id: secondVariant }],
+        additional_variant_ids: extraVariants,
       }).success,
     ).toBe(true);
     expect(
       staffReservationCreateRequest.safeParse({
         ...baseStaffCreate,
-        lines: [{ variant_id: secondVariant }],
+        additional_variant_ids: [...extraVariants, ids.variant],
       }).success,
     ).toBe(false);
-    expect(staffReservationCreateRequest.safeParse({ ...baseStaffCreate, lines: [] }).success).toBe(false);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        additional_variant_ids: [ids.variant],
+      }).success,
+    ).toBe(false);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        additional_variant_ids: [extraVariants[0], extraVariants[0]],
+      }).success,
+    ).toBe(false);
+    expect(
+      staffReservationCreateRequest.safeParse({
+        ...baseStaffCreate,
+        additional_variant_ids: [ids.variant],
+        lines: [{ variant_id: ids.variant }],
+      }).success,
+    ).toBe(false);
   });
 
-  it('accepts multi-line staff rebooking only when the compatibility variant matches line one', () => {
+  it('accepts duplicate copied variants in the legacy multi-line rebooking shape', () => {
     const secondVariant = '00000000-0000-4000-8000-000000000012';
     expect(
       staffReservationCreateRequest.safeParse({
         ...baseStaffCreate,
-        lines: [{ variant_id: ids.variant }, { variant_id: secondVariant }],
+        lines: [{ variant_id: ids.variant }, { variant_id: ids.variant }, { variant_id: secondVariant }],
       }).success,
     ).toBe(true);
     expect(
@@ -416,6 +437,20 @@ describe('reservation contracts', () => {
       staffReservationCompleteResponse.safeParse({
         reservation: { ...baseSummary, status: 'confirmed', version: 3 },
         completion_state: 'pending_confirmation',
+        next_action: 'merchant_review',
+      }).success,
+    ).toBe(false);
+    expect(
+      staffReservationCompleteResponse.safeParse({
+        reservation: { ...baseSummary, status: 'completed', version: 3 },
+        completion_state: 'completed',
+        next_action: 'payment_verification',
+      }).success,
+    ).toBe(true);
+    expect(
+      staffReservationCompleteResponse.safeParse({
+        reservation: { ...baseSummary, status: 'completed', version: 3 },
+        completion_state: 'completed',
         next_action: 'merchant_review',
       }).success,
     ).toBe(false);

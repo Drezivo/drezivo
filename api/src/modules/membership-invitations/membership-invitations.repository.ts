@@ -3,6 +3,7 @@ import type { PoolClient } from 'pg';
 export interface InvitationRow {
   id: string;
   tenant_id: string;
+  claimed_membership_id: string | null;
   recipient_email_digest: string;
   recipient_email_ciphertext: string;
   status: 'pending' | 'accepted' | 'revoked' | 'expired';
@@ -29,6 +30,11 @@ export interface OwnerInvitationRow extends SafeInvitationRow {
 export interface InvitationDispatchSnapshot {
   invitation: InvitationRow;
   clerk_org_id: string;
+}
+
+export interface AcceptedInvitationMembership {
+  claimed_membership_id: string | null;
+  membership_status: string | null;
 }
 
 interface InvitationDispatchQueryRow extends InvitationRow {
@@ -74,16 +80,82 @@ export async function expirePendingInvitations(
   );
 }
 
-export async function findInvitationByDigest(
+export async function findPendingInvitationByDigest(
   client: PoolClient,
   tenantId: string,
   digest: string,
 ): Promise<InvitationRow | null> {
   const result = await client.query<InvitationRow>(
-    `SELECT id, tenant_id, recipient_email_digest, recipient_email_ciphertext, status,
+    `SELECT id, tenant_id, claimed_membership_id, recipient_email_digest,
+            recipient_email_ciphertext, status,
             expires_at, clerk_invitation_id, business_key, dispatch_version, created_at, updated_at
        FROM membership_invitation
+      WHERE tenant_id = $1 AND recipient_email_digest = $2 AND status = 'pending'
+      FOR UPDATE`,
+    [tenantId, digest],
+  );
+  return result.rows[0] ?? null;
+}
+
+/** Lock accepted invitation history and its local memberships before deciding whether to re-invite. */
+export async function findAcceptedInvitationMembershipsByDigest(
+  client: PoolClient,
+  tenantId: string,
+  digest: string,
+): Promise<AcceptedInvitationMembership[]> {
+  const invitations = await client.query<{ claimed_membership_id: string | null }>(
+    `SELECT claimed_membership_id
+       FROM membership_invitation
+      WHERE tenant_id = $1 AND recipient_email_digest = $2 AND status = 'accepted'
+      ORDER BY created_at DESC, id DESC
+      FOR UPDATE`,
+    [tenantId, digest],
+  );
+  if (invitations.rows.length === 0) return [];
+
+  const membershipIds = [
+    ...new Set(
+      invitations.rows.flatMap((row) =>
+        row.claimed_membership_id ? [row.claimed_membership_id] : [],
+      ),
+    ),
+  ];
+  const memberships =
+    membershipIds.length === 0
+      ? []
+      : (
+          await client.query<{ id: string; status: string }>(
+            `SELECT id, status
+           FROM membership
+          WHERE tenant_id = $1 AND id = ANY($2::uuid[])
+          ORDER BY id
+          FOR UPDATE`,
+            [tenantId, membershipIds],
+          )
+        ).rows;
+  const statusById = new Map(memberships.map((row) => [row.id, row.status]));
+  return invitations.rows.map((row) => ({
+    claimed_membership_id: row.claimed_membership_id,
+    membership_status: row.claimed_membership_id
+      ? (statusById.get(row.claimed_membership_id) ?? null)
+      : null,
+  }));
+}
+
+export async function findReusableInvitationByDigest(
+  client: PoolClient,
+  tenantId: string,
+  digest: string,
+): Promise<InvitationRow | null> {
+  const result = await client.query<InvitationRow>(
+    `SELECT id, tenant_id, claimed_membership_id, recipient_email_digest,
+            recipient_email_ciphertext, status, expires_at, clerk_invitation_id,
+            business_key, dispatch_version, created_at, updated_at
+       FROM membership_invitation
       WHERE tenant_id = $1 AND recipient_email_digest = $2
+        AND status IN ('revoked', 'expired')
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1
       FOR UPDATE`,
     [tenantId, digest],
   );
@@ -94,6 +166,7 @@ export async function insertInvitation(
   client: PoolClient,
   input: {
     tenantId: string;
+    id: string;
     digest: string;
     ciphertext: string;
     businessKey: string;
@@ -101,11 +174,12 @@ export async function insertInvitation(
 ): Promise<InvitationRow> {
   const result = await client.query<InvitationRow>(
     `INSERT INTO membership_invitation
-       (tenant_id, recipient_email_digest, recipient_email_ciphertext, business_key, expires_at)
-     VALUES ($1, $2, $3, $4, now() + interval '7 days')
-     RETURNING id, tenant_id, recipient_email_digest, recipient_email_ciphertext, status,
+       (id, tenant_id, recipient_email_digest, recipient_email_ciphertext, business_key, expires_at)
+     VALUES ($1, $2, $3, $4, $5, now() + interval '7 days')
+     RETURNING id, tenant_id, claimed_membership_id, recipient_email_digest,
+               recipient_email_ciphertext, status,
                expires_at, clerk_invitation_id, business_key, dispatch_version, created_at, updated_at`,
-    [input.tenantId, input.digest, input.ciphertext, input.businessKey],
+    [input.id, input.tenantId, input.digest, input.ciphertext, input.businessKey],
   );
   const row = result.rows[0];
   if (!row) throw new Error('Invitation insert returned no row.');
@@ -118,7 +192,8 @@ export async function lockInvitation(
   invitationId: string,
 ): Promise<InvitationRow | null> {
   const result = await client.query<InvitationRow>(
-    `SELECT id, tenant_id, recipient_email_digest, recipient_email_ciphertext, status,
+    `SELECT id, tenant_id, claimed_membership_id, recipient_email_digest,
+            recipient_email_ciphertext, status,
             expires_at, clerk_invitation_id, business_key, dispatch_version, created_at, updated_at
        FROM membership_invitation
       WHERE tenant_id = $1 AND id = $2
@@ -135,7 +210,8 @@ export async function lockInvitationForDispatch(
   invitationId: string,
 ): Promise<InvitationDispatchSnapshot | null> {
   const result = await client.query<InvitationDispatchQueryRow>(
-    `SELECT i.id, i.tenant_id, i.recipient_email_digest, i.recipient_email_ciphertext, i.status,
+    `SELECT i.id, i.tenant_id, i.claimed_membership_id, i.recipient_email_digest,
+            i.recipient_email_ciphertext, i.status,
             i.expires_at, i.clerk_invitation_id, i.business_key, i.dispatch_version,
             i.created_at, i.updated_at, t.clerk_org_id
        FROM membership_invitation i
@@ -180,7 +256,8 @@ export async function updateInvitationForResend(
         SET status = 'pending', expires_at = now() + interval '7 days',
             dispatch_version = dispatch_version + 1, updated_at = now()
       WHERE tenant_id = $1 AND id = $2 AND status IN ('pending', 'expired', 'revoked')
-      RETURNING id, tenant_id, recipient_email_digest, recipient_email_ciphertext, status,
+      RETURNING id, tenant_id, claimed_membership_id, recipient_email_digest,
+                recipient_email_ciphertext, status,
                 expires_at, clerk_invitation_id, business_key, dispatch_version, created_at, updated_at`,
     [tenantId, invitationId],
   );
@@ -197,11 +274,40 @@ export async function revokeInvitation(
         SET status = CASE WHEN status = 'pending' THEN 'revoked' ELSE status END,
             updated_at = now()
       WHERE tenant_id = $1 AND id = $2
-      RETURNING id, tenant_id, recipient_email_digest, recipient_email_ciphertext, status,
+      RETURNING id, tenant_id, claimed_membership_id, recipient_email_digest,
+                recipient_email_ciphertext, status,
                 expires_at, clerk_invitation_id, business_key, dispatch_version, created_at, updated_at`,
     [tenantId, invitationId],
   );
   return result.rows[0] ?? null;
+}
+
+/** Keep a re-invite behind the durable Clerk removal for the previously accepted member. */
+export async function hasPendingPriorMembershipRemoval(
+  client: PoolClient,
+  tenantId: string,
+  digest: string,
+): Promise<boolean> {
+  const result = await client.query<{ pending: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+         FROM membership_invitation accepted
+         JOIN membership member
+           ON member.tenant_id = accepted.tenant_id
+          AND member.id = accepted.claimed_membership_id
+         JOIN outbox_event removal
+           ON removal.tenant_id = member.tenant_id
+          AND removal.event_type = 'clerk.membership.remove_requested'
+          AND removal.payload ->> 'membership_id' = member.id::text
+        WHERE accepted.tenant_id = $1
+          AND accepted.recipient_email_digest = $2
+          AND accepted.status = 'accepted'
+          AND member.status = 'removed'
+          AND removal.status IN ('pending', 'leased')
+     ) AS pending`,
+    [tenantId, digest],
+  );
+  return result.rows[0]?.pending === true;
 }
 
 export async function insertInvitationOutbox(

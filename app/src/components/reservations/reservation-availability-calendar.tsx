@@ -12,29 +12,79 @@ import { Calendar } from "@/components/ui/calendar";
 import { DatePickerField } from "@/components/ui/date-picker-field";
 import { cn } from "@/lib/utils";
 
+export type ReservationCalendarAvailabilityItem = {
+  label: string;
+  response: StaffReservationAvailabilityCalendarResponse;
+};
+
 export function ReservationAvailabilityCalendar({
-  availability,
+  availabilityItems,
   loading,
+  error,
   month,
   onMonthChange,
   pickupDate,
   dueDate,
   onRangeChange,
-  timeZone,
 }: {
-  availability: StaffReservationAvailabilityCalendarResponse | null;
+  availabilityItems: ReservationCalendarAvailabilityItem[];
   loading: boolean;
+  error: string | null;
   month: Date;
   onMonthChange: (month: Date) => void;
   pickupDate: string;
   dueDate: string;
   onRangeChange: (range: { pickupDate: string; dueDate: string }) => void;
-  timeZone: string;
 }) {
   const byDate = useMemo(
-    () => new Map(availability?.days.map((day) => [day.date, day]) ?? []),
-    [availability?.days]
+    () => {
+      const firstResponse = availabilityItems[0]?.response;
+      if (!firstResponse)
+        return new Map<
+          string,
+          { day: StaffReservationAvailabilityCalendarDay; conflicts: string[] }
+        >();
+
+      return new Map(
+        firstResponse.days.map((firstDay) => {
+          const itemDays = availabilityItems.map((item) =>
+            item.response.days.find((day) => day.date === firstDay.date)
+          );
+          const conflicts = availabilityItems
+            .filter((item, index) => {
+              const day = itemDays[index];
+              return !day || day.state === "unavailable" || day.available_assets === 0;
+            })
+            .map((item) => item.label);
+          const availableAssets = Math.min(
+            ...itemDays.map((day) => day?.available_assets ?? 0)
+          );
+          const readyAssets = Math.min(...itemDays.map((day) => day?.ready_assets ?? 0));
+
+          return [
+            firstDay.date,
+            {
+              day: {
+                ...firstDay,
+                state:
+                  conflicts.length > 0
+                    ? "unavailable"
+                    : availableAssets < readyAssets
+                      ? "limited"
+                      : "available",
+                available_assets: availableAssets,
+                ready_assets: readyAssets,
+              },
+              conflicts,
+            },
+          ] as const;
+        })
+      );
+    },
+    [availabilityItems]
   );
+  const availabilityUnavailable =
+    loading || Boolean(error) || availabilityItems.length === 0;
   const selected = useMemo<DateRange | undefined>(() => {
     const from = parseCalendarDate(pickupDate);
     if (!from) return undefined;
@@ -42,31 +92,48 @@ export function ReservationAvailabilityCalendar({
   }, [dueDate, pickupDate]);
   // The pickup date is Day 1, so an N-day package spans N - 1 nights: a 3-day rental picked up
   // Oct 5 is returned Oct 7. react-day-picker's range `min` counts nights.
-  const includedRentalDays = availability
-    ? Math.floor(availability.pricing.minimum_duration_minutes / (24 * 60))
-    : 0;
-  const minimumNights = Math.max(0, includedRentalDays - 1);
-  const branchToday = parseCalendarDate(todayInTimeZone(timeZone));
-  const disabledDates = useMemo(
-    () =>
-      availability?.days
-        .filter((day) => day.state === "unavailable")
-        .map((day) => parseCalendarDate(day.date))
-        .filter((date): date is Date => date !== null) ?? [],
-    [availability?.days]
+  const minimumDurationMinutes = Math.max(
+    0,
+    ...availabilityItems.map((item) => item.response.pricing.minimum_duration_minutes)
   );
+  const includedRentalDays = Math.floor(minimumDurationMinutes / (24 * 60));
+  const minimumNights = Math.max(0, includedRentalDays - 1);
+  const disabledDates = useMemo(
+    () => [...byDate.values()]
+      .filter(({ day }) => day.state === "unavailable")
+      .map(({ day }) => parseCalendarDate(day.date))
+      .filter((date): date is Date => date !== null),
+    [byDate]
+  );
+  const conflictsByItem = useMemo(() => {
+    if (loading || error || availabilityItems.length < 2 || !pickupDate) return [];
+
+    const selectedEnd = dueDate && dueDate >= pickupDate ? dueDate : pickupDate;
+    return availabilityItems
+      .map((item) => ({
+        label: item.label,
+        dates: item.response.days
+          .filter(
+            (day) =>
+              day.date >= pickupDate &&
+              day.date <= selectedEnd &&
+              (day.state === "unavailable" || day.available_assets === 0)
+          )
+          .map((day) => day.date),
+      }))
+      .filter((item) => item.dates.length > 0);
+  }, [availabilityItems, dueDate, error, loading, pickupDate]);
   const earliestCandidateReturn =
     selected?.from && !selected.to && minimumNights > 0
       ? addCalendarDays(selected.from, minimumNights)
       : null;
 
   const [fieldNotice, setFieldNotice] = useState<string | null>(null);
-  const todayIso = todayInTimeZone(timeZone);
 
   /** First unavailable day inside the range, so a typed range cannot skip over a busy day. */
   const firstBusyDate = (start: string, end: string): string | null => {
     for (let day = start; day <= end; day = addIsoDays(day, 1)) {
-      if (byDate.get(day)?.state === "unavailable") return day;
+      if (byDate.get(day)?.day.state === "unavailable") return day;
     }
     return null;
   };
@@ -105,8 +172,11 @@ export function ReservationAvailabilityCalendar({
     ...buttonProps
   }: DayButtonProps) => {
     const isoDate = toCalendarIsoDate(day.date);
-    const dayAvailability = byDate.get(isoDate);
-    const label = availabilityLabel(dayAvailability);
+    const dayResult = byDate.get(isoDate);
+    const dayAvailability = dayResult?.day;
+    const label = dayResult?.conflicts.length
+      ? `Unavailable: ${dayResult.conflicts.join(", ")} (${availabilityLabel(dayAvailability)})`
+      : availabilityLabel(dayAvailability);
     const isSelected =
       modifiers.selected ||
       modifiers.range_start ||
@@ -143,7 +213,9 @@ export function ReservationAvailabilityCalendar({
             (!dayAvailability || dayAvailability?.state === "available") && "bg-dashboard-muted/50"
           )}
         />
-        <span className="hidden min-h-4 truncate text-xs leading-tight sm:block">{label}</span>
+        <span className="hidden min-h-4 w-full max-w-full truncate px-0.5 text-xs leading-tight sm:block">
+          {label}
+        </span>
       </button>
     );
   };
@@ -158,12 +230,16 @@ export function ReservationAvailabilityCalendar({
           selected={selected}
           min={minimumNights}
           resetOnSelect
+          // Staff may pick past dates to record a booking that already happened.
           disabled={[
-            ...(branchToday ? [{ before: branchToday }] : []),
-            ...disabledDates,
+            (date: Date) =>
+              availabilityUnavailable ||
+              !byDate.has(toCalendarIsoDate(date)) ||
+              byDate.get(toCalendarIsoDate(date))?.day.state === "unavailable",
           ]}
           excludeDisabled
           onSelect={(range, triggerDate) => {
+            if (availabilityUnavailable) return;
             setFieldNotice(null);
             if (
               minimumNights === 0 &&
@@ -186,7 +262,7 @@ export function ReservationAvailabilityCalendar({
           }}
           components={{ DayButton: AvailabilityDayButton }}
           classNames={{
-            month_grid: "w-full min-w-0 border-collapse",
+            month_grid: "w-full min-w-0 table-fixed border-collapse",
             weekdays: "flex w-full min-w-0",
             weekday: "min-w-0 flex-1 py-1.5 text-center text-[10px] font-medium text-dashboard-muted sm:py-2 sm:text-xs",
             week: "mt-0.5 flex w-full min-w-0 sm:mt-1",
@@ -212,9 +288,27 @@ export function ReservationAvailabilityCalendar({
         />
       </div>
 
+      {conflictsByItem.length > 0 ? (
+        <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-dashboard-danger" role="alert">
+          <p className="font-medium">Selected dates unavailable for:</p>
+          <ul className="mt-1 list-disc pl-5 text-xs">
+            {conflictsByItem.map((item) => (
+              <li key={item.label}>
+                {item.label}: {formatDateRanges(item.dates)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {loading ? (
         <p className="text-xs text-dashboard-muted" role="status">
-          Loading variant availability…
+          Loading availability for selected garments…
+        </p>
+      ) : null}
+      {error ? (
+        <p className="text-xs text-dashboard-danger" role="alert">
+          {error}
         </p>
       ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -224,8 +318,13 @@ export function ReservationAvailabilityCalendar({
             ariaLabel="Date from"
             placeholder="Pickup date"
             value={pickupDate}
-            min={todayIso}
             disabledDates={disabledDates}
+            disabledDate={(date) =>
+              availabilityUnavailable ||
+              !byDate.has(toCalendarIsoDate(date)) ||
+              byDate.get(toCalendarIsoDate(date))?.day.state === "unavailable"
+            }
+            disabled={availabilityUnavailable}
             onChange={choosePickupFromField}
           />
         </div>
@@ -235,8 +334,13 @@ export function ReservationAvailabilityCalendar({
             ariaLabel="Date to"
             placeholder={pickupDate ? "Return date" : "Choose pickup first"}
             value={dueDate}
-            min={pickupDate ? addIsoDays(pickupDate, minimumNights) : todayIso}
-            disabled={!pickupDate}
+            {...(pickupDate ? { min: addIsoDays(pickupDate, minimumNights) } : {})}
+            disabledDate={(date) =>
+              availabilityUnavailable ||
+              !byDate.has(toCalendarIsoDate(date)) ||
+              byDate.get(toCalendarIsoDate(date))?.day.state === "unavailable"
+            }
+            disabled={!pickupDate || availabilityUnavailable}
             disabledDates={disabledDates}
             onChange={chooseReturnFromField}
           />
@@ -253,7 +357,7 @@ export function ReservationAvailabilityCalendar({
         </p>
       ) : null}
       <p className="text-xs text-dashboard-muted">
-        Day colors show when this variant&apos;s serialized garments are actually occupied. Your full rental interval plus post-return recovery is revalidated after pickup and return times are selected.
+        A date is available only when every selected garment is free. The full rental interval plus post-return recovery is revalidated after pickup and return times are selected.
       </p>
     </div>
   );
@@ -279,6 +383,21 @@ function availabilityLabel(day: StaffReservationAvailabilityCalendarDay | undefi
   if (day.maintenance_assets > 0) return "Maintenance";
   if (day.transfer_assets > 0) return "Unavailable";
   return "Unavailable";
+}
+
+function formatDateRanges(dates: string[]): string {
+  const sorted = [...new Set(dates)].sort();
+  const ranges: Array<[string, string]> = [];
+  for (const date of sorted) {
+    const previous = ranges[ranges.length - 1];
+    if (previous && addIsoDays(previous[1], 1) === date) previous[1] = date;
+    else ranges.push([date, date]);
+  }
+  return ranges
+    .map(([start, end]) =>
+      start === end ? formatIsoForNotice(start) : `${formatIsoForNotice(start)}–${formatIsoForNotice(end)}`
+    )
+    .join(", ");
 }
 
 export function toCalendarIsoDate(date: Date): string {

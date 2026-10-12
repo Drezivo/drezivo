@@ -295,6 +295,11 @@ describe('TBF-040 membership invitations', async () => {
 
   it('returns a state conflict rather than reinserting an accepted recipient', async () => {
     const context = await createOwnerContext('user_tbf040_reinvite_accepted');
+    const acceptedMembershipId = await createTestMembership(
+      context.tenantId,
+      'user_tbf040_reinvite_accepted_member',
+      'frontdesk',
+    );
     const first = await createMembershipInvitation({
       ...context,
       requestId: 'req-tbf040-reinvite-accepted-1',
@@ -304,9 +309,12 @@ describe('TBF-040 membership invitations', async () => {
     const invitationId = String((first.body.data as { id: string }).id);
 
     await withTenantTransaction(context.tenantId, context.principalId, (client) =>
-      client.query(`UPDATE membership_invitation SET status = 'accepted' WHERE id = $1`, [
-        invitationId,
-      ]),
+      client.query(
+        `UPDATE membership_invitation
+            SET status = 'accepted', claimed_membership_id = $2
+          WHERE id = $1`,
+        [invitationId, acceptedMembershipId],
+      ),
     );
 
     const duplicate = await createMembershipInvitation({
