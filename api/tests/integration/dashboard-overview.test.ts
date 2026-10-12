@@ -457,7 +457,7 @@ describe('Dashboard overview API', async () => {
                     'email', 'secret@example.test',
                     'phone', $16::text
                   ),
-                  '{}'::jsonb, 'PHP', $14, $17, $14::bigint + $17::bigint,
+                  '{}'::jsonb, 'PHP', $14, $17, $14::int + $17::int,
                   CASE WHEN $15::int IS NULL THEN NULL ELSE
                     (((date_trunc('month', statement_timestamp() AT TIME ZONE clock.timezone)
                        + make_interval(months => $15::int))::date + 5)::timestamp AT TIME ZONE clock.timezone)
