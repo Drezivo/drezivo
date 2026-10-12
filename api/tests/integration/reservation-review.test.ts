@@ -603,6 +603,19 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       audit: 1,
       outbox: 1,
     });
+    const verificationCount = await withTenantTransaction(
+      seed.tenantId,
+      seed.principalId,
+      async (client) => {
+        const result = await client.query<{ count: number }>(
+          `SELECT count(*)::int AS count FROM payment_verification
+            WHERE tenant_id = $1 AND payment_id = $2`,
+          [seed.tenantId, held.paymentId],
+        );
+        return requireRow(result.rows, 'cash payment verification count').count;
+      },
+    );
+    expect(verificationCount).toBe(1);
   });
 
   it('keeps cash outstanding when an unauthorized staff member confirms receipt on a past booking', async () => {

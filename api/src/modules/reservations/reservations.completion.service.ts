@@ -79,6 +79,9 @@ export async function completeStaffReservationCommand(
     ) {
       throw new ValidationError('Cash tendered cannot be less than the amount due.');
     }
+    if ((await readReservationPaymentStatus(context, reservationId)) === 'paid') {
+      return completionSuccess(context, current, 'none');
+    }
     const verified = await verifyReservationPaymentByStaff(
       childContext(context, 'verify'),
       reservationId,

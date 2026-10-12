@@ -148,14 +148,18 @@ describe('multi-garment reservations', async () => {
     });
     expect(created.status).toBe(201);
     if (created.body.success !== true) throw new Error('Expected historical garments to be held.');
-    const reservationId = created.body.data.reservation.id;
+    const reservation = created.body.data.reservation;
+    const reservationId = reservation.id;
 
     const completed = await service.completeStaffReservation(
       context(seed, 'past-complete'),
       reservationId,
       {
-        version: created.body.data.reservation.version,
+        version: reservation.version,
         terms_accepted: true,
+        cash_collection: {
+          amount_tendered_minor: reservation.price_snapshot.due_now_minor,
+        },
       },
     );
     expect(completed.body).toMatchObject({
