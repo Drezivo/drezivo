@@ -454,8 +454,7 @@ export function DashboardOverview() {
                   Business Performance
                 </CardTitle>
                 <p className="mt-1 text-xs text-dashboard-muted">
-                  Completed Rental Value is month-to-date; Projected Rental Value combines completed
-                  rental fees to date with upcoming confirmed bookings, excluding deposits.
+                  Completed rental value excludes deposits; new customers are tenant-wide.
                 </p>
               </div>
               <CardAction>
@@ -512,20 +511,6 @@ export function DashboardOverview() {
                     overview.business_performance.new_customers.previous
                   )}
                 />
-                {overview.business_performance.projected_rental_value ? (
-                  <div className="col-span-2">
-                    <PerformanceMetric
-                      label="Projected Rental Value"
-                      value={formatMoneyMinor(
-                        overview.business_performance.projected_rental_value.current_minor,
-                        overview.business_performance.currency
-                      )}
-                      comparison={projectionNote(
-                        overview.business_performance.projected_rental_value.reservations
-                      )}
-                    />
-                  </div>
-                ) : null}
               </div>
             </CardContent>
           </Card>
@@ -602,12 +587,6 @@ function ScheduleRow({
       </TableCell>
     </TableRow>
   );
-}
-
-/** Says what the projection is made of, since it is not yet earned money. */
-function projectionNote(reservations: number): string {
-  if (reservations === 0) return "Completed rental fees to date, with no upcoming confirmed bookings";
-  return `Completed rental fees to date + ${reservations.toLocaleString("en-PH")} upcoming confirmed ${reservations === 1 ? "reservation" : "reservations"}`;
 }
 
 function PerformanceMetric({
