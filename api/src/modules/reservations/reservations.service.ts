@@ -64,7 +64,6 @@ import {
 } from '../../shared/errors.js';
 import { resolveReservationCatalogueQuoteSelection } from '../catalogue/catalogue-allocation.service.js';
 import {
-  assertRequestedPickupNotInPast,
   resolveReservationQuote,
   computeRentalTotal,
   type ReservationQuote,
@@ -183,8 +182,8 @@ export async function getStaffReservationAvailabilityCheck(
   query: StaffReservationAvailabilityCheckQuery,
 ): Promise<StaffReservationAvailabilityCheckResponse> {
   assertReservationBookingContext(input);
+  // Staff availability may look at past dates so a past booking can be entered.
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
-    await assertRequestedPickupNotInPast(client, query.pickup_at);
     const requestedInterval = { start: query.pickup_at, end: query.due_at };
     const catalogue = await resolveReservationCatalogueQuoteSelection(client, {
       tenantId: tenantId.parse(input.tenantId),
@@ -266,6 +265,7 @@ export async function getStaffReservationQuote(
     resolveReservationQuote(client, {
       tenantId: input.tenantId,
       branchId: input.branchId,
+      allowPastPickup: true,
       request: {
         variant_id: variantId,
         requested_interval: request.requested_interval,
@@ -738,6 +738,7 @@ function toReservationListItem(
       deposit_minor: String(row.line_deposit_minor),
       currency: row.line_currency,
     },
+    ...(row.line_count !== null ? { line_count: Number(row.line_count) } : {}),
     fulfillment_method: row.fulfillment_method,
     pickup_at: row.pickup_at.toISOString(),
     due_at: row.due_at.toISOString(),

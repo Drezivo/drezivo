@@ -193,14 +193,20 @@ export async function upsertClaimBranchGrant(
 
 export async function acceptClaimInvitation(
   client: PoolClient,
-  input: { tenantId: string; invitationId: string; providerInvitationId: string },
+  input: {
+    tenantId: string;
+    invitationId: string;
+    membershipId: string;
+    providerInvitationId: string;
+  },
 ): Promise<boolean> {
   const result = await client.query(
     `UPDATE membership_invitation
-        SET status = 'accepted', clerk_invitation_id = COALESCE(clerk_invitation_id, $3),
+        SET status = 'accepted', claimed_membership_id = $3,
+            clerk_invitation_id = COALESCE(clerk_invitation_id, $4),
             updated_at = now()
       WHERE tenant_id = $1 AND id = $2 AND status = 'pending' AND expires_at > now()`,
-    [input.tenantId, input.invitationId, input.providerInvitationId],
+    [input.tenantId, input.invitationId, input.membershipId, input.providerInvitationId],
   );
   return result.rowCount === 1;
 }

@@ -7,7 +7,7 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import type { CatalogueVariant, FulfillmentMethod, GuestReservationRequest, GuestReservationView, ItemDetail, PublicStorefront } from '@drezivo/contracts';
 
 import { createReservation, StorefrontApiError } from '@/lib/storefront-api';
-import { dateIn, formatDay, formatMinor, formatTime, rentalDays, zonedInstant } from '@/lib/storefront-format';
+import { dateIn, formatDay, formatMinor, formatTime, minimumRentalDays, rentalDays, zonedInstant } from '@/lib/storefront-format';
 
 import { lockPageScroll } from '../motion/scroll';
 import { Turnstile, TURNSTILE_SITE_KEY, type TurnstileHandle } from '../turnstile';
@@ -74,11 +74,6 @@ function reducer(state: State, action: Action): State {
 function estimateRentalMinor(variant: CatalogueVariant, days: number): bigint {
   if (variant.pricing_mode === 'daily') return BigInt(variant.rental_price_minor) * BigInt(days);
   return BigInt(variant.rental_price_minor) + BigInt(Math.max(0, days - minimumRentalDays(variant))) * BigInt(variant.extra_day_price_minor);
-}
-
-/** A fixed-duration price covers its included days, which is also the shortest rental the server accepts. */
-function minimumRentalDays(variant: CatalogueVariant): number {
-  return variant.pricing_mode === 'fixed_duration' ? Math.max(1, Math.ceil(variant.included_duration_minutes / 1440)) : 1;
 }
 
 const STEPS: Array<{ key: Step; label: string }> = [

@@ -26,6 +26,7 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import type { DrezivoApiError } from "@/lib/drezivo-api";
 import { displaySizeLabel } from "@/lib/catalogue-display";
+import { isPastBooking } from "@/lib/past-booking";
 import { cn } from "@/lib/utils";
 
 import type { ReservationRebookSource } from "./new-reservation-sheet";
@@ -43,6 +44,7 @@ import {
   RESERVATION_STATUS_CLASSES,
   RESERVATION_STATUS_LABELS,
 } from "./reservations-data";
+import { PaymentProof, usePaymentProof } from "./payment-proof";
 
 export function ReservationDetailsSheet({
   detail,
@@ -147,6 +149,12 @@ function ReservationDetails({
   const effectiveTimeZone = detail.timezone_snapshot || timeZone;
   const [failedImageLines, setFailedImageLines] = useState<Set<string>>(() => new Set());
   const [editing, setEditing] = useState(false);
+  const [paymentReceiptViewerOpen, setPaymentReceiptViewerOpen] = useState(false);
+  const canViewCompletedPaymentReceipts =
+    detail.status === "completed" &&
+    permissionCodes.includes("payments.manage") &&
+    permissionCodes.includes("evidence.verify");
+  const paymentProof = usePaymentProof(detail.id, canViewCompletedPaymentReceipts);
   const canEdit =
     detail.status === "confirmed" &&
     customer !== null &&
@@ -155,6 +163,7 @@ function ReservationDetails({
   useEffect(() => {
     setFailedImageLines(new Set());
     setEditing(false);
+    setPaymentReceiptViewerOpen(false);
   }, [detail.id]);
 
   return (
@@ -185,6 +194,11 @@ function ReservationDetails({
               className="whitespace-nowrap px-2 py-1 text-xs text-dashboard-muted"
             >
               {detail.booking_channel === "online" ? "Online booking" : "Walk-in"}
+            </Badge>
+          ) : null}
+          {isPastBooking(detail) ? (
+            <Badge variant="outline" className="whitespace-nowrap px-2 py-1 text-xs text-dashboard-muted">
+              Past booking
             </Badge>
           ) : null}
         </div>
@@ -461,6 +475,19 @@ function ReservationDetails({
           ) : (
             <p className="text-sm text-dashboard-muted">No payment intent is recorded yet.</p>
           )}
+          {canViewCompletedPaymentReceipts &&
+          detail.payment &&
+          !(paymentProof.kind === "ready" && paymentProof.receipts.length === 0) ? (
+            <>
+              <Separator className="my-4" />
+              <PaymentProof
+                state={paymentProof}
+                viewerOpen={paymentReceiptViewerOpen}
+                onViewerOpenChange={setPaymentReceiptViewerOpen}
+                heading="Payment receipt"
+              />
+            </>
+          ) : null}
         </DetailCard>
 
         <DetailCard title="Reservation lifecycle" icon={Clock3}>

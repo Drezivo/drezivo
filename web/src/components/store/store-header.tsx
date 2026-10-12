@@ -15,6 +15,7 @@ export function StoreHeader({ store }: { store: PublicStorefront }) {
   const menuButton = useRef<HTMLButtonElement>(null);
   const nav = storeNav(store);
   const home = `/s/${store.slug}`;
+  const reservationsOpen = store.reservations_open ?? store.booking_open;
 
   useEffect(() => setOpen(false), [pathname]);
   useEffect(() => {
@@ -63,11 +64,13 @@ export function StoreHeader({ store }: { store: PublicStorefront }) {
 
           <div className="flex items-center gap-2">
             {/* Phones get "Browse the collection" in the menu; .sf-button's display would beat `hidden`. */}
-            <span className="hidden sm:block">
-              <Link href={`${home}/catalog`} className="sf-button sf-button-outline">
-                Reserve
-              </Link>
-            </span>
+            {reservationsOpen ? (
+              <span className="hidden sm:block">
+                <Link href={`${home}/catalog`} className="sf-button sf-button-outline">
+                  Reserve
+                </Link>
+              </span>
+            ) : null}
             <button
               ref={menuButton}
               type="button"

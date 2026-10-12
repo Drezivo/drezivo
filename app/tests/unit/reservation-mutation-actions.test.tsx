@@ -637,7 +637,7 @@ describe("ReservationMutationActions", () => {
       renderActions(pendingManual("walk_in"));
 
       expect(screen.queryByRole("button", { name: "Verify Payment" })).not.toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Log Payment" }));
+      fireEvent.click(screen.getAllByRole("button", { name: "Log Payment" }).at(-1)!);
       expect(api.getReservationPaymentReceipts).not.toHaveBeenCalled();
       fireEvent.change(screen.getByLabelText("Merchant reference"), {
         target: { value: "MAYA-123" },
@@ -651,6 +651,78 @@ describe("ReservationMutationActions", () => {
         merchant_reference: "MAYA-123",
       });
       expect(screen.queryByText("Is this payment verified?")).not.toBeInTheDocument();
+    });
+
+    it("lets authorized staff record payment after completion without reopening the reservation", async () => {
+      const completedWalkIn = reservationDetail.parse({
+        ...pendingManual("walk_in"),
+        status: "completed",
+        completed_at: "2026-10-12T03:00:00.000Z",
+      });
+      api.verifyReservationPayment.mockResolvedValue({ data: {}, requestId: "req-follow-up" });
+      api.completeStaffReservation.mockResolvedValue({
+        data: {
+          completion_state: "completed",
+          next_action: "none",
+          reservation: { status: "completed" },
+        },
+        requestId: "req-follow-up-completion",
+      });
+      const callbacks = renderActions(completedWalkIn);
+
+      fireEvent.click(screen.getByRole("button", { name: "Log Payment" }));
+      expect(screen.getByText(/reservation will remain completed/i)).toBeInTheDocument();
+      fireEvent.click(screen.getAllByRole("button", { name: "Log Payment" }).at(-1)!);
+
+      await waitFor(() => expect(api.verifyReservationPayment).toHaveBeenCalledTimes(1));
+      expect(api.completeStaffReservation).toHaveBeenCalledWith(
+        completedWalkIn.id,
+        { version: completedWalkIn.version, terms_accepted: true },
+        expect.any(String)
+      );
+      expect(callbacks.onNotice).toHaveBeenCalledWith({
+        tone: "success",
+        message: "Payment recorded as paid. Reservation remains Completed.",
+      });
+    });
+
+    it("requires cash confirmation and sufficient tender for completed cash follow-up", async () => {
+      const completedCash = reservationDetail.parse({
+        ...confirmedDetail,
+        status: "completed",
+        completed_at: "2026-10-12T03:00:00.000Z",
+        payment: {
+          ...confirmedDetail.payment!,
+          status: "pending",
+          verified_at: null,
+        },
+      });
+      api.completeStaffReservation.mockResolvedValue({
+        data: {
+          completion_state: "completed",
+          next_action: "none",
+          reservation: { status: "completed" },
+        },
+        requestId: "req-cash-follow-up",
+      });
+      renderActions(completedCash);
+
+      fireEvent.click(screen.getByRole("button", { name: "Record Cash" }));
+      const submit = screen.getAllByRole("button", { name: "Record Cash" }).at(-1)!;
+      expect(submit).toBeDisabled();
+      fireEvent.change(screen.getByLabelText("Cash tendered"), { target: { value: "1000" } });
+      expect(submit).toBeDisabled();
+      fireEvent.click(screen.getByRole("checkbox", { name: "Cash received" }));
+      expect(submit).toBeDisabled();
+      fireEvent.change(screen.getByLabelText("Cash tendered"), { target: { value: "2000" } });
+      expect(submit).toBeEnabled();
+      fireEvent.click(submit);
+
+      await waitFor(() => expect(api.completeStaffReservation).toHaveBeenCalledTimes(1));
+      expect(api.completeStaffReservation.mock.calls[0]?.[1]).toMatchObject({
+        version: completedCash.version,
+        cash_collection: { amount_tendered_minor: "200000" },
+      });
     });
   });
 });

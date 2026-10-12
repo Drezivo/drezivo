@@ -34,6 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { isPastBooking } from "@/lib/past-booking";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { cn } from "@/lib/utils";
 
@@ -610,6 +611,12 @@ function ReservationTable({
                 <div className="min-w-0">
                   <p className="max-w-52 truncate font-medium text-dashboard-navy">
                     {reservation.line.name_snapshot}
+                    {reservation.line_count && reservation.line_count > 1 ? (
+                      <span className="ml-1 text-xs font-normal text-dashboard-muted">+{reservation.line_count - 1} more</span>
+                    ) : null}
+                    {isPastBooking(reservation) ? (
+                      <span className="ml-1 text-xs font-normal text-dashboard-muted">· Past booking</span>
+                    ) : null}
                   </p>
                   <p className="mt-1 text-xs text-dashboard-muted">
                     {formatMinorMoney(reservation.line.rental_minor, reservation.line.currency)}{" "}

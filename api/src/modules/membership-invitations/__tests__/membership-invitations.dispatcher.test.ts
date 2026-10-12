@@ -18,11 +18,16 @@ const { createMembershipInvitationDispatchHandler } =
   await import('../membership-invitations.dispatcher.js');
 const { clerkInvitationDispatchSource } =
   await import('../../../integrations/clerk/clerk.adapter.js');
+const { DeferredOutboxError } = await import('../../../worker/runner.js');
 
 const invitationId = '11111111-1111-4111-8111-111111111111';
 const tenantId = '22222222-2222-4222-8222-222222222222';
 
-function createHarness(options?: { status?: 'pending' | 'revoked'; version?: number }) {
+function createHarness(options?: {
+  status?: 'pending' | 'revoked';
+  version?: number;
+  priorRemovalPending?: boolean;
+}) {
   const query = vi.fn((sql: string) => {
     if (sql.includes('SELECT i.id')) {
       return {
@@ -43,6 +48,9 @@ function createHarness(options?: { status?: 'pending' | 'revoked'; version?: num
           },
         ],
       };
+    }
+    if (sql.includes('SELECT EXISTS')) {
+      return { rows: [{ pending: options?.priorRemovalPending ?? false }] };
     }
     if (sql.includes('UPDATE membership_invitation')) return { rows: [{ id: invitationId }] };
     return { rows: [] };
@@ -132,6 +140,24 @@ describe('membership invitation dispatch worker', () => {
       _leaseToken: 'lease',
     });
     expect(cancelled.clerk.createInvitation).not.toHaveBeenCalled();
+  });
+
+  it('defers dispatch while the previous local member removal is pending', async () => {
+    const { handler, clerk } = createHarness({ priorRemovalPending: true });
+    await expect(
+      handler({
+        id: 'outbox-removal-pending',
+        tenant_id: tenantId,
+        dedupe_key: 'invitation:dispatch:waiting-removal',
+        event_type: 'clerk.invitation.dispatch_requested',
+        payload: { invitation_id: invitationId, dispatch_version: 1, operation: 'create' },
+        attempts: 0,
+        max_attempts: 8,
+        _leaseToken: 'lease',
+      }),
+    ).rejects.toBeInstanceOf(DeferredOutboxError);
+    expect(clerk.createInvitation).not.toHaveBeenCalled();
+    expect(clerk.findInvitationByDispatchMarker).not.toHaveBeenCalled();
   });
 
   it('revokes the prior provider invitation before creating a resend', async () => {

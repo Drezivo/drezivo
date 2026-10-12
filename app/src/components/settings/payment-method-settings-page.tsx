@@ -26,6 +26,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { Input } from "@/components/ui/input";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { storefrontImageProblem, uploadStorefrontImage, type ImageUploadPurpose, type UploadIntent } from "@/lib/storefront-assets";
@@ -634,7 +635,17 @@ function useObjectUrl(file: File | null): string | null {
   return url;
 }
 
-function FilePreview({ url, contentType, label }: { url: string; contentType: string | null; label: string }) {
+function FilePreview({
+  url,
+  contentType,
+  label,
+  onOpenImage,
+}: {
+  url: string;
+  contentType: string | null;
+  label: string;
+  onOpenImage: () => void;
+}) {
   if (contentType === "application/pdf") {
     return (
       <a href={url} target="_blank" rel="noopener noreferrer" className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-dashboard-accent hover:underline">
@@ -643,8 +654,18 @@ function FilePreview({ url, contentType, label }: { url: string; contentType: st
     );
   }
   return (
-    // eslint-disable-next-line @next/next/no-img-element -- short-lived signed or local object URL
-    <img src={url} alt={label} className="mb-2 max-h-48 w-auto rounded-lg border border-dashboard-border bg-dashboard-surface object-contain" />
+    <button
+      type="button"
+      onClick={onOpenImage}
+      aria-label={`Open ${label} preview`}
+      className="group relative mb-2 block w-fit max-w-full cursor-zoom-in overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/50"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed or local object URL */}
+      <img src={url} alt={label} className="block max-h-48 max-w-full w-auto object-contain" />
+      <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent px-1 pb-1.5 pt-5 text-center text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+        Click to enlarge
+      </span>
+    </button>
   );
 }
 
@@ -676,9 +697,12 @@ function FilePicker({
   const Icon = file ? (file.type === "application/pdf" ? FileText : ImageIcon) : UploadCloud;
   const pickedUrl = useObjectUrl(file);
   const savedLocalUrl = useObjectUrl(saved?.file ?? null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const previewName = label.startsWith("Your ") ? label.slice("Your ".length) : label;
   const preview = file
-    ? pickedUrl && { url: pickedUrl, contentType: file.type, label: `New ${label}: ${file.name}` }
-    : saved && (saved.url ?? savedLocalUrl) && { url: (saved.url ?? savedLocalUrl) as string, contentType: saved.contentType, label: `Current ${label}` };
+    ? pickedUrl && { url: pickedUrl, contentType: file.type, label: `New ${previewName}: ${file.name}` }
+    : saved && (saved.url ?? savedLocalUrl) && { url: (saved.url ?? savedLocalUrl) as string, contentType: saved.contentType, label: `Current ${previewName}` };
+  const isImagePreview = Boolean(preview && preview.contentType !== "application/pdf");
   return (
     <div className="relative mt-4">
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -691,7 +715,14 @@ function FilePicker({
           </span>
         ) : null}
       </div>
-      {preview ? <FilePreview url={preview.url} contentType={preview.contentType} label={preview.label} /> : null}
+      {preview ? (
+        <FilePreview
+          url={preview.url}
+          contentType={preview.contentType}
+          label={preview.label}
+          onOpenImage={() => setLightboxOpen(true)}
+        />
+      ) : null}
       <input
         id={id}
         className="sr-only"
@@ -723,6 +754,13 @@ function FilePicker({
           {configured ? "Change" : "Browse"}
         </span>
       </label>
+      <ImageLightbox
+        images={preview && isImagePreview ? [{ src: preview.url, alt: `${preview.label} full-size preview` }] : []}
+        open={lightboxOpen}
+        onOpenChange={setLightboxOpen}
+        activeIndex={0}
+        onActiveIndexChange={() => undefined}
+      />
     </div>
   );
 }

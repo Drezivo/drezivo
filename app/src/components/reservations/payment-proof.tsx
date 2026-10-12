@@ -45,10 +45,12 @@ export function PaymentProof({
   state,
   viewerOpen,
   onViewerOpenChange,
+  heading = "Proof of payment from the renter",
 }: {
   state: PaymentProofState;
   viewerOpen: boolean;
   onViewerOpenChange: (open: boolean) => void;
+  heading?: string;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -80,7 +82,7 @@ export function PaymentProof({
 
   return (
     <div>
-      <p className="mb-2 text-xs font-medium text-dashboard-muted">Proof of payment from the renter</p>
+      <p className="mb-2 text-xs font-medium text-dashboard-muted">{heading}</p>
       <div className="flex flex-wrap gap-2">
         {images.map((receipt, index) => (
           <button

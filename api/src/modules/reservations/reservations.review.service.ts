@@ -57,6 +57,7 @@ import {
 import {
   attachAcceptedReservationReceipt,
   bindReservationCustomerForSubmit,
+  completePastPendingReservation,
   confirmReservationReview,
   expireReservationReview,
   lockLatestReservationReceipt,
@@ -69,11 +70,13 @@ import {
   markReservationAllocationsConfirmed,
   readLatestReservationVerification,
   readReservationMutationSummary,
+  readPastCashCollectionRequirement,
   repairReservationSnapshotForSubmit,
   rejectReservationReview,
   releaseReservationAllocations,
   submitReservationForReview,
   verifyReservationPaymentCollection,
+  type PastCashCollectionRequirementRow,
   type LockedReservationPaymentRow,
   type LockedReservationReceiptRow,
   type LockedReservationReviewRow,
@@ -85,6 +88,7 @@ const ATTACH_PAYMENT_RECEIPT_OPERATION = 'reservation.payment_receipt.attach.v1'
 const VERIFY_PAYMENT_OPERATION = 'reservation.payment.verify.v1';
 const CONFIRM_OPERATION = 'reservation.confirm.v1';
 const REJECT_OPERATION = 'reservation.reject.v1';
+const PAST_COMPLETION_OPERATION = 'reservation.complete_past_booking.v1';
 const REVIEW_EFFECTS_SAVEPOINT = 'reservation_review_effects';
 const EXPIRY_EFFECTS_SAVEPOINT = 'reservation_review_expiry_effects';
 
@@ -118,6 +122,50 @@ export async function readReservationReviewSummary(
     if (!row) throw new NotFoundError('Reservation could not be found.');
     return toReservationSummary(row);
   });
+}
+
+export async function readReservationPaymentStatus(
+  context: ReservationReviewReadContext,
+  reservationId: string,
+): Promise<LockedReservationPaymentRow['status'] | null> {
+  return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+    const payment = await lockReservationPaymentForReview(client, {
+      tenantId: context.tenantId,
+      reservationId,
+    });
+    return payment?.status ?? null;
+  });
+}
+
+/** Reads the DB-time payment state and enforces explicit confirmation for past cash bookings. */
+export async function assertPastCashCollectionConfirmed(
+  context: ReservationReviewReadContext,
+  reservationId: string,
+  cashCollectionConfirmed: boolean,
+): Promise<PastCashCollectionRequirementRow> {
+  const requirement = await withTenantTransaction(
+    context.tenantId,
+    context.principalId,
+    async (client) =>
+      readPastCashCollectionRequirement(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+        reservationId,
+      }),
+  );
+  if (!requirement) throw new NotFoundError('Reservation could not be found.');
+  if (
+    requirement.due_elapsed &&
+    requirement.due_now_minor > 0 &&
+    requirement.payment_rail === 'cash' &&
+    requirement.payment_status !== 'paid' &&
+    !cashCollectionConfirmed
+  ) {
+    throw new PaymentPrerequisiteFailedError(
+      'Confirm that cash was received before completing this past cash reservation.',
+    );
+  }
+  return requirement;
 }
 
 export async function submitReservationForConfirmation(
@@ -169,12 +217,16 @@ export async function submitReservationForConfirmation(
 
       const customerIntent = request.customer;
       if (reservation.customer_snapshot === null && !customerIntent) {
-        throw new StateConflictError('Customer information is required before completing this hold.');
+        throw new StateConflictError(
+          'Customer information is required before completing this hold.',
+        );
       }
       if (reservation.customer_snapshot !== null) {
         if (reservationSnapshotNeedsCompletion(reservation.customer_snapshot)) {
           if (reservation.customer_id === null) {
-            throw new StateConflictError('Reservation customer information is incomplete for submission.');
+            throw new StateConflictError(
+              'Reservation customer information is incomplete for submission.',
+            );
           }
           assertBoundSnapshotCustomerIntent(customerIntent, reservation.customer_id);
         } else {
@@ -190,7 +242,9 @@ export async function submitReservationForConfirmation(
       savepointOpen = true;
       if (reservation.customer_snapshot === null) {
         if (!customerIntent) {
-          throw new StateConflictError('Customer information is required before completing this hold.');
+          throw new StateConflictError(
+            'Customer information is required before completing this hold.',
+          );
         }
         const customer = await resolveSubmissionCustomer(client, context, customerIntent);
         const customerSnapshot = {
@@ -213,7 +267,9 @@ export async function submitReservationForConfirmation(
         }
       } else if (reservationSnapshotNeedsCompletion(reservation.customer_snapshot)) {
         if (reservation.customer_id === null) {
-          throw new StateConflictError('Reservation customer information is incomplete for submission.');
+          throw new StateConflictError(
+            'Reservation customer information is incomplete for submission.',
+          );
         }
         const customer = await resolveBoundSnapshotCustomer(
           client,
@@ -287,6 +343,126 @@ export async function submitReservationForConfirmation(
   });
 }
 
+/**
+ * Completes an already-due staff booking after its customer/terms submission. This path is
+ * intentionally separate from returned-rental completion: it records no custody or inspection
+ * events and leaves the existing rental-plus-recovery allocation blocking until its scheduled end.
+ */
+export async function completePastStaffReservation(
+  context: ReservationReviewContext,
+  reservationId: string,
+  request: { version: number; cashCollectionConfirmed: boolean },
+): Promise<ReservationReviewCommandResponse<ReservationSubmitResponse> | null> {
+  const payloadHash = canonicalRequestHash({ reservation_id: reservationId, ...request });
+
+  // Avoid reserving this child idempotency key when the return time has not passed yet. Due time
+  // is monotonic, and the final UPDATE below repeats the database-clock predicate atomically.
+  const eligibility = await withTenantTransaction(
+    context.tenantId,
+    context.principalId,
+    async (client) => {
+      const result = await client.query<{
+        status: LockedReservationReviewRow['status'];
+        due_elapsed: boolean;
+      }>(
+        `SELECT status, due_at < statement_timestamp() AS due_elapsed
+         FROM reservation
+        WHERE tenant_id = $1 AND branch_id = $2::uuid AND id = $3::uuid`,
+        [context.tenantId, context.branchId, reservationId],
+      );
+      const row = result.rows[0];
+      if (!row) throw new NotFoundError('Reservation could not be found.');
+      return row;
+    },
+  );
+  if (eligibility.status === 'pending_confirmation' && !eligibility.due_elapsed) return null;
+
+  return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
+    const claim = await claimReviewIdempotency(
+      client,
+      context,
+      PAST_COMPLETION_OPERATION,
+      payloadHash,
+    );
+    const replay = replayOrThrow<ReservationSubmitResponse>(claim);
+    if (replay) return replay;
+
+    try {
+      const reservation = await requireLockedReservation(client, context, reservationId);
+      assertActionableState(reservation, request.version, 'pending_confirmation');
+      if (reservation.due_at.getTime() >= reservation.database_now.getTime()) {
+        // Due time is monotonic, so this is only a defensive clock-boundary case. Remove only the
+        // newly claimed intent, allowing a later final submission to retry the eligibility check.
+        if (claim.kind === 'claimed') {
+          await client.query(
+            `DELETE FROM idempotency_record WHERE id = $1::uuid AND status = 'in_progress'`,
+            [claim.recordId],
+          );
+        }
+        return null;
+      }
+
+      const payment = await lockReservationPaymentForReview(client, {
+        tenantId: context.tenantId,
+        reservationId,
+      });
+      if (!payment) {
+        throw new PaymentPrerequisiteFailedError('Reservation payment intent is missing.');
+      }
+      if (
+        reservation.due_now_minor > 0 &&
+        payment.rail === 'cash' &&
+        payment.status !== 'paid' &&
+        !request.cashCollectionConfirmed
+      ) {
+        throw new PaymentPrerequisiteFailedError(
+          'Confirm that cash was received before completing this past cash reservation.',
+        );
+      }
+
+      const newVersion = await completePastPendingReservation(client, {
+        tenantId: context.tenantId,
+        branchId: context.branchId,
+        reservationId,
+        version: request.version,
+      });
+      if (newVersion === null) {
+        throw new StateConflictError(
+          'Historical reservation completion lost a concurrent state change.',
+        );
+      }
+
+      await appendReservationAuditEvent(client, {
+        tenantId: context.tenantId,
+        actorKind: 'staff',
+        actorKey: context.principalId,
+        action: 'reservation.completed',
+        entityType: 'reservation',
+        entityId: reservationId,
+        redactedSummary: {
+          version: newVersion,
+          completion_method: 'past_booking_entry',
+          due_at: reservation.due_at.toISOString(),
+        },
+        requestId: context.requestId,
+      });
+      await appendReservationOutboxEvent(client, {
+        tenantId: context.tenantId,
+        dedupeKey: `reservation-completed:${reservationId}:${newVersion}`,
+        eventType: 'reservation.completed',
+        payload: { reservationId, reservationVersion: newVersion },
+      });
+
+      const data = reservationSubmitResponse.parse({
+        reservation: await requireMutationSummary(client, context, reservationId),
+      });
+      return finalizeSuccess(client, context, PAST_COMPLETION_OPERATION, payloadHash, data);
+    } catch (error) {
+      return finalizeKnownFailure(client, context, PAST_COMPLETION_OPERATION, payloadHash, error);
+    }
+  });
+}
+
 export async function attachReservationPaymentReceipt(
   context: ReservationReviewContext,
   reservationId: string,
@@ -322,7 +498,8 @@ export async function attachReservationPaymentReceipt(
         tenantId: context.tenantId,
         reservationId,
       });
-      if (!payment) throw new PaymentPrerequisiteFailedError('Reservation payment intent is missing.');
+      if (!payment)
+        throw new PaymentPrerequisiteFailedError('Reservation payment intent is missing.');
       if (payment.rail === 'cash') {
         throw new StateConflictError('Cash payments do not require uploaded payment evidence.');
       }
@@ -336,7 +513,9 @@ export async function attachReservationPaymentReceipt(
         fileId: request.file_id,
       });
       if (!receipt) {
-        throw new StateConflictError('Payment receipt must be an accepted immutable payment-receipt file.');
+        throw new StateConflictError(
+          'Payment receipt must be an accepted immutable payment-receipt file.',
+        );
       }
 
       await appendReservationAuditEvent(client, {
@@ -355,13 +534,7 @@ export async function attachReservationPaymentReceipt(
         payment_id: receipt.payment_id,
         evidence_status: 'uploaded',
       });
-      return finalizeSuccess(
-        client,
-        context,
-        ATTACH_PAYMENT_RECEIPT_OPERATION,
-        payloadHash,
-        data,
-      );
+      return finalizeSuccess(client, context, ATTACH_PAYMENT_RECEIPT_OPERATION, payloadHash, data);
     } catch (error) {
       return finalizeKnownFailure(
         client,
@@ -385,7 +558,8 @@ export async function verifyReservationPaymentByStaff(
   } = {},
 ): Promise<ReservationReviewCommandResponse<ReservationPaymentVerifyResponse>> {
   const parsed = reservationPaymentVerifyRequest.safeParse(requestInput);
-  if (!parsed.success) throw new ValidationError('Reservation payment verification request is invalid.');
+  if (!parsed.success)
+    throw new ValidationError('Reservation payment verification request is invalid.');
   const request = parsed.data;
   const payloadHash = canonicalRequestHash({
     reservation_id: reservationId,
@@ -397,36 +571,57 @@ export async function verifyReservationPaymentByStaff(
   });
 
   return withTenantTransaction(context.tenantId, context.principalId, async (client) => {
-    const claim = await claimReviewIdempotency(client, context, VERIFY_PAYMENT_OPERATION, payloadHash);
+    const claim = await claimReviewIdempotency(
+      client,
+      context,
+      VERIFY_PAYMENT_OPERATION,
+      payloadHash,
+    );
     const replay = replayOrThrow<ReservationPaymentVerifyResponse>(claim);
     if (replay) return replay;
 
     try {
       const reservation = await requireLockedReservation(client, context, reservationId);
-      assertActionableState(reservation, request.version, 'pending_confirmation');
-      if (deadlineElapsed(reservation)) {
-        await expireLockedReview(client, context, reservation, reservationId);
-        throw new HoldExpiredError('The merchant review deadline has expired.');
+      if (reservation.status === 'completed') {
+        if (reservation.version !== request.version) {
+          throw new StaleVersionError('Reservation version is stale. Refresh before retrying.');
+        }
+      } else {
+        assertActionableState(reservation, request.version, 'pending_confirmation');
+        if (deadlineElapsed(reservation)) {
+          await expireLockedReview(client, context, reservation, reservationId);
+          throw new HoldExpiredError('The merchant review deadline has expired.');
+        }
       }
 
       const payment = await lockReservationPaymentForReview(client, {
         tenantId: context.tenantId,
         reservationId,
       });
-      if (!payment) throw new PaymentPrerequisiteFailedError('Reservation payment intent is missing.');
+      if (!payment)
+        throw new PaymentPrerequisiteFailedError('Reservation payment intent is missing.');
       if (options.requireRail && payment.rail !== options.requireRail) {
         throw new PaymentPrerequisiteFailedError(
           `This payment action requires the ${options.requireRail} payment rail.`,
         );
       }
       if (payment.status === 'failed' || payment.status === 'refunded') {
-        throw new PaymentPrerequisiteFailedError('Reservation payment is not eligible for verification.');
+        throw new PaymentPrerequisiteFailedError(
+          'Reservation payment is not eligible for verification.',
+        );
+      }
+      if (reservation.status === 'completed' && payment.status !== 'pending' && payment.status !== 'paid') {
+        throw new PaymentPrerequisiteFailedError(
+          'Only an unpaid completed reservation can receive a payment verification.',
+        );
       }
       if (
         BigInt(request.verified_amount_minor) !== BigInt(payment.amount_minor) ||
         BigInt(request.verified_amount_minor) < BigInt(reservation.due_now_minor)
       ) {
-        throw new PaymentPrerequisiteFailedError('Verified amount must exactly match the recorded amount due.');
+        throw new PaymentPrerequisiteFailedError(
+          'Verified amount must exactly match the recorded amount due.',
+        );
       }
 
       const receipt = await lockLatestReservationReceipt(client, {
@@ -435,13 +630,19 @@ export async function verifyReservationPaymentByStaff(
       });
       if (payment.rail !== 'cash' && receipt) {
         if (!isImmutableAcceptedReceipt(receipt)) {
-          throw new PaymentPrerequisiteFailedError('Uploaded payment evidence is not an accepted immutable receipt.');
+          throw new PaymentPrerequisiteFailedError(
+            'Uploaded payment evidence is not an accepted immutable receipt.',
+          );
         }
         if (receipt.evidence_status !== 'uploaded' && receipt.evidence_status !== 'under_review') {
-          throw new PaymentPrerequisiteFailedError('Payment evidence is not eligible for verification.');
+          throw new PaymentPrerequisiteFailedError(
+            'Payment evidence is not eligible for verification.',
+          );
         }
       } else if (payment.rail !== 'cash' && !options.allowMissingPaymentEvidence) {
-        throw new PaymentPrerequisiteFailedError('Accepted payment evidence is required before verification.');
+        throw new PaymentPrerequisiteFailedError(
+          'Accepted payment evidence is required before verification.',
+        );
       }
 
       const existingVerification = await readLatestReservationVerification(client, {
@@ -464,7 +665,9 @@ export async function verifyReservationPaymentByStaff(
         return finalizeSuccess(client, context, VERIFY_PAYMENT_OPERATION, payloadHash, data);
       }
       if (payment.status === 'paid' || payment.verified_at !== null || existingVerification) {
-        throw new StateConflictError('Payment verification state changed. Refresh before retrying.');
+        throw new StateConflictError(
+          'Payment verification state changed. Refresh before retrying.',
+        );
       }
 
       const verifiedAt = await verifyReservationPaymentCollection(client, {
@@ -496,7 +699,9 @@ export async function verifyReservationPaymentByStaff(
               : 'Merchant collection manually verified by staff without uploaded receipt evidence.',
       });
       if (!verificationId) {
-        throw new StateConflictError('Payment was already verified by another action. Refresh before retrying.');
+        throw new StateConflictError(
+          'Payment was already verified by another action. Refresh before retrying.',
+        );
       }
       if (payment.rail !== 'cash' && receipt) {
         await markReservationReceiptVerified(client, {
@@ -825,30 +1030,44 @@ async function fillMissingSubmissionCustomerDetails(
   const submittedEmail = intent?.email?.trim().toLowerCase();
   const submittedAddress = intent?.address?.trim();
 
-  if (customer.phone !== null && submittedPhone !== undefined && customer.phone !== submittedPhone) {
-    throw new ValidationError('Saved customer phone cannot be changed during reservation completion.');
-  }
-  if (customer.email !== null && submittedEmail !== undefined && customer.email !== submittedEmail) {
-    throw new ValidationError('Saved customer email cannot be changed during reservation completion.');
-  }
-  if (customer.address !== null && submittedAddress !== undefined && customer.address !== submittedAddress) {
-    throw new ValidationError('Saved customer address cannot be changed during reservation completion.');
-  }
-
   if (
     customer.phone !== null &&
-    customer.email !== null &&
-    customer.address !== null
+    submittedPhone !== undefined &&
+    customer.phone !== submittedPhone
   ) {
+    throw new ValidationError(
+      'Saved customer phone cannot be changed during reservation completion.',
+    );
+  }
+  if (
+    customer.email !== null &&
+    submittedEmail !== undefined &&
+    customer.email !== submittedEmail
+  ) {
+    throw new ValidationError(
+      'Saved customer email cannot be changed during reservation completion.',
+    );
+  }
+  if (
+    customer.address !== null &&
+    submittedAddress !== undefined &&
+    customer.address !== submittedAddress
+  ) {
+    throw new ValidationError(
+      'Saved customer address cannot be changed during reservation completion.',
+    );
+  }
+
+  if (customer.phone !== null && customer.email !== null && customer.address !== null) {
     return customer;
   }
 
   const updated = await fillReservationCustomerDetails(client, {
     tenantId: context.tenantId,
     customerId: customer.id,
-    phone: customer.phone === null ? submittedPhone ?? null : null,
-    email: customer.email === null ? submittedEmail ?? null : null,
-    address: customer.address === null ? submittedAddress ?? null : null,
+    phone: customer.phone === null ? (submittedPhone ?? null) : null,
+    email: customer.email === null ? (submittedEmail ?? null) : null,
+    address: customer.address === null ? (submittedAddress ?? null) : null,
   });
   if (!updated) {
     throw new StateConflictError('Customer details changed during reservation submission.');
@@ -867,7 +1086,9 @@ async function updateSubmittedCustomerProfile(
     throw new StateConflictError('Customer profile edits are required for this update.');
   }
   if (current.updated_at.getTime() !== new Date(profile.expected_updated_at).getTime()) {
-    throw new StaleVersionError('This customer profile changed before reservation completion. Refresh and try again.');
+    throw new StaleVersionError(
+      'This customer profile changed before reservation completion. Refresh and try again.',
+    );
   }
 
   const next = {
@@ -881,7 +1102,8 @@ async function updateSubmittedCustomerProfile(
   const changedFields = (
     ['full_name', 'phone', 'email', 'address', 'social_media', 'notes'] as const
   ).filter((field) => {
-    const currentValue = field === 'email' ? current.email?.toLowerCase() ?? null : current[field];
+    const currentValue =
+      field === 'email' ? (current.email?.toLowerCase() ?? null) : current[field];
     return currentValue !== next[field];
   });
   if (changedFields.length === 0) return current;
@@ -898,7 +1120,9 @@ async function updateSubmittedCustomerProfile(
     notes: next.notes,
   });
   if (!updated) {
-    throw new StaleVersionError('This customer profile changed before reservation completion. Refresh and try again.');
+    throw new StaleVersionError(
+      'This customer profile changed before reservation completion. Refresh and try again.',
+    );
   }
 
   await appendReservationAuditEvent(client, {
@@ -932,7 +1156,9 @@ function assertBoundSnapshotCustomerIntent(
     throw new StateConflictError('This reservation already has a different customer snapshot.');
   }
   if (intent.profile) {
-    throw new StateConflictError('Customer profile edits must be saved before a reservation snapshot is created.');
+    throw new StateConflictError(
+      'Customer profile edits must be saved before a reservation snapshot is created.',
+    );
   }
 }
 
@@ -944,7 +1170,10 @@ async function resolveBoundSnapshotCustomer(
 ): Promise<ReservationCustomerSnapshotRow> {
   assertBoundSnapshotCustomerIntent(intent, customerId);
   const existingIntent = intent?.source === 'existing' ? intent : undefined;
-  const customer = await readReservationCustomerForCreate(client, { tenantId: context.tenantId, customerId });
+  const customer = await readReservationCustomerForCreate(client, {
+    tenantId: context.tenantId,
+    customerId,
+  });
   if (!customer) throw new NotFoundError('Customer could not be found.');
   return fillMissingSubmissionCustomerDetails(client, context, customer, existingIntent);
 }
@@ -960,7 +1189,9 @@ function assertCompleteCustomerSnapshot(snapshot: Record<string, unknown> | null
 
   const invalidFields = new Set(parsed.error.issues.map((issue) => issue.path[0]));
   if (invalidFields.has('phone')) {
-    throw new ValidationError('Customer phone must contain exactly 11 digits before reservation submission.');
+    throw new ValidationError(
+      'Customer phone must contain exactly 11 digits before reservation submission.',
+    );
   }
   if (invalidFields.has('email')) {
     throw new ValidationError('A valid customer email is required before reservation submission.');
@@ -999,27 +1230,42 @@ function assertSubmissionEvidence(
     throw new PaymentPrerequisiteFailedError('Reservation payment intent is missing.');
   }
   if (payment.status === 'failed' || payment.status === 'refunded') {
-    throw new PaymentPrerequisiteFailedError('Reservation payment intent is not eligible for review.');
+    throw new PaymentPrerequisiteFailedError(
+      'Reservation payment intent is not eligible for review.',
+    );
   }
-  if (payment.currency !== reservation.currency || payment.amount_minor < reservation.due_now_minor) {
-    throw new PaymentPrerequisiteFailedError('Reservation payment intent does not cover the amount due now.');
+  if (
+    payment.currency !== reservation.currency ||
+    payment.amount_minor < reservation.due_now_minor
+  ) {
+    throw new PaymentPrerequisiteFailedError(
+      'Reservation payment intent does not cover the amount due now.',
+    );
   }
   if (payment.rail === 'cash') return;
   if (!receipt) {
     if (options.allowMissingPaymentEvidence) return;
-    throw new PaymentPrerequisiteFailedError('Payment evidence must be uploaded before submission.');
+    throw new PaymentPrerequisiteFailedError(
+      'Payment evidence must be uploaded before submission.',
+    );
   }
   if (!isImmutableAcceptedReceipt(receipt)) {
-    throw new PaymentPrerequisiteFailedError('Payment evidence is not an accepted immutable receipt.');
+    throw new PaymentPrerequisiteFailedError(
+      'Payment evidence is not an accepted immutable receipt.',
+    );
   }
   if (receipt.evidence_status !== 'uploaded' && receipt.evidence_status !== 'under_review') {
-    throw new PaymentPrerequisiteFailedError('Payment evidence is not eligible for merchant review.');
+    throw new PaymentPrerequisiteFailedError(
+      'Payment evidence is not eligible for merchant review.',
+    );
   }
   if (
     reservation.hold_expires_at === null ||
     receipt.submitted_at.getTime() >= reservation.hold_expires_at.getTime()
   ) {
-    throw new HoldExpiredError('Payment evidence was not submitted before the original hold deadline.');
+    throw new HoldExpiredError(
+      'Payment evidence was not submitted before the original hold deadline.',
+    );
   }
 }
 
@@ -1039,7 +1285,9 @@ function assertVerifiedMerchantCollection(
     payment.currency !== reservation.currency ||
     payment.amount_minor < reservation.due_now_minor
   ) {
-    throw new PaymentPrerequisiteFailedError('Verified merchant collection is required before confirmation.');
+    throw new PaymentPrerequisiteFailedError(
+      'Verified merchant collection is required before confirmation.',
+    );
   }
   if (
     !verification ||
@@ -1047,7 +1295,9 @@ function assertVerifiedMerchantCollection(
     verification.verified_amount_minor === null ||
     verification.verified_amount_minor < reservation.due_now_minor
   ) {
-    throw new PaymentPrerequisiteFailedError('A verified merchant decision is required before confirmation.');
+    throw new PaymentPrerequisiteFailedError(
+      'A verified merchant decision is required before confirmation.',
+    );
   }
   if (payment.rail === 'cash') return;
   // Staff may explicitly verify a manual payment after checking the merchant account or an
@@ -1075,12 +1325,14 @@ function isImmutableAcceptedReceipt(receipt: LockedReservationReceiptRow): boole
 function assertCurrentBlockingAllocation(
   allocations: Awaited<ReturnType<typeof lockReservationAllocationsForReview>>,
 ): void {
+  // A booking may hold several garments; every one must still be a current blocking hold.
   if (
-    allocations.length !== 1 ||
-    allocations[0]?.kind !== 'reservation_hold' ||
-    allocations[0].is_blocking !== true
+    allocations.length === 0 ||
+    allocations.some(
+      (allocation) => allocation.kind !== 'reservation_hold' || allocation.is_blocking !== true,
+    )
   ) {
-    throw new StateConflictError('Reservation does not have exactly one current blocking hold allocation.');
+    throw new StateConflictError('Reservation garments are not all current blocking holds.');
   }
 }
 
@@ -1105,7 +1357,7 @@ async function expireLockedReview(
       tenantId: context.tenantId,
       reservationId,
     });
-    if (released !== 1) {
+    if (released < 1) {
       throw new StateConflictError('Reservation expiry could not release its current allocation.');
     }
     await appendReservationAuditEvent(client, {
@@ -1187,7 +1439,9 @@ async function claimReviewIdempotency(
   });
 }
 
-function replayOrThrow<T>(claim: TenantIdempotencyClaim): ReservationReviewCommandResponse<T> | null {
+function replayOrThrow<T>(
+  claim: TenantIdempotencyClaim,
+): ReservationReviewCommandResponse<T> | null {
   if (claim.kind === 'replayed') {
     return {
       status: claim.responseCode,
@@ -1195,10 +1449,14 @@ function replayOrThrow<T>(claim: TenantIdempotencyClaim): ReservationReviewComma
     };
   }
   if (claim.kind === 'key_reused') {
-    throw new IdempotencyKeyReusedError('This Idempotency-Key was already used for another request.');
+    throw new IdempotencyKeyReusedError(
+      'This Idempotency-Key was already used for another request.',
+    );
   }
   if (claim.kind === 'in_progress') {
-    throw new StateConflictError('An identical reservation action is already being processed. Retry shortly.');
+    throw new StateConflictError(
+      'An identical reservation action is already being processed. Retry shortly.',
+    );
   }
   return null;
 }
