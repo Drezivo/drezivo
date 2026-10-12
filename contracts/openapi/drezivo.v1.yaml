@@ -16502,21 +16502,6 @@ paths:
                               - current
                               - previous
                             additionalProperties: false
-                            projected_rental_value:
-                              type: object
-                              properties:
-                                current_minor:
-                                  type: string
-                                  pattern: ^-?(0|[1-9]\d*)$
-                                reservations:
-                                  type: integer
-                                  minimum: -9007199254740991
-                                  maximum: 9007199254740991
-                              required:
-                                - current_minor
-                                - reservations
-                              additionalProperties: false
-                              description: Lifetime completed rental fees plus fees from confirmed reservations with pickup_at at or after the query database as_of timestamp. Excludes deposits; reservations counts upcoming confirmed bookings.
                         required:
                           - currency
                           - completed_rental_value

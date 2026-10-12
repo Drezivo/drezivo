@@ -232,8 +232,6 @@ Use `/api/v1` for the first API major version. Product V2 branches do not requir
 
 Every implemented route needs a permission policy even when public access is the intended policy. Preserve exact webhook bytes before JSON parsing. Use provider-supported signature algorithms, replay windows and constant-time secret comparison where applicable.
 
-`GET /api/v1/dashboard/overview` returns Business Performance values scoped to the authorized tenant and active branch. `completed_rental_value.current_minor` remains the current branch-local calendar month's completed rental fees. `projected_rental_value.current_minor` is all completed rental fees to date plus rental fees for confirmed reservations with `pickup_at >= as_of`, where `as_of` is the database timestamp captured for the overview query. Its `reservations` count covers only those upcoming confirmed reservations. Both values use `rental_total_minor`, excluding security deposits; cancelled, pending, picked-up, returned, and other statuses do not contribute to the projection. The projection uses the existing completed-reservation and pickup indexes and does not maintain a second financial ledger.
-
 ### Staff clothing availability timeline
 
 The staff Calendar's Clothing Availability tab reads `GET /api/v1/calendar/availability`. This is a
@@ -339,8 +337,6 @@ The first successful tenant bootstrap starts the selected plan's fourteen-day tr
 Authorize upload purpose, expected size, content types and owner before signing. Use unpredictable immutable keys; accept catalogue images and evidence through separate policies. Limit image dimensions/decompression, strip unnecessary metadata, validate actual file signatures, and scan quarantined objects. Never execute uploaded content.
 
 R2 presigned URLs can be reused until expiry, so Drezivo signs every new upload as a create-only PUT with `If-None-Match: *` against an unpredictable unique key. Reusing the authorization therefore cannot replace an existing object. Finalization streams the stored bytes through the API, enforces the upload-size bound, computes SHA-256 itself, and verifies MIME type and magic bytes before marking the file accepted. New R2 files do not rely on provider version IDs; legacy non-null version IDs fail closed until migrated and reconciled. [Cloudflare R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/), [R2 S3 compatibility](https://developers.cloudflare.com/r2/api/s3/api/).
-
-For staff catalogue photos, the browser reads each selected file and computes its SHA-256 when it is chosen, then keeps a stable Blob for the later authorized PUT. It does not reread the original mobile file-picker reference during form submission. If the browser cannot read a selected photo immediately, the form identifies that photo and asks staff to reselect a local copy before saving.
 
 Catalogue products allow at most five ordered photos per style, with display order zero as the cover. Each source image remains limited to 10 MB and each proof image to 5 MB. Serve optimized public derivatives only. Keep private evidence access short-lived (proposed five-minute downloads), no public ACLs, no indexing, no shared CDN cache. Use least-privilege bucket-scoped credentials, encryption at rest and TLS. Keep accepted SHA-256 values and any legacy provider-version metadata in the retention/deletion inventory.
 

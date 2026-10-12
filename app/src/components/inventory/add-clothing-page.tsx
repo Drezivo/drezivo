@@ -49,7 +49,6 @@ import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { uploadAuthorizedFile } from "@/lib/authorized-file-upload";
-import { capturePhotoFile } from "@/lib/capture-photo-file";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { inferMeasurementKind, parseMeasurementInput, type MeasurementKind } from "@/lib/measurement-input";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
@@ -63,7 +62,7 @@ type PricingMode = "fixed_duration" | "daily";
 type MeasurementUnit = "in" | "cm";
 type MeasurementMode = "default_guide" | "custom" | "none";
 type SubcategorySelection = "none" | "LONG" | "MINI" | "custom";
-type PhotoStatus = "preparing" | "ready" | "uploading" | "uploaded" | "error";
+type PhotoStatus = "ready" | "uploading" | "uploaded" | "error";
 type PendingNavigation = { kind: "href"; href: string } | { kind: "back" };
 
 type GuideSetupIntent = {
@@ -75,18 +74,12 @@ type GuideSetupIntent = {
 
 type PendingPhoto = {
   id: string;
-  name: string;
-  contentType: string;
-  byteSize: number;
-  lastModified: number;
-  previewUrl: string | null;
-  uploadBlob: Blob | null;
-  sha256: string | null;
+  file: File;
+  previewUrl: string;
   uploadIntentKey: string;
   finalizeIntentKey: string;
   fileId: string | null;
   status: PhotoStatus;
-  errorKind: "read" | "upload" | null;
   error: string | null;
 };
 
@@ -105,8 +98,6 @@ export function AddClothingPage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const photoPreviewUrlsRef = useRef(new Set<string>());
-  const mountedRef = useRef(false);
   const guideFileInputRef = useRef<HTMLInputElement>(null);
   const submitFingerprintRef = useRef<string | null>(null);
   const guideSetupIntentRef = useRef<GuideSetupIntent | null>(null);
@@ -176,19 +167,6 @@ export function AddClothingPage() {
   );
   const selectedCategory =
     activeCategories.find((category) => category.id === categoryId) ?? null;
-  const hasUnreadablePhoto = photos.some((photo) => photo.errorKind === "read");
-  const isPreparingPhoto = photos.some((photo) => photo.status === "preparing");
-  const isPhotoSubmissionBlocked = hasUnreadablePhoto || isPreparingPhoto;
-
-  useEffect(() => {
-    mountedRef.current = true;
-    const previewUrls = photoPreviewUrlsRef.current;
-    return () => {
-      mountedRef.current = false;
-      previewUrls.forEach((previewUrl) => URL.revokeObjectURL(previewUrl));
-      previewUrls.clear();
-    };
-  }, []);
 
   const markDirty = useCallback(() => {
     setIsDirty(true);
@@ -549,9 +527,8 @@ export function AddClothingPage() {
     ({ key }) => measurementModes[key] === "default_guide"
   );
 
-  const selectPhotos = async (files: FileList | null) => {
+  const selectPhotos = (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    if (fileInputRef.current) fileInputRef.current.value = "";
     setFormError(null);
     const incoming = Array.from(files);
     const availableSlots = Math.max(0, MAX_CLOTHING_PHOTOS - photos.length);
@@ -571,62 +548,27 @@ export function AddClothingPage() {
     });
     if (accepted.length === 0) return;
     markDirty();
-    const pending = accepted.map((sourceFile) => ({
-      sourceFile,
-      photo: {
+    setPhotos((current) => [
+      ...current,
+      ...accepted.map((file) => ({
         id: newIntentKey("photo"),
-        name: sourceFile.name,
-        contentType: sourceFile.type,
-        byteSize: sourceFile.size,
-        lastModified: sourceFile.lastModified,
-        previewUrl: null,
-        uploadBlob: null,
-        sha256: null,
+        file,
+        previewUrl: URL.createObjectURL(file),
         uploadIntentKey: newIntentKey("upload"),
         finalizeIntentKey: newIntentKey("finalize"),
         fileId: null,
-        status: "preparing" as const,
-        errorKind: null,
+        status: "ready" as const,
         error: null,
-      },
-    }));
-    setPhotos((current) => [...current, ...pending.map(({ photo }) => photo)]);
-
-    for (const { photo, sourceFile } of pending) {
-      try {
-        const captured = await capturePhotoFile(sourceFile);
-        const previewUrl = URL.createObjectURL(captured.body);
-        if (!mountedRef.current) {
-          URL.revokeObjectURL(previewUrl);
-          continue;
-        }
-        photoPreviewUrlsRef.current.add(previewUrl);
-        updatePhoto(photo.id, {
-          previewUrl,
-          uploadBlob: captured.body,
-          sha256: captured.sha256,
-          status: "ready",
-          errorKind: null,
-          error: null,
-        });
-      } catch {
-        updatePhoto(photo.id, {
-          status: "error",
-          errorKind: "read",
-          error: `Could not read “${photo.name}”. Save or download the image to your device, remove this photo, then select the local copy.`,
-        });
-      }
-    }
+      })),
+    ]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const removePhoto = (photoId: string) => {
     markDirty();
     setPhotos((current) => {
       const target = current.find((photo) => photo.id === photoId);
-      if (target?.previewUrl) {
-        URL.revokeObjectURL(target.previewUrl);
-        photoPreviewUrlsRef.current.delete(target.previewUrl);
-      }
+      if (target) URL.revokeObjectURL(target.previewUrl);
       return current.filter((photo) => photo.id !== photoId);
     });
   };
@@ -639,24 +581,22 @@ export function AddClothingPage() {
 
   const uploadPhoto = async (photo: PendingPhoto): Promise<string> => {
     if (photo.fileId) return photo.fileId;
-    if (!photo.uploadBlob || !photo.sha256) {
-      throw new Error(`Could not prepare “${photo.name}”. Remove it and select the image again.`);
-    }
     const client = createDrezivoApiClient(getToken);
-    updatePhoto(photo.id, { status: "uploading", errorKind: null, error: null });
+    updatePhoto(photo.id, { status: "uploading", error: null });
     try {
+      const sha256 = await fileSha256Base64(photo.file);
       const authorized = await client.authorizeUpload(
         {
           purpose: "catalogue_image",
-          content_type: photo.contentType as "image/jpeg" | "image/png" | "image/webp",
-          byte_size: photo.byteSize,
-          sha256: photo.sha256,
+          content_type: photo.file.type as "image/jpeg" | "image/png" | "image/webp",
+          byte_size: photo.file.size,
+          sha256,
         },
         photo.uploadIntentKey
       );
       await uploadAuthorizedFile(
         authorized.data,
-        photo.uploadBlob,
+        photo.file,
         "Photo upload failed before Drezivo could accept the file."
       );
       const finalized = await client.finalizeUpload(
@@ -664,17 +604,11 @@ export function AddClothingPage() {
         photo.finalizeIntentKey
       );
       const fileId = finalized.data.file.file_id;
-      updatePhoto(photo.id, {
-        fileId,
-        uploadBlob: null,
-        status: "uploaded",
-        errorKind: null,
-        error: null,
-      });
+      updatePhoto(photo.id, { fileId, status: "uploaded", error: null });
       return fileId;
     } catch (error) {
       const message = errorMessage(error, "Could not upload this photo.");
-      updatePhoto(photo.id, { status: "error", errorKind: "upload", error: message });
+      updatePhoto(photo.id, { status: "error", error: message });
       throw error;
     }
   };
@@ -774,10 +708,6 @@ export function AddClothingPage() {
     setCapacityLimitHit(false);
 
     try {
-      if (isPreparingPhoto) throw new Error("Wait for the selected photos to finish preparing.");
-      if (hasUnreadablePhoto) {
-        throw new Error("Remove or reselect each photo that could not be read before saving.");
-      }
       if (activate && photos.length === 0) {
         throw new Error("Add at least one photo before adding clothing. You can still save it as a draft without a photo.");
       }
@@ -788,9 +718,9 @@ export function AddClothingPage() {
         previewRequest,
         photos: photos.map((photo) => ({
           id: photo.id,
-          name: photo.name,
-          size: photo.byteSize,
-          lastModified: photo.lastModified,
+          name: photo.file.name,
+          size: photo.file.size,
+          lastModified: photo.file.lastModified,
         })),
       });
       if (submitFingerprintRef.current !== fingerprint) {
@@ -814,12 +744,7 @@ export function AddClothingPage() {
       });
       if (!result) return;
 
-      photos.forEach((photo) => {
-        if (photo.previewUrl) {
-          URL.revokeObjectURL(photo.previewUrl);
-          photoPreviewUrlsRef.current.delete(photo.previewUrl);
-        }
-      });
+      photos.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
       setIsDirty(false);
       historyGuardArmedRef.current = false;
       sessionStorage.setItem(
@@ -882,8 +807,7 @@ export function AddClothingPage() {
                 multiple
                 className="sr-only"
                 aria-label="Clothing photos"
-                disabled={isSubmitting || isPreparingPhoto}
-                onChange={(event) => void selectPhotos(event.target.files)}
+                onChange={(event) => selectPhotos(event.target.files)}
               />
               <div className="flex flex-wrap gap-3">
                 {photos.map((photo, index) => (
@@ -891,23 +815,16 @@ export function AddClothingPage() {
                     key={photo.id}
                     className="relative h-36 w-28 overflow-hidden rounded-xl border border-dashboard-border bg-dashboard-active"
                   >
-                    {photo.previewUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- captured Blob preview before governed upload finalization.
-                      <img
-                        src={photo.previewUrl}
-                        alt={`${photo.name} preview`}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span className="absolute inset-0 flex items-center justify-center px-2 text-center text-xs text-dashboard-muted">
-                        {photo.status === "preparing" ? "Preparing photo…" : "Preview unavailable"}
-                      </span>
-                    )}
+                    <img
+                      src={photo.previewUrl}
+                      alt={`${photo.file.name} preview`}
+                      className="h-full w-full object-cover"
+                    />
                     <button
                       type="button"
                       onClick={() => removePhoto(photo.id)}
-                      disabled={isSubmitting || photo.status === "preparing"}
-                      aria-label={`Remove ${photo.name}`}
+                      disabled={isSubmitting}
+                      aria-label={`Remove ${photo.file.name}`}
                       className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-dashboard-surface/90 text-dashboard-navy shadow-sm transition hover:bg-dashboard-active disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -917,10 +834,10 @@ export function AddClothingPage() {
                         Cover photo
                       </span>
                     ) : null}
-                    {photo.status === "uploading" || photo.status === "preparing" ? (
+                    {photo.status === "uploading" ? (
                       <span className="absolute inset-x-2 bottom-2 flex items-center justify-center gap-1 rounded bg-dashboard-surface/90 px-2 py-1 text-[0.65rem] font-medium text-dashboard-navy">
                         <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-                        {photo.status === "preparing" ? "Preparing" : "Uploading"}
+                        Uploading
                       </span>
                     ) : null}
                   </div>
@@ -928,7 +845,7 @@ export function AddClothingPage() {
                 {photos.length < MAX_CLOTHING_PHOTOS ? (
                   <button
                     type="button"
-                    disabled={isSubmitting || isPreparingPhoto}
+                    disabled={isSubmitting}
                     onClick={() => fileInputRef.current?.click()}
                     className="flex h-36 w-28 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-dashboard-border bg-dashboard-surface text-xs font-medium text-dashboard-muted transition-colors hover:border-dashboard-accent hover:bg-dashboard-active hover:text-dashboard-accent disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -937,12 +854,7 @@ export function AddClothingPage() {
                   </button>
                 ) : null}
               </div>
-              {photos.filter((photo) => photo.errorKind === "read").map((photo) => (
-                <p key={photo.id} className="text-xs text-dashboard-danger" role="alert">
-                  {photo.error}
-                </p>
-              ))}
-              {photos.some((photo) => photo.errorKind === "upload") ? (
+              {photos.some((photo) => photo.status === "error") ? (
                 <p className="text-xs text-dashboard-danger">
                   One or more photos could not be uploaded. Retry the form submission to try again.
                 </p>
@@ -1599,7 +1511,7 @@ export function AddClothingPage() {
                 <Button
                   variant="ghost"
                   className="w-full border border-dashboard-border bg-dashboard-surface text-dashboard-navy hover:bg-dashboard-active"
-                  disabled={isSubmitting || isPhotoSubmissionBlocked || (sizingMode === "sized" && selectedSizes.length === 0) || !categoryId}
+                  disabled={isSubmitting || (sizingMode === "sized" && selectedSizes.length === 0) || !categoryId}
                   onClick={() => void submitClothing(false)}
                 >
                   {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />}
@@ -1607,7 +1519,7 @@ export function AddClothingPage() {
                 </Button>
                 <Button
                   className="w-full"
-                  disabled={isSubmitting || isPhotoSubmissionBlocked || (sizingMode === "sized" && selectedSizes.length === 0) || !categoryId || photos.length === 0}
+                  disabled={isSubmitting || (sizingMode === "sized" && selectedSizes.length === 0) || !categoryId || photos.length === 0}
                   onClick={() => void submitClothing(true)}
                 >
                   {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
