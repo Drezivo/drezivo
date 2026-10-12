@@ -316,6 +316,16 @@ describe('storefront guest booking', async () => {
     });
   });
 
+  it('never lets a storefront renter book a pickup in the past', async () => {
+    const ws = await liveStore('gv-past', (doc) => {
+      doc.checkout.min_notice_days = 0;
+    });
+    const result = await booking.createReservation(ws.slug, { requestId: 'past', idempotencyKey: 'guest-past-1' }, holdRequest(ws, 'ana@example.test', { requested_interval: interval(2, -3) }));
+    expect(result.status).toBe(422);
+    const holds = await admin.query<{ n: number }>('SELECT count(*)::int AS n FROM reservation WHERE tenant_id = $1', [ws.tenantId]);
+    expect(holds.rows[0]?.n).toBe(0);
+  });
+
   it('lets a renter ask for delivery when the shop has not set it up, charges no fee, and tells the owner to arrange it', async () => {
     const ws = await liveStore('gv-deliver', undefined, { ...policy, delivery: { enabled: false, fee_minor: '0', notes: null } });
     const business = await settingsService.getBusiness(ws.owner);

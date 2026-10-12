@@ -137,13 +137,15 @@ Pickup requires confirmed booking, allocation, physical presence, readiness, pol
 | State                                           | Allowed transition                                                                      |
 | ----------------------------------------------- | --------------------------------------------------------------------------------------- |
 | `held`                                          | `pending_confirmation`, `cancelled`, `expired`                                          |
-| `pending_confirmation`                          | `confirmed`, `rejected`, `cancelled`, `expired`                                         |
+| `pending_confirmation`                          | `confirmed`, `rejected`, `cancelled`, `expired`; staff may record `completed` when `due_at` has passed |
 | `confirmed`                                     | `picked_up`, `cancelled`; atomic reschedule retains state                               |
 | `picked_up`                                     | `returned`; cannot cancel into available                                                |
 | `returned`                                      | `completed` after inspection and settlement checklist; asset readiness remains separate |
 | `completed`, `cancelled`, `expired`, `rejected` | Terminal; append financial corrections or create another reservation                    |
 
 An anonymous short hold may lack a customer row/contact. Submission requires validated contact, terms acceptance, a nonblank address, and complete snapshots. Do not create fake empty customers to satisfy an early FK. `customer.address` remains nullable for fitting walk-ins and legacy records; a reservation create/submit transaction locks an addressless selected customer, writes the supplied address once, and snapshots it atomically. A historical accepted snapshot may retain `address: null`; it remains readable but cannot satisfy a new submission gate.
+
+When staff submit a booking whose return/due time is earlier than database time, the same version-checked completion flow records it directly as `completed` and timestamps `completed_at` at submission. A past pickup alone does not qualify. This historical-entry path does not fabricate pickup, return, or inspection custody events, does not infer payment, and does not release or shorten any garment allocation: its scheduled rental-plus-recovery interval remains blocking. Incomplete holds still expire normally.
 
 **Hold:** validate and compute quote → lock candidate assets in sorted order → explicitly release expired holds using database time → insert header/line/block → commit idempotency outcome. QR instructions appear only after commit. Initial TTL is 15 minutes; evidence submitted before expiry extends review to no later than 24 hours from initial acquisition. These are proposed pilot policy values; accepted deadlines must not drift silently.
 

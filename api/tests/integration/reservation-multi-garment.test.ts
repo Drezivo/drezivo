@@ -120,6 +120,59 @@ describe('multi-garment reservations', async () => {
     expect(list.items[0]).toMatchObject({ line_count: 3, line: { name_snapshot: 'Celestine' } });
   });
 
+  it('records a past multi-garment submission as completed while keeping every allocation and custody history intact', async () => {
+    const seed = await seedWorkspace('org_multi_past_complete', 'user_multi_past_complete');
+    const dates = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ start: Date; end: Date }>(
+        `WITH pickup AS (
+           SELECT date_trunc('day', statement_timestamp() AT TIME ZONE 'Asia/Manila')
+                    + interval '10 hours' - interval '5 days' AS local_at
+         )
+         SELECT local_at AT TIME ZONE 'Asia/Manila' AS start,
+                (local_at + interval '2 days') AT TIME ZONE 'Asia/Manila' AS "end"
+           FROM pickup`,
+      );
+      const row = result.rows[0];
+      if (!row) throw new Error('Expected historical multi-garment dates.');
+      return row;
+    });
+    const requestBody = await request(seed, [
+      seed.celestineId,
+      seed.celestineLargeId,
+      seed.amaraId,
+    ]);
+    const created = await service.createStaffReservation(context(seed, 'past-create'), {
+      ...requestBody,
+      requested_interval: { start: dates.start.toISOString(), end: dates.end.toISOString() },
+      event_date: undefined,
+    });
+    expect(created.status).toBe(201);
+    if (created.body.success !== true) throw new Error('Expected historical garments to be held.');
+    const reservation = created.body.data.reservation;
+    const reservationId = reservation.id;
+
+    const completed = await service.completeStaffReservation(
+      context(seed, 'past-complete'),
+      reservationId,
+      {
+        version: reservation.version,
+        terms_accepted: true,
+        cash_collection: {
+          amount_tendered_minor: reservation.price_snapshot.due_now_minor,
+        },
+      },
+    );
+    expect(completed.body).toMatchObject({
+      success: true,
+      data: { completion_state: 'completed', reservation: { status: 'completed', version: 3 } },
+    });
+    const lines = await lineState(seed, reservationId);
+    expect(lines).toHaveLength(3);
+    expect(lines.every((line) => line.is_blocking)).toBe(true);
+    expect(await custodyEvents(seed, reservationId, 'pickup')).toBe(0);
+    expect(await custodyEvents(seed, reservationId, 'return')).toBe(0);
+  });
+
   it('refuses the whole booking and names the garment when one of them has no free piece', async () => {
     const seed = await seedWorkspace('org_multi_full', 'user_multi_full');
 
@@ -242,6 +295,27 @@ describe('multi-garment reservations', async () => {
     expect(again.status).toBe(201);
   });
 
+  it('lets staff record a booking that already happened, with one or several items', async () => {
+    const seed = await seedWorkspace('org_multi_past', 'user_multi_past');
+
+    const single = await service.createStaffReservation(
+      context(seed, 'past-one'),
+      await request(seed, [seed.amaraId], false, -20),
+    );
+    expect(single.status).toBe(201);
+    const several = await service.createStaffReservation(
+      context(seed, 'past-two'),
+      await request(seed, [seed.celestineId, seed.amaraId], false, -10),
+    );
+    expect(several.status).toBe(201);
+    if (several.body.success !== true) throw new Error('Expected a past multi-item booking.');
+    expect(Date.parse(several.body.data.reservation.pickup_at)).toBeLessThan(Date.now());
+    // The hold still lasts its normal window from now, so staff can finish entering it.
+    expect(Date.parse(several.body.data.reservation.hold_expires_at ?? '')).toBeGreaterThan(
+      Date.now(),
+    );
+  });
+
   it('creates one booking for a sequential or concurrent double-fire of the same intent', async () => {
     const seed = await seedWorkspace('org_multi_double', 'user_multi_double');
     const body = await request(seed, [seed.celestineId, seed.amaraId]);
@@ -351,11 +425,13 @@ describe('multi-garment reservations', async () => {
     seed: Seed,
     variantIds: string[],
     legacyLines = false,
+    pickupDayOffset = 3,
   ): Promise<StaffReservationCreateRequest> {
     const dates = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
       const result = await client.query<{ start: Date; end: Date }>(
-        `WITH pickup AS (SELECT date_trunc('day', statement_timestamp() AT TIME ZONE 'Asia/Manila') + interval '3 days 10 hours' AS local_at)
+        `WITH pickup AS (SELECT date_trunc('day', statement_timestamp() AT TIME ZONE 'Asia/Manila') + make_interval(days => $1::int, hours => 10) AS local_at)
          SELECT local_at AT TIME ZONE 'Asia/Manila' AS start, (local_at + interval '2 days') AT TIME ZONE 'Asia/Manila' AS "end" FROM pickup`,
+        [pickupDayOffset],
       );
       const row = result.rows[0];
       if (!row) throw new Error('Expected booking dates.');

@@ -8,7 +8,7 @@
  * | State                 | Allowed transition                                   |
  * |------------------------|------------------------------------------------------|
  * | held                   | pending_confirmation, cancelled, expired              |
- * | pending_confirmation    | confirmed, rejected, cancelled, expired               |
+ * | pending_confirmation    | confirmed, rejected, cancelled, expired; completed after due_at for staff-recorded past bookings |
  * | confirmed              | picked_up, cancelled; atomic reschedule retains state |
  * | picked_up              | returned; cannot cancel into available                |
  * | returned               | completed after inspection and settlement checklist   |
@@ -36,13 +36,13 @@ export type ReservationState = z.infer<typeof reservationState>;
  * nicety, never as the authority.
  */
 export const RESERVATION_STATE_TRANSITIONS = Object.freeze({
-    held: Object.freeze(['pending_confirmation', 'cancelled', 'expired']),
-    pending_confirmation: Object.freeze(['confirmed', 'rejected', 'cancelled', 'expired']),
-    confirmed: Object.freeze(['picked_up', 'cancelled']),
-    picked_up: Object.freeze(['returned']),
-    returned: Object.freeze(['completed']),
-    completed: Object.freeze([]),
-    cancelled: Object.freeze([]),
-    expired: Object.freeze([]),
-    rejected: Object.freeze([]),
-  } as const);
+  held: Object.freeze(['pending_confirmation', 'cancelled', 'expired']),
+  pending_confirmation: Object.freeze(['confirmed', 'rejected', 'cancelled', 'expired', 'completed']),
+  confirmed: Object.freeze(['picked_up', 'cancelled']),
+  picked_up: Object.freeze(['returned']),
+  returned: Object.freeze(['completed']),
+  completed: Object.freeze([]),
+  cancelled: Object.freeze([]),
+  expired: Object.freeze([]),
+  rejected: Object.freeze([]),
+} as const);

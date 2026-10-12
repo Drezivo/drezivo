@@ -9,7 +9,7 @@ import { buildEditBody } from "@/components/reservations/reservation-edit-form";
 // A stable token getter: a new function per render would re-run every effect that depends on it.
 const auth = vi.hoisted(() => ({ value: { getToken: () => Promise.resolve("token") } }));
 vi.mock("@clerk/nextjs", () => ({ useAuth: () => auth.value }));
-const api = vi.hoisted(() => ({ editReservation: vi.fn() }));
+const api = vi.hoisted(() => ({ editReservation: vi.fn(), getReservationPaymentReceipts: vi.fn() }));
 vi.mock("@/lib/drezivo-api", () => ({
   DrezivoApiError: class DrezivoApiError extends Error {
     code: string;
@@ -163,6 +163,69 @@ describe("ReservationDetailsSheet", () => {
   it("hides Continue without reservation management permission", () => {
     renderSheet(detailWith({}), []);
     expect(screen.queryByRole("button", { name: /create new reservation from this/i })).toBeNull();
+  });
+
+  it("shows completed payment receipts only to staff with payment and evidence permissions", async () => {
+    api.getReservationPaymentReceipts.mockReset().mockResolvedValue({
+      data: {
+        receipts: [
+          {
+            file_id: "00000000-0000-4000-8000-000000000901",
+            content_type: "image/png",
+            url: "https://files.test/completed-receipt.png",
+            submitted_at: "2026-10-10T02:05:00.000Z",
+            evidence_status: "verified",
+          },
+        ],
+      },
+      requestId: "req-completed-receipts",
+    });
+    const completed = detailWith({
+      status: "completed",
+      payment: {
+        id: "00000000-0000-4000-8000-000000000105",
+        payment_method_id: "00000000-0000-4000-8000-000000000106",
+        method_name: "GCash",
+        rail: "manual_qr",
+        status: "paid",
+        evidence_status: "verified",
+        amount_minor: "1050000",
+        currency: "PHP",
+        verified_at: "2026-10-10T03:00:00.000Z",
+      },
+    });
+
+    renderSheet(completed, [...MANAGE, "payments.manage", "evidence.verify"]);
+
+    expect(await screen.findByRole("button", { name: "View proof of payment 1 full size" })).toBeTruthy();
+    expect(screen.getByText("Payment receipt")).toBeTruthy();
+    expect(api.getReservationPaymentReceipts).toHaveBeenCalledWith(completed.id);
+  });
+
+  it.each([
+    ["without evidence verification", [...MANAGE, "payments.manage"] as PermissionCode[]],
+    ["without payment management", [...MANAGE, "evidence.verify"] as PermissionCode[]],
+  ])("does not request or display completed payment receipts %s", (_scenario, permissions) => {
+    api.getReservationPaymentReceipts.mockReset();
+    const completed = detailWith({
+      status: "completed",
+      payment: {
+        id: "00000000-0000-4000-8000-000000000105",
+        payment_method_id: "00000000-0000-4000-8000-000000000106",
+        method_name: "GCash",
+        rail: "manual_qr",
+        status: "paid",
+        evidence_status: "verified",
+        amount_minor: "1050000",
+        currency: "PHP",
+        verified_at: "2026-10-10T03:00:00.000Z",
+      },
+    });
+
+    renderSheet(completed, permissions);
+
+    expect(api.getReservationPaymentReceipts).not.toHaveBeenCalled();
+    expect(screen.queryByText("Payment receipt")).toBeNull();
   });
 
   it("shows a delivery request the shop must arrange, with the renter's address and contact actions", () => {

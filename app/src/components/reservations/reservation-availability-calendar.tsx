@@ -26,7 +26,6 @@ export function ReservationAvailabilityCalendar({
   pickupDate,
   dueDate,
   onRangeChange,
-  timeZone,
 }: {
   availabilityItems: ReservationCalendarAvailabilityItem[];
   loading: boolean;
@@ -36,7 +35,6 @@ export function ReservationAvailabilityCalendar({
   pickupDate: string;
   dueDate: string;
   onRangeChange: (range: { pickupDate: string; dueDate: string }) => void;
-  timeZone: string;
 }) {
   const byDate = useMemo(
     () => {
@@ -100,7 +98,6 @@ export function ReservationAvailabilityCalendar({
   );
   const includedRentalDays = Math.floor(minimumDurationMinutes / (24 * 60));
   const minimumNights = Math.max(0, includedRentalDays - 1);
-  const branchToday = parseCalendarDate(todayInTimeZone(timeZone));
   const disabledDates = useMemo(
     () => [...byDate.values()]
       .filter(({ day }) => day.state === "unavailable")
@@ -132,7 +129,6 @@ export function ReservationAvailabilityCalendar({
       : null;
 
   const [fieldNotice, setFieldNotice] = useState<string | null>(null);
-  const todayIso = todayInTimeZone(timeZone);
 
   /** First unavailable day inside the range, so a typed range cannot skip over a busy day. */
   const firstBusyDate = (start: string, end: string): string | null => {
@@ -234,8 +230,8 @@ export function ReservationAvailabilityCalendar({
           selected={selected}
           min={minimumNights}
           resetOnSelect
+          // Staff may pick past dates to record a booking that already happened.
           disabled={[
-            ...(branchToday ? [{ before: branchToday }] : []),
             (date: Date) =>
               availabilityUnavailable ||
               !byDate.has(toCalendarIsoDate(date)) ||
@@ -322,7 +318,6 @@ export function ReservationAvailabilityCalendar({
             ariaLabel="Date from"
             placeholder="Pickup date"
             value={pickupDate}
-            min={todayIso}
             disabledDates={disabledDates}
             disabledDate={(date) =>
               availabilityUnavailable ||
@@ -339,7 +334,7 @@ export function ReservationAvailabilityCalendar({
             ariaLabel="Date to"
             placeholder={pickupDate ? "Return date" : "Choose pickup first"}
             value={dueDate}
-            min={pickupDate ? addIsoDays(pickupDate, minimumNights) : todayIso}
+            {...(pickupDate ? { min: addIsoDays(pickupDate, minimumNights) } : {})}
             disabledDate={(date) =>
               availabilityUnavailable ||
               !byDate.has(toCalendarIsoDate(date)) ||
