@@ -49,7 +49,12 @@ import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { uploadAuthorizedFile } from "@/lib/authorized-file-upload";
-import { capturePhotoFile } from "@/lib/capture-photo-file";
+import {
+  capturePhotoFile,
+  mayBeSupportedPhoto,
+  unusablePhotoMessage,
+  type CapturedPhotoFile,
+} from "@/lib/capture-photo-file";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { inferMeasurementKind, parseMeasurementInput, type MeasurementKind } from "@/lib/measurement-input";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
@@ -65,6 +70,7 @@ type MeasurementMode = "default_guide" | "custom" | "none";
 type SubcategorySelection = "none" | "LONG" | "MINI" | "custom";
 type PhotoStatus = "preparing" | "ready" | "uploading" | "uploaded" | "error";
 type PendingNavigation = { kind: "href"; href: string } | { kind: "back" };
+type CapturedGuideImage = CapturedPhotoFile & { name: string; byteSize: number; lastModified: number };
 
 type GuideSetupIntent = {
   fingerprint: string;
@@ -158,7 +164,8 @@ export function AddClothingPage() {
   const [measurementGuideOpen, setMeasurementGuideOpen] = useState(false);
   const [guideSetupOpen, setGuideSetupOpen] = useState(false);
   const [guideName, setGuideName] = useState("");
-  const [guideFile, setGuideFile] = useState<File | null>(null);
+  const [guideFile, setGuideFile] = useState<CapturedGuideImage | null>(null);
+  const [isPreparingGuide, setIsPreparingGuide] = useState(false);
   const [guidePreviewUrl, setGuidePreviewUrl] = useState<string | null>(null);
   const [guideSetupError, setGuideSetupError] = useState<string | null>(null);
   const [guideSaveStage, setGuideSaveStage] = useState<string | null>(null);
@@ -442,7 +449,7 @@ export function AddClothingPage() {
     setGuideSetupOpen(true);
   };
 
-  const selectGuideFile = (file: File | null) => {
+  const selectGuideFile = async (file: File | null) => {
     setGuideSetupError(null);
     guideSetupIntentRef.current = null;
     if (!file) {
@@ -450,7 +457,7 @@ export function AddClothingPage() {
       setGuidePreviewUrl(null);
       return;
     }
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    if (!mayBeSupportedPhoto(file)) {
       setGuideSetupError("Size guide images must be JPEG, PNG, or WebP.");
       return;
     }
@@ -458,9 +465,22 @@ export function AddClothingPage() {
       setGuideSetupError("The size guide image must be 10 MB or smaller.");
       return;
     }
-    setGuideFile(file);
-    setGuidePreviewUrl(URL.createObjectURL(file));
     if (guideFileInputRef.current) guideFileInputRef.current.value = "";
+    // Read now: the picker's access can lapse before Save, which fails with NotReadableError.
+    setIsPreparingGuide(true);
+    try {
+      const captured = await capturePhotoFile(file);
+      if (!mountedRef.current) return;
+      setGuideFile({ ...captured, name: file.name, byteSize: file.size, lastModified: file.lastModified });
+      setGuidePreviewUrl(URL.createObjectURL(captured.body));
+    } catch (error) {
+      if (!mountedRef.current) return;
+      setGuideFile(null);
+      setGuidePreviewUrl(null);
+      setGuideSetupError(unusablePhotoMessage(error, file.name));
+    } finally {
+      if (mountedRef.current) setIsPreparingGuide(false);
+    }
   };
 
   const saveDefaultGuide = async () => {
@@ -474,7 +494,7 @@ export function AddClothingPage() {
       return;
     }
 
-    const fingerprint = `${guideName.trim()}|${guideFile.name}|${guideFile.type}|${guideFile.size}|${guideFile.lastModified}`;
+    const fingerprint = `${guideName.trim()}|${guideFile.name}|${guideFile.sha256}|${guideFile.byteSize}|${guideFile.lastModified}`;
     const intent =
       guideSetupIntentRef.current?.fingerprint === fingerprint
         ? guideSetupIntentRef.current
@@ -491,13 +511,12 @@ export function AddClothingPage() {
     try {
       const client = createDrezivoApiClient(getToken);
       setGuideSaveStage("Preparing size guide…");
-      const sha256 = await fileSha256Base64(guideFile);
       const authorized = await client.authorizeUpload(
         {
           purpose: "measurement_guide",
-          content_type: guideFile.type as "image/jpeg" | "image/png" | "image/webp",
-          byte_size: guideFile.size,
-          sha256,
+          content_type: guideFile.contentType,
+          byte_size: guideFile.byteSize,
+          sha256: guideFile.sha256,
         },
         intent.uploadKey
       );
@@ -505,7 +524,7 @@ export function AddClothingPage() {
       setGuideSaveStage("Uploading size guide…");
       await uploadAuthorizedFile(
         authorized.data,
-        guideFile,
+        guideFile.body,
         "The size guide upload did not finish successfully."
       );
 
@@ -551,15 +570,16 @@ export function AddClothingPage() {
 
   const selectPhotos = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
+    // Copy the list before clearing the input, which empties its FileList.
+    const incoming = Array.from(files);
     if (fileInputRef.current) fileInputRef.current.value = "";
     setFormError(null);
-    const incoming = Array.from(files);
     const availableSlots = Math.max(0, MAX_CLOTHING_PHOTOS - photos.length);
     if (incoming.length > availableSlots) {
       setFormError(`You can upload a maximum of ${MAX_CLOTHING_PHOTOS} photos. ${availableSlots} slot${availableSlots === 1 ? " is" : "s are"} available.`);
     }
     const accepted = incoming.slice(0, availableSlots).filter((file) => {
-      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      if (!mayBeSupportedPhoto(file)) {
         setFormError("Photos must be JPEG, PNG, or WebP images.");
         return false;
       }
@@ -602,6 +622,7 @@ export function AddClothingPage() {
         }
         photoPreviewUrlsRef.current.add(previewUrl);
         updatePhoto(photo.id, {
+          contentType: captured.contentType,
           previewUrl,
           uploadBlob: captured.body,
           sha256: captured.sha256,
@@ -609,11 +630,11 @@ export function AddClothingPage() {
           errorKind: null,
           error: null,
         });
-      } catch {
+      } catch (error) {
         updatePhoto(photo.id, {
           status: "error",
           errorKind: "read",
-          error: `Could not read “${photo.name}”. Save or download the image to your device, remove this photo, then select the local copy.`,
+          error: unusablePhotoMessage(error, photo.name),
         });
       }
     }
@@ -1671,13 +1692,13 @@ export function AddClothingPage() {
                 aria-label="Default size guide image"
                 accept="image/jpeg,image/png,image/webp"
                 className="sr-only"
-                onChange={(event) => selectGuideFile(event.target.files?.[0] ?? null)}
-                disabled={isSavingGuide}
+                onChange={(event) => void selectGuideFile(event.target.files?.[0] ?? null)}
+                disabled={isSavingGuide || isPreparingGuide}
               />
               <button
                 type="button"
                 onClick={() => guideFileInputRef.current?.click()}
-                disabled={isSavingGuide}
+                disabled={isSavingGuide || isPreparingGuide}
                 className="flex min-h-36 w-full items-center justify-center rounded-xl border border-dashed border-dashboard-border bg-dashboard-surface p-4 text-center transition-colors hover:border-dashboard-accent hover:bg-dashboard-active disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {guidePreviewUrl ? (
@@ -1721,7 +1742,7 @@ export function AddClothingPage() {
           <div className="space-y-3 p-5">
             <Button
               className="w-full"
-              disabled={isSavingGuide || !guideName.trim() || !guideFile}
+              disabled={isSavingGuide || isPreparingGuide || !guideName.trim() || !guideFile}
               onClick={() => void saveDefaultGuide()}
             >
               {isSavingGuide ? (
@@ -1977,15 +1998,6 @@ function newIntentKey(prefix: string): string {
   return `${prefix}_${random.replaceAll("-", "_")}`;
 }
 
-async function fileSha256Base64(file: File): Promise<string> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const digest = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytes));
-  let binary = "";
-  digest.forEach((value) => {
-    binary += String.fromCharCode(value);
-  });
-  return btoa(binary);
-}
 
 function pesosToMinor(value: string, label: string): string {
   const normalized = value.trim();

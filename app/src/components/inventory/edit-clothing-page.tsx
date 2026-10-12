@@ -58,7 +58,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { uploadAuthorizedFile } from "@/lib/authorized-file-upload";
-import { capturePhotoFile } from "@/lib/capture-photo-file";
+import { capturePhotoFile, mayBeSupportedPhoto, unusablePhotoMessage } from "@/lib/capture-photo-file";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { inferMeasurementKind, parseMeasurementInput, type MeasurementKind } from "@/lib/measurement-input";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
@@ -346,14 +346,15 @@ export function EditClothingPage({ productId }: { productId: string }) {
 
   const selectPhotos = async (files: FileList | null) => {
     if (!files?.length) return;
+    // Copy the list before clearing the input, which empties its FileList.
+    const incoming = Array.from(files);
     if (fileInputRef.current) fileInputRef.current.value = "";
     const availableSlots = Math.max(0, MAX_CLOTHING_PHOTOS - photos.length);
-    const incoming = Array.from(files);
     if (incoming.length > availableSlots) {
       setFormError(`You can keep a maximum of ${MAX_CLOTHING_PHOTOS} photos. ${availableSlots} slot${availableSlots === 1 ? " is" : "s are"} available.`);
     }
     const accepted = incoming.slice(0, availableSlots).filter((file) => {
-      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      if (!mayBeSupportedPhoto(file)) {
         setFormError("Photos must be JPEG, PNG, or WebP images.");
         return false;
       }
@@ -397,6 +398,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
         }
         photoPreviewUrlsRef.current.add(previewUrl);
         updateNewPhoto(photo.id, {
+          contentType: captured.contentType,
           previewUrl,
           uploadBlob: captured.body,
           sha256: captured.sha256,
@@ -404,11 +406,11 @@ export function EditClothingPage({ productId }: { productId: string }) {
           errorKind: null,
           error: null,
         });
-      } catch {
+      } catch (error) {
         updateNewPhoto(photo.id, {
           status: "error",
           errorKind: "read",
-          error: `Could not read “${photo.name}”. Save or download the image to your device, remove this photo, then select the local copy.`,
+          error: unusablePhotoMessage(error, photo.name),
         });
       }
     }
@@ -661,7 +663,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
               {photos.length === 0 ? (
                 <button
                   type="button"
-                    disabled={isPreparingPhoto}
+                  disabled={isPreparingPhoto}
                   onClick={() => fileInputRef.current?.click()}
                   className="flex min-h-32 w-full items-center justify-center rounded-xl border border-dashed border-dashboard-border bg-dashboard-surface text-sm text-dashboard-muted transition-colors hover:border-dashboard-accent hover:bg-dashboard-active"
                 >
@@ -685,7 +687,7 @@ export function EditClothingPage({ productId }: { productId: string }) {
                           // eslint-disable-next-line @next/next/no-img-element -- signed API URL or local object URL.
                           <img
                             src={photo.previewUrl}
-                          alt={index === 0 ? "Current cover photo" : `Clothing photo ${index + 1}`}
+                            alt={index === 0 ? "Current cover photo" : `Clothing photo ${index + 1}`}
                             className="h-full w-full object-cover"
                           />
                         ) : (
