@@ -48,6 +48,7 @@ Before marking a task complete:
     - [x] Fittings today follows the existing fitting-summary state/date semantics; upcoming appointments include future `pending` and `confirmed` appointments from database time through the next three branch-local calendar days (today plus two days).
     - [x] Payment review counts branch-linked payments whose latest receipt evidence is `uploaded` or `under_review`; this is not a count of every unpaid obligation.
     - [x] Performance compares completed reservation rental totals (deposit excluded), completed counts/average, and active new-customer profiles between the current and previous branch-local calendar months. New customers are tenant-wide because customer profiles have no branch ownership.
+    - [x] Projected Rental Value is all completed rental fees to date plus rental fees for confirmed reservations with pickup timestamps at or after database `as_of`, across all future months. It excludes deposits and all other reservation statuses; its reservation count covers upcoming confirmed bookings only.
     - [x] Database time defines `as_of`; the active branch IANA timezone defines “today”, fitting windows, and month boundaries.
     - [x] Issue/readiness and reservation-review counts are explicitly deferred rather than fabricated.
   - **Tests/evidence:** Focused dashboard PostgreSQL integration verifies branch-local metrics and current/prior-month values; contract tests verify the response shape.
@@ -102,6 +103,7 @@ Before marking a task complete:
     - [x] Upcoming fitting appointments cover the remainder of today plus the next two branch-local days, include only future `pending`/`confirmed` rows, and use persisted booking channel labels.
     - [x] Completed rental value excludes deposits and is labelled as rental value rather than accounting revenue.
     - [x] Current and previous calendar-month values, counts, average, and active customer profile counts are returned with zero-baseline-safe values.
+    - [x] Projected Rental Value remains separate from monthly Completed Rental Value and combines lifetime completed rental fees with upcoming confirmed rental fees.
     - [x] Customer contact details, fitting notes, payment details, and fabricated fitting subtypes are not returned.
   - **Tests/evidence:** Focused dashboard PostgreSQL integration, contract tests, and dashboard component tests pass.
 
