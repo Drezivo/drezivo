@@ -108,7 +108,15 @@ describe("PaymentMethodSettingsPage", () => {
     );
   });
 
-  it("shows the saved QR image instead of only a Replace file label", async () => {
+  it("keeps the full file picker when no QR image is selected", async () => {
+    render(<PaymentMethodSettingsPage />);
+    await screen.findByText("GCash");
+
+    const filePicker = screen.getByText("Choose a file").closest("label");
+    expect(filePicker).toHaveClass("border-dashed", "gap-4");
+  });
+
+  it("shows the saved QR image above the file picker and opens it in the lightbox", async () => {
     api.getPaymentMethodSettings.mockResolvedValue({
       data: {
         items: [
@@ -121,6 +129,23 @@ describe("PaymentMethodSettingsPage", () => {
 
     const image = await screen.findByRole("img", { name: "Current QR image" });
     expect(image).toHaveAttribute("src", "https://files.example.test/gcash-qr.png");
+    expect(image).toHaveClass("max-h-48");
+
+    const trigger = screen.getByRole("button", { name: "Open Current QR image preview" });
+    const filePicker = screen.getByText("Change").closest("label");
+    expect(filePicker).toHaveClass("border-dashed", "items-center");
+    expect(filePicker).toContainElement(screen.getByText("Replace file"));
+    expect(trigger.parentElement).toContainElement(filePicker);
+    expect(trigger.compareDocumentPosition(filePicker!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: "Image preview" })).toBeVisible();
+    expect(screen.getByRole("img", { name: "Current QR image full-size preview" })).toHaveAttribute(
+      "src",
+      "https://files.example.test/gcash-qr.png"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Close image preview" }));
+    expect(screen.queryByRole("dialog", { name: "Image preview" })).not.toBeInTheDocument();
   });
 
   it("previews a newly picked QR image before it is saved", async () => {
@@ -135,7 +160,47 @@ describe("PaymentMethodSettingsPage", () => {
 
     const preview = await screen.findByRole("img", { name: "New QR image: new-qr.png" });
     expect(preview).toHaveAttribute("src", "blob:new-qr");
+    expect(preview).toHaveClass("max-h-48");
     expect(screen.getByText("Uploads when you save.")).toBeVisible();
+    const trigger = screen.getByRole("button", { name: "Open New QR image: new-qr.png preview" });
+    const filePicker = screen.getByText("Browse").closest("label");
+    expect(filePicker).toHaveClass("border-dashed");
+    expect(trigger.compareDocumentPosition(filePicker!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: "Image preview" })).toBeVisible();
+    expect(screen.getByRole("img", { name: "New QR image: new-qr.png full-size preview" })).toHaveAttribute(
+      "src",
+      "blob:new-qr"
+    );
+  });
+
+  it("opens saved payment-instruction images in the lightbox", async () => {
+    api.getPaymentMethodSettings.mockResolvedValue({
+      data: {
+        items: [
+          methods[0],
+          {
+            ...methods[1],
+            presentation: "material",
+            material: { file_id: gcashId, content_type: "image/png" },
+            material_url: "https://files.example.test/payment-steps.png",
+          },
+        ],
+      },
+    });
+    render(<PaymentMethodSettingsPage />);
+
+    const trigger = await screen.findByRole("button", { name: "Open Current payment instructions preview" });
+    expect(screen.getByRole("img", { name: "Current payment instructions" })).toHaveClass("max-h-48");
+    expect(trigger.parentElement).toContainElement(screen.getByText("Change").closest("label"));
+    expect(trigger.compareDocumentPosition(screen.getByText("Change").closest("label")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: "Image preview" })).toBeVisible();
+    expect(screen.getByRole("img", { name: "Current payment instructions full-size preview" })).toHaveAttribute(
+      "src",
+      "https://files.example.test/payment-steps.png"
+    );
   });
 
   it("links to a saved PDF of payment instructions", async () => {
@@ -154,7 +219,11 @@ describe("PaymentMethodSettingsPage", () => {
     });
     render(<PaymentMethodSettingsPage />);
 
-    expect(await screen.findByRole("link", { name: "View PDF" })).toHaveAttribute("href", "https://files.example.test/steps.pdf");
+    const viewPdf = await screen.findByRole("link", { name: "View PDF" });
+    expect(viewPdf).toHaveAttribute("href", "https://files.example.test/steps.pdf");
+    expect(viewPdf).toHaveAttribute("target", "_blank");
+    expect(screen.getByText("Replace file").closest("label")).toHaveClass("border-dashed", "items-center");
+    expect(screen.queryByRole("dialog", { name: "Image preview" })).not.toBeInTheDocument();
   });
 
   it("disables adding at five online methods and says why", async () => {
