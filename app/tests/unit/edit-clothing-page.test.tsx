@@ -297,7 +297,7 @@ describe("EditClothingPage", () => {
       configurable: true,
       value: vi.fn(),
     });
-    const uploadedBytes = new Uint8Array([9, 8, 7]);
+    const uploadedBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 8, 7]);
     const selectedFile = new File([uploadedBytes], "mobile-screenshot.png", { type: "image/png" });
     Object.defineProperty(selectedFile, "arrayBuffer", {
       configurable: true,
@@ -344,14 +344,14 @@ describe("EditClothingPage", () => {
       {
         purpose: "catalogue_image",
         content_type: "image/png",
-        byte_size: 3,
+        byte_size: 11,
         sha256: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
       },
       expect.any(String)
     );
     expect(uploadFetch).toHaveBeenCalledTimes(1);
     const uploadedBody = uploadFetch.mock.calls[0]?.[1]?.body as Blob;
-    expect(Array.from(new Uint8Array(await uploadedBody.arrayBuffer()))).toEqual([9, 8, 7]);
+    expect(Array.from(new Uint8Array(await uploadedBody.arrayBuffer()))).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 8, 7]);
     expect(api.replaceClothingImages).toHaveBeenCalledWith(
       productId,
       { file_ids: [fileId, newFileId] },
@@ -360,7 +360,7 @@ describe("EditClothingPage", () => {
   });
 
   it("blocks all edit mutations for an unreadable photo and preserves other edits after removal", async () => {
-    const selectedFile = new File([new Uint8Array([2, 3, 4])], "unreadable-screenshot.png", {
+    const selectedFile = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 2, 3, 4])], "unreadable-screenshot.png", {
       type: "image/png",
     });
     Object.defineProperty(selectedFile, "arrayBuffer", {
