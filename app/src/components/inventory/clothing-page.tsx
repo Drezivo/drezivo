@@ -83,7 +83,25 @@ export function ClothingPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
+  // Batch Add stays hidden until the API confirms this account may use it.
+  const [batchAddAllowed, setBatchAddAllowed] = useState(false);
   const debouncedQuery = useDebouncedValue(query.trim());
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    let cancelled = false;
+    void createDrezivoApiClient(getToken)
+      .getCatalogueImportCapabilities()
+      .then(
+        (result) => {
+          if (!cancelled) setBatchAddAllowed(result.data.batch_add);
+        },
+        () => undefined
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, isLoaded, isSignedIn]);
   const isSearchPending = query.trim() !== debouncedQuery;
   const [categoryId, setCategoryId] = useState<CatalogueCategory["id"] | null>(() =>
     parseCategoryFilter(searchParams.get("category"))
@@ -294,15 +312,20 @@ export function ClothingPage() {
           <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
             <Link
               href="/inventory/categories"
-              className={buttonVariants({ variant: "secondary" })}
+              className={buttonVariants({
+                variant: "secondary",
+                className: batchAddAllowed ? undefined : "col-span-2 sm:col-span-1",
+              })}
             >
               <Tags className="h-4 w-4" aria-hidden="true" />
               Manage Categories
             </Link>
-            <Link href="/inventory/import" className={buttonVariants({ variant: "secondary" })}>
-              <Layers3 className="h-4 w-4" aria-hidden="true" />
-              Batch Add
-            </Link>
+            {batchAddAllowed ? (
+              <Link href="/inventory/import" className={buttonVariants({ variant: "secondary" })}>
+                <Layers3 className="h-4 w-4" aria-hidden="true" />
+                Batch Add
+              </Link>
+            ) : null}
             <Link href="/inventory/new" className={buttonVariants({ className: "col-span-2 sm:col-span-1" })}>
               <Plus className="h-4 w-4" aria-hidden="true" />
               Add Clothing

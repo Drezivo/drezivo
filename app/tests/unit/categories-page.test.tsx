@@ -13,6 +13,9 @@ const api = vi.hoisted(() => ({
   createCatalogueCategory: vi.fn(),
   getCatalogueCategories: vi.fn(),
   getCatalogueClothing: vi.fn(),
+  getCatalogueImportCapabilities: vi.fn(() =>
+    Promise.resolve({ data: { photo_extraction: false, max_batch_items: 25, batch_add: false } })
+  ),
   removeCatalogueCategory: vi.fn(),
   updateCatalogueCategory: vi.fn(),
   updateCatalogueCategoryStatus: vi.fn(),
