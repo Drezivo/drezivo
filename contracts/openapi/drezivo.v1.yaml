@@ -1705,16 +1705,6 @@ components:
             - file_id
             - content_type
           additionalProperties: false
-        qr_image_url:
-          type:
-            - string
-            - "null"
-          format: uri
-        material_url:
-          type:
-            - string
-            - "null"
-          format: uri
       required:
         - id
         - name
@@ -1801,16 +1791,6 @@ components:
                   - file_id
                   - content_type
                 additionalProperties: false
-              qr_image_url:
-                type:
-                  - string
-                  - "null"
-                format: uri
-              material_url:
-                type:
-                  - string
-                  - "null"
-                format: uri
             required:
               - id
               - name
@@ -7023,16 +7003,6 @@ paths:
                                 - file_id
                                 - content_type
                               additionalProperties: false
-                            qr_image_url:
-                              type:
-                                - string
-                                - "null"
-                              format: uri
-                            material_url:
-                              type:
-                                - string
-                                - "null"
-                              format: uri
                           required:
                             - id
                             - name
@@ -7255,16 +7225,6 @@ paths:
                           - file_id
                           - content_type
                         additionalProperties: false
-                      qr_image_url:
-                        type:
-                          - string
-                          - "null"
-                        format: uri
-                      material_url:
-                        type:
-                          - string
-                          - "null"
-                        format: uri
                     required:
                       - id
                       - name
@@ -7572,16 +7532,6 @@ paths:
                           - file_id
                           - content_type
                         additionalProperties: false
-                      qr_image_url:
-                        type:
-                          - string
-                          - "null"
-                        format: uri
-                      material_url:
-                        type:
-                          - string
-                          - "null"
-                        format: uri
                     required:
                       - id
                       - name
@@ -12692,12 +12642,9 @@ paths:
                       max_batch_items:
                         type: integer
                         exclusiveMinimum: 0
-                      batch_add:
-                        type: boolean
                     required:
                       - photo_extraction
                       - max_batch_items
-                      - batch_add
                   request_id:
                     type: string
                     minLength: 1
@@ -16555,24 +16502,21 @@ paths:
                               - current
                               - previous
                             additionalProperties: false
-                          projected_rental_value:
-                            type: object
-                            properties:
-                              current_minor:
-                                type: string
-                                pattern: ^-?(0|[1-9]\d*)$
-                              reservations:
-                                type: integer
-                                minimum: -9007199254740991
-                                maximum: 9007199254740991
-                            required:
-                              - current_minor
-                              - reservations
-                            additionalProperties: false
-                            description: Lifetime completed rental fees plus fees from confirmed
-                              reservations with pickup_at at or after the query
-                              database as_of timestamp. Excludes deposits;
-                              reservations counts upcoming confirmed bookings.
+                            projected_rental_value:
+                              type: object
+                              properties:
+                                current_minor:
+                                  type: string
+                                  pattern: ^-?(0|[1-9]\d*)$
+                                reservations:
+                                  type: integer
+                                  minimum: -9007199254740991
+                                  maximum: 9007199254740991
+                              required:
+                                - current_minor
+                                - reservations
+                              additionalProperties: false
+                              description: Lifetime completed rental fees plus fees from confirmed reservations with pickup_at at or after the query database as_of timestamp. Excludes deposits; reservations counts upcoming confirmed bookings.
                         required:
                           - currency
                           - completed_rental_value
@@ -31869,16 +31813,6 @@ paths:
                           - file_id
                           - content_type
                         additionalProperties: false
-                      qr_image_url:
-                        type:
-                          - string
-                          - "null"
-                        format: uri
-                      material_url:
-                        type:
-                          - string
-                          - "null"
-                        format: uri
                     required:
                       - id
                       - name
