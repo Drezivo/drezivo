@@ -26,6 +26,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { Input } from "@/components/ui/input";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
 import { storefrontImageProblem, uploadStorefrontImage, type ImageUploadPurpose, type UploadIntent } from "@/lib/storefront-assets";
@@ -297,6 +298,10 @@ function PaymentMethodEditor({ method, onSaved }: { method: PaymentMethodSetting
   const [uploading, setUploading] = useState(false);
   const qrIntentRef = useRef<UploadIntent | null>(null);
   const materialIntentRef = useRef<UploadIntent | null>(null);
+  // After a save, the list item the parent receives has no signed links, so keep showing the file
+  // that was just uploaded until the page is next loaded.
+  const [savedQrPreview, setSavedQrPreview] = useState<SavedPreview | null>(null);
+  const [savedMaterialPreview, setSavedMaterialPreview] = useState<SavedPreview | null>(null);
 
   const staffOnly = method.rail === "cash";
   const isQr = method.rail === "manual_qr";
@@ -333,12 +338,14 @@ function PaymentMethodEditor({ method, onSaved }: { method: PaymentMethodSetting
       if (isQr && presentation === "details" && qrFile) {
         nextQrFileId = await upload(qrFile, "storefront_asset", qrIntentRef);
         setQrFileId(nextQrFileId);
+        setSavedQrPreview({ fileId: nextQrFileId, file: qrFile });
         setQrFile(null);
       }
       let nextMaterialFileId = materialFileId;
       if (presentation === "material" && materialFile) {
         nextMaterialFileId = await upload(materialFile, "payment_method_material", materialIntentRef);
         setMaterialFileId(nextMaterialFileId);
+        setSavedMaterialPreview({ fileId: nextMaterialFileId, file: materialFile });
         setMaterialFile(null);
       }
 
@@ -479,6 +486,7 @@ function PaymentMethodEditor({ method, onSaved }: { method: PaymentMethodSetting
                     purpose="storefront_asset"
                     file={qrFile}
                     configured={Boolean(qrFileId)}
+                    saved={savedFile(qrFileId, savedQrPreview, method.qr_image_url, "image/png")}
                     onPick={(file) => {
                       setQrFile(file);
                       qrIntentRef.current = null;
@@ -497,6 +505,7 @@ function PaymentMethodEditor({ method, onSaved }: { method: PaymentMethodSetting
                 purpose="payment_method_material"
                 file={materialFile}
                 configured={Boolean(materialFileId)}
+                saved={savedFile(materialFileId, savedMaterialPreview, method.material_url, method.material?.content_type ?? null)}
                 configuredLabel={method.material?.content_type === "application/pdf" ? "PDF uploaded" : "Image uploaded"}
                 onPick={(file) => {
                   setMaterialFile(file);
@@ -596,6 +605,70 @@ function RemovedMethodRow({ method, disabled, onRestored }: { method: PaymentMet
   );
 }
 
+type SavedPreview = { fileId: FileObjectId; file: File };
+type SavedFile = { url: string | null; file: File | null; contentType: string | null };
+
+/** What to show for the stored file: the one just uploaded here, else the server's signed link. */
+function savedFile(
+  fileId: FileObjectId | null,
+  local: SavedPreview | null,
+  url: string | null | undefined,
+  contentType: string | null
+): SavedFile | null {
+  if (!fileId) return null;
+  if (local?.fileId === fileId) return { url: null, file: local.file, contentType: local.file.type };
+  return url ? { url, file: null, contentType } : null;
+}
+
+/** An object URL for a picked file, revoked when the file changes or the card unmounts. */
+function useObjectUrl(file: File | null): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!file) {
+      setUrl(null);
+      return;
+    }
+    const next = URL.createObjectURL(file);
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [file]);
+  return url;
+}
+
+function FilePreview({
+  url,
+  contentType,
+  label,
+  onOpenImage,
+}: {
+  url: string;
+  contentType: string | null;
+  label: string;
+  onOpenImage: () => void;
+}) {
+  if (contentType === "application/pdf") {
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer" className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-dashboard-accent hover:underline">
+        <FileText className="h-4 w-4" aria-hidden="true" /> View PDF
+      </a>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onOpenImage}
+      aria-label={`Open ${label} preview`}
+      className="group relative mb-2 block w-fit max-w-full cursor-zoom-in overflow-hidden rounded-lg border border-dashboard-border bg-dashboard-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dashboard-accent/50"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed or local object URL */}
+      <img src={url} alt={label} className="block max-h-48 max-w-full w-auto object-contain" />
+      <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent px-1 pb-1.5 pt-5 text-center text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+        Click to enlarge
+      </span>
+    </button>
+  );
+}
+
 function FilePicker({
   id,
   label,
@@ -605,6 +678,7 @@ function FilePicker({
   file,
   configured,
   configuredLabel = "Configured",
+  saved = null,
   onPick,
   onProblem,
 }: {
@@ -616,10 +690,19 @@ function FilePicker({
   file: File | null;
   configured: boolean;
   configuredLabel?: string;
+  saved?: SavedFile | null;
   onPick: (file: File | null) => void;
   onProblem: (message: string) => void;
 }) {
   const Icon = file ? (file.type === "application/pdf" ? FileText : ImageIcon) : UploadCloud;
+  const pickedUrl = useObjectUrl(file);
+  const savedLocalUrl = useObjectUrl(saved?.file ?? null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const previewName = label.startsWith("Your ") ? label.slice("Your ".length) : label;
+  const preview = file
+    ? pickedUrl && { url: pickedUrl, contentType: file.type, label: `New ${previewName}: ${file.name}` }
+    : saved && (saved.url ?? savedLocalUrl) && { url: (saved.url ?? savedLocalUrl) as string, contentType: saved.contentType, label: `Current ${previewName}` };
+  const isImagePreview = Boolean(preview && preview.contentType !== "application/pdf");
   return (
     <div className="relative mt-4">
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -632,6 +715,14 @@ function FilePicker({
           </span>
         ) : null}
       </div>
+      {preview ? (
+        <FilePreview
+          url={preview.url}
+          contentType={preview.contentType}
+          label={preview.label}
+          onOpenImage={() => setLightboxOpen(true)}
+        />
+      ) : null}
       <input
         id={id}
         className="sr-only"
@@ -663,6 +754,13 @@ function FilePicker({
           {configured ? "Change" : "Browse"}
         </span>
       </label>
+      <ImageLightbox
+        images={preview && isImagePreview ? [{ src: preview.url, alt: `${preview.label} full-size preview` }] : []}
+        open={lightboxOpen}
+        onOpenChange={setLightboxOpen}
+        activeIndex={0}
+        onActiveIndexChange={() => undefined}
+      />
     </div>
   );
 }

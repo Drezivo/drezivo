@@ -32,6 +32,7 @@ import {
 import { canonicalRequestHash } from '../../shared/idempotency.js';
 import type { FailureEnvelope, SuccessEnvelope } from '../../shared/response.js';
 import { claimTenantIdempotency, finalizeTenantIdempotency } from '../../shared/tenant-idempotency.js';
+import { storefrontMediaSigner } from '../storefront/storefront-media.js';
 import { isPaymentMaterialContentType } from './payment-method-readiness.js';
 import {
   assertFileObjectCleanupProducerEnabled,
@@ -79,7 +80,19 @@ export async function getPaymentMethodSettings(input: PaymentMethodContext): Pro
   assertCanManagePayments(input);
   return withTenantTransaction(input.tenantId, input.principalId, async (client) => {
     const rows = await listPaymentMethodSettings(client, input.tenantId);
-    return paymentMethodSettingsList.parse({ items: rows.map(toSettingsItem) });
+    // Only accepted, displayable files of this tenant are signed; anything else stays null.
+    const urls = await storefrontMediaSigner.sign(
+      client,
+      input.tenantId,
+      rows.flatMap((row) => [row.qr_file_id, row.material_file_id]),
+    );
+    return paymentMethodSettingsList.parse({
+      items: rows.map((row) => ({
+        ...toSettingsItem(row),
+        qr_image_url: row.qr_file_id ? (urls.get(row.qr_file_id) ?? null) : null,
+        material_url: row.material_file_id ? (urls.get(row.material_file_id) ?? null) : null,
+      })),
+    });
   });
 }
 

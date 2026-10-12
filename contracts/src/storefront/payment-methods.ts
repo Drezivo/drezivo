@@ -43,6 +43,12 @@ export const paymentMethodSettingsItem = z
     qr_file_id: fileObjectId.nullable(),
     presentation: paymentMethodPresentation,
     material: paymentMethodMaterial.nullable(),
+    /**
+     * Short-lived signed links so the owner sees the saved QR image and instructions file. Only the
+     * settings list sends them; command responses omit them because replays are stored.
+     */
+    qr_image_url: z.string().url().nullable().optional(),
+    material_url: z.string().url().nullable().optional(),
   })
   .strict();
 export type PaymentMethodSettingsItem = z.infer<typeof paymentMethodSettingsItem>;
