@@ -339,7 +339,7 @@ describe("AddClothingPage", () => {
     if (!("arrayBuffer" in File.prototype)) {
       Object.defineProperty(File.prototype, "arrayBuffer", {
         configurable: true,
-        value: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
+        value: vi.fn().mockResolvedValue(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]).buffer),
       });
     }
 
@@ -383,17 +383,19 @@ describe("AddClothingPage", () => {
     fireEvent.change(screen.getByLabelText("Guide Name"), {
       target: { value: "Luna Standard Size Guide" },
     });
-    const guideFile = new File([new Uint8Array([1, 2, 3])], "guide.png", { type: "image/png" });
+    const guideFile = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])], "guide.png", { type: "image/png" });
     fireEvent.change(screen.getByLabelText("Default size guide image"), {
       target: { files: [guideFile] },
     });
+    // The image is read at pick time; Save stays disabled until that finishes.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save Default Size Guide" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save Default Size Guide" }));
 
     await waitFor(() => expect(api.authorizeUpload).toHaveBeenCalledTimes(1));
     expect(api.authorizeUpload.mock.calls[0]?.[0]).toMatchObject({
       purpose: "measurement_guide",
       content_type: "image/png",
-      byte_size: 3,
+      byte_size: 11,
     });
     await waitFor(() => expect(api.finalizeUpload).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(api.saveMeasurementGuide).toHaveBeenCalledTimes(1));
@@ -684,7 +686,8 @@ describe("AddClothingPage", () => {
         digest: vi.fn().mockResolvedValue(new Uint8Array(32).buffer),
       },
     });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+    const uploadFetch = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", uploadFetch);
     Object.defineProperty(URL, "createObjectURL", {
       configurable: true,
       value: vi.fn((file: File) => `blob:${file.name}`),
@@ -696,7 +699,7 @@ describe("AddClothingPage", () => {
     if (!("arrayBuffer" in File.prototype)) {
       Object.defineProperty(File.prototype, "arrayBuffer", {
         configurable: true,
-        value: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
+        value: vi.fn().mockResolvedValue(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]).buffer),
       });
     }
 
@@ -746,7 +749,7 @@ describe("AddClothingPage", () => {
 
     const files = Array.from(
       { length: 11 },
-      (_, index) => new File([new Uint8Array([1, 2, 3])], `photo-${index + 1}.png`, { type: "image/png" })
+      (_, index) => new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])], `photo-${index + 1}.png`, { type: "image/png" })
     );
     fireEvent.change(screen.getByLabelText("Clothing photos"), {
       target: { files },
@@ -755,6 +758,9 @@ describe("AddClothingPage", () => {
     expect(screen.getAllByRole("button", { name: /^Remove photo-/ })).toHaveLength(5);
     expect(screen.getByText("5/5 photos")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add Photos" })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getAllByRole("img", { name: /photo-\d+\.png preview/ })).toHaveLength(5)
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Add Clothing" }));
 
@@ -770,6 +776,11 @@ describe("AddClothingPage", () => {
         (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`
       )
     );
+    expect(uploadFetch).toHaveBeenCalledTimes(5);
+    for (const [, options] of uploadFetch.mock.calls) {
+      const uploadedBody = options?.body as Blob;
+      expect(Array.from(new Uint8Array(await uploadedBody.arrayBuffer()))).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    }
     await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("/inventory"));
     expect(navigation.push).not.toHaveBeenCalled();
     expect(sessionStorage.getItem("drezivo:inventory-notice")).toBe("clothing-added");
@@ -777,5 +788,140 @@ describe("AddClothingPage", () => {
     const beforeUnload = new Event("beforeunload", { cancelable: true });
     expect(window.dispatchEvent(beforeUnload)).toBe(true);
     expect(beforeUnload.defaultPrevented).toBe(false);
+  });
+
+  it("shows local-copy guidance when a picked photo cannot be read and allows reselecting it", async () => {
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:captured-screenshot"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
+
+    const selectedFile = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 4, 5, 6])], "phone-screenshot.png", {
+      type: "image/png",
+    });
+    const readFile = vi.fn()
+      .mockRejectedValueOnce(new DOMException("The requested file could not be read", "NotReadableError"))
+      .mockResolvedValueOnce(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 4, 5, 6]).buffer);
+    Object.defineProperty(selectedFile, "arrayBuffer", { configurable: true, value: readFile });
+
+    renderPage();
+    await waitForDefaultGuideLoaded();
+    fireEvent.change(screen.getByLabelText("Clothing Name *"), {
+      target: { value: "Screenshot Dress" },
+    });
+    fireEvent.change(screen.getByLabelText("Flexible fit bust"), { target: { value: "34" } });
+
+    const photoInput = screen.getByLabelText("Clothing photos");
+    fireEvent.change(photoInput, { target: { files: [selectedFile] } });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("phone-screenshot.png");
+    expect(screen.getByRole("alert")).toHaveTextContent("select the local copy");
+    expect(screen.getByRole("button", { name: "Add Clothing" })).toBeDisabled();
+    expect(api.authorizeUpload).not.toHaveBeenCalled();
+    expect(api.createClothing).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove phone-screenshot.png" }));
+    expect(screen.getByText("0/5 photos")).toBeInTheDocument();
+    expect(photoInput).toHaveValue("");
+
+    fireEvent.change(photoInput, { target: { files: [selectedFile] } });
+    expect(await screen.findByRole("img", { name: "phone-screenshot.png preview" })).toBeVisible();
+    expect(readFile).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Clothing" })).toBeEnabled();
+  });
+  describe("photos that fail in production browsers", () => {
+    const fileId = "00000000-0000-4000-8000-000000000777";
+
+    beforeEach(() => {
+      let sequence = 0;
+      vi.stubGlobal("crypto", {
+        randomUUID: () => `00000000-0000-4000-8000-${String(++sequence).padStart(12, "0")}`,
+        subtle: { digest: vi.fn().mockResolvedValue(new Uint8Array(32).buffer) },
+      });
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+      Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:photo") });
+      Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+      api.authorizeUpload.mockResolvedValue({
+        data: {
+          file_id: fileId,
+          upload_url: `https://uploads.example/${fileId}`,
+          upload_method: "PUT",
+          required_headers: { "Content-Type": "image/jpeg" },
+          expires_at: "2026-09-21T02:00:00.000Z",
+        },
+        requestId: "req-upload",
+      });
+      api.finalizeUpload.mockResolvedValue({
+        data: {
+          file: {
+            file_id: fileId,
+            purpose: "catalogue_image",
+            lifecycle_status: "accepted",
+            content_type: "image/jpeg",
+            byte_size: 6,
+            sha256: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            frozen_at: "2026-09-21T01:30:00.000Z",
+          },
+        },
+        requestId: "req-finalize",
+      });
+    });
+
+    async function pickAndAdd(photo: File, afterPick: () => void = () => undefined) {
+      renderPage();
+      await waitForDefaultGuideLoaded();
+      fireEvent.change(screen.getByLabelText("Clothing Name *"), { target: { value: "Alara dress" } });
+      fireEvent.change(screen.getByLabelText("Flexible fit bust"), { target: { value: "34" } });
+      fireEvent.change(screen.getByLabelText("Clothing photos"), { target: { files: [photo] } });
+      await waitFor(() => expect(screen.getByRole("button", { name: "Add Clothing" })).toBeEnabled());
+      afterPick();
+      fireEvent.click(screen.getByRole("button", { name: "Add Clothing" }));
+      await waitFor(() => expect(api.createClothing).toHaveBeenCalledTimes(1));
+    }
+
+    it("saves when the picked file becomes unreadable before Save (NotReadableError)", async () => {
+      const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10])], "dress.jpg", { type: "image/jpeg" });
+      // Readable while the picker grant lasts; afterwards every read fails, as Chrome reports it.
+      let accessLapsed = false;
+      const read = vi.fn(() =>
+        accessLapsed
+          ? Promise.reject(new DOMException("The requested file could not be read", "NotReadableError"))
+          : Promise.resolve(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10]).buffer)
+      );
+      Object.defineProperty(photo, "arrayBuffer", { configurable: true, value: read });
+
+      await pickAndAdd(photo, () => {
+        accessLapsed = true;
+      });
+
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText(/could not be read/i)).not.toBeInTheDocument();
+    });
+
+    it("declares a JPEG named .webp as image/jpeg so finalize accepts it", async () => {
+      const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10])], "dress.webp", { type: "image/webp" });
+
+      await pickAndAdd(photo);
+
+      expect(api.authorizeUpload.mock.calls[0]?.[0]).toMatchObject({ content_type: "image/jpeg", byte_size: 6 });
+    });
+
+    it("blocks a HEIC photo at pick time with a message that says what to do", async () => {
+      const heic = [0, 0, 0, 0x18, ..."ftypheic".split("").map((c) => c.charCodeAt(0)), 0, 0, 0, 0];
+      renderPage();
+      await waitForDefaultGuideLoaded();
+      fireEvent.change(screen.getByLabelText("Clothing photos"), {
+        target: { files: [new File([new Uint8Array(heic)], "IMG_2041.jpg", { type: "image/jpeg" })] },
+      });
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("“IMG_2041.jpg” is a HEIC image. Save it as JPG or PNG");
+      expect(screen.getByRole("button", { name: "Add Clothing" })).toBeDisabled();
+      expect(api.authorizeUpload).not.toHaveBeenCalled();
+    });
   });
 });

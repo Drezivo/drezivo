@@ -81,6 +81,8 @@ import {
   publicPlanCatalogResponse,
   resendMembershipInvitationRequest,
   cancelMembershipInvitationRequest,
+  memberRemovalResponse,
+  type MemberRemovalResponse,
   paymentMethodSettingsItem,
   branchBusinessHours,
   branchClosureCreateRequest,
@@ -441,6 +443,15 @@ export function createDrezivoApiClient(getToken: TokenGetter) {
         method: "GET",
         path: "/api/v1/members",
         responseSchema: apiEnvelope(memberRosterResponse),
+      }),
+    removeMember: (membershipId: string, idempotencyKey: string) =>
+      request<MemberRemovalResponse>({
+        getToken,
+        body: {},
+        idempotencyKey,
+        method: "POST",
+        path: `/api/v1/members/${encodeURIComponent(membershipId)}/remove`,
+        responseSchema: apiEnvelope(memberRemovalResponse),
       }),
     getMembershipInvitations: (input: PaginationRequest) => {
       const query = paginationRequest.parse(input);

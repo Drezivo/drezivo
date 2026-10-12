@@ -264,6 +264,8 @@ export const storefrontCheckout = z
     handover_time: z.string().regex(/^([01]\d|2[0-3]):(00|30)$/, 'use a half-hour time such as 10:00'),
     min_notice_days: z.number().int().min(0).max(60),
     max_rental_days: z.number().int().min(1).max(30),
+    /** Off: the storefront stays up for browsing, but renters reserve by contacting the shop. */
+    reservation_requests: z.boolean(),
     fitting_requests: z.boolean(),
   })
   .strict();
@@ -468,6 +470,7 @@ export function defaultStorefrontDocument(businessName: string): StorefrontDocum
       handover_time: '10:00',
       min_notice_days: 1,
       max_rental_days: 7,
+      reservation_requests: true,
       fitting_requests: false,
     },
   };
