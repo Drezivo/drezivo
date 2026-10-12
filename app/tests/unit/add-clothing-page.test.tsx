@@ -684,7 +684,8 @@ describe("AddClothingPage", () => {
         digest: vi.fn().mockResolvedValue(new Uint8Array(32).buffer),
       },
     });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+    const uploadFetch = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", uploadFetch);
     Object.defineProperty(URL, "createObjectURL", {
       configurable: true,
       value: vi.fn((file: File) => `blob:${file.name}`),
@@ -755,6 +756,9 @@ describe("AddClothingPage", () => {
     expect(screen.getAllByRole("button", { name: /^Remove photo-/ })).toHaveLength(5);
     expect(screen.getByText("5/5 photos")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add Photos" })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getAllByRole("img", { name: /photo-\d+\.png preview/ })).toHaveLength(5)
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Add Clothing" }));
 
@@ -770,6 +774,11 @@ describe("AddClothingPage", () => {
         (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`
       )
     );
+    expect(uploadFetch).toHaveBeenCalledTimes(5);
+    for (const [, options] of uploadFetch.mock.calls) {
+      const uploadedBody = options?.body as Blob;
+      expect(Array.from(new Uint8Array(await uploadedBody.arrayBuffer()))).toEqual([1, 2, 3]);
+    }
     await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("/inventory"));
     expect(navigation.push).not.toHaveBeenCalled();
     expect(sessionStorage.getItem("drezivo:inventory-notice")).toBe("clothing-added");
@@ -777,5 +786,50 @@ describe("AddClothingPage", () => {
     const beforeUnload = new Event("beforeunload", { cancelable: true });
     expect(window.dispatchEvent(beforeUnload)).toBe(true);
     expect(beforeUnload.defaultPrevented).toBe(false);
+  });
+
+  it("shows local-copy guidance when a picked photo cannot be read and allows reselecting it", async () => {
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:captured-screenshot"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
+
+    const selectedFile = new File([new Uint8Array([4, 5, 6])], "phone-screenshot.png", {
+      type: "image/png",
+    });
+    const readFile = vi.fn()
+      .mockRejectedValueOnce(new DOMException("The requested file could not be read", "NotReadableError"))
+      .mockResolvedValueOnce(new Uint8Array([4, 5, 6]).buffer);
+    Object.defineProperty(selectedFile, "arrayBuffer", { configurable: true, value: readFile });
+
+    renderPage();
+    await waitForDefaultGuideLoaded();
+    fireEvent.change(screen.getByLabelText("Clothing Name *"), {
+      target: { value: "Screenshot Dress" },
+    });
+    fireEvent.change(screen.getByLabelText("Flexible fit bust"), { target: { value: "34" } });
+
+    const photoInput = screen.getByLabelText("Clothing photos");
+    fireEvent.change(photoInput, { target: { files: [selectedFile] } });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("phone-screenshot.png");
+    expect(screen.getByRole("alert")).toHaveTextContent("select the local copy");
+    expect(screen.getByRole("button", { name: "Add Clothing" })).toBeDisabled();
+    expect(api.authorizeUpload).not.toHaveBeenCalled();
+    expect(api.createClothing).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove phone-screenshot.png" }));
+    expect(screen.getByText("0/5 photos")).toBeInTheDocument();
+    expect(photoInput).toHaveValue("");
+
+    fireEvent.change(photoInput, { target: { files: [selectedFile] } });
+    expect(await screen.findByRole("img", { name: "phone-screenshot.png preview" })).toBeVisible();
+    expect(readFile).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Clothing" })).toBeEnabled();
   });
 });
