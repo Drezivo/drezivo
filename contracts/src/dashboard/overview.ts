@@ -165,13 +165,17 @@ export const dashboardOverviewResponse = z
           .strict(),
         new_customers: z.object({ current: dashboardCount, previous: dashboardCount }).strict(),
         /**
-         * Rental fees (no deposits) of confirmed bookings whose pickup falls in the current month,
-         * as if they all complete. Cancelled and completed bookings are not included. Optional only
-         * so an app build from before this field still reads an older API.
+         * Cumulative projected rental fees: all completed rental fees to date plus the rental fees
+         * (no deposits) of confirmed bookings whose pickup has not passed, as if they complete.
+         * The count covers only those upcoming confirmed bookings. Optional so older API responses
+         * without this projection remain valid.
          */
         projected_rental_value: z
           .object({ current_minor: nonNegativeMoneyString, reservations: dashboardCount })
           .strict()
+          .describe(
+            'Lifetime completed rental fees plus fees from confirmed reservations with pickup_at at or after the query database as_of timestamp. Excludes deposits; reservations counts upcoming confirmed bookings.'
+          )
           .optional(),
       })
       .strict(),

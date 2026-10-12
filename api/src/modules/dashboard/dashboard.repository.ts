@@ -325,15 +325,25 @@ export const DASHBOARD_OVERVIEW_SQL = `WITH branch_clock AS MATERIALIZED (
        GROUP BY w.month_start, w.month_end, w.previous_month_start, w.previous_month_end
      ),
      projection AS (
-       -- Confirmed and not yet picked up, so still expected to earn its rental fee this month.
        SELECT
-         COALESCE(sum(r.rental_total_minor::numeric), 0)::text AS projected_value_minor,
-         count(r.id)::int AS projected_reservations
+         (completed.rental_value_minor + upcoming.rental_value_minor)::text AS projected_value_minor,
+         upcoming.projected_reservations
        FROM windows w
-       LEFT JOIN reservation r
-         ON r.tenant_id = $1::uuid AND r.branch_id = $2::uuid AND r.status = 'confirmed'
-        AND r.pickup_at >= w.month_start AND r.pickup_at < w.month_end
-       GROUP BY w.month_start, w.month_end
+       CROSS JOIN LATERAL (
+         SELECT COALESCE(sum(r.rental_total_minor::numeric), 0) AS rental_value_minor
+           FROM reservation r
+          WHERE r.tenant_id = $1::uuid AND r.branch_id = $2::uuid
+            AND r.status = 'completed' AND r.completed_at IS NOT NULL
+            AND r.completed_at <= w.as_of
+       ) completed
+       CROSS JOIN LATERAL (
+         SELECT
+           COALESCE(sum(r.rental_total_minor::numeric), 0) AS rental_value_minor,
+           count(*)::int AS projected_reservations
+           FROM reservation r
+          WHERE r.tenant_id = $1::uuid AND r.branch_id = $2::uuid
+            AND r.status = 'confirmed' AND r.pickup_at >= w.as_of
+       ) upcoming
      ),
      new_customer_counts AS (
        SELECT

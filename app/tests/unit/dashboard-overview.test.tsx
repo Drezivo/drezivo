@@ -163,7 +163,9 @@ describe("DashboardOverview", () => {
     ).toBeVisible();
     expect(screen.getByText("Projected Rental Value")).toBeVisible();
     expect(screen.getByText("₱12,500.00")).toBeVisible();
-    expect(screen.getByText("From 4 confirmed bookings picking up this month")).toBeVisible();
+    expect(
+      screen.getByText("Completed rental fees to date + 4 upcoming confirmed reservations")
+    ).toBeVisible();
     expect(screen.queryByText(/sample|prototype|maria|2025/i)).not.toBeInTheDocument();
   });
 
@@ -176,6 +178,25 @@ describe("DashboardOverview", () => {
 
     expect(await screen.findByText("Completed Rental Value")).toBeVisible();
     expect(screen.queryByText("Projected Rental Value")).not.toBeInTheDocument();
+  });
+
+  it("explains the projection when there are no upcoming confirmed reservations", async () => {
+    dashboardApi.getDashboardOverview.mockResolvedValue({
+      data: {
+        ...overview,
+        business_performance: {
+          ...overview.business_performance,
+          projected_rental_value: { current_minor: "4850000", reservations: 0 },
+        },
+      },
+    });
+    render(<DashboardOverview />);
+
+    expect(
+      await screen.findByText(
+        "Completed rental fees to date, with no upcoming confirmed bookings"
+      )
+    ).toBeVisible();
   });
 
   it("shows a loading state without presenting fabricated dashboard values", () => {

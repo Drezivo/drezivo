@@ -603,8 +603,8 @@ function ScheduleRow({
 
 /** Says what the projection is made of, since it is not yet earned money. */
 function projectionNote(reservations: number): string {
-  if (reservations === 0) return "No confirmed bookings picking up this month yet";
-  return `From ${reservations.toLocaleString("en-PH")} confirmed ${reservations === 1 ? "booking" : "bookings"} picking up this month`;
+  if (reservations === 0) return "Completed rental fees to date, with no upcoming confirmed bookings";
+  return `Completed rental fees to date + ${reservations.toLocaleString("en-PH")} upcoming confirmed ${reservations === 1 ? "reservation" : "reservations"}`;
 }
 
 function PerformanceMetric({
