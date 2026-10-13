@@ -105,7 +105,10 @@ export function StaffSignInForm({ initialFlow = "sign-in" }: StaffSignInFormProp
 
   async function resolveSignUpAttempt(attempt: NonNullable<typeof signUp>) {
     if (attempt.status === "complete" && attempt.createdSessionId && setActive) {
-      await setActive({ session: attempt.createdSessionId, redirectUrl: "/onboarding" });
+      await setActive({
+        session: attempt.createdSessionId,
+        redirectUrl: "/onboarding",
+      });
       return;
     }
 
@@ -151,13 +154,9 @@ export function StaffSignInForm({ initialFlow = "sign-in" }: StaffSignInFormProp
         isClerkAPIResponseError(caughtError) &&
         caughtError.errors[0]?.code === "form_identifier_not_found"
       ) {
-        try {
-          await startEmailSignUp(normalizedEmail);
-          return;
-        } catch {
-          setError(GENERIC_ERROR);
-          return;
-        }
+        setFlow("sign-up");
+        setError("No account was found. Create an account to continue.");
+        return;
       }
 
       setError(GENERIC_ERROR);

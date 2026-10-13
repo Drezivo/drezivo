@@ -2517,13 +2517,12 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
   it('records a late return and links the return custody fact to an already-threatened future reservation', async () => {
     const seed = await seedWorkspace('org_rsv051_late', 'user_rsv051_late', 'cash');
     const pickedUp = await createPickedUpReservation(seed, 'return-late-current');
-    const futureStart = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
-    const futureEnd = new Date(futureStart.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const futureInterval = await intervalAfterReservationTurnaround(seed, pickedUp.id);
     const future = await createHoldForInterval(
       seed,
       'return-late-future',
-      futureStart.toISOString(),
-      futureEnd.toISOString(),
+      futureInterval.start,
+      futureInterval.end,
     );
 
     await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
@@ -3505,7 +3504,9 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       },
     );
     if (result.status !== 201 || result.body.success !== true) {
-      throw new Error(`Expected held reservation creation, got ${result.status}.`);
+      throw new Error(
+        `Expected held reservation creation, got ${result.status}: ${JSON.stringify(result.body)}.`,
+      );
     }
     const reservation = result.body.data.reservation;
     const paymentId = await withTenantTransaction(
@@ -3521,6 +3522,34 @@ describe('RSV-030/031/032/041/050 reservation lifecycle commands', async () => {
       },
     );
     return { id: reservation.id, version: reservation.version, paymentId };
+  }
+
+  async function intervalAfterReservationTurnaround(
+    seed: ReviewSeed,
+    reservationId: string,
+  ): Promise<{ start: string; end: string }> {
+    const interval = await withTenantTransaction(seed.tenantId, seed.principalId, async (client) => {
+      const result = await client.query<{ start_at: Date; end_at: Date }>(
+        `SELECT r.due_at + ((pv.turnaround_minutes + 1) * interval '1 minute') AS start_at,
+                r.due_at + ((pv.turnaround_minutes + pv.included_duration_minutes + 1)
+                            * interval '1 minute') AS end_at
+           FROM reservation r
+           JOIN reservation_line rl
+             ON rl.tenant_id = r.tenant_id
+            AND rl.reservation_id = r.id
+           JOIN product_variant pv
+             ON pv.tenant_id = rl.tenant_id
+            AND pv.id = rl.variant_id
+          WHERE r.tenant_id = $1
+            AND r.id = $2
+          ORDER BY rl.line_number ASC
+          LIMIT 1`,
+        [seed.tenantId, reservationId],
+      );
+      return requireRow(result.rows, 'future reservation interval');
+    });
+
+    return { start: interval.start_at.toISOString(), end: interval.end_at.toISOString() };
   }
 
   function walkInCustomer(fullName: string) {

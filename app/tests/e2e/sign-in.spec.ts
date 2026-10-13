@@ -30,6 +30,16 @@ test.describe("staff sign-in", () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 
+  test("defers Terms acceptance until after email verification", async ({ page }) => {
+    await page.goto("/sign-up");
+
+    const form = page.getByTestId("staff-sign-in-form");
+    const createAccount = form.getByRole("button", { name: "Create account" });
+    await expect(form.getByRole("checkbox")).toHaveCount(0);
+    await expect(form.getByRole("link", { name: "Terms of Service" })).toHaveCount(0);
+    await expect(createAccount).toBeEnabled();
+  });
+
   test("keeps the SSO callback route public", async ({ page }) => {
     await page.goto("/sso-callback");
 

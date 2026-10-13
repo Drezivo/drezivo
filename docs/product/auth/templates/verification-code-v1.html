@@ -1,0 +1,37 @@
+<re-html>
+  <re-head>
+    <re-title>{{otp_code}} is your {{app.name}} verification code</re-title>
+  </re-head>
+  <re-body background-color="#f5f1ea" padding="32px 8px">
+    <re-container width="400px" background-color="#fffdf9" border="1px solid #e5d9c8" border-radius="16px">
+      <re-header background-color="#fffdf9" padding="28px 28px 8px">
+        <re-block align="center">
+          <re-text align="center" color="#72502f" font-size="15px" font-weight="bold">{{> app_logo}}</re-text>
+        </re-block>
+      </re-header>
+      <re-main background-color="#fffdf9" padding="0 28px 24px">
+        <re-block align="center" padding="8px 0 0">
+          <re-heading level="h1" align="center" color="#241d18" font-weight="bold">Verification code</re-heading>
+          <re-text align="center" color="#675c51" font-size="15px" line-height="1.6">Enter the following verification code when prompted:</re-text>
+        </re-block>
+        <re-block align="center" background-color="#f1e5d2" border="1px solid #e6d5bb" border-radius="12px" padding="15px 24px">
+          <re-text align="center" color="#241d18" font-size="30px" font-weight="bold" line-height="1.2">{{otp_code}}</re-text>
+        </re-block>
+        <re-block align="center" padding="16px 0 12px">
+          <re-text align="center" color="#75695e" font-size="13px" line-height="1.6">To protect your account, do not share this code.</re-text>
+        </re-block>
+        <re-block padding="8px 0 0">
+          <re-text color="#241d18" font-size="13px" font-weight="bold">Didn't request this?</re-text>
+          <re-text color="#75695e" font-size="13px" line-height="1.6">This code was requested from {{requested_from}} at {{requested_at}}. If you didn't make this request, you can safely ignore this email.</re-text>
+        </re-block>
+      </re-main>
+      <re-footer background-color="#fffdf9" padding="0 28px 20px">
+        <re-block>
+          <re-divider background-color="#e5d9c8" height="1px"></re-divider>
+          <re-spacer height="16px"></re-spacer>
+          <re-text align="center" color="#877c71" font-size="11px" line-height="1.5">© {{current_year}} {{app.name}}</re-text>
+        </re-block>
+      </re-footer>
+    </re-container>
+  </re-body>
+</re-html>

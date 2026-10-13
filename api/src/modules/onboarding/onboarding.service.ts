@@ -1,4 +1,4 @@
-import type { PlanCode } from '@drezivo/contracts';
+import { CURRENT_TERMS_VERSION, type PlanCode } from '@drezivo/contracts';
 
 import { createClerkServerAdapter } from '../../integrations/clerk/clerk.adapter.js';
 import {
@@ -12,6 +12,7 @@ import {
 import { canonicalRequestHash } from '../../shared/idempotency.js';
 import { type FailureEnvelope, type SuccessEnvelope } from '../../shared/response.js';
 import { ensureAccount, getAccountByClerkUserId } from '../accounts/account.repository.js';
+import { getLatestAccountTermsAcceptance } from '../accounts/terms-acceptance.repository.js';
 import {
   getCurrentOwnerOnboarding,
   getOwnerOnboarding,
@@ -66,14 +67,17 @@ export interface AbandonOwnerOnboardingInput {
 export async function getCurrentOwnerOnboardingContext(
   input: GetCurrentOnboardingInput,
 ): Promise<OwnerOnboardingContextDTO> {
-  const [onboarding, account] = await Promise.all([
+  const [onboarding, account, termsAcceptance] = await Promise.all([
     getCurrentOwnerOnboarding(input.principalId),
     getAccountByClerkUserId(input.principalId),
+    getLatestAccountTermsAcceptance(input.principalId),
   ]);
   return {
     onboarding: onboarding ? toPublicOnboarding(onboarding) : null,
     has_current_owned_tenant: Boolean(account?.currentOwnedTenantId),
     has_consumed_lifetime_trial: Boolean(account?.trialConsumedAt),
+    required_terms_version: CURRENT_TERMS_VERSION,
+    accepted_terms_version: termsAcceptance?.termsVersion ?? null,
   };
 }
 
@@ -91,6 +95,20 @@ export async function startOwnerOnboarding(
 ): Promise<OnboardingCommandResponse> {
   const payloadHash = canonicalRequestHash(input.request);
   const account = await ensureAccount(input.principalId);
+  const [currentOnboarding, termsAcceptance] = await Promise.all([
+    getCurrentOwnerOnboarding(input.principalId),
+    getLatestAccountTermsAcceptance(input.principalId),
+  ]);
+  if (
+    !account.currentOwnedTenantId &&
+    !currentOnboarding &&
+    termsAcceptance?.termsVersion !== CURRENT_TERMS_VERSION
+  ) {
+    throw new StateConflictError(
+      'Accept the current Terms of Service before creating your workspace.',
+    );
+  }
+
   const claim = await withOnboardingTransaction(input.principalId, (transaction) =>
     transaction.claimStart({
       account,
