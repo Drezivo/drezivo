@@ -79,7 +79,7 @@ function PlanCards({ plans, signUpUrl }: { plans: readonly PublicPlan[]; signUpU
 
 /**
  * Pricing as its own chapter. With a single plan there is nothing to compare, so the price is the
- * headline; when the operator console publishes two to four plans, the same section becomes cards.
+ * headline; when multiple plans are offered, the same section becomes cards.
  */
 export function PlanShowcase({
   plans,
