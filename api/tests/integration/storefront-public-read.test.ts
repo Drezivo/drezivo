@@ -200,9 +200,9 @@ describe('public storefront read API', async () => {
     expect((await request(app).get(`/api/v1/public/stores/${ws.slug}/media/${randomUUID()}`)).status).toBe(404);
 
     const evidence = await admin.query<{ id: string }>(
-      `INSERT INTO file_object (tenant_id, purpose, storage_key, mime_type, byte_size, lifecycle_status,
+      `INSERT INTO file_object (tenant_id, purpose, storage_key, version_id, mime_type, byte_size, lifecycle_status,
          is_private, upload_expires_at, frozen_at)
-       VALUES ($1, 'verification_document', $2, 'image/png', $3, 'accepted', true, now(), now())
+       VALUES ($1, 'verification_document', $2, 'private-evidence-v1', 'image/png', $3, 'accepted', true, now(), now())
        RETURNING id`,
       [ws.tenantId, `tenant-files/${ws.tenantId}/private-evidence/source`, png.byteLength],
     );
