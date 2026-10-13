@@ -1,36 +1,10 @@
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import PricingPage from '@/app/(marketing)/pricing/page';
 import TermsPage from '@/app/(marketing)/terms/page';
+import { PublicPlanShowcase } from '@/components/marketing/public-plan-showcase';
 import { MARKETING_FAQ_GROUPS } from '@/lib/marketing-content';
-
-const planApi = vi.hoisted(() => ({ getPublicPlanCatalog: vi.fn() }));
-vi.mock('@/lib/storefront-api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/storefront-api')>()),
-  getPublicPlanCatalog: planApi.getPublicPlanCatalog,
-}));
-
-const planCatalog = {
-  plans: [
-    {
-      code: 'starter' as const,
-      name: 'Starter' as const,
-      monthly_price_minor: 14900,
-      currency: 'PHP' as const,
-      trial_days: 14,
-      limits: { active_garments: 125, frontdesk_seats: 0 },
-    },
-    {
-      code: 'standard' as const,
-      name: 'Standard' as const,
-      monthly_price_minor: 29900,
-      currency: 'PHP' as const,
-      trial_days: 14,
-      limits: { active_garments: 300, frontdesk_seats: 3 },
-    },
-  ],
-};
 
 function answerFor(question: string): string {
   const faq = MARKETING_FAQ_GROUPS.flatMap((group) => group.faqs).find(
@@ -41,14 +15,15 @@ function answerFor(question: string): string {
 }
 
 describe('marketing FAQ, pricing, and terms', () => {
-  beforeEach(() => {
-    planApi.getPublicPlanCatalog.mockReset().mockResolvedValue(planCatalog);
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it('shows both catalog-backed offers in the pricing section', async () => {
+  it('renders both static offers immediately on the pricing page', () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
     render(<PricingPage />);
 
-    await screen.findByText('Starter');
+    expect(screen.getByText('Starter')).toBeTruthy();
     const pricing = screen.getByRole('heading', { level: 1 }).closest('#pricing');
     expect(pricing).not.toBeNull();
     const pricingText = pricing?.textContent ?? '';
@@ -61,12 +36,27 @@ describe('marketing FAQ, pricing, and terms', () => {
     expect(pricingText).toContain('Up to 3 Front Desk staff');
     const starterCard = screen.getByText('Starter').closest('li');
     expect(starterCard?.textContent).not.toContain('Front Desk staff');
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('moves billing-detail explanations to the FAQ instead of the pricing page', async () => {
+  it('renders static offers in the shared showcase used by the landing page', () => {
+    const { container } = render(<PublicPlanShowcase signUpUrl="/sign-up" />);
+    const pricing = container.querySelector('#pricing');
+
+    expect(pricing?.textContent).toContain('Starter');
+    expect(pricing?.textContent).toContain('₱149');
+    expect(pricing?.textContent).toContain('Up to 125 active garments');
+    expect(pricing?.textContent).toContain('Standard');
+    expect(pricing?.textContent).toContain('₱299');
+    expect(pricing?.textContent).toContain('Up to 300 active garments');
+  });
+
+  it('moves billing-detail explanations to the FAQ instead of the pricing page', () => {
     render(<PricingPage />);
 
-    await screen.findByText('Starter');
+    expect(screen.getByText('Starter')).toBeTruthy();
     expect(screen.queryByText('How billing works')).toBeNull();
     expect(answerFor('Do I need a credit card to start?')).toContain(
       'GCash, Maya, or bank-transfer',

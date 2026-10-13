@@ -1,5 +1,3 @@
-import type { PublicPlanCatalogResponse } from '@drezivo/contracts';
-
 /** A subscription plan as the marketing site shows it. */
 export interface PublicPlan {
   readonly code: string;
@@ -13,38 +11,44 @@ export interface PublicPlan {
   readonly highlighted: boolean;
 }
 
-/** The marketing site lays out between one and four plans; more would need a different page. */
-export const MAX_PUBLIC_PLANS = 4;
-
-/** Builds marketing cards from the validated, server-owned catalog response. */
-export function toPublicPlans(catalog: PublicPlanCatalogResponse): readonly PublicPlan[] {
-  return catalog.plans.slice(0, MAX_PUBLIC_PLANS).map((plan) => {
-    const features = [`Up to ${plan.limits.active_garments} active garments`];
-    if (plan.code === 'starter') {
-      features.push('Owner-only access (no Front Desk accounts)');
-    } else if (plan.limits.frontdesk_seats > 0) {
-      features.push(`Up to ${plan.limits.frontdesk_seats} Front Desk staff`);
-    }
-    features.push(
+/**
+ * Static marketing snapshot of the current public catalog. Update alongside catalog changes;
+ * onboarding and billing continue to use the API-owned catalog.
+ */
+export const PUBLIC_MARKETING_PLANS: readonly PublicPlan[] = [
+  {
+    code: 'starter',
+    name: 'Starter',
+    tagline: 'The essentials to keep a clothing rental shop organized and bookable.',
+    price: '149.00',
+    interval: 'month',
+    trialDays: 14,
+    features: [
+      'Up to 125 active garments',
+      'Owner-only access (no Front Desk accounts)',
       'Online storefront with bookings and fittings',
       'Reservations, calendar & availability',
       'Customers, payments, returns & exports',
-    );
-    return {
-      code: plan.code,
-      name: plan.name,
-      tagline:
-        plan.code === 'starter'
-          ? 'The essentials to keep a clothing rental shop organized and bookable.'
-          : 'More room for a growing rental shop and a small front-desk team.',
-      price: (plan.monthly_price_minor / 100).toFixed(2),
-      interval: 'month',
-      trialDays: plan.trial_days,
-      features,
-      highlighted: plan.code === 'standard',
-    };
-  });
-}
+    ],
+    highlighted: false,
+  },
+  {
+    code: 'standard',
+    name: 'Standard',
+    tagline: 'More room for a growing rental shop and a small front-desk team.',
+    price: '299.00',
+    interval: 'month',
+    trialDays: 14,
+    features: [
+      'Up to 300 active garments',
+      'Up to 3 Front Desk staff',
+      'Online storefront with bookings and fittings',
+      'Reservations, calendar & availability',
+      'Customers, payments, returns & exports',
+    ],
+    highlighted: true,
+  },
+];
 
 /** Formats whole pesos without centavos and preserves non-zero centavos. */
 export function formatPlanPrice(price: string): string {
