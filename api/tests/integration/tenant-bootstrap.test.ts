@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 
-import { storefrontSlug } from '@drezivo/contracts';
+import { CURRENT_TERMS_VERSION, storefrontSlug } from '@drezivo/contracts';
 
 import '../../src/config/load-env.js';
 import {
@@ -36,6 +36,23 @@ describe('TBF-030 tenant bootstrap', async () => {
     await import('../../src/modules/onboarding/tenant-bootstrap.persistence.js');
   const { canonicalRequestHash } = await import('../../src/shared/idempotency.js');
 
+  async function acceptCurrentTermsForTest(principalId: string) {
+    const account = await ensureAccount(principalId);
+    await withGlobalTransaction(principalId, async (client) => {
+      await client.query(
+        `INSERT INTO account_terms_acceptance (account_id, terms_version)
+         VALUES ($1, $2)
+         ON CONFLICT (account_id, terms_version) DO NOTHING`,
+        [account.id, CURRENT_TERMS_VERSION],
+      );
+    });
+  }
+
+  async function runAcceptedTenantBootstrap(input: Parameters<typeof runTenantBootstrap>[0]) {
+    await acceptCurrentTermsForTest(input.principalId);
+    return runTenantBootstrap(input);
+  }
+
   beforeAll(async () => {
     await migrateTestDatabase(adminUrl);
     await ensureAppRoleLogin(adminUrl);
@@ -64,7 +81,7 @@ describe('TBF-030 tenant bootstrap', async () => {
     const selected = await chooseOnboardingPlan(onboarding.onboarding.id, 'standard', principalId);
     if (selected.kind !== 'updated') throw new Error('expected plan selection');
 
-    const result = await runTenantBootstrap({
+    const result = await runAcceptedTenantBootstrap({
       principalId,
       clerkOrgId: 'org_tbf030_success',
       onboardingId: onboarding.onboarding.id,
@@ -228,7 +245,7 @@ describe('TBF-030 tenant bootstrap', async () => {
     const selected = await chooseOnboardingPlan(onboarding.onboarding.id, 'starter', principalId);
     if (selected.kind !== 'updated') throw new Error('expected Starter plan selection');
 
-    const result = await runTenantBootstrap({
+    const result = await runAcceptedTenantBootstrap({
       principalId,
       clerkOrgId: 'org_tbf030_starter_bootstrap',
       onboardingId: onboarding.onboarding.id,
@@ -259,6 +276,47 @@ describe('TBF-030 tenant bootstrap', async () => {
     ]);
   });
 
+  it('rejects trial activation until the current Terms version has been accepted', async () => {
+    const principalId = 'user_tbf030_terms_required';
+    const account = await ensureAccount(principalId);
+    const onboarding = await createOrResumeOnboarding(
+      account.id,
+      'org_tbf030_terms_required',
+      principalId,
+      { organizationName: 'Terms Studio' },
+    );
+    if (onboarding.kind !== 'created') throw new Error('expected onboarding creation');
+    await chooseOnboardingPlan(onboarding.onboarding.id, 'standard', principalId);
+
+    const result = await runTenantBootstrap({
+      principalId,
+      clerkOrgId: 'org_tbf030_terms_required',
+      onboardingId: onboarding.onboarding.id,
+      idempotencyKey: 'bootstrap-terms-required-001',
+      payloadHash: canonicalRequestHash({ onboarding_id: onboarding.onboarding.id, body: {} }),
+      requestId: 'req-tbf030-terms-required',
+    });
+
+    expect(result).toMatchObject({
+      kind: 'rejected',
+      status: 409,
+      body: {
+        error: {
+          code: 'STATE_CONFLICT',
+          message: 'Accept the current Terms of Service before starting your trial.',
+        },
+      },
+    });
+    const effects = await withGlobalTransaction(principalId, async (client) => {
+      const tenants = await client.query<{ count: number }>('SELECT count(*)::int AS count FROM tenant');
+      const accountState = await client.query<{ trial_consumed_at: Date | null }>(
+        'SELECT trial_consumed_at FROM account',
+      );
+      return { tenants: tenants.rows[0]?.count ?? -1, trialConsumedAt: accountState.rows[0]?.trial_consumed_at };
+    });
+    expect(effects).toEqual({ tenants: 0, trialConsumedAt: null });
+  });
+
   it('replays one committed graph for concurrent same-key requests', async () => {
     const principalId = 'user_tbf030_concurrent';
     const account = await ensureAccount(principalId);
@@ -281,7 +339,10 @@ describe('TBF-030 tenant bootstrap', async () => {
       requestId: 'req-tbf030-concurrent',
     };
 
-    const results = await Promise.all([runTenantBootstrap(input), runTenantBootstrap(input)]);
+    const results = await Promise.all([
+      runAcceptedTenantBootstrap(input),
+      runAcceptedTenantBootstrap(input),
+    ]);
     expect(results.map((result) => result.kind).sort()).toEqual(['replayed', 'success']);
     const tenantId = results.find((result) => result.kind === 'success')?.body.data.tenant.id;
     if (!tenantId) throw new Error('expected successful bootstrap');
@@ -329,7 +390,7 @@ describe('TBF-030 tenant bootstrap', async () => {
     if (onboarding.kind !== 'created') throw new Error('expected onboarding creation');
     await chooseOnboardingPlan(onboarding.onboarding.id, 'standard', principalId);
 
-    const result = await runTenantBootstrap({
+    const result = await runAcceptedTenantBootstrap({
       principalId,
       clerkOrgId: 'org_tbf030_other',
       onboardingId: onboarding.onboarding.id,
@@ -367,7 +428,7 @@ describe('TBF-030 tenant bootstrap', async () => {
         throw new Error(`expected ${testCase.key} onboarding creation`);
       await chooseOnboardingPlan(onboarding.onboarding.id, 'standard', principalId);
 
-      const result = await runTenantBootstrap({
+      const result = await runAcceptedTenantBootstrap({
         principalId,
         clerkOrgId: `org_tbf030_${testCase.key}`,
         onboardingId: onboarding.onboarding.id,
@@ -396,7 +457,7 @@ describe('TBF-030 tenant bootstrap', async () => {
     );
     if (firstOnboarding.kind !== 'created') throw new Error('expected first onboarding creation');
     await chooseOnboardingPlan(firstOnboarding.onboarding.id, 'standard', firstPrincipal);
-    const first = await runTenantBootstrap({
+    const first = await runAcceptedTenantBootstrap({
       principalId: firstPrincipal,
       clerkOrgId: 'org_tbf030_slug_first',
       onboardingId: firstOnboarding.onboarding.id,
@@ -418,7 +479,7 @@ describe('TBF-030 tenant bootstrap', async () => {
     );
     if (secondOnboarding.kind !== 'created') throw new Error('expected second onboarding creation');
     await chooseOnboardingPlan(secondOnboarding.onboarding.id, 'standard', secondPrincipal);
-    const second = await runTenantBootstrap({
+    const second = await runAcceptedTenantBootstrap({
       principalId: secondPrincipal,
       clerkOrgId: 'org_tbf030_slug_second',
       onboardingId: secondOnboarding.onboarding.id,

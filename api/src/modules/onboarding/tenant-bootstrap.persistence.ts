@@ -13,6 +13,8 @@ import {
   lockBootstrapOnboarding,
 } from './tenant-bootstrap.repository.js';
 import type { TenantBootstrapResponse } from './tenant-bootstrap.repository.js';
+import { CURRENT_TERMS_VERSION } from '@drezivo/contracts';
+import { hasAccountAcceptedTerms } from '../accounts/terms-acceptance.repository.js';
 
 export type BootstrapPersistenceResult =
   | { kind: 'success'; status: 201; body: SuccessEnvelope<TenantBootstrapResponse> }
@@ -69,6 +71,19 @@ export async function runTenantBootstrap(input: RunBootstrapInput): Promise<Boot
       account.current_owned_tenant_id
     ) {
       return rejectAndFinalize(context, account.id, input, claim.recordId, 409, 'STATE_CONFLICT', 'Onboarding is not eligible for bootstrap.', 'state_conflict');
+    }
+
+    if (!(await hasAccountAcceptedTerms(client, account.id, CURRENT_TERMS_VERSION))) {
+      return rejectAndFinalize(
+        context,
+        account.id,
+        input,
+        claim.recordId,
+        409,
+        'STATE_CONFLICT',
+        'Accept the current Terms of Service before starting your trial.',
+        'terms_acceptance_required',
+      );
     }
 
     let plan;

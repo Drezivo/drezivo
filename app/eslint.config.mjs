@@ -30,7 +30,15 @@ const eslintConfig = [
     },
   },
   {
-    ignores: [".next/**", "node_modules/**", ".claude/**", ".codex/**", "playwright-report/**", "test-results/**"],
+    ignores: [
+      ".next/**",
+      "next-env.d.ts",
+      "node_modules/**",
+      ".claude/**",
+      ".codex/**",
+      "playwright-report/**",
+      "test-results/**",
+    ],
   },
 ];
 

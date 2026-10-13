@@ -18,6 +18,7 @@ import { OnboardingProgress } from "@/components/onboarding/onboarding-progress"
 import { RestartOnboardingDialog } from "@/components/onboarding/restart-onboarding-dialog";
 import { OnboardingStatusPage } from "@/components/onboarding/onboarding-status-page";
 import { createDrezivoApiClient, DrezivoApiError } from "@/lib/drezivo-api";
+import { publicTermsUrl } from "@/lib/public-terms";
 import { useSubmitGuard } from "@/lib/use-submit-guard";
 import { WORKSPACE_HOME } from "@/lib/workspace-routes";
 
@@ -37,7 +38,8 @@ export function OnboardingEntry() {
 
     setState({ kind: "loading" });
     try {
-      const result = await createDrezivoApiClient(getToken).getCurrentOnboarding();
+      const api = createDrezivoApiClient(getToken);
+      const result = await api.getCurrentOnboarding();
       setState({ kind: "ready", context: result.data });
     } catch (caughtError) {
       setState({ kind: "error", error: toDrezivoApiError(caughtError) });
@@ -85,6 +87,8 @@ export function OnboardingEntry() {
           onCreated={() => {
             router.replace("/onboarding/plan");
           }}
+          acceptedTermsVersion={context.accepted_terms_version}
+          requiredTermsVersion={context.required_terms_version}
           setActive={setActive}
         />
       </OnboardingFrame>
@@ -175,22 +179,32 @@ export function OnboardingEntry() {
 }
 
 function OrganizationSetup({
+  acceptedTermsVersion,
   getToken,
   onCreated,
+  requiredTermsVersion,
   setActive,
 }: {
+  acceptedTermsVersion: string | null;
   getToken: () => Promise<string | null>;
   onCreated: () => void;
+  requiredTermsVersion: OnboardingActorContext["required_terms_version"];
   setActive: (params: { organization: string }) => Promise<unknown>;
 }) {
   const api = createDrezivoApiClient(getToken);
   const { isSubmitting, resetIntent, submit } = useSubmitGuard();
+  const { isSubmitting: isSavingTerms, submit: submitTerms } = useSubmitGuard();
   const [organizationName, setOrganizationName] = useState("");
   const [error, setError] = useState<DrezivoApiError | null>(null);
+  const [acceptedVersion, setAcceptedVersion] = useState(acceptedTermsVersion);
+  const [termsChecked, setTermsChecked] = useState(false);
+  const termsHref = publicTermsUrl();
+  const needsTermsAcceptance = acceptedVersion !== requiredTermsVersion;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isSubmitting) return;
+    if (isSubmitting || isSavingTerms) return;
+    if (needsTermsAcceptance && (!termsChecked || !termsHref)) return;
 
     const input = {
       organization_name: organizationName.trim(),
@@ -207,6 +221,15 @@ function OrganizationSetup({
 
     setError(null);
     try {
+      if (needsTermsAcceptance) {
+        const acceptance = await submitTerms((idempotencyKey) =>
+          api.acceptAccountTerms({ terms_version: requiredTermsVersion }, idempotencyKey)
+        );
+        if (!acceptance) return;
+        setAcceptedVersion(acceptance.data.terms_version);
+        setTermsChecked(false);
+      }
+
       const result = await submit((idempotencyKey) =>
         api.createOnboarding(parsed.data, idempotencyKey)
       );
@@ -272,8 +295,52 @@ function OrganizationSetup({
             placeholder="Luna's Gown Rentals"
           />
         </div>
-        <button type="submit" disabled={isSubmitting} className={primaryButtonClass}>
-          {isSubmitting ? "Creating workspace…" : "Continue"}
+        {needsTermsAcceptance ? (
+          <label className="flex items-start gap-3 text-sm leading-6 text-auth-dark-muted">
+            <input
+              type="checkbox"
+              required
+              checked={termsChecked}
+              onChange={(event) => {
+                setTermsChecked(event.target.checked);
+                setError(null);
+              }}
+              className="mt-1 h-4 w-4 shrink-0 accent-auth-gold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-auth-focus"
+            />
+            <span>
+              I have read and agree to the{" "}
+              {termsHref ? (
+                <Link href={termsHref} target="_blank" rel="noreferrer" className="font-medium text-auth-gold underline underline-offset-4">
+                  Terms of Service
+                </Link>
+              ) : (
+                <span className="font-medium text-auth-text">Terms of Service</span>
+              )}
+              .
+              {!termsHref ? (
+                <span className="mt-1 block text-xs text-auth-error">
+                  Terms are temporarily unavailable. Please try again later.
+                </span>
+              ) : null}
+            </span>
+          </label>
+        ) : null}
+        <button
+          type="submit"
+          disabled={
+            isSubmitting ||
+            isSavingTerms ||
+            (needsTermsAcceptance && (!termsChecked || !termsHref))
+          }
+          className={primaryButtonClass}
+        >
+          {isSavingTerms
+            ? "Saving acceptance…"
+            : isSubmitting
+              ? "Creating workspace…"
+              : needsTermsAcceptance
+                ? "Accept and Continue"
+                : "Continue"}
         </button>
       </form>
 

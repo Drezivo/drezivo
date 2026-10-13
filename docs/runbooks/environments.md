@@ -205,8 +205,11 @@ naming convention) once TRD §12's "remaining selection" of hosting plans/region
   for each request.
 - `NEXT_PUBLIC_APP_ENV` — surfaces the environment name in client UI (e.g., a staging banner)
   without leaking anything sensitive.
-- `NEXT_PUBLIC_STOREFRONT_ORIGIN` — public origin of `web`, used by the Storefront pages to show
-  and copy the full store address. Without it, the app shows the `/s/<slug>` path only.
+- `NEXT_PUBLIC_STOREFRONT_ORIGIN` — public origin of `web`, used by Storefront pages to show and
+  copy the full store address and by signup/onboarding to link to the environment's `/terms` page.
+  Configure it separately per local, preview, staging, and production environment. Without it,
+  the app must not allow a new account or Terms acceptance to proceed because the legal link is
+  unavailable.
 
 ## `web` (Next.js marketing site + public tenant storefronts)
 

@@ -20,6 +20,7 @@ import { catalogueRouter } from './modules/catalogue/catalogue.routes.js';
 import { catalogueImportRouter } from './modules/catalogue-import/catalogue-import.routes.js';
 import { membershipInvitationsRouter } from './modules/membership-invitations/membership-invitations.routes.js';
 import { membersRouter } from './modules/members/members.routes.js';
+import { accountsRouter } from './modules/accounts/accounts.routes.js';
 import { paymentMethodsRouter } from './modules/payment-methods/payment-methods.routes.js';
 import { filesRouter } from './modules/files/files.routes.js';
 import { fittingsRouter } from './modules/fittings/fittings.routes.js';
@@ -170,6 +171,7 @@ export function createApp(options: AppOptions = {}): Express {
   v1.use(customersRouter);
   v1.use(membershipInvitationsRouter);
   v1.use(membersRouter);
+  v1.use(accountsRouter);
   app.use('/api/v1', v1);
 
   app.use(errorHandler);
