@@ -1,4 +1,4 @@
-import type { CatalogueVariant } from '@drezivo/contracts';
+import type { BranchOperatingHours, CatalogueVariant } from '@drezivo/contracts';
 
 const PESO = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
@@ -21,6 +21,20 @@ export function durationLabel(mode: 'fixed_duration' | 'daily', includedMinutes:
 /** A fixed-duration package covers its included days, which is also the shortest rental allowed. */
 export function minimumRentalDays(variant: Pick<CatalogueVariant, 'pricing_mode' | 'included_duration_minutes'>): number {
   return variant.pricing_mode === 'fixed_duration' ? Math.max(1, Math.ceil(variant.included_duration_minutes / 1440)) : 1;
+}
+
+/** Pickup starts every half hour from opening, never at or after closing. */
+export function pickupTimeOptions(hours: BranchOperatingHours | undefined): string[] {
+  if (!hours) return [];
+  const [openingHour = 0, openingMinute = 0] = hours.opens_local.split(':').map(Number);
+  const [closingHour = 0, closingMinute = 0] = hours.closes_local.split(':').map(Number);
+  const opening = openingHour * 60 + openingMinute;
+  const closing = closingHour * 60 + closingMinute;
+  const options: string[] = [];
+  for (let minutes = opening; minutes < closing; minutes += 30) {
+    options.push(`${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`);
+  }
+  return options;
 }
 
 /** Calendar date (YYYY-MM-DD) of an instant in a time zone. */

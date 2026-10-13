@@ -8149,6 +8149,26 @@ paths:
                           max_rental_days:
                             type: integer
                             exclusiveMinimum: 0
+                          business_hours:
+                            type: object
+                            properties:
+                              opens_local:
+                                type: string
+                                pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                              closes_local:
+                                type: string
+                                pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                              closed_weekdays:
+                                type: array
+                                items:
+                                  type: string
+                                  enum: *a47
+                                maxItems: 7
+                            required:
+                              - opens_local
+                              - closes_local
+                              - closed_weekdays
+                            additionalProperties: false
                         required:
                           - requirements
                           - handover_time

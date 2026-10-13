@@ -7,7 +7,7 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import type { CatalogueVariant, FulfillmentMethod, GuestReservationRequest, GuestReservationView, ItemDetail, PublicStorefront } from '@drezivo/contracts';
 
 import { createReservation, StorefrontApiError } from '@/lib/storefront-api';
-import { dateIn, formatDay, formatMinor, formatTime, minimumRentalDays, rentalDays, zonedInstant } from '@/lib/storefront-format';
+import { dateIn, formatDay, formatMinor, formatTime, minimumRentalDays, pickupTimeOptions, rentalDays, zonedInstant } from '@/lib/storefront-format';
 
 import { lockPageScroll } from '../motion/scroll';
 import { Turnstile, TURNSTILE_SITE_KEY, type TurnstileHandle } from '../turnstile';
@@ -35,6 +35,7 @@ interface State {
   notice: DateRangeNotice | null;
   customer: Customer;
   fulfillment: FulfillmentMethod;
+  pickupTime: string;
   paymentMethodId: string | null;
   accepted: boolean;
   pending: boolean;
@@ -46,7 +47,7 @@ type Action =
   | { type: 'range'; range: DateRange | null; notice?: DateRangeNotice | undefined }
   | { type: 'step'; step: Step }
   | { type: 'customer'; patch: Partial<Customer> }
-  | { type: 'set'; patch: Partial<Pick<State, 'fulfillment' | 'paymentMethodId' | 'accepted'>> }
+  | { type: 'set'; patch: Partial<Pick<State, 'fulfillment' | 'pickupTime' | 'paymentMethodId' | 'accepted'>> }
   | { type: 'pending'; value: boolean }
   | { type: 'error'; message: string | null; step?: Step }
   | { type: 'held'; reservation: GuestReservationView };
@@ -86,12 +87,17 @@ const STEPS: Array<{ key: Step; label: string }> = [
 export function BookingDrawer({ store, item, variant, onClose }: { store: PublicStorefront; item: ItemDetail; variant: CatalogueVariant; onClose: () => void }) {
   const router = useRouter();
   const today = dateIn(store.timezone);
+  const pickupTimes = pickupTimeOptions(store.checkout.business_hours);
+  const initialPickupTime = pickupTimes.includes(store.checkout.handover_time)
+    ? store.checkout.handover_time
+    : pickupTimes[0] ?? '';
   const [state, dispatch] = useReducer(reducer, {
     step: 'dates',
     range: null,
     notice: null,
     customer: { full_name: '', email: '', phone: '', address: '', social_handle: '', event_date: '' },
     fulfillment: 'pickup',
+    pickupTime: initialPickupTime,
     paymentMethodId: store.payment_methods[0]?.id ?? null,
     accepted: false,
     pending: false,
@@ -106,6 +112,9 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
   const [robotToken, setRobotToken] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<CustomerFieldErrors>({});
   const [focusTarget, setFocusTarget] = useState<{ field: CustomerField; request: number } | null>(null);
+  const [pickupTimeOpen, setPickupTimeOpen] = useState(false);
+  const pickupTimePicker = useRef<HTMLDivElement>(null);
+  const pickupTimeTrigger = useRef<HTMLButtonElement>(null);
   const requirements = store.checkout.requirements;
   const days = state.range ? rentalDays(state.range.start, state.range.end) : 0;
 
@@ -134,11 +143,29 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') requestClose();
+      if (event.key !== 'Escape') return;
+      if (pickupTimeOpen) {
+        event.preventDefault();
+        setPickupTimeOpen(false);
+        pickupTimeTrigger.current?.focus();
+        return;
+      }
+      requestClose();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   });
+
+  useEffect(() => {
+    if (!pickupTimeOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !pickupTimePicker.current?.contains(event.target)) {
+        setPickupTimeOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [pickupTimeOpen]);
 
   function updateCustomer(field: CustomerField, value: string) {
     const customer = { ...state.customer, [field]: value };
@@ -171,12 +198,20 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
     }
     return {
       fieldErrors: errors,
-      formError: !state.paymentMethodId ? 'This shop has no online payment method yet. Contact the shop to book.' : null,
+      formError: !state.paymentMethodId
+        ? 'This shop has no online payment method yet. Contact the shop to book.'
+        : state.fulfillment === 'delivery' && !store.fulfillment.delivery
+          ? 'This shop does not offer delivery. Choose pickup instead.'
+          : state.fulfillment === 'pickup' && !pickupTimes.includes(state.pickupTime)
+            ? 'Pickup times are unavailable. Please contact the shop to arrange your rental.'
+            : null,
     };
   }
 
   async function placeHold() {
     if (inFlight.current || !state.range || !state.paymentMethodId || !state.accepted) return;
+    if (state.fulfillment === 'delivery' && !store.fulfillment.delivery) return;
+    if (state.fulfillment === 'pickup' && !pickupTimes.includes(state.pickupTime)) return;
     if (TURNSTILE_SITE_KEY && !robotToken) {
       dispatch({ type: 'error', message: 'Complete the security check first.' });
       return;
@@ -193,8 +228,8 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
       },
       variant_id: variant.variant_id,
       requested_interval: {
-        start: zonedInstant(state.range.start, store.checkout.handover_time, store.timezone),
-        end: zonedInstant(state.range.end, store.checkout.handover_time, store.timezone),
+        start: zonedInstant(state.range.start, state.fulfillment === 'pickup' ? state.pickupTime : store.checkout.handover_time, store.timezone),
+        end: zonedInstant(state.range.end, state.fulfillment === 'pickup' ? state.pickupTime : store.checkout.handover_time, store.timezone),
       },
       event_date: requirements.event_date === 'hidden' || !c.event_date ? null : c.event_date,
       fulfillment_method: state.fulfillment,
@@ -225,11 +260,8 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
   }
 
   const rental = state.range ? estimateRentalMinor(variant, days) : 0n;
-  // Delivery is always offered. A shop that has not set it up arranges it with the renter after
-  // booking, so nothing is added to the total (the API records it as `to_arrange`).
-  const deliveryToArrange = state.fulfillment === 'delivery' && !store.fulfillment.delivery;
-  const delivery = state.fulfillment === 'delivery' && store.fulfillment.delivery ? BigInt(store.fulfillment.delivery_fee_minor) : 0n;
-  const estimate = rental + BigInt(variant.security_deposit_minor) + delivery;
+  const deliveryToArrange = state.fulfillment === 'delivery';
+  const estimate = rental + BigInt(variant.security_deposit_minor);
   const stepIndex = STEPS.findIndex((step) => step.key === state.step);
 
   return (
@@ -270,7 +302,7 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                 <h3 className="font-sf-display text-2xl">Choose your dates</h3>
                 <p className="mt-1 text-sm text-sf-muted">
                   Tap your pickup date, then your return date. The pickup date counts as Day 1, so a 3-day rental is
-                  pickup, event, return. Handover is at {formatTime(store.checkout.handover_time)}.
+                  pickup, event, return. If you pick up at the shop, you’ll choose a pickup time next.
                   {minimumRentalDays(variant) > 1 ? ` Rentals are at least ${minimumRentalDays(variant)} days.` : ''}
                 </p>
               </div>
@@ -316,23 +348,78 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
               ) : null}
 
               <fieldset>
-                <legend className="mb-2 text-sm font-medium">Pickup or delivery</legend>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['pickup', 'delivery'] as const).map((method) => (
-                    <Choice key={method} name="fulfillment" checked={state.fulfillment === method} onSelect={() => dispatch({ type: 'set', patch: { fulfillment: method } })}>
+                <legend className="mb-2 text-sm font-medium">How would you like to receive your rental?</legend>
+                <div className={`grid gap-2 ${store.fulfillment.delivery ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                  {(['pickup', ...(store.fulfillment.delivery ? ['delivery' as const] : [])] as const).map((method) => (
+                    <Choice key={method} name="fulfillment" checked={state.fulfillment === method} onSelect={() => {
+                      setPickupTimeOpen(false);
+                      dispatch({ type: 'set', patch: { fulfillment: method } });
+                    }}>
                       {method === 'pickup'
                         ? 'Pick up at the shop'
-                        : store.fulfillment.delivery
-                          ? `Delivery${store.fulfillment.delivery_fee_minor !== '0' ? ` · ${formatMinor(store.fulfillment.delivery_fee_minor)}` : ''}`
-                          : 'Delivery · arranged with the shop'}
+                        : 'Delivery · arranged with the shop'}
                     </Choice>
                   ))}
                 </div>
-                {deliveryToArrange ? (
-                  <p className="mt-2 text-sm text-sf-muted">
-                    The shop will contact you to arrange delivery and any delivery fee. It is not part of this total.
-                  </p>
-                ) : null}
+                {state.fulfillment === 'pickup' ? (
+                  <>
+                    <p className="mt-2 text-sm text-sf-muted">You or someone you arrange, such as a courier, can collect the rental from the shop.</p>
+                    {pickupTimes.length > 0 ? (
+                      <div ref={pickupTimePicker} className="mt-4 text-sm">
+                        <span id="booking-pickup-time-label" className="mb-1.5 block font-medium">Pickup time</span>
+                        <button
+                          ref={pickupTimeTrigger}
+                          type="button"
+                          aria-labelledby="booking-pickup-time-label booking-pickup-time-value"
+                          aria-expanded={pickupTimeOpen}
+                          aria-controls="booking-pickup-time-options"
+                          onClick={() => setPickupTimeOpen((open) => !open)}
+                          className="sf-input flex items-center justify-between text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sf-accent"
+                        >
+                          <span id="booking-pickup-time-value">{formatTime(state.pickupTime)}</span>
+                          <span aria-hidden="true" className={`transition-transform ${pickupTimeOpen ? 'rotate-180' : ''}`}>⌄</span>
+                        </button>
+                        {pickupTimeOpen ? (
+                          <div
+                            id="booking-pickup-time-options"
+                            role="group"
+                            aria-label="Available pickup times"
+                            className="mt-2 border border-sf-line bg-sf-surface p-2"
+                          >
+                            <p className="px-2 pb-2 text-xs font-medium text-sf-muted">Quick times</p>
+                            <div className="grid max-h-56 grid-cols-2 gap-1 overflow-y-auto overscroll-contain pr-1">
+                              {pickupTimes.map((time) => {
+                                const selected = time === state.pickupTime;
+                                return (
+                                  <button
+                                    key={time}
+                                    type="button"
+                                    aria-label={formatTime(time)}
+                                    aria-pressed={selected}
+                                    onClick={() => {
+                                      dispatch({ type: 'set', patch: { pickupTime: time } });
+                                      setPickupTimeOpen(false);
+                                      pickupTimeTrigger.current?.focus();
+                                    }}
+                                    className={`flex min-h-11 items-center justify-between rounded-sm px-3 py-2 text-left text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sf-accent ${selected ? 'bg-sf-ink font-medium text-sf-bg' : 'text-sf-ink hover:bg-sf-accent/30'}`}
+                                  >
+                                    <span>{formatTime(time)}</span>
+                                    {selected ? <span aria-hidden="true">✓</span> : null}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+                        <span className="mt-1 block text-xs text-sf-muted">Your return time will be the same on your final rental day.</span>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-sf-muted">Pickup times are unavailable. Please contact the shop to arrange your rental.</p>
+                    )}
+                  </>
+                ) : (
+                  <p className="mt-2 text-sm text-sf-muted">The shop will contact you to arrange delivery and any delivery fee. It is not part of this total.</p>
+                )}
               </fieldset>
 
               {store.payment_methods.length > 1 ? (
@@ -355,7 +442,17 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
               <h3 className="font-sf-display text-2xl">Review your request</h3>
               <dl className="space-y-2 text-sm">
                 <Row label="Dates" value={`${formatDay(state.range.start)} → ${formatDay(state.range.end)}`} />
-                <Row label="Handover" value={`${formatTime(store.checkout.handover_time)}, pickup and return`} />
+                {state.fulfillment === 'pickup' ? (
+                  <>
+                    <Row label="Pickup" value={`${formatDay(state.range.start)} · ${formatTime(state.pickupTime)}`} />
+                    <Row label="Return due" value={`${formatDay(state.range.end)} · ${formatTime(state.pickupTime)}`} />
+                  </>
+                ) : (
+                  <>
+                    <Row label="Rental dates" value={`${formatDay(state.range.start)} → ${formatDay(state.range.end)}`} />
+                    <Row label="Delivery" value="The shop will contact you to arrange it." />
+                  </>
+                )}
                 <Row label="Size" value={variant.size_label ?? 'One size'} />
                 <Row label="Name" value={state.customer.full_name} />
                 <Row label="Email" value={state.customer.email.trim().toLowerCase()} />
@@ -365,8 +462,7 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
               <dl className="space-y-2 border-t border-sf-line pt-4 text-sm">
                 <Row label={`Rental · ${days} day${days === 1 ? '' : 's'}`} value={formatMinor(rental.toString())} />
                 <Row label="Refundable deposit" value={formatMinor(variant.security_deposit_minor)} />
-                {delivery > 0n ? <Row label="Delivery" value={formatMinor(delivery.toString())} /> : null}
-                {deliveryToArrange ? <Row label="Delivery" value="Arranged with the shop" /> : null}
+                {deliveryToArrange ? <Row label="Delivery fee" value="Arranged separately with the shop" /> : null}
                 <div className="flex justify-between gap-4 border-t border-sf-line pt-2 font-medium">
                   <dt>Estimated total</dt>
                   <dd className="tabular-nums">{formatMinor(estimate.toString())}</dd>
@@ -403,6 +499,7 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
           <div className="flex gap-3 border-t border-sf-line p-5">
             {state.step !== 'dates' ? (
               <button type="button" className="sf-button sf-button-outline" disabled={state.pending} onClick={() => {
+                setPickupTimeOpen(false);
                 setFieldErrors({});
                 setFocusTarget(null);
                 dispatch({ type: 'step', step: state.step === 'review' ? 'details' : 'dates' });
@@ -429,7 +526,10 @@ export function BookingDrawer({ store, item, variant, onClose }: { store: Public
                   }
                   if (formError) dispatch({ type: 'error', message: formError });
                   else if (firstInvalidField) dispatch({ type: 'error', message: null });
-                  else dispatch({ type: 'step', step: 'review' });
+                  else {
+                    setPickupTimeOpen(false);
+                    dispatch({ type: 'step', step: 'review' });
+                  }
                 }}
               >
                 Review request

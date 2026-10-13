@@ -190,12 +190,14 @@ export async function claimReservationAsset(
     branchId: string;
     requestId: string;
     request: ReservationQuoteRequest;
+    deliveryHandling?: 'shop_arranged';
   },
 ): Promise<{ quote: ReservationQuote; assetId: string }> {
   const quote = await resolveReservationQuote(client, {
     tenantId: input.tenantId,
     branchId: input.branchId,
     request: input.request,
+    ...(input.deliveryHandling ? { deliveryHandling: input.deliveryHandling } : {}),
   });
 
   const lockedAssetIds = await lockEligibleReservationAssets(client, {

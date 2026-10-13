@@ -121,7 +121,7 @@ describe('storefront guest booking', async () => {
     );
   }
 
-  /** Pickup 3 days from now at the store's handover time, for `days` days. */
+  /** Pickup 3 days from now at the store's default handover time, for `days` days. */
   function interval(days: number, offset = 3): { start: string; end: string } {
     const pickup = addDays(localDate(new Date(), 'Asia/Manila'), offset);
     return { start: `${pickup}T10:00:00+08:00`, end: `${addDays(pickup, days)}T10:00:00+08:00` };
@@ -274,13 +274,33 @@ describe('storefront guest booking', async () => {
       booking.createReservation(ws.slug, { requestId: key, idempotencyKey: key }, holdRequest(ws, 'ana@example.test', overrides));
 
     expect((await attempt('rule-social', { customer: { full_name: 'Ana Reyes', phone: null, address: '12 Mabini St', social_handle: '@ana' } })).status).toBe(422);
-    expect((await attempt('rule-time', { requested_interval: { start: interval(3).start.replace('T10:00', 'T15:00'), end: interval(3).end.replace('T10:00', 'T15:00') } })).status).toBe(422);
+    expect((await attempt('rule-time-closed', { requested_interval: { start: interval(2).start.replace('T10:00', 'T20:00'), end: interval(2).end.replace('T10:00', 'T20:00') } })).status).toBe(422);
+    expect((await attempt('rule-time-minute', { requested_interval: { start: interval(2).start.replace('T10:00', 'T15:15'), end: interval(2).end.replace('T10:00', 'T15:15') } })).status).toBe(422);
     expect((await attempt('rule-long', { requested_interval: interval(5) })).status).toBe(422);
     expect((await attempt('rule-notice', { requested_interval: interval(2, 0) })).status).toBe(422);
 
     const cash = await admin.query<Record<string, unknown>>(`INSERT INTO payment_method (tenant_id, name, rail, destination_snapshot, active, storefront_enabled) VALUES ($1, 'Cash', 'cash', '{}', true, false) RETURNING id`, [ws.tenantId]);
     expect((await attempt('rule-cash', { payment_method_id: cash.rows[0]?.['id'] })).status).toBe(422);
     expect(guestReservationRequest.safeParse({ ...holdRequest(ws, 'ana@example.test'), verification_token: 'x'.repeat(43) }).success).toBe(false);
+  });
+
+  it('accepts a pickup time during shop hours and keeps the same time for return', async () => {
+    const ws = await liveStore('gv-pickup-time');
+    const selected = interval(2);
+    const result = await booking.createReservation(
+      ws.slug,
+      { requestId: 'pickup-time', idempotencyKey: 'pickup-time' },
+      holdRequest(ws, 'ana@example.test', {
+        requested_interval: {
+          start: selected.start.replace('T10:00', 'T15:30'),
+          end: selected.end.replace('T10:00', 'T15:30'),
+        },
+      }),
+    );
+    expect(result.status).toBe(201);
+    if (!result.body.success) throw new Error('hold failed');
+    expect(result.body.data.reservation.pickup_at).toBe(new Date(selected.start.replace('T10:00', 'T15:30')).toISOString());
+    expect(result.body.data.reservation.due_at).toBe(new Date(selected.end.replace('T10:00', 'T15:30')).toISOString());
   });
 
   describe('business hours', () => {
@@ -344,8 +364,17 @@ describe('storefront guest booking', async () => {
     expect(holds.rows[0]?.n).toBe(0);
   });
 
-  it('lets a renter ask for delivery when the shop has not set it up, charges no fee, and tells the owner to arrange it', async () => {
-    const ws = await liveStore('gv-deliver', undefined, { ...policy, delivery: { enabled: false, fee_minor: '0', notes: null } });
+  it('rejects delivery requests when the shop has not enabled delivery', async () => {
+    const ws = await liveStore('gv-deliver-disabled', undefined, { ...policy, delivery: { enabled: false, fee_minor: '0', notes: null } });
+    const created = await booking.createReservation(ws.slug, { requestId: 'd-disabled', idempotencyKey: 'deliver-disabled' }, holdRequest(ws, 'ana@example.test', { fulfillment_method: 'delivery' }));
+    expect(created.status).toBe(422);
+    expect(created.body).toMatchObject({ success: false, error: { message: 'This shop does not offer delivery.' } });
+    const holds = await admin.query<{ n: number }>('SELECT count(*)::int AS n FROM reservation WHERE tenant_id = $1', [ws.tenantId]);
+    expect(holds.rows[0]?.n).toBe(0);
+  });
+
+  it('lets a renter request enabled delivery while leaving its location-dependent fee unset and uncharged', async () => {
+    const ws = await liveStore('gv-deliver');
     const business = await settingsService.getBusiness(ws.owner);
     await settingsService.updateBusiness(ws.owner, 'biz', { version: business.version, business_name: 'Luna Gown Rentals', business_email: 'owner@luna.test', business_phone: null, business_address: null });
 
@@ -361,7 +390,7 @@ describe('storefront guest booking', async () => {
     expect(submitted.status).toBe(200);
 
     const detail = await getReservationDetail(ws.owner, reservation.id);
-    expect(detail.delivery_snapshot).toEqual({ fulfillment_method: 'delivery', fee_minor: '0', terms: 'to_arrange' });
+    expect(detail.delivery_snapshot).toEqual({ fulfillment_method: 'delivery', terms: 'to_arrange' });
 
     const emails = await admin.query<Record<string, unknown>>(`SELECT payload FROM outbox_event WHERE tenant_id = $1 AND dedupe_key LIKE 'reservation-email:%:new_request:business'`, [ws.tenantId]);
     expect(emails.rows).toHaveLength(1);

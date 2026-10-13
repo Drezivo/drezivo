@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 import type { z } from 'zod';
 
 import {
+  branchOperatingHours,
   catalogueCard,
   catalogueResponse,
   fittingSlotsResponse,
@@ -20,7 +21,7 @@ import {
   type StorefrontDocument,
 } from '@drezivo/contracts';
 
-import { NotFoundError } from '../../shared/errors.js';
+import { NotFoundError, StateConflictError } from '../../shared/errors.js';
 import { toDocument } from '../storefront-cms/storefront-cms.service.js';
 import { closedReason, readShopClosures } from './shop-closures.js';
 import { storefrontMediaSigner, type StorefrontMediaSigner } from './storefront-media.js';
@@ -61,6 +62,10 @@ export class PublicStorefrontService {
     const result = await withPublishedStore(slug, async (client, store) => {
       const core = await this.requireCore(client, store);
       const document = toDocument(core);
+      const businessHours = branchOperatingHours.safeParse(core.operating_hours);
+      if (!businessHours.success) {
+        throw new StateConflictError('This shop needs valid Business Hours before taking online reservations.');
+      }
       // One pooled connection runs queries one at a time, so these are sequential on purpose.
       const policy = await readEffectivePolicy(client, store);
       const paymentMethods = await readStorefrontPaymentMethods(client, store.tenantId);
@@ -125,7 +130,7 @@ export class PublicStorefrontService {
         fulfillment: {
           pickup: true,
           delivery: rules?.delivery.enabled ?? false,
-          delivery_fee_minor: rules?.delivery.enabled ? rules.delivery.fee_minor : '0',
+          delivery_fee_minor: '0',
         },
         payment_methods: paymentMethods,
         booking_open: store.bookingOpen,
@@ -135,6 +140,7 @@ export class PublicStorefrontService {
           handover_time: document.checkout.handover_time,
           min_notice_days: document.checkout.min_notice_days,
           max_rental_days: document.checkout.max_rental_days,
+          business_hours: businessHours.data,
         },
         fitting: {
           enabled: fittingOpen,
