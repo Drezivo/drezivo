@@ -73,9 +73,12 @@ describe('migration history inspection', () => {
     expect(cleanupMigrationIndex).toBeGreaterThan(planMigrationIndex);
     const appliedFiles = migrationFilesOnDisk.slice(0, cleanupMigrationIndex);
 
+    // 0076 and every later migration are pending; later files must not reorder it before 0075.
+    const pendingFiles = migrationFilesOnDisk.slice(cleanupMigrationIndex);
+    expect(pendingFiles[0]).toBe('0076_file_object_cleanup.sql');
     expect(inspectMigrationHistory(migrationFilesOnDisk, appliedFiles)).toEqual({
       appliedFiles,
-      pendingFiles: migrationFilesOnDisk.slice(cleanupMigrationIndex),
+      pendingFiles,
     });
   });
 

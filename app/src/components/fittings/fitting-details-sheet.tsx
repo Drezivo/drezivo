@@ -206,6 +206,11 @@ export function FittingDetailsSheet({
               <section aria-labelledby="fitting-garments-heading">
                 <SectionHeading id="fitting-garments-heading">Garments</SectionHeading>
                 <div className="mt-3 space-y-2">
+                  {fitting.garments.length === 0 ? (
+                    <p className="rounded-lg border border-dashed border-dashboard-border p-4 text-sm text-dashboard-muted">
+                      No garments selected yet. The customer will choose what to try on at the shop.
+                    </p>
+                  ) : null}
                   {fitting.garments.map((garment) => (
                     <div key={garment.id} className="rounded-lg border border-dashboard-border p-4">
                       <div className="flex items-start gap-3">

@@ -95,7 +95,10 @@ describe('public storefront read API', async () => {
         facebook_url: 'https://www.facebook.com/luna-rentals',
         tiktok_url: 'https://www.tiktok.com/@luna.gowns',
       },
-      fulfillment: { pickup: true, delivery: true, delivery_fee_minor: '15000' },
+      fulfillment: { pickup: true, delivery: true, delivery_fee_minor: '0' },
+      checkout: {
+        business_hours: { opens_local: '08:00', closes_local: '20:00', closed_weekdays: [] },
+      },
       policy: { version: 2, rental: rules.rental },
       fitting: { enabled: false },
     });

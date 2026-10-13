@@ -17,6 +17,13 @@ Table account {
   Note: 'V1 foundation global record. Minimal Clerk identity only; one current owned tenant and one lifetime trial.'
 }
 
+Table account_terms_acceptance {
+  account_id uuid [pk, not null]
+  terms_version varchar(10) [pk, not null]
+  accepted_at timestamptz [not null]
+  Note: 'V1 foundation global append-only account consent. Database time; runtime account RLS permits select/insert only.'
+}
+
 Table organization_onboarding {
   id uuid [pk, not null]
   account_id uuid [not null]
@@ -1096,6 +1103,7 @@ Table transfer_event {
 
 Ref: branch.tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: account.current_owned_tenant_id > tenant.id [delete: restrict, update: no action]
+Ref: account_terms_acceptance.account_id > account.id [delete: restrict, update: no action]
 Ref: organization_onboarding.account_id > account.id [delete: restrict, update: no action]
 Ref: organization_onboarding.provisioned_tenant_id > tenant.id [delete: restrict, update: no action]
 Ref: onboarding_payment_verification.organization_onboarding_id > organization_onboarding.id [delete: restrict, update: no action]

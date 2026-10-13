@@ -13,6 +13,7 @@ const clerk = vi.hoisted(() => ({
 
 const api = vi.hoisted(() => ({
   getActorContext: vi.fn(),
+  acceptAccountTerms: vi.fn(),
   getCurrentOnboarding: vi.fn(),
   getPublicPlanCatalog: vi.fn(),
   getWorkspaces: vi.fn(),
@@ -110,6 +111,8 @@ function mockCurrent(currentOnboarding: OrganizationOnboarding = onboarding) {
       onboarding: currentOnboarding,
       has_current_owned_tenant: false,
       has_consumed_lifetime_trial: false,
+      required_terms_version: "2026-10-02",
+      accepted_terms_version: "2026-10-02",
     },
     requestId: "req-current",
   });
@@ -120,6 +123,7 @@ describe("OnboardingPlan", () => {
   const originalLocation = window.location;
 
   beforeEach(() => {
+    vi.stubEnv("NEXT_PUBLIC_STOREFRONT_ORIGIN", "http://localhost:3001");
     vi.clearAllMocks();
     clerk.getToken.mockResolvedValue("clerk-token");
     clerk.setActive.mockResolvedValue(undefined);
@@ -158,6 +162,7 @@ describe("OnboardingPlan", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
   });
 
@@ -226,6 +231,61 @@ describe("OnboardingPlan", () => {
       { plan_code: "starter" },
       expect.any(String)
     );
+  });
+
+  it("keeps trial activation disabled until a legacy account's Terms acceptance saves", async () => {
+    mockCurrent();
+    api.getCurrentOnboarding.mockResolvedValue({
+      data: {
+        onboarding,
+        has_current_owned_tenant: false,
+        has_consumed_lifetime_trial: false,
+        required_terms_version: "2026-10-02",
+        accepted_terms_version: null,
+      },
+      requestId: "req-current-needs-terms",
+    });
+    api.acceptAccountTerms
+      .mockRejectedValueOnce(new Error("temporary write failure"))
+      .mockResolvedValueOnce({
+        data: {
+          terms_version: "2026-10-02",
+          accepted_at: "2026-10-14T00:00:00.000Z",
+        },
+        requestId: "req-terms-accepted",
+      });
+
+    renderPlan();
+    await screen.findByRole("radiogroup", { name: "Subscription plan" });
+    fireEvent.click(screen.getByRole("radio", { name: /Standard/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Start your free trial" });
+    const startTrial = screen.getByRole("button", { name: /Start 14-day trial/ });
+    expect(startTrial).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Terms of Service" })).toHaveAttribute(
+      "href",
+      "http://localhost:3001/terms"
+    );
+
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We could not complete that request. Please try again."
+    );
+    expect(startTrial).toBeDisabled();
+    expect(api.startOnboardingTrial).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("checkbox"));
+    await waitFor(() => expect(startTrial).toBeEnabled());
+    expect(api.acceptAccountTerms).toHaveBeenCalledTimes(2);
+    expect(api.acceptAccountTerms).toHaveBeenNthCalledWith(
+      1,
+      { terms_version: "2026-10-02" },
+      expect.any(String)
+    );
+    expect(api.acceptAccountTerms.mock.calls[0]?.[1]).toBe(api.acceptAccountTerms.mock.calls[1]?.[1]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(startTrial);
+    expect(await screen.findByRole("dialog", { name: "Start your 14-day trial?" })).toBeVisible();
   });
 
   it("closes on Not yet without starting anything, and the trial button reopens it", async () => {

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OnboardingEntry } from "@/components/onboarding/onboarding-entry";
 
@@ -13,6 +13,7 @@ const clerk = vi.hoisted(() => ({
 
 const api = vi.hoisted(() => ({
   abandonOnboarding: vi.fn(),
+  acceptAccountTerms: vi.fn(),
   createOnboarding: vi.fn(),
   getCurrentOnboarding: vi.fn(),
 }));
@@ -41,6 +42,8 @@ const noOnboardingContext = {
   onboarding: null,
   has_current_owned_tenant: false,
   has_consumed_lifetime_trial: false,
+  required_terms_version: "2026-10-02",
+  accepted_terms_version: "2026-10-02",
 };
 
 function renderEntry() {
@@ -51,6 +54,8 @@ function renderEntry() {
 
 describe("OnboardingEntry", () => {
   beforeEach(() => {
+    sessionStorage.clear();
+    vi.stubEnv("NEXT_PUBLIC_STOREFRONT_ORIGIN", "http://localhost:3001");
     vi.clearAllMocks();
     clerk.getToken.mockResolvedValue("clerk-token");
     clerk.setActive.mockResolvedValue(undefined);
@@ -61,12 +66,134 @@ describe("OnboardingEntry", () => {
     });
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    window.history.replaceState({}, "", "/");
+  });
+
   it("renders the initial organization setup state", async () => {
     renderEntry();
 
     expect(await screen.findByRole("heading", { name: "Set up your business" })).toBeVisible();
     expect(screen.getByLabelText("Business name")).toBeVisible();
     expect(screen.queryByLabelText(/Slug/)).not.toBeInTheDocument();
+  });
+
+  it("shows Terms consent below Business name and records it before creating the workspace", async () => {
+    api.getCurrentOnboarding.mockResolvedValue({
+      data: { ...noOnboardingContext, accepted_terms_version: null },
+      requestId: "req-current-legacy",
+    });
+    api.acceptAccountTerms.mockResolvedValue({
+      data: {
+        terms_version: "2026-10-02",
+        accepted_at: "2026-10-14T00:00:00.000Z",
+      },
+      requestId: "req-accept-terms",
+    });
+    api.createOnboarding.mockResolvedValue({
+      data: {
+        id: "onboarding_123",
+        clerk_org_id: "org_123",
+        organization_name: "Luna Rentals",
+        status: "incomplete",
+        selected_plan_code: null,
+        is_trial_eligible: true,
+        created_at: "2026-09-19T00:00:00.000Z",
+        updated_at: "2026-09-19T00:00:00.000Z",
+      },
+      requestId: "req-create",
+    });
+
+    renderEntry();
+    expect(await screen.findByRole("heading", { name: "Set up your business" })).toBeVisible();
+    const businessName = screen.getByLabelText("Business name");
+    const checkbox = screen.getByRole("checkbox");
+    expect(businessName.compareDocumentPosition(checkbox) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Accept and Continue" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Terms of Service" })).toHaveAttribute(
+      "href",
+      "http://localhost:3001/terms"
+    );
+    fireEvent.change(businessName, { target: { value: "Luna Rentals" } });
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole("button", { name: "Accept and Continue" }));
+
+    await waitFor(() => expect(api.createOnboarding).toHaveBeenCalledTimes(1));
+    expect(api.acceptAccountTerms).toHaveBeenCalledWith(
+      { terms_version: "2026-10-02" },
+      expect.any(String)
+    );
+    expect(api.acceptAccountTerms.mock.invocationCallOrder[0]).toBeLessThan(
+      api.createOnboarding.mock.invocationCallOrder[0]!
+    );
+  });
+
+  it("does not create a workspace when saving Terms acceptance fails", async () => {
+    api.getCurrentOnboarding.mockResolvedValue({
+      data: { ...noOnboardingContext, accepted_terms_version: null },
+      requestId: "req-current-no-consent-intent",
+    });
+    api.acceptAccountTerms.mockRejectedValue(new Error("terms save failed"));
+
+    renderEntry();
+    await screen.findByRole("heading", { name: "Set up your business" });
+    fireEvent.change(screen.getByLabelText("Business name"), { target: { value: "Luna Rentals" } });
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Accept and Continue" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("We could not complete that request.");
+    expect(api.acceptAccountTerms).toHaveBeenCalledTimes(1);
+    expect(api.createOnboarding).not.toHaveBeenCalled();
+  });
+
+  it("retries workspace creation without recording duplicate acceptance", async () => {
+    api.getCurrentOnboarding.mockResolvedValue({
+      data: { ...noOnboardingContext, accepted_terms_version: null },
+      requestId: "req-current-no-consent",
+    });
+    api.acceptAccountTerms.mockResolvedValue({
+      data: { terms_version: "2026-10-02", accepted_at: "2026-10-14T00:00:00.000Z" },
+      requestId: "req-accept-terms",
+    });
+    api.createOnboarding
+      .mockRejectedValueOnce(new Error("temporary workspace failure"))
+      .mockResolvedValueOnce({
+        data: {
+          id: "onboarding_123",
+          clerk_org_id: "org_123",
+          organization_name: "Luna Rentals",
+          status: "incomplete",
+          selected_plan_code: null,
+          is_trial_eligible: true,
+          created_at: "2026-09-19T00:00:00.000Z",
+          updated_at: "2026-09-19T00:00:00.000Z",
+        },
+        requestId: "req-create",
+      });
+
+    renderEntry();
+    await screen.findByRole("heading", { name: "Set up your business" });
+    fireEvent.change(screen.getByLabelText("Business name"), { target: { value: "Luna Rentals" } });
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Accept and Continue" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("We could not complete that request.");
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(api.createOnboarding).toHaveBeenCalledTimes(2));
+    expect(api.acceptAccountTerms).toHaveBeenCalledTimes(1);
+    expect(api.createOnboarding.mock.calls[0]?.[1]).toBe(api.createOnboarding.mock.calls[1]?.[1]);
+  });
+
+  it("skips the checkbox for an account that accepted the current Terms version", async () => {
+    renderEntry();
+
+    expect(await screen.findByRole("heading", { name: "Set up your business" })).toBeVisible();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled();
+    expect(api.acceptAccountTerms).not.toHaveBeenCalled();
   });
 
   it("creates an organization with only the allowed fields and activates the returned organization", async () => {

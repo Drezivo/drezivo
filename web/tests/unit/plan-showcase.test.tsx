@@ -2,7 +2,11 @@ import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { PlanShowcase } from '@/components/marketing/atelier/sections/plan-showcase';
-import { formatPlanPrice, toPublicPlans, MAX_PUBLIC_PLANS, type PublicPlan } from '@/lib/plans';
+import {
+  formatPlanPrice,
+  PUBLIC_MARKETING_PLANS,
+  type PublicPlan,
+} from '@/lib/plans';
 
 // web resolves its own vitest copy, which the root jest-dom typings do not augment, so these tests
 // use plain matchers on text content instead of the jest-dom ones.
@@ -63,64 +67,41 @@ describe('plan showcase', () => {
 });
 
 describe('public plans', () => {
-  const catalog = {
-    plans: [
+  it('keeps the static marketing snapshot aligned with the current catalog', () => {
+    expect(PUBLIC_MARKETING_PLANS).toEqual([
       {
-        code: 'starter' as const,
-        name: 'Starter' as const,
-        monthly_price_minor: 14900,
-        currency: 'PHP' as const,
-        trial_days: 14,
-        limits: { active_garments: 125, frontdesk_seats: 0 },
-      },
-      {
-        code: 'standard' as const,
-        name: 'Standard' as const,
-        monthly_price_minor: 29900,
-        currency: 'PHP' as const,
-        trial_days: 14,
-        limits: { active_garments: 300, frontdesk_seats: 3 },
-      },
-    ],
-  };
-
-  it('maps server-owned prices and limits into both pricing cards', () => {
-    const plans = toPublicPlans(catalog);
-
-    expect(
-      plans.map(({ name, price, features, highlighted }) => ({
-        name,
-        price,
-        features,
-        highlighted,
-      })),
-    ).toEqual([
-      {
+        code: 'starter',
         name: 'Starter',
+        tagline: 'The essentials to keep a clothing rental shop organized and bookable.',
         price: '149.00',
-        features: expect.arrayContaining([
+        interval: 'month',
+        trialDays: 14,
+        features: [
           'Up to 125 active garments',
           'Owner-only access (no Front Desk accounts)',
-        ]),
+          'Online storefront with bookings and fittings',
+          'Reservations, calendar & availability',
+          'Customers, payments, returns & exports',
+        ],
         highlighted: false,
       },
       {
+        code: 'standard',
         name: 'Standard',
+        tagline: 'More room for a growing rental shop and a small front-desk team.',
         price: '299.00',
-        features: expect.arrayContaining(['Up to 300 active garments', 'Up to 3 Front Desk staff']),
+        interval: 'month',
+        trialDays: 14,
+        features: [
+          'Up to 300 active garments',
+          'Up to 3 Front Desk staff',
+          'Online storefront with bookings and fittings',
+          'Reservations, calendar & availability',
+          'Customers, payments, returns & exports',
+        ],
         highlighted: true,
       },
     ]);
-    expect(plans[0]?.features.filter((feature) => feature.includes('Front Desk staff'))).toEqual([]);
-  });
-
-  it('caps the number of catalog entries to the layout capacity', () => {
-    const plans = toPublicPlans({
-      plans: Array.from({ length: MAX_PUBLIC_PLANS + 1 }, (_, index) => ({
-        ...catalog.plans[index % catalog.plans.length]!,
-      })),
-    });
-    expect(plans).toHaveLength(MAX_PUBLIC_PLANS);
   });
 
   it('formats whole pesos without centavos and keeps real centavos', () => {

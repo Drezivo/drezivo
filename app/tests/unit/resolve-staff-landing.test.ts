@@ -53,6 +53,8 @@ describe("resolveStaffLanding", () => {
         onboarding: null,
         has_current_owned_tenant: false,
         has_consumed_lifetime_trial: false,
+        required_terms_version: "2026-10-02",
+        accepted_terms_version: null,
       },
     });
 
@@ -133,6 +135,8 @@ describe("resolveStaffLanding", () => {
         onboarding: null,
         has_current_owned_tenant: true,
         has_consumed_lifetime_trial: true,
+        required_terms_version: "2026-10-02",
+        accepted_terms_version: null,
       },
     });
 
@@ -183,6 +187,8 @@ describe("resolveStaffLanding", () => {
           onboarding: null,
           has_current_owned_tenant: false,
           has_consumed_lifetime_trial: false,
+          required_terms_version: "2026-10-02",
+          accepted_terms_version: null,
         },
       });
 

@@ -164,7 +164,7 @@ export const fittingDetail = z
     period: instantInterval,
     timezone_snapshot: ianaTimezone,
     customer: fittingCustomerDetail,
-    garments: z.array(fittingGarmentLineDetail).min(1).max(FITTING_MAX_GARMENT_LINES),
+    garments: z.array(fittingGarmentLineDetail).max(FITTING_MAX_GARMENT_LINES),
     fee: fittingFeePaymentSummary,
     internal_note: z.string().trim().max(FITTING_INTERNAL_NOTE_MAX_LENGTH).nullable(),
     terminal_reason: z.string().trim().min(1).max(FITTING_TERMINAL_REASON_MAX_LENGTH).nullable(),
