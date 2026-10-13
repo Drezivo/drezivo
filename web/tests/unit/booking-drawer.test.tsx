@@ -1,13 +1,22 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { AnchorHTMLAttributes, ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CatalogueVariant, ItemDetail, PublicStorefront } from '@drezivo/contracts';
 
+import { createReservation } from '@/lib/storefront-api';
+
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('next/link', () => ({
-  default: ({ href, children, ...props }: { href: string; children: ReactNode } & AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a href={href} {...props}>{children}</a>
+  default: ({
+    href,
+    children,
+    ...props
+  }: { href: string; children: ReactNode } & AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
   ),
 }));
 vi.mock('@/lib/storefront-api', () => ({
@@ -15,9 +24,16 @@ vi.mock('@/lib/storefront-api', () => ({
   StorefrontApiError: class StorefrontApiError extends Error {},
 }));
 vi.mock('@/components/store/motion/scroll', () => ({ lockPageScroll: () => () => undefined }));
+vi.mock('@/components/store/booking/payment-step', () => ({ PaymentStep: () => null }));
 vi.mock('@/components/store/booking/availability-calendar', () => ({
-  AvailabilityCalendar: ({ onChange }: { onChange: (range: { start: string; end: string }) => void }) => (
-    <button type="button" onClick={() => onChange({ start: '2026-10-11', end: '2026-10-12' })}>Set test dates</button>
+  AvailabilityCalendar: ({
+    onChange,
+  }: {
+    onChange: (range: { start: string; end: string }) => void;
+  }) => (
+    <button type="button" onClick={() => onChange({ start: '2026-11-11', end: '2026-11-12' })}>
+      Set test dates
+    </button>
   ),
 }));
 
@@ -48,6 +64,7 @@ const store = {
     handover_time: '10:00',
     max_rental_days: 14,
     requirements: { phone: 'hidden', social_handle: 'hidden', event_date: 'hidden' },
+    business_hours: { opens_local: '08:00', closes_local: '20:00', closed_weekdays: [] },
   },
   fulfillment: { delivery: false, delivery_fee_minor: '0' },
   payment_methods: [{ id: 'payment-test', name: 'GCash' }],
@@ -55,17 +72,27 @@ const store = {
 } as unknown as PublicStorefront;
 
 function openDetails(requirements = store.checkout.requirements) {
-  const configuredStore = { ...store, checkout: { ...store.checkout, requirements } } as PublicStorefront;
+  const configuredStore = {
+    ...store,
+    checkout: { ...store.checkout, requirements },
+  } as PublicStorefront;
   render(<BookingDrawer store={configuredStore} item={item} variant={variant} onClose={vi.fn()} />);
   fireEvent.click(screen.getByRole('button', { name: 'Set test dates' }));
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 }
 
 describe('reservation details validation', () => {
+  beforeEach(() => {
+    vi.mocked(createReservation).mockReset();
+    vi.mocked(createReservation).mockResolvedValue({ reservation: {} as never } as never);
+  });
+
   it('shows an invalid email beside the field, focuses it into view, and clears it when corrected', async () => {
     openDetails();
     fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'QA Test' } });
-    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'qa213@invalid' } });
+    fireEvent.change(screen.getByLabelText('Email address'), {
+      target: { value: 'qa213@invalid' },
+    });
     fireEvent.change(screen.getByLabelText('Address'), { target: { value: '12 Test Street' } });
 
     const email = screen.getByLabelText('Email address');
@@ -99,13 +126,124 @@ describe('reservation details validation', () => {
       ['Instagram or Facebook', 'booking-social_handle-error'],
       ['Event date', 'booking-event_date-error'],
     ] as const;
-    expect(invalidFields.map(([label, errorId]) => {
-      const input = screen.getByLabelText(label);
-      return [input.getAttribute('aria-invalid'), input.getAttribute('aria-describedby'), errorId];
-    })).toEqual(invalidFields.map(([, errorId]) => ['true', errorId, errorId]));
+    expect(
+      invalidFields.map(([label, errorId]) => {
+        const input = screen.getByLabelText(label);
+        return [
+          input.getAttribute('aria-invalid'),
+          input.getAttribute('aria-describedby'),
+          errorId,
+        ];
+      }),
+    ).toEqual(invalidFields.map(([, errorId]) => ['true', errorId, errorId]));
     expect(await screen.findByText('Enter your full name.')).not.toBeNull();
 
     fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'QA Test' } });
     expect(screen.queryByText('Enter your full name.')).toBeNull();
+  });
+
+  it('offers shop-hour pickup times and sends the same chosen time for pickup and return', async () => {
+    openDetails();
+
+    expect(screen.queryByRole('radio', { name: /Delivery/ })).toBeNull();
+    const pickupTime = screen.getByRole('button', { name: 'Pickup time 10:00 AM' });
+    expect(pickupTime.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(pickupTime);
+    expect(pickupTime.getAttribute('aria-expanded')).toBe('true');
+    const timeGrid = screen.getByRole('group', { name: 'Available pickup times' });
+    const timeOptions = within(timeGrid).getAllByRole('button');
+    expect(timeGrid.querySelector('.grid-cols-2')).not.toBeNull();
+    expect(timeOptions.slice(0, 4).map((option) => option.getAttribute('aria-label'))).toEqual([
+      '8:00 AM',
+      '8:30 AM',
+      '9:00 AM',
+      '9:30 AM',
+    ]);
+    expect(timeOptions.at(-1)?.getAttribute('aria-label')).toBe('7:30 PM');
+    expect(screen.getByRole('button', { name: '10:00 AM' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: '11:30 AM' }));
+    expect(pickupTime.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(pickupTime);
+    fireEvent.change(screen.getByLabelText('Email address'), {
+      target: { value: 'qa@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'QA Customer' } });
+    fireEvent.change(screen.getByLabelText('Address'), { target: { value: '12 Test Street' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Review request' }));
+
+    expect(await screen.findByText(/Nov 11, 2026 · 11:30 AM/)).not.toBeNull();
+    expect(screen.getByText(/Nov 12, 2026 · 11:30 AM/)).not.toBeNull();
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Hold my size and pay' }));
+
+    await waitFor(() => expect(createReservation).toHaveBeenCalled());
+    expect(vi.mocked(createReservation).mock.calls[0]?.[1]).toMatchObject({
+      requested_interval: {
+        start: '2026-11-11T11:30:00+08:00',
+        end: '2026-11-12T11:30:00+08:00',
+      },
+      fulfillment_method: 'pickup',
+    });
+  });
+
+  it('supports keyboard selection and Escape dismissal for pickup times', async () => {
+    const user = userEvent.setup();
+    openDetails();
+    const pickupTime = screen.getByRole('button', { name: 'Pickup time 10:00 AM' });
+
+    pickupTime.focus();
+    await user.keyboard('{Enter}');
+    expect(pickupTime.getAttribute('aria-expanded')).toBe('true');
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: '8:00 AM' }));
+    await user.keyboard('{Enter}');
+
+    expect(screen.getByRole('button', { name: 'Pickup time 8:00 AM' }).getAttribute('aria-expanded')).toBe('false');
+    const updatedTrigger = screen.getByRole('button', { name: 'Pickup time 8:00 AM' });
+    updatedTrigger.focus();
+    await user.keyboard('{Enter}');
+    await user.keyboard('{Escape}');
+    expect(updatedTrigger.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(updatedTrigger);
+  });
+
+  it('offers delivery only when enabled and keeps its fee separate from the rental total', async () => {
+    const configuredStore = {
+      ...store,
+      fulfillment: { pickup: true, delivery: true, delivery_fee_minor: '15000' },
+    } as PublicStorefront;
+    render(
+      <BookingDrawer store={configuredStore} item={item} variant={variant} onClose={vi.fn()} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Set test dates' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(screen.getByText('How would you like to receive your rental?')).not.toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: 'Delivery · arranged with the shop' }));
+    expect(screen.queryByRole('button', { name: /Pickup time/ })).toBeNull();
+    expect(
+      screen.getByText(
+        'The shop will contact you to arrange delivery and any delivery fee. It is not part of this total.',
+      ),
+    ).not.toBeNull();
+    fireEvent.change(screen.getByLabelText('Email address'), {
+      target: { value: 'qa@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'QA Customer' } });
+    fireEvent.change(screen.getByLabelText('Address'), { target: { value: '12 Test Street' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Review request' }));
+
+    expect(await screen.findByText('Arranged separately with the shop')).not.toBeNull();
+    expect(screen.getByText('₱1,100')).not.toBeNull();
+    expect(screen.queryByText('₱1,250')).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Hold my size and pay' }));
+    await waitFor(() => expect(createReservation).toHaveBeenCalled());
+    expect(vi.mocked(createReservation).mock.calls[0]?.[1]).toMatchObject({
+      requested_interval: {
+        start: '2026-11-11T10:00:00+08:00',
+        end: '2026-11-12T10:00:00+08:00',
+      },
+      fulfillment_method: 'delivery',
+    });
   });
 });

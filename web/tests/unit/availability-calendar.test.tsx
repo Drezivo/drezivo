@@ -18,7 +18,7 @@ vi.mock('@/lib/storefront-api', () => ({
   }),
 }));
 
-import { AvailabilityCalendar, type DateRange, type DateRangeNotice } from '@/components/store/booking/availability-calendar';
+import { AvailabilityCalendar, type DateRange } from '@/components/store/booking/availability-calendar';
 
 function renderCalendar(minDays: number) {
   const onChange = vi.fn();
@@ -43,21 +43,24 @@ function renderCalendar(minDays: number) {
   return onChange;
 }
 
-/** The pop-over grid renders after the main grid, so its day button is the last match. */
-async function pickInPopover(day: RegExp) {
-  await waitFor(() => expect((screen.getAllByRole('button', { name: day }).at(-1) as HTMLButtonElement | undefined)?.disabled).toBe(false));
-  fireEvent.click(screen.getAllByRole('button', { name: day }).at(-1)!);
+async function pickDateOnTopCalendar(day: RegExp) {
+  await waitFor(() => expect((screen.getByRole('button', { name: day }) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole('button', { name: day }));
 }
 
-describe('storefront Date from / Date to fields', () => {
+describe('storefront Date from / Date to controls the shared calendar', () => {
   it('fills the earliest return date, counting the pickup date as Day 1', async () => {
     const onChange = renderCalendar(3);
 
+    expect(screen.getAllByRole('grid')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Date from' }));
-    await pickInPopover(/October 5/);
+    expect(screen.getByRole('button', { name: 'Date from' }).getAttribute('aria-pressed')).toBe('true');
+    await pickDateOnTopCalendar(/October 5/);
 
     expect(onChange).toHaveBeenLastCalledWith({ start: '2026-10-05', end: '2026-10-07' }, undefined);
     expect(screen.getByRole('button', { name: 'Date to' }).textContent).toContain('Oct 7, 2026');
+    expect(screen.getByRole('button', { name: 'Date to' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getAllByRole('grid')).toHaveLength(1);
   });
 
   it('keeps the fields and the calendar in step', async () => {
@@ -75,9 +78,9 @@ describe('storefront Date from / Date to fields', () => {
     const onChange = renderCalendar(2);
 
     fireEvent.click(screen.getByRole('button', { name: 'Date from' }));
-    await pickInPopover(/October 12/);
+    await pickDateOnTopCalendar(/October 12/);
     fireEvent.click(screen.getByRole('button', { name: 'Date to' }));
-    await pickInPopover(/October 16/);
+    await pickDateOnTopCalendar(/October 16/);
 
     expect(onChange).toHaveBeenLastCalledWith(null, { reason: 'other', message: 'Oct 14 is not available in that range. Choose other dates.' });
   });
@@ -100,7 +103,7 @@ describe('storefront Date from / Date to fields', () => {
     const onChange = renderCalendar(2);
 
     fireEvent.click(screen.getByRole('button', { name: 'Date from' }));
-    await pickInPopover(/October 10/);
+    await pickDateOnTopCalendar(/October 10/);
 
     // Oct 11 (Day 2) is a Sunday, so the suggested return moves to Monday Oct 12.
     expect(onChange).toHaveBeenLastCalledWith({ start: '2026-10-10', end: '2026-10-12' }, undefined);
@@ -110,7 +113,7 @@ describe('storefront Date from / Date to fields', () => {
     renderCalendar(3);
 
     fireEvent.click(screen.getByRole('button', { name: 'Date from' }));
-    await pickInPopover(/October 5/);
+    await pickDateOnTopCalendar(/October 5/);
     fireEvent.click(screen.getByRole('button', { name: 'Date to' }));
 
     // Oct 5 is Day 1, so Oct 6 (Day 2) cannot be the return date of a 3-day package; Oct 7 can.
@@ -118,17 +121,13 @@ describe('storefront Date from / Date to fields', () => {
     expect((screen.getAllByRole('button', { name: /October 6/ }).at(-1) as HTMLButtonElement | undefined)?.disabled).toBe(true);
   });
 
-  it('explains the Day 1 rule when the calendar return date is too early', async () => {
-    const onChange = renderCalendar(3);
+  it('shows the earliest return date and disables earlier dates while editing the return', async () => {
+    renderCalendar(3);
 
-    await waitFor(() => expect((screen.getAllByRole('button', { name: /October 5/ })[0] as HTMLButtonElement | undefined)?.disabled).toBe(false));
-    fireEvent.click(screen.getAllByRole('button', { name: /October 5/ })[0]!);
-    fireEvent.click(screen.getAllByRole('button', { name: /October 6/ })[0]!);
-
-    expect(onChange).toHaveBeenLastCalledWith(null, {
-      reason: 'other',
-      message: 'This piece rents for at least 3 days, counting the pickup date as Day 1. Choose a later return date.',
-    } satisfies DateRangeNotice);
+    await pickDateOnTopCalendar(/October 5/);
+    expect(screen.getByText('Return date. The earliest is Oct 7.')).not.toBeNull();
+    expect((screen.getByRole('button', { name: /October 6/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: /October 7/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('marks an over-limit date range with the max-rental reason', async () => {

@@ -77,7 +77,8 @@ export interface ReservationQuote {
   };
   delivery_snapshot: {
     fulfillment_method: FulfillmentMethod;
-    fee_minor: string;
+    /** Omitted for storefront delivery until the shop arranges a location-specific fee. */
+    fee_minor?: string;
     /** Set on deliveries only: whether the fee was charged or the shop arranges it with the renter. */
     terms?: DeliveryTerms;
   };
@@ -135,6 +136,7 @@ export async function resolveReservationQuote(
      * guests never can; their path leaves this unset.
      */
     allowPastPickup?: boolean;
+    deliveryHandling?: 'shop_arranged';
   },
 ): Promise<ReservationQuote> {
   if (!input.allowPastPickup) {
@@ -193,7 +195,7 @@ export async function resolveReservationQuote(
     catalogue.variant.security_deposit_minor,
     'Security deposit',
   );
-  const delivery = resolveDelivery(foundation.delivery_rules, input.request.fulfillment_method);
+  const delivery = resolveDelivery(foundation.delivery_rules, input.request.fulfillment_method, input.deliveryHandling);
   const deliveryFee = delivery.feeMinor;
   const dueNow = assertSupportedAmount(
     rental.totalMinor + securityDeposit + deliveryFee,
@@ -242,7 +244,9 @@ export async function resolveReservationQuote(
     },
     delivery_snapshot: {
       fulfillment_method: input.request.fulfillment_method,
-      fee_minor: deliveryFee.toString(),
+      ...(input.deliveryHandling === 'shop_arranged' && input.request.fulfillment_method === 'delivery'
+        ? {}
+        : { fee_minor: deliveryFee.toString() }),
       ...(delivery.terms ? { terms: delivery.terms } : {}),
     },
     policy_snapshot: {
@@ -374,8 +378,13 @@ function localIsoDate(instantValue: string, timeZone: string): string {
 export function resolveDelivery(
   rules: Record<string, unknown>,
   fulfillmentMethod: FulfillmentMethod,
+  deliveryHandling?: 'shop_arranged',
 ): { feeMinor: bigint; terms: DeliveryTerms | null } {
   if (fulfillmentMethod === 'pickup') return { feeMinor: 0n, terms: null };
+  if (deliveryHandling === 'shop_arranged') {
+    if (rules.enabled !== true) throw new ValidationError('This shop does not offer delivery.');
+    return { feeMinor: 0n, terms: 'to_arrange' };
+  }
   if (rules.enabled !== true) return { feeMinor: 0n, terms: 'to_arrange' };
   const configuredFee = rules.fee_minor;
   if (configuredFee === undefined || configuredFee === null || configuredFee === '') return { feeMinor: 0n, terms: 'set_fee' };

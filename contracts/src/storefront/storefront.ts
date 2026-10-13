@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { paymentMethodId } from '../common/ids';
 import { currencyCode, moneyString } from '../common/money';
 import { ianaTimezone } from '../common/time';
+import { branchOperatingHours } from '../tenancy/business-hours';
 import { catalogueCard } from './catalogue';
 import { fieldRequirement, storefrontSections, storefrontTheme } from './cms';
 
@@ -66,7 +67,11 @@ export const publicStorefront = z
       .object({
         announcement: z.string().nullable(),
         hero: z
-          .object({ heading: z.string(), body: z.string().nullable(), image_url: z.string().url().nullable() })
+          .object({
+            heading: z.string(),
+            body: z.string().nullable(),
+            image_url: z.string().url().nullable(),
+          })
           .strict(),
         about: z
           .object({
@@ -83,7 +88,12 @@ export const publicStorefront = z
     new_arrivals: z.array(catalogueCard).max(8),
     policy: publicStorefrontPolicy,
     fulfillment: z
-      .object({ pickup: z.literal(true), delivery: z.boolean(), delivery_fee_minor: moneyString })
+      .object({
+        pickup: z.literal(true),
+        delivery: z.boolean(),
+        /** Kept for compatibility; public storefronts return zero because delivery is arranged separately. */
+        delivery_fee_minor: moneyString,
+      })
       .strict(),
     payment_methods: z.array(publicPaymentMethod).max(20),
     /** False while the shop's subscription is read-only: the storefront is visible but takes no bookings or fittings. */
@@ -102,6 +112,8 @@ export const publicStorefront = z
         handover_time: z.string(),
         min_notice_days: z.number().int().nonnegative(),
         max_rental_days: z.number().int().positive(),
+        /** Older API versions omit this; current storefront APIs always return the active branch schedule. */
+        business_hours: branchOperatingHours.optional(),
       })
       .strict(),
     fitting: z

@@ -5,6 +5,7 @@ import type { PoolClient } from 'pg';
 import {
   guestFittingCreated,
   guestReceiptUploadResponse,
+  branchOperatingHours,
   guestReservationView,
   type GuestFittingCreated,
   type GuestFittingRequest,
@@ -119,11 +120,15 @@ export class GuestBookingService {
           const core = await readStoreCore(client, store);
           if (!core) throw new NotFoundError(STORE_NOT_FOUND);
           const checkout = toDocument(core).checkout;
+          const businessHours = branchOperatingHours.safeParse(core.operating_hours);
+          if (!businessHours.success) {
+            throw new StateConflictError('This shop needs valid Business Hours before taking online reservations.');
+          }
           // The owner can keep the storefront up for browsing while taking reservations by message.
           if (!checkout.reservation_requests) {
             throw new BookingPausedError('This shop takes reservations by message. Please contact the shop to reserve.');
           }
-          assertCheckoutRules(checkout, request, core.timezone);
+          assertCheckoutRules(checkout, businessHours.data, request, core.timezone);
           const handover = handoverDates(request, core.timezone);
           assertShopOpenForHandover(await readShopClosures(client, store, handover.pickup, handover.return), request, core.timezone);
 
@@ -147,6 +152,7 @@ export class GuestBookingService {
                 fulfillment_method: request.fulfillment_method,
                 payment_method_id: request.payment_method_id,
               },
+              deliveryHandling: 'shop_arranged',
             });
             const customer = await findOrCreateGuestCustomer(client, store.tenantId, request.email, request.customer);
             const { graph } = await createHeldReservation(client, {

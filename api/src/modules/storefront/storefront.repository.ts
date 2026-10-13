@@ -75,11 +75,13 @@ export interface StoreCoreRow {
   tenant_name: string;
   currency: string;
   timezone: string;
+  operating_hours: unknown;
 }
 
 export async function readStoreCore(client: PoolClient, store: PublishedStore): Promise<StoreCoreRow | null> {
   const result = await client.query<StoreCoreRow>(
-    `SELECT s.slug, s.branding, s.contact, s.content, s.checkout, t.name AS tenant_name, t.currency, b.timezone
+    `SELECT s.slug, s.branding, s.contact, s.content, s.checkout, t.name AS tenant_name, t.currency, b.timezone,
+            b.operating_hours
        FROM storefront s
        JOIN tenant t ON t.id = s.tenant_id
        JOIN branch b ON b.tenant_id = s.tenant_id AND b.id = s.branch_id
